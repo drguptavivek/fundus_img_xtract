@@ -5,6 +5,8 @@ import hashlib
 import re
 import shutil
 from pathlib import Path
+from datetime import datetime
+
 
 # --- Model and DB Imports ---
 # Import everything needed from the new models.py file
@@ -48,20 +50,77 @@ def calculate_md5(filepath):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
-# --- Main Processing Logic ---
+def clean_filename(name: str) -> str:
+    # Remove Windows duplicate suffixes like " (1)" or " (2)"
+    return re.sub(r"\s\(\d+\)", "", name)
 
-def process_zip_file(zip_path, session):
+
+
+# Path for log file
+LOG_FILE = Path(__file__).resolve().parent / "logs"/"zip_main_process_log.txt"
+
+def log_status(filename: str, status: str, message: str = ""):
+    """Append a processing status entry to the log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] {filename} -> {status}"
+    if message:
+        log_entry += f" | {message}"
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(log_entry + "\n")
+    print(f"LOG: {log_entry}")  # also print for console feedback
+
+
+
+
+
+def daily_dup_dir() -> Path:
+    # /files/dupmd5_YYYY-MM-DD
+    files_root = UPLOAD_DIR.parent
+    ddir = files_root / f"dupmd5_{datetime.now():%Y-%m-%d}"
+    ddir.mkdir(parents=True, exist_ok=True)
+    return ddir
+
+
+# --- Main Processing Logic ---
+def process_zip_file(zip_path: Path, session):
     """
     Processes a single ZIP file, extracts metadata, and organizes files.
+    Ensures the ZIP file is CLOSED before attempting to move it.
     """
+    def safe_move(src: Path, dst: Path, attempts: int = 5):
+        # Small retry helper for Windows lock shenanigans
+        import time
+        for i in range(attempts):
+            try:
+                shutil.move(str(src), str(dst))
+                return
+            except PermissionError as e:
+                if i == attempts - 1:
+                    raise
+                time.sleep(0.2 * (i + 1))
+
     md5_hash = calculate_md5(zip_path)
-    if session.query(ZipFile).filter_by(md5_hash=md5_hash).first():
-        print(f"Skipping '{zip_path.name}', as it has already been processed.")
+    existing = session.query(ZipFile).filter_by(md5_hash=md5_hash).first()
+    if existing:
+        # Found duplicate content
+        original_name = existing.zip_filename  # first-seen file with this MD5
+        dup_dir = daily_dup_dir()
+
+        try:
+            shutil.move(str(zip_path), str(dup_dir / zip_path.name))
+            print(f"Duplicate '{zip_path.name}' moved to '{dup_dir}'.")
+        except PermissionError as e:
+            print(f"Failed to move duplicate '{zip_path.name}': {e}")
+
+        log_status(zip_path.name, "SKIPPED_DUPMD5", f"original={original_name}")
         return
 
     print(f"\n--- Processing '{zip_path.name}' ---")
-    
+
+    success = False  # track outcome to decide where to move the ZIP
+
     try:
+        # --- OPEN ZIP (everything that reads from the archive stays inside this block) ---
         with zipfile.ZipFile(zip_path, 'r') as zf:
             print("  Archive Contents (Tree Structure):")
             zf.printdir()
@@ -69,7 +128,7 @@ def process_zip_file(zip_path, session):
 
             dir_in_zip = None
             all_dirs = {Path(p).parent for p in zf.namelist()}
-            
+
             for d in all_dirs:
                 current_path = Path(d)
                 for i in range(len(current_path.parts)):
@@ -89,7 +148,9 @@ def process_zip_file(zip_path, session):
             patient_id = dir_parts[-2]
             name = ' '.join(dir_parts[:-2])
 
-            new_zip_file = ZipFile(zip_filename=zip_path.name, md5_hash=md5_hash)
+
+            clean_name = clean_filename(zip_path.name)
+            new_zip_file = ZipFile(zip_filename=clean_name, md5_hash=md5_hash)
             new_patient_encounter = PatientEncounters(
                 name=name, patient_id=patient_id, capture_date=capture_date
             )
@@ -100,41 +161,60 @@ def process_zip_file(zip_path, session):
 
             files_to_add = []
             for member_info in zf.infolist():
+                # skip directories or items outside the identified parent dir
                 if member_info.is_dir() or not str(Path(member_info.filename)).startswith(str(dir_in_zip)):
                     continue
 
                 original_filepath = Path(member_info.filename)
-                file_ext = original_filepath.suffix.lower()
+                ext = original_filepath.suffix.lower()
                 new_filename = f"{patient_id}_{name.replace(' ', '_')}_{capture_date}_{original_filepath.name.replace('/', '_')}"
-                
-                if file_ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp']:
+
+                if ext in {'.jpg', '.jpeg', '.png', '.gif', '.bmp'}:
                     dest_dir, file_type = IMAGE_DIR, 'image'
-                elif file_ext == '.pdf':
+                elif ext == '.pdf':
                     dest_dir, file_type = PDF_DIR, 'pdf'
                 else:
                     continue
 
-                source = zf.open(member_info)
                 target_path = dest_dir / new_filename
-                with open(target_path, "wb") as target:
-                    target.write(source.read())
-                
+                # Ensure both source and target are closed promptly
+                with zf.open(member_info) as source, open(target_path, "wb") as target:
+                    shutil.copyfileobj(source, target)
+
                 files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type))
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
-            
+
             new_patient_encounter.encounter_files = files_to_add
             session.add(new_zip_file)
-            session.commit()
 
-            print(f"Successfully processed and logged '{zip_path.name}'.")
-            shutil.move(zip_path, PROCESSED_DIR / zip_path.name)
-            print(f"Moved '{zip_path.name}' to processed directory.")
+        # --- OUTSIDE the with-block: the ZIP file handle is closed now ---
+        session.commit()
+        success = True
+        print(f"Successfully processed and logged '{zip_path.name}'.")
 
-    except (zipfile.BadZipFile, ValueError, Exception) as e:
+    except (zipfile.BadZipFile, ValueError) as e:
         print(f"Error processing '{zip_path.name}': {e}")
         session.rollback()
-        shutil.move(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
-        print(f"Moved '{zip_path.name}' to error directory.")
+        success = False
+    except Exception as e:
+        print(f"Error processing '{zip_path.name}': {e}")
+        session.rollback()
+        success = False
+    finally:
+        try:
+            if success:
+                safe_move(zip_path, PROCESSED_DIR / zip_path.name)
+                print(f"Moved '{zip_path.name}' to processed directory.")
+                log_status(zip_path.name, "SUCCESS")
+            else:
+                safe_move(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
+                print(f"Moved '{zip_path.name}' to error directory.")
+                log_status(zip_path.name, "ERROR", str(e))
+        except PermissionError as e:
+            # If it’s still locked by some external process, surface a clear message
+            print(f"Final move failed for '{zip_path.name}' due to a lock: {e}. "
+                  f"Please close any apps using this file and rerun.")
+            log_status(zip_path.name, "ERROR", f"PermissionError: {e}")
 
 # --- Main Execution ---
 

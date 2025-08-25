@@ -1,44 +1,47 @@
 # initialize.py
 import os
-import shutil
+import sys
 import subprocess
+from pathlib import Path
 
-# Define paths
-processed_dir = './files/processed'
-uploaded_dir = './files/uploaded'
-db_path = './zip_processing.db'
-models_script = 'models.py'
+# Define paths (relative to this file)
+BASE_DIR = Path(__file__).parent.resolve()
+processed_dir = BASE_DIR / "files" / "processed"
+uploaded_dir  = BASE_DIR / "files" / "uploaded"
+db_path       = BASE_DIR / "zip_processing.db"
+models_script = BASE_DIR / "models.py"
 
-def move_files(src_dir, dest_dir):
-    if not os.path.isdir(src_dir):
-        print(f"Source directory not found: {src_dir}")
-        return
 
-    os.makedirs(dest_dir, exist_ok=True)
+def ensure_directories() -> None:
+    """Create required directories if they don't exist."""
+    for d in (processed_dir, uploaded_dir):
+        d.mkdir(parents=True, exist_ok=True)
+        print(f"Ensured directory exists: {d}")
 
-    for filename in os.listdir(src_dir):
-        src_path = os.path.join(src_dir, filename)
-        dest_path = os.path.join(dest_dir, filename)
 
-        if os.path.isfile(src_path):
-            shutil.move(src_path, dest_path)
-            print(f"Moved: {src_path} -> {dest_path}")
-
-def delete_file(file_path):
-    if os.path.isfile(file_path):
-        os.remove(file_path)
-        print(f"Deleted file: {file_path}")
-    else:
-        print(f"File not found: {file_path}")
-
-def run_models_script(script_path):
-    if os.path.isfile(script_path):
-        print(f"Executing {script_path}...")
-        subprocess.run(['python', script_path], check=True)
-    else:
+def run_models_script(script_path: Path) -> None:
+    """Run models.py with the current Python interpreter."""
+    if not script_path.is_file():
         print(f"Script not found: {script_path}")
+        raise SystemExit(1)
 
-if __name__ == '__main__':
-    move_files(processed_dir, uploaded_dir)
-    delete_file(db_path)
+    print(f"Executing {script_path} with {sys.executable} ...")
+    try:
+        subprocess.run([sys.executable, str(script_path)], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] {script_path.name} exited with status {e.returncode}")
+        raise SystemExit(e.returncode)
+
+
+def ensure_db_exists() -> None:
+    """Create DB (via models.py) only if it doesn't already exist."""
+    if db_path.exists():
+        print(f"DB already present: {db_path}")
+        return
+    print(f"DB not found, creating: {db_path}")
     run_models_script(models_script)
+
+
+if __name__ == "__main__":
+    ensure_directories()
+    ensure_db_exists()

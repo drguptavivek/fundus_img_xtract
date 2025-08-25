@@ -3,6 +3,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session as DBSession # Renamed to avoid conflict with `session` variable
 from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
+from datetime import datetime
+
 
 # Import database models and configurations
 from models import (
@@ -24,6 +26,37 @@ GLAUCOMA_PDF_DIR = Path(__file__).resolve().parent / "files/glaucoma_pdfs"
 # Make sure your OCR function is in 'ocr_extraction.py' in the same directory
 from ocr_extraction import find_report_pages_by_coords_with_grid
 
+
+
+def clean_ocr_text(text: str | None) -> str | None:
+    if not text:
+        return text
+    # Replace newlines with space, collapse multiple spaces
+    return " ".join(text.split())
+
+
+# Log files
+SUCCESS_LOG = Path(__file__).resolve().parent / "logs"/"process_pdf_success_log.txt"
+ERROR_LOG = Path(__file__).resolve().parent / "logs"/"process_pdf_error_log.txt"
+
+def log_success(filename: str, message: str = ""):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] SUCCESS {filename}"
+    if message:
+        line += f" | {message}"
+    with open(SUCCESS_LOG, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    print(f"LOG (success): {line}")
+
+def log_error(filename: str, message: str):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] ERROR {filename} | {message}"
+    with open(ERROR_LOG, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+    print(f"LOG (error): {line}")
+
+
+
 # --- Main PDF Processing Logic ---
 
 def process_all_pdfs_for_ocr():
@@ -44,16 +77,19 @@ def process_all_pdfs_for_ocr():
         pdf_files = list(PDF_DIR.glob("*.pdf"))
         if not pdf_files:
             print("\nNo PDF files found in 'files/pdfs' for OCR processing.")
+            log_error(str(PDF_DIR), "No PDF files found for OCR processing.")
             return
-
-        for pdf_path in pdf_files:
-            print(f"\n--- Processing OCR for '{pdf_path.name}' ---")
+        
+        total_files = len(pdf_files)
+        for idx, pdf_path in enumerate(pdf_files, start=1):
+            print(f"\n--- Processing file {idx}/{total_files}: '{pdf_path.name}' ---")
             
             # Extract patient_id, name, capture_date from the PDF filename
             # Filename format: {patient_id}_{name}_{capture_date}_{original_filepath.name.replace('/', '_')}
             parts = pdf_path.name.split('_')
             if len(parts) < 4:
                 print(f"Skipping '{pdf_path.name}': Malformed filename, cannot extract patient ID, name, or date.")
+                log_error(pdf_path.name, "Malformed filename: missing patient ID/name/date parts")
                 continue
             
             extracted_patient_id = parts[0]
@@ -62,6 +98,7 @@ def process_all_pdfs_for_ocr():
 
             if not patient_encounter_from_db:
                 print(f"Skipping '{pdf_path.name}': Patient encounter not found for ID '{extracted_patient_id}'.")
+                log_error(pdf_path.name, f"Patient encounter not found for ID  {extracted_patient_id}  . Skipping ")
                 continue
             
             # Use data from DB for name and capture_date for consistent naming
@@ -79,6 +116,7 @@ def process_all_pdfs_for_ocr():
 
             if existing_dr_report or existing_gl_report:
                 print(f"Reports for patient ID '{extracted_patient_id}' from '{pdf_path.name}' already exist. Skipping OCR.")
+                log_error(pdf_path.name, f"Reports for patient ID  {extracted_patient_id}  already exist. Skipping OCR")
                 
                 # Optionally, update the EncounterFile's ocr_processed flag if not already set
                 encounter_file = db_session.query(EncounterFile).filter_by(
@@ -104,8 +142,10 @@ def process_all_pdfs_for_ocr():
                 try:
                     pdf_document = fitz.open(str(pdf_path))
                 except Exception as e:
+                    msg = f"Error opening PDF for splitting: {e}"
                     print(f"Error opening PDF for splitting '{pdf_path.name}': {e}")
-                    pdf_document = None # Ensure it's None if opening failed
+                    log_error(pdf_path.name, msg)
+                    pdf_document = None  # Ensure it's None if opening failed
 
             # Initialize filenames for split PDFs
             dr_pdf_filename = None
@@ -125,12 +165,14 @@ def process_all_pdfs_for_ocr():
                         output_dr_pdf.close()
                         print(f"  Saved DR report page {pageNumberDiabeticReport} to '{dr_pdf_path.name}'.")
                     except Exception as e:
-                        print(f"  Error saving DR report page {pageNumberDiabeticReport} for '{pdf_path.name}': {e}")
+                        err = f"Error saving DR report page {pageNumberDiabeticReport}: {e}"
+                        print(f"  {err} for '{pdf_path.name}'")
+                        log_error(pdf_path.name, err)
 
                 new_dr_report = DiabeticRetinopathyReport(
                     patient_encounter_id=patient_encounter.id,
-                    result=text_diabetic_result, # Directly use OCR output
-                    qualitative_result=text_diabetic_qual_result, # Store qualitative result
+                    result=clean_ocr_text(text_diabetic_result), # Directly use OCR output
+                    qualitative_result=clean_ocr_text(text_diabetic_qual_result), # Store qualitative result
                     report_file_name=dr_pdf_filename # Store the name of the split DR PDF
                 )
                 db_session.add(new_dr_report)
@@ -150,14 +192,16 @@ def process_all_pdfs_for_ocr():
                         output_gl_pdf.close()
                         print(f"  Saved Glaucoma report page {pageNumberGlaucomaReport} to '{gl_pdf_path.name}'.")
                     except Exception as e:
-                        print(f"  Error saving Glaucoma report page {pageNumberGlaucomaReport} for '{pdf_path.name}': {e}")
+                        err = f"Error saving Glaucoma report page {pageNumberGlaucomaReport}: {e}"
+                        print(f"  {err} for '{pdf_path.name}'")
+                        log_error(pdf_path.name, err)
 
                 new_glaucoma_report = GlaucomaReport(
                     patient_encounter_id=patient_encounter.id,
-                    vcdr_right=vcdr_rt, # Directly use string OCR output
-                    vcdr_left=vcdr_lt,  # Directly use string OCR output
-                    result=text_glaucoma_result, # Directly use OCR output
-                    qualitative_result=text_gl_qual_result, # Store qualitative result
+                    vcdr_right=clean_ocr_text(vcdr_rt), # Directly use string OCR output
+                    vcdr_left=clean_ocr_text(vcdr_lt),  # Directly use string OCR output
+                    result=clean_ocr_text(text_glaucoma_result), # Directly use OCR output
+                    qualitative_result=clean_ocr_text(text_gl_qual_result), # Store qualitative result
                     report_file_name=gl_pdf_filename # Store the name of the split Glaucoma PDF
                 )
                 db_session.add(new_glaucoma_report)
@@ -180,20 +224,33 @@ def process_all_pdfs_for_ocr():
             if encounter_file:
                 encounter_file.ocr_processed = True
                 db_session.add(encounter_file)
-                print(f"  Marked '{pdf_path.name}' as OCR processed in EncounterFile.")
+                msg = f"Marked '{pdf_path.name}' as OCR processed in EncounterFile."
+                print(f"  {msg}")
+                log_success(pdf_path.name, msg)
+                
             else:
-                print(f"  Warning: Could not find EncounterFile entry for '{pdf_path.name}'.")
+                warn = f"Could not find EncounterFile entry for '{pdf_path.name}'."
+                print(f"  Warning: {warn}")
+                log_error(pdf_path.name, warn)
 
             db_session.commit() # Commit changes for the current PDF
 
             print(f"Successfully processed OCR and split pages for '{pdf_path.name}'.")
+            log_success(pdf_path.name, "OCR and split pages completed")
 
     except Exception as e:
-        print(f"An error occurred during PDF OCR processing: {e}")
-        db_session.rollback() # Rollback all changes in case of an error
+        # Capture whichever file was in scope, else mark as UNKNOWN
+        file_name = pdf_path.name if 'pdf_path' in locals() and pdf_path else "UNKNOWN"
+        msg = f"An error occurred during PDF OCR processing: {e}"
+        print(msg)
+        db_session.rollback()  # Roll back all changes in case of an error
+        log_error(file_name, msg)
+
     finally:
         db_session.close() # Always close the session
-        print("\nPDF OCR processing workflow finished.")
+        msg = "PDF OCR processing workflow finished."
+        print("\n" + msg)
+        log_success("(workflow)", msg)
 
 if __name__ == '__main__':
     process_all_pdfs_for_ocr()

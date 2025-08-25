@@ -40,6 +40,7 @@ htmlcov/
 
 # Logs
 *.log
+/logs/**/*
 
 # virtualenv
 *.egg-info/
@@ -51,3 +52,6 @@ build/
 /files/**/*.zip
 /files/**/*.*  
 zip_processing.db
+pdf_error_log.txt
+pdf_success_log.txt
+process_log.txt

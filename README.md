@@ -1,25 +1,17 @@
 
 # Purpose
-
 To extract data from remedio camera zip files
+Uses PyTesseract, pyUPDF
 
 
-## GIT Workflow
 
 ```bash
-git init
-git add README.md
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/drguptavivek/fundus_img_xtract.git
-git push -u origin main
-git branch --set-upstream-to=origin/main main
+git clone https://github.com/drguptavivek/fundus_img_xtract.git
+uv init
+uv sync
 
-
-
-git add . && git commit -a -m "The commit message"
-git push -u origin main
 ```
+
 
 ## To Run
 
@@ -48,3 +40,21 @@ python process_pdfs.py
 ```
 
 
+
+
+## GIT Workflow
+
+```bash
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/drguptavivek/fundus_img_xtract.git
+git push -u origin main
+git branch --set-upstream-to=origin/main main
+
+
+
+git add . && git commit -a -m "The commit message"
+git push -u origin main
+```

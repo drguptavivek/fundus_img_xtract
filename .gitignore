@@ -45,3 +45,7 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+
+
+/files/**/*.pdf
+/files/**/*.zip

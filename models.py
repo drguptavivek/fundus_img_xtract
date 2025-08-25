@@ -64,6 +64,10 @@ class DiabeticRetinopathyReport(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
     result: Mapped[str]
+    # New field to store additional qualitative results from OCR
+    qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
+    # New field to store the name of the split DR PDF file
+    report_file_name: Mapped[str | None] = mapped_column(nullable=True)
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="dr_reports")
 
@@ -72,9 +76,13 @@ class GlaucomaReport(Base):
     __tablename__ = 'glaucoma_reports'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
-    vcdr_right: Mapped[float | None]
-    vcdr_left: Mapped[float | None]
+    vcdr_right: Mapped[str | None]
+    vcdr_left: Mapped[str | None]
     result: Mapped[str]
+    # New field to store additional qualitative results from OCR
+    qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
+    # New field to store the name of the split Glaucoma PDF file
+    report_file_name: Mapped[str | None] = mapped_column(nullable=True)
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="glaucoma_reports")
 

@@ -1,5 +1,6 @@
 # ocr_extraction.py
-import fitz  # PyMuPDF
+# uses PyMuPDF  PIL,  pytesseract  matplotlib
+import fitz  # PyMuPDF 
 from PIL import Image
 import pytesseract
 import io

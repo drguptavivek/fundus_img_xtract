@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
 from datetime import datetime
 
+# uses ocr_extraction.py   
 
 # Import database models and configurations
 from models import (

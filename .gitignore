@@ -49,3 +49,5 @@ build/
 
 /files/**/*.pdf
 /files/**/*.zip
+/files/**/*.*  
+zip_processing.db

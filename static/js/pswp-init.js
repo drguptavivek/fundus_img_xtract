@@ -6,54 +6,61 @@
   function getSlideImgEl(pswp) {
     const slide = pswp?.currSlide;
     if (!slide) return null;
-
     const img =
       slide?.content?.element ||
       slide?.holderElement?.querySelector('img.pswp__img') ||
       slide?.holderElement?.querySelector('img');
-
     console.log('[PSWP] getSlideImgEl →', img);
     return img;
   }
 
-  // 🎨 Apply a CSS filter class to the current image
-  function applyFilter(pswp, filterClass) {
-    console.log('[PSWP] applyFilter called →', filterClass);
-
+  // 🎨 Toggle a CSS filter class on the current image
+  function toggleFilter(pswp, filterClass) {
     const img = getSlideImgEl(pswp);
     if (!img) {
-      console.warn('[PSWP] No image element found to apply filter');
+      console.log('[PSWP] No image element found to toggle filter');
       return;
     }
 
-    img.classList.remove(
+    if (!filterClass) {
+      // clear all
+      img.classList.remove(
+        'pswp-img-filter-greenmono',
+        'pswp-img-filter-greenboost',
+        'pswp-img-filter-bluemono',
+        'pswp-img-filter-gray',
+        'pswp-img-filter-contrast'
+      );
+      if (pswp.currSlide?.data) pswp.currSlide.data._filterClass = '';
+      console.log('[PSWP] Cleared all filters');
+      return;
+    }
+
+    const active = img.classList.toggle(filterClass);
+    // remove others
+    [
       'pswp-img-filter-greenmono',
       'pswp-img-filter-greenboost',
       'pswp-img-filter-bluemono',
       'pswp-img-filter-gray',
       'pswp-img-filter-contrast'
-    );
+    ].forEach(cls => { if (cls !== filterClass) img.classList.remove(cls); });
 
-    if (filterClass) img.classList.add(filterClass);
-
-    if (pswp.currSlide.data) {
-      pswp.currSlide.data._filterClass = filterClass || '';
-    }
-
-    console.log('[PSWP] Applied filter class:', filterClass);
+    if (pswp.currSlide?.data) pswp.currSlide.data._filterClass = active ? filterClass : '';
+    console.log(active ? '[PSWP] Activated filter:' : '[PSWP] Deactivated filter:', filterClass);
   }
 
-  // 📐 Measure image sizes to preload into PhotoSwipe
+  function focusPswpRoot(pswp) {
+    try { pswp?.element?.focus(); } catch (_) { }
+  }
+
   async function ensureNaturalSizes(galleryEl) {
     const anchors = Array.from(galleryEl.querySelectorAll('a'));
     await Promise.all(anchors.map(a => {
       const type = (a.dataset.pswpType || 'image').toLowerCase();
       if (type !== 'image') return Promise.resolve();
       if (a.dataset.pswpWidth && a.dataset.pswpHeight) return Promise.resolve();
-
-      const src = a.getAttribute('href');
-      if (!src) return Promise.resolve();
-
+      const src = a.getAttribute('href'); if (!src) return Promise.resolve();
       return new Promise((res) => {
         const img = new Image();
         img.onload = () => {
@@ -61,96 +68,22 @@
           a.dataset.pswpHeight = img.naturalHeight || 900;
           res();
         };
-        img.onerror = () => {
-          a.dataset.pswpWidth = 1200;
-          a.dataset.pswpHeight = 900;
-          res();
-        };
+        img.onerror = () => { a.dataset.pswpWidth = 1200; a.dataset.pswpHeight = 900; res(); };
         img.src = src;
       });
     }));
   }
 
-// 🎨 Toggle a CSS filter class on the current image
-function toggleFilter(pswp, filterClass) {
-  console.log('[PSWP] toggleFilter called →', filterClass);
-
-  const img = getSlideImgEl(pswp);
-  if (!img) {
-    console.warn('[PSWP] No image element found to toggle filter');
-    return;
-  }
-
-  // If "clear" button (filterClass === ''), remove all filters
-  if (!filterClass) {
-    img.classList.remove(
-      'pswp-img-filter-greenmono',
-      'pswp-img-filter-greenboost',
-      'pswp-img-filter-bluemono',
-      'pswp-img-filter-gray',
-      'pswp-img-filter-contrast'
-    );
-    if (pswp.currSlide.data) {
-      pswp.currSlide.data._filterClass = '';
-    }
-    console.log('[PSWP] Cleared all filters');
-    return;
-  }
-
-  // Toggle the selected filter class
-  const active = img.classList.toggle(filterClass);
-
-  // If we just activated this filter, remove all others to avoid overlap
-  if (active) {
-    [
-      'pswp-img-filter-greenmono',
-      'pswp-img-filter-greenboost',
-      'pswp-img-filter-bluemono',
-      'pswp-img-filter-gray',
-      'pswp-img-filter-contrast'
-    ].forEach(cls => {
-      if (cls !== filterClass) img.classList.remove(cls);
-    });
-    if (pswp.currSlide.data) {
-      pswp.currSlide.data._filterClass = filterClass;
-    }
-    console.log('[PSWP] Activated filter:', filterClass);
-  } else {
-    if (pswp.currSlide.data) {
-      pswp.currSlide.data._filterClass = '';
-    }
-    console.log('[PSWP] Deactivated filter:', filterClass);
-  }
-}
-
-
-
-  // 📦 Launch the PhotoSwipe viewer
+  // 📦 Launch PhotoSwipe
   window.openPswpGallery = async function (galleryId, index) {
-    console.log('[PSWP] openPswpGallery →', galleryId, index);
-
     const galleryEl = document.getElementById(galleryId);
-    if (!galleryEl) {
-      console.warn('[PSWP] Gallery not found:', galleryId);
-      return;
-    }
-
+    if (!galleryEl) return;
     if (!window.PhotoSwipeLightbox || !window.PhotoSwipe) {
-      console.error('[PSWP] PhotoSwipe scripts not loaded before pswp-init.js');
+      console.error('[PSWP] PhotoSwipe scripts not loaded');
       return;
     }
-
     await ensureNaturalSizes(galleryEl);
-
-    if (lightbox) {
-      try {
-        console.log('[PSWP] Destroying existing lightbox instance');
-        lightbox.destroy();
-      } catch (e) {
-        console.warn('[PSWP] Failed to destroy previous instance:', e);
-      }
-      lightbox = null;
-    }
+    if (lightbox) { try { lightbox.destroy(); } catch (_) { } lightbox = null; }
 
     lightbox = new PhotoSwipeLightbox({
       gallery: '#' + galleryId,
@@ -165,80 +98,120 @@ function toggleFilter(pswp, filterClass) {
       clickToCloseNonZoomable: true
     });
 
-    // 🌍 Expose globally for manual testing
-    window.pswpLightbox = lightbox;
-    window.getSlideImgEl = getSlideImgEl;
-
-    // 🔧 Mark PDFs as html and all others as image
+    // PDFs as HTML
     lightbox.addFilter('itemData', (item) => {
-      const el = item.element;
-      const type = el?.dataset?.pswpType;
-
-      if (type === 'html') {
+      if (item.element?.dataset?.pswpType === 'html') {
         item.type = 'html';
-        item.html = el.dataset.pswpHtml;
+        item.html = item.element.dataset.pswpHtml;
       } else {
         item.type = 'image';
       }
-
       return item;
     });
 
-    // 🎯 On slide change, reapply remembered filter
-    lightbox.on('change', () => {
-      const pswp = lightbox.pswp;
-      const f = pswp?.currSlide?.data?._filterClass || '';
-      console.log('[PSWP] Slide changed → reapplying filter:', f);
-      applyFilter(pswp, f);
-    });
-
-    // 🧰 Register filter buttons in the top bar
+    // UI buttons
     lightbox.on('uiRegister', function () {
       const pswp = lightbox.pswp;
-
-      // z-index fix
-      pswp.ui.registerElement({
-        name: 'zfix',
-        order: 1,
-        isButton: false,
-        appendTo: 'bar',
-        onInit: (el) => {
-          const bar = el.closest('.pswp__top-bar');
-          if (bar) bar.style.zIndex = '200';
-        }
-      });
-
       const mkBtn = (name, label, filterClass) => {
         pswp.ui.registerElement({
-          name,
-          order: 30,
-          isButton: true,
-          tagName: 'button',
-          html: label,
-          appendTo: 'bar',
+          name, order: 30, isButton: true, tagName: 'button',
+          html: label, appendTo: 'bar',
           onClick: (event, el, pswpInstance) => {
-            console.log('[PSWP] Filter button clicked:', name);
+            console.log('[PSWP] Button clicked:', name);
             toggleFilter(pswpInstance, filterClass);
+            focusPswpRoot(pswpInstance);
           }
         });
       };
-
-      mkBtn('filter-redfree',    'R', 'pswp-img-filter-greenmono');
+      mkBtn('filter-redfree', 'R', 'pswp-img-filter-greenmono');
       mkBtn('filter-greenboost', 'G', 'pswp-img-filter-greenboost');
-      mkBtn('filter-bluemono',   'B', 'pswp-img-filter-bluemono');
-      mkBtn('filter-gray',       'Y', 'pswp-img-filter-gray');
-      mkBtn('filter-contrast',   'H', 'pswp-img-filter-contrast');
-      mkBtn('filter-clear',      'C', '');
+      mkBtn('filter-bluemono', 'B', 'pswp-img-filter-bluemono');
+      mkBtn('filter-gray', 'Y', 'pswp-img-filter-gray');
+      mkBtn('filter-contrast', 'H', 'pswp-img-filter-contrast');
+      mkBtn('filter-clear', 'C', '');
+
+      pswp.ui.registerElement({
+        name: 'custom-caption',
+        order: 9, // just after counter
+        isButton: false,
+        appendTo: 'root',
+        onInit: (el, pswp) => {
+          el.classList.add('pswp__custom-caption');
+          pswp.on('change', () => {
+            const currSlide = pswp.currSlide;
+            let caption = '';
+            if (currSlide?.data?.element) {
+              caption = currSlide.data.element.getAttribute('title') || '';
+            }
+            el.innerHTML = caption;
+          });
+        }
+      });
+
+
+      // 🔍 Zoom slider
+     pswp.ui.registerElement({
+  name: 'zoom-slider',
+  order: 40,
+  isButton: false,
+  appendTo: 'bar',
+  html: '<input type="range" min="0.1" max="4" step="0.1" value="1" class="pswp__zoom-slider" aria-label="Zoom">',
+  onInit: (el, pswp) => {
+    const slider = el.querySelector('input');
+
+    // ✅ Allow the slider's native drag; just stop the event from reaching PSWP.
+    const stopOnly = (e) => {
+      e.stopPropagation();                // do NOT call preventDefault here
+    };
+    ['pointerdown','pointermove','pointerup',
+     'touchstart','touchmove','touchend',
+     'mousedown','mousemove','mouseup','click']
+      .forEach(evt => slider.addEventListener(evt, stopOnly, { capture: true }));
+
+    // Only the wheel should be fully swallowed to avoid wheel-zoom under the slider
+    slider.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, { capture: true, passive: false });
+
+    // Change zoom when slider moves
+    slider.addEventListener('input', () => {
+      const z = parseFloat(slider.value);
+      if (pswp.currSlide) {
+        pswp.currSlide.zoomTo(z, {
+          x: pswp.viewportSize.x / 2,
+          y: pswp.viewportSize.y / 2
+        }, true);
+      }
     });
 
-    // 🎹 Keyboard shortcuts
+    // Sync slider when zoom changes via pinch/wheel/dblclick
+    pswp.on('zoomPanUpdate', () => {
+      if (pswp.currSlide) {
+        slider.value = pswp.currSlide.currZoomLevel.toFixed(2);
+      }
+    });
+  }
+});
+
+    });
+
+    // Reapply on slide change
+    lightbox.on('change', () => {
+      const pswp = lightbox.pswp;
+      const f = pswp?.currSlide?.data?._filterClass || '';
+      if (f) toggleFilter(pswp, f); else toggleFilter(pswp, '');
+      focusPswpRoot(pswp);
+    });
+
+    // Keyboard bindings
     lightbox.on('open', () => {
       const pswp = lightbox.pswp;
-
+      focusPswpRoot(pswp);
       const handler = (e) => {
         const key = (e.key || '').toLowerCase();
-        console.log('[PSWP] Key pressed:', key);
-
+        if (!['r', 'g', 'b', 'y', 'h', 'c'].includes(key)) return;
+        e.preventDefault(); e.stopPropagation();
         switch (key) {
           case 'r': return toggleFilter(pswp, 'pswp-img-filter-greenmono');
           case 'g': return toggleFilter(pswp, 'pswp-img-filter-greenboost');
@@ -248,22 +221,14 @@ function toggleFilter(pswp, filterClass) {
           case 'c': return toggleFilter(pswp, '');
         }
       };
-
-      document.addEventListener('keydown', handler);
-      pswp.on('destroy', () => {
-        document.removeEventListener('keydown', handler);
-      });
+      window.addEventListener('keydown', handler, { capture: true });
+      pswp.on('destroy', () => window.removeEventListener('keydown', handler, { capture: true }));
     });
 
-    console.log('[PSWP] Initializing lightbox');
     lightbox.init();
-
-    // 🧭 Start at first image (not a PDF)
     const links = Array.from(galleryEl.querySelectorAll('a'));
     let firstImageIndex = links.findIndex(a => (a.dataset.pswpType || 'image') === 'image');
     if (firstImageIndex === -1) firstImageIndex = 0;
-
-    console.log('[PSWP] Opening gallery at index:', typeof index === 'number' ? index : firstImageIndex);
     lightbox.loadAndOpen(typeof index === 'number' ? index : firstImageIndex);
   };
 })();

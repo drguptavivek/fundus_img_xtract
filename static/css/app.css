@@ -1,41 +1,81 @@
-/* PDF inside PhotoSwipe: fill the slide area */
-.pswp__pdfwrap, .pswp__pdfwrap iframe {
-  top: 6rem;  
+/* ================================
+   PDF inside PhotoSwipe
+   ================================ */
+.pswp__pdfwrap {
+  position: absolute;  /* allow top/left/right/bottom */
+  top: 6rem;           /* push PDF below toolbar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+}
+.pswp__pdfwrap iframe {
   width: 100%;
   height: 100%;
   border: 0;
+  filter: none !important;  /* PDFs should never be filtered */
 }
 
-/* Optional: if your app’s global CSS adds padding to iframes, neutralize it here */
-.pswp__pdfwrap {
-  display: flex;
-}
-
-.pswp__top-bar { z-index: 200; position: relative; }
 
 
-/* Caption overlay (top-left, over image/PDF, non-blocking) */
+/* ================================
+   Captions
+   ================================ */
 .pswp__custom-caption {
   position: absolute;
-  top: 60px;
-  left: 8px;
-  max-width: 75vw;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 80vw;
   padding: .25rem .5rem;
-  background: rgba(0, 0, 0, 0.60);
+  background: rgba(0,0,0,0.65);
   color: #fff;
-  font-size: 1.4rem;
+  font-size: 0.9rem;
   line-height: 1.3;
+  text-align: center;
+  border-radius: 4px;
+  z-index: 9000;           /* below top bar, above slide */
+  pointer-events: none;    /* never block pan/zoom */
   white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
-  border-bottom-right-radius: .25rem;
-  z-index: 120;          /* higher than slides & default UI */
-  pointer-events: none;  /* don't block pan/zoom */
+  overflow: hidden;
 }
 
+/* ================================
+   Image filters (SVG filters mapped)
+   ================================ */
+.pswp-img-filter-greenmono   { filter: url(#pswp-greenmono); }
+.pswp-img-filter-greenboost  { filter: url(#pswp-greenboost); }
+.pswp-img-filter-gray        { filter: url(#pswp-gray); }
+.pswp-img-filter-contrast    { filter: url(#pswp-contrast); }
+.pswp-img-filter-bluemono    { filter: url(#pswp-bluemono); }
+
+/* ================================
+   Layout tweaks
+   ================================ */
+/* Push images down by 20px to avoid overlapping UI */
+.pswp__img {
+  margin-top: 20px;
+  box-sizing: border-box;
+
+}
+
+/* PDF wrapper still below toolbar */
+.pswp__pdfwrap {
+  position: absolute;
+  top: 6rem; left: 0; right: 0; bottom: 0;
+  display: flex;
+}
+.pswp__pdfwrap iframe { width: 100%; height: 100%; border: 0; filter: none !important; }
 
 
-/* Custom filter buttons in the top toolbar */
+
+
+/* ================================
+   Top bar & UI controls
+   ================================ */
+
+/* Custom filter buttons */
 .pswp__button--filter-redfree,
 .pswp__button--filter-greenboost,
 .pswp__button--filter-bluemono,
@@ -54,23 +94,97 @@
   margin-left: 4px;
   cursor: pointer;
 }
-
-
-
-
-
-
-/* keep the others you already added */
-.pswp-img-filter-greenmono { filter: url(#pswp-greenmono); }
-.pswp-img-filter-greenboost { filter: url(#pswp-greenboost); }
-.pswp-img-filter-gray { filter: url(#pswp-gray); }
-.pswp-img-filter-contrast { filter: url(#pswp-contrast); }
-.pswp-img-filter-bluemono { filter: url(#pswp-bluemono); }
-
-
-/* PDFs should never be filtered */
-.pswp__pdfwrap iframe { filter: none !important; }
-
 .pswp__button.active {
   background-color: #157347 !important;
 }
+
+
+
+
+
+/* ===== Zoom slider base ===== */
+.pswp__zoom-slider {
+  /* make it styleable across browsers */
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 10003;
+  width: 160px;
+  margin-left: 8px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation; /* allow drags/taps; no double-tap zoom */
+  outline: none;
+  --pswp-zoom-track: rgba(255,255,255,.28); /* unfilled */
+  --pswp-zoom-fill:  rgba(255,255,255,.9);  /* filled */
+  --pswp-zoom-thumb: #ffffff;               /* knob */
+  --pswp-zoom-thumb-border: rgba(0,0,0,.45);
+  --pswp-zoom-track-h: 4px;                 /* track height */
+}
+
+/* Focus ring for accessibility */
+.pswp__zoom-slider:focus-visible {
+  outline: 2px solid rgba(255,255,255,.85);
+  outline-offset: 2px;
+}
+
+/* ===== WebKit (Chrome, Safari) ===== */
+/* Track: use a gradient to fake the "filled" portion (we'll set its size via JS) */
+.pswp__zoom-slider::-webkit-slider-runnable-track {
+  height: var(--pswp-zoom-track-h);
+  border-radius: 999px;
+  background:
+    linear-gradient(to right, var(--pswp-zoom-fill), var(--pswp-zoom-fill)) 0/var(--bg-size,0%) 100% no-repeat,
+    var(--pswp-zoom-track);
+}
+
+/* Thumb */
+.pswp__zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px; width: 14px;
+  border-radius: 50%;
+  background: var(--pswp-zoom-thumb);
+  border: 1px solid var(--pswp-zoom-thumb-border);
+  margin-top: calc((var(--pswp-zoom-track-h) - 14px) / 2); /* vertically center */
+}
+
+/* ===== Firefox ===== */
+/* Unfilled track */
+.pswp__zoom-slider::-moz-range-track {
+  height: var(--pswp-zoom-track-h);
+  border-radius: 999px;
+  background: var(--pswp-zoom-track);
+}
+
+/* Filled portion (from min to current value) */
+.pswp__zoom-slider::-moz-range-progress {
+  height: var(--pswp-zoom-track-h);
+  border-radius: 999px;
+  background: var(--pswp-zoom-fill);
+}
+
+/* Thumb */
+.pswp__zoom-slider::-moz-range-thumb {
+  height: 14px; width: 14px;
+  border-radius: 50%;
+  background: var(--pswp-zoom-thumb);
+  border: 1px solid var(--pswp-zoom-thumb-border);
+}
+
+/* High-contrast mode friendliness */
+@media (forced-colors: active) {
+  .pswp__zoom-slider {
+    forced-color-adjust: auto;
+  }
+}
+
+
+/* Ensure the top bar is on top and clickable (keep these if not already present) */
+.pswp__top-bar{
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 10002 !important;
+  pointer-events: auto !important;
+}
+.pswp__top-bar *{ pointer-events: auto !important; }

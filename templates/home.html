@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="text-center py-5">
+  <h1 class="mb-4">Welcome to Fundus Image Extractor</h1>
+  <p class="lead mb-4">
+    Upload ZIP files containing patient fundus data, automatically extract and OCR them,
+    and track progress via jobs.
+  </p>
+  <div class="d-flex justify-content-center gap-3">
+    <a class="btn btn-primary btn-lg" href="{{ url_for('uploads.upload_form') }}">
+      Upload Files
+    </a>
+    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('jobs.list_recent_jobs') }}">
+      Recent Jobs
+    </a>
+    <a class="btn btn-outline-secondary btn-lg" href="/healthz">Health Check</a>
+  </div>
+</div>
+{% endblock %}

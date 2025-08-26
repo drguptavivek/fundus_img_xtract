@@ -37,7 +37,7 @@ def _file_size_bytes(file_storage) -> int:
     file_storage.stream.seek(pos, os.SEEK_SET)
     return size
 
-@bp.route("/", methods=["GET"])
+@bp.route("/upload_files", methods=["GET"])
 def upload_form():
     return render_template(
         "upload_multi.html",

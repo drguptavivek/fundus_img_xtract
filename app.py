@@ -3,7 +3,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, request
+from flask import Flask, render_template, request
 from models import Base, engine
 from main import setup_environment
 from dotenv import load_dotenv  
@@ -12,13 +12,24 @@ import time
 
 def create_app():
     load_dotenv()
-    app = Flask(__name__)
+    app = Flask(
+        __name__,
+        static_folder="static",         # default, explicit for clarity
+        static_url_path="/static"       # default path)
+    )
+
+    # Static cache age (seconds) — tweak per env
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))  # 7 days
+    app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
+
     app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
 
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
     app.config["PER_FILE_MAX_BYTES"] = int(os.getenv("PER_FILE_MAX_BYTES", 10 * 1024 * 1024))
     app.config["MAX_FILES_PER_UPLOAD"] = int(os.getenv("MAX_FILES_PER_UPLOAD", 50))
     app.config["WORKERS"] = int(os.getenv("WORKERS", "4"))
+    app.config["UPLOADED_RESULTS_PAGE_SIZE"] = int(os.getenv("UPLOADED_RESULTS_PAGE_SIZE", 50))
+    app.config["SCREENINGS_PAGE_SIZE"] = int(os.getenv("SCREENINGS_PAGE_SIZE", 50))
 
 
     # Thread pool (shared via app.config)
@@ -89,12 +100,31 @@ def create_app():
 
     #  relative imports
     from uploads import bp as uploads_bp
-    from jobs import bp as jobs_bp
-
-    
     app.register_blueprint(uploads_bp)
+    
+    from jobs import bp as jobs_bp
     app.register_blueprint(jobs_bp)
     
+    from uploaded_results import bp as uploaded_results_bp
+    app.register_blueprint(uploaded_results_bp)
+
+    from screenings import bp as screenings_bp
+    app.register_blueprint(screenings_bp)
+
+    from reports import bp as reports_bp
+    app.register_blueprint(reports_bp)
+
+    from media import bp as media_bp
+    app.register_blueprint(media_bp)
+    
+    # -------------------------------
+    # New homepage route
+    # -------------------------------
+    @app.route("/")
+    def homepage():
+        return render_template("home.html")
+    # -------------------------------
+
     return app
 
 if __name__ == "__main__":

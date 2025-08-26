@@ -1,0 +1,94 @@
+/* static/css/lightbox.css */
+.lb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.9);
+  display: none;
+  z-index: 1050;
+}
+.lb-overlay.open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lb-dialog {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+.lb-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .5rem .75rem;
+  background: rgba(0,0,0,.7);
+  color: #fff;
+}
+.lb-title-text {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: .5rem;
+  flex: 1;
+}
+
+.lb-close {
+  line-height: 1;
+  padding: .25rem .5rem;
+  background: #fff;
+  border: none;
+  border-radius: .25rem;
+}
+
+.lb-content {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.lb-media {
+  max-height: 100vh;   /* 🔑 full viewport height */
+  max-width: 100vw;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  background: #000;
+}
+
+.lb-content iframe.lb-media {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+.lb-nav {
+  padding: .5rem .75rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  background: rgba(0,0,0,.7);
+}
+.lb-nav button {
+  color: #fff;
+}
+
+/* Pan/zoom UX */
+.lb-media.img-panzoom {
+  cursor: grab;
+}
+.lb-media.img-panzoom:active {
+  cursor: grabbing;
+}
+
+/* Extra toolbar buttons alongside Prev/Next */
+.lb-nav .btn-zoom {
+  margin-right: .5rem;
+}
+

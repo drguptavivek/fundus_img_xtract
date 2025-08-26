@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Uploaded ZIPs{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Uploaded ZIPs</h3>
+  <div class="d-flex gap-2">
+    <a class="btn btn-secondary" href="{{ url_for('uploads.upload_form') }}">Upload</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 90px;">ID</th>
+          <th>ZIP Filename</th>
+          <th>MD5</th>
+          <th>Patient</th>
+          <th>Patient ID</th>
+          <th>Capture Date</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for z in items %}
+        {% set enc = z.patient_encounter %}
+        <tr>
+          <td>{{ z.id }}</td>
+          <td><code>{{ z.zip_filename }}</code></td>
+          <td class="small text-muted">{{ z.md5_hash }}</td>
+          <td>{{ enc.name if enc else '-' }}</td>
+          <td>{{ enc.patient_id if enc else '-' }}</td>
+          <td>{{ enc.capture_date if enc else '-' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-center text-muted p-4">No uploads yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <div class="text-muted small">
+    Showing page {{ page }} of {{ total_pages }} &middot; {{ total }} total
+  </div>
+  <nav>
+    <ul class="pagination mb-0">
+      <li class="page-item {% if not has_prev %}disabled{% endif %}">
+        <a class="page-link" href="{{ prev_url or '#' }}">Previous</a>
+      </li>
+      <li class="page-item disabled">
+        <span class="page-link">Page {{ page }}</span>
+      </li>
+      <li class="page-item {% if not has_next %}disabled{% endif %}">
+        <a class="page-link" href="{{ next_url or '#' }}">Next</a>
+      </li>
+    </ul>
+  </nav>
+</div>
+{% endblock %}

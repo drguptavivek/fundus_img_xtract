@@ -6,6 +6,9 @@ import re
 import shutil
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv  # ✅ load .env first
+load_dotenv()
+
 
 
 # --- Model and DB Imports ---
@@ -17,12 +20,17 @@ from models import (
     EncounterFile,
     engine,
     Session,
+    BASE_DIR, 
     UPLOAD_DIR,
     IMAGE_DIR,
     PDF_DIR,
     PROCESSED_DIR,
     PROCESSING_ERROR_DIR
 )
+
+# Path for log file
+LOG_FILE = BASE_DIR / os.getenv("ZIP_INGEST_LOG", "logs/zip_main_process_log.txt")
+
 
 # --- Utility Functions ---
 
@@ -56,8 +64,7 @@ def clean_filename(name: str) -> str:
 
 
 
-# Path for log file
-LOG_FILE = Path(__file__).resolve().parent / "logs"/"zip_main_process_log.txt"
+
 
 def log_status(filename: str, status: str, message: str = ""):
     """Append a processing status entry to the log file."""

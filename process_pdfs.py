@@ -1,11 +1,18 @@
 import re
+import os
 from pathlib import Path
 from sqlalchemy.orm import Session as DBSession # Renamed to avoid conflict with `session` variable
 from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
 from datetime import datetime
 
+from dotenv import load_dotenv
+
+
 # uses ocr_extraction.py   
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # Import database models and configurations
 from models import (
@@ -19,9 +26,16 @@ from models import (
     Base # Import Base for metadata if needed for direct table creation (though main.py handles it)
 )
 
-# Define new directories for split PDFs
-DR_PDF_DIR = Path(__file__).resolve().parent / "files/dr_pdfs"
-GLAUCOMA_PDF_DIR = Path(__file__).resolve().parent / "files/glaucoma_pdfs"
+
+# --- Directories from .env ---
+DR_PDF_DIR = BASE_DIR / os.getenv("DR_PDF_DIR", "files/dr_pdfs")
+GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/glaucoma_pdfs")
+
+# --- Logs from .env ---
+SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.txt")
+ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
+
+
 
 # Import the OCR extraction function from your separate file
 # Make sure your OCR function is in 'ocr_extraction.py' in the same directory
@@ -37,8 +51,7 @@ def clean_ocr_text(text: str | None) -> str | None:
 
 
 # Log files
-SUCCESS_LOG = Path(__file__).resolve().parent / "logs"/"process_pdf_success_log.txt"
-ERROR_LOG = Path(__file__).resolve().parent / "logs"/"process_pdf_error_log.txt"
+
 
 def log_success(filename: str, message: str = ""):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

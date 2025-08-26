@@ -70,3 +70,7 @@
 
 /* PDFs should never be filtered */
 .pswp__pdfwrap iframe { filter: none !important; }
+
+.pswp__button.active {
+  background-color: #157347 !important;
+}

@@ -4,16 +4,11 @@
   <meta charset="utf-8">
   <title>{% block title %}ZIP → Extract → OCR{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-
-
   {% set v = (config.get('ASSETS_VERSION') or '') %}
   <!-- Local Bootstrap CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
-
-
 </head>
 <body class="bg-light">
 
@@ -57,7 +52,6 @@
     </div>
   </div>
 </nav>
-
 
 <div class="container">
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -131,9 +125,7 @@
 
 <!-- Local Bootstrap JS (bundle includes Popper) -->
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
-
 <!-- Optional: your own app.js -->
-<script src="{{ url_for('static', filename='js/app.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>

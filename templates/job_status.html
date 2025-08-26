@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Job Status</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script>
+    async function poll() {
+      const jobId = "{{ job_id }}";
+      const res = await fetch(`/jobs/${jobId}`);
+      const data = await res.json();
+
+      const statusEl = document.getElementById('status');
+      const createdEl = document.getElementById('created_at');
+      const listEl = document.getElementById('items');
+      const rejEl = document.getElementById('rejected');
+
+      statusEl.textContent = data.status || 'unknown';
+      createdEl.textContent = data.created_at || '-';
+      listEl.innerHTML = '';
+      (data.items || []).forEach((it, i) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.textContent = it.filename + ' ';
+        const badge = document.createElement('span');
+        badge.className = 'badge bg-' + (it.state === 'ok' ? 'success' :
+                                         it.state === 'error' ? 'danger' :
+                                         it.state === 'processing' ? 'warning text-dark' : 'secondary');
+        badge.textContent = it.state;
+        li.appendChild(badge);
+        if (it.detail) {
+          const small = document.createElement('div');
+          small.className = 'small text-muted';
+          small.textContent = it.detail;
+          li.appendChild(small);
+        }
+        listEl.appendChild(li);
+      });
+
+      // Show rejected summary if any (once)
+      rejEl.innerHTML = '';
+      if (data.rejected_summary) {
+        const li = document.createElement('li');
+        li.className = 'list-group-item list-group-item-danger';
+        li.textContent = data.rejected_summary;
+        rejEl.appendChild(li);
+      }
+
+      if (data.status && ['done', 'error'].includes(data.status)) return;
+      setTimeout(poll, 1500);
+    }
+    window.addEventListener('DOMContentLoaded', poll);
+  </script>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <h3 class="mb-3">Job <code>{{ job_id }}</code></h3>
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Status</dt>
+        <dd class="col-sm-9"><span id="status">queued</span></dd>
+        <dt class="col-sm-3">Created</dt>
+        <dd class="col-sm-9"><span id="created_at">-</span></dd>
+      </dl>
+      <hr>
+      <h6>Files</h6>
+      <ul id="items" class="list-group mb-3"></ul>
+
+      <h6>Rejected (client-side checks)</h6>
+      <ul id="rejected" class="list-group"></ul>
+
+      <a class="btn btn-secondary mt-3" href="{{ url_for('uploads.upload_form') }}">Back</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

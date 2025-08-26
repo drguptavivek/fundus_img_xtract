@@ -1,20 +1,29 @@
 import os
 from pathlib import Path
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
+from datetime import datetime
+from typing import Optional
+from dotenv import load_dotenv   # ✅ add this
+
+
+# --- Load environment ---
+load_dotenv()
 
 # --- Database and File Path Configuration ---
 # Central place for all path and DB configurations
 BASE_DIR = Path(__file__).resolve().parent
-DB_FILE = BASE_DIR / "zip_processing.db"
-DATABASE_URL = f"sqlite:///{DB_FILE}"
 
-# File processing directories
-UPLOAD_DIR = BASE_DIR / "files/uploaded"
-IMAGE_DIR = BASE_DIR / "files/images"
-PDF_DIR = BASE_DIR / "files/pdfs"
-PROCESSED_DIR = BASE_DIR / "files/processed"
-PROCESSING_ERROR_DIR = BASE_DIR / "files/processing_error"
+
+# Database URL (already wired)
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'zip_processing.db'}")
+
+# --- File processing directories from .env ---
+UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/uploaded")
+IMAGE_DIR = BASE_DIR / os.getenv("IMAGE_DIR", "files/images")
+PDF_DIR = BASE_DIR / os.getenv("PDF_DIR", "files/pdfs")
+PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/processed")
+PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/processing_error")
 
 
 # --- SQLAlchemy Setup ---
@@ -86,9 +95,50 @@ class GlaucomaReport(Base):
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="glaucoma_reports")
 
+
+
+# --- Jobs: persist async processing state ---
+
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # optional external/public token if you prefer non-sequential ids
+    token: Mapped[str] = mapped_column(unique=True)
+    status: Mapped[str] = mapped_column(default="queued")   # queued|processing|done|error
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rejected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # one-line summary
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items: Mapped[list["JobItem"]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+class JobItem(Base):
+    __tablename__ = "job_items"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
+    filename: Mapped[str]
+    state: Mapped[str] = mapped_column(default="queued")  # queued|processing|ok|error
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    job: Mapped["Job"] = relationship(back_populates="items")
+
+
+
 # --- Engine and Session Creation ---
 # A single engine and session factory can be imported by other scripts
-engine = create_engine(DATABASE_URL)
+# If you’ll process jobs in background threads, update your engine to allow cross-thread use:
+# ✅ Engine with thread safety for SQLite
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
+
 Session = sessionmaker(bind=engine)
 
 def create_db_and_tables():

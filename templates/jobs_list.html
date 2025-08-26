@@ -1,0 +1,67 @@
+<!-- templates/jobs_list.html -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Recent Jobs</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .table td, .table th { vertical-align: middle; }
+  </style>
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Recent Jobs</h3>
+    <a class="btn btn-secondary" href="/">Upload</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 140px;">Created (UTC)</th>
+            <th>Token</th>
+            <th style="width: 140px;">Status</th>
+            <th>Error</th>
+            <th>Rejected</th>
+            <th style="width: 120px;">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for j in jobs %}
+          <tr>
+            <td>{{ j.created_at.strftime('%Y-%m-%d %H:%M:%S') if j.created_at else '-' }}</td>
+            <td><code>{{ j.token }}</code></td>
+            <td>
+              {% set c = 'secondary' %}
+              {% if j.status == 'queued' %}{% set c='secondary' %}
+              {% elif j.status == 'processing' %}{% set c='warning text-dark' %}
+              {% elif j.status == 'done' %}{% set c='success' %}
+              {% elif j.status == 'error' %}{% set c='danger' %}{% endif %}
+              <span class="badge bg-{{ c }}">{{ j.status or 'unknown' }}</span>
+            </td>
+            <td class="small text-muted">{{ (j.error or '')[:120] }}</td>
+            <td class="small text-muted">{{ (j.rejected_summary or '')[:120] }}</td>
+            <td>
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{{ url_for('jobs.job_status_page', job_token=j.token) }}">
+                View
+              </a>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-center text-muted p-4">No jobs yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mt-3 text-end">
+    <a class="btn btn-outline-secondary" href="/healthz">Health</a>
+  </div>
+</div>
+</body>
+</html>

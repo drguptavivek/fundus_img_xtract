@@ -36,7 +36,7 @@ htmlcov/
 # Environments
 *.env
 .env
-.env.*
+
 
 # Logs
 *.log

@@ -223,10 +223,26 @@ def create_app():
     
     # -------------------------------
     # New homepage route
-    # -------------------------------
     @app.route("/")
     def homepage():
-        return render_template("home.html")
+        # Compute counts for the public home (unauthenticated visitors)
+        from sqlalchemy import select, func, or_
+        from models import Session, EncounterFile, PatientEncounters
+        img_exts = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]  # same set the app serves
+        with Session() as db:
+            img_filters = [func.lower(EncounterFile.filename).like(f"%{ext}") for ext in img_exts]
+            images_count = db.execute(
+                select(func.count(EncounterFile.id)).where(or_(*img_filters))
+            ).scalar_one()
+            screenings_count = db.execute(
+                select(func.count(PatientEncounters.id))
+            ).scalar_one()
+
+        return render_template(
+            "home.html",
+            images_count=images_count,
+            screenings_count=screenings_count,
+        )
     # -------------------------------
 
     @app.route("/healthz", methods=["GET"])

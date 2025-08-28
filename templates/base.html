@@ -31,58 +31,62 @@
               href="{{ url_for('homepage') }}">Home</a>
           </li>
 
-        {# Work menu: visible to admin or fileUploader #}
-        {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader')) %}
+          {# Work menu: visible to admin or fileUploader #}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader')) %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle
                       {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs']
-                                        or (request.endpoint|default('')).startswith('jobs.')) else '' }}"
-               href="#" id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        or (request.endpoint|default('')).startswith('jobs.')) else '' }}" href="#"
+              id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Work
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'uploads.upload_form' %}active{% endif %}"
-                   href="{{ url_for('uploads.upload_form') }}">Upload</a>
+                  href="{{ url_for('uploads.upload_form') }}">Upload</a>
               </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
-                   href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
+                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
               </li>
-              <li><hr class="dropdown-divider"></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('')).startswith('jobs.')) else '' }}"
-                   href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+                  href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
               </li>
             </ul>
           </li>
-        {% endif %}
+          {% endif %}
 
-        {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
           <li class="nav-item">
             <a class="nav-link {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('')).startswith('screenings.')) else '' }}"
-               href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
+              href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
           </li>
-        {% endif %}
+          {% endif %}
 
           {# Admin dropdown (only for admin users) #}
-            {% if current_user.is_authenticated and current_user_has('admin') %}
-              <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['admin','jobs'] else '' }}"
-                  href="#" id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  Admin
-                </a>
-                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
-                  <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>          
-                  <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
-                  <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
-                  <li><hr class="dropdown-divider"></li>
-                  <li><a class="dropdown-item" href="/healthz">Health</a></li>
-
-                </ul>
+          {% if current_user.is_authenticated and current_user_has('admin') %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['admin','jobs'] else '' }}" href="#"
+              id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Admin
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
+              <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
+              <li>
+                <hr class="dropdown-divider">
               </li>
-            {% endif %}
+              <li><a class="dropdown-item" href="/healthz">Health</a></li>
+
+            </ul>
+          </li>
+          {% endif %}
 
 
           {% if current_user.is_authenticated %}
@@ -97,7 +101,12 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Sign out</a></li>
+              <li>
+                <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="dropdown-item w-100 text-start">Sign out</button>
+                </form>
+              </li>
             </ul>
           </li>
           {% endif %}

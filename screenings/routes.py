@@ -1,4 +1,7 @@
+#screenings/routes.py
+
 from math import ceil
+import re
 from flask import abort, render_template, request, current_app, url_for
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
@@ -7,19 +10,19 @@ from auth.roles import roles_required
 from . import bp
 from models import Session, PatientEncounters
 
-# If bp = Blueprint("screenings", __name__, url_prefix="/screenings"):
 @bp.route("/", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "ophthalmologist")  # allow both per your ACL
 def list_screenings():
     # Query params
     page = request.args.get("page", default=1, type=int) or 1
+    q = (request.args.get("q") or "").strip()
     per_page = int(current_app.config.get("SCREENINGS_PAGE_SIZE", 50)) or 50
     page = max(1, page)
     per_page = max(1, per_page)
 
     db = Session()
     try:
-        # Base query WITHOUT eager load options (safe for count/pagination)
+        # Base query
         base_q = (
             db.query(PatientEncounters)
             .order_by(
@@ -28,17 +31,28 @@ def list_screenings():
             )
         )
 
-        # Total rows
+        # --- Search by patient_id or name ---
+        # PatientEncounters has columns 'patient_id' and 'name'  :contentReference[oaicite:0]{index=0}
+        if q:
+            tokens = [t for t in re.split(r"\s+", q) if t]
+            for t in tokens:
+                pat = f"%{t}%"
+                base_q = base_q.filter(
+                    or_(
+                        PatientEncounters.patient_id.ilike(pat),
+                        PatientEncounters.name.ilike(pat),
+                    )
+                )
+
+        # Total rows AFTER filters
         total = base_q.count()
         total_pages = max(1, ceil(total / per_page)) if total else 1
 
-        # Clamp page to valid range
+        # Clamp page
         if page > total_pages:
             page = total_pages
 
-        # Now apply eager loads ONLY on the paginated items query
-        # - 1–1: joinedload (or selectinload is also fine)
-        # - 1–many collections: selectinload to avoid JOIN explosion
+        # Page items with eager loads
         items = (
             base_q
             .options(
@@ -66,8 +80,10 @@ def list_screenings():
         total_pages=total_pages,
         has_prev=has_prev,
         has_next=has_next,
-        prev_url=url_for("screenings.list_screenings", page=page - 1) if has_prev else None,
-        next_url=url_for("screenings.list_screenings", page=page + 1) if has_next else None,
+        # keep q in pagination links
+        prev_url=url_for("screenings.list_screenings", page=page-1, q=q) if has_prev else None,
+        next_url=url_for("screenings.list_screenings", page=page+1, q=q) if has_next else None,
+        q=q,
     )
 
 

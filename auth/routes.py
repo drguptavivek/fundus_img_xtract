@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from . import auth_bp
 from .security import verify_password, hash_password
 from .utils import utcnow, get_client_ip
+from flask import flash
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock  # type: ignore
@@ -154,7 +155,8 @@ def login():
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for("auth.login"))
+    flash("You’ve been signed out.", "info")
+    return redirect(url_for("homepage"))
 
 
 

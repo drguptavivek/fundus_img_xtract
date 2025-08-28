@@ -2,20 +2,72 @@
 {% block title %}Home{% endblock %}
 
 {% block content %}
-<div class="text-center py-5">
-  <h1 class="mb-4">Welcome to Fundus Image Extractor</h1>
-  <p class="lead mb-4">
-    Upload ZIP files containing patient fundus data, automatically extract and OCR them,
-    and track progress via jobs.
-  </p>
-  <div class="d-flex justify-content-center gap-3">
-    <a class="btn btn-primary btn-lg" href="{{ url_for('uploads.upload_form') }}">
-      Upload Files
-    </a>
-    <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('jobs.list_recent_jobs') }}">
-      Recent Jobs
-    </a>
-    <a class="btn btn-outline-secondary btn-lg" href="/healthz">Health Check</a>
-  </div>
+<div class="container py-4">
+
+  {% if not current_user.is_authenticated %}
+    <!-- Welcome Card -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
+        <div class="flex-fill">
+          <h1 class="h4 mb-2">Welcome to Fundus Image Extractor</h1>
+          <p class="mb-0 text-muted">
+            Upload ZIPs of fundus images, extract reports, and review screenings — all in one place.
+          </p>
+        </div>
+        <div class="ms-md-3 mt-3 mt-md-0 text-md-end">
+          <a class="btn btn-primary" href="{{ url_for('auth.login') }}">
+            Login to get started
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Public KPIs -->
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted small">Total Images</div>
+                <div class="display-6 fw-semibold">{{ images_count or 0 }}</div>
+              </div>
+              <div aria-hidden="true" class="opacity-50">
+                <!-- simple icon-ish circle -->
+                <div class="rounded-circle bg-light" style="width:48px;height:48px;"></div>
+              </div>
+            </div>
+            <div class="mt-2 small text-muted">All images detected across uploaded encounters.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-md-6">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <div>
+                <div class="text-muted small">Total Screenings</div>
+                <div class="display-6 fw-semibold">{{ screenings_count or 0 }}</div>
+              </div>
+              <div aria-hidden="true" class="opacity-50">
+                <div class="rounded-circle bg-light" style="width:48px;height:48px;"></div>
+              </div>
+            </div>
+            <div class="mt-2 small text-muted">Patient encounters processed by the system.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <!-- (Optional) Signed-in home — add quick links or recent activity -->
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h5 mb-2">Welcome back, {{ current_user.full_name or current_user.username }}!</h2>
+        <p class="text-muted mb-0">Use the navigation to upload ZIPs, review screenings, or manage admin tasks.</p>
+      </div>
+    </div>
+  {% endif %}
+
 </div>
 {% endblock %}

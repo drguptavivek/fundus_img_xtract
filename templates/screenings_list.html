@@ -2,25 +2,75 @@
 {% block title %}Screenings{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-  <h3 class="mb-0">Patient Screenings</h3>
-  <div class="d-flex align-items-center gap-2 flex-wrap">
-    <a class="btn btn-secondary" href="{{ url_for('uploads.upload_form') }}">Upload</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded
-      ZIPs</a>
+<div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+      <h3 class="mb-0 me-2">Patient Screenings</h3>
+</div>
 
-    <!-- Top pager -->
-    <div class="vr d-none d-sm-inline mx-1"></div>
-    <div class="btn-group btn-group-sm" role="group" aria-label="Page navigation (top)">
-      <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{{ prev_url or '#' }}">←
-        Prev</a>
-      <span class="btn btn-outline-secondary disabled">Page {{ page }} / {{ total_pages }}</span>
-      <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{{ next_url or '#' }}">Next
-        →</a>
+<div class="mb-3">
+  <div class="row g-2 align-items-center">
+
+    {# LEFT: Search #}
+    <div class="col-12 col-lg-4 order-1">
+      <form method="get" action="{{ url_for('screenings.list_screenings') }}" role="search">
+        <div class="input-group input-group-sm" style="max-width: 520px;">
+          <input type="search"
+                 name="q"
+                 class="form-control"
+                 placeholder="Search by Patient ID or Name"
+                 value="{{ q or '' }}"
+                 aria-label="Search screenings">
+          <button class="btn btn-primary" type="submit">Search</button>
+          {% if q %}
+            <a class="btn btn-outline-secondary" href="{{ url_for('screenings.list_screenings') }}">Clear</a>
+          {% endif %}
+        </div>
+      </form>
     </div>
+
+    {# MIDDLE: Summary #}
+    <div class="col-12 col-lg-4 order-3 order-lg-2 text-center">
+      <div class="text-muted small toolbar-status">
+        {% if q %}
+          Showing {{ items|length }} of {{ total }} result{{ 's' if total != 1 else '' }} for “{{ q }}”.
+        {% else %}&nbsp;{% endif %}
+      </div>
+    </div>
+
+    {# RIGHT: Pager #}
+    <div class="col-12 col-lg-4 order-2 order-lg-3 d-flex justify-content-lg-end">
+      <div class="d-inline-flex align-items-center gap-2">
+        <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
+           href="{{ prev_url or '#' }}"
+           tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
+
+        <form class="d-inline" method="get" action="{{ url_for('screenings.list_screenings') }}">
+          {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+          <label for="goto-page" class="visually-hidden">Go to page</label>
+          <div class="page-box btn-sm">
+            <input type="number"
+                   id="goto-page"
+                   name="page"
+                   class="page-input"
+                   inputmode="numeric"
+                   min="1"
+                   max="{{ total_pages }}"
+                   value="{{ page }}"
+                   aria-label="Go to page">
+            <span class="sep">/ {{ total_pages }}</span>
+          </div>
+        </form>
+
+        <a class="btn btn-outline-secondary btn-sm {% if not has_next %}disabled{% endif %}"
+           href="{{ next_url or '#' }}"
+           tabindex="{% if not has_next %}-1{% else %}0{% endif %}">Next →</a>
+      </div>
+    </div>
+
   </div>
 </div>
+
+
+
 
 {% if items %}
 <div class="row g-3">
@@ -59,13 +109,22 @@
             </div>
           </div>
 
-          <div class="d-flex flex-column align-items-end gap-1">
-            <span class="d-none d-lg-inline badge scr-badge">#{{ enc.id }}</span>
-            <a class="btn btn-sm btn-outline-secondary"
+          <div class="d-flex flex-column align-items-end gap-1 text-end">
+            <span class="badge scr-badge d-none d-md-inline">#{{ enc.id }}</span>
+
+            <a class="btn btn-primary btn-sm shadow-sm fw-semibold detail-btn px-3"
               href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">
+              <span class="me-1" aria-hidden="true">
+                <!-- tiny eye icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" focusable="false">
+                  <path d="M8 3c3.3 0 5.9 2.1 7.3 4.6a.9.9 0 0 1 0 .8C13.9 11.9 11.3 14 8 14s-5.9-2.1-7.3-4.6a.9.9 0 0 1 0-.8C2.1 5.1 4.7 3 8 3zm0 1.6c-2.6 0-4.7 1.6-6 3.4 1.3 1.8 3.4 3.4 6 3.4s4.7-1.6 6-3.4c-1.3-1.8-3.4-3.4-6-3.4zM8 6.2a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z"/>
+                </svg>
+              </span>
               Screening Detail
             </a>
           </div>
+
+
         </div>
 
       </div>
@@ -223,6 +282,8 @@
 </div>
 
 <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
+<br/>
+<br/>
 {% endblock %}
 
 
@@ -231,4 +292,5 @@
 <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
 <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/page_nav_screenings_list.js') }}?v={{ v }}"></script>
 {% endblock %}

@@ -2,11 +2,14 @@ from math import ceil
 from flask import abort, render_template, request, current_app, url_for
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
+
+from auth.roles import roles_required
 from . import bp
 from models import Session, PatientEncounters
 
 # If bp = Blueprint("screenings", __name__, url_prefix="/screenings"):
 @bp.route("/", methods=["GET"])
+@roles_required("admin")
 def list_screenings():
     # Query params
     page = request.args.get("page", default=1, type=int) or 1
@@ -69,6 +72,7 @@ def list_screenings():
 
 
 @bp.route("/<int:encounter_id>", methods=["GET"])
+@roles_required("admin")
 def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 

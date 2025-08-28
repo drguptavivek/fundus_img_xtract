@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Users & Roles{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0">Users &amp; Roles</h1>
+  <a class="btn btn-success btn-sm" href="{{ url_for('admin.add_user') }}">Add user</a>
+</div>
+
+  {% if not users %}
+    <div class="alert alert-info">No users yet.</div>
+  {% else %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th style="width:70px">ID</th>
+            <th>Username</th>
+            <th>Active</th>
+            <th>Roles</th>
+            <th style="width:220px"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td class="text-muted">{{ u.id }}</td>
+            <td><strong>{{ u.username }}</strong></td>
+            <td>
+              <form method="post" action="{{ url_for('admin.users_update', user_id=u.id) }}" class="d-inline">
+                {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="active-{{ u.id }}" name="active" value="1" {% if u.is_active %}checked{% endif %}>
+                  <label class="form-check-label small" for="active-{{ u.id }}">Active</label>
+                </div>
+
+                {# Roles as checkboxes #}
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                  {% for r in roles %}
+                    {% set has = (u.roles|map(attribute='name')|list)|select('equalto', r.name)|list|length > 0 %}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="role-{{ u.id }}-{{ r.name }}" name="roles" value="{{ r.name }}" {% if has %}checked{% endif %}>
+                      <label class="form-check-label small" for="role-{{ u.id }}-{{ r.name }}">{{ r.name }}</label>
+                    </div>
+                  {% endfor %}
+                </div>
+
+                <div class="mt-2 d-flex gap-2">
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  <a class="btn btn-sm btn-outline-secondary"
+                     href="{{ url_for('admin.change_password', username=u.username) }}">
+                    Change password
+                  </a>
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
+                    Edit profile
+                    </a>
+
+                </div>
+              </form>
+            </td>
+            <td class="text-nowrap">
+              {% for r in u.roles or [] %}
+                <span class="badge text-bg-secondary">{{ r.name }}</span>
+              {% endfor %}
+            </td>
+            <td></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

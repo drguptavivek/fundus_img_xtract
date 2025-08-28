@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 from flask import abort, send_from_directory
 from werkzeug.utils import secure_filename
+
+from auth.roles import roles_required
 from . import bp
 
 # Reuse the same locations you configured for split PDFs
@@ -22,12 +24,14 @@ def _safe_file(base_dir: Path, filename: str) -> tuple[str, str]:
     return (str(base_dir), fname)
 
 @bp.route("/dr/<path:filename>", methods=["GET"])
+@roles_required("admin")
 def serve_dr_pdf(filename: str):
     directory, fname = _safe_file(DR_PDF_DIR, filename)
     # Serve inline (not attachment), browser will open in a new tab when link has target=_blank
     return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)
 
 @bp.route("/glaucoma/<path:filename>", methods=["GET"])
+@roles_required("admin")
 def serve_glaucoma_pdf(filename: str):
     directory, fname = _safe_file(GLAUCOMA_PDF_DIR, filename)
     return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)

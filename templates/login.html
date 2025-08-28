@@ -1,0 +1,100 @@
+{# auth/templates/login.html #}
+{% extends "base.html" %}
+
+{% block title %}Sign in{% endblock %}
+
+{# If your base has custom blocks like head_extra or scripts_extra, you can add to them too #}
+{# {% block head_extra %}{% endblock %} #}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-sm-10 col-md-8 col-lg-6 col-xl-5">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <h1 class="h5 mb-0">Sign in</h1>
+          {# Optional: icon/branding could go here #}
+        </div>
+        <div class="card-body">
+
+          {# Flashed messages (supports categories) #}
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category in ['error','danger'] else category }} alert-dismissible fade show" role="alert">
+                  {{ message }}
+                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
+
+          {# Direct error string from view (kept generic to avoid username enumeration) #}
+          {% if error %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+              {{ error }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endif %}
+
+          <form method="post" action="{{ url_for('auth.login') }}" novalidate>
+            {# CSRF token (works if CSRFProtect/Flask-WTF is configured) #}
+            {% if csrf_token is defined %}
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% elif form is defined and form.csrf_token is defined %}
+              {{ form.csrf_token }}
+            {% endif %}
+
+            <div class="mb-3">
+              <label class="form-label" for="username">Username</label>
+              <input
+                class="form-control"
+                name="username"
+                id="username"
+                autocomplete="username"
+                required
+                autofocus
+              >
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="password">Password</label>
+              <input
+                class="form-control"
+                type="password"
+                name="password"
+                id="password"
+                autocomplete="current-password"
+                required
+              >
+            </div>
+
+            {# Optional remember-me; uncomment if you wire it in your route #}
+            {#
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" value="1" id="remember" name="remember">
+              <label class="form-check-label" for="remember">Remember me</label>
+            </div>
+            #}
+
+            <button class="btn btn-primary w-100" type="submit">Sign in</button>
+          </form>
+
+        </div>
+        <div class="card-footer text-muted small">
+          <div class="d-flex justify-content-between align-items-center">
+            <span>Too many failed attempts? Try again later.</span>
+            {# Optional: link stub for password reset/help #}
+            {# <a href="{{ url_for('auth.forgot') }}">Forgot password?</a> #}
+          </div>
+        </div>
+      </div>
+
+      {# Optional: space for any page-specific notes #}
+      <p class="text-center text-muted small mt-3 mb-0">
+        You’ll be locked out for 4 hours after repeated failures (username or IP).
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

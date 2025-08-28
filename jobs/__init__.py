@@ -1,4 +1,6 @@
 # jobs/__init__.py
 from flask import Blueprint
-bp = Blueprint("jobs", __name__, url_prefix="")
-from . import routes  # noqa
+
+jobs_bp = Blueprint("jobs", __name__, url_prefix="/jobs" )
+
+from . import routes 

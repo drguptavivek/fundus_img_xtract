@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Edit User — {{ user.username }}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Edit User: {{ user.username }}</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.users_list') }}">Back</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('admin.edit_user', user_id=user.id) }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="full_name">Full name</label>
+            <input class="form-control" id="full_name" name="full_name" value="{{ user.full_name or '' }}" maxlength="200">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="designation">Designation</label>
+            <input class="form-control" id="designation" name="designation" value="{{ user.designation or '' }}" maxlength="100">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input class="form-control" id="email" name="email" type="email" value="{{ user.email or '' }}" maxlength="254">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="phone">Phone</label>
+            <input class="form-control" id="phone" name="phone" value="{{ user.phone or '' }}"
+                   pattern="[0-9+\-\s()]{7,}" maxlength="32" title="Digits, + - ( ) and spaces">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="year_of_joining">Year of joining</label>
+            <input class="form-control" id="year_of_joining" name="year_of_joining"
+                   value="{{ user.year_of_joining if user.year_of_joining is not none else '' }}"
+                   inputmode="numeric" pattern="[0-9]{4}" title="YYYY">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label" for="last_date_of_service">Last date of service</label>
+            <input class="form-control" id="last_date_of_service" name="last_date_of_service" type="date"
+                   value="{{ user.last_date_of_service }}">
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

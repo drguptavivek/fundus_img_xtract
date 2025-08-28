@@ -224,3 +224,11 @@
 
 <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
 {% endblock %}
+
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/screening-viewer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+{% endblock %}

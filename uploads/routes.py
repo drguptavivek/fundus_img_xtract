@@ -6,12 +6,12 @@ from flask import (
     render_template, request, redirect, url_for, flash, current_app
 )
 from werkzeug.utils import secure_filename
-
-
 from models import Session, UPLOAD_DIR
 from job_store import db_create_job
 from worker import queue_job
 from . import bp
+from auth.roles import roles_required
+
 
 ALLOWED_EXT = {"zip"}
 
@@ -38,6 +38,7 @@ def _file_size_bytes(file_storage) -> int:
     return size
 
 @bp.route("/upload_files", methods=["GET"])
+@roles_required("admin", "fileUploader")
 def upload_form():
     return render_template(
         "upload_multi.html",
@@ -46,6 +47,7 @@ def upload_form():
     )
 
 @bp.route("/upload", methods=["POST"])
+@roles_required("admin", "fileUploader")
 def upload_files():
     per_file_max = current_app.config["PER_FILE_MAX_BYTES"]
     max_files = current_app.config["MAX_FILES_PER_UPLOAD"]

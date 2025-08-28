@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 from flask import abort, send_from_directory
 from werkzeug.utils import secure_filename
+
+from auth.roles import roles_required
 from . import bp
 
 # Use your existing configured IMAGE_DIR from models.py
@@ -18,6 +20,7 @@ def _safe_image(base_dir: Path, filename: str) -> tuple[str, str]:
     return (str(base_dir), fname)
 
 @bp.route("/img/<path:filename>", methods=["GET"])
+@roles_required("admin")
 def serve_image(filename: str):
     directory, fname = _safe_image(IMAGE_DIR, filename)
     # Let the browser display the image inline; open in new tab via target=_blank in templates

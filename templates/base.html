@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8">
   <title>{% block title %}ZIP → Extract → OCR{% endblock %}</title>
@@ -10,122 +11,214 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
 </head>
+
 <body class="bg-light">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-  <div class="container">
-    <a class="navbar-brand" href="{{ url_for('homepage') }}">
-      Fundus Image Extractor
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-            aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'homepage' %}active{% endif %}" 
-             href="{{ url_for('homepage') }}">Home</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'uploads.upload_form' %}active{% endif %}" 
-             href="{{ url_for('uploads.upload_form') }}">Upload</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'jobs.list_recent_jobs' %}active{% endif %}" 
-             href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
-                href="{{ url_for('uploaded_results.list_uploaded_results') }}">
-                Uploaded ZIPs
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="{{ url_for('homepage') }}">
+        Fundus Image Extractor
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+        aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint == 'homepage' %}active{% endif %}"
+              href="{{ url_for('homepage') }}">Home</a>
+          </li>
+
+        {# Work menu: visible to admin or fileUploader #}
+        {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader')) %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle
+                      {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs']
+                                        or (request.endpoint|default('')).startswith('jobs.')) else '' }}"
+               href="#" id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Work
             </a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.endpoint == 'screenings.list_screenings' %}active{% endif %}"
-            href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
-      </li>
-        <li class="nav-item">
-          <a class="nav-link" href="/healthz">Health</a>
-        </li>
-      </ul>
-    </div>
-  </div>
-</nav>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'uploads.upload_form' %}active{% endif %}"
+                   href="{{ url_for('uploads.upload_form') }}">Upload</a>
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
+                   href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('')).startswith('jobs.')) else '' }}"
+                   href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+              </li>
+            </ul>
+          </li>
+        {% endif %}
 
-<div class="container">
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div class="mb-3">
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} mb-2">{{ message }}</div>
-        {% endfor %}
+        {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
+          <li class="nav-item">
+            <a class="nav-link {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('')).startswith('screenings.')) else '' }}"
+               href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
+          </li>
+        {% endif %}
+
+          {# Admin dropdown (only for admin users) #}
+            {% if current_user.is_authenticated and current_user_has('admin') %}
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['admin','jobs'] else '' }}"
+                  href="#" id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Admin
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
+                  <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>          
+                  <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
+                  <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li><a class="dropdown-item" href="/healthz">Health</a></li>
+
+                </ul>
+              </li>
+            {% endif %}
+
+
+          {% if current_user.is_authenticated %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'account' else '' }}" href="#"
+              role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Account
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="{{ url_for('account.profile') }}">My profile</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('account.change_password_self') }}">Change password</a></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">Sign out</a></li>
+            </ul>
+          </li>
+          {% endif %}
+
+        </ul>
       </div>
-    {% endif %}
-  {% endwith %}
+    </div>
+  </nav>
 
-  {% block content %}{% endblock %}
-</div>
+  {# Flash toasts (fixed, compact, top-right, offset under navbar) #}
+  <div id="flash-toasts" class="toast-container position-fixed end-0 p-3"
+    style="z-index:1200; top: var(--toast-top, 64px); --bs-toast-max-width: 300px; --bs-toast-padding-x: .5rem; --bs-toast-padding-y: .25rem;">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    {% set cls = (
+    'danger' if category in ['error','danger']
+    else 'success' if category in ['ok','success']
+    else 'warning' if category in ['warn','warning']
+    else 'info'
+    ) %}
+    <div class="toast text-bg-{{ cls }} border-0 shadow-sm small" role="alert" aria-live="polite" aria-atomic="true"
+      data-bs-autohide="true" data-bs-delay="3000">
+      <div class="d-flex">
+        <div class="toast-body py-1">{{ message }}</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"
+          aria-label="Close"></button>
+      </div>
+    </div>
+    {% endfor %}
+    {% endwith %}
+  </div>
 
 
-<!-- Global SVG color filters (hidden) For Images-->
-<svg width="0" height="0" style="position:absolute;left:-9999px;visibility:hidden" aria-hidden="true" focusable="false">
-  <defs>
-    <!-- Red-free: output R=G, G=G, B=G (green channel as monochrome) -->
-    <filter id="pswp-greenmono" color-interpolation-filters="sRGB">
-      <feColorMatrix type="matrix" values="
+
+  <div class="container">
+    {% from "_forms.html" import csrf_field %}
+    {% block content %}
+
+    {% endblock %}
+  </div>
+
+
+  <!-- Global SVG color filters (hidden) For Images-->
+  <svg width="0" height="0" style="position:absolute;left:-9999px;visibility:hidden" aria-hidden="true"
+    focusable="false">
+    <defs>
+      <!-- Red-free: output R=G, G=G, B=G (green channel as monochrome) -->
+      <filter id="pswp-greenmono" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
         0 1 0 0 0
         0 1 0 0 0
         0 1 0 0 0
         0 0 0 1 0" />
-    </filter>
+      </filter>
 
-    <!-- Green emphasis: keep color, reduce R/B to 50% -->
-    <filter id="pswp-greenboost" color-interpolation-filters="sRGB">
-      <feColorMatrix type="matrix" values="
+      <!-- Green emphasis: keep color, reduce R/B to 50% -->
+      <filter id="pswp-greenboost" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
         0.5 0   0   0 0
         0   1.0 0   0 0
         0   0   0.5 0 0
         0   0   0   1 0" />
-    </filter>
+      </filter>
 
-    <!-- Grayscale (luminosity) -->
-    <filter id="pswp-gray" color-interpolation-filters="sRGB">
-      <feColorMatrix type="matrix" values="
+      <!-- Grayscale (luminosity) -->
+      <filter id="pswp-gray" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
         0.2126 0.7152 0.0722 0 0
         0.2126 0.7152 0.0722 0 0
         0.2126 0.7152 0.0722 0 0
         0      0      0      1 0" />
-    </filter>
+      </filter>
 
-    <!-- High contrast: simple contrast boost -->
-    <filter id="pswp-contrast" color-interpolation-filters="sRGB">
-      <!-- contrast ~1.3 around 0.5 -->
-      <feComponentTransfer>
-        <feFuncR type="linear" slope="1.3" intercept="-0.15"/>
-        <feFuncG type="linear" slope="1.3" intercept="-0.15"/>
-        <feFuncB type="linear" slope="1.3" intercept="-0.15"/>
-      </feComponentTransfer>
-    </filter>
+      <!-- High contrast: simple contrast boost -->
+      <filter id="pswp-contrast" color-interpolation-filters="sRGB">
+        <!-- contrast ~1.3 around 0.5 -->
+        <feComponentTransfer>
+          <feFuncR type="linear" slope="1.3" intercept="-0.15" />
+          <feFuncG type="linear" slope="1.3" intercept="-0.15" />
+          <feFuncB type="linear" slope="1.3" intercept="-0.15" />
+        </feComponentTransfer>
+      </filter>
 
-    <!-- Blue mono: output R=B, G=B, B=B -->
-  <filter id="pswp-bluemono" color-interpolation-filters="sRGB">
-    <feColorMatrix type="matrix" values="
+      <!-- Blue mono: output R=B, G=B, B=B -->
+      <filter id="pswp-bluemono" color-interpolation-filters="sRGB">
+        <feColorMatrix type="matrix" values="
       0 0 1 0 0
       0 0 1 0 0
       0 0 1 0 0
       0 0 0 1 0" />
-  </filter>
-  </defs>
-</svg>
+      </filter>
+    </defs>
+  </svg>
+
+
+  <!--  {# --- Core/vendor scripts first (e.g., bootstrap bundle, photoswipe, etc.) --- #} -->
+  <!-- Local Bootstrap JS (bundle includes Popper) -->
+  <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
+
+  <!--  {# Optional: your global/boot code #} -->
+  <!-- Optional: your own app.js -->
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/flash-toasts.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
+    defer></script>
+
+  {% if current_user.is_authenticated %}
+  <script id="idle-timeout-js" src="{{ url_for('static', filename='js/idle-timeout.js') }}" async data-enabled="1"
+    data-timeout-min="{{ config.get('INACTIVITY_TIMEOUT_MINUTES', 30)|int }}" data-warn-lead-min="2"
+    data-ping-url="{{ url_for('auth.ping') }}" data-login-url="{{ url_for('auth.login') }}">
+    </script>
+  {% endif %}
+
+
+  <!-- {# Page-specific scripts go here #} -->
+  {% block page_scripts %}
+
+  {% endblock %}
 
 
 
-<!-- Local Bootstrap JS (bundle includes Popper) -->
-<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
-<!-- Optional: your own app.js -->
-<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
-<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
-<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+
 </body>
+
 </html>

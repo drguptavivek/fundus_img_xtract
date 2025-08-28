@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}My Profile{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="h4 mb-3">My Profile</h1>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('account.profile') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="full_name">Full name</label>
+            <input class="form-control" id="full_name" name="full_name"
+                   value="{{ (full_name if full_name is defined else (current_user.full_name or '')) }}" maxlength="200">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="designation">Designation</label>
+            <input class="form-control" id="designation" name="designation"
+                   value="{{ (designation if designation is defined else (current_user.designation or '')) }}" maxlength="100">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="email">Email</label>
+            <input class="form-control" id="email" name="email" type="email"
+                   value="{{ (email if email is defined else (current_user.email or '')) }}" maxlength="254">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="phone">Phone</label>
+            <input class="form-control" id="phone" name="phone"
+                   value="{{ (phone if phone is defined else (current_user.phone or '')) }}"
+                   pattern="[0-9+\-\s()]{7,}" maxlength="32" title="Digits, + - ( ) and spaces">
+          </div>
+        </div>
+
+          <div class="col-12">
+            <label class="form-label d-block">Assigned roles</label>
+            {% if roles and roles|length %}
+              {% for r in roles %}
+                <span class="badge text-bg-secondary me-1 mb-1">{{ r }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-muted">No roles assigned</span>
+            {% endif %}
+          </div>
+
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">Save</button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('account.change_password_self') }}">Change password</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

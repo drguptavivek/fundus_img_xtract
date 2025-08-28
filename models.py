@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text, Index, func, UniqueConstraint
+from sqlalchemy import Date, create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text, Index, func, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv   
 
@@ -26,6 +26,9 @@ IMAGE_DIR = BASE_DIR / os.getenv("IMAGE_DIR", "files/images")
 PDF_DIR = BASE_DIR / os.getenv("PDF_DIR", "files/pdfs")
 PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/processed")
 PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/processing_error")
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 
 # --- SQLAlchemy Setup ---
@@ -134,11 +137,7 @@ class JobItem(Base):
 
 
 
-
-def utcnow():
-    # store UTC everywhere
-    return datetime.now(timezone.utc)
-
+# --- existing User model: ADD the relationship + helper methods ---
 class User(Base):
     __tablename__ = "users"
 
@@ -147,21 +146,68 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
+    # --- Profile fields ---
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
+    year_of_joining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_date_of_service: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    # Flask-Login integration helpers (optional but convenient)
+    # NEW: roles many-to-many
+    roles: Mapped[list["Role"]] = relationship(
+        "Role",
+        secondary="user_roles",
+        back_populates="users",
+        lazy="selectin",
+    )
+
+    # Flask-Login helpers (keep as before) ...
     @property
     def is_authenticated(self) -> bool:  # noqa
         return True
-
     @property
     def is_anonymous(self) -> bool:  # noqa
         return False
-
-    def get_id(self) -> str:  # noqa (Flask-Login expects str)
+    def get_id(self) -> str:  # noqa
         return str(self.id)
+
+    # NEW: convenience checks
+    def has_role(self, *names: str) -> bool:
+        user_roles = {r.name.lower() for r in (self.roles or [])}
+        return any(n.lower() in user_roles for n in names)
+
+    def has_all_roles(self, *names: str) -> bool:
+        user_roles = {r.name.lower() for r in (self.roles or [])}
+        return all(n.lower() in user_roles for n in names)
+
+# --- NEW: Role model ---
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+
+    users: Mapped[list["User"]] = relationship(
+        "User",
+        secondary="user_roles",
+        back_populates="roles",
+    )
+
+# --- NEW: association table ---
+class UserRole(Base):
+    __tablename__ = "user_roles"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"),
+        Index("ix_user_roles_user", "user_id"),
+        Index("ix_user_roles_role", "role_id"),
+    )
+
 
 class LoginAttempt(Base):
     """

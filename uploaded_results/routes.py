@@ -1,12 +1,15 @@
 # uploaded_results/routes.py
 from math import ceil
 from flask import render_template, request, current_app, url_for
+
+from auth.roles import roles_required
 from . import bp
 from models import Session, ZipFile
 from sqlalchemy.orm import joinedload  
 
 
 @bp.route("/uploaded_results", methods=["GET"])
+@roles_required("admin", "fileUploader")
 def list_uploaded_results():
     # Pagination inputs
     page = request.args.get("page", default=1, type=int)

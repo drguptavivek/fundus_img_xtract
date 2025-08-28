@@ -347,8 +347,28 @@
 }
 
 /* screenings list cards */
+/* tighter cards */
+/* Header meta row */
+.scr-meta code { font-size: .85em; }
+
+/* Subtle badge for #716 etc. */
+.scr-badge {
+  background-color: var(--bs-light);
+  color: var(--bs-secondary-color);
+  font-weight: 400;
+  line-height: 1;
+}
+
+/* Keep cards compact */
 .scr-card .card-header { padding-top: .5rem; padding-bottom: .5rem; }
-.scr-card .card-body   { padding-top: .75rem; padding-bottom: .75rem; }
-.scr-card .card-footer { padding-top: .5rem; padding-bottom: .5rem; }
+.scr-card .card-body   { padding-top: .75rem; padding-bottom: .5rem; }
+
+/* Allow truncation & compact lists */
+.scr-grid .scr-col { min-width: 0; }
 .list-compact li { margin-bottom: .25rem; }
 
+/* On large screens, let report/image lists expand; on small, keep them tidy */
+.scr-scroll { max-height: 260px; overflow: auto; }
+@media (min-width: 992px) {
+  .scr-scroll { max-height: none; overflow: visible; }
+}

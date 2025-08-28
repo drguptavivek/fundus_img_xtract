@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text, Index, func, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
-from dotenv import load_dotenv   # ✅ add this
+from dotenv import load_dotenv   
+
+
 
 
 # --- Load environment ---
@@ -127,6 +129,70 @@ class JobItem(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     job: Mapped["Job"] = relationship(back_populates="items")
+
+
+
+
+
+
+def utcnow():
+    # store UTC everywhere
+    return datetime.now(timezone.utc)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(150), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    # Flask-Login integration helpers (optional but convenient)
+    @property
+    def is_authenticated(self) -> bool:  # noqa
+        return True
+
+    @property
+    def is_anonymous(self) -> bool:  # noqa
+        return False
+
+    def get_id(self) -> str:  # noqa (Flask-Login expects str)
+        return str(self.id)
+
+class LoginAttempt(Base):
+    """
+    Record every login attempt (success or failure) with typed username and client IP.
+    We aggregate by rolling windows to decide throttling/lockouts.
+    """
+    __tablename__ = "login_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username_input: Mapped[str] = mapped_column(String(150), nullable=False)  # exactly what user typed
+    ip_address: Mapped[str] = mapped_column(String(64), nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True, nullable=False)
+
+    __table_args__ = (
+        Index("ix_login_attempts_username_created", "username_input", "created_at"),
+        Index("ix_login_attempts_ip_created", "ip_address", "created_at"),
+    )
+
+class IpLock(Base):
+    """
+    Locks a client IP for a period.
+    """
+    __tablename__ = "ip_locks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    ip_address: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    locked_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (UniqueConstraint("ip_address", name="uq_iplock_ip"),)
+
 
 
 

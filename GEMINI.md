@@ -4,7 +4,7 @@
 
 This project is a Python-based data processing pipeline designed to extract and analyze medical reports from zip files. The primary focus is on processing PDF reports containing fundus imagery for Diabetic Retinopathy and Glaucoma screenings.
 
-The workflow begins by ingesting zip files, extracting their contents (PDFs and images), and then performing Optical Character Recognition (OCR) on the PDFs to extract key medical data points. The extracted information is then stored in a structured database.
+The workflow begins by ingesting zip files, extracting their contents (PDFs and images), and then performing Optical Character Recognition (OCR) on the PDFs to extract key medical data points. The extracted information is then stored in a structured database. 
 
 The project also includes a web application component built with **Flask**, which provides an interface for uploading files, monitoring processing status, and viewing the extracted results.
 

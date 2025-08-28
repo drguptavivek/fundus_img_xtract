@@ -1,33 +1,49 @@
-# screenings/routes.py
 from math import ceil
-from flask import render_template, request, current_app, url_for
-from sqlalchemy.orm import joinedload
+from flask import abort, render_template, request, current_app, url_for
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy import and_, or_
 from . import bp
 from models import Session, PatientEncounters
 
-@bp.route("/screenings", methods=["GET"])
+# If bp = Blueprint("screenings", __name__, url_prefix="/screenings"):
+@bp.route("/", methods=["GET"])
 def list_screenings():
-    page = request.args.get("page", default=1, type=int)
-    per_page = int(current_app.config.get("SCREENINGS_PAGE_SIZE", 50))
-    page = 1 if page < 1 else page
+    # Query params
+    page = request.args.get("page", default=1, type=int) or 1
+    per_page = int(current_app.config.get("SCREENINGS_PAGE_SIZE", 50)) or 50
+    page = max(1, page)
+    per_page = max(1, per_page)
 
     db = Session()
     try:
-        # ✅ Eager-load associated ZipFile, GlaucomaReports, and DR Reports
+        # Base query WITHOUT eager load options (safe for count/pagination)
         base_q = (
             db.query(PatientEncounters)
-            .options(
-                joinedload(PatientEncounters.zip_file),
-                joinedload(PatientEncounters.glaucoma_reports),
-                joinedload(PatientEncounters.dr_reports),
-                joinedload(PatientEncounters.encounter_files),   # 👈 add this
+            .order_by(
+                PatientEncounters.capture_date.desc(),
+                PatientEncounters.id.desc()
             )
-            .order_by(PatientEncounters.capture_date.desc(), PatientEncounters.id.desc())
         )
 
+        # Total rows
         total = base_q.count()
+        total_pages = max(1, ceil(total / per_page)) if total else 1
+
+        # Clamp page to valid range
+        if page > total_pages:
+            page = total_pages
+
+        # Now apply eager loads ONLY on the paginated items query
+        # - 1–1: joinedload (or selectinload is also fine)
+        # - 1–many collections: selectinload to avoid JOIN explosion
         items = (
             base_q
+            .options(
+                joinedload(PatientEncounters.zip_file),
+                selectinload(PatientEncounters.glaucoma_reports),
+                selectinload(PatientEncounters.dr_reports),
+                selectinload(PatientEncounters.encounter_files),
+            )
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -35,7 +51,6 @@ def list_screenings():
     finally:
         db.close()
 
-    total_pages = max(1, ceil(total / per_page)) if total else 1
     has_prev = page > 1
     has_next = page < total_pages
 
@@ -50,4 +65,86 @@ def list_screenings():
         has_next=has_next,
         prev_url=url_for("screenings.list_screenings", page=page - 1) if has_prev else None,
         next_url=url_for("screenings.list_screenings", page=page + 1) if has_next else None,
+    )
+
+
+@bp.route("/<int:encounter_id>", methods=["GET"])
+def screening_detail(encounter_id: int):
+    IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
+
+    db = Session()
+    try:
+        encounter = (
+            db.query(PatientEncounters)
+            .options(
+                joinedload(PatientEncounters.zip_file),
+                selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.dr_reports),
+                selectinload(PatientEncounters.glaucoma_reports),
+            )
+            .filter(PatientEncounters.id == encounter_id)
+            .first()
+        )
+        if not encounter:
+            abort(404, description="Encounter not found")
+
+        # Prev/Next (global ordering: capture_date DESC, id DESC)
+        prev_enc = (
+            db.query(PatientEncounters)
+            .filter(
+                or_(
+                    PatientEncounters.capture_date > encounter.capture_date,
+                    and_(
+                        PatientEncounters.capture_date == encounter.capture_date,
+                        PatientEncounters.id > encounter.id,
+                    ),
+                )
+            )
+            .order_by(PatientEncounters.capture_date.asc(), PatientEncounters.id.asc())
+            .first()
+        )
+        next_enc = (
+            db.query(PatientEncounters)
+            .filter(
+                or_(
+                    PatientEncounters.capture_date < encounter.capture_date,
+                    and_(
+                        PatientEncounters.capture_date == encounter.capture_date,
+                        PatientEncounters.id < encounter.id,
+                    ),
+                )
+            )
+            .order_by(PatientEncounters.capture_date.desc(), PatientEncounters.id.desc())
+            .first()
+        )
+        prev_url = url_for("screenings.screening_detail", encounter_id=prev_enc.id) if prev_enc else None
+        next_url = url_for("screenings.screening_detail", encounter_id=next_enc.id) if next_enc else None
+
+        # Images only from encounter_files
+        images = []
+        for ef in (encounter.encounter_files or []):
+            ft = (ef.file_type or "").lower().strip()
+            ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
+            if ft.startswith("image/") or ext in IMAGE_EXTS:
+                images.append(ef)
+
+        # Reports (for left-side buttons)
+        dr_reports = encounter.dr_reports or []
+        gl_reports = encounter.glaucoma_reports or []
+
+    finally:
+        db.close()
+
+    gallery_id = f"pswp-gallery-enc-{encounter.id}"
+
+    return render_template(
+        "screening_detail.html",
+        encounter=encounter,
+        images=images,
+        dr_reports=dr_reports,
+        gl_reports=gl_reports,
+        back_url=url_for("screenings.list_screenings"),
+        prev_url=prev_url,
+        next_url=next_url,
+        gallery_id=gallery_id,     
     )

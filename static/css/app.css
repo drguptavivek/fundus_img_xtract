@@ -1,3 +1,4 @@
+/* static/css/app.css     */
 /* ================================
    PDF inside PhotoSwipe
    ================================ */
@@ -188,3 +189,166 @@
   pointer-events: auto !important;
 }
 .pswp__top-bar *{ pointer-events: auto !important; }
+
+
+/* ===== Large image viewer (CSS-only) ===== */
+
+/* (Optional) wrapper — if present */
+.sv-viewer-root {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Big square viewer */
+.sv-main {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 100%;
+  background: #000;
+  border-radius: .5rem;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden; /* keep arrows/counter inside */
+}
+
+/* On wider-than-mobile: cap the square by 70% of viewport height */
+@media (min-width: 576px) {
+  /* fallback */
+  .sv-main { width: min(100%, 70vh); }
+}
+@supports (height: 1svh) {
+  @media (min-width: 576px) {
+    .sv-main { width: min(100%, 70svh); }
+  }
+}
+@supports (height: 1dvh) {
+  @media (min-width: 576px) {
+    .sv-main { width: min(100%, 70dvh); }
+  }
+}
+
+/* Image always fully visible */
+.sv-main-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain; /* never crop, letterbox on black */
+  display: block;
+}
+
+/* Controls (match your markup) */
+.sv-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0,0,0,.45);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.sv-prev { left: 10px; }
+.sv-next { right: 10px; }
+
+.sv-counter {
+  position: absolute;
+  top: .5rem; left: .5rem;
+  background: rgba(0,0,0,.55);
+  color: #fff;
+  padding: .15rem .4rem;
+  border-radius: .25rem;
+  font-size: .8rem;
+}
+
+/* Thumbnails (optional; unchanged) */
+.sv-thumbs { display:flex; gap:.5rem; overflow-x:auto; padding:.25rem .25rem .5rem; }
+.sv-thumb-link { border:2px solid transparent; border-radius:8px; padding:2px; background:#fff; flex:0 0 auto; }
+.sv-thumb-link.active { border-color:#0d6efd; }
+.sv-thumb-img { height:64px; width:64px; object-fit:cover; border-radius:6px; display:block; }
+
+/* Make the selected filter button look active */
+.sv-filters .btn-check:checked + .btn {
+  color: #fff;
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+/* Apply SVG filters to the large image using :has() */
+.card:has(.sv-filters input[value="none"]:checked)       .sv-main-img { filter: none; }
+.card:has(.sv-filters input[value="redfree"]:checked)    .sv-main-img { filter: url(#pswp-greenmono); }
+.card:has(.sv-filters input[value="greenboost"]:checked) .sv-main-img { filter: url(#pswp-greenboost); }
+.card:has(.sv-filters input[value="bluemono"]:checked)   .sv-main-img { filter: url(#pswp-bluemono); }
+.card:has(.sv-filters input[value="gray"]:checked)       .sv-main-img { filter: url(#pswp-gray); }
+.card:has(.sv-filters input[value="contrast"]:checked)   .sv-main-img { filter: url(#pswp-contrast); }
+
+
+/* Filename bar under the viewer */
+.sv-filebar{
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: .25rem 0 .5rem;
+  padding: .35rem .5rem;
+  background: var(--bs-light, #f8f9fa);
+  border-radius: .375rem;
+  min-height: 2rem;
+}
+.sv-filebar-label{
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: .85rem;
+  flex: 0 0 auto;
+}
+.sv-filebar-name{
+  flex: 1 1 auto;
+  min-width: 0;                /* enables ellipsis */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: .9rem;
+}
+
+
+/* Subtle top navigation for screening detail */
+.sv-topbar .btn {
+  padding: .15rem .5rem;
+  line-height: 1.2;
+}
+
+.btn-subtle {
+  border-color: transparent;
+  color: var(--bs-secondary-color, #6c757d);
+  background: transparent;
+}
+
+.btn-subtle:hover,
+.btn-subtle:focus {
+  color: var(--bs-body-color, #212529);
+  border-color: var(--bs-border-color, #dee2e6);
+  background: var(--bs-light, #f8f9fa);
+}
+
+.btn-subtle:disabled {
+  opacity: .55;
+  border-color: transparent;
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* Thin separator */
+.vr {
+  width: 1px;
+  height: 1.25rem;
+  background-color: var(--bs-border-color, #dee2e6);
+  opacity: .6;
+}
+
+/* screenings list cards */
+.scr-card .card-header { padding-top: .5rem; padding-bottom: .5rem; }
+.scr-card .card-body   { padding-top: .75rem; padding-bottom: .75rem; }
+.scr-card .card-footer { padding-top: .5rem; padding-bottom: .5rem; }
+.list-compact li { margin-bottom: .25rem; }
+

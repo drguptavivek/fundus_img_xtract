@@ -1,8 +1,4 @@
-Here’s a **structured documentation** of the SQLite schema generated from your provided SQLAlchemy models. I’ve described each table, its columns, relationships, and constraints.
-
----
-
-# 📄 Database Schema Documentation (`zip_processing.db`)
+# 📄 Database Schema Documentation (`zip_processing.db`) for models.py
 
 This database is designed to manage **uploaded ZIP files**, their associated **patient encounters**, and **diagnostic reports** (Diabetic Retinopathy & Glaucoma). It also stores metadata about **individual files** extracted from the encounters.
 

@@ -2,182 +2,196 @@
 {% block title %}Screenings{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h3 class="mb-0">Patient Screenings</h3>
-  <div class="d-flex gap-2">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
     <a class="btn btn-secondary" href="{{ url_for('uploads.upload_form') }}">Upload</a>
     <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
     <a class="btn btn-outline-secondary" href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
-  </div>
-</div>
-<div class="card shadow-sm">
-  <div class="card-body p-0">
-    <table class="table table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th style="width: 80px;">ID</th>
-          <th>Patient Name</th>
-          <th>Patient ID</th>
-          <th style="width: 160px;">Capture Date</th>
-          <th>DR Report</th>
-          <th>Glaucoma Report</th>
-          <th style="width: 240px;">ZIP Filename</th>     <!-- second last column -->
-          <th style="width: 320px;">Images</th>           <!-- last column -->
-          <th style="width: 90px;">View</th>   <!-- NEW -->
-        </tr>
-      </thead>
-      <tbody>
-      {% for enc in items %}
-        {# collect images #}
-        {% set images = [] %}
-        {% for ef in enc.encounter_files %}
-        {% if ef.file_type == 'image' %}
-            {% set _ = images.append(ef) %}
-        {% endif %}
-        {% endfor %}
-        <tr id="enc-{{ enc.id }}">
-          <td>{{ enc.id }}</td>
-          <td>{{ enc.name }}</td>
-          <td>{{ enc.patient_id }}</td>
-          <td>{{ enc.capture_date }}</td>
 
-          <!-- DR Report -->
-          <td>
-            {% if enc.dr_reports %}
-              {% for dr in enc.dr_reports %}
-                <div class="mb-2">
-                  <span class="fw-semibold">{{ dr.result or '-' }}</span>
-                  {% if dr.qualitative_result %}
-                    <div class="small text-muted">{{ dr.qualitative_result }}</div>
-                  {% endif %}
-                  {% if dr.report_file_name %}
-                    <div class="small">
-                      PDF:
-                      <a href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
-                         target="_blank" rel="noopener">
-                        {{ dr.report_file_name }}
-                      </a>
-                    </div>
-                  {% endif %}
-                </div>
-              {% endfor %}
-            {% else %}
-              <span class="text-muted">–</span>
-            {% endif %}
-          </td>
-          <!-- Glaucoma Report -->
-          <td>
-            {% if enc.glaucoma_reports %}
-              {% for gr in enc.glaucoma_reports %}
-                <div class="mb-2">
-                  <span class="fw-semibold">{{ gr.result or '-' }}</span>
-                  {% if gr.vcdr_right or gr.vcdr_left %}
-                    <div class="small">VCDR: R={{ gr.vcdr_right or '-' }}, L={{ gr.vcdr_left or '-' }}</div>
-                  {% endif %}
-                  {% if gr.qualitative_result %}
-                    <div class="small text-muted">{{ gr.qualitative_result }}</div>
-                  {% endif %}
-                  {% if gr.report_file_name %}
-                    <div class="small">
-                      PDF:
-                      <a href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}"
-                         target="_blank" rel="noopener">
-                        {{ gr.report_file_name }}
-                      </a>
-                    </div>
-                  {% endif %}
-                </div>
-              {% endfor %}
-            {% else %}
-              <span class="text-muted">–</span>
-            {% endif %}
-          </td>
-
-          <!-- ZIP Filename  -->
-          <td>
-            <code>{{ enc.zip_file.zip_filename if enc.zip_file else '-' }}</code>
-          </td>
-          <!-- Images  -->
-            <td>
-            {% if images %}
-                <ol class="small mb-0 ps-3">
-                {% for img in images %}
-                    {% set parts = img.filename.rsplit('_', 2) %}
-                    {% if parts|length >= 2 %}
-                    {% set truncated = parts[-2] ~ '_' ~ parts[-1] %}
-                    {% else %}
-                    {% set truncated = img.filename %}
-                    {% endif %}
-                    <li class="mb-1">
-                    <a href="{{ url_for('media.serve_image', filename=img.filename) }}"
-                        target="_blank" rel="noopener"
-                        title="{{ img.filename }}">
-                        {{ truncated }}
-                    </a>
-                    </li>
-                {% endfor %}
-                </ol>
-            {% else %}
-                <span class="text-muted small">No images</span>
-            {% endif %}
-            </td>
-    {# Build a gallery of assets per encounter #}
-    {% set gallery_id = 'pswp-gallery-enc-' ~ enc.id %}
-
-    <!-- Hidden gallery items for this encounter -->
-    <div id="{{ gallery_id }}" class="pswp-gallery d-none">
-        {# IMAGES — each anchor becomes a slide #}
-        {% for ef in enc.encounter_files if ef.file_type == 'image' %}
-        <a
-            href="{{ url_for('media.serve_image', filename=ef.filename) }}"
-            data-pswp-type="image"
-            title="{{ ef.filename }}"
-        ></a>
-        {% endfor %}
-
-
-        {# DR PDF(s) as inline HTML slides #}
-        {% for dr in enc.dr_reports or [] %}
-        {% if dr.report_file_name %}
-            <a
-            href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
-            data-pswp-type="html"
-            data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) | e }}' title='{{ dr.report_file_name | e }}' frameborder='0'></iframe></div>"
-            title="{{ dr.report_file_name }}"
-            ></a>
-        {% endif %}
-        {% endfor %}
-
-        {# GLAUCOMA PDF(s) as inline HTML slides #}
-        {% for gr in enc.glaucoma_reports or [] %}
-        {% if gr.report_file_name %}
-            <a
-            href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}"
-            data-pswp-type="html"
-            data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) | e }}' title='{{ gr.report_file_name | e }}' frameborder='0'></iframe></div>"
-            title="{{ gr.report_file_name }}"
-            ></a>
-        {% endif %}
-        {% endfor %}
+    <!-- Top pager -->
+    <div class="vr d-none d-sm-inline mx-1"></div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Page navigation (top)">
+      <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{{ prev_url or '#' }}">← Prev</a>
+      <span class="btn btn-outline-secondary disabled">Page {{ page }} / {{ total_pages }}</span>
+      <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{{ next_url or '#' }}">Next →</a>
     </div>
-
-      {# View button cell #}
-      <td class="text-nowrap">
-            <button
-                class="btn btn-sm btn-outline-primary"
-                type="button"
-                onclick="openPswpGallery('{{ gallery_id }}', 0)"
-            >
-                View files
-            </button>
-        </td>
-        {% else %}
-        <tr><td colspan="8" class="text-center text-muted p-4">No screenings found.</td></tr>
-  {% endfor %}
-  </tbody>
-  </table>
   </div>
 </div>
+
+{% if items %}
+  <div class="row g-3">
+    {% for enc in items %}
+      {# collect images #}
+      {% set images = [] %}
+      {% for ef in enc.encounter_files %}
+        {% if ef.file_type == 'image' %}
+          {% set _ = images.append(ef) %}
+        {% endif %}
+      {% endfor %}
+      {% set gallery_id = 'pswp-gallery-enc-' ~ enc.id %}
+
+      <!-- One card per row -->
+      <div class="col-12">
+        <div class="card scr-card h-100 shadow-sm">
+          <!-- Header: Patient / Encounter + Detail button -->
+          <div class="card-header py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="me-2">
+                <div class="fw-semibold text-truncate">{{ enc.name or '—' }}</div>
+                <div class="small text-muted">
+                  <span class="me-2">ID: <code>{{ enc.patient_id or '—' }}</code></span>
+                  <span>Capture: {{ enc.capture_date or '—' }}</span>
+                </div>
+                <div class="small text-muted">
+                  ZIP: <code class="text-break">{{ enc.zip_file.zip_filename if enc.zip_file else '-' }}</code>
+                </div>
+              </div>
+
+              <div class="d-flex flex-column align-items-end gap-1">
+                <span class="badge text-bg-light">#{{ enc.id }}</span>
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">
+                  Screening Detail
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Body: four columns on md+ -->
+          <div class="card-body pt-3 pb-2">
+            <div class="row scr-grid g-3">
+              <!-- 1) DR Report -->
+              <div class="col-12 col-md-3 scr-col">
+                <div class="scr-sec-title small text-uppercase text-muted mb-1">DR Report</div>
+                {% if enc.dr_reports %}
+                  <div class="scr-scroll">
+                    {% for dr in enc.dr_reports %}
+                      <div class="mb-2">
+                        <span class="fw-semibold">{{ dr.result or '-' }}</span>
+                        {% if dr.qualitative_result %}
+                          <div class="small text-muted">{{ dr.qualitative_result }}</div>
+                        {% endif %}
+                        {% if dr.report_file_name %}
+                          <div class="small">
+                            PDF:
+                            <a href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
+                               target="_blank" rel="noopener">{{ dr.report_file_name }}</a>
+                          </div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">–</span>
+                {% endif %}
+              </div>
+
+              <!-- 2) Glaucoma Report -->
+              <div class="col-12 col-md-3 scr-col">
+                <div class="scr-sec-title small text-uppercase text-muted mb-1">Glaucoma Report</div>
+                {% if enc.glaucoma_reports %}
+                  <div class="scr-scroll">
+                    {% for gr in enc.glaucoma_reports %}
+                      <div class="mb-2">
+                        <span class="fw-semibold">{{ gr.result or '-' }}</span>
+                        {% if gr.vcdr_right or gr.vcdr_left %}
+                          <div class="small">VCDR: R={{ gr.vcdr_right or '-' }}, L={{ gr.vcdr_left or '-' }}</div>
+                        {% endif %}
+                        {% if gr.qualitative_result %}
+                          <div class="small text-muted">{{ gr.qualitative_result }}</div>
+                        {% endif %}
+                        {% if gr.report_file_name %}
+                          <div class="small">
+                            PDF:
+                            <a href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}"
+                               target="_blank" rel="noopener">{{ gr.report_file_name }}</a>
+                          </div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="text-muted">–</span>
+                {% endif %}
+              </div>
+
+              <!-- 3) Images -->
+              <div class="col-12 col-md-4 scr-col">
+                <div class="scr-sec-title small text-uppercase text-muted mb-1">Images</div>
+                {% if images %}
+                  <div class="scr-scroll">
+                    <ol class="small list-unstyled list-compact mb-2">
+                      {% for img in images %}
+                        {% set parts = img.filename.rsplit('_', 2) %}
+                        {% if parts|length >= 2 %}
+                          {% set truncated = parts[-2] ~ '_' ~ parts[-1] %}
+                        {% else %}
+                          {% set truncated = img.filename %}
+                        {% endif %}
+                        <li class="mb-1 text-truncate">
+                          <a href="{{ url_for('media.serve_image', filename=img.filename) }}"
+                             target="_blank" rel="noopener" title="{{ img.filename }}">
+                            {{ truncated }}
+                          </a>
+                        </li>
+                      {% endfor %}
+                    </ol>
+                  </div>
+                {% else %}
+                  <span class="text-muted small">No images</span>
+                {% endif %}
+              </div>
+
+              <!-- 4) Actions (View files) -->
+              <div class="col-12 col-md-2 scr-col">
+                <div class="scr-sec-title small text-uppercase text-muted mb-1">Actions</div>
+                {% if images %}
+                  <button class="btn btn-sm btn-outline-primary w-100"
+                          type="button"
+                          onclick="openPswpGallery('{{ gallery_id }}', 0)">
+                    View files
+                  </button>
+                {% else %}
+                  <button class="btn btn-sm btn-outline-secondary w-100" type="button" disabled>
+                    View files
+                  </button>
+                {% endif %}
+
+                <!-- Hidden PSWP gallery inside card -->
+                <div id="{{ gallery_id }}" class="pswp-gallery d-none">
+                  {% for ef in enc.encounter_files if ef.file_type == 'image' %}
+                    <a href="{{ url_for('media.serve_image', filename=ef.filename) }}"
+                       data-pswp-type="image" title="{{ ef.filename }}"></a>
+                  {% endfor %}
+                  {% for dr in enc.dr_reports or [] if dr.report_file_name %}
+                    <a href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
+                       data-pswp-type="html"
+                       data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) | e }}' title='{{ dr.report_file_name | e }}' frameborder='0'></iframe></div>"
+                       title="{{ dr.report_file_name }}"></a>
+                  {% endfor %}
+                  {% for gr in enc.glaucoma_reports or [] if gr.report_file_name %}
+                    <a href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}"
+                       data-pswp-type="html"
+                       data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) | e }}' title='{{ gr.report_file_name | e }}' frameborder='0'></iframe></div>"
+                       title="{{ gr.report_file_name }}"></a>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Optional: remove footer to keep it compact -->
+          {# <div class="card-footer bg-transparent"></div> #}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="text-center text-muted p-4">No screenings found.</div>
+{% endif %}
+
+<!-- Bottom pager (retained) -->
 <div class="d-flex justify-content-between align-items-center mt-3">
   <div class="text-muted small">
     Showing page {{ page }} of {{ total_pages }} · {{ total }} total
@@ -196,5 +210,6 @@
     </ul>
   </nav>
 </div>
+
 <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
 {% endblock %}

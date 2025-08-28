@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Screening #{{ encounter.id }}{% endblock %}
+
+{% block content %}
+<div class="py-3">
+    {# small, inconspicuous nav bar #}
+<div class="sv-topbar d-flex flex-wrap align-items-center gap-2 mb-2 small text-muted">
+  <a class="btn btn-sm btn-outline-secondary btn-subtle"
+     href="{{ back_url }}" aria-label="Back to screenings list" title="Back to screenings">
+    &larr; All screenings
+  </a>
+
+  <span class="vr d-none d-sm-inline mx-1"></span>
+
+  {% if prev_url %}
+    <a class="btn btn-sm btn-outline-secondary btn-subtle"
+       href="{{ prev_url }}" aria-label="Previous screening" title="Previous screening">
+      &larr; Prev
+    </a>
+  {% else %}
+    <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled
+            aria-label="No previous screening"> &larr; Prev </button>
+  {% endif %}
+
+  {% if next_url %}
+    <a class="btn btn-sm btn-outline-secondary btn-subtle"
+       href="{{ next_url }}" aria-label="Next screening" title="Next screening">
+      Next &rarr;
+    </a>
+  {% else %}
+    <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled
+            aria-label="No next screening"> Next &rarr; </button>
+  {% endif %}
+</div>
+
+
+
+    <!-- One row, two columns -->
+    <div class="row g-3 align-items-start">
+        <!-- LEFT: results -->
+        <div class="col-12 col-md-5 col-lg-5 col-xl-4">
+            {# Patient & Encounter #}
+            <div class="card shadow-sm mb-3">
+                <div class="card-header"><strong>Patient & Encounter</strong></div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-5">Patient Name</dt>
+                        <dd class="col-7">{{ encounter.name or "-" }}</dd>
+                        <dt class="col-5">Patient ID</dt>
+                        <dd class="col-7">{{ encounter.patient_id or "-" }}</dd>
+                        <dt class="col-5">Capture Date</dt>
+                        <dd class="col-7">{{ encounter.capture_date or "-" }}</dd>
+                        <dt class="col-5">Zip File</dt>
+                        <dd class="col-7">{% if encounter.zip_file %}{{ encounter.zip_file.zip_filename }}{% else %}-{%
+                            endif %}</dd>
+                    </dl>
+                </div>
+            </div>
+
+            {# DR Reports #}
+            <div class="card shadow-sm mb-3">
+                <div class="card-header"><strong>Diabetic Retinopathy (DR) Reports</strong></div>
+                <div class="card-body">
+                    {% if dr_reports %}
+                    <ul class="list-group list-group-flush">
+                        {% for dr in dr_reports %}
+                        <li class="list-group-item">
+                            <div><strong>Result:</strong> {{ dr.result or "-" }}</div>
+                            {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}
+                            </div>{% endif %}
+                            {% if dr.report_file_name %}
+                            <div class="mt-2">
+                                <a class="btn btn-sm btn-outline-dark"
+                                    href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
+                                    target="_blank" rel="noopener">Open DR PDF in New Tab</a>
+                            </div>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}<em class="text-muted">No DR reports linked.</em>{% endif %}
+                </div>
+            </div>
+
+            {# Glaucoma Reports #}
+            <div class="card shadow-sm">
+                <div class="card-header"><strong>Glaucoma Reports</strong></div>
+                <div class="card-body">
+                    {% if gl_reports %}
+                    <ul class="list-group list-group-flush">
+                        {% for gl in gl_reports %}
+                        <li class="list-group-item">
+                            <div class="mb-1"><strong>Result:</strong> {{ gl.result or "-" }}</div>
+                            {% if gl.qualitative_result %}<div class="mb-1"><strong>Qualitative:</strong> {{
+                                gl.qualitative_result }}</div>{% endif %}
+                            <div class="mb-1"><strong>VCDR (R/L):</strong> {{ gl.vcdr_right or "-" }} / {{ gl.vcdr_left
+                                or "-" }}</div>
+                            {% if gl.report_file_name %}
+                            <div class="mt-2">
+                                <a class="btn btn-sm btn-outline-dark"
+                                    href="{{ url_for('reports.serve_glaucoma_pdf', filename=gl.report_file_name) }}"
+                                    target="_blank" rel="noopener">Open Glaucoma PDF in New Tab</a>
+                            </div>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}<em class="text-muted">No Glaucoma reports linked.</em>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: large photo viewer -->
+        <div class="col-12 col-md-7 col-lg-7 col-xl-8">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>Images</strong>
+
+                    <!-- Filter buttons -->
+                    <div class="sv-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-none-{{ encounter.id }}" value="none" checked>
+                    <label class="btn btn-outline-secondary" for="svf-none-{{ encounter.id }}">None</label>
+
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-r-{{ encounter.id }}" value="redfree">
+                    <label class="btn btn-outline-secondary" for="svf-r-{{ encounter.id }}">R</label>
+
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-g-{{ encounter.id }}" value="greenboost">
+                    <label class="btn btn-outline-secondary" for="svf-g-{{ encounter.id }}">G</label>
+
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-b-{{ encounter.id }}" value="bluemono">
+                    <label class="btn btn-outline-secondary" for="svf-b-{{ encounter.id }}">B</label>
+
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-y-{{ encounter.id }}" value="gray">
+                    <label class="btn btn-outline-secondary" for="svf-y-{{ encounter.id }}">Y</label>
+
+                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-h-{{ encounter.id }}" value="contrast">
+                    <label class="btn btn-outline-secondary" for="svf-h-{{ encounter.id }}">H</label>
+                    </div>
+                    <small class="text-muted">{{ images|length }} file(s)</small>
+                </div>
+
+                <div class="card-body">
+                    {% if images %}
+                    <div class="sv-viewer-root" data-enc-id="{{ encounter.id }}">
+                        <!-- Large viewer -->
+                        <div class="sv-main bg-black rounded position-relative mb-2">
+                            <img class="sv-main-img"
+                                src="{{ url_for('media.serve_image', filename=images[0].filename) }}"
+                                alt="{{ images[0].filename }}" data-index="0" />
+                            <div class="sv-counter">1 / {{ images|length }}</div>
+                            <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
+                            <button class="sv-nav sv-next" type="button" aria-label="Next image">&rarr;</button>
+                            <button class="sv-full btn btn-sm btn-light position-absolute top-0 end-0 m-2"
+                                type="button">Fullscreen</button>
+                        </div>
+
+                        <!-- 🔽 New: file name row -->
+                        <div class="sv-filebar" aria-live="polite">
+                        <span class="sv-filebar-label">File:</span>
+                        <span class="sv-filebar-name">{{ images[0].filename }}</span>
+                        </div>
+
+                        <!-- Thumbnails -->
+                        <div class="sv-thumbs">
+                            {% for img in images %}
+                            <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
+                                data-index="{{ loop.index0 }}" title="{{ img.filename }}">
+                                <img class="sv-thumb-img"
+                                    src="{{ url_for('media.serve_image', filename=img.filename) }}"
+                                    alt="{{ img.filename }}" loading="lazy" />
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <em class="text-muted">No images available for this encounter.</em>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- viewer script -->
+<script src="{{ url_for('static', filename='js/screening-viewer.js') }}"></script>
+{% endblock %}

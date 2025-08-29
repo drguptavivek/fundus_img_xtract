@@ -9,11 +9,14 @@
     {{ csrf_field() }}
     <div class="card shadow-sm mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <strong>Edit Glaucoma Result</strong>
         <div class="d-flex align-items-center gap-2">
-          <span id="verify-status" class="small {% if row.patient_encounter and row.patient_encounter.verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
-            {% if row.patient_encounter and row.patient_encounter.verified_status == 'verified' %}
-              Verified by {{ row.patient_encounter.verified_by or '—' }}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ back_url or url_for('glaucoma.glaucoma_list') }}">&larr; Back to Date</a>
+          <strong>Edit Glaucoma Result</strong>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span id="verify-status" class="small {% if row.patient_encounter and row.patient_encounter.glaucoma_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+            {% if row.patient_encounter and row.patient_encounter.glaucoma_verified_status == 'verified' %}
+              Verified by {{ row.patient_encounter.glaucoma_verified_by or '—' }}
             {% else %}
               Not verified
             {% endif %}
@@ -21,7 +24,7 @@
           {% if current_user_has('optometrist') or current_user_has('admin') %}
             <button id="verify-btn" type="button" class="btn btn-sm btn-outline-success"
                     data-url="{{ url_for('glaucoma.glaucoma_verify', clean_id=row.id) }}"
-                    {% if not (row.patient_encounter and row.patient_encounter.verified_status != 'verified') %}disabled{% endif %}>
+                    {% if not (row.patient_encounter and row.patient_encounter.glaucoma_verified_status != 'verified') %}disabled{% endif %}>
               Mark Verified
             </button>
           {% endif %}
@@ -48,8 +51,8 @@
         </div>
         <div class="col-12 col-md-2 text-end">
           <div class="btn-group" role="group" aria-label="Prev/Next">
-            <a class="btn btn-outline-secondary btn-sm {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr; Prev</a>
-            <a class="btn btn-outline-secondary btn-sm {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next &rarr;</a>
+            <a id="prev-link" class="btn btn-outline-secondary btn-sm {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr; Prev</a>
+            <a id="next-link" class="btn btn-outline-secondary btn-sm {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next &rarr;</a>
           </div>
         </div>
       </div>

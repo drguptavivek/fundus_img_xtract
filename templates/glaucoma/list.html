@@ -13,6 +13,13 @@
     <div class="d-flex align-items-center gap-2">
       <span class="small text-muted">Active date:</span>
       <span class="fw-semibold">{{ selected_date }}</span>
+      <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Verify filter">
+        <a class="btn btn-outline-secondary {% if ver=='all' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='all') }}">All</a>
+        <a class="btn btn-outline-secondary {% if ver=='yes' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='yes') }}">Verified</a>
+        <a class="btn btn-outline-secondary {% if ver=='no' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='no') }}">Unverified</a>
+      </div>
+      <a class="btn btn-sm btn-outline-warning ms-2 {% if not recent_unverified_url %}disabled{% endif %}"
+         href="{{ recent_unverified_url or '#' }}">Most Recent Unverified</a>
     </div>
     {% else %}
     <div></div>
@@ -25,6 +32,9 @@
         <button class="btn btn-sm btn-outline-primary" type="submit">Go</button>
         {% if selected_date %}
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_list') }}">Clear</a>
+        {% endif %}
+        {% if ver and ver!='all' %}
+          <input type="hidden" name="ver" value="{{ ver }}">
         {% endif %}
       </form>
 
@@ -39,6 +49,7 @@
                  min="1" max="{{ total_pages }}" value="{{ page }}" aria-label="Go to page">
           <span class="sep">/ {{ total_pages }}</span>
         </div>
+        {% if ver and ver!='all' %}<input type="hidden" name="ver" value="{{ ver }}">{% endif %}
         {# page-based date navigation; no hidden date here #}
       </form>
 
@@ -61,6 +72,7 @@
           <th>Result</th>
           <th>VCDR R</th>
           <th>VCDR L</th>
+          <th>Verified</th>
           <th></th>
         </tr>
       </thead>
@@ -74,6 +86,7 @@
           <td>{{ gr.result or '-' }}</td>
           <td>{% if gr.vcdr_right_num is not none %}{{ '%.2f'|format(gr.vcdr_right_num) }}{% else %}-{% endif %}</td>
           <td>{% if gr.vcdr_left_num is not none %}{{ '%.2f'|format(gr.vcdr_left_num) }}{% else %}-{% endif %}</td>
+          <td>{% if enc and enc.glaucoma_verified_status == 'verified' %}Yes{% else %}No{% endif %}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm" role="group">
               <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>

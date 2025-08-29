@@ -29,14 +29,22 @@ def column_exists(conn, table: str, column: str) -> bool:
 
 def migrate(dry_run: bool = False) -> None:
     with engine.begin() as conn:
-        print("Inspecting patient_encounters for verification columns ...")
+        print("Inspecting patient_encounters for glaucoma/DR verification columns ...")
         adds = []
-        if not column_exists(conn, 'patient_encounters', 'verified_status'):
-            adds.append("ALTER TABLE patient_encounters ADD COLUMN verified_status TEXT")
-        if not column_exists(conn, 'patient_encounters', 'verified_by'):
-            adds.append("ALTER TABLE patient_encounters ADD COLUMN verified_by TEXT")
-        if not column_exists(conn, 'patient_encounters', 'verified_at'):
-            adds.append("ALTER TABLE patient_encounters ADD COLUMN verified_at DATETIME")
+        # Glaucoma
+        if not column_exists(conn, 'patient_encounters', 'glaucoma_verified_status'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN glaucoma_verified_status TEXT")
+        if not column_exists(conn, 'patient_encounters', 'glaucoma_verified_by'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN glaucoma_verified_by TEXT")
+        if not column_exists(conn, 'patient_encounters', 'glaucoma_verified_at'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN glaucoma_verified_at DATETIME")
+        # DR
+        if not column_exists(conn, 'patient_encounters', 'dr_verified_status'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN dr_verified_status TEXT")
+        if not column_exists(conn, 'patient_encounters', 'dr_verified_by'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN dr_verified_by TEXT")
+        if not column_exists(conn, 'patient_encounters', 'dr_verified_at'):
+            adds.append("ALTER TABLE patient_encounters ADD COLUMN dr_verified_at DATETIME")
         if not adds:
             print("- All columns already present.")
         else:
@@ -44,9 +52,29 @@ def migrate(dry_run: bool = False) -> None:
                 print(f"- Will execute: {sql}")
                 if not dry_run:
                     conn.exec_driver_sql(sql)
-        # optional index on verified_status
-        print("Ensuring index on verified_status ...")
-        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_patient_encounters_verified_status ON patient_encounters (verified_status)")
+        # optional indexes
+        print("Ensuring index on glaucoma_verified_status ...")
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_patient_encounters_glaucoma_verified_status ON patient_encounters (glaucoma_verified_status)")
+        print("Ensuring index on dr_verified_status ...")
+        conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_patient_encounters_dr_verified_status ON patient_encounters (dr_verified_status)")
+
+        # Backfill from old columns if they exist
+        print("Backfilling glaucoma_* from legacy verified_* if present ...")
+        if column_exists(conn, 'patient_encounters', 'verified_status'):
+            if not dry_run:
+                conn.exec_driver_sql(
+                    "UPDATE patient_encounters SET glaucoma_verified_status = COALESCE(glaucoma_verified_status, verified_status)"
+                )
+        if column_exists(conn, 'patient_encounters', 'verified_by'):
+            if not dry_run:
+                conn.exec_driver_sql(
+                    "UPDATE patient_encounters SET glaucoma_verified_by = COALESCE(glaucoma_verified_by, verified_by)"
+                )
+        if column_exists(conn, 'patient_encounters', 'verified_at'):
+            if not dry_run:
+                conn.exec_driver_sql(
+                    "UPDATE patient_encounters SET glaucoma_verified_at = COALESCE(glaucoma_verified_at, verified_at)"
+                )
     print("Done." if not dry_run else "Dry run complete (no changes applied).")
 
 
@@ -59,4 +87,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-

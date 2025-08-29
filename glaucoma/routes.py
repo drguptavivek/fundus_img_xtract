@@ -154,6 +154,9 @@ def glaucoma_list():
     """Date-wise pagination: each page shows all reports for one capture_date_dt."""
     page = request.args.get("page", default=1, type=int) or 1
     selected_date = (request.args.get("date") or "").strip() or None
+    ver = (request.args.get("ver") or "all").strip().lower()
+    if ver not in {"all", "yes", "no"}:
+        ver = "all"
     page = max(1, page)
 
     db = Session()
@@ -168,6 +171,21 @@ def glaucoma_list():
               .all()
         )
         dates: list[_date] = [r[0] for r in date_rows]
+
+        # Find most recent date that has at least one unverified encounter
+        unv_rows = (
+            db.query(PatientEncounters.capture_date_dt)
+              .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.capture_date_dt.isnot(None))
+              .filter(
+                  (PatientEncounters.glaucoma_verified_status.is_(None)) |
+                  (PatientEncounters.glaucoma_verified_status != 'verified')
+              )
+              .distinct()
+              .order_by(PatientEncounters.capture_date_dt.desc())
+              .all()
+        )
+        most_recent_unverified = unv_rows[0][0] if unv_rows else None
 
         total_pages = max(1, len(dates))
         # Determine focused date by selected_date or page index
@@ -189,6 +207,12 @@ def glaucoma_list():
         page = focus_idx + 1 if total_pages else 1
         selected_date = focus_date.isoformat() if focus_date else None
 
+        # Recent unverified page index
+        recent_unverified_url = None
+        if most_recent_unverified and most_recent_unverified in dates:
+            ru_idx = dates.index(most_recent_unverified) + 1
+            recent_unverified_url = url_for('glaucoma.glaucoma_list', page=ru_idx, ver='no')
+
         # Pull all reports for the focused date
         if focus_date is not None:
             items = (
@@ -199,6 +223,11 @@ def glaucoma_list():
                   .options(selectinload(GlaucomaResultsCleaned.patient_encounter))
                   .all()
             )
+            # Apply verified filter within date
+            if ver == "yes":
+                items = [gr for gr in items if gr.patient_encounter and gr.patient_encounter.glaucoma_verified_status == 'verified']
+            elif ver == "no":
+                items = [gr for gr in items if not gr.patient_encounter or gr.patient_encounter.glaucoma_verified_status != 'verified']
         else:
             items = []
     finally:
@@ -216,9 +245,11 @@ def glaucoma_list():
         total_pages=total_pages,
         has_prev=has_prev,
         has_next=has_next,
-        prev_url=url_for("glaucoma.glaucoma_list", page=page-1) if has_prev else None,
-        next_url=url_for("glaucoma.glaucoma_list", page=page+1) if has_next else None,
+        prev_url=url_for("glaucoma.glaucoma_list", page=page-1, ver=ver) if has_prev else None,
+        next_url=url_for("glaucoma.glaucoma_list", page=page+1, ver=ver) if has_next else None,
         selected_date=selected_date,
+        ver=ver,
+        recent_unverified_url=recent_unverified_url,
     )
 
 
@@ -559,10 +590,25 @@ def glaucoma_edit(clean_id: int):
             )
         prev_url = url_for("glaucoma.glaucoma_edit", clean_id=prev_row.id) if prev_row else None
         next_url = url_for("glaucoma.glaucoma_edit", clean_id=next_row.id) if next_row else None
+        # Compute back_url to glaucoma list page for this date
+        back_url = None
+        if enc and enc.capture_date_dt is not None:
+            date_rows = (
+                db.query(PatientEncounters.capture_date_dt)
+                  .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                  .filter(PatientEncounters.capture_date_dt.isnot(None))
+                  .distinct()
+                  .order_by(PatientEncounters.capture_date_dt.desc())
+                  .all()
+            )
+            dates = [r[0] for r in date_rows]
+            if enc.capture_date_dt in dates:
+                page_idx = dates.index(enc.capture_date_dt) + 1
+                back_url = url_for("glaucoma.glaucoma_list", page=page_idx)
     finally:
         db.close()
 
-    return render_template("glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url)
+    return render_template("glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url, back_url=back_url)
  
 
 @bp.route("/edit/<int:clean_id>/verify", methods=["POST"])
@@ -574,6 +620,38 @@ def glaucoma_verify(clean_id: int):
         if not row:
             from flask import abort
             abort(404)
+        # Save incoming form data (same fields as edit save)
+        def _to_float(val):
+            if val is None:
+                return None
+            s = str(val).strip()
+            if s == "":
+                return None
+            try:
+                return float(s)
+            except Exception:
+                return None
+        row.vcdr_right_num = _to_float(request.form.get("vcdr_right_num"))
+        row.vcdr_left_num = _to_float(request.form.get("vcdr_left_num"))
+        row.result = (request.form.get("result") or "").strip() or None
+        row.qualitative_result = (request.form.get("qualitative_result") or "").strip() or None
+        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        if enc:
+            new_pid = (request.form.get("patient_id") or "").strip()
+            if new_pid:
+                enc.patient_id = new_pid
+            date_str = (request.form.get("capture_date_dt") or "").strip()
+            if date_str:
+                try:
+                    from datetime import datetime as _dt
+                    d = _dt.strptime(date_str, "%Y-%m-%d").date()
+                    enc.capture_date_dt = d
+                    enc.capture_date = d.isoformat()
+                except Exception:
+                    pass
+            db.add(enc)
+        db.add(row)
+        db.commit()
         # Ensure all images are tagged before verification
         missing = (
             db.query(EncounterFile)
@@ -591,19 +669,18 @@ def glaucoma_verify(clean_id: int):
             flash(msg, "danger")
             return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
 
-        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
         if enc:
-            enc.verified_status = 'verified'
+            enc.glaucoma_verified_status = 'verified'
             try:
-                enc.verified_by = current_user.username  # type: ignore[attr-defined]
+                enc.glaucoma_verified_by = current_user.username  # type: ignore[attr-defined]
             except Exception:
-                enc.verified_by = 'unknown'
-            enc.verified_at = utcnow()
+                enc.glaucoma_verified_by = 'unknown'
+            enc.glaucoma_verified_at = utcnow()
             db.add(enc)
             db.commit()
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-            return {"ok": True, "status": enc.verified_status if enc else 'verified', "by": enc.verified_by if enc else current_user.username}
+            return {"ok": True, "status": enc.glaucoma_verified_status if enc else 'verified', "by": enc.glaucoma_verified_by if enc else current_user.username}
         flash("Encounter verified.", "success")
         return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
     finally:

@@ -9,8 +9,11 @@
     const counter = root.querySelector('.sv-counter');
     const thumbLinks = Array.from(root.querySelectorAll('.sv-thumb-link'));
 
-    // Build URL list
-    const urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
+    // Build URL list; fallback to main image if no thumbnails present
+    let urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
+    if ((!urls.length) && mainImg && mainImg.getAttribute('src')) {
+      urls = [mainImg.getAttribute('src')];
+    }
     if (!urls.length || !mainImg) return;
 
     let index = parseInt(mainImg.dataset.index || '0', 10) || 0;
@@ -91,7 +94,10 @@
     const thumbsWrap = root.querySelector('.sv-thumbs');
     const thumbLinks = Array.from(root.querySelectorAll('.sv-thumb-link'));
 
-    const urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
+    let urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
+    if ((!urls.length) && mainImg && mainImg.getAttribute('src')) {
+      urls = [mainImg.getAttribute('src')];
+    }
     if (!urls.length || !mainImg) return;
 
     let index = parseInt(mainImg.dataset.index || '0', 10) || 0;
@@ -159,8 +165,12 @@
     const filebarName = root.querySelector('.sv-filebar-name');   // 👈 NEW
     const thumbLinks = Array.from(root.querySelectorAll('.sv-thumb-link'));
 
-    const urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
-    const names = thumbLinks.map(a => a.title || a.querySelector('img')?.getAttribute('alt') || ''); // 👈 NEW
+    let urls = thumbLinks.map(a => a.querySelector('img')?.src).filter(Boolean);
+    let names = thumbLinks.map(a => a.title || a.querySelector('img')?.getAttribute('alt') || ''); // 👈 NEW
+    if ((!urls.length) && mainImg && mainImg.getAttribute('src')) {
+      urls = [mainImg.getAttribute('src')];
+      names = [mainImg.getAttribute('alt') || ''];
+    }
     if (!urls.length || !mainImg) return;
 
     let index = parseInt(mainImg.dataset.index || '0', 10) || 0;
@@ -195,4 +205,3 @@
     document.querySelectorAll('.sv-viewer-root').forEach(initViewer);
   });
 })();
-

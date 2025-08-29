@@ -1,0 +1,71 @@
+{# Reusable grading image viewer card
+   Expects: image (EncounterFile with .uuid)
+#}
+<div class="card shadow-sm h-100">
+  <div class="card-header">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-none-{{ image.uuid }}" value="none" checked>
+        <label class="btn btn-outline-secondary" for="imggr-none-{{ image.uuid }}">None</label>
+
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-r-{{ image.uuid }}" value="redfree">
+        <label class="btn btn-outline-secondary" for="imggr-r-{{ image.uuid }}">R</label>
+
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-g-{{ image.uuid }}" value="greenboost">
+        <label class="btn btn-outline-secondary" for="imggr-g-{{ image.uuid }}">G</label>
+
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-b-{{ image.uuid }}" value="bluemono">
+        <label class="btn btn-outline-secondary" for="imggr-b-{{ image.uuid }}">B</label>
+
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-y-{{ image.uuid }}" value="gray">
+        <label class="btn btn-outline-secondary" for="imggr-y-{{ image.uuid }}">Y</label>
+
+        <input class="btn-check" type="radio" name="imggrFilter-{{ image.uuid }}" id="imggr-h-{{ image.uuid }}" value="contrast">
+        <label class="btn btn-outline-secondary" for="imggr-h-{{ image.uuid }}">H</label>
+      </div>
+      <div class="d-flex align-items-center gap-2 ms-auto">
+        <label class="small mb-0" for="imggr-bright-{{ image.uuid }}">Brightness</label>
+        <input id="imggr-bright-{{ image.uuid }}" class="form-range imggr-bright" type="range" min="0.5" max="1.5" step="0.05" value="1" style="width:140px;">
+        <label class="small mb-0" for="imggr-contrast-{{ image.uuid }}">Contrast</label>
+        <input id="imggr-contrast-{{ image.uuid }}" class="form-range imggr-contrast" type="range" min="0.5" max="1.5" step="0.05" value="1" style="width:140px;">
+        <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
+      </div>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    <div id="imggr-view-{{ image.uuid }}" class="imggr-viewer-root" data-enc-id="{{ image.uuid }}">
+      <div class="imggr-main bg-black rounded position-relative" style="height: 90vh; display:flex; align-items:center; justify-content:center;">
+        <img class="imggr-main-img" src="{{ url_for('media.serve_file_by_uuid', uuid=image.uuid) }}" alt="Image" data-index="0" />
+        <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+      </div>
+      {# No thumbnails in grading view #}
+    </div>
+  </div>
+</div>
+
+{# ensure viewer script is loaded once and scroll into view #}
+<script>
+(function(){
+  var rootId = 'imggr-view-{{ image.uuid }}';
+  function run(){
+    try { if (window.initImggrViewers) window.initImggrViewers(document.getElementById(rootId)); } catch(_) {}
+    // Scroll this viewer into view
+    var el = document.getElementById(rootId);
+    if (el) {
+      setTimeout(function(){
+        try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch(_) { window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 16); }
+      }, 50);
+    }
+  }
+  if (!window.__imggrViewerLoaded) {
+    var s=document.createElement('script');
+    // Build static URL with cache-busting via ASSETS_VERSION; avoid string concat
+    s.src = "{{ url_for('static', filename='js/grading-viewer.js', v=config.get('ASSETS_VERSION','')) }}";
+    s.defer=true; s.onload = run; document.head.appendChild(s);
+  } else {
+    // JS already present
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  }
+})();
+</script>

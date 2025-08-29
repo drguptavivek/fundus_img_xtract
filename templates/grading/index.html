@@ -76,10 +76,15 @@
     <form method="post" class="row g-2 align-items-center">
       {{ csrf_field() }}
       <div class="col-12 col-lg-9">
-        <label for="image_uuid" class="form-label mb-0">Image UUID</label>
+        <label for="image_uuid" class="form-label mb-0">Code Specific Image</label>
         <div class="input-group input-group-sm">
           <input type="text" class="form-control" id="image_uuid" name="image_uuid" size="60" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
-          <button type="submit" class="btn btn-primary btn-sm">Code Specific Image</button>
+          <select class="form-select form-select-sm" name="code_for" aria-label="Grading type" style="max-width: 140px;">
+            <option value="glaucoma" selected>Glaucoma</option>
+            <option value="dr">DR</option>
+            <option value="amd">AMD</option>
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm">Open</button>
         </div>
       </div>
     </form>

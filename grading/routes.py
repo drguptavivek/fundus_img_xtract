@@ -14,6 +14,9 @@ from models import Session, PatientEncounters, EncounterFile, ImageGrading, utcn
 def index():
     if request.method == "POST":
         img_uuid = (request.form.get("image_uuid") or "").strip()
+        code_for = (request.form.get("code_for") or request.form.get("gfor") or "glaucoma").strip().lower()
+        if code_for not in {"glaucoma","dr","amd"}:
+            code_for = "glaucoma"
         if img_uuid:
             # Validate UUID points to an image we can grade; add clear messaging for scenarios
             db = Session()
@@ -28,22 +31,29 @@ def index():
                     flash("That UUID does not reference an image.", "danger")
                     return redirect(url_for('grading.index'))
 
-                # Message depending on whether the current user already graded it
+                # Message depending on whether the current user already graded it for the selected type
                 my_id = getattr(current_user, 'id', None)
                 has_my = (
                     db.query(ImageGrading)
                       .filter(ImageGrading.encounter_file_id == ef.id,
-                              ImageGrading.graded_for == 'glaucoma',
+                              ImageGrading.graded_for == code_for,
                               ImageGrading.grader_user_id == my_id)
                       .count()
                 )
+                if code_for == 'amd':
+                    flash("AMD grading is not available yet.", "warning")
+                    return redirect(url_for('grading.index'))
                 if has_my:
-                    flash("Opening your previous glaucoma grading to revise.", "info")
+                    flash(f"Opening your previous {code_for.upper()} grading to revise.", "info")
                 else:
-                    flash("Opening image — no glaucoma grading by you yet.", "success")
+                    flash(f"Opening image — no {code_for.upper()} grading by you yet.", "success")
             finally:
                 db.close()
-            return redirect(url_for('grading.glaucoma_image', uuid=img_uuid))
+
+            if code_for == 'glaucoma':
+                return redirect(url_for('grading.glaucoma_image', uuid=img_uuid))
+            elif code_for == 'dr':
+                return redirect(url_for('grading.dr_image', uuid=img_uuid))
         flash("Please enter a valid Image UUID", "warning")
 
     # Stats + most recent encounter with an ungraded glaucoma image
@@ -213,6 +223,85 @@ def glaucoma_grade():
         if not ef:
             flash("Invalid image.", "danger")
             return redirect(request.referrer or url_for("grading.index"))
+    finally:
+        db.close()
+
+    role = None
+    try:
+        if current_user.has_role('ophthalmologist'):
+            role = 'ophthalmologist'
+        elif current_user.has_role('optometrist'):
+            role = 'optometrist'
+        elif current_user.has_role('admin'):
+            role = 'admin'
+    except Exception:
+        role = 'unknown'
+
+    if impression not in {"Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"}:
+        flash("Please select a valid impression.", "warning")
+        return redirect(request.referrer or url_for("screenings.list_screenings"))
+
+    db = Session()
+    try:
+        # Upsert by image + user + role
+        user_id = getattr(current_user, 'id', None)
+        username = getattr(current_user, 'username', None)
+        existing = (
+            db.query(ImageGrading)
+              .filter(ImageGrading.encounter_file_id == ef.id,
+                      ImageGrading.grader_user_id == user_id,
+                      ImageGrading.grader_role == role,
+                      ImageGrading.graded_for == 'glaucoma')
+              .first()
+        )
+        if existing:
+            existing.impression = impression
+            existing.remarks = remarks
+            db.add(existing)
+        else:
+            db.add(ImageGrading(
+                encounter_file_id=ef.id,
+                grader_user_id=user_id,
+                grader_username=username,
+                grader_role=role,
+                graded_for='glaucoma',
+                impression=impression,
+                remarks=remarks,
+            ))
+        db.commit()
+        flash("Grading saved.", "success")
+
+        # Save & Next flow
+        action = (request.form.get('action') or '').strip().lower()
+        if action == 'save_next':
+            grader_id = getattr(current_user, 'id', None)
+            cand_q = (
+                db.query(EncounterFile)
+                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                  .outerjoin(
+                      ImageGrading,
+                      and_(
+                          ImageGrading.encounter_file_id == EncounterFile.id,
+                          ImageGrading.graded_for == 'glaucoma',
+                          ImageGrading.grader_user_id == grader_id,
+                      ),
+                  )
+                  .filter(PatientEncounters.capture_date_dt.isnot(None))
+                  .filter(EncounterFile.file_type == 'image')
+                  .filter(ImageGrading.id.is_(None))
+                  .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
+                  .limit(50)
+            )
+            candidates = cand_q.all()
+            choice = random.choice(candidates) if candidates else None
+            if choice and choice.uuid:
+                return redirect(url_for('grading.glaucoma_image', uuid=choice.uuid))
+            else:
+                flash("No further ungraded glaucoma images found.", "info")
+        elif action == 'save_close':
+            return redirect(url_for('grading.index'))
+        # Default
+        return redirect(url_for('grading.glaucoma_image', uuid=ef.uuid))
     finally:
         db.close()
 
@@ -401,87 +490,6 @@ def dr_remove():
     finally:
         db.close()
 
-    role = None
-    try:
-        if current_user.has_role('ophthalmologist'):
-            role = 'ophthalmologist'
-        elif current_user.has_role('optometrist'):
-            role = 'optometrist'
-        elif current_user.has_role('admin'):
-            role = 'admin'
-    except Exception:
-        role = 'unknown'
-
-    if impression not in {"Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"}:
-        flash("Please select a valid impression.", "warning")
-        return redirect(request.referrer or url_for("screenings.list_screenings"))
-
-    db = Session()
-    try:
-        # ef already loaded
-        # Upsert by image + user + role
-        user_id = getattr(current_user, 'id', None)
-        username = getattr(current_user, 'username', None)
-        existing = (
-            db.query(ImageGrading)
-              .filter(ImageGrading.encounter_file_id == ef.id,
-                      ImageGrading.grader_user_id == user_id,
-                      ImageGrading.grader_role == role,
-                      ImageGrading.graded_for == 'glaucoma')
-              .first()
-        )
-        if existing:
-            existing.impression = impression
-            existing.remarks = remarks
-            db.add(existing)
-        else:
-            db.add(ImageGrading(
-                encounter_file_id=ef.id,
-                grader_user_id=user_id,
-                grader_username=username,
-                grader_role=role,
-                graded_for='glaucoma',
-                impression=impression,
-                remarks=remarks,
-            ))
-        db.commit()
-        flash("Grading saved.", "success")
-
-        # If user clicked Save & Next, pick a next image using the same logic
-        # as the Start Glaucoma Grading button: random among 50 most recent
-        # images not graded by this user for glaucoma.
-        action = (request.form.get('action') or '').strip().lower()
-        if action == 'save_next':
-            grader_id = getattr(current_user, 'id', None)
-            cand_q = (
-                db.query(EncounterFile)
-                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-                  .outerjoin(
-                      ImageGrading,
-                      and_(
-                          ImageGrading.encounter_file_id == EncounterFile.id,
-                          ImageGrading.graded_for == 'glaucoma',
-                          ImageGrading.grader_user_id == grader_id,
-                      ),
-                  )
-                  .filter(PatientEncounters.capture_date_dt.isnot(None))
-                  .filter(EncounterFile.file_type == 'image')
-                  .filter(ImageGrading.id.is_(None))
-                  .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
-                  .limit(50)
-            )
-            candidates = cand_q.all()
-            choice = random.choice(candidates) if candidates else None
-            if choice and choice.uuid:
-                return redirect(url_for('grading.glaucoma_image', uuid=choice.uuid))
-            else:
-                flash("No further ungraded glaucoma images found.", "info")
-        elif action == 'save_close':
-            return redirect(url_for('grading.index'))
-        # Default: Redirect back to this image glaucoma grading page
-        return redirect(url_for('grading.glaucoma_image', uuid=ef.uuid))
-    finally:
-        db.close()
 
 
 @bp.route("/glaucoma/remove", methods=["POST"])

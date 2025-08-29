@@ -249,6 +249,8 @@
   max-width: 100%;
   background: #000;
   border-radius: .5rem;
+  padding: 2px;              /* add slight padding around image */
+  box-sizing: border-box;    /* keep overall size consistent */
 
   position: relative;
   display: flex;
@@ -592,3 +594,38 @@
 .form-switch .form-check-input.state-not-verified:focus {
   box-shadow: 0 0 0 .25rem rgba(var(--bs-danger-rgb), .25) !important;
 }
+
+/* Grading viewer: center the single image perfectly */
+.imggr-viewer-root .imggr-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;      /* ensure black background */
+  padding: 2px;          /* small padding around the image */
+  box-sizing: border-box;
+}
+.imggr-viewer-root .imggr-main-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+  margin: auto;
+}
+
+/* Grading filters: button active state */
+.imggr-filters .btn-check:checked + .btn {
+  color: #fff;
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+/* Apply SVG filter selections to the grading viewer image */
+.card:has(.imggr-filters input[value="none"]:checked) .imggr-main-img { filter: none; }
+.card:has(.imggr-filters input[value="redfree"]:checked) .imggr-main-img { filter: url(#pswp-greenmono); }
+.card:has(.imggr-filters input[value="greenboost"]:checked) .imggr-main-img { filter: url(#pswp-greenboost); }
+.card:has(.imggr-filters input[value="bluemono"]:checked) .imggr-main-img { filter: url(#pswp-bluemono); }
+.card:has(.imggr-filters input[value="gray"]:checked) .imggr-main-img { filter: url(#pswp-gray); }
+.card:has(.imggr-filters input[value="contrast"]:checked) .imggr-main-img { filter: url(#pswp-contrast); }

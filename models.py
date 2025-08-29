@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from sqlalchemy import Date, create_engine, Column, Integer, String, ForeignKey, Boolean, Float, DateTime, Text, Index, func, UniqueConstraint
+from sqlalchemy import Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional
@@ -80,6 +80,8 @@ class DiabeticRetinopathyReport(Base):
     __tablename__ = 'diabetic_retinopathy_reports'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
+    # Stable identifier for public/secure links to split DR PDFs
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     result: Mapped[str]
     # New field to store additional qualitative results from OCR
     qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
@@ -93,6 +95,8 @@ class GlaucomaReport(Base):
     __tablename__ = 'glaucoma_reports'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
+    # Stable identifier for public/secure links to split Glaucoma PDFs
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     vcdr_right: Mapped[str | None]
     vcdr_left: Mapped[str | None]
     result: Mapped[str]
@@ -242,8 +246,7 @@ class IpLock(Base):
 
     __table_args__ = (UniqueConstraint("ip_address", name="uq_iplock_ip"),)
 
-
-  
+ 
 
 # --- Engine and Session Creation ---
 # A single engine and session factory can be imported by other scripts
@@ -255,16 +258,4 @@ else:
     engine = create_engine(DATABASE_URL)
 
 Session = sessionmaker(bind=engine)
-
-def create_db_and_tables():
-    """A function to initialize the database and create tables."""
-    print("Creating database and tables if they don't exist...")
-    Base.metadata.create_all(engine)
-    print("Database is ready.")
-
-
-
-if __name__ == '__main__':
-    # This allows you to set up the database by running `python models.py`
-    create_db_and_tables()
 

@@ -1,3 +1,4 @@
+# scripts/migrate_uuid.py
 import argparse
 import os
 import time

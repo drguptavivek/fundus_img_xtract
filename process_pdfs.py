@@ -40,11 +40,9 @@ SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.
 ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
 
 
-
 # Import the OCR extraction function from your separate file
 # Make sure your OCR function is in 'ocr_extraction.py' in the same directory
 from ocr_extraction import find_report_pages_by_coords_with_grid
-
 
 
 def clean_ocr_text(text: str | None) -> str | None:

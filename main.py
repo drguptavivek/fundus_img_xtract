@@ -47,10 +47,10 @@ def setup_environment():
 
 def setup_database():
     """Initializes the database and creates tables from the SQLAlchemy models."""
-    print("Setting up the database...")
+    print("Setting up the database...", flush=True)
     Base.metadata.create_all(engine)
 
-    print("Database is ready.")
+    print("Database is ready.", flush=True)
 
 def calculate_md5(filepath):
     """Calculates the MD5 hash of a file for unique identification."""

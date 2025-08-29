@@ -19,7 +19,7 @@ def list_recent_jobs():
             .limit(100)
             .all()
         )
-        return render_template("jobs_list.html", jobs=jobs)
+        return render_template("jobs/jobs_list.html", jobs=jobs)
     finally:
         db.close()
 
@@ -37,7 +37,7 @@ def job_status_json(job_token: str):
 @roles_required("admin")
 def job_status_page(job_token: str):
     # simple HTML page that polls <token> JSON
-    return render_template("job_status.html", job_id=job_token)
+    return render_template("jobs/job_status.html", job_id=job_token)
 
 
 

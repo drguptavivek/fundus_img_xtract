@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from flask import render_template, request, current_app, url_for
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, date as _date
 
 from auth.roles import roles_required
@@ -245,7 +245,31 @@ def glaucoma_clean_workflow():
     inserted = 0
     updated = 0
     total = 0
+    before = {}
+    after = {}
     try:
+        # --- BEFORE metrics ---
+        total_src_reports = db.query(func.count(GlaucomaReport.id)).scalar() or 0
+        cleaned_total_before = db.query(func.count(GlaucomaResultsCleaned.id)).scalar() or 0
+        cleaned_missing_num_before = (
+            db.query(func.count(GlaucomaResultsCleaned.id))
+              .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
+              .scalar() or 0
+        )
+        cleaned_with_pdf_before = (
+            db.query(func.count(GlaucomaResultsCleaned.id))
+              .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
+              .filter(GlaucomaResultsCleaned.report_file_name != "")
+              .scalar() or 0
+        )
+        before = dict(
+            total_src_reports=int(total_src_reports),
+            cleaned_total=int(cleaned_total_before),
+            cleaned_missing_num=int(cleaned_missing_num_before),
+            with_pdf=int(cleaned_with_pdf_before),
+        )
+
+        # --- Upsert cleaned rows ---
         reports = (
             db.query(GlaucomaReport)
               .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
@@ -286,6 +310,25 @@ def glaucoma_clean_workflow():
                 db.add(row)
                 inserted += 1
         db.commit()
+
+        # --- AFTER metrics ---
+        cleaned_total_after = db.query(func.count(GlaucomaResultsCleaned.id)).scalar() or 0
+        cleaned_missing_num_after = (
+            db.query(func.count(GlaucomaResultsCleaned.id))
+              .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
+              .scalar() or 0
+        )
+        cleaned_with_pdf_after = (
+            db.query(func.count(GlaucomaResultsCleaned.id))
+              .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
+              .filter(GlaucomaResultsCleaned.report_file_name != "")
+              .scalar() or 0
+        )
+        after = dict(
+            cleaned_total=int(cleaned_total_after),
+            cleaned_missing_num=int(cleaned_missing_num_after),
+            with_pdf=int(cleaned_with_pdf_after),
+        )
     finally:
         db.close()
 
@@ -294,4 +337,121 @@ def glaucoma_clean_workflow():
         total=total,
         inserted=inserted,
         updated=updated,
+        before=before,
+        after=after,
+    )
+
+
+@bp.route("/detail/<int:clean_id>", methods=["GET"])
+@roles_required("admin",)
+def glaucoma_detail(clean_id: int):
+    """Detail view aligned to Glaucoma list ordering (date desc, id desc).
+    Prev/Next follow the cleaned results sequence.
+    """
+    IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
+
+    db = Session()
+    try:
+        row = (
+            db.query(GlaucomaResultsCleaned)
+            .options(
+                joinedload(GlaucomaResultsCleaned.patient_encounter).joinedload(PatientEncounters.zip_file),
+                joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.encounter_files),
+                joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.dr_reports),
+                joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
+            )
+            .filter(GlaucomaResultsCleaned.id == clean_id)
+            .first()
+        )
+        if not row or not row.patient_encounter:
+            from flask import abort
+            abort(404)
+
+        enc = row.patient_encounter
+
+        # Compute prev/next by global glaucoma ordering
+        d = enc.capture_date_dt
+        cur_id = row.id
+
+        prev_row = (
+            db.query(GlaucomaResultsCleaned)
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(
+                (
+                    PatientEncounters.capture_date_dt > d
+                )
+                | (
+                    (PatientEncounters.capture_date_dt == d)
+                    & (GlaucomaResultsCleaned.id > cur_id)
+                )
+            )
+            .order_by(PatientEncounters.capture_date_dt.asc(), GlaucomaResultsCleaned.id.asc())
+            .first()
+        )
+
+        next_row = (
+            db.query(GlaucomaResultsCleaned)
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(
+                (
+                    PatientEncounters.capture_date_dt < d
+                )
+                | (
+                    (PatientEncounters.capture_date_dt == d)
+                    & (GlaucomaResultsCleaned.id < cur_id)
+                )
+            )
+            .order_by(PatientEncounters.capture_date_dt.desc(), GlaucomaResultsCleaned.id.desc())
+            .first()
+        )
+
+        prev_url = url_for("glaucoma.glaucoma_detail", clean_id=prev_row.id) if prev_row else None
+        next_url = url_for("glaucoma.glaucoma_detail", clean_id=next_row.id) if next_row else None
+
+        # Build images list from encounter files
+        images = []
+        for ef in (enc.encounter_files or []):
+            ft = (ef.file_type or "").lower().strip()
+            ext = ef.filename.rsplit(".", 1)[-1].lower() if ef.filename and "." in ef.filename else ""
+            if ft.startswith("image/") or ext in IMAGE_EXTS or ft == 'image':
+                images.append(ef)
+
+        dr_reports = enc.dr_reports or []
+        gl_reports = enc.glaucoma_reports or []
+
+    finally:
+        db.close()
+
+    gallery_id = f"pswp-gallery-enc-{enc.id}"
+
+    # Compute page index for this date to preserve list position
+    page_idx = 1
+    if enc.capture_date_dt is not None:
+        with Session() as db2:
+            date_rows = (
+                db2.query(PatientEncounters.capture_date_dt)
+                   .join(GlaucomaResultsCleaned, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                   .filter(PatientEncounters.capture_date_dt.isnot(None))
+                   .distinct()
+                   .order_by(PatientEncounters.capture_date_dt.desc())
+                   .all()
+            )
+            dates = [r[0] for r in date_rows]
+            if enc.capture_date_dt in dates:
+                page_idx = dates.index(enc.capture_date_dt) + 1
+    back_url = url_for("glaucoma.glaucoma_list", page=page_idx)
+    back_label = f"Date {enc.capture_date_dt.strftime('%Y-%m-%d') if enc.capture_date_dt else ''}"
+
+    # Reuse the screenings detail template for consistent UI
+    return render_template(
+        "screenings/detail.html",
+        encounter=enc,
+        images=images,
+        dr_reports=dr_reports,
+        gl_reports=gl_reports,
+        back_url=back_url,
+        prev_url=prev_url,
+        next_url=next_url,
+        gallery_id=gallery_id,
+        back_label=back_label,
     )

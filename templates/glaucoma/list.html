@@ -76,9 +76,7 @@
           <td>{% if gr.vcdr_left_num is not none %}{{ '%.2f'|format(gr.vcdr_left_num) }}{% else %}-{% endif %}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm" role="group">
-              {% if enc %}
-              <a class="btn btn-outline-secondary" href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">View</a>
-              {% endif %}
+              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
               {% if gr.report_file_name %}
               <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank" rel="noopener">PDF</a>
               {% endif %}

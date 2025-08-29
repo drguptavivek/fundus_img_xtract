@@ -23,6 +23,34 @@
     </div>
   </div>
 
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>Before</strong></div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li><span class="text-muted">Source reports:</span> <strong>{{ before.total_src_reports }}</strong></li>
+            <li><span class="text-muted">Cleaned rows:</span> <strong>{{ before.cleaned_total }}</strong></li>
+            <li><span class="text-muted">Missing numeric VCDR:</span> <strong>{{ before.cleaned_missing_num }}</strong></li>
+            <li><span class="text-muted">With PDF file name:</span> <strong>{{ before.with_pdf }}</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>After</strong></div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0">
+            <li><span class="text-muted">Cleaned rows:</span> <strong>{{ after.cleaned_total }}</strong></li>
+            <li><span class="text-muted">Missing numeric VCDR:</span> <strong>{{ after.cleaned_missing_num }}</strong></li>
+            <li><span class="text-muted">With PDF file name:</span> <strong>{{ after.with_pdf }}</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_list') }}">Back to List</a>
     <a class="btn btn-primary" href="{{ url_for('glaucoma.glaucoma_results') }}">View Dashboard</a>

@@ -86,7 +86,7 @@ def login():
         # Block if IP locked
         ip_locked, ip_until = _is_ip_locked(db, ip)
         if ip_locked:
-            return render_template("login.html",
+            return render_template("auth/login.html",
                                    error=f"This IP is temporarily locked until {ip_until.isoformat()}."),
         if request.method == "POST":
             username = (request.form.get("username") or "").strip()
@@ -100,7 +100,7 @@ def login():
                 if user:
                     until = _lock_user(db, user)
                     _record_attempt(db, username, ip, success=False)
-                    return render_template("login.html",
+                    return render_template("auth/login.html",
                                            error=f"User locked due to repeated failures until {until.isoformat()}.")
                 # If user doesn't exist, still fall through and verify → will fail & increase counters,
                 # but we won't create a fake user. The IP rule will still protect.
@@ -110,14 +110,14 @@ def login():
             if recent_ip_fails >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
                 _record_attempt(db, username, ip, success=False)
-                return render_template("login.html",
+                return render_template("auth/login.html",
                                        error=f"This IP is locked due to repeated failures until {until.isoformat()}.")
 
             # Fetch user & enforce user lock
             user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
             if user and user.is_locked_until and user.is_locked_until > utcnow():
                 _record_attempt(db, username, ip, success=False)
-                return render_template("login.html",
+                return render_template("auth/login.html",
                                        error=f"User is locked until {user.is_locked_until.isoformat()}.")
 
             # Verify password
@@ -138,18 +138,18 @@ def login():
             # Re-check windows after this failure to possibly trigger locks
             if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME and user:
                 until = _lock_user(db, user)
-                return render_template("login.html",
+                return render_template("auth/login.html",
                                        error=f"User locked due to repeated failures until {until.isoformat()}.")
             if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
-                return render_template("login.html",
+                return render_template("auth/login.html",
                                        error=f"This IP is locked due to repeated failures until {until.isoformat()}.")
 
             # Generic error (avoid username enumeration)
-            return render_template("login.html", error="Invalid username or password.")
+            return render_template("auth/login.html", error="Invalid username or password.")
 
         # GET
-        return render_template("login.html")
+        return render_template("auth/login.html")
 
 @auth_bp.route("/logout", methods=["POST", "GET"])
 @login_required

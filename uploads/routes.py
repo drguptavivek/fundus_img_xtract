@@ -50,7 +50,7 @@ def _file_size_bytes(file_storage) -> int:
 @roles_required("admin", "fileUploader")
 def upload_form():
     return render_template(
-        "upload_multi.html",
+        "upload/upload_multi.html",
         per_file_mb=int(current_app.config["PER_FILE_MAX_BYTES"] / (1024 * 1024)),
         max_files=current_app.config["MAX_FILES_PER_UPLOAD"],
     )

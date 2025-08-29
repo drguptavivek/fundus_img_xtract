@@ -42,7 +42,7 @@ def list_uploaded_results():
     has_next = page < total_pages
 
     return render_template(
-        "uploaded_results_list.html",
+        "upload/uploaded_results_list.html",
         items=items,
         page=page,
         per_page=per_page,

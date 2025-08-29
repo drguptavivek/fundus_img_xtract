@@ -60,6 +60,8 @@
   </div>
 </div>
 
+
+
 {% if items %}
 <div class="card shadow-sm">
   <div class="table-responsive">
@@ -94,7 +96,7 @@
               <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank" rel="noopener">PDF</a>
               {% endif %}
               {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager') %}
-              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_edit', clean_id=gr.id) }}">Edit</a>
+              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_edit', clean_id=gr.id) }}">Verify</a>
               {% endif %}
             </div>
           </td>
@@ -108,24 +110,47 @@
   <div class="text-center text-muted p-4">No glaucoma reports found.</div>
 {% endif %}
 
-<!-- Bottom pager -->
-<div class="d-flex justify-content-between align-items-center mt-3">
-  <div class="text-muted small">
-    Showing page {{ page }} of {{ total_pages }} · {{ total }} total
+{# bottom pager removed per request #}
+
+{# My recently verified by me (last 20) — moved below the main list #}
+{% if my_recent_verified %}
+<div class="card shadow-sm mb-3 mt-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>My Recently Verified ({{ my_recent_verified|length }})</strong>
+    <span class="small text-muted">Most recent first</span>
   </div>
-  <nav>
-    <ul class="pagination mb-0">
-      <li class="page-item {% if not has_prev %}disabled{% endif %}">
-        <a class="page-link" href="{{ prev_url or '#' }}">Previous</a>
-      </li>
-      <li class="page-item disabled">
-        <span class="page-link">Page {{ page }}</span>
-      </li>
-      <li class="page-item {% if not has_next %}disabled{% endif %}">
-        <a class="page-link" href="{{ next_url or '#' }}">Next</a>
-      </li>
-    </ul>
-  </nav>
+  <div class="card-body p-2">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <thead>
+          <tr>
+            <th class="text-nowrap">Verified At</th>
+            <th class="text-nowrap">Capture Date</th>
+            <th>Patient ID</th>
+            <th>Patient Name</th>
+            <th>Result</th>
+            <th class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for gr in my_recent_verified %}
+          {% set enc = gr.patient_encounter %}
+          <tr>
+            <td class="text-nowrap">{% if enc and enc.glaucoma_verified_at %}{{ enc.glaucoma_verified_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
+            <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
+            <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
+            <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
+            <td>{{ gr.result or '-' }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
+  </div>
+{% endif %}
 
 {% endblock %}

@@ -230,6 +230,25 @@ def glaucoma_list():
                 items = [gr for gr in items if not gr.patient_encounter or gr.patient_encounter.glaucoma_verified_status != 'verified']
         else:
             items = []
+
+        # Build "my recently verified" list (up to 20) for the logged-in user
+        my_recent_verified = []
+        try:
+            from flask_login import current_user as cu
+            uname = getattr(cu, 'username', None)
+            if uname:
+                my_recent_verified = (
+                    db.query(GlaucomaResultsCleaned)
+                      .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                      .filter(PatientEncounters.glaucoma_verified_status == 'verified')
+                      .filter(PatientEncounters.glaucoma_verified_by == uname)
+                      .order_by(PatientEncounters.glaucoma_verified_at.desc(), GlaucomaResultsCleaned.id.desc())
+                      .options(selectinload(GlaucomaResultsCleaned.patient_encounter))
+                      .limit(20)
+                      .all()
+                )
+        except Exception:
+            my_recent_verified = []
     finally:
         db.close()
 
@@ -250,6 +269,7 @@ def glaucoma_list():
         selected_date=selected_date,
         ver=ver,
         recent_unverified_url=recent_unverified_url,
+        my_recent_verified=my_recent_verified,
     )
 
 
@@ -686,6 +706,30 @@ def glaucoma_verify(clean_id: int):
     finally:
         db.close()
 
+
+@bp.route("/edit/<int:clean_id>/unverify", methods=["POST"])
+@roles_required("admin", "optometrist")
+def glaucoma_unverify(clean_id: int):
+    db = Session()
+    try:
+        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        if not row:
+            from flask import abort
+            abort(404)
+        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        if enc:
+            enc.glaucoma_verified_status = None
+            enc.glaucoma_verified_by = None
+            enc.glaucoma_verified_at = None
+            db.add(enc)
+            db.commit()
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": True, "status": enc.glaucoma_verified_status if enc else None}
+        flash("Encounter unverified.", "warning")
+        return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+    finally:
+        db.close()
 
 @bp.route("/edit/<int:clean_id>/mark_eye", methods=["POST"])
 @roles_required("admin", "optometrist", "data_manager")

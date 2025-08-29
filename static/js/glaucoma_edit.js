@@ -3,13 +3,31 @@
     const btns = form.querySelectorAll('button[name="side"]');
     btns.forEach(btn => {
       btn.classList.remove('btn-primary','btn-outline-primary','btn-outline-secondary');
-      if (btn.value === 'cannot_tell') btn.classList.add('btn-outline-secondary');
-      else btn.classList.add('btn-outline-primary');
-      if (btn.value === side) btn.classList.add('btn-primary');
+      if (btn.value === side) {
+        // Selected: solid primary (white text)
+        btn.classList.add('btn-primary');
+      } else {
+        // Unselected: outline styles
+        if (btn.value === 'cannot_tell') btn.classList.add('btn-outline-secondary');
+        else btn.classList.add('btn-outline-primary');
+      }
     });
   }
 
   document.addEventListener('DOMContentLoaded', function(){
+    // Live visual marker for Patient ID length (expected 8)
+    const pid = document.getElementById('patient-id-input');
+    const checkPid = () => {
+      if (!pid) return;
+      const len = (pid.value || '').trim().length;
+      if (len !== 8) pid.classList.add('is-invalid');
+      else pid.classList.remove('is-invalid');
+    };
+    if (pid) {
+      checkPid();
+      pid.addEventListener('input', checkPid);
+      pid.addEventListener('blur', checkPid);
+    }
     document.querySelectorAll('.eye-mark-form').forEach(form => {
       form.addEventListener('submit', function(e){
         e.preventDefault();
@@ -31,8 +49,8 @@
       });
     });
 
-    // Verification handler
-    const verifyBtn = document.getElementById('verify-btn');
+    // Verification toggle handler
+    const verifyToggle = document.getElementById('verify-toggle');
     function showToast(message, type){
       // type: 'success' | 'danger' | 'warning' | 'info'
       const container = document.getElementById('flash-toasts') || (function(){
@@ -61,15 +79,23 @@
         setTimeout(()=> toast.remove(), 3500);
       }
     }
-    if (verifyBtn) {
-      verifyBtn.addEventListener('click', function(e){
-        e.preventDefault();
-        const url = verifyBtn.getAttribute('data-url');
+    if (verifyToggle) {
+      verifyToggle.addEventListener('change', function(e){
+        const checked = verifyToggle.checked;
         const mainForm = document.getElementById('main-form');
-        const fd = new FormData(mainForm); // include all current field values
+        const fd = new FormData(mainForm);
+        const url = checked ? verifyToggle.getAttribute('data-verify-url')
+                            : verifyToggle.getAttribute('data-unverify-url');
         fetch(url, {
           method: 'POST',
-          body: fd,
+          body: (function(){
+            if (checked) return fd; // includes all fields + csrf
+            // For unverify, send only CSRF token to satisfy protection
+            const only = new FormData();
+            const tok = mainForm.querySelector('input[name="csrf_token"]');
+            if (tok && tok.value) only.append('csrf_token', tok.value);
+            return only;
+          })(),
           headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
           credentials: 'same-origin'
         }).then(async res => {
@@ -78,23 +104,40 @@
           if (res.ok && json && json.ok) {
             const statusEl = document.getElementById('verify-status');
             if (statusEl) {
-              statusEl.textContent = `Verified by ${json.by || ''}`;
-              statusEl.classList.remove('text-danger');
-              statusEl.classList.add('text-success');
+              if (checked) {
+                statusEl.textContent = `Verified by ${json.by || ''}`;
+                statusEl.classList.remove('text-danger');
+                statusEl.classList.add('text-success');
+              } else {
+                statusEl.textContent = 'Not verified';
+                statusEl.classList.remove('text-success');
+                statusEl.classList.add('text-danger');
+              }
             }
-            verifyBtn.disabled = true;
-            // Navigate to next encounter if available
-            const nextLink = document.getElementById('next-link');
-            if (nextLink && nextLink.getAttribute('href') && nextLink.getAttribute('href') !== '#' && !nextLink.classList.contains('disabled')) {
-              window.location.href = nextLink.getAttribute('href');
+            // Update toggle color class for not-verified state
+            if (verifyToggle) {
+              if (checked) verifyToggle.classList.remove('state-not-verified');
+              else verifyToggle.classList.add('state-not-verified');
+            }
+            // if just verified, optionally auto-advance to next encounter
+            if (checked) {
+              const nextLink = document.getElementById('next-link');
+              if (nextLink && nextLink.getAttribute('href') && nextLink.getAttribute('href') !== '#' && !nextLink.classList.contains('disabled')) {
+                try { showToast('Navigating to next…', 'info'); } catch(_) {}
+                setTimeout(() => { window.location.href = nextLink.getAttribute('href'); }, 1000);
+              }
             }
           } else {
-            const msg = (json && (json.message || json.error)) || 'Verification failed';
+            // revert toggle on failure
+            verifyToggle.checked = !checked;
+            const msg = (json && (json.message || json.error)) || (checked ? 'Verification failed' : 'Unverify failed');
             showToast(msg, 'danger');
           }
         }).catch(err => {
-          console.error('Verify failed', err);
-          showToast('Verification failed due to network error', 'danger');
+          // revert toggle on error
+          verifyToggle.checked = !checked;
+          console.error('Verify toggle failed', err);
+          showToast('Operation failed due to network error', 'danger');
         });
       });
     }

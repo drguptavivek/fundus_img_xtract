@@ -1,5 +1,4 @@
 #screenings/routes.py
-
 from math import ceil
 import re
 from datetime import datetime

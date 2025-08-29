@@ -2,6 +2,7 @@ import re
 import pandas as pd
 import numpy as np
 from flask import render_template, request, current_app, url_for, redirect, flash
+from flask_login import current_user
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, date as _date
@@ -9,7 +10,7 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile
+from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow
 from process_pdfs import GLAUCOMA_PDF_DIR
 
 
@@ -562,6 +563,51 @@ def glaucoma_edit(clean_id: int):
         db.close()
 
     return render_template("glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url)
+ 
+
+@bp.route("/edit/<int:clean_id>/verify", methods=["POST"])
+@roles_required("admin", "optometrist")
+def glaucoma_verify(clean_id: int):
+    db = Session()
+    try:
+        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        if not row:
+            from flask import abort
+            abort(404)
+        # Ensure all images are tagged before verification
+        missing = (
+            db.query(EncounterFile)
+              .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
+              .filter(EncounterFile.file_type == 'image')
+              .filter(
+                  (EncounterFile.eye_side.is_(None)) | (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+              )
+              .count()
+        )
+        if missing:
+            msg = f"{missing} image(s) still untagged; cannot verify."
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                return {"ok": False, "error": "incomplete", "message": msg}, 400
+            flash(msg, "danger")
+            return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+
+        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        if enc:
+            enc.verified_status = 'verified'
+            try:
+                enc.verified_by = current_user.username  # type: ignore[attr-defined]
+            except Exception:
+                enc.verified_by = 'unknown'
+            enc.verified_at = utcnow()
+            db.add(enc)
+            db.commit()
+
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": True, "status": enc.verified_status if enc else 'verified', "by": enc.verified_by if enc else current_user.username}
+        flash("Encounter verified.", "success")
+        return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+    finally:
+        db.close()
 
 
 @bp.route("/edit/<int:clean_id>/mark_eye", methods=["POST"])

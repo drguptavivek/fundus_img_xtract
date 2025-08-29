@@ -54,6 +54,10 @@ class PatientEncounters(Base):
     name: Mapped[str]
     patient_id: Mapped[str]
     capture_date: Mapped[str]
+    # Verification fields
+    verified_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # New: proper Date column for reliable queries (nullable until backfilled)
     capture_date_dt: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     

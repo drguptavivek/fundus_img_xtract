@@ -30,5 +30,33 @@
         }).catch(err => console.error('Laterality update failed', err));
       });
     });
+
+    // Verification handler
+    const verifyBtn = document.getElementById('verify-btn');
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', function(e){
+        e.preventDefault();
+        const url = verifyBtn.getAttribute('data-url');
+        const tokenInput = document.querySelector('#main-form input[name="csrf_token"]');
+        const fd = new FormData();
+        if (tokenInput) fd.set('csrf_token', tokenInput.value);
+        fetch(url, {
+          method: 'POST',
+          body: fd,
+          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+          credentials: 'same-origin'
+        }).then(res => res.json()).then(json => {
+          if (json && json.ok) {
+            const statusEl = document.getElementById('verify-status');
+            if (statusEl) {
+              statusEl.textContent = `Verified by ${json.by || ''}`;
+              statusEl.classList.remove('text-danger');
+              statusEl.classList.add('text-success');
+            }
+            verifyBtn.disabled = true;
+          }
+        }).catch(err => console.error('Verify failed', err));
+      });
+    }
   });
 })();

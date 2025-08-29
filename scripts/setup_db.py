@@ -84,6 +84,11 @@ def main() -> None:
         help="Add eye_side column to encounter_files and index it",
     )
     parser.add_argument(
+        "--migrate-verification",
+        action="store_true",
+        help="Add verification columns to patient_encounters",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -102,6 +107,12 @@ def main() -> None:
         migrate_uuids(args.check_only, args.batch_size, args.progress_every)
     if args.migrate_eye_side:
         migrate_eye_side(dry_run=args.check_only)
+    if args.migrate_verification:
+        try:
+            from migrate_verification import migrate as migrate_verif
+            migrate_verif(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_verification: {e}")
 
 
 if __name__ == "__main__":

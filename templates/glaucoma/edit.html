@@ -8,7 +8,25 @@
   <form id="main-form" method="post" action="">
     {{ csrf_field() }}
     <div class="card shadow-sm mb-3">
-      <div class="card-header"><strong>Edit Glaucoma Result</strong></div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Edit Glaucoma Result</strong>
+        <div class="d-flex align-items-center gap-2">
+          <span id="verify-status" class="small {% if row.patient_encounter and row.patient_encounter.verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+            {% if row.patient_encounter and row.patient_encounter.verified_status == 'verified' %}
+              Verified by {{ row.patient_encounter.verified_by or '—' }}
+            {% else %}
+              Not verified
+            {% endif %}
+          </span>
+          {% if current_user_has('optometrist') or current_user_has('admin') %}
+            <button id="verify-btn" type="button" class="btn btn-sm btn-outline-success"
+                    data-url="{{ url_for('glaucoma.glaucoma_verify', clean_id=row.id) }}"
+                    {% if not (row.patient_encounter and row.patient_encounter.verified_status != 'verified') %}disabled{% endif %}>
+              Mark Verified
+            </button>
+          {% endif %}
+        </div>
+      </div>
       <div class="card-body">
       <!-- Row 1: ID, Name, VCDR R, VCDR L, Nav -->
       <div class="row g-3 align-items-end">

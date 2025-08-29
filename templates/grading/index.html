@@ -23,7 +23,15 @@
   </div>
 
 <div class="row g-3 mb-3">
-  <div class="col-12 col-md-4">
+  <div class="col-12 col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-semibold">My gradings</div>
+        <div class="display-6">{{ my_total or 0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-3">
     <div class="card shadow-sm h-100">
       <div class="card-body">
         <div class="fw-semibold">Glaucoma gradings</div>
@@ -31,7 +39,7 @@
       </div>
     </div>
   </div>
-  <div class="col-12 col-md-4">
+  <div class="col-12 col-md-3">
     <div class="card shadow-sm h-100">
       <div class="card-body">
         <div class="fw-semibold">DR gradings</div>
@@ -39,11 +47,12 @@
       </div>
     </div>
   </div>
-  <div class="col-12 col-md-4">
+  <div class="col-12 col-md-3">
     <div class="card shadow-sm h-100">
       <div class="card-body">
-        <div class="fw-semibold">Unique images graded</div>
-        <div class="display-6">{{ total_unique_images or 0 }}</div>
+        <div class="fw-semibold">Total gradings</div>
+        <div class="display-6">{{ overall_total or 0 }}</div>
+        <div class="small text-muted">Unique images: {{ total_unique_images or 0 }}</div>
       </div>
     </div>
   </div>
@@ -51,14 +60,14 @@
 
 <div class="card shadow-sm mb-3">
   <div class="card-body d-flex flex-wrap align-items-end gap-3">
-    <form method="post" class="row g-3 align-items-end">
+    <form method="post" class="row g-2 align-items-center">
       {{ csrf_field() }}
-      <div class="col-12 col-sm-6 col-md-6 col-lg-4">
-        <label for="image_uuid" class="form-label">Image UUID</label>
-        <input type="text" class="form-control" id="image_uuid" name="image_uuid" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
-      </div>
-      <div class="col-12 col-sm-6 col-md-6 col-lg-3">
-        <button type="submit" class="btn btn-primary">Go to Glaucoma Grading</button>
+      <div class="col-12 col-lg-9">
+        <label for="image_uuid" class="form-label mb-0">Image UUID</label>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="image_uuid" name="image_uuid" size="60" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
+          <button type="submit" class="btn btn-primary btn-sm">Code Specific Image</button>
+        </div>
       </div>
     </form>
 
@@ -66,6 +75,73 @@
   </div>
   <div class="card-footer bg-light small">
     Tip: The Start button opens the most recent encounter with at least one ungraded glaucoma image.
+  </div>
+  </div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>My Gradings</strong>
+    <span class="small text-muted">{{ my_total or 0 }} total</span>
+  </div>
+  <div class="card-body p-0">
+    <div class="p-2 border-bottom">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="small text-muted">Filter:</span>
+        {% set types = ['all','Normal','Glaucoma Suspect','Glaucoma','Other Retinal','Not gradable'] %}
+        <div class="btn-group btn-group-sm" role="group">
+          {% for t in types %}
+            <a class="btn btn-outline-secondary {% if gimp==t %}active{% endif %}"
+               href="{{ url_for('grading.index', gimp=t, p=1) }}">{{ t|capitalize }}</a>
+          {% endfor %}
+        </div>
+        {% if type_counts %}
+          <span class="ms-auto small text-muted">
+            {% for k,v in type_counts.items() %}
+              <span class="me-2">{{ k }}: <strong>{{ v }}</strong></span>
+            {% endfor %}
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 180px;">Graded At</th>
+          <th style="width: 340px;">Image UUID</th>
+          <th style="width: 120px;">For</th>
+          <th>Result</th>
+          <th>Remarks</th>
+          <th style="width: 120px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% if my_items %}
+        {% for g in my_items %}
+        <tr>
+          <td class="text-nowrap">{{ (g.updated_at or g.created_at).strftime('%Y-%m-%d %H:%M') if g.updated_at or g.created_at else '-' }}</td>
+          <td class="text-break"><code>{{ g.image.uuid if g.image else '—' }}</code></td>
+          <td class="text-nowrap">{{ g.graded_for or '-' }}</td>
+          <td>{{ g.impression or '-' }}</td>
+          <td class="small text-muted">{{ g.remarks or '' }}</td>
+          <td class="text-end">
+            {% if g.image and g.image.uuid %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.glaucoma_image', uuid=g.image.uuid) }}">Revise</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="5" class="text-center text-muted p-3">No gradings found.</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <div class="small text-muted">Page {{ my_page }} of {{ my_total_pages }}</div>
+    <div class="btn-group btn-group-sm" role="group">
+      <a class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}" href="{{ my_prev_url or '#' }}">Prev</a>
+      <a class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}" href="{{ my_next_url or '#' }}">Next</a>
+    </div>
   </div>
 </div>
 

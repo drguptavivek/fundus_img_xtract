@@ -1,3 +1,7 @@
+# process_pdfs.py
+# This script processes PDF files in the 'files/pdfs' directory,
+# It uses -      ocr_extraction.py   
+
 import re
 import os
 from pathlib import Path
@@ -9,7 +13,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 
-# uses ocr_extraction.py   
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent

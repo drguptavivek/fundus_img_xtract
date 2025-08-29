@@ -68,12 +68,17 @@
                             <div><strong>Result:</strong> {{ dr.result or "-" }}</div>
                             {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}
                             </div>{% endif %}
-                            {% if dr.report_file_name %}
-                            <div class="mt-2">
+                            {# Link to first EncounterFile PDF by UUID #}
+                            {% set pdfs = [] %}
+                            {% for ef in encounter.encounter_files if ef.file_type == 'pdf' %}
+                              {% set _ = pdfs.append(ef) %}
+                            {% endfor %}
+                            {% if pdfs %}
+                              <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                    href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
-                                    target="_blank" rel="noopener">Open DR PDF</a>
-                            </div>
+                                   href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                                   target="_blank" rel="noopener">Open PDF</a>
+                              </div>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -95,12 +100,17 @@
                                 gl.qualitative_result }}</div>{% endif %}
                             <div class="mb-1"><strong>VCDR (R/L):</strong> {{ gl.vcdr_right or "-" }} / {{ gl.vcdr_left
                                 or "-" }}</div>
-                            {% if gl.report_file_name %}
-                            <div class="mt-2">
+                            {# Link to first EncounterFile PDF by UUID #}
+                            {% set pdfs = [] %}
+                            {% for ef in encounter.encounter_files if ef.file_type == 'pdf' %}
+                              {% set _ = pdfs.append(ef) %}
+                            {% endfor %}
+                            {% if pdfs %}
+                              <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                    href="{{ url_for('reports.serve_glaucoma_pdf', filename=gl.report_file_name) }}"
-                                    target="_blank" rel="noopener">Open Glaucoma PDF</a>
-                            </div>
+                                   href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                                   target="_blank" rel="noopener">Open PDF</a>
+                              </div>
                             {% endif %}
                         </li>
                         {% endfor %}

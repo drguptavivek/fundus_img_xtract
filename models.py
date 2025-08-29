@@ -267,3 +267,4 @@ def create_db_and_tables():
 if __name__ == '__main__':
     # This allows you to set up the database by running `python models.py`
     create_db_and_tables()
+

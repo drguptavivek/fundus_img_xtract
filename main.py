@@ -124,9 +124,35 @@ def process_zip_file(zip_path: Path, session):
     print(f"\n--- Processing '{zip_path.name}' ---")
 
     success = False  # track outcome to decide where to move the ZIP
+    error_message = ""
 
     try:
         # --- OPEN ZIP (everything that reads from the archive stays inside this block) ---
+        # Guard: skip macOS resource fork artifacts and invalid zips
+        if zip_path.name.startswith("._"):
+            print(f"Skipping resource-fork file '{zip_path.name}'.")
+            log_status(zip_path.name, "SKIPPED_RESOURCEFORK")
+            return
+        if not zipfile.is_zipfile(zip_path):
+            print(f"File '{zip_path.name}' is not a valid ZIP. Moving to error.")
+            try:
+                # define a local mover consistent with below
+                def _safe_move_local(src: Path, dst: Path):
+                    import time
+                    for i in range(5):
+                        try:
+                            shutil.move(str(src), str(dst))
+                            return
+                        except PermissionError as _:
+                            if i == 4:
+                                raise
+                            time.sleep(0.2 * (i + 1))
+                _safe_move_local(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
+            except PermissionError as pe:
+                print(f"Final move failed for '{zip_path.name}' due to a lock: {pe}.")
+            log_status(zip_path.name, "ERROR_BADZIP", "not a zip file")
+            return
+
         with zipfile.ZipFile(zip_path, 'r') as zf:
             print("  Archive Contents (Tree Structure):")
             zf.printdir()
@@ -202,10 +228,12 @@ def process_zip_file(zip_path: Path, session):
         print(f"Error processing '{zip_path.name}': {e}")
         session.rollback()
         success = False
+        error_message = str(e)
     except Exception as e:
         print(f"Error processing '{zip_path.name}': {e}")
         session.rollback()
         success = False
+        error_message = str(e)
     finally:
         try:
             if success:
@@ -215,12 +243,12 @@ def process_zip_file(zip_path: Path, session):
             else:
                 safe_move(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
                 print(f"Moved '{zip_path.name}' to error directory.")
-                log_status(zip_path.name, "ERROR", str(e))
-        except PermissionError as e:
+                log_status(zip_path.name, "ERROR", error_message or "")
+        except PermissionError as pe:
             # If it’s still locked by some external process, surface a clear message
-            print(f"Final move failed for '{zip_path.name}' due to a lock: {e}. "
+            print(f"Final move failed for '{zip_path.name}' due to a lock: {pe}. "
                   f"Please close any apps using this file and rerun.")
-            log_status(zip_path.name, "ERROR", f"PermissionError: {e}")
+            log_status(zip_path.name, "ERROR", f"PermissionError: {pe}")
 
 # --- Main Execution ---
 
@@ -232,7 +260,8 @@ def main():
     
     session = Session()
 
-    zip_files = list(UPLOAD_DIR.glob("*.zip"))
+    # Filter out macOS resource fork artifacts like '._*.zip'
+    zip_files = [p for p in UPLOAD_DIR.glob("*.zip") if not p.name.startswith("._")]
     if not zip_files:
         print("\nNo new ZIP files found in 'files/uploaded'.")
     else:

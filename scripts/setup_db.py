@@ -99,6 +99,11 @@ def main() -> None:
         help="Drop unique constraint/index on image_gradings and create a non-unique index",
     )
     parser.add_argument(
+        "--migrate-job-uploader",
+        action="store_true",
+        help="Add uploader metadata columns to jobs and job_items",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -135,6 +140,12 @@ def main() -> None:
             drop_unique(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_drop_image_grading_unique: {e}")
+    if args.migrate_job_uploader:
+        try:
+            from migrate_job_uploader import migrate as mig_job_upl
+            mig_job_upl(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_job_uploader: {e}")
 
 
 if __name__ == "__main__":

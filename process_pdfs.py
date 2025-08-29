@@ -75,7 +75,7 @@ def log_error(filename: str, message: str):
 
 # --- Main PDF Processing Logic ---
 
-def process_all_pdfs_for_ocr():
+def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
     """
     Iterates through all PDF files in the PDF_DIR, performs OCR,
     stores the extracted results into the database, and
@@ -107,6 +107,8 @@ def process_all_pdfs_for_ocr():
         for ef, enc in rows:
             pdf_path = PDF_DIR / (ef.filename or "")
             if not ef.filename:
+                continue
+            if limit_filenames is not None and ef.filename not in limit_filenames:
                 continue
             if not pdf_path.exists():
                 log_error(ef.filename, "PDF file missing on disk; skipping")

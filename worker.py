@@ -19,9 +19,13 @@ def _process_one_zip(zip_path: Path) -> dict:
     setup_database()
     db = Session()
     try:
-        process_zip_file(zip_path, db)
-        process_all_pdfs_for_ocr()
-        return {"status": "ok", "message": "Ingested + OCR pipeline completed"}
+        pdfs = process_zip_file(zip_path, db)
+        if not pdfs:
+            # Nothing extracted (e.g., images only), treat as ok but skip OCR
+            return {"status": "ok", "message": "Ingested (no PDFs to OCR)"}
+        # Limit OCR strictly to PDFs from this zip
+        process_all_pdfs_for_ocr(limit_filenames=set(pdfs))
+        return {"status": "ok", "message": f"Ingested + OCR for {len(pdfs)} PDF(s)"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
     finally:

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Malicious Uploads{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Malicious Upload Incidents</h3>
+  <span class="text-muted small">Log: {{ log_path }}</span>
+  <a class="btn btn-secondary" href="{{ url_for('admin.users_list') }}">Admin</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="text-muted">Total Incidents</h6>
+        <div class="display-6">{{ total or 0 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="text-muted">Top Uploaders</h6>
+        <ul class="list-unstyled mb-0 small">
+          {% for u, c in top_users or [] %}
+          <li><span class="badge bg-secondary me-1">{{ c }}</span>{{ u }}</li>
+          {% else %}
+          <li class="text-muted">No data</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="text-muted">Top Reasons</h6>
+        <ul class="list-unstyled mb-0 small">
+          {% for r, c in top_reasons or [] %}
+          <li><span class="badge bg-secondary me-1">{{ c }}</span>{{ r }}</li>
+          {% else %}
+          <li class="text-muted">No data</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 210px;">Timestamp (UTC)</th>
+            <th>ZIP</th>
+            <th>User</th>
+            <th>IP</th>
+            <th>Reason</th>
+            <th>Expected</th>
+            <th>Detected</th>
+            <th>Entry</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in incidents %}
+          <tr class="{% if it.reason in ['path_traversal','disallowed_file'] %}table-danger{% else %}table-warning{% endif %}">
+            <td><code>{{ it.ts }}</code></td>
+            <td><code>{{ it.zip }}</code></td>
+            <td>{{ it.user }}</td>
+            <td>{{ it.ip }}</td>
+            <td><span class="badge bg-danger">{{ it.reason or '-' }}</span></td>
+            <td>{{ it.expected or '-' }}</td>
+            <td>{{ it.detected or '-' }}</td>
+            <td class="text-truncate" style="max-width: 360px;" title="{{ it.entry }}">{{ it.entry }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8" class="text-center text-muted p-4">No incidents logged.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer text-end">
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.malicious_uploads') }}">Refresh</a>
+  </div>
+  
+</div>
+
+{% endblock %}

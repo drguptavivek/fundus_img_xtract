@@ -5,8 +5,10 @@ from datetime import datetime
 from flask import (
     render_template, request, redirect, url_for, flash, current_app
 )
+from flask_login import current_user
 from werkzeug.utils import secure_filename
 from models import Session, UPLOAD_DIR
+import json
 from job_store import db_create_job
 from worker import queue_job
 from . import bp
@@ -99,6 +101,26 @@ def upload_files():
                 pass
             f.save(str(save_path))
             saved_paths.append(save_path)
+
+            # Write sidecar metadata for uploader and IP
+            try:
+                meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                meta_dir.mkdir(parents=True, exist_ok=True)
+                xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+                ip = xff or (request.remote_addr or "-")
+                meta = {
+                    "filename": save_path.name,
+                    "uploaded_at": datetime.utcnow().isoformat() + "Z",
+                    "uploader_username": getattr(current_user, "username", None) or "-",
+                    "uploader_id": getattr(current_user, "id", None),
+                    "ip": ip,
+                    "user_agent": request.headers.get("User-Agent", "-"),
+                }
+                with open(meta_dir / f"{save_path.name}.json", "w", encoding="utf-8") as mf:
+                    json.dump(meta, mf, ensure_ascii=False)
+            except Exception:
+                # Metadata logging should not block upload; ignore errors
+                pass
         except Exception as ex:
             rejected.append(f"{fname} (save failed: {ex})")
 
@@ -107,7 +129,18 @@ def upload_files():
         return redirect(url_for("uploads.upload_form"))
 
     # Create Job in DB and queue background work
-    job_token = db_create_job([p.name for p in saved_paths], rejected)
+    # Capture uploader identity and client IP
+    xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    ip = xff or (request.remote_addr or "-")
+    uploader_username = getattr(current_user, "username", None)
+    uploader_user_id = getattr(current_user, "id", None)
+    job_token = db_create_job(
+        [p.name for p in saved_paths],
+        rejected,
+        uploader_user_id=uploader_user_id,
+        uploader_username=uploader_username,
+        uploader_ip=ip,
+    )
     queue_job(current_app, job_token, saved_paths)
 
     flash(f"Queued {len(saved_paths)} file(s) for processing. Rejected: {len(rejected)}", "info")

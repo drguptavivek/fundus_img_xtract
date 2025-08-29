@@ -20,6 +20,12 @@
           </dd>
           <dt class="col-sm-3">Created</dt>
           <dd class="col-sm-9"><span id="created_at">-</span></dd>
+          <dt class="col-sm-3">Uploaded By</dt>
+          <dd class="col-sm-9"><span id="uploader_username">-</span></dd>
+          <dt class="col-sm-3">Uploader IP</dt>
+          <dd class="col-sm-9"><span id="uploader_ip">-</span></dd>
+          <dt class="col-sm-3">Errored Items</dt>
+          <dd class="col-sm-9"><span id="error_count">0</span></dd>
         </dl>
 
         <hr>
@@ -63,27 +69,35 @@
 
       const statusEl = document.getElementById('status');
       const createdEl = document.getElementById('created_at');
+      const errorEl = document.getElementById('error_count');
       const listEl = document.getElementById('items');
       const rejEl = document.getElementById('rejected');
+      const upUserEl = document.getElementById('uploader_username');
+      const upIpEl = document.getElementById('uploader_ip');
 
       // header status
       statusEl.className = `badge bg-${badgeClassForState(data.status)}`;
       statusEl.textContent = (data.status || 'unknown');
 
       createdEl.textContent = data.created_at || '-';
+      const errorCount = (data.items || []).filter((it) => (it.state || '').toLowerCase() === 'error').length;
+      errorEl.textContent = String(errorCount);
+      upUserEl.textContent = data.uploader_username || '-';
+      upIpEl.textContent = data.uploader_ip || '-';
 
       // files list
       listEl.innerHTML = '';
       (data.items || []).forEach((it) => {
         const li = document.createElement('li');
         li.className = 'list-group-item';
+        const rejected = (it.state || '').toLowerCase() === 'error';
         li.innerHTML = `
           <div class="d-flex justify-content-between align-items-start">
             <div class="me-3">
               <div class="fw-semibold">${it.filename}</div>
-              ${it.detail ? `<div class="small text-muted">${it.detail}</div>` : ''}
+              ${it.detail ? `<div class="small ${rejected ? 'text-danger' : 'text-muted'}">${it.detail}</div>` : ''}
             </div>
-            ${badgeHtml(it.state)}
+            <div class="d-flex gap-2 align-items-center">${rejected ? `<span class="badge bg-danger">Rejected</span>` : ''}${badgeHtml(it.state)}</div>
           </div>
           <div class="small text-muted mt-1">
             ${it.started_at ? `Started: ${it.started_at}` : ''} ${it.finished_at ? ` | Finished: ${it.finished_at}` : ''}

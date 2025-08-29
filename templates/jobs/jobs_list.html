@@ -14,7 +14,9 @@
         <tr>
           <th style="width: 160px;">Created (UTC)</th>
           <th>Token</th>
-          <th style="width: 120px;">Status</th>
+          <th>Uploaded By</th>
+          <th>Uploader IP</th>
+          <th style="width: 160px;">Status</th>
           <th>Error</th>
           <th>Rejected</th>
           <th style="width: 100px;">Open</th>
@@ -25,16 +27,28 @@
         <tr>
           <td>{{ j.created_at.strftime('%Y-%m-%d %H:%M:%S') if j.created_at else '-' }}</td>
           <td><code>{{ j.token }}</code></td>
+          <td>{{ j.uploader_username or '-' }}</td>
+          <td><code>{{ j.uploader_ip or '-' }}</code></td>
           <td>
             {% set c = 'secondary' %}
             {% if j.status == 'queued' %}{% set c='secondary' %}
             {% elif j.status == 'processing' %}{% set c='warning text-dark' %}
             {% elif j.status == 'done' %}{% set c='success' %}
             {% elif j.status == 'error' %}{% set c='danger' %}{% endif %}
-            <span class="badge bg-{{ c }}">{{ j.status or 'unknown' }}</span>
+            <div class="d-flex gap-2 align-items-center">
+              <span class="badge bg-{{ c }}">{{ j.status or 'unknown' }}</span>
+              {% if rejections and rejections.get(j.id, 0) > 0 %}
+                <span class="badge bg-danger">Rejected</span>
+              {% endif %}
+            </div>
           </td>
           <td class="small text-muted">{{ (j.error or '')[:120] }}</td>
-          <td class="small text-muted">{{ (j.rejected_summary or '')[:120] }}</td>
+          <td class="small text-muted">
+            {% if rejections and rejections.get(j.id, 0) > 0 %}
+              <span class="badge bg-danger me-1">{{ rejections.get(j.id) }}</span>
+            {% endif %}
+            {{ (j.rejected_summary or '')[:120] }}
+          </td>
           <td>
             <a class="btn btn-sm btn-outline-primary"
                href="{{ url_for('jobs.job_status_page', job_token=j.token) }}">

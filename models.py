@@ -192,6 +192,11 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Uploader metadata (captured at upload time)
+    uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
+    uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     items: Mapped[list["JobItem"]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
@@ -205,6 +210,11 @@ class JobItem(Base):
     detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Uploader metadata (denormalized to each item for auditing)
+    uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
+    uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     job: Mapped["Job"] = relationship(back_populates="items")
 
@@ -327,4 +337,3 @@ else:
     engine = create_engine(DATABASE_URL)
 
 Session = sessionmaker(bind=engine)
-

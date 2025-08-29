@@ -31,6 +31,40 @@ from uuid import uuid4
 
 # Path for log file
 LOG_FILE = BASE_DIR / os.getenv("ZIP_INGEST_LOG", "logs/zip_main_process_log.txt")
+MALICIOUS_LOG_FILE = BASE_DIR / os.getenv("MALICIOUS_UPLOAD_LOG", "logs/malicious_uploads.log")
+
+# Only allow these extensions inside uploaded ZIPs
+ALLOWED_EXTS = {".pdf", ".jpg", ".jpeg"}
+
+
+class MaliciousZipError(Exception):
+    """Raised when a ZIP contains disallowed files or paths."""
+    pass
+
+
+def _sniff_member_type(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> str:
+    """Best-effort magic-bytes sniffing.
+    Returns one of: 'pdf', 'jpg', 'pe', 'elf', 'zip', 'script', 'unknown'.
+    """
+    try:
+        with zf.open(info) as fp:
+            head = fp.read(8)
+    except Exception:
+        return "unknown"
+    if head.startswith(b"%PDF-"):
+        return "pdf"
+    # JPEG SOI marker FFD8FF
+    if len(head) >= 3 and head[:3] == b"\xFF\xD8\xFF":
+        return "jpg"
+    if head[:2] == b"MZ":
+        return "pe"
+    if head[:4] == b"\x7FELF":
+        return "elf"
+    if head[:2] == b"PK":
+        return "zip"
+    if head[:2] == b"#!":
+        return "script"
+    return "unknown"
 
 
 # --- Utility Functions ---
@@ -101,7 +135,7 @@ def daily_dup_dir() -> Path:
 
 
 # --- Main Processing Logic ---
-def process_zip_file(zip_path: Path, session):
+def process_zip_file(zip_path: Path, session) -> list[str]:
     """
     Processes a single ZIP file, extracts metadata, and organizes files.
     Ensures the ZIP file is CLOSED before attempting to move it.
@@ -137,6 +171,8 @@ def process_zip_file(zip_path: Path, session):
     print(f"\n--- Processing '{zip_path.name}' ---")
 
     success = False  # track outcome to decide where to move the ZIP
+    deleted_zip = False  # if we delete due to disallowed content, skip any move
+    added_pdf_filenames: list[str] = []
     error_message = ""
 
     try:
@@ -170,6 +206,156 @@ def process_zip_file(zip_path: Path, session):
             print("  Archive Contents (Tree Structure):")
             zf.printdir()
             print("-" * 40)
+
+            # --- Strict allowlist: only PDF and JPG/JPEG files allowed ---
+            # Also block path traversal or absolute paths within the ZIP
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                inner_name = info.filename
+                # Ignore macOS metadata entries inside zips
+                if inner_name.startswith("__MACOSX/") or Path(inner_name).name.startswith("._"):
+                    continue
+                # Block absolute paths and traversal like ../
+                p = Path(inner_name)
+                if inner_name.startswith("/") or any(part == ".." for part in p.parts):
+                    print(f"  Disallowed path in archive: {inner_name}")
+                    zf.close()
+                    # Log malicious upload with user & IP from sidecar metadata, if available
+                    try:
+                        meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                        meta_path = meta_dir / f"{zip_path.name}.json"
+                        uploader_username = "-"
+                        uploader_ip = "-"
+                        if meta_path.exists():
+                            import json
+                            with open(meta_path, "r", encoding="utf-8") as mf:
+                                meta = json.load(mf)
+                                uploader_username = meta.get("uploader_username", "-")
+                                uploader_ip = meta.get("ip", "-")
+                        MALICIOUS_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        with open(MALICIOUS_LOG_FILE, "a", encoding="utf-8") as lf:
+                            from datetime import datetime as _dt
+                            ts = _dt.utcnow().isoformat() + "Z"
+                            lf.write(f"[{ts}] zip={zip_path.name} user={uploader_username} ip={uploader_ip} reason=path_traversal entry={inner_name}\n")
+                    except Exception:
+                        pass
+                    try:
+                        zip_path.unlink()
+                        deleted_zip = True
+                        # best-effort: remove sidecar metadata
+                        try:
+                            (UPLOAD_DIR.parent / "upload_meta" / f"{zip_path.name}.json").unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    except Exception as _e:
+                        print(f"  Failed to delete disallowed ZIP '{zip_path.name}': {_e}")
+                    log_status(zip_path.name, "DELETED_BADZIP", "path traversal or absolute path detected")
+                    raise MaliciousZipError("Rejected: path traversal or absolute path detected")
+                ext = p.suffix.lower()
+                if ext not in ALLOWED_EXTS:
+                    print(f"  Disallowed file type in archive: {inner_name}")
+                    zf.close()
+                    # Log malicious upload with user & IP from sidecar metadata, if available
+                    try:
+                        meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                        meta_path = meta_dir / f"{zip_path.name}.json"
+                        uploader_username = "-"
+                        uploader_ip = "-"
+                        if meta_path.exists():
+                            import json
+                            with open(meta_path, "r", encoding="utf-8") as mf:
+                                meta = json.load(mf)
+                                uploader_username = meta.get("uploader_username", "-")
+                                uploader_ip = meta.get("ip", "-")
+                        MALICIOUS_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        with open(MALICIOUS_LOG_FILE, "a", encoding="utf-8") as lf:
+                            from datetime import datetime as _dt
+                            ts = _dt.utcnow().isoformat() + "Z"
+                            lf.write(f"[{ts}] zip={zip_path.name} user={uploader_username} ip={uploader_ip} reason=disallowed_file entry={inner_name}\n")
+                    except Exception:
+                        pass
+                    try:
+                        zip_path.unlink()
+                        deleted_zip = True
+                        # best-effort: remove sidecar metadata
+                        try:
+                            (UPLOAD_DIR.parent / "upload_meta" / f"{zip_path.name}.json").unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    except Exception as _e:
+                        print(f"  Failed to delete disallowed ZIP '{zip_path.name}': {_e}")
+                    log_status(zip_path.name, "DELETED_BADZIP", f"disallowed entry: {inner_name}")
+                    # Set explicit detail for job item
+                    raise MaliciousZipError(f"Disallowed file type in archive: {inner_name}")
+
+                # Content-type sniffing to catch renamed executables/scripts
+                detected = _sniff_member_type(zf, info)
+                expected = 'pdf' if ext == '.pdf' else ('jpg' if ext in {'.jpg', '.jpeg'} else 'unknown')
+                if expected == 'pdf' and detected != 'pdf':
+                    print(f"  Type mismatch for {inner_name}: ext={ext} detected={detected}")
+                    zf.close()
+                    try:
+                        meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                        meta_path = meta_dir / f"{zip_path.name}.json"
+                        uploader_username = "-"
+                        uploader_ip = "-"
+                        if meta_path.exists():
+                            import json
+                            with open(meta_path, "r", encoding="utf-8") as mf:
+                                meta = json.load(mf)
+                                uploader_username = meta.get("uploader_username", "-")
+                                uploader_ip = meta.get("ip", "-")
+                        MALICIOUS_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        with open(MALICIOUS_LOG_FILE, "a", encoding="utf-8") as lf:
+                            from datetime import datetime as _dt
+                            ts = _dt.utcnow().isoformat() + "Z"
+                            lf.write(f"[{ts}] zip={zip_path.name} user={uploader_username} ip={uploader_ip} reason=type_mismatch expected=pdf detected={detected} entry={inner_name}\n")
+                    except Exception:
+                        pass
+                    try:
+                        zip_path.unlink()
+                        deleted_zip = True
+                        try:
+                            (UPLOAD_DIR.parent / "upload_meta" / f"{zip_path.name}.json").unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    except Exception as _e:
+                        print(f"  Failed to delete disallowed ZIP '{zip_path.name}': {_e}")
+                    log_status(zip_path.name, "DELETED_BADZIP", f"type mismatch: expected pdf, detected {detected} ({inner_name})")
+                    raise MaliciousZipError(f"Rejected: extension/content mismatch — expected PDF, detected {detected} (entry: {inner_name})")
+                if expected == 'jpg' and detected != 'jpg':
+                    print(f"  Type mismatch for {inner_name}: ext={ext} detected={detected}")
+                    zf.close()
+                    try:
+                        meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                        meta_path = meta_dir / f"{zip_path.name}.json"
+                        uploader_username = "-"
+                        uploader_ip = "-"
+                        if meta_path.exists():
+                            import json
+                            with open(meta_path, "r", encoding="utf-8") as mf:
+                                meta = json.load(mf)
+                                uploader_username = meta.get("uploader_username", "-")
+                                uploader_ip = meta.get("ip", "-")
+                        MALICIOUS_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+                        with open(MALICIOUS_LOG_FILE, "a", encoding="utf-8") as lf:
+                            from datetime import datetime as _dt
+                            ts = _dt.utcnow().isoformat() + "Z"
+                            lf.write(f"[{ts}] zip={zip_path.name} user={uploader_username} ip={uploader_ip} reason=type_mismatch expected=jpg detected={detected} entry={inner_name}\n")
+                    except Exception:
+                        pass
+                    try:
+                        zip_path.unlink()
+                        deleted_zip = True
+                        try:
+                            (UPLOAD_DIR.parent / "upload_meta" / f"{zip_path.name}.json").unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    except Exception as _e:
+                        print(f"  Failed to delete disallowed ZIP '{zip_path.name}': {_e}")
+                    log_status(zip_path.name, "DELETED_BADZIP", f"type mismatch: expected jpg, detected {detected} ({inner_name})")
+                    raise MaliciousZipError(f"Rejected: extension/content mismatch — expected JPG, detected {detected} (entry: {inner_name})")
 
             dir_in_zip = None
             all_dirs = {Path(p).parent for p in zf.namelist()}
@@ -220,11 +406,13 @@ def process_zip_file(zip_path: Path, session):
                 ext = original_filepath.suffix.lower()
                 new_filename = f"{patient_id}_{name.replace(' ', '_')}_{capture_date}_{original_filepath.name.replace('/', '_')}"
 
-                if ext in {'.jpg', '.jpeg', '.png', '.gif', '.bmp'}:
+                # Only allow JPG/JPEG images and PDFs (as per requirement)
+                if ext in {'.jpg', '.jpeg'}:
                     dest_dir, file_type = IMAGE_DIR, 'image'
                 elif ext == '.pdf':
                     dest_dir, file_type = PDF_DIR, 'pdf'
                 else:
+                    # Should not reach here due to pre-check, but keep defensive
                     continue
 
                 target_path = dest_dir / new_filename
@@ -233,6 +421,8 @@ def process_zip_file(zip_path: Path, session):
                     shutil.copyfileobj(source, target)
 
                 files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4())))
+                if file_type == 'pdf':
+                    added_pdf_filenames.append(new_filename)
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add
@@ -242,20 +432,35 @@ def process_zip_file(zip_path: Path, session):
         session.commit()
         success = True
         print(f"Successfully processed and logged '{zip_path.name}'.")
+        return added_pdf_filenames
 
     except (zipfile.BadZipFile, ValueError) as e:
         print(f"Error processing '{zip_path.name}': {e}")
         session.rollback()
         success = False
         error_message = str(e)
+        # Treat structural/format errors as hard failures for job items
+        raise
+    except MaliciousZipError as e:
+        # Propagate to caller so /jobs item shows explicit rejection reason
+        print(f"Rejected malicious ZIP '{zip_path.name}': {e}")
+        session.rollback()
+        success = False
+        error_message = str(e)
+        # Re-raise so worker records item state=error with detail
+        raise
     except Exception as e:
         print(f"Error processing '{zip_path.name}': {e}")
         session.rollback()
         success = False
         error_message = str(e)
+        raise
     finally:
         try:
-            if success:
+            if deleted_zip:
+                # Already deleted due to disallowed content; nothing to move
+                pass
+            elif success:
                 safe_move(zip_path, PROCESSED_DIR / zip_path.name)
                 print(f"Moved '{zip_path.name}' to processed directory.")
                 log_status(zip_path.name, "SUCCESS")
@@ -268,6 +473,7 @@ def process_zip_file(zip_path: Path, session):
             print(f"Final move failed for '{zip_path.name}' due to a lock: {pe}. "
                   f"Please close any apps using this file and rerun.")
             log_status(zip_path.name, "ERROR", f"PermissionError: {pe}")
+        # Do not return here; allow previous return or raised exceptions to propagate
 
 # --- Main Execution ---
 

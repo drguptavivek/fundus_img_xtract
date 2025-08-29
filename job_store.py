@@ -1,21 +1,41 @@
 # job_store.py
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session as DBSession
 from models import Session, Job, JobItem
 
-def db_create_job(filenames: List[str], rejected: List[str]) -> str:
+def db_create_job(
+    filenames: List[str],
+    rejected: List[str],
+    *,
+    uploader_user_id: Optional[int] = None,
+    uploader_username: Optional[str] = None,
+    uploader_ip: Optional[str] = None,
+) -> str:
     db: DBSession = Session()
     try:
         job = Job(
             token=uuid.uuid4().hex,
             status="queued",
             rejected_summary="; ".join(rejected) if rejected else None,
+            uploader_user_id=uploader_user_id,
+            uploader_username=uploader_username,
+            uploader_ip=uploader_ip,
         )
         db.add(job)
         db.flush()
-        items = [JobItem(job_id=job.id, filename=fn, state="queued") for fn in filenames]
+        items = [
+            JobItem(
+                job_id=job.id,
+                filename=fn,
+                state="queued",
+                uploader_user_id=uploader_user_id,
+                uploader_username=uploader_username,
+                uploader_ip=uploader_ip,
+            )
+            for fn in filenames
+        ]
         db.add_all(items)
         db.commit()
         return job.token
@@ -80,6 +100,9 @@ def db_get_job_payload(job_token: str) -> dict | None:
             "status": job.status,
             "error": job.error,
             "rejected_summary": job.rejected_summary,
+            "uploader_user_id": job.uploader_user_id,
+            "uploader_username": job.uploader_username,
+            "uploader_ip": job.uploader_ip,
             "created_at": job.created_at.isoformat() + "Z" if job.created_at else None,
             "updated_at": job.updated_at.isoformat() + "Z" if job.updated_at else None,
             "items": [
@@ -88,6 +111,9 @@ def db_get_job_payload(job_token: str) -> dict | None:
                     "filename": it.filename,
                     "state": it.state,
                     "detail": it.detail,
+                    "uploader_user_id": it.uploader_user_id,
+                    "uploader_username": it.uploader_username,
+                    "uploader_ip": it.uploader_ip,
                     "started_at": it.started_at.isoformat() + "Z" if it.started_at else None,
                     "finished_at": it.finished_at.isoformat() + "Z" if it.finished_at else None,
                 }

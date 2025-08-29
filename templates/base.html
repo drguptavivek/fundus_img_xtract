@@ -14,9 +14,23 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
+
+  <!-- Theme bootstrapper: set initial theme ASAP to avoid FOUC -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('theme');
+        // Default to dark mode; user preference in localStorage wins
+        var theme = stored || 'dark';
+        document.documentElement.setAttribute('data-bs-theme', theme);
+      } catch (e) {
+        // no-op
+      }
+    })();
+  </script>
 </head>
 
-<body class="bg-light d-flex flex-column min-vh-100">
+<body class="bg-body d-flex flex-column min-vh-100">
 
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container">
@@ -194,23 +208,26 @@
   <br/>
 
 
-  <footer class="bg-dark text-light mt-auto">
-    <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2">
-      <div class="small text-white text-center text-sm-start">
+  <footer class="site-footer mt-auto">
+    <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
+      <!-- GitHub icon (left) -->
+      <a class="link-body-emphasis d-inline-flex align-items-center text-decoration-none" aria-label="GitHub repository"
+         href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}" target="_blank" rel="noopener">
+        <span class="d-inline-block" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z"/>
+          </svg>
+        </span>
+      </a>
+
+      <div class="small text-center text-sm-start text-body-secondary">
         &copy; Software is CC BY-NC-SA — Dr Vivek Gupta, RP Centre, AIIMS, New Delhi. All data is Protected.
         <div class="mt-1">All logos and trademarks are the property of their respective owners.</div>
       </div>
-      <div>
-        <a class="link-light d-inline-flex align-items-center gap-2 text-decoration-none"
-           href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}" target="_blank" rel="noopener">
-          <span class="d-inline-block" aria-hidden="true">
-            <!-- GitHub icon (inline SVG) -->
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z"/>
-            </svg>
-          </span>
-          <span class="small">GitHub Repository</span>
-        </a>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-theme-toggle aria-label="Toggle dark mode">
+          <span data-theme-icon>🌙</span>
+        </button>
       </div>
     </div>
   </footer>
@@ -293,6 +310,32 @@
   {% block page_scripts %}
 
   {% endblock %}
+
+  <!-- Theme toggle logic -->
+  <script>
+    (function () {
+      function updateToggle(theme) {
+        var icon = document.querySelector('[data-theme-icon]');
+        if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        var btn = document.querySelector('[data-theme-toggle]');
+        if (btn) btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+      }
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-bs-theme', theme);
+        try { localStorage.setItem('theme', theme); } catch(e) {}
+        updateToggle(theme);
+      }
+      // initialize toggle state based on current attribute
+      var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+      updateToggle(current);
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-theme-toggle]');
+        if (!btn) return;
+        var cur = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        setTheme(cur === 'dark' ? 'light' : 'dark');
+      });
+    })();
+  </script>
 
 
 

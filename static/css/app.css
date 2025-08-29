@@ -132,6 +132,22 @@
 
 
 
+/* ================================
+   Site footer
+   ================================ */
+.site-footer {
+  background: var(--bs-body-bg);
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.site-footer .link-body-emphasis:hover {
+  text-decoration: underline;
+}
+
+.site-footer [data-theme-toggle] {
+  line-height: 1.1;
+}
+
 
 /* ===== Zoom slider base ===== */
 .pswp__zoom-slider {

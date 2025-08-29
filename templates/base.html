@@ -76,6 +76,12 @@
           </li>
           {% endif %}
 
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('optometrist') or current_user_has('ophthalmologist')) %}
+          <li class="nav-item">
+            <a class="nav-link {{ 'active' if request.blueprint == 'grading' else '' }}" href="{{ url_for('grading.index') }}">Grading</a>
+          </li>
+          {% endif %}
+
           {# Glaucoma nav (admin or ophthalmologist) #}
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
           <li class="nav-item dropdown">

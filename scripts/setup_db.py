@@ -89,6 +89,16 @@ def main() -> None:
         help="Add verification columns to patient_encounters",
     )
     parser.add_argument(
+        "--migrate-image-grading-for",
+        action="store_true",
+        help="Add graded_for to image_gradings and unique index",
+    )
+    parser.add_argument(
+        "--drop-image-grading-unique",
+        action="store_true",
+        help="Drop unique constraint/index on image_gradings and create a non-unique index",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -113,6 +123,18 @@ def main() -> None:
             migrate_verif(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_verification: {e}")
+    if args.migrate_image_grading_for:
+        try:
+            from migrate_image_grading_graded_for import migrate as mig_gr_for
+            mig_gr_for(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_image_grading_graded_for: {e}")
+    if args.drop_image_grading_unique:
+        try:
+            from migrate_drop_image_grading_unique import migrate as drop_unique
+            drop_unique(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_drop_image_grading_unique: {e}")
 
 
 if __name__ == "__main__":

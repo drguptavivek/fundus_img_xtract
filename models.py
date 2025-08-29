@@ -86,6 +86,7 @@ class EncounterFile(Base):
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
+    gradings: Mapped[list["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
 
 class DiabeticRetinopathyReport(Base):
     """Stores extracted data from DR reports."""
@@ -149,6 +150,30 @@ class GlaucomaResultsCleaned(Base):
     # Relationships for convenience
     patient_encounter: Mapped["PatientEncounters"] = relationship("PatientEncounters")
     glaucoma_report: Mapped["GlaucomaReport"] = relationship("GlaucomaReport")
+
+
+class ImageGrading(Base):
+    """A grading record per image per grader (user+role).
+    Captures impression and optional remarks.
+    """
+    __tablename__ = 'image_gradings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    encounter_file_id: Mapped[int] = mapped_column(ForeignKey('encounter_files.id'), index=True)
+    grader_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
+    grader_username: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    grader_role: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # 'optometrist'|'ophthalmologist'|'admin' etc.
+    graded_for: Mapped[str] = mapped_column(String(32), index=True)  # glaucoma|dr|amd
+    impression: Mapped[str] = mapped_column(String(32))  # Normal|Glaucoma Suspect|Glaucoma|Other Retinal|Not gradable
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    image: Mapped["EncounterFile"] = relationship(back_populates="gradings")
+    grader: Mapped["User"] = relationship("User", foreign_keys=[grader_user_id])
+
+    __table_args__ = (
+        Index('ix_image_gradings_image_user_role_for', 'encounter_file_id', 'grader_user_id', 'grader_role', 'graded_for'),
+    )
 
 
 

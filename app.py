@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
+from werkzeug.exceptions import HTTPException
 
 
 csrf = CSRFProtect()
@@ -230,6 +231,37 @@ def create_app():
         flash(e.description or "Security check failed. Please try again.", "danger")
         # send them back or home
         return redirect(request.referrer or url_for("homepage")), 400
+
+    # ---- Custom error pages ----
+    @app.errorhandler(404)
+    def handle_404(e):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(405)
+    def handle_405(e):
+        return render_template("errors/405.html"), 405
+
+    @app.errorhandler(501)
+    def handle_501(e):
+        return render_template("errors/501.html"), 501
+
+    @app.errorhandler(500)
+    def handle_500(e):
+        current_app.logger.exception("Unhandled exception: %s", e)
+        return render_template("errors/500.html"), 500
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e: HTTPException):
+        # Fallback renderer for HTTP errors without a dedicated template
+        return (
+            render_template(
+                "errors/error.html",
+                code=getattr(e, "code", 500),
+                title=getattr(e, "name", "Error"),
+                message=getattr(e, "description", "An unexpected error occurred."),
+            ),
+            getattr(e, "code", 500),
+        )
 
     # Serve classic /favicon.ico path for browsers that request it directly
     @app.get('/favicon.ico')

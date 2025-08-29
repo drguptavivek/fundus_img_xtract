@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Error {{ code or 500 }} — {{ title or 'Something went wrong' }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-body text-center py-5">
+          <div class="display-1 fw-bold">{{ code or 500 }}</div>
+          <h1 class="h4 mt-3">{{ title or 'Something went wrong' }}</h1>
+          <p class="text-muted mb-4">
+            {{ message or 'An unexpected error occurred. Please try again later.' }}
+          </p>
+          <div class="d-flex justify-content-center gap-2">
+            <a class="btn btn-primary" href="{{ url_for('homepage') }}">Back to Home</a>
+            <a class="btn btn-outline-secondary" href="#" onclick="history.back();return false;">Go Back</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="text-center small text-muted mt-3">If this keeps happening, please contact the administrator.</div>
+  
+</div>
+{% endblock %}

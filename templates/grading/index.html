@@ -8,18 +8,31 @@
   <h3 class="mb-0">Image Grading</h3>
 </div>
 
-{# Primary CTA: Start Glaucoma Grading (most important) #}
-<div class="mb-3">
-  <a class="btn btn-success btn-lg {% if not start_url %}disabled{% endif %}"
-     href="{{ start_url or '#' }}">
-    Start Glaucoma Grading
-  </a>
-  {% if not start_url %}
-    <span class="ms-2 text-muted">No ungraded glaucoma images found.</span>
-  {% else %}
-    <span class="ms-2 small text-muted">Jumps to the most recent ungraded image.</span>
-  {% endif %}
-  <hr class="mt-3 mb-0"/>
+{# Primary CTAs: Start grading flows #}
+<div class="mb-3 d-flex flex-wrap align-items-center gap-3">
+  <div>
+    <a class="btn btn-success btn-lg {% if not start_url %}disabled{% endif %}"
+       href="{{ start_url or '#' }}">
+      Start Glaucoma Grading
+    </a>
+    {% if not start_url %}
+      <span class="ms-2 text-muted">No ungraded glaucoma images found.</span>
+    {% else %}
+      <span class="ms-2 small text-muted">Jumps to the most recent ungraded glaucoma image.</span>
+    {% endif %}
+  </div>
+  <div>
+    <a class="btn btn-primary btn-lg {% if not start_dr_url %}disabled{% endif %}"
+       href="{{ start_dr_url or '#' }}">
+      Start DR Grading
+    </a>
+    {% if not start_dr_url %}
+      <span class="ms-2 text-muted">No ungraded DR images found.</span>
+    {% else %}
+      <span class="ms-2 small text-muted">Jumps to the most recent ungraded DR image.</span>
+    {% endif %}
+  </div>
+  <hr class="w-100 mt-2 mb-0"/>
   </div>
 
 <div class="row g-3 mb-3">
@@ -85,14 +98,26 @@
   </div>
   <div class="card-body p-0">
     <div class="p-2 border-bottom">
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <span class="small text-muted">Filter:</span>
-        {% set types = ['all','Normal','Glaucoma Suspect','Glaucoma','Other Retinal','Not gradable'] %}
-        <div class="btn-group btn-group-sm" role="group">
-          {% for t in types %}
-            <a class="btn btn-outline-secondary {% if gimp==t %}active{% endif %}"
-               href="{{ url_for('grading.index', gimp=t, p=1) }}">{{ t|capitalize }}</a>
-          {% endfor %}
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Impression:</span>
+          {% set types = ['all','Normal','Glaucoma Suspect','Glaucoma','Other Retinal','Not gradable'] %}
+          <div class="btn-group btn-group-sm" role="group">
+            {% for t in types %}
+              <a class="btn btn-outline-secondary {% if gimp==t %}active{% endif %}"
+                 href="{{ url_for('grading.index', gimp=t, gfor=gfor, p=1) }}">{{ t|capitalize }}</a>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Type:</span>
+          {% set gfor_opts = ['all','glaucoma','dr','amd'] %}
+          <div class="btn-group btn-group-sm" role="group">
+            {% for f in gfor_opts %}
+              <a class="btn btn-outline-secondary text-uppercase {% if gfor==f %}active{% endif %}"
+                 href="{{ url_for('grading.index', gimp=gimp, gfor=f, p=1) }}">{{ f }}</a>
+            {% endfor %}
+          </div>
         </div>
         {% if type_counts %}
           <span class="ms-auto small text-muted">

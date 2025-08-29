@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Glaucoma Reports{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <h3 class="mb-0 me-2">Glaucoma Reports</h3>
+  <a class="btn btn-sm btn-primary" href="{{ url_for('glaucoma.glaucoma_results') }}">Glaucoma Dashboard</a>
+  <div class="w-100 small text-muted">Date-wise order by encounter capture date (newest first).</div>
+
+  <div class="d-flex align-items-center justify-content-between w-100 mt-1">
+    <!-- Left: Active date + Dashboard button near title -->
+    {% if selected_date %}
+    <div class="d-flex align-items-center gap-2">
+      <span class="small text-muted">Active date:</span>
+      <span class="fw-semibold">{{ selected_date }}</span>
+    </div>
+    {% else %}
+    <div></div>
+    {% endif %}
+
+    <!-- Right: Datepicker + Pager -->
+    <div class="d-inline-flex align-items-center gap-2">
+      <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
+        <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date or '' }}" aria-label="Pick date">
+        <button class="btn btn-sm btn-outline-primary" type="submit">Go</button>
+        {% if selected_date %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_list') }}">Clear</a>
+        {% endif %}
+      </form>
+
+      <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
+         href="{{ prev_url or '#' }}"
+         tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
+
+      <form class="d-inline" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
+        <label for="goto-page" class="visually-hidden">Go to page</label>
+        <div class="page-box btn-sm">
+          <input type="number" id="goto-page" name="page" class="page-input" inputmode="numeric"
+                 min="1" max="{{ total_pages }}" value="{{ page }}" aria-label="Go to page">
+          <span class="sep">/ {{ total_pages }}</span>
+        </div>
+        {% if selected_date %}
+          <input type="hidden" name="date" value="{{ selected_date }}">
+        {% endif %}
+      </form>
+
+      <a class="btn btn-outline-secondary btn-sm {% if not has_next %}disabled{% endif %}"
+         href="{{ next_url or '#' }}"
+         tabindex="{% if not has_next %}-1{% else %}0{% endif %}">Next →</a>
+    </div>
+  </div>
+</div>
+
+{% if items %}
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th class="text-nowrap">Capture Date</th>
+          <th>Patient ID</th>
+          <th>Patient Name</th>
+          <th>Result</th>
+          <th>VCDR R</th>
+          <th>VCDR L</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for gr in items %}
+        {% set enc = gr.patient_encounter %}
+        <tr>
+          <td class="text-nowrap">{{ enc.capture_date if enc else '-' }}</td>
+          <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
+          <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
+          <td>{{ gr.result or '-' }}</td>
+          <td>{{ gr.vcdr_right or '-' }}</td>
+          <td>{{ gr.vcdr_left or '-' }}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm" role="group">
+              {% if enc %}
+              <a class="btn btn-outline-secondary" href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">View</a>
+              {% endif %}
+              {% if gr.report_file_name %}
+              <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.uuid) }}" target="_blank" rel="noopener">PDF</a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+  <div class="text-center text-muted p-4">No glaucoma reports found.</div>
+{% endif %}
+
+<!-- Bottom pager -->
+<div class="d-flex justify-content-between align-items-center mt-3">
+  <div class="text-muted small">
+    Showing page {{ page }} of {{ total_pages }} · {{ total }} total
+  </div>
+  <nav>
+    <ul class="pagination mb-0">
+      <li class="page-item {% if not has_prev %}disabled{% endif %}">
+        <a class="page-link" href="{{ prev_url or '#' }}">Previous</a>
+      </li>
+      <li class="page-item disabled">
+        <span class="page-link">Page {{ page }}</span>
+      </li>
+      <li class="page-item {% if not has_next %}disabled{% endif %}">
+        <a class="page-link" href="{{ next_url or '#' }}">Next</a>
+      </li>
+    </ul>
+  </nav>
+  </div>
+
+{% endblock %}

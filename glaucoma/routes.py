@@ -1,8 +1,9 @@
 import re
 import pandas as pd
 import numpy as np
-from flask import render_template
+from flask import render_template, request, current_app, url_for
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from . import bp
@@ -141,3 +142,80 @@ def glaucoma_results():
         hist_left=hist_left,
     )
 
+
+@bp.route("/list", methods=["GET"])
+@roles_required("admin")
+def glaucoma_list():
+    """Paginated Glaucoma reports in date-wise order (capture_date desc)."""
+    page = request.args.get("page", default=1, type=int) or 1
+    selected_date = (request.args.get("date") or "").strip() or None
+    per_page = int(current_app.config.get("SCREENINGS_PAGE_SIZE", 50)) or 50
+    page = max(1, page)
+    per_page = max(1, per_page)
+
+    db = Session()
+    try:
+        base_q = (
+            db.query(GlaucomaReport)
+              .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
+        )
+
+        # Load all matching rows (we'll sort+paginate in Python due to string dates)
+        rows = (
+            base_q
+            .options(selectinload(GlaucomaReport.patient_encounter))
+            .all()
+        )
+    finally:
+        db.close()
+
+    # Robust date parsing from potentially messy strings
+    from datetime import datetime, date as _date
+    def _parse_date(s: str | None) -> _date:
+        if not s:
+            return _date.min
+        s = str(s).strip()
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%m-%d-%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except Exception:
+                continue
+        return _date.min
+
+    # Optional filter by selected_date (expects YYYY-MM-DD from <input type=date>)
+    if selected_date:
+        try:
+            sel_dt = datetime.strptime(selected_date, "%Y-%m-%d").date()
+        except Exception:
+            sel_dt = None
+        if sel_dt:
+            rows = [r for r in rows if _parse_date(getattr(r.patient_encounter, "capture_date", None)) == sel_dt]
+
+    # Sort by parsed capture_date desc, then by report id desc
+    rows.sort(key=lambda r: (_parse_date(getattr(r.patient_encounter, "capture_date", None)), r.id), reverse=True)
+
+    total = len(rows)
+    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+    if page > total_pages:
+        page = total_pages
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    items = rows[start:end]
+
+    has_prev = page > 1
+    has_next = page < total_pages
+
+    return render_template(
+        "glaucoma_list.html",
+        items=items,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=total_pages,
+        has_prev=has_prev,
+        has_next=has_next,
+        prev_url=url_for("glaucoma.glaucoma_list", page=page-1, date=selected_date) if has_prev else None,
+        next_url=url_for("glaucoma.glaucoma_list", page=page+1, date=selected_date) if has_next else None,
+        selected_date=selected_date,
+    )

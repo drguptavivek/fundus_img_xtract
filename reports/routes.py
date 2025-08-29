@@ -10,6 +10,7 @@ from . import bp
 # Reuse the same locations you configured for split PDFs
 # (these were moved to .env in your earlier steps)
 from process_pdfs import DR_PDF_DIR, GLAUCOMA_PDF_DIR  # Path objects
+from models import Session, DiabeticRetinopathyReport, GlaucomaReport
 
 def _safe_file(base_dir: Path, filename: str) -> tuple[str, str]:
     """
@@ -35,3 +36,4 @@ def serve_dr_pdf(filename: str):
 def serve_glaucoma_pdf(filename: str):
     directory, fname = _safe_file(GLAUCOMA_PDF_DIR, filename)
     return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)
+

@@ -149,7 +149,7 @@
                   PDF:
                   <a href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}" target="_blank"
                     rel="noopener">{{ dr.report_file_name }}</a>
-                </div>
+                  </div>
                 {% endif %}
               </div>
               {% endfor %}
@@ -176,9 +176,9 @@
                 {% if gr.report_file_name %}
                 <div class="small">
                   PDF:
-                  <a href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}" target="_blank"
+                         <a href="{{ url_for('reports.serve_glaucoma_pdf', filename=gr.report_file_name) }}" target="_blank"
                     rel="noopener">{{ gr.report_file_name }}</a>
-                </div>
+                            </div>
                 {% endif %}
               </div>
               {% endfor %}
@@ -199,12 +199,10 @@
             <div class="scr-scroll">
               <ol class="small list-unstyled list-compact mb-2">
                 {% for img in images %}
-                {% set parts = img.filename.rsplit('_', 2) %}
-                {% set truncated = parts[-2] ~ '_' ~ parts[-1] if parts|length >= 2 else img.filename %}
                 <li class="mb-1 text-truncate">
-                  <a href="{{ url_for('media.serve_image', filename=img.filename) }}" target="_blank" rel="noopener"
-                    title="{{ img.filename }}">
-                    {{ truncated }}
+                  <a href="{{ url_for('media.serve_file_by_uuid', uuid=img.uuid) }}" target="_blank" rel="noopener"
+                    title="Image">
+                    Image {{ loop.index }}
                   </a>
                 </li>
                 {% endfor %}
@@ -232,10 +230,12 @@
 
             <!-- Hidden PSWP gallery inside card -->
             <div id="{{ gallery_id }}" class="pswp-gallery d-none">
+              {# Images via UUID #}
               {% for ef in enc.encounter_files if ef.file_type == 'image' %}
-              <a href="{{ url_for('media.serve_image', filename=ef.filename) }}" data-pswp-type="image"
-                title="{{ ef.filename }}"></a>
+              <a href="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" data-pswp-type="image"
+                title="Image"></a>
               {% endfor %}
+              {# PDF reports via UUID #}
               {% for dr in enc.dr_reports or [] if dr.report_file_name %}
               <a href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}" data-pswp-type="html"
                 data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) | e }}' title='{{ dr.report_file_name | e }}' frameborder='0'></iframe></div>"

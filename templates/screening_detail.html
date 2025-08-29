@@ -72,7 +72,7 @@
                             <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
                                     href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}"
-                                    target="_blank" rel="noopener">Open DR PDF in New Tab</a>
+                                    target="_blank" rel="noopener">Open DR PDF</a>
                             </div>
                             {% endif %}
                         </li>
@@ -99,7 +99,7 @@
                             <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
                                     href="{{ url_for('reports.serve_glaucoma_pdf', filename=gl.report_file_name) }}"
-                                    target="_blank" rel="noopener">Open Glaucoma PDF in New Tab</a>
+                                    target="_blank" rel="noopener">Open Glaucoma PDF</a>
                             </div>
                             {% endif %}
                         </li>
@@ -145,8 +145,8 @@
                         <!-- Large viewer -->
                         <div class="sv-main bg-black rounded position-relative mb-2">
                             <img class="sv-main-img"
-                                src="{{ url_for('media.serve_image', filename=images[0].filename) }}"
-                                alt="{{ images[0].filename }}" data-index="0" />
+                                src="{{ url_for('media.serve_file_by_uuid', uuid=images[0].uuid) }}"
+                                alt="Image" data-index="0" />
                             <div class="sv-counter">1 / {{ images|length }}</div>
                             <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
                             <button class="sv-nav sv-next" type="button" aria-label="Next image">&rarr;</button>
@@ -154,20 +154,16 @@
                                 type="button">Fullscreen</button>
                         </div>
 
-                        <!-- 🔽 New: file name row -->
-                        <div class="sv-filebar" aria-live="polite">
-                        <span class="sv-filebar-label">File:</span>
-                        <span class="sv-filebar-name">{{ images[0].filename }}</span>
-                        </div>
+                        {# Removed file name row to avoid exposing original filenames #}
 
                         <!-- Thumbnails -->
                         <div class="sv-thumbs">
                             {% for img in images %}
                             <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
-                                data-index="{{ loop.index0 }}" title="{{ img.filename }}">
+                                data-index="{{ loop.index0 }}" title="Thumbnail">
                                 <img class="sv-thumb-img"
-                                    src="{{ url_for('media.serve_image', filename=img.filename) }}"
-                                    alt="{{ img.filename }}" loading="lazy" />
+                                    src="{{ url_for('media.serve_file_by_uuid', uuid=img.uuid) }}"
+                                    alt="Thumbnail" loading="lazy" />
                             </a>
                             {% endfor %}
                         </div>

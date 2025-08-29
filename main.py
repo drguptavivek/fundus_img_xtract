@@ -25,8 +25,9 @@ from models import (
     IMAGE_DIR,
     PDF_DIR,
     PROCESSED_DIR,
-    PROCESSING_ERROR_DIR
+    PROCESSING_ERROR_DIR,
 )
+from uuid import uuid4
 
 # Path for log file
 LOG_FILE = BASE_DIR / os.getenv("ZIP_INGEST_LOG", "logs/zip_main_process_log.txt")
@@ -48,6 +49,7 @@ def setup_database():
     """Initializes the database and creates tables from the SQLAlchemy models."""
     print("Setting up the database...")
     Base.metadata.create_all(engine)
+
     print("Database is ready.")
 
 def calculate_md5(filepath):
@@ -75,9 +77,6 @@ def log_status(filename: str, status: str, message: str = ""):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(log_entry + "\n")
     print(f"LOG: {log_entry}")  # also print for console feedback
-
-
-
 
 
 def daily_dup_dir() -> Path:
@@ -188,7 +187,7 @@ def process_zip_file(zip_path: Path, session):
                 with zf.open(member_info) as source, open(target_path, "wb") as target:
                     shutil.copyfileobj(source, target)
 
-                files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type))
+                files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4())))
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add

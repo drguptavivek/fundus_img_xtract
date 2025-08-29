@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, 
 from datetime import date, datetime, timezone
 from typing import Optional
 from dotenv import load_dotenv   
+from uuid import uuid4
 
 
 
@@ -69,6 +70,8 @@ class EncounterFile(Base):
     filename: Mapped[str]
     file_type: Mapped[str]
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    # New: stable unique identifier for each extracted file
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
 
@@ -240,7 +243,7 @@ class IpLock(Base):
     __table_args__ = (UniqueConstraint("ip_address", name="uq_iplock_ip"),)
 
 
-
+  
 
 # --- Engine and Session Creation ---
 # A single engine and session factory can be imported by other scripts
@@ -258,6 +261,8 @@ def create_db_and_tables():
     print("Creating database and tables if they don't exist...")
     Base.metadata.create_all(engine)
     print("Database is ready.")
+
+
 
 if __name__ == '__main__':
     # This allows you to set up the database by running `python models.py`

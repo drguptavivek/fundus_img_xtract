@@ -168,3 +168,4 @@ def screening_detail(encounter_id: int):
         next_url=next_url,
         gallery_id=gallery_id,     
     )
+

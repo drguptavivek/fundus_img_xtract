@@ -1,0 +1,30 @@
+{
+  "name": "fundus-img-xtract",
+  "private": true,
+  "devDependencies": {
+    "bootstrap": "^5.3.3",
+    "sass": "^1.91.0"
+  },
+  "scripts": {
+    "build:css": "sass --no-source-map --style=compressed --load-path=node_modules assets/scss/bootstrap-theme.scss static/css/bootstrap.min.css",
+    "build:css:light": "sass --no-source-map --style=compressed --load-path=node_modules assets/scss/bootstrap-theme-light.scss static/css/bootstrap.light.min.css",
+    "build:css:dark": "sass --no-source-map --style=compressed --load-path=node_modules assets/scss/bootstrap-theme-dark.scss static/css/bootstrap.dark.min.css",
+    "build:css:all": "npm run build:css && npm run build:css:light && npm run build:css:dark",
+    "watch:css": "sass --style=compressed --load-path=node_modules --watch assets/scss/bootstrap-theme.scss:static/css/bootstrap.min.css"
+  },
+  "version": "1.0.0",
+  "description": "To extract data from remedio camera zip files Uses PyTesseract, pyUPDF",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drguptavivek/fundus_img_xtract.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/drguptavivek/fundus_img_xtract/issues"
+  },
+  "homepage": "https://github.com/drguptavivek/fundus_img_xtract#readme"
+}

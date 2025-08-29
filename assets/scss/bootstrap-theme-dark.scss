@@ -1,0 +1,66 @@
+// Bootstrap 5.3 — Healthcare Calm (DARK-ONLY build)
+// Compiles a single dark theme without color-mode wrappers.
+
+@use "sass:color";
+
+// Brand palette (tuned for dark)
+$primary:  #2ec4b6;  // teal
+$secondary:#9aa0b5;  // slate
+$success:  #55d68d;  // green
+$info:     #38bdf8;  // blue
+$warning:  #facc15;  // amber
+$danger:   #f77a72;  // red
+
+@use "bootstrap/scss/bootstrap" as bs with (
+  $color-mode-type: null,
+
+  $primary:  $primary,
+  $secondary:$secondary,
+  $success:  $success,
+  $info:     $info,
+  $warning:  $warning,
+  $danger:   $danger,
+
+  $theme-colors: (
+    "primary":   $primary,
+    "secondary": $secondary,
+    "success":   $success,
+    "info":      $info,
+    "warning":   $warning,
+    "danger":    $danger,
+  ),
+
+  // Body + links (dark)
+  $body-bg:    #0f1416,
+  $body-color: #d7e0e4,
+  $link-color: $primary,
+  $link-hover-color: color.mix($primary, #fff, 20%),
+
+  // Surfaces & borders
+  $body-secondary-bg: #121a1d,
+  $body-tertiary-bg:  #0c1214,
+  $border-color:      #223136,
+  $card-bg:           #121a1d,
+  $card-border-color: #223136,
+
+  // Button interaction tuning
+  $btn-hover-bg-shade-amount:      10%,
+  $btn-hover-bg-tint-amount:       10%,
+  $btn-hover-border-shade-amount:  12%,
+  $btn-active-bg-shade-amount:     14%,
+  $btn-active-border-shade-amount: 16%,
+);
+
+// Soft badge mapping to subtle tints
+.badge.bg-primary,
+.badge.text-bg-primary { background-color: var(--bs-primary-bg-subtle) !important; color: var(--bs-primary-text-emphasis) !important; }
+.badge.bg-secondary,
+.badge.text-bg-secondary { background-color: var(--bs-secondary-bg-subtle) !important; color: var(--bs-secondary-text-emphasis) !important; }
+.badge.bg-success,
+.badge.text-bg-success { background-color: var(--bs-success-bg-subtle) !important; color: var(--bs-success-text-emphasis) !important; }
+.badge.bg-info,
+.badge.text-bg-info { background-color: var(--bs-info-bg-subtle) !important; color: var(--bs-info-text-emphasis) !important; }
+.badge.bg-warning,
+.badge.text-bg-warning { background-color: var(--bs-warning-bg-subtle) !important; color: var(--bs-warning-text-emphasis) !important; }
+.badge.bg-danger,
+.badge.text-bg-danger { background-color: var(--bs-danger-bg-subtle) !important; color: var(--bs-danger-text-emphasis) !important; }

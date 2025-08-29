@@ -1,0 +1,604 @@
+// Bootstrap 5.3 — Healthcare Calm theme
+// Uses data attribute color mode (data-bs-theme) and overrides core tokens
+
+@use "sass:color";
+@use "bootstrap/scss/bootstrap" as bs with (
+  $color-mode-type: data,
+
+  // Brand palette (light mode)
+  $primary:  #0ea5a6,
+  $secondary:#5b6073,
+  $success:  #2fbf71,
+  $info:     #1ba1e2,
+  $warning:  #f2b705,
+  $danger:   #e15249,
+
+  $theme-colors: (
+    "primary":   #0ea5a6,
+    "secondary": #5b6073,
+    "success":   #2fbf71,
+    "info":      #1ba1e2,
+    "warning":   #f2b705,
+    "danger":    #e15249,
+  ),
+
+  // Light mode body defaults
+  $body-bg:    #ffffff,
+  $body-color: #212529,
+  $link-color: #0ea5a6,
+
+  // Dark mode body defaults
+  $body-bg-dark:    #151c20,
+  $body-color-dark: #ffffff,
+  $link-color-dark: #0ea5a6,
+
+  // Dark surfaces and borders
+  $body-secondary-bg-dark: #121a1d,
+  $body-tertiary-bg-dark:  #0c1214,
+  $border-color-dark:      #223136,
+
+  // Button interaction tuning (applies to all themes)
+  $btn-hover-bg-shade-amount:      10%,
+  $btn-hover-bg-tint-amount:       10%,
+  $btn-hover-border-shade-amount:  12%,
+  $btn-active-bg-shade-amount:     14%,
+  $btn-active-border-shade-amount: 16%,
+  $focus-ring-opacity: .35,
+  $focus-ring-color: rgba(#0ea5a6, .35),
+  // Headings should feel like fw-semibold
+  $headings-font-weight: 600,
+);
+
+// Perceptual mixing helpers
+// Note: Your Sass version exposes color.mix(..., $method: ...) not $space.
+// We approximate OKLCH by mixing in LCH, which is widely supported.
+@function oklch-tint($c, $w) { @return color.mix(#fff, $c, $w, $method: lch); }
+@function oklch-shade($c, $w) { @return color.mix(#000, $c, $w, $method: lch); }
+
+// Reusable brand tokens for post-Bootstrap tweaks
+$brand-primary:  #0ea5a6;
+
+// Brand map for generating component tints across variants
+$brand-colors: (
+  "primary":  #0ea5a6,
+  "secondary":#5b6073,
+  "success":  #2fbf71,
+  "info":     #1ba1e2,
+  "warning":  #f2b705,
+  "danger":   #e15249
+);
+
+// ------------------------------------------------------------
+// Riot Card + KPI gradient utilities (mixins)
+// ------------------------------------------------------------
+
+// Helper: generate multi-splash radial gradient backgrounds
+@mixin riot-card-bg($c1, $c2, $c3) {
+  background-image:
+    radial-gradient(700px 540px at 15% 18%, color-mix(in oklch, #{$c1} 32%, transparent), transparent 62%),
+    radial-gradient(760px 560px at 85% 22%, color-mix(in oklch, #{$c2} 28%, transparent), transparent 60%),
+    radial-gradient(680px 520px at 50% 88%, color-mix(in oklch, #{$c3} 26%, transparent), transparent 58%);
+  background-attachment: fixed;
+}
+
+// Base style for riot cards
+@mixin riot-card($c1, $c2, $c3, $text: #0b1314) {
+  @include riot-card-bg($c1, $c2, $c3);
+  border: 0;
+  color: $text;
+}
+
+// Additional dark CSS variables not exposed via Sass config
+[data-bs-theme="dark"] {
+  --bs-card-bg: #121a1d;
+  --bs-card-border-color: #223136;
+  /* text emphasis */
+  --bs-primary-text-emphasis:  #9beae2;
+  --bs-secondary-text-emphasis:#cfd4df;
+  --bs-success-text-emphasis:  #a9efd0;
+  --bs-info-text-emphasis:     #9ddff7;
+  --bs-warning-text-emphasis:  #f5de8a;
+  --bs-danger-text-emphasis:   #f3a09a;
+
+  /* bg subtle */
+  --bs-primary-bg-subtle:  #0c2f2e;
+  --bs-secondary-bg-subtle:#1f222b;
+  --bs-success-bg-subtle:  #0e2a1e;
+  --bs-info-bg-subtle:     #0b2840;
+  --bs-warning-bg-subtle:  #33260a;
+  --bs-danger-bg-subtle:   #3a1513;
+
+  /* border subtle */
+  --bs-primary-border-subtle:  #1a5c58;
+  --bs-secondary-border-subtle:#3b4150;
+  --bs-success-border-subtle:  #1f5a3c;
+  --bs-info-border-subtle:     #1b5a7e;
+  --bs-warning-border-subtle:  #7a5e14;
+  --bs-danger-border-subtle:   #7e2e2a;
+}
+
+// Light-mode subtle tokens using OKLCH/LCH mixing for smoother tints
+@include bs.color-mode(light) {
+  // Theme-aware navbar (auto light)
+  .navbar.theme-auto {
+    background-color: var(--bs-body-bg);
+    --bs-navbar-color: rgba(0, 0, 0, .55);
+    --bs-navbar-hover-color: rgba(0, 0, 0, .7);
+    --bs-navbar-active-color: rgba(0, 0, 0, .9);
+    --bs-navbar-brand-color: rgba(0, 0, 0, .9);
+    --bs-navbar-toggler-border-color: rgba(0, 0, 0, .1);
+    --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(0, 0, 0, 0.55)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+    /* Riot gradient bar */
+    background-image: linear-gradient(90deg,
+      color-mix(in oklch, var(--bs-primary) 90%, transparent),
+      color-mix(in oklch, var(--bs-danger) 90%, transparent) 25%,
+      color-mix(in oklch, var(--bs-warning) 90%, transparent) 50%,
+      color-mix(in oklch, var(--bs-success) 90%, transparent) 75%,
+      color-mix(in oklch, var(--bs-info) 90%, transparent) 100%);
+    background-blend-mode: multiply;
+  }
+  :root, [data-bs-theme="light"] {
+    @each $name, $col in $brand-colors {
+      --bs-#{$name}-bg-subtle: #{oklch-tint($col, 80%)};
+      --bs-#{$name}-border-subtle: #{oklch-tint($col, 55%)};
+      --bs-#{$name}-text-emphasis: #{oklch-shade($col, 65%)};
+    }
+  }
+}
+// Optional: slightly softer outline button hover backgrounds
+// Uses color-mode mixin so values adapt for dark automatically
+@include bs.color-mode(light) {
+  // Headings and header text: very dark for high contrast
+  :root, [data-bs-theme="light"] {
+    --bs-heading-color: #0b1314; // almost-black
+  }
+
+  // Ensure common headers use the heading color explicitly
+  h1, h2, h3, h4, h5, h6,
+  .h1, .h2, .h3, .h4, .h5, .h6 {
+    color: var(--bs-heading-color);
+  }
+
+  // Card and table headers
+  .card .card-header { color: var(--bs-heading-color); }
+  .table thead th { color: var(--bs-heading-color); }
+
+  // Forms: make labels light in dark mode
+  .form-label,
+  .col-form-label,
+  .form-check-label {
+    color: #f0f3f6;
+  }
+
+  // Light-mode: more prominent, summery background gradient on .bg-body
+  .bg-body {
+    background-color: var(--bs-body-bg);
+    background-image:
+      /* stronger neutral vignettes */
+      radial-gradient(1200px 900px at -10% -10%, rgba(var(--bs-dark-rgb), .12), transparent 65%),
+      radial-gradient(1100px 800px at 110% 120%, rgba(var(--bs-dark-rgb), .10), transparent 65%),
+      /* summery splashes darkened in OKLCH */
+      radial-gradient(900px 650px at 85% 15%, color-mix(in oklch, var(--bs-warning) 70%, black 30%) 0%, transparent 62%),
+      radial-gradient(800px 600px at 18% 82%, color-mix(in oklch, var(--bs-danger) 65%, black 35%) 0%, transparent 58%),
+      radial-gradient(850px 620px at 10% 20%, color-mix(in oklch, var(--bs-primary) 70%, black 30%) 0%, transparent 60%);
+    background-attachment: fixed;
+  }
+  .btn-outline-primary:hover {
+    background-color: oklch-tint($brand-primary, 75%);
+    border-color: oklch-shade($brand-primary, 20%);
+  }
+
+  /* Riot buttons: gradient fills per variant */
+  @each $name, $col in $brand-colors {
+    .btn-#{$name} {
+      background-image: linear-gradient(135deg, #{oklch-tint($col, 15%)}, #{oklch-shade($col, 25%)});
+      border-color: transparent;
+    }
+    .btn-#{$name}:hover {
+      background-image: linear-gradient(135deg, #{oklch-tint($col, 5%)}, #{oklch-shade($col, 35%)});
+    }
+  }
+
+  /* Colorful card headers and bodies */
+  .card .card-header {
+    background-image: linear-gradient(90deg,
+      color-mix(in oklch, var(--bs-primary) 70%, transparent),
+      color-mix(in oklch, var(--bs-info) 70%, transparent));
+    color: #0b1314;
+    border-bottom-color: color-mix(in oklch, var(--bs-primary) 40%, var(--bs-info) 40%);
+  }
+  .card:not(.kpi-card) .card-body {
+    background-color: oklch-tint(#0ea5a6, 92%);
+  }
+
+  /* Rainbow table stripes */
+  .table-striped > tbody > tr:nth-of-type(6n+1) { background-color: oklch-tint(#0ea5a6, 90%) !important; }
+  .table-striped > tbody > tr:nth-of-type(6n+2) { background-color: oklch-tint(#e15249, 92%) !important; }
+  .table-striped > tbody > tr:nth-of-type(6n+3) { background-color: oklch-tint(#f2b705, 92%) !important; }
+  .table-striped > tbody > tr:nth-of-type(6n+4) { background-color: oklch-tint(#2fbf71, 92%) !important; }
+  .table-striped > tbody > tr:nth-of-type(6n+5) { background-color: oklch-tint(#1ba1e2, 92%) !important; }
+  .table-striped > tbody > tr:nth-of-type(6n+6) { background-color: oklch-tint(#5b6073, 92%) !important; }
+
+  /* Footer gradient */
+  .site-footer {
+    background-image: linear-gradient(90deg,
+      color-mix(in oklch, var(--bs-primary) 85%, transparent) 0%,
+      color-mix(in oklch, var(--bs-danger) 85%, transparent) 25%,
+      color-mix(in oklch, var(--bs-warning) 85%, transparent) 50%,
+      color-mix(in oklch, var(--bs-success) 85%, transparent) 75%,
+      color-mix(in oklch, var(--bs-info) 85%, transparent) 100%);
+    color: #0b1314;
+  }
+
+  // Alerts (light): use perceptual tints/shades per variant
+  @each $name, $col in $brand-colors {
+    .alert-#{$name} {
+      --bs-alert-bg: #{oklch-tint($col, 90%)};
+      --bs-alert-border-color: #{oklch-tint($col, 72%)};
+      --bs-alert-color: #{oklch-shade($col, 50%)};
+    }
+  }
+
+  // Progress stripes tuned to the variant color
+  @each $name, $col in $brand-colors {
+    .progress-bar.bg-#{$name}.progress-bar-striped {
+      background-image: linear-gradient(45deg,
+        #{oklch-shade($col, 12%)} 25%, transparent 25%,
+        transparent 50%, #{oklch-shade($col, 12%)} 50%,
+        #{oklch-shade($col, 12%)} 75%, transparent 75%, transparent);
+    }
+  }
+}
+
+@include bs.color-mode(dark) {
+  // Headings and header text: bright in dark mode
+  :root, [data-bs-theme="dark"] {
+    --bs-heading-color: #eef3f5;
+    --bs-border-color: #2b3940; // slightly brighter divider for better contrast
+    --bs-body-color: #ffffff;   // ensure body text is white
+  }
+
+  h1, h2, h3, h4, h5, h6,
+  .h1, .h2, .h3, .h4, .h5, .h6 { color: var(--bs-heading-color); }
+  .card .card-header { color: var(--bs-heading-color); }
+  .table thead th { color: var(--bs-heading-color); }
+
+  // Tables and cards: brighter text and borders
+  .table { color: #f3f6f8; }
+  .table > :not(caption) > * > * { border-color: var(--bs-border-color); }
+  .card { border-color: var(--bs-border-color); }
+  .card .card-header { border-bottom-color: var(--bs-border-color); }
+
+  // Semibold utility should read very white in dark
+  .fw-semibold { color: #f5f8fa; }
+  .fw-bold { color: #ffffff; }
+  .text-muted { color: rgba(255,255,255,.70) !important; }
+
+  // Theme-aware navbar (auto dark)
+  .navbar.theme-auto {
+    background-color: var(--bs-body-bg);
+    --bs-navbar-color: rgba(255, 255, 255, .65);
+    --bs-navbar-hover-color: #fff;
+    --bs-navbar-active-color: #fff;
+    --bs-navbar-brand-color: #fff;
+    --bs-navbar-toggler-border-color: rgba(255, 255, 255, .2);
+    --bs-navbar-toggler-icon-bg: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255, 255, 255, 0.65)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+    /* Retain colorful header in dark mode */
+    background-image: linear-gradient(90deg,
+      color-mix(in oklch, var(--bs-primary) 70%, transparent),
+      color-mix(in oklch, var(--bs-danger) 70%, transparent) 25%,
+      color-mix(in oklch, var(--bs-warning) 70%, transparent) 50%,
+      color-mix(in oklch, var(--bs-success) 70%, transparent) 75%,
+      color-mix(in oklch, var(--bs-info) 70%, transparent) 100%);
+    background-blend-mode: screen;
+  }
+  .btn-outline-primary:hover {
+    background-color: oklch-shade($brand-primary, 20%);
+    border-color: oklch-shade($brand-primary, 25%);
+  }
+
+  /* Retain colorful footer in dark mode */
+  .site-footer {
+    background-image: linear-gradient(90deg,
+      color-mix(in oklch, var(--bs-primary) 65%, transparent) 0%,
+      color-mix(in oklch, var(--bs-danger) 65%, transparent) 25%,
+      color-mix(in oklch, var(--bs-warning) 65%, transparent) 50%,
+      color-mix(in oklch, var(--bs-success) 65%, transparent) 75%,
+      color-mix(in oklch, var(--bs-info) 65%, transparent) 100%);
+    color: #ffffff;
+  }
+
+  // Alerts (dark): deeper backgrounds, lighter text for readability
+  @each $name, $col in $brand-colors {
+    .alert-#{$name} {
+      --bs-alert-bg: #{oklch-shade($col, 85%)};
+      --bs-alert-border-color: #{oklch-shade($col, 70%)};
+      --bs-alert-color: #{oklch-tint($col, 65%)};
+    }
+  }
+
+  // Progress stripes tuned to the variant color
+  @each $name, $col in $brand-colors {
+    .progress-bar.bg-#{$name}.progress-bar-striped {
+      background-image: linear-gradient(45deg,
+        #{oklch-tint($col, 15%)} 25%, transparent 25%,
+        transparent 50%, #{oklch-tint($col, 15%)} 50%,
+        #{oklch-tint($col, 15%)} 75%, transparent 75%, transparent);
+    }
+  }
+}
+
+// KPI cards: bold gradients and readable text
+.kpi-card {
+  color: #0b1314;
+  background-image:
+    radial-gradient(600px 500px at 15% 15%, color-mix(in oklch, var(--bs-primary) 35%, transparent), transparent 60%),
+    radial-gradient(700px 550px at 85% 30%, color-mix(in oklch, var(--bs-success) 30%, transparent), transparent 60%),
+    radial-gradient(650px 520px at 50% 90%, color-mix(in oklch, var(--bs-warning) 30%, transparent), transparent 60%);
+  border: 1px solid color-mix(in oklch, var(--kpi-accent, var(--bs-primary)) 20%, var(--bs-border-color));
+  border-radius: .75rem;
+  position: relative;
+  overflow: hidden;
+  background-size: 140% 140%;
+  animation: kpi-pan 18s ease-in-out infinite alternate;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.kpi-card .card-body { backdrop-filter: saturate(1.1); }
+
+// Animated background pan for KPIs
+@keyframes kpi-pan {
+  0%   { background-position: 0%   0%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 100% 100%; }
+}
+
+// Accent-driven glow per KPI variant
+.kpi-card { --kpi-accent: var(--bs-primary); }
+.kpi-card.kpi--primary   { --kpi-accent: var(--bs-primary); }
+.kpi-card.kpi--success   { --kpi-accent: var(--bs-success); }
+.kpi-card.kpi--info      { --kpi-accent: var(--bs-info); }
+.kpi-card.kpi--warning   { --kpi-accent: var(--bs-warning); }
+.kpi-card.kpi--danger    { --kpi-accent: var(--bs-danger); }
+.kpi-card.kpi--secondary { --kpi-accent: var(--bs-secondary); }
+
+.kpi-card {
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--kpi-accent) 45%, transparent),
+    0 14px 34px color-mix(in oklch, var(--kpi-accent) 24%, transparent);
+}
+
+.kpi-card:hover, .kpi-card:focus-within {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--kpi-accent) 55%, transparent),
+    0 18px 42px color-mix(in oklch, var(--kpi-accent) 32%, transparent);
+  border-color: color-mix(in oklch, var(--kpi-accent) 35%, var(--bs-border-color));
+}
+
+// Progress bars inside KPI cards: accent color + animated stripes
+.kpi-card .progress { background-color: color-mix(in oklch, var(--kpi-accent) 8%, transparent); }
+.kpi-card .progress-bar { background-color: var(--kpi-accent); }
+.kpi-card .progress-bar.progress-bar-striped,
+.kpi-card .progress-bar-striped {
+  background-image: linear-gradient(45deg,
+    color-mix(in oklch, var(--kpi-accent) 28%, transparent) 25%,
+    transparent 25%, transparent 50%,
+    color-mix(in oklch, var(--kpi-accent) 28%, transparent) 50%,
+    color-mix(in oklch, var(--kpi-accent) 28%, transparent) 75%, transparent 75%, transparent);
+  background-size: 1.25rem 1.25rem;
+}
+.kpi-card .progress-bar.progress-bar-animated,
+.kpi-card .progress-bar-animated { animation: kpi-stripes 1.1s linear infinite; }
+
+@keyframes kpi-stripes { to { background-position-x: 1.25rem; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card { animation: none; transition: none; }
+  .kpi-card .progress-bar-animated { animation: none; }
+}
+
+.kpi-card .kpi-icon { font-size: 1.25rem; line-height: 1; }
+
+// ------------------------------------------------------------
+// Page-level theming via body.theme-<blueprint>
+// Applies colorful variants per section without touching templates
+// ------------------------------------------------------------
+
+.theme-jobs .card         { @include riot-card(var(--bs-info), var(--bs-primary), var(--bs-success), #ffffff); }
+.theme-admin .card        { @include riot-card(var(--bs-indigo), var(--bs-purple), var(--bs-pink), #ffffff); }
+.theme-uploads .card      { @include riot-card(var(--bs-warning), var(--bs-orange), var(--bs-danger), #0b1314); }
+.theme-uploaded_results .card { @include riot-card(var(--bs-success), var(--bs-teal), var(--bs-primary), #0b1314); }
+.theme-screenings .card   { @include riot-card(var(--bs-success), var(--bs-primary), var(--bs-info), #0b1314); }
+.theme-grading .card      { @include riot-card(var(--bs-purple), var(--bs-indigo), var(--bs-cyan), #ffffff); }
+.theme-glaucoma .card     { @include riot-card(var(--bs-info), var(--bs-primary), var(--bs-success), #ffffff); }
+.theme-audit .card        { @include riot-card(var(--bs-warning), var(--bs-danger), var(--bs-orange), #0b1314); }
+
+// Table headers/footers gradients per section
+.theme-jobs .table thead, .theme-jobs .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-info) 60%, transparent), color-mix(in oklch, var(--bs-primary) 60%, transparent));
+}
+.theme-admin .table thead, .theme-admin .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-indigo) 55%, transparent), color-mix(in oklch, var(--bs-purple) 55%, transparent));
+}
+.theme-uploads .table thead, .theme-uploads .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-warning) 55%, transparent), color-mix(in oklch, var(--bs-danger) 55%, transparent));
+}
+.theme-screenings .table thead, .theme-screenings .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-success) 55%, transparent), color-mix(in oklch, var(--bs-primary) 55%, transparent));
+}
+.theme-grading .table thead, .theme-grading .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-purple) 55%, transparent), color-mix(in oklch, var(--bs-cyan) 55%, transparent));
+}
+.theme-glaucoma .table thead, .theme-glaucoma .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-info) 55%, transparent), color-mix(in oklch, var(--bs-success) 55%, transparent));
+}
+.theme-audit .table thead, .theme-audit .table tfoot {
+  background-image: linear-gradient(90deg, color-mix(in oklch, var(--bs-warning) 55%, transparent), color-mix(in oklch, var(--bs-orange) 55%, transparent));
+}
+
+
+// Named gradient card variants
+.card-sunrise   { @include riot-card(var(--bs-danger), var(--bs-warning), var(--bs-pink), #0b1314); }
+.card-sea       { @include riot-card(var(--bs-info), var(--bs-primary), var(--bs-success), #ffffff); }
+.card-forest    { @include riot-card(var(--bs-success), var(--bs-teal), var(--bs-primary), #ffffff); }
+.card-lava      { @include riot-card(var(--bs-danger), var(--bs-orange), var(--bs-warning), #ffffff); }
+.card-aurora    { @include riot-card(var(--bs-purple), var(--bs-indigo), var(--bs-cyan), #ffffff); }
+.card-candy     { @include riot-card(var(--bs-pink), var(--bs-purple), var(--bs-primary), #0b1314); }
+.card-violet    { @include riot-card(var(--bs-indigo), var(--bs-purple), var(--bs-pink), #ffffff); }
+.card-rainbow   {
+  border: 0;
+  color: #0b1314;
+  background-image: linear-gradient(135deg,
+    color-mix(in oklch, var(--bs-primary) 30%, transparent) 0%,
+    color-mix(in oklch, var(--bs-danger) 30%, transparent) 25%,
+    color-mix(in oklch, var(--bs-warning) 30%, transparent) 50%,
+    color-mix(in oklch, var(--bs-success) 30%, transparent) 75%,
+    color-mix(in oklch, var(--bs-info) 30%, transparent) 100%);
+}
+
+// Soft tinted cards (subtle, solid tints)
+@each $name, $col in $brand-colors {
+  .card-soft-#{$name} {
+    background-color: oklch-tint($col, 88%);
+    border: 1px solid oklch-tint($col, 65%);
+    color: oklch-shade($col, 55%);
+  }
+}
+
+// KPI modifiers: reuse riot-card pattern with single dominant hue
+.kpi-card.kpi--primary  { @include riot-card(var(--bs-primary),  var(--bs-info),     var(--bs-success), #0b1314); }
+.kpi-card.kpi--success  { @include riot-card(var(--bs-success),  var(--bs-teal),     var(--bs-primary), #0b1314); }
+.kpi-card.kpi--info     { @include riot-card(var(--bs-info),     var(--bs-primary),  var(--bs-cyan),    #0b1314); }
+.kpi-card.kpi--warning  { @include riot-card(var(--bs-warning),  var(--bs-orange),   var(--bs-danger),  #0b1314); }
+.kpi-card.kpi--danger   { @include riot-card(var(--bs-danger),   var(--bs-pink),     var(--bs-orange),  #ffffff); }
+.kpi-card.kpi--secondary{ @include riot-card(var(--bs-secondary),var(--bs-indigo),   var(--bs-purple),  #ffffff); }
+
+// Optional: ensure readable content sections inside gradient-heavy cards
+.card[class*="card-"] .card-body,
+.kpi-card[class*="kpi--"] .card-body {
+  backdrop-filter: saturate(1.1) contrast(1.05);
+}
+
+// ------------------------------------------------------------
+// High-contrast wrapper (neutralize riot colors for data-heavy views)
+// ------------------------------------------------------------
+.theme-contrast {
+  .card:not(.kpi-card) {
+    background-image: none !important;
+    background-color: var(--bs-body-bg) !important;
+    color: var(--bs-body-color) !important;
+    border: 1px solid var(--bs-border-color);
+  }
+  .card:not(.kpi-card) .card-header {
+    background-image: none !important;
+    background-color: var(--bs-tertiary-bg) !important;
+    color: var(--bs-heading-color) !important;
+    border-bottom: 1px solid var(--bs-border-color);
+  }
+  .table thead, .table tfoot {
+    background-image: none !important;
+    background-color: var(--bs-tertiary-bg) !important;
+  }
+  .table-striped > tbody > tr { background-color: inherit !important; }
+  .progress-bar { background-image: none; }
+}
+
+// ------------------------------------------------------------
+// Gradient badges (louder than subtle badges)
+// Use CSS color-mix so we can accept CSS variables (var(--bs-*))
+// ------------------------------------------------------------
+
+@mixin badge-gradient($col, $text: #0b1314) {
+  background-image: linear-gradient(135deg,
+    color-mix(in oklch, #{$col} 15%, white),
+    color-mix(in oklch, #{$col} 35%, black));
+  color: $text;
+  border: 0;
+}
+
+.badge-gradient-primary   { @include badge-gradient(#0ea5a6, #0b1314); }
+.badge-gradient-success   { @include badge-gradient(#2fbf71, #0b1314); }
+.badge-gradient-info      { @include badge-gradient(#1ba1e2, #0b1314); }
+.badge-gradient-warning   { @include badge-gradient(#f2b705, #0b1314); }
+.badge-gradient-danger    { @include badge-gradient(#e15249, #ffffff); }
+.badge-gradient-secondary { @include badge-gradient(#5b6073, #ffffff); }
+.badge-gradient-purple    { @include badge-gradient(var(--bs-purple), #ffffff); }
+.badge-gradient-pink      { @include badge-gradient(var(--bs-pink), #0b1314); }
+.badge-gradient-indigo    { @include badge-gradient(var(--bs-indigo), #ffffff); }
+.badge-gradient-cyan      { @include badge-gradient(var(--bs-cyan), #0b1314); }
+.badge-gradient-teal      { @include badge-gradient(var(--bs-teal), #0b1314); }
+.badge-gradient-orange    { @include badge-gradient(var(--bs-orange), #0b1314); }
+
+// ------------------------------------------------------------
+// Soft badges (calmer, intended for dense tables)
+// ------------------------------------------------------------
+@mixin badge-soft($name, $col) {
+  .badge-soft-#{$name} {
+    background-color: var(--bs-#{$name}-bg-subtle);
+    color: var(--bs-#{$name}-text-emphasis);
+    border: 1px solid var(--bs-#{$name}-border-subtle);
+    font-weight: 500;
+  }
+}
+@include badge-soft(primary,  #0ea5a6);
+@include badge-soft(success,  #2fbf71);
+@include badge-soft(info,     #1ba1e2);
+@include badge-soft(warning,  #f2b705);
+@include badge-soft(danger,   #e15249);
+@include badge-soft(secondary,#5b6073);
+@include badge-soft(purple,   var(--bs-purple));
+@include badge-soft(pink,     var(--bs-pink));
+@include badge-soft(indigo,   var(--bs-indigo));
+@include badge-soft(cyan,     var(--bs-cyan));
+@include badge-soft(teal,     var(--bs-teal));
+@include badge-soft(orange,   var(--bs-orange));
+
+// Slightly smaller badges inside tables
+.table .badge[class^="badge-soft-"],
+.table .badge[class*=" badge-soft-"] {
+  padding: .25em .5em;
+  font-size: .72rem;
+  border-radius: 10rem;
+}
+
+// Soft badge mapping to subtle tints (applies in both modes via CSS variables)
+.badge.bg-primary,
+.badge.text-bg-primary { background-color: var(--bs-primary-bg-subtle) !important; color: var(--bs-primary-text-emphasis) !important; }
+.badge.bg-secondary,
+.badge.text-bg-secondary { background-color: var(--bs-secondary-bg-subtle) !important; color: var(--bs-secondary-text-emphasis) !important; }
+.badge.bg-success,
+.badge.text-bg-success { background-color: var(--bs-success-bg-subtle) !important; color: var(--bs-success-text-emphasis) !important; }
+.badge.bg-info,
+.badge.text-bg-info { background-color: var(--bs-info-bg-subtle) !important; color: var(--bs-info-text-emphasis) !important; }
+.badge.bg-warning,
+.badge.text-bg-warning { background-color: var(--bs-warning-bg-subtle) !important; color: var(--bs-warning-text-emphasis) !important; }
+.badge.bg-danger,
+.badge.text-bg-danger { background-color: var(--bs-danger-bg-subtle) !important; color: var(--bs-danger-text-emphasis) !important; }
+
+// Improve primary button legibility and weight
+@include bs.color-mode(light) {
+  .btn-primary {
+    --bs-btn-color: #ffffff;
+    --bs-btn-hover-color: #ffffff;
+    --bs-btn-active-color: #ffffff;
+    --bs-btn-hover-bg: #{oklch-shade($brand-primary, 18%)};
+    --bs-btn-active-bg: #{oklch-shade($brand-primary, 24%)};
+    --bs-btn-hover-border-color: #{oklch-shade($brand-primary, 20%)};
+    --bs-btn-active-border-color: #{oklch-shade($brand-primary, 28%)};
+    font-weight: 600;
+  }
+}
+
+@include bs.color-mode(dark) {
+  .btn-primary {
+    /* On lighter teal backgrounds, dark text has better contrast */
+    --bs-btn-color: #0b1314;
+    --bs-btn-hover-color: #0b1314;
+    --bs-btn-active-color: #0b1314;
+    --bs-btn-hover-bg: #{oklch-shade($brand-primary, 12%)};
+    --bs-btn-active-bg: #{oklch-shade($brand-primary, 16%)};
+    --bs-btn-hover-border-color: #{oklch-shade($brand-primary, 14%)};
+    --bs-btn-active-border-color: #{oklch-shade($brand-primary, 18%)};
+    font-weight: 600;
+  }
+}

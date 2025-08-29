@@ -47,6 +47,10 @@ htmlcov/
 dist/
 build/
 
+node_modules/**/*
+package-lock.json
+yarn.lock
+
 
 /files/**/*.pdf
 /files/**/*.zip
@@ -57,3 +61,5 @@ zip_processing*.db-*
 pdf_error_log.txt
 pdf_success_log.txt
 process_log.txt
+node_modules/@parcel/watcher/LICENSE
+node_modules/@parcel/watcher-darwin-arm64/LICENSE

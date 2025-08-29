@@ -54,6 +54,8 @@ class PatientEncounters(Base):
     name: Mapped[str]
     patient_id: Mapped[str]
     capture_date: Mapped[str]
+    # New: proper Date column for reliable queries (nullable until backfilled)
+    capture_date_dt: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[list["EncounterFile"]] = relationship(

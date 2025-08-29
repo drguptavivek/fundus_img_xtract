@@ -5,7 +5,7 @@ import hashlib
 import re
 import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, date as _date
 from dotenv import load_dotenv  # ✅ load .env first
 load_dotenv()
 
@@ -63,6 +63,19 @@ def calculate_md5(filepath):
 def clean_filename(name: str) -> str:
     # Remove Windows duplicate suffixes like " (1)" or " (2)"
     return re.sub(r"\s\(\d+\)", "", name)
+
+
+def parse_capture_date(s: str | None) -> _date | None:
+    if not s:
+        return None
+    s = str(s).strip()
+    # Try common formats first
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%m-%d-%Y", "%Y%m%d"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except Exception:
+            continue
+    return None
 
 
 
@@ -184,8 +197,14 @@ def process_zip_file(zip_path: Path, session):
             clean_name = clean_filename(zip_path.name)
             new_zip_file = ZipFile(zip_filename=clean_name, md5_hash=md5_hash)
             new_patient_encounter = PatientEncounters(
-                name=name, patient_id=patient_id, capture_date=capture_date
+                name=name,
+                patient_id=patient_id,
+                capture_date=capture_date,
             )
+            # Populate proper Date column when possible
+            parsed_dt = parse_capture_date(capture_date)
+            if parsed_dt is not None:
+                new_patient_encounter.capture_date_dt = parsed_dt
             new_zip_file.patient_encounter = new_patient_encounter
 
             print(f"  Identified Parent Directory: {dir_in_zip.name}")

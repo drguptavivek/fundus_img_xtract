@@ -4,6 +4,7 @@ import numpy as np
 from flask import render_template, request, current_app, url_for
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
+from datetime import datetime, date as _date
 
 from auth.roles import roles_required
 from . import bp
@@ -160,48 +161,33 @@ def glaucoma_list():
               .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
         )
 
-        # Load all matching rows (we'll sort+paginate in Python due to string dates)
-        rows = (
+        # If a date was selected, parse to date and filter on capture_date_dt
+        sel_dt: _date | None = None
+        if selected_date:
+            try:
+                sel_dt = datetime.strptime(selected_date, "%Y-%m-%d").date()
+            except Exception:
+                sel_dt = None
+        if sel_dt is not None:
+            base_q = base_q.filter(PatientEncounters.capture_date_dt == sel_dt)
+
+        # Order by proper Date column (desc), then fallback by report id
+        base_q = base_q.order_by(PatientEncounters.capture_date_dt.desc(), GlaucomaReport.id.desc())
+
+        total = base_q.count()
+        total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+        if page > total_pages:
+            page = total_pages
+
+        items = (
             base_q
             .options(selectinload(GlaucomaReport.patient_encounter))
+            .offset((page - 1) * per_page)
+            .limit(per_page)
             .all()
         )
     finally:
         db.close()
-
-    # Robust date parsing from potentially messy strings
-    from datetime import datetime, date as _date
-    def _parse_date(s: str | None) -> _date:
-        if not s:
-            return _date.min
-        s = str(s).strip()
-        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%m-%d-%Y"):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except Exception:
-                continue
-        return _date.min
-
-    # Optional filter by selected_date (expects YYYY-MM-DD from <input type=date>)
-    if selected_date:
-        try:
-            sel_dt = datetime.strptime(selected_date, "%Y-%m-%d").date()
-        except Exception:
-            sel_dt = None
-        if sel_dt:
-            rows = [r for r in rows if _parse_date(getattr(r.patient_encounter, "capture_date", None)) == sel_dt]
-
-    # Sort by parsed capture_date desc, then by report id desc
-    rows.sort(key=lambda r: (_parse_date(getattr(r.patient_encounter, "capture_date", None)), r.id), reverse=True)
-
-    total = len(rows)
-    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
-    if page > total_pages:
-        page = total_pages
-
-    start = (page - 1) * per_page
-    end = start + per_page
-    items = rows[start:end]
 
     has_prev = page > 1
     has_next = page < total_pages

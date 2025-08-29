@@ -2,6 +2,7 @@
 
 from math import ceil
 import re
+from datetime import datetime
 from flask import abort, render_template, request, current_app, url_for
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
@@ -26,8 +27,8 @@ def list_screenings():
         base_q = (
             db.query(PatientEncounters)
             .order_by(
-                PatientEncounters.capture_date.desc(),
-                PatientEncounters.id.desc()
+                PatientEncounters.capture_date_dt.desc().nullslast(),
+                PatientEncounters.id.desc(),
             )
         )
 
@@ -36,13 +37,29 @@ def list_screenings():
         if q:
             tokens = [t for t in re.split(r"\s+", q) if t]
             for t in tokens:
+                # If token looks like a date (YYYY-MM-DD), also match on capture_date_dt
+                dt = None
+                try:
+                    if re.match(r"^\d{4}-\d{2}-\d{2}$", t):
+                        dt = datetime.strptime(t, "%Y-%m-%d").date()
+                except Exception:
+                    dt = None
                 pat = f"%{t}%"
-                base_q = base_q.filter(
-                    or_(
-                        PatientEncounters.patient_id.ilike(pat),
-                        PatientEncounters.name.ilike(pat),
+                if dt is not None:
+                    base_q = base_q.filter(
+                        or_(
+                            PatientEncounters.patient_id.ilike(pat),
+                            PatientEncounters.name.ilike(pat),
+                            PatientEncounters.capture_date_dt == dt,
+                        )
                     )
-                )
+                else:
+                    base_q = base_q.filter(
+                        or_(
+                            PatientEncounters.patient_id.ilike(pat),
+                            PatientEncounters.name.ilike(pat),
+                        )
+                    )
 
         # Total rows AFTER filters
         total = base_q.count()
@@ -72,7 +89,7 @@ def list_screenings():
     has_next = page < total_pages
 
     return render_template(
-        "screenings_list.html",
+        "screenings/list.html",
         items=items,
         page=page,
         per_page=per_page,
@@ -158,7 +175,7 @@ def screening_detail(encounter_id: int):
     gallery_id = f"pswp-gallery-enc-{encounter.id}"
 
     return render_template(
-        "screening_detail.html",
+        "screenings/detail.html",
         encounter=encounter,
         images=images,
         dr_reports=dr_reports,

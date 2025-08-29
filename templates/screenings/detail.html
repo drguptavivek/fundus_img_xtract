@@ -55,7 +55,15 @@
                         <dt class="col-5">Patient ID</dt>
                         <dd class="col-7">{{ encounter.patient_id or "-" }}</dd>
                         <dt class="col-5">Capture Date</dt>
-                        <dd class="col-7">{{ encounter.capture_date or "-" }}</dd>
+                        <dd class="col-7">
+                          {% if encounter.capture_date_dt %}
+                            {{ encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+                          {% elif encounter.capture_date %}
+                            {{ encounter.capture_date }}
+                          {% else %}
+                            -
+                          {% endif %}
+                        </dd>
                         <dt class="col-5">Zip File</dt>
                         <dd class="col-7">{% if encounter.zip_file %}{{ encounter.zip_file.zip_filename }}{% else %}-{%
                             endif %}</dd>

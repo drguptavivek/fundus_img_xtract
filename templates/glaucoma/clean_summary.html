@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Glaucoma Clean – Summary{% endblock %}
+
+{% block content %}
+<div class="py-3">
+  <h3 class="mb-3">Glaucoma Clean Workflow</h3>
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <div class="fw-semibold">Total reports scanned</div>
+          <div class="display-6">{{ total }}</div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="fw-semibold">Inserted (new)</div>
+          <div class="display-6 text-success">{{ inserted }}</div>
+        </div>
+        <div class="col-12 col-md-4">
+          <div class="fw-semibold">Updated (existing)</div>
+          <div class="display-6 text-primary">{{ updated }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_list') }}">Back to List</a>
+    <a class="btn btn-primary" href="{{ url_for('glaucoma.glaucoma_results') }}">View Dashboard</a>
+  </div>
+</div>
+{% endblock %}

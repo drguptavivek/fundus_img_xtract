@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Missing Capture Date{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <h3 class="mb-0 me-2">Encounters Missing Capture Date</h3>
+  <div class="small text-muted">Total: {{ total }}</div>
+  <div class="w-100 small text-muted">Lists encounters where the real date column is null. Use the migration script to backfill.</div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('screenings.list_screenings') }}">Back to Screenings</a>
+  </div>
+  </div>
+
+{% if items %}
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Patient ID</th>
+            <th>Patient Name</th>
+            <th>Capture Date (string)</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for enc in items %}
+          <tr>
+            <td class="text-nowrap">#{{ enc.id }}</td>
+            <td class="text-nowrap">{{ enc.patient_id or '—' }}</td>
+            <td class="text-nowrap">{{ enc.name or '—' }}</td>
+            <td class="text-nowrap">{{ enc.capture_date or '—' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="text-center text-muted p-4">No records missing capture_date_dt.</div>
+{% endif %}
+
+{% endblock %}
+

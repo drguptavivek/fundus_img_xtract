@@ -187,9 +187,12 @@ def create_app():
 
     from media import bp as media_bp
     app.register_blueprint(media_bp)
-    
+
     from account import account_bp
     app.register_blueprint(account_bp)
+
+    from audit import bp as audit_bp
+    app.register_blueprint(audit_bp)
 
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)

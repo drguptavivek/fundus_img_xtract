@@ -110,6 +110,37 @@ class GlaucomaReport(Base):
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="glaucoma_reports")
 
 
+class GlaucomaResultsCleaned(Base):
+    """Numeric, cleaned snapshot of glaucoma results for analytics.
+    One row per original GlaucomaReport.
+    """
+    __tablename__ = 'glaucoma_results_cleaned'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    glaucoma_report_id: Mapped[int] = mapped_column(ForeignKey('glaucoma_reports.id'), unique=True, index=True)
+    patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'), index=True)
+
+    # Parsed numeric VCDR values (0.00–1.00), nullable if parsing fails
+    vcdr_right_num: Mapped[float | None] = mapped_column(nullable=True)
+    vcdr_left_num: Mapped[float | None] = mapped_column(nullable=True)
+
+    # Keep originals for traceability
+    original_vcdr_right: Mapped[str | None] = mapped_column(nullable=True)
+    original_vcdr_left: Mapped[str | None] = mapped_column(nullable=True)
+
+    # Copy over headline results for convenience
+    result: Mapped[str | None] = mapped_column(nullable=True)
+    qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
+    report_uuid: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    report_file_name: Mapped[str | None] = mapped_column(nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    # Relationships for convenience
+    patient_encounter: Mapped["PatientEncounters"] = relationship("PatientEncounters")
+    glaucoma_report: Mapped["GlaucomaReport"] = relationship("GlaucomaReport")
+
+
 
 # --- Jobs: persist async processing state ---
 

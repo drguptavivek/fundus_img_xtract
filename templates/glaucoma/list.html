@@ -39,9 +39,7 @@
                  min="1" max="{{ total_pages }}" value="{{ page }}" aria-label="Go to page">
           <span class="sep">/ {{ total_pages }}</span>
         </div>
-        {% if selected_date %}
-          <input type="hidden" name="date" value="{{ selected_date }}">
-        {% endif %}
+        {# page-based date navigation; no hidden date here #}
       </form>
 
       <a class="btn btn-outline-secondary btn-sm {% if not has_next %}disabled{% endif %}"
@@ -70,19 +68,19 @@
       {% for gr in items %}
         {% set enc = gr.patient_encounter %}
         <tr>
-          <td class="text-nowrap">{{ enc.capture_date if enc else '-' }}</td>
+          <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
           <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
           <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
           <td>{{ gr.result or '-' }}</td>
-          <td>{{ gr.vcdr_right or '-' }}</td>
-          <td>{{ gr.vcdr_left or '-' }}</td>
+          <td>{% if gr.vcdr_right_num is not none %}{{ '%.2f'|format(gr.vcdr_right_num) }}{% else %}-{% endif %}</td>
+          <td>{% if gr.vcdr_left_num is not none %}{{ '%.2f'|format(gr.vcdr_left_num) }}{% else %}-{% endif %}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm" role="group">
               {% if enc %}
               <a class="btn btn-outline-secondary" href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">View</a>
               {% endif %}
               {% if gr.report_file_name %}
-              <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.uuid) }}" target="_blank" rel="noopener">PDF</a>
+              <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank" rel="noopener">PDF</a>
               {% endif %}
             </div>
           </td>

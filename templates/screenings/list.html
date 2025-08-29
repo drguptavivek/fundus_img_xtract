@@ -99,7 +99,7 @@
 
               <span class="vr d-none d-sm-inline mx-1"></span>
               <span class="fw-semibold text-body">Capture:</span>
-              <span class="fw-semibold text-body">{{ enc.capture_date or '—' }}</span>
+              <span class="fw-semibold text-body">{% if enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{% else %}{{ enc.capture_date or '—' }}{% endif %}</span>
 
               <!-- ZIP only on md+ -->
               <span class="vr d-none d-md-inline mx-1"></span>
@@ -231,7 +231,7 @@
     </div>
   </div>
   {% endfor %}
-</div>
+  </div>
 {% else %}
 <div class="text-center text-muted p-4">No screenings found.</div>
 {% endif %}
@@ -259,13 +259,4 @@
 <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
 <br/>
 <br/>
-{% endblock %}
-
-
-{% block page_scripts %}
-<script src="{{ url_for('static', filename='js/screening-viewer.js') }}"></script>
-<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
-<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
-<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
-<script src="{{ url_for('static', filename='js/page_nav_screenings_list.js') }}?v={{ v }}"></script>
 {% endblock %}

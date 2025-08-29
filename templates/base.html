@@ -31,12 +31,13 @@
               href="{{ url_for('homepage') }}">Home</a>
           </li>
 
-          {# Work menu: visible to admin or fileUploader #}
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader')) %}
+          {# Work menu: visible to admin, fileUploader, optometrist, data_manager #}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader') or current_user_has('optometrist') or current_user_has('data_manager')) %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle
-                      {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs']
-                                        or (request.endpoint|default('')).startswith('jobs.')) else '' }}" href="#"
+                      {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs','audit']
+                                        or (request.endpoint|default('')).startswith('jobs.')
+                                        or (request.endpoint|default('')) == 'glaucoma.glaucoma_clean_workflow') else '' }}" href="#"
               id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Work
             </a>
@@ -56,6 +57,14 @@
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('')).startswith('jobs.')) else '' }}"
                   href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
               </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('')) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
+                   href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if request.blueprint == 'audit' else '' }}"
+                   href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
+              </li>
             </ul>
           </li>
           {% endif %}
@@ -64,6 +73,27 @@
           <li class="nav-item">
             <a class="nav-link {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('')).startswith('screenings.')) else '' }}"
               href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
+          </li>
+          {% endif %}
+
+          {# Glaucoma nav (admin or ophthalmologist) #}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'glaucoma' else '' }}" href="#"
+               id="glaucomaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Glaucoma
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="glaucomaMenu">
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('')) == 'glaucoma.glaucoma_list' else '' }}"
+                   href="{{ url_for('glaucoma.glaucoma_list') }}">List</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('')) == 'glaucoma.glaucoma_results' else '' }}"
+                   href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+              </li>
+              {# Clean Data moved to Work menu #}
+            </ul>
           </li>
           {% endif %}
 

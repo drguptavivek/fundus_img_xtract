@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session as DBSession # Renamed to avoid conflict with
 from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
 from datetime import datetime
+import time
 
 from dotenv import load_dotenv
 
@@ -91,40 +92,50 @@ def process_all_pdfs_for_ocr():
     print(f"Created directories: {DR_PDF_DIR} and {GLAUCOMA_PDF_DIR}")
 
     try:
-        pdf_files = list(PDF_DIR.glob("*.pdf"))
-        if not pdf_files:
-            print("\nNo PDF files found in 'files/pdfs' for OCR processing.")
-            log_error(str(PDF_DIR), "No PDF files found for OCR processing.")
+        # Build a targeted worklist from DB: only unprocessed EncounterFile PDFs
+        rows = (
+            db_session.query(EncounterFile, PatientEncounters)
+            .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+            .filter(EncounterFile.file_type == 'pdf')
+            .filter((EncounterFile.ocr_processed == False) | (EncounterFile.ocr_processed.is_(None)))
+            .all()
+        )
+
+        if not rows:
+            print("\nNo unprocessed PDFs found (EncounterFile.ocr_processed==False). Nothing to do.")
             return
-        
-        total_files = len(pdf_files)
-        for idx, pdf_path in enumerate(pdf_files, start=1):
+
+        work_items: list[tuple[Path, PatientEncounters, str]] = []  # (pdf_path, encounter, filename)
+        for ef, enc in rows:
+            pdf_path = PDF_DIR / (ef.filename or "")
+            if not ef.filename:
+                continue
+            if not pdf_path.exists():
+                log_error(ef.filename, "PDF file missing on disk; skipping")
+                continue
+            work_items.append((pdf_path, enc, ef.filename))
+
+        total_files = len(work_items)
+        for idx, (pdf_path, patient_encounter, ef_filename) in enumerate(work_items, start=1):
             print(f"\n--- Processing file {idx}/{total_files}: '{pdf_path.name}' ---")
-            
-            # Extract patient_id, name, capture_date from the PDF filename
-            # Filename format: {patient_id}_{name}_{capture_date}_{original_filepath.name.replace('/', '_')}
-            parts = pdf_path.name.split('_')
-            if len(parts) < 4:
-                print(f"Skipping '{pdf_path.name}': Malformed filename, cannot extract patient ID, name, or date.")
-                log_error(pdf_path.name, "Malformed filename: missing patient ID/name/date parts")
+
+            # Use data from DB for consistent naming
+            extracted_patient_id = patient_encounter.patient_id
+            patient_name_for_filename = (patient_encounter.name or '').replace(' ', '_')
+            capture_date_for_filename = patient_encounter.capture_date
+
+            # Skip if reports already exist for this encounter
+            already_dr = db_session.query(DiabeticRetinopathyReport).filter_by(patient_encounter_id=patient_encounter.id).first()
+            already_gl = db_session.query(GlaucomaReport).filter_by(patient_encounter_id=patient_encounter.id).first()
+            if already_dr or already_gl:
+                log_error(pdf_path.name, f"Reports for patient ID  {extracted_patient_id}  already exist. Skipping OCR")
+                # Optionally mark as processed to avoid repeated attempts
+                enc_file = db_session.query(EncounterFile).filter_by(patient_encounter_id=patient_encounter.id, filename=pdf_path.name).first()
+                if enc_file and not enc_file.ocr_processed:
+                    enc_file.ocr_processed = True
+                    db_session.add(enc_file)
+                    db_session.commit()
                 continue
-            
-            extracted_patient_id = parts[0]
-            
-            patient_encounter_from_db = db_session.query(PatientEncounters).filter_by(patient_id=extracted_patient_id).first()
-
-            if not patient_encounter_from_db:
-                print(f"Skipping '{pdf_path.name}': Patient encounter not found for ID '{extracted_patient_id}'.")
-                log_error(pdf_path.name, f"Patient encounter not found for ID  {extracted_patient_id}  . Skipping ")
-                continue
-            
-            # Use data from DB for name and capture_date for consistent naming
-            patient_name_for_filename = patient_encounter_from_db.name.replace(' ', '_')
-            capture_date_for_filename = patient_encounter_from_db.capture_date
-
-
-            # Find the corresponding PatientEncounters record
-            patient_encounter = patient_encounter_from_db
 
             # Check if this PDF has already been OCR processed for reports
             # We can check if any DR or Glaucoma reports already exist for this encounter
@@ -254,6 +265,8 @@ def process_all_pdfs_for_ocr():
 
             print(f"Successfully processed OCR and split pages for '{pdf_path.name}'.")
             log_success(pdf_path.name, "OCR and split pages completed")
+            # Brief pause between PDFs to smooth IO/CPU
+            time.sleep(1)
 
     except Exception as e:
         # Capture whichever file was in scope, else mark as UNKNOWN

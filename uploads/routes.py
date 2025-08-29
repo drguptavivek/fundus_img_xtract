@@ -31,10 +31,19 @@ def _uniquify(dest_dir: Path, filename: str) -> Path:
         i += 1
 
 def _file_size_bytes(file_storage) -> int:
-    pos = file_storage.stream.tell()
-    file_storage.stream.seek(0, os.SEEK_END)
-    size = file_storage.stream.tell()
-    file_storage.stream.seek(pos, os.SEEK_SET)
+    # Prefer reported content_length when available
+    try:
+        cl = getattr(file_storage, "content_length", None)
+        if cl is not None:
+            return int(cl)
+    except Exception:
+        pass
+    # Fallback: measure underlying stream without disturbing current position
+    stream = file_storage.stream
+    pos = stream.tell()
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(pos, os.SEEK_SET)
     return size
 
 @bp.route("/upload_files", methods=["GET"])
@@ -49,8 +58,8 @@ def upload_form():
 @bp.route("/upload", methods=["POST"])
 @roles_required("admin", "fileUploader")
 def upload_files():
-    per_file_max = current_app.config["PER_FILE_MAX_BYTES"]
-    max_files = current_app.config["MAX_FILES_PER_UPLOAD"]
+    per_file_max = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
+    max_files = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))
 
     files = request.files.getlist("files")
     if not files:
@@ -69,6 +78,10 @@ def upload_files():
         if not fname:
             rejected.append("(empty filename)")
             continue
+        # skip macOS resource forks and enforce .zip
+        if fname.startswith("._"):
+            rejected.append(f"{fname} (resource-fork file)")
+            continue
         if not _allowed_zip(fname):
             rejected.append(f"{fname} (not a .zip)")
             continue
@@ -78,9 +91,16 @@ def upload_files():
 
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
         save_path = _uniquify(UPLOAD_DIR, fname)
-        f.seek(0)
-        f.save(str(save_path))
-        saved_paths.append(save_path)
+        try:
+            # ensure stream is at start before saving
+            try:
+                f.stream.seek(0)
+            except Exception:
+                pass
+            f.save(str(save_path))
+            saved_paths.append(save_path)
+        except Exception as ex:
+            rejected.append(f"{fname} (save failed: {ex})")
 
     if not saved_paths:
         flash("All files were rejected (not ZIP or too large).", "danger")

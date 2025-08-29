@@ -10,6 +10,7 @@
       </div>
       <div class="card-body">
         <form method="post" action="{{ url_for('uploads.upload_files') }}" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="mb-3">
             <label for="files" class="form-label">Choose one or more .zip files</label>
             <input id="files" class="form-control" type="file" name="files" multiple accept=".zip" required>

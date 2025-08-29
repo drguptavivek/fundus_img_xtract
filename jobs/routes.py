@@ -40,4 +40,4 @@ def job_status_page(job_token: str):
     return render_template("job_status.html", job_id=job_token)
 
 
-# ---------------- NEW: recent jobs list (admin-lite) ----------------
+

@@ -6,6 +6,10 @@
   <title>{% block title %}ZIP → Extract → OCR{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   {% set v = (config.get('ASSETS_VERSION') or '') %}
+  <!-- Favicons -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}?v={{ v }}" sizes="any">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}?v={{ v }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='favicon.png') }}?v={{ v }}">
   <!-- Local Bootstrap CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
@@ -16,8 +20,10 @@
 
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
     <div class="container">
-      <a class="navbar-brand" href="{{ url_for('homepage') }}">
-        Fundus Image Extractor
+      <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('homepage') }}">
+        <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}"
+             alt="Fundus retina logo" width="36" height="36" loading="eager">
+        <span>Fundus Image Manager</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
         aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">

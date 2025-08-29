@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
+from flask import send_from_directory
 from models import Base, Job, Session, engine
 from main import setup_environment
 from dotenv import load_dotenv  
@@ -229,7 +230,12 @@ def create_app():
         flash(e.description or "Security check failed. Please try again.", "danger")
         # send them back or home
         return redirect(request.referrer or url_for("homepage")), 400
-    
+
+    # Serve classic /favicon.ico path for browsers that request it directly
+    @app.get('/favicon.ico')
+    def _favicon():
+        return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
     # -------------------------------
     # New homepage route
     @app.route("/")

@@ -1,7 +1,7 @@
 # reports/routes.py
 import os
 from pathlib import Path
-from flask import abort, send_from_directory
+from flask import abort, send_from_directory, redirect, url_for
 from werkzeug.utils import secure_filename
 
 from auth.roles import roles_required
@@ -37,3 +37,49 @@ def serve_glaucoma_pdf(filename: str):
     directory, fname = _safe_file(GLAUCOMA_PDF_DIR, filename)
     return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)
 
+# --- New: serve split report PDFs by report UUIDs ---
+
+@bp.route("/dr/by-uuid/<uuid>", methods=["GET"])
+@roles_required("admin")
+def serve_dr_pdf_by_uuid(uuid: str):
+    db = Session()
+    try:
+        rep = (
+            db.query(DiabeticRetinopathyReport)
+            .filter(DiabeticRetinopathyReport.uuid == uuid)
+            .first()
+        )
+    finally:
+        db.close()
+
+    if not rep or not rep.report_file_name:
+        abort(404)
+    directory, fname = _safe_file(DR_PDF_DIR, rep.report_file_name)
+    return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)
+
+
+@bp.route("/glaucoma/by-uuid/<uuid>", methods=["GET"])
+@roles_required("admin")
+def serve_glaucoma_pdf_by_uuid(uuid: str):
+    db = Session()
+    try:
+        rep = (
+            db.query(GlaucomaReport)
+            .filter(GlaucomaReport.uuid == uuid)
+            .first()
+        )
+    finally:
+        db.close()
+
+    if not rep or not rep.report_file_name:
+        abort(404)
+    directory, fname = _safe_file(GLAUCOMA_PDF_DIR, rep.report_file_name)
+    return send_from_directory(directory=directory, path=fname, mimetype="application/pdf", as_attachment=False)
+
+
+@bp.route("/glaucoma_results", methods=["GET"])
+@roles_required("admin")
+def glaucoma_results_redirect():
+    # Redirect old path to new blueprint path
+    return redirect(url_for("glaucoma.glaucoma_results"), code=302)
+ 

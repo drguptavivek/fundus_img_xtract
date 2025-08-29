@@ -9,7 +9,7 @@ from sqlalchemy import and_, or_
 from auth.roles import roles_required
 from . import bp
 from models import Session, PatientEncounters
-
+ 
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "ophthalmologist")  # allow both per your ACL
 def list_screenings():

@@ -4,33 +4,39 @@
 {% block content %}
 <div class="py-3">
     {# small, inconspicuous nav bar #}
-<div class="sv-topbar d-flex flex-wrap align-items-center gap-2 mb-2 small text-muted">
-  <a class="btn btn-sm btn-outline-secondary btn-subtle"
-     href="{{ back_url }}" aria-label="Back to screenings list" title="Back to screenings">
-    &larr; All screenings
-  </a>
-
-  <span class="vr d-none d-sm-inline mx-1"></span>
-
-  {% if prev_url %}
+<div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
+  <!-- Left: Back link -->
+  <div class="d-flex align-items-center gap-2">
     <a class="btn btn-sm btn-outline-secondary btn-subtle"
-       href="{{ prev_url }}" aria-label="Previous screening" title="Previous screening">
-      &larr; Prev
+       href="{{ back_url }}" aria-label="Back to screenings list" title="Back to screenings">
+      &larr; All screenings
     </a>
-  {% else %}
-    <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled
-            aria-label="No previous screening"> &larr; Prev </button>
-  {% endif %}
+  </div>
 
-  {% if next_url %}
-    <a class="btn btn-sm btn-outline-secondary btn-subtle"
-       href="{{ next_url }}" aria-label="Next screening" title="Next screening">
-      Next &rarr;
-    </a>
-  {% else %}
-    <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled
-            aria-label="No next screening"> Next &rarr; </button>
-  {% endif %}
+  <!-- Right: Pager buttons -->
+  <div class="d-flex align-items-center gap-2">
+    {% if prev_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle"
+         href="{{ prev_url }}" aria-label="Previous screening" title="Previous screening">
+        &larr; Prev
+      </a>
+    {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous screening">
+        &larr; Prev
+      </button>
+    {% endif %}
+
+    {% if next_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle"
+         href="{{ next_url }}" aria-label="Next screening" title="Next screening">
+        Next &rarr;
+      </a>
+    {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next screening">
+        Next &rarr;
+      </button>
+    {% endif %}
+  </div>
 </div>
 
 
@@ -68,15 +74,11 @@
                             <div><strong>Result:</strong> {{ dr.result or "-" }}</div>
                             {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}
                             </div>{% endif %}
-                            {# Link to first EncounterFile PDF by UUID #}
-                            {% set pdfs = [] %}
-                            {% for ef in encounter.encounter_files if ef.file_type == 'pdf' %}
-                              {% set _ = pdfs.append(ef) %}
-                            {% endfor %}
-                            {% if pdfs %}
+                            {# Link to DR split PDF by report UUID #}
+                            {% if dr.report_file_name %}
                               <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                   href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                                   href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}"
                                    target="_blank" rel="noopener">Open PDF</a>
                               </div>
                             {% endif %}
@@ -100,15 +102,11 @@
                                 gl.qualitative_result }}</div>{% endif %}
                             <div class="mb-1"><strong>VCDR (R/L):</strong> {{ gl.vcdr_right or "-" }} / {{ gl.vcdr_left
                                 or "-" }}</div>
-                            {# Link to first EncounterFile PDF by UUID #}
-                            {% set pdfs = [] %}
-                            {% for ef in encounter.encounter_files if ef.file_type == 'pdf' %}
-                              {% set _ = pdfs.append(ef) %}
-                            {% endfor %}
-                            {% if pdfs %}
+                            {# Link to Glaucoma split PDF by report UUID #}
+                            {% if gl.report_file_name %}
                               <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                   href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                                   href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gl.uuid) }}"
                                    target="_blank" rel="noopener">Open PDF</a>
                               </div>
                             {% endif %}

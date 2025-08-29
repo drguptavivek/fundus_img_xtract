@@ -171,6 +171,7 @@ class User(Base):
         lazy="selectin",
     )
 
+
     # Flask-Login helpers (keep as before) ...
     @property
     def is_authenticated(self) -> bool:  # noqa

@@ -24,6 +24,22 @@ python reset.py
 # To create directories and A NEW empty DB
 python initialize.py
 
+Standalone database setup utility.
+
+Usage examples (PowerShell):
+  # Create tables only (fast)
+  python scripts/setup_db.py
+
+  # Create tables + backfill UUIDs (EncounterFile + Reports)
+  python scripts/setup_db.py --migrate-uuids
+
+  # Check-only UUID migration (no changes, just counts/indexes)
+  python scripts/setup_db.py --migrate-uuids --check-only
+
+#Options:
+#  --batch-size N        Rows to update per batch (UUID backfill)
+#  --progress-every N    Print progress every N batches
+
 
 # Extract PDFs and images from ZIPs in the /uplaoded directory and move source ZIPs  to prcessed direcy
 python main.py
@@ -39,6 +55,12 @@ python process_pdfs.py
 
 ```
 
+## FLASP APP
+
+```bash
+python app.py
+
+```
 
 
 

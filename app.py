@@ -182,6 +182,9 @@ def create_app():
     from reports import bp as reports_bp
     app.register_blueprint(reports_bp)
 
+    from glaucoma import bp as glaucoma_bp
+    app.register_blueprint(glaucoma_bp)
+
     from media import bp as media_bp
     app.register_blueprint(media_bp)
     

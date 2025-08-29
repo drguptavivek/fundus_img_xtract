@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Glaucoma Results KPIs{% endblock %}
+
+{% block content %}
+<div class="py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Glaucoma Results</h3>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('screenings.list_screenings') }}">&larr; Back to Screenings</a>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="fw-semibold">Total Glaucoma Reports</div>
+          <div class="display-6">{{ total_reports }}</div>
+          <div class="text-muted small">Rows in glaucoma_reports</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="fw-semibold">Reports With Split PDF</div>
+          <div class="display-6">{{ total_with_pdf }}</div>
+          <div class="text-muted small">report_file_name not null</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="fw-semibold">PDFs Present On Disk</div>
+          <div class="display-6">{{ present_on_disk }}</div>
+          <div class="text-muted small">Files found in Glaucoma PDF dir</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-3">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="fw-semibold">Unique Patients Tested</div>
+          <div class="display-6">{{ unique_patients }}</div>
+          <div class="text-muted small">Distinct Patient IDs with reports</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>Result</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Value</th>
+                <th class="text-end">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for val, cnt in result_counts %}
+              <tr>
+                <td>{{ val or '—' }}</td>
+                <td class="text-end">{{ cnt }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>Qualitative Result</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Value</th>
+                <th class="text-end">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for val, cnt in qualitative_counts %}
+              <tr>
+                <td>{{ val or '—' }}</td>
+                <td class="text-end">{{ cnt }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>VCDR Right</strong></div>
+        <div class="card-body p-0">
+          <div class="p-3">
+            <div class="fw-semibold mb-2">Histogram (0.00–1.00, step 0.05)</div>
+            <div class="mb-2 small text-muted">Total values: {{ hist_right.total }}</div>
+            {% if hist_right.labels %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                  <thead>
+                    <tr>
+                      <th class="w-25">Bin</th>
+                      <th>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% set maxc = (hist_right.counts | max) if hist_right.counts else 0 %}
+                    {% for label in hist_right.labels %}
+                      {% set cnt = hist_right.counts[loop.index0] %}
+                      {% set pct = (cnt / maxc * 100) if maxc else 0 %}
+                      <tr>
+                        <td class="text-nowrap">{{ label }}</td>
+                        <td>
+                          <div class="progress" style="height: 14px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ '%.1f'|format(pct) }}%;" aria-valuenow="{{ cnt }}" aria-valuemin="0" aria-valuemax="{{ maxc }}">{{ cnt }}</div>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <em class="text-muted">No numeric values found.</em>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>VCDR Left</strong></div>
+        <div class="card-body p-0">
+          <div class="p-3">
+            <div class="fw-semibold mb-2">Histogram (0.00–1.00, step 0.05)</div>
+            <div class="mb-2 small text-muted">Total values: {{ hist_left.total }}</div>
+            {% if hist_left.labels %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                  <thead>
+                    <tr>
+                      <th class="w-25">Bin</th>
+                      <th>Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% set maxc = (hist_left.counts | max) if hist_left.counts else 0 %}
+                    {% for label in hist_left.labels %}
+                      {% set cnt = hist_left.counts[loop.index0] %}
+                      {% set pct = (cnt / maxc * 100) if maxc else 0 %}
+                      <tr>
+                        <td class="text-nowrap">{{ label }}</td>
+                        <td>
+                          <div class="progress" style="height: 14px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ '%.1f'|format(pct) }}%;" aria-valuenow="{{ cnt }}" aria-valuemin="0" aria-valuemax="{{ maxc }}">{{ cnt }}</div>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <em class="text-muted">No numeric values found.</em>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -138,21 +138,16 @@
             <div class="scr-sec-title small text-uppercase text-muted mb-1">DR Report</div>
             {% if enc.dr_reports %}
             <div class="scr-scroll">
-              {# Collect PDFs from encounter_files #}
-              {% set pdfs = [] %}
-              {% for ef in enc.encounter_files if ef.file_type == 'pdf' %}
-                {% set _ = pdfs.append(ef) %}
-              {% endfor %}
               {% for dr in enc.dr_reports %}
               <div class="mb-2">
                 <span class="fw-semibold">{{ dr.result or '-' }}</span>
                 {% if dr.qualitative_result %}
                 <div class="small text-muted">{{ dr.qualitative_result }}</div>
                 {% endif %}
-                {% if pdfs %}
+                {% if dr.report_file_name %}
                   <div class="mt-2">
                     <a class="btn btn-sm btn-outline-primary"
-                       href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                       href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}"
                        target="_blank" rel="noopener">Open PDF</a>
                   </div>
                 {% endif %}
@@ -169,11 +164,6 @@
             <div class="scr-sec-title small text-uppercase text-muted mb-1">Glaucoma Report</div>
             {% if enc.glaucoma_reports %}
             <div class="scr-scroll">
-              {# Collect PDFs from encounter_files #}
-              {% set pdfs = [] %}
-              {% for ef in enc.encounter_files if ef.file_type == 'pdf' %}
-                {% set _ = pdfs.append(ef) %}
-              {% endfor %}
               {% for gr in enc.glaucoma_reports %}
               <div class="mb-2">
                 <span class="fw-semibold">{{ gr.result or '-' }}</span>
@@ -183,10 +173,10 @@
                 {% if gr.qualitative_result %}
                 <div class="small text-muted">{{ gr.qualitative_result }}</div>
                 {% endif %}
-                {% if pdfs %}
+                {% if gr.report_file_name %}
                   <div class="mt-2">
                     <a class="btn btn-sm btn-outline-primary"
-                       href="{{ url_for('media.serve_file_by_uuid', uuid=pdfs[0].uuid) }}"
+                       href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.uuid) }}"
                        target="_blank" rel="noopener">Open PDF</a>
                   </div>
                 {% endif %}
@@ -215,11 +205,16 @@
                 {% for ef in enc.encounter_files if ef.file_type == 'image' %}
                 <a href="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" data-pswp-type="image" title="Image"></a>
                 {% endfor %}
-                {# PDFs via EncounterFile UUIDs #}
-                {% for pf in enc.encounter_files if pf.file_type == 'pdf' %}
-                <a href="{{ url_for('media.serve_file_by_uuid', uuid=pf.uuid) }}" data-pswp-type="html"
-                   data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('media.serve_file_by_uuid', uuid=pf.uuid) | e }}' title='PDF' frameborder='0'></iframe></div>"
-                   title="PDF"></a>
+                {# PDFs via Report UUIDs (split pages) #}
+                {% for dr in enc.dr_reports if dr.report_file_name %}
+                <a href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" data-pswp-type="html"
+                   data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) | e }}' title='DR PDF' frameborder='0'></iframe></div>"
+                   title="DR PDF"></a>
+                {% endfor %}
+                {% for gr in enc.glaucoma_reports if gr.report_file_name %}
+                <a href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.uuid) }}" data-pswp-type="html"
+                   data-pswp-html="<div class='pswp__pdfwrap'><iframe src='{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.uuid) | e }}' title='Glaucoma PDF' frameborder='0'></iframe></div>"
+                   title="Glaucoma PDF"></a>
                 {% endfor %}
               </div>
             {% else %}

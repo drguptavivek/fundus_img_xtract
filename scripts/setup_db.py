@@ -56,6 +56,16 @@ def migrate_uuids(check_only: bool, batch_size: int, progress_every: int) -> Non
     )
 
 
+def migrate_eye_side(dry_run: bool) -> None:
+    print("Preparing migration for encounter_files.eye_side ...", flush=True)
+    try:
+        from migrate_eye_side import migrate  # type: ignore
+    except Exception as e:  # pragma: no cover
+        print(f"Failed to import migrate_eye_side.py: {e}")
+        return
+    migrate(dry_run=dry_run)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Initialize database and optionally backfill UUIDs.")
     parser.add_argument(
@@ -67,6 +77,11 @@ def main() -> None:
         "--check-only",
         action="store_true",
         help="When used with --migrate-uuids, show counts only and do not apply changes",
+    )
+    parser.add_argument(
+        "--migrate-eye-side",
+        action="store_true",
+        help="Add eye_side column to encounter_files and index it",
     )
     parser.add_argument(
         "--batch-size",
@@ -85,6 +100,8 @@ def main() -> None:
     create_tables()
     if args.migrate_uuids:
         migrate_uuids(args.check_only, args.batch_size, args.progress_every)
+    if args.migrate_eye_side:
+        migrate_eye_side(dry_run=args.check_only)
 
 
 if __name__ == "__main__":

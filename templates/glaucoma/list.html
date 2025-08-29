@@ -80,6 +80,9 @@
               {% if gr.report_file_name %}
               <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank" rel="noopener">PDF</a>
               {% endif %}
+              {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager') %}
+              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_edit', clean_id=gr.id) }}">Edit</a>
+              {% endif %}
             </div>
           </td>
         </tr>

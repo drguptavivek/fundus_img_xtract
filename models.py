@@ -74,6 +74,8 @@ class EncounterFile(Base):
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
     # New: stable unique identifier for each extracted file
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
+    # Optional: laterality annotation for images ('right', 'left', 'cannot_tell')
+    eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
 

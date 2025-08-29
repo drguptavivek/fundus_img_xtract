@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Edit Glaucoma Result #{{ row.id }}{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+  <!-- Top: two rows with fields -->
+  <form id="main-form" method="post" action="">
+    {{ csrf_field() }}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header"><strong>Edit Glaucoma Result</strong></div>
+      <div class="card-body">
+      <!-- Row 1: ID, Name, VCDR R, VCDR L, Nav -->
+      <div class="row g-3 align-items-end">
+        <div class="col-6 col-md-2">
+          <label class="form-label">Patient ID (PEC ID)</label>
+          <input type="text" name="patient_id" class="form-control" maxlength="15" value="{{ row.patient_encounter.patient_id if row.patient_encounter else '' }}">
+        </div>
+        <div class="col-6 col-md-4">
+          <label class="form-label">Patient Name</label>
+          <input type="text" class="form-control" maxlength="30" value="{{ row.patient_encounter.name if row.patient_encounter else '' }}" readonly>
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">VCDR Right</label>
+          <input type="number" step="0.01" min="0" max="1" name="vcdr_right_num" class="form-control" maxlength="6" value="{{ '%.2f'|format(row.vcdr_right_num) if row.vcdr_right_num is not none else '' }}">
+        </div>
+        <div class="col-6 col-md-2">
+          <label class="form-label">VCDR Left</label>
+          <input type="number" step="0.01" min="0" max="1" name="vcdr_left_num" class="form-control" maxlength="6" value="{{ '%.2f'|format(row.vcdr_left_num) if row.vcdr_left_num is not none else '' }}">
+        </div>
+        <div class="col-12 col-md-2 text-end">
+          <div class="btn-group" role="group" aria-label="Prev/Next">
+            <a class="btn btn-outline-secondary btn-sm {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr; Prev</a>
+            <a class="btn btn-outline-secondary btn-sm {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next &rarr;</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Results and Qual Result -->
+      <div class="row g-3 mt-1">
+        <div class="col-12 col-md-6">
+          <label class="form-label">Result</label>
+          <textarea name="result" class="form-control" rows="2">{{ row.result or '' }}</textarea>
+        </div>
+        <div class="col-12 col-md-6">
+          <label class="form-label">Qualitative Result</label>
+          <textarea name="qualitative_result" class="form-control" rows="2">{{ row.qualitative_result or '' }}</textarea>
+        </div>
+      </div>
+      </div>
+      {# Save button moved below PDF viewer per request #}
+    </div>
+  </form>
+
+  <!-- Below: two columns: Left images grid, Right PDF narrower -->
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong>Encounter Images</strong>
+          <span class="small text-muted">Right / Left / Cannot tell</span>
+        </div>
+        <div class="card-body">
+          {% if row.patient_encounter and row.patient_encounter.encounter_files %}
+            <div class="row g-3">
+            {% for ef in row.patient_encounter.encounter_files if ef.file_type == 'image' %}
+              <div class="col-12 col-md-6">
+                <div class="border rounded p-2 h-100 d-flex flex-column">
+                  <div class="mb-2" style="width:100%; height:240px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+                    <img src="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
+                  </div>
+                  <form method="post" action="{{ url_for('glaucoma.glaucoma_mark_eye', clean_id=row.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="ef_id" value="{{ ef.id }}">
+                    {% set sel = (ef.eye_side or '') %}
+                    <button name="side" value="right" type="submit" class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
+                    <button name="side" value="left" type="submit" class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
+                    <button name="side" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+            </div>
+          {% else %}
+            <em class="text-muted">No images found for this encounter.</em>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>PDF Report</strong></div>
+        <div class="card-body">
+          {% if row.report_uuid %}
+            <div style="height: 50vh;">
+              <iframe src="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=row.report_uuid) }}" title="Glaucoma PDF" frameborder="0" style="width:100%; height:100%;"></iframe>
+            </div>
+          {% elif row.report_file_name %}
+            <div style="height: 50vh;">
+              <iframe src="{{ url_for('reports.serve_glaucoma_pdf', filename=row.report_file_name) }}" title="Glaucoma PDF" frameborder="0" style="width:100%; height:100%;"></iframe>
+            </div>
+          {% else %}
+            <em class="text-muted">No PDF linked for this record.</em>
+          {% endif %}
+        </div>
+      </div>
+      <div class="text-end mt-2">
+        <button type="submit" class="btn btn-primary" form="main-form">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+
+
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/glaucoma_edit.js') }}?v={{ v }}"></script>
+{% endblock %}

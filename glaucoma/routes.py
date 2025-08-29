@@ -1,7 +1,7 @@
 import re
 import pandas as pd
 import numpy as np
-from flask import render_template, request, current_app, url_for
+from flask import render_template, request, current_app, url_for, redirect, flash
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload, joinedload
 from datetime import datetime, date as _date
@@ -9,7 +9,7 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned
+from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile
 from process_pdfs import GLAUCOMA_PDF_DIR
 
 
@@ -455,3 +455,153 @@ def glaucoma_detail(clean_id: int):
         gallery_id=gallery_id,
         back_label=back_label,
     )
+
+
+@bp.route("/edit/<int:clean_id>", methods=["GET", "POST"])
+@roles_required("admin", "optometrist", "data_manager")
+def glaucoma_edit(clean_id: int):
+    db = Session()
+    try:
+        row = (
+            db.query(GlaucomaResultsCleaned)
+              .options(
+                  joinedload(GlaucomaResultsCleaned.patient_encounter)
+                    .selectinload(PatientEncounters.encounter_files)
+              )
+              .filter(GlaucomaResultsCleaned.id == clean_id)
+              .first()
+        )
+        if not row:
+            from flask import abort
+            abort(404)
+
+        if request.method == "POST":
+            def _to_float(val):
+                if val is None:
+                    return None
+                s = str(val).strip()
+                if s == "":
+                    return None
+                try:
+                    f = float(s)
+                    return f
+                except Exception:
+                    return None
+
+            row.vcdr_right_num = _to_float(request.form.get("vcdr_right_num"))
+            row.vcdr_left_num = _to_float(request.form.get("vcdr_left_num"))
+            row.result = (request.form.get("result") or "").strip() or None
+            row.qualitative_result = (request.form.get("qualitative_result") or "").strip() or None
+            # Update basic encounter fields
+            enc = row.patient_encounter
+            if enc is not None:
+                new_pid = (request.form.get("patient_id") or "").strip()
+                if new_pid:
+                    enc.patient_id = new_pid
+                date_str = (request.form.get("capture_date_dt") or "").strip()
+                if date_str:
+                    try:
+                        from datetime import datetime as _dt
+                        d = _dt.strptime(date_str, "%Y-%m-%d").date()
+                        enc.capture_date_dt = d
+                        # keep string field in sync for legacy displays
+                        enc.capture_date = d.isoformat()
+                    except Exception:
+                        pass
+
+            db.add(row)
+            db.commit()
+
+            # Verify that all images for this encounter have laterality set
+            missing = (
+                db.query(EncounterFile)
+                  .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
+                  .filter(EncounterFile.file_type == 'image')
+                  .filter(
+                      (EncounterFile.eye_side.is_(None)) |
+                      (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+                  )
+                  .count()
+            )
+            if missing and missing > 0:
+                flash(f"Saved. {missing} image(s) still untagged. Please mark Right/Left/Cannot tell.", "danger")
+            else:
+                flash("Saved. All images are tagged.", "success")
+            return redirect(url_for("glaucoma.glaucoma_edit", clean_id=row.id))
+
+        # Compute prev/next neighbors for navigation on edit page
+        enc = row.patient_encounter
+        d = enc.capture_date_dt if enc else None
+        cur_id = row.id
+        prev_row = None
+        next_row = None
+        if d is not None:
+            prev_row = (
+                db.query(GlaucomaResultsCleaned)
+                .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                .filter(
+                    (PatientEncounters.capture_date_dt > d)
+                    | ((PatientEncounters.capture_date_dt == d) & (GlaucomaResultsCleaned.id > cur_id))
+                )
+                .order_by(PatientEncounters.capture_date_dt.asc(), GlaucomaResultsCleaned.id.asc())
+                .first()
+            )
+            next_row = (
+                db.query(GlaucomaResultsCleaned)
+                .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+                .filter(
+                    (PatientEncounters.capture_date_dt < d)
+                    | ((PatientEncounters.capture_date_dt == d) & (GlaucomaResultsCleaned.id < cur_id))
+                )
+                .order_by(PatientEncounters.capture_date_dt.desc(), GlaucomaResultsCleaned.id.desc())
+                .first()
+            )
+        prev_url = url_for("glaucoma.glaucoma_edit", clean_id=prev_row.id) if prev_row else None
+        next_url = url_for("glaucoma.glaucoma_edit", clean_id=next_row.id) if next_row else None
+    finally:
+        db.close()
+
+    return render_template("glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url)
+
+
+@bp.route("/edit/<int:clean_id>/mark_eye", methods=["POST"])
+@roles_required("admin", "optometrist", "data_manager")
+def glaucoma_mark_eye(clean_id: int):
+    side = (request.form.get("side") or "").strip().lower()
+    ef_id = request.form.get("ef_id")
+    if side not in {"right", "left", "cannot_tell"}:
+        # AJAX response if requested
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "invalid_side"}, 400
+        flash("Invalid selection.", "danger")
+        return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+    try:
+        ef_id_int = int(ef_id)
+    except Exception:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "invalid_image"}, 400
+        flash("Invalid image id.", "danger")
+        return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+
+    db = Session()
+    try:
+        row = db.query(GlaucomaResultsCleaned).filter(GlaucomaResultsCleaned.id == clean_id).first()
+        if not row:
+            from flask import abort
+            abort(404)
+        ef = db.query(EncounterFile).filter(EncounterFile.id == ef_id_int).first()
+        if not ef or ef.patient_encounter_id != row.patient_encounter_id:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                return {"ok": False, "error": "not_found"}, 404
+            flash("Image not found for this encounter.", "danger")
+            return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+        ef.eye_side = side
+        db.add(ef)
+        db.commit()
+        # AJAX response: avoid full page reload
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": True, "ef_id": ef.id, "side": ef.eye_side}
+        flash("Image laterality updated.", "success")
+    finally:
+        db.close()
+    return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))

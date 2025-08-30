@@ -244,6 +244,79 @@
     </div>
   </section>
 
+  <!-- Soft Tinted Cards -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Soft Tinted Cards</h2>
+    <p class="small text-body-secondary mb-2">Subtle, solid tints via <code>.card-soft-*</code> classes.</p>
+    <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3">
+      {% for name in ['primary','secondary','success','danger','warning','info'] %}
+      <div class="col">
+        <div class="card card-soft-{{ name }} h-100">
+          <div class="card-body">
+            <div class="fw-semibold text-capitalize">{{ name }} soft</div>
+            <div class="small opacity-75">Tinted background, subtle border</div>
+          </div>
+          <div class="card-footer small text-body-secondary"><code>.card-soft-{{ name }}</code></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Progress Bars -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Progress</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="fw-semibold mb-2">Basic</div>
+        <div class="progress mb-2" style="height: 10px;">
+          <div class="progress-bar" style="width: 25%"></div>
+        </div>
+        <div class="progress mb-2">
+          <div class="progress-bar bg-success" style="width: 50%"></div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="fw-semibold mb-2">Striped & Animated</div>
+        <div class="progress mb-2">
+          <div class="progress-bar bg-primary progress-bar-striped" style="width: 60%"></div>
+        </div>
+        <div class="progress">
+          <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width: 75%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="small text-body-secondary mt-2">Striping colors adapt to each variant.</div>
+  </section>
+
+  <!-- High Contrast Wrapper -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">High Contrast</h2>
+    <p class="small text-body-secondary mb-2">Use <code>.theme-contrast</code> to neutralize gradients for data-heavy views.</p>
+    <div class="row g-3 row-cols-1 row-cols-md-2">
+      <div class="col">
+        <div class="card card-rainbow h-100">
+          <div class="card-body">
+            <div class="fw-semibold">Gradient card</div>
+            <div class="small opacity-75">Default colorful style</div>
+          </div>
+          <div class="card-footer small text-body-secondary"><code>.card-rainbow</code></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="theme-contrast p-2 h-100">
+          <div class="card card-rainbow h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Neutralized</div>
+              <div class="small opacity-75">Contrast wrapper applied</div>
+            </div>
+            <div class="card-footer small text-body-secondary"><code>.theme-contrast .card-rainbow</code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Typography -->
   <section class="mb-5">
     <h2 class="h5 mb-3">Typography</h2>

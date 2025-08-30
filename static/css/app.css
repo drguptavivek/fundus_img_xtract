@@ -575,6 +575,7 @@
   height: calc(1.5em + .5rem + 2px);
   padding: 0;
   background: transparent
+  
 }
 
 .page-box:focus-within {
@@ -695,3 +696,11 @@
 .card:has(.imggr-filters input[value="bluemono"]:checked) .imggr-main-img { filter: url(#pswp-bluemono); }
 .card:has(.imggr-filters input[value="gray"]:checked) .imggr-main-img { filter: url(#pswp-gray); }
 .card:has(.imggr-filters input[value="contrast"]:checked) .imggr-main-img { filter: url(#pswp-contrast); }
+
+
+
+[data-bs-theme="dark"]  .btn-outline-secondary {
+  color: var(--bs-light);
+  border-color: var(--bs-light);
+
+}

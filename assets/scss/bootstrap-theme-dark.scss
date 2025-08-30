@@ -11,7 +11,8 @@ $info:     #38bdf8;  // blue
 $warning:  #facc15;  // amber
 $danger:   #f77a72;  // red
 
-@use "bootstrap/scss/bootstrap" as bs with (
+// Resolve to node_modules/bootstrap/scss via CLI --load-path
+@use "bootstrap" as bs with (
   $color-mode-type: null,
 
   $primary:  $primary,

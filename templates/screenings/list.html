@@ -39,7 +39,7 @@
     {# RIGHT: Pager #}
     <div class="col-12 col-lg-4 order-2 order-lg-3 d-flex justify-content-lg-end">
       <div class="d-inline-flex align-items-center gap-2">
-        <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
+        <a class="btn btn-outline-secondary btn-sm  {% if not has_prev %}disabled{% endif %}"
            href="{{ prev_url or '#' }}"
            tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
 
@@ -93,9 +93,9 @@
           <div class="me-2 flex-grow-1 min-w-0">
             <div class="fw-semibold text-truncate">{{ enc.name or '—' }}</div>
 
-            <div class="d-flex flex-wrap align-items-center gap-2 small scr-meta">
+            <div class="d-flex flex-wrap align-items-center gap-2  ">
               <span class="fw-semibold text-body">ID:</span>
-              <code class="fw-semibold text-body">{{ enc.patient_id or '—' }}</code>
+              <span class="fw-semibold text-body">{{ enc.patient_id or '—' }}</span>
 
               <span class="vr d-none d-sm-inline mx-1"></span>
               <span class="fw-semibold text-body">Capture:</span>

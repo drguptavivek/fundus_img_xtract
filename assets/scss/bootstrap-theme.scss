@@ -2,11 +2,12 @@
 // Uses data attribute color mode (data-bs-theme) and overrides core tokens
 
 @use "sass:color";
-@use "bootstrap/scss/bootstrap" as bs with (
+// Resolve to node_modules/bootstrap/scss via CLI --load-path
+@use "bootstrap" as bs with (
   $color-mode-type: data,
 
   // Brand palette (light mode)
-  $dark:     #0b1314,
+  $dark:     #17292c,
   $light:    #f8f9fa,
   $primary:  #0ea5a6,
   $secondary:#5b6073,
@@ -94,7 +95,7 @@ $brand-colors: (
 
 // Additional dark CSS variables not exposed via Sass config
 [data-bs-theme="dark"] {
-  --bs-card-bg: #121a1d;
+  --bs-card-bg: #192529;
   --bs-card-border-color: #223136;
   /* text emphasis */
   --bs-primary-text-emphasis:  #9beae2;
@@ -268,7 +269,7 @@ $brand-colors: (
   // Headings and header text: bright in dark mode
   :root, [data-bs-theme="dark"] {
     --bs-heading-color: #eef3f5;
-    --bs-border-color: #2b3940; // slightly brighter divider for better contrast
+    --bs-border-color: #3b5661; // slightly brighter divider for better contrast
     --bs-body-color: #ffffff;   // ensure body text is white
   }
 
@@ -280,7 +281,7 @@ $brand-colors: (
   // Tables and cards: brighter text and borders
   .table { color: #f3f6f8; }
   .table > :not(caption) > * > * { border-color: var(--bs-border-color); }
-  .card { border-color: var(--bs-border-color); }
+  .card { border-color: var(--bs-secondary); }
   .card .card-header { border-bottom-color: var(--bs-border-color); }
 
   // Forms: ensure labels are readable in dark mode

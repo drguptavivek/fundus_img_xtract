@@ -446,6 +446,11 @@
   font-size: .9rem;
 }
 
+/* Light theme: ensure filename text is dark and readable */
+[data-bs-theme="light"] .sv-filebar-name {
+  color: var(--bs-body-color, #212529);
+}
+
 
 /* Subtle top navigation for screening detail */
 .sv-topbar .btn {

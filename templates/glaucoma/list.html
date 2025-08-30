@@ -7,114 +7,125 @@
   <a class="btn btn-sm btn-primary" href="{{ url_for('glaucoma.glaucoma_results') }}">Glaucoma Dashboard</a>
   <div class="w-100 small text-muted">Date-wise order by encounter capture date (newest first).</div>
 
-  <div class="d-flex align-items-center justify-content-between w-100 mt-1">
-    <!-- Left: Active date + Dashboard button near title -->
-    {% if selected_date %}
-    <div class="d-flex align-items-center gap-2">
-      <span class="small text-muted">Active date:</span>
-      <span class="fw-semibold">{{ selected_date }}</span>
-      <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Verify filter">
-        <a class="btn btn-outline-secondary {% if ver=='all' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='all') }}">All</a>
-        <a class="btn btn-outline-secondary {% if ver=='yes' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='yes') }}">Verified</a>
-        <a class="btn btn-outline-secondary {% if ver=='no' %}active{% endif %}" href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='no') }}">Unverified</a>
+  <!-- GLAUCOMA REPORTS -->
+  <div class="card shadow-sm mb-3 mt-3 w-100">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center justify-content-between w-100 mt-1">
+        <!-- Left: Active date + Dashboard button near title -->
+        {% if selected_date %}
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Active date:</span>
+          <span class="fw-semibold">{{ selected_date }}</span>
+          <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Verify filter">
+            <a class="btn btn-outline-secondary {% if ver=='all' %}active{% endif %}"
+              href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='all') }}">All</a>
+            <a class="btn btn-outline-secondary {% if ver=='yes' %}active{% endif %}"
+              href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='yes') }}">Verified</a>
+            <a class="btn btn-outline-secondary {% if ver=='no' %}active{% endif %}"
+              href="{{ url_for('glaucoma.glaucoma_list', page=page, ver='no') }}">Unverified</a>
+          </div>
+          <a class="btn btn-sm btn-warning ms-2 {% if not recent_unverified_url %}disabled{% endif %}"
+            href="{{ recent_unverified_url or '#' }}">Most Recent Unverified</a>
+        </div>
+        {% else %}
+        {% endif %}
+
+        <!-- Right: Datepicker + Pager -->
+        <div class="d-inline-flex align-items-center gap-2">
+          <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
+            <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date or '' }}"
+              aria-label="Pick date">
+            <button class="btn btn-sm btn-outline-primary text-bg-danger" type="submit">Go</button>
+            {% if selected_date %}
+            <a class="btn btn-sm btn-outline-secondary .shadow-sm" href="{{ url_for('glaucoma.glaucoma_list') }}">Clear</a>
+            {% endif %}
+            {% if ver and ver!='all' %}
+            <input type="hidden" name="ver" value="{{ ver }}">
+            {% endif %}
+          </form>
+
+          <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
+            href="{{ prev_url or '#' }}" tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
+
+          <form class="d-inline" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
+            <label for="goto-page" class="visually-hidden">Go to page</label>
+            <div class="page-box btn-sm">
+              <input type="number" id="goto-page" name="page" class="page-input" inputmode="numeric" min="1"
+                max="{{ total_pages }}" value="{{ page }}" aria-label="Go to page">
+              <span class="sep">/ {{ total_pages }}</span>
+            </div>
+            {% if ver and ver!='all' %}<input type="hidden" name="ver" value="{{ ver }}">{% endif %}
+          </form>
+
+          <a class="btn btn-outline-secondary btn-sm {% if not has_next %}disabled{% endif %}"
+            href="{{ next_url or '#' }}" tabindex="{% if not has_next %}-1{% else %}0{% endif %}">Next →</a>
+        </div>
       </div>
-      <a class="btn btn-sm btn-outline-warning ms-2 {% if not recent_unverified_url %}disabled{% endif %}"
-         href="{{ recent_unverified_url or '#' }}">Most Recent Unverified</a>
+    </div>
+  <div class="card-body p-2">
+    <!-- Start  table  -->
+    {% if items %}
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="text-nowrap">Capture Date</th>
+              <th>Patient ID</th>
+              <th>Patient Name</th>
+              <th>Result</th>
+              <th>VCDR R</th>
+              <th>VCDR L</th>
+              <th>Verified</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for gr in items %}
+            {% set enc = gr.patient_encounter %}
+            <tr>
+              <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d')
+                }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
+              <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
+              <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
+              <td>{{ gr.result or '-' }}</td>
+              <td>{% if gr.vcdr_right_num is not none %}{{ '%.2f'|format(gr.vcdr_right_num) }}{% else %}-{% endif %}
+              </td>
+              <td>{% if gr.vcdr_left_num is not none %}{{ '%.2f'|format(gr.vcdr_left_num) }}{% else %}-{% endif %}</td>
+              <td>{% if enc and enc.glaucoma_verified_status == 'verified' %}Yes{% else %}No{% endif %}</td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <a class="btn btn-outline-secondary"
+                    href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
+                  {% if gr.report_file_name %}
+                  <a class="btn btn-outline-secondary"
+                    href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank"
+                    rel="noopener">PDF</a>
+                  {% endif %}
+                  {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager')
+                  %}
+                  <a class="btn btn-outline-primary"
+                    href="{{ url_for('glaucoma.glaucoma_edit', clean_id=gr.id) }}">Verify</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
     {% else %}
-    <div></div>
+    <div class="text-center text-muted p-4">No glaucoma reports found.</div>
     {% endif %}
-
-    <!-- Right: Datepicker + Pager -->
-    <div class="d-inline-flex align-items-center gap-2">
-      <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
-        <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date or '' }}" aria-label="Pick date">
-        <button class="btn btn-sm btn-outline-primary" type="submit">Go</button>
-        {% if selected_date %}
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_list') }}">Clear</a>
-        {% endif %}
-        {% if ver and ver!='all' %}
-          <input type="hidden" name="ver" value="{{ ver }}">
-        {% endif %}
-      </form>
-
-      <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
-         href="{{ prev_url or '#' }}"
-         tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
-
-      <form class="d-inline" method="get" action="{{ url_for('glaucoma.glaucoma_list') }}">
-        <label for="goto-page" class="visually-hidden">Go to page</label>
-        <div class="page-box btn-sm">
-          <input type="number" id="goto-page" name="page" class="page-input" inputmode="numeric"
-                 min="1" max="{{ total_pages }}" value="{{ page }}" aria-label="Go to page">
-          <span class="sep">/ {{ total_pages }}</span>
-        </div>
-        {% if ver and ver!='all' %}<input type="hidden" name="ver" value="{{ ver }}">{% endif %}
-        {# page-based date navigation; no hidden date here #}
-      </form>
-
-      <a class="btn btn-outline-secondary btn-sm {% if not has_next %}disabled{% endif %}"
-         href="{{ next_url or '#' }}"
-         tabindex="{% if not has_next %}-1{% else %}0{% endif %}">Next →</a>
-    </div>
   </div>
 </div>
+<!-- End table  -->
+<!-- END GLAUCOMA REPORTS -->
 
-
-
-{% if items %}
-<div class="card shadow-sm">
-  <div class="table-responsive">
-    <table class="table table-sm align-middle mb-0">
-      <thead>
-        <tr>
-          <th class="text-nowrap">Capture Date</th>
-          <th>Patient ID</th>
-          <th>Patient Name</th>
-          <th>Result</th>
-          <th>VCDR R</th>
-          <th>VCDR L</th>
-          <th>Verified</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for gr in items %}
-        {% set enc = gr.patient_encounter %}
-        <tr>
-          <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
-          <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
-          <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
-          <td>{{ gr.result or '-' }}</td>
-          <td>{% if gr.vcdr_right_num is not none %}{{ '%.2f'|format(gr.vcdr_right_num) }}{% else %}-{% endif %}</td>
-          <td>{% if gr.vcdr_left_num is not none %}{{ '%.2f'|format(gr.vcdr_left_num) }}{% else %}-{% endif %}</td>
-          <td>{% if enc and enc.glaucoma_verified_status == 'verified' %}Yes{% else %}No{% endif %}</td>
-          <td class="text-end">
-            <div class="btn-group btn-group-sm" role="group">
-              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
-              {% if gr.report_file_name %}
-              <a class="btn btn-outline-primary" href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gr.report_uuid) }}" target="_blank" rel="noopener">PDF</a>
-              {% endif %}
-              {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager') %}
-              <a class="btn btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_edit', clean_id=gr.id) }}">Verify</a>
-              {% endif %}
-            </div>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-{% else %}
-  <div class="text-center text-muted p-4">No glaucoma reports found.</div>
-{% endif %}
-
-{# bottom pager removed per request #}
-
-{# My recently verified by me (last 20) — moved below the main list #}
+<!--  recently verified by me (last 20) -->
 {% if my_recent_verified %}
-<div class="card shadow-sm mb-3 mt-3">
+<div class="card shadow-sm mb-3 mt-3 w-100">
   <div class="card-header d-flex justify-content-between align-items-center">
     <strong>My Recently Verified ({{ my_recent_verified|length }})</strong>
     <span class="small text-muted">Most recent first</span>
@@ -133,24 +144,27 @@
           </tr>
         </thead>
         <tbody>
-        {% for gr in my_recent_verified %}
+          {% for gr in my_recent_verified %}
           {% set enc = gr.patient_encounter %}
           <tr>
-            <td class="text-nowrap">{% if enc and enc.glaucoma_verified_at %}{{ enc.glaucoma_verified_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
-            <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
+            <td class="text-nowrap">{% if enc and enc.glaucoma_verified_at %}{{
+              enc.glaucoma_verified_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
+            <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{%
+              elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
             <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
             <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
             <td>{{ gr.result or '-' }}</td>
             <td class="text-end">
-              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
+              <a class="btn btn-sm btn-outline-secondary"
+                href="{{ url_for('glaucoma.glaucoma_detail', clean_id=gr.id) }}">View</a>
             </td>
           </tr>
-        {% endfor %}
+          {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-  </div>
+</div>
 {% endif %}
 
 {% endblock %}

@@ -458,6 +458,33 @@
   line-height: 1.2;
 }
 
+
+/* Screening detail: lighten filter buttons (R,G,B,Y,H) in Light mode */
+[data-bs-theme="light"] .sv-filters .btn.btn-outline-secondary {
+  color: var(--bs-dark);
+  border-color: var(--bs-dark);
+}
+[data-bs-theme="light"] .sv-filters .btn.btn-outline-secondary:hover,
+[data-bs-theme="light"] .sv-filters .btn.btn-outline-secondary:focus {
+  color: var(--bs-dark);
+  border-color: var(--bs-dark);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+
+
+/* Screening detail: lighten filter buttons (R,G,B,Y,H) in dark mode */
+[data-bs-theme="dark"] .sv-filters .btn.btn-outline-secondary {
+  color: var(--bs-light);
+  border-color: var(--bs-light);
+}
+[data-bs-theme="dark"] .sv-filters .btn.btn-outline-secondary:hover,
+[data-bs-theme="dark"] .sv-filters .btn.btn-outline-secondary:focus {
+  color: var(--bs-light);
+  border-color: var(--bs-light);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
 .btn-subtle {
   border-color: transparent;
   color: var(--bs-secondary-color, #6c757d);
@@ -594,6 +621,13 @@
   background: var(--bs-light);
   color: var(--bs-secondary-color);
   border: 1px solid var(--bs-border-color);
+}
+
+/* Dark mode: ensure readable badge for encounter number */
+[data-bs-theme="dark"] .scr-badge {
+  background-color: var(--bs-secondary-bg-subtle);
+  color: var(--bs-secondary-text-emphasis);
+  border-color: var(--bs-secondary-border-subtle);
 }
 
 /* Slight emphasis + hover lift for the CTA */

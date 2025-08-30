@@ -4,65 +4,91 @@
 {% block content %}
 <div class="container py-4">
 
+  <!-- Hero / Welcome -->
+  <div class="card card-aurora mb-4">
+    <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
+      <div class="flex-fill">
+        <h1 class="h4 mb-2">Welcome to Fundus Image Extractor</h1>
+        <p class="mb-0 opacity-75">
+          Upload ZIPs of fundus images, extract reports, and review screenings — all in one place.
+        </p>
+      </div>
+      {% if not current_user.is_authenticated %}
+      <div class="ms-md-3 mt-3 mt-md-0 text-md-end">
+        <a class="btn btn-primary" href="{{ url_for('auth.login') }}">Login to get started</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
 
-    <!-- Welcome Card -->
-    <div class="card shadow-sm mb-4">
-      <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
-        <div class="flex-fill">
-          <h1 class="h4 mb-2">Welcome to Fundus Image Extractor</h1>
-          <p class="mb-0 text-muted">
-            Upload ZIPs of fundus images, extract reports, and review screenings — all in one place.
-          </p>
+  <!-- Quick Actions -->
+  <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-4 mb-4">
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('uploads.upload_form') }}">
+        <div class="card card-forest h-100">
+          <div class="card-body">
+            <div class="fw-semibold">Upload Files</div>
+            <div class="small opacity-75">ZIPs of fundus images</div>
+          </div>
         </div>
-          {% if not current_user.is_authenticated %}
-        <div class="ms-md-3 mt-3 mt-md-0 text-md-end">
-          <a class="btn btn-primary" href="{{ url_for('auth.login') }}">
-            Login to get started
-          </a>
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('uploaded_results.list_uploaded_results') }}">
+        <div class="card card-sea h-100">
+          <div class="card-body">
+            <div class="fw-semibold">Uploaded Results</div>
+            <div class="small opacity-75">Review extracted data</div>
+          </div>
         </div>
-          {% endif %}
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('jobs.list_recent_jobs') }}">
+        <div class="card card-violet h-100">
+          <div class="card-body">
+            <div class="fw-semibold">Jobs</div>
+            <div class="small opacity-75">Track processing status</div>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="col">
+      <a class="text-decoration-none" href="{{ url_for('screenings.list_screenings') }}">
+        <div class="card card-sunrise h-100">
+          <div class="card-body">
+            <div class="fw-semibold">Screenings</div>
+            <div class="small opacity-75">Browse patient encounters</div>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3">
+    <div class="col-12 col-md-6">
+      <div class="card kpi-card kpi--primary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
+          <div class="display-6 fw-bold">{{ images_count or 0 }}</div>
+          <div class="small opacity-75">All images detected across uploads</div>
+        </div>
       </div>
     </div>
 
-    <!-- Public KPIs -->
-    <div class="row g-3">
-      <div class="col-12 col-md-6">
-        <div class="card kpi-card shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <div class="text-muted small">Total Images</div>
-                <div class="display-6 fw-semibold">{{ images_count or 0 }}</div>
-              </div>
-              <div aria-hidden="true" class="opacity-50">
-                <!-- simple icon-ish circle -->
-                <div class="rounded-circle bg-light" style="width:48px;height:48px;"></div>
-              </div>
-            </div>
-            <div class="mt-2 small text-muted">All images detected across uploaded encounters.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-12 col-md-6">
-        <div class="card kpi-card shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex align-items-center justify-content-between">
-              <div>
-                <div class="text-muted small">Total Screenings</div>
-                <div class="display-6 fw-semibold">{{ screenings_count or 0 }}</div>
-              </div>
-              <div aria-hidden="true" class="opacity-50">
-                <div class="rounded-circle bg-light" style="width:48px;height:48px;"></div>
-              </div>
-            </div>
-            <div class="mt-2 small text-muted">Patient encounters processed by the system.</div>
-          </div>
+    <div class="col-12 col-md-6">
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Screenings</div>
+          <div class="display-6 fw-bold">{{ screenings_count or 0 }}</div>
+          <div class="small opacity-75">Patient encounters processed</div>
         </div>
       </div>
     </div>
+  </div>
 
-
+  <div class="mt-4"></div>
 
 </div>
 {% endblock %}

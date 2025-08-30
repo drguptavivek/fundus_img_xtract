@@ -82,9 +82,42 @@ def create_app():
     http_error_logger = logging.getLogger("http_error")
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
+    # Prevent duplicate propagation to root
+    http_success_logger.propagate = False
+    http_error_logger.propagate = False
 
-    success_handler = RotatingFileHandler(success_log_path, maxBytes=2 * 1024 * 1024, backupCount=5)
-    error_handler = RotatingFileHandler(error_log_path, maxBytes=2 * 1024 * 1024, backupCount=5)
+    # If reloaded (e.g., dev), remove and close existing handlers to release file locks on Windows
+    for lg in (http_success_logger, http_error_logger):
+        if lg.handlers:
+            for h in list(lg.handlers):
+                try:
+                    lg.removeHandler(h)
+                finally:
+                    try:
+                        h.close()
+                    except Exception:
+                        pass
+
+    # Build file handlers. Allow opting out of rotation; default off on Windows
+    dr_env = os.getenv("HTTP_LOG_DISABLE_ROTATION")
+    if dr_env is not None:
+        disable_rotation = str(dr_env).lower() in ("1", "true", "yes")
+    else:
+        # No explicit preference: on Windows default to disabling rotation to avoid file locks
+        disable_rotation = (os.name == "nt") and (str(os.getenv("ENABLE_LOG_ROTATION_ON_WINDOWS", "0")).lower() not in ("1","true","yes"))
+
+    if disable_rotation:
+        from logging import FileHandler
+        success_handler = FileHandler(success_log_path, encoding="utf-8", delay=True)
+        error_handler = FileHandler(error_log_path, encoding="utf-8", delay=True)
+    else:
+        # Use delayed open to reduce locking; ensure UTF-8 encoding
+        success_handler = RotatingFileHandler(
+            success_log_path, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8", delay=True
+        )
+        error_handler = RotatingFileHandler(
+            error_log_path, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8", delay=True
+        )
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     success_handler.setFormatter(fmt)
     error_handler.setFormatter(fmt)
@@ -92,7 +125,8 @@ def create_app():
     http_success_logger.addHandler(success_handler)
     http_error_logger.addHandler(error_handler)
 
-    app.logger.handlers = []  # prevent double logging
+    # prevent double logging to app logger
+    app.logger.handlers = []
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

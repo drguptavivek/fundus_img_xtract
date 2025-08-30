@@ -216,6 +216,7 @@ def create_app():
             or path == "/login"
             or path.startswith("/static/")
             or path == "/favicon.ico"
+            or path == "/style_guide"
         ):
             return  # allowed without auth
         if not current_user.is_authenticated:
@@ -290,6 +291,13 @@ def create_app():
             images_count=images_count,
             screenings_count=screenings_count,
         )
+    # -------------------------------
+
+    # -------------------------------
+    # Style Guide
+    @app.route("/style_guide")
+    def style_guide():
+        return render_template("style_guide.html")
     # -------------------------------
 
     @app.route("/healthz", methods=["GET"])

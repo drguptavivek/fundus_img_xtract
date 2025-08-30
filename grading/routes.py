@@ -7,7 +7,7 @@ import random
 from auth.roles import roles_required
 from . import bp
 from models import Session, PatientEncounters, EncounterFile, ImageGrading, utcnow
- 
+
 
 @bp.route("/", methods=["GET", "POST"])
 @roles_required("admin", "optometrist", "ophthalmologist")

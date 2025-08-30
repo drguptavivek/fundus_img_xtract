@@ -6,6 +6,8 @@
   $color-mode-type: data,
 
   // Brand palette (light mode)
+  $dark:     #0b1314,
+  $light:    #f8f9fa,
   $primary:  #0ea5a6,
   $secondary:#5b6073,
   $success:  #2fbf71,
@@ -20,6 +22,8 @@
     "info":      #1ba1e2,
     "warning":   #f2b705,
     "danger":    #e15249,
+    "dark":      #0b1314,
+    "light":     #f8f9fa,
   ),
 
   // Light mode body defaults
@@ -117,6 +121,16 @@ $brand-colors: (
   --bs-danger-border-subtle:   #7e2e2a;
 }
 
+// Ensure --bs-dark and rgb token are always present
+:root, [data-bs-theme="light"] {
+  --bs-dark: #0b1314;
+  --bs-dark-rgb: 11, 19, 20;
+}
+[data-bs-theme="dark"] {
+  --bs-dark: #0b1314;
+  --bs-dark-rgb: 11, 19, 20;
+}
+
 // Light-mode subtle tokens using OKLCH/LCH mixing for smoother tints
 @include bs.color-mode(light) {
   // Theme-aware navbar (auto light)
@@ -163,24 +177,24 @@ $brand-colors: (
   .card .card-header { color: var(--bs-heading-color); }
   .table thead th { color: var(--bs-heading-color); }
 
-  // Forms: make labels light in dark mode
+  // Forms: use body text color for labels in light mode
   .form-label,
   .col-form-label,
   .form-check-label {
-    color: #f0f3f6;
+    color: var(--bs-body-color);
   }
 
-  // Light-mode: more prominent, summery background gradient on .bg-body
+  // Light-mode: soften background gradient on .bg-body for better contrast
   .bg-body {
     background-color: var(--bs-body-bg);
     background-image:
-      /* stronger neutral vignettes */
-      radial-gradient(1200px 900px at -10% -10%, rgba(var(--bs-dark-rgb), .12), transparent 65%),
-      radial-gradient(1100px 800px at 110% 120%, rgba(var(--bs-dark-rgb), .10), transparent 65%),
-      /* summery splashes darkened in OKLCH */
-      radial-gradient(900px 650px at 85% 15%, color-mix(in oklch, var(--bs-warning) 70%, black 30%) 0%, transparent 62%),
-      radial-gradient(800px 600px at 18% 82%, color-mix(in oklch, var(--bs-danger) 65%, black 35%) 0%, transparent 58%),
-      radial-gradient(850px 620px at 10% 20%, color-mix(in oklch, var(--bs-primary) 70%, black 30%) 0%, transparent 60%);
+      /* softer neutral vignettes */
+      radial-gradient(1200px 900px at -10% -10%, rgba(var(--bs-dark-rgb), .06), transparent 70%),
+      radial-gradient(1100px 800px at 110% 120%, rgba(var(--bs-dark-rgb), .05), transparent 70%),
+      /* softened colorful splashes */
+      radial-gradient(900px 650px at 85% 15%, color-mix(in oklch, var(--bs-warning) 45%, transparent) 0%, transparent 60%),
+      radial-gradient(800px 600px at 18% 82%, color-mix(in oklch, var(--bs-danger) 40%, transparent) 0%, transparent 58%),
+      radial-gradient(850px 620px at 10% 20%, color-mix(in oklch, var(--bs-primary) 45%, transparent) 0%, transparent 60%);
     background-attachment: fixed;
   }
   .btn-outline-primary:hover {
@@ -268,6 +282,13 @@ $brand-colors: (
   .table > :not(caption) > * > * { border-color: var(--bs-border-color); }
   .card { border-color: var(--bs-border-color); }
   .card .card-header { border-bottom-color: var(--bs-border-color); }
+
+  // Forms: ensure labels are readable in dark mode
+  .form-label,
+  .col-form-label,
+  .form-check-label {
+    color: #f0f3f6;
+  }
 
   // Semibold utility should read very white in dark
   .fw-semibold { color: #f5f8fa; }
@@ -363,6 +384,7 @@ $brand-colors: (
 
 .kpi-card {
   box-shadow:
+    0 8px 22px rgba(0, 0, 0, .18),
     0 0 0 1px color-mix(in oklch, var(--kpi-accent) 45%, transparent),
     0 14px 34px color-mix(in oklch, var(--kpi-accent) 24%, transparent);
 }
@@ -370,6 +392,7 @@ $brand-colors: (
 .kpi-card:hover, .kpi-card:focus-within {
   transform: translateY(-2px);
   box-shadow:
+    0 12px 28px rgba(0, 0, 0, .22),
     0 0 0 1px color-mix(in oklch, var(--kpi-accent) 55%, transparent),
     0 18px 42px color-mix(in oklch, var(--kpi-accent) 32%, transparent);
   border-color: color-mix(in oklch, var(--kpi-accent) 35%, var(--bs-border-color));
@@ -465,6 +488,21 @@ $brand-colors: (
   }
 }
 
+// Light-mode readability fixes: ensure dark text for bright gradients
+@include bs.color-mode(light) {
+  .theme-jobs .card,
+  .theme-admin .card,
+  .theme-grading .card,
+  .theme-glaucoma .card,
+  .card-sea,
+  .card-forest,
+  .card-lava,
+  .card-aurora,
+  .card-violet {
+    color: #0b1314;
+  }
+}
+
 // KPI modifiers: reuse riot-card pattern with single dominant hue
 .kpi-card.kpi--primary  { @include riot-card(var(--bs-primary),  var(--bs-info),     var(--bs-success), #0b1314); }
 .kpi-card.kpi--success  { @include riot-card(var(--bs-success),  var(--bs-teal),     var(--bs-primary), #0b1314); }
@@ -472,6 +510,31 @@ $brand-colors: (
 .kpi-card.kpi--warning  { @include riot-card(var(--bs-warning),  var(--bs-orange),   var(--bs-danger),  #0b1314); }
 .kpi-card.kpi--danger   { @include riot-card(var(--bs-danger),   var(--bs-pink),     var(--bs-orange),  #ffffff); }
 .kpi-card.kpi--secondary{ @include riot-card(var(--bs-secondary),var(--bs-indigo),   var(--bs-purple),  #ffffff); }
+
+// Fix: ensure readable text for certain KPI variants in light mode
+@include bs.color-mode(light) {
+  .kpi-card.kpi--danger,
+  .kpi-card.kpi--secondary {
+    color: #0b1314; // dark text in light mode
+  }
+}
+
+// Dark-mode readability fixes: ensure light text for dark background cards
+@include bs.color-mode(dark) {
+  .kpi-card.kpi--primary,
+  .kpi-card.kpi--success,
+  .kpi-card.kpi--info,
+  .kpi-card.kpi--warning,
+  .card-rainbow,
+  .card-candy,
+  .card-sunrise,
+  .theme-audit .card,
+  .theme-screenings .card,
+  .theme-uploaded_results .card,
+  .theme-uploads .card {
+    color: #ffffff;
+  }
+}
 
 // Optional: ensure readable content sections inside gradient-heavy cards
 .card[class*="card-"] .card-body,

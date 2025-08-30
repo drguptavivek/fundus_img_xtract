@@ -317,6 +317,159 @@
     </div>
   </section>
 
+  <!-- Viewer (sv-*) Demo -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Square Viewer (sv-*)</h2>
+    <div class="card">
+      <div class="card-body">
+        <div class="sv-viewer-root">
+          <div class="sv-main position-relative">
+            <img class="sv-main-img" src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Demo image">
+            <button class="sv-nav sv-prev" type="button" aria-label="Previous">‹</button>
+            <button class="sv-nav sv-next" type="button" aria-label="Next">›</button>
+            <div class="sv-counter">1 / 4</div>
+          </div>
+        </div>
+        <div class="sv-filebar mt-2">
+          <div class="sv-filebar-label">File</div>
+          <div class="sv-filebar-name">example_image.png</div>
+        </div>
+        <div class="sv-filters mt-2">
+          <div class="btn-group" role="group" aria-label="Filters">
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFNone" value="none" checked>
+            <label class="btn btn-outline-secondary btn-sm" for="svFNone">None</label>
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFRedfree" value="redfree">
+            <label class="btn btn-outline-secondary btn-sm" for="svFRedfree">Red‑free</label>
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFGreen" value="greenboost">
+            <label class="btn btn-outline-secondary btn-sm" for="svFGreen">Green+</label>
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFBlue" value="bluemono">
+            <label class="btn btn-outline-secondary btn-sm" for="svFBlue">Blue mono</label>
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFGray" value="gray">
+            <label class="btn btn-outline-secondary btn-sm" for="svFGray">Grayscale</label>
+            <input type="radio" class="btn-check" name="svFilterDemo" id="svFContrast" value="contrast">
+            <label class="btn btn-outline-secondary btn-sm" for="svFContrast">Contrast</label>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer small text-body-secondary"><code>.sv-viewer-root .sv-main .sv-main-img</code> + <code>.sv-filters</code></div>
+    </div>
+  </section>
+
+  <!-- Grading Viewer (imggr-*) Demo -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Grading Viewer (imggr-*)</h2>
+    <div class="card">
+      <div class="card-body imggr-viewer-root">
+        <div class="imggr-main">
+          <img class="imggr-main-img" src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Demo image">
+        </div>
+        <div class="imggr-filters mt-2">
+          <div class="btn-group" role="group" aria-label="Filters">
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFNone" value="none" checked>
+            <label class="btn btn-outline-secondary btn-sm" for="igFNone">None</label>
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFRedfree" value="redfree">
+            <label class="btn btn-outline-secondary btn-sm" for="igFRedfree">Red‑free</label>
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFGreen" value="greenboost">
+            <label class="btn btn-outline-secondary btn-sm" for="igFGreen">Green+</label>
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFBlue" value="bluemono">
+            <label class="btn btn-outline-secondary btn-sm" for="igFBlue">Blue mono</label>
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFGray" value="gray">
+            <label class="btn btn-outline-secondary btn-sm" for="igFGray">Grayscale</label>
+            <input type="radio" class="btn-check" name="imggrFilterDemo" id="igFContrast" value="contrast">
+            <label class="btn btn-outline-secondary btn-sm" for="igFContrast">Contrast</label>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer small text-body-secondary"><code>.imggr-viewer-root .imggr-main .imggr-main-img</code> + <code>.imggr-filters</code></div>
+    </div>
+  </section>
+
+  <!-- PhotoSwipe-style Controls (standalone demo) -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Viewer Controls</h2>
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <div class="me-2 small">Zoom</div>
+          <input class="pswp__zoom-slider" type="range" min="0" max="100" value="40" aria-label="Zoom slider">
+        </div>
+        <div class="small mb-2">Filter buttons</div>
+        <div>
+          <button type="button" class="pswp__button pswp__button--filter-redfree">Red‑free</button>
+          <button type="button" class="pswp__button pswp__button--filter-greenboost">Green+</button>
+          <button type="button" class="pswp__button pswp__button--filter-bluemono">Blue mono</button>
+          <button type="button" class="pswp__button pswp__button--filter-gray">Grayscale</button>
+          <button type="button" class="pswp__button pswp__button--filter-contrast">Contrast</button>
+          <button type="button" class="pswp__button pswp__button--filter-clear">Clear</button>
+        </div>
+      </div>
+      <div class="card-footer small text-body-secondary"><code>.pswp__zoom-slider</code> and <code>.pswp__button--filter-*</code></div>
+    </div>
+  </section>
+
+  <!-- Pager Control -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Pager</h2>
+    <div class="card">
+      <div class="card-body d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-secondary" type="button">Prev</button>
+        <div class="page-box">
+          <input class="page-input" type="number" min="1" value="1" aria-label="Page">
+          <span class="sep">/ 24</span>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" type="button">Next</button>
+        <span class="vr mx-2"></span>
+        <span class="toolbar-status small text-body-secondary">Showing 1–50 of 1,200</span>
+      </div>
+      <div class="card-footer small text-body-secondary"><code>.page-box</code>, <code>.page-input</code>, <code>.sep</code>, <code>.toolbar-status</code></div>
+    </div>
+  </section>
+
+  <!-- Screenings List Snippet -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Screenings Card</h2>
+    <div class="card scr-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="scr-meta small">
+          <span class="badge scr-badge me-2">#716</span>
+          <code>PID‑00123</code>
+        </div>
+        <a href="#" class="btn btn-sm btn-outline-primary detail-btn">Open</a>
+      </div>
+      <div class="card-body">
+        <div class="row scr-grid g-3">
+          <div class="col-md-6 scr-col">
+            <ul class="m-0 ps-3 list-compact">
+              <li>Left image: available</li>
+              <li>Right image: missing</li>
+              <li>Reports: 2</li>
+            </ul>
+          </div>
+          <div class="col-md-6 scr-col">
+            <div class="scr-scroll">
+              <ul class="m-0 ps-3 list-compact">
+                {% for i in range(1,9) %}
+                <li>Report {{ i }} — status: ok</li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="small text-body-secondary mt-2">Uses <code>.scr-card</code>, <code>.scr-badge</code>, <code>.scr-grid</code>, <code>.list-compact</code>, <code>.scr-scroll</code></div>
+  </section>
+
+  <!-- Not-verified Switch -->
+  <section class="mb-5">
+    <h2 class="h5 mb-3">Verification Switch</h2>
+    <div class="form-check form-switch">
+      <input class="form-check-input state-not-verified" type="checkbox" role="switch" id="sgVeri">
+      <label class="form-check-label" for="sgVeri">Not verified</label>
+    </div>
+    <div class="small text-body-secondary">Apply <code>.state-not-verified</code> to the switch input for a red track.</div>
+  </section>
+
   <!-- Typography -->
   <section class="mb-5">
     <h2 class="h5 mb-3">Typography</h2>

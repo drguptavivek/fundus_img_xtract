@@ -179,6 +179,12 @@
   /* track height */
 }
 
+/* Light theme: darken track and filled portion for visibility */
+[data-bs-theme="light"] .pswp__zoom-slider {
+  --pswp-zoom-track: rgba(0, 0, 0, .2);
+  --pswp-zoom-fill: rgba(0, 0, 0, .7);
+}
+
 /* Focus ring for accessibility */
 .pswp__zoom-slider:focus-visible {
   outline: 2px solid rgba(255, 255, 255, .85);

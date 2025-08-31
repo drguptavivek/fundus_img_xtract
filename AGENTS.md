@@ -26,6 +26,12 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
 - Have a proceess to send images to an external API for grading of specific disease and save its result
 - For each disease,  assess inter-rater agreement, intra-rater agreement , agreement between remedio AI and final grade etc
 
+
+**Confidentiality** is a key aspect of the grading workflow, handled through two main principles: masking patient identity and ensuring grader independence. 
+    *   First, the grading interface is "masked" to protect patient privacy. When a grader views an image, the system only displays the image   itself and non-identifying metadata like the capture date and image UUID. It deliberately withholds all patient-identifying information, such as name or patient ID, so the grader has no knowledge of whose image they are assessing.
+    *   Second, the system ensures that each grader's assessment is independent and confidential from other graders. A user can only see their own previous grading for an image, not the assessments made by their colleagues. This prevents one expert's opinion from influencing another's, which is crucial for an unbiased assessment and for later analysis of inter-rater agreement.
+
+
 ### Progress So far
 
 #### Models 
@@ -95,12 +101,11 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
 
 ##### Viewing and Searching Patient Encounters / Screeinings
 
-  The `screenings.list_screenings` route displays a searchable and paginated list of all patient encounters, ordered with the most recent
-  first. It allows administrators and ophthalmologists to quickly find specific encounters by searching for a patient's name, or ID.
+The `screenings.list_screenings` route displays a searchable and paginated list of all patient encounters, ordered with the most recent first. It allows administrators and ophthalmologists to quickly find specific encounters by searching for a patient's name, or ID.
 
-  From that list, the `screenings.screening_detail` endpoint provides a comprehensive view of a single encounter. It displays all associated
-  images in a gallery, provides links to the generated DR and Glaucoma PDF reports, and includes navigation to easily move to the previous
-  or next patient encounter in the timeline.
+From that list, the `screenings.screening_detail` endpoint provides a comprehensive view of a single encounter. It displays all associated  images in a gallery, provides links to the generated DR and Glaucoma PDF reports, and includes navigation to easily move to the previous or next patient encounter in the timeline.
+
+Patient details are NOT masked in these screens. Hence confidential payinet data will be revealed to teh viewers. Only selected persons whoudl eb given access to these screens.
 
 ##### Manual Data Verification for Glaucoma Reports
 
@@ -132,12 +137,61 @@ This information is saved across several tables in the database to ensure data i
 
   The `glaucoma.results` route serves as an analytics dashboard, presenting a high-level overview of the cleaned glaucoma data. It displays aggregate  statistics, such as the total number of reports and unique patients, and shows the distribution of qualitative results. The key feature is the pair of histograms that visualize the distribution of the numeric VCDR (Vertical Cup-to-Disc Ratio) values for both right and left  eyes. It can be acessed from the Navbar `"Glacucoma > Dashboard"`
 
+
+Patient details are  masked in these screens. Hence confidential patinet data will be proetcted from the viewers. 
+
 ##### Manual Data Verification for Diabetic Retinopathy Reports
 To Be Developed
 The laterality of some of the images would already be marked as part of the Glaucoma workflow.
 
+##### Grading of Glaucoma
+
+Clicking a "Gradiing" button on the navigation bar takes the user to the  `grading.index` route accessible at `\grading\`. This route serves as the central dashboard for the image grading workflow, accessible to ophthalmologists, optometrists, and  administrators. It provides several key features to streamline the process.
+- To help users jump directly into their work, it includes a "Start Grading" feature that finds a random, ungraded image and provides a  direct link to its grading page. 
+- The page also includes a form to look up a specific image by its UUID 
+- It also has a paginated list of the  current user's previously graded images, which can be filtered by disease and impression, allowing for easy review of past work.
+- It displays several Key Performance Indicators (KPIs) to provide a summary of the overall grading activity. These
+  include:
+   * A count of Total Glaucoma Gradings and Total DR Gradings.
+   * The number of Total Unique Images that have received at least one grade.
+   * An Overall Total of all grading records in the system.
+   * A breakdown of Gradings by Impression, showing the counts for each clinical assessment category, such as "Normal," "Glaucoma Suspect,"
+     and "Glaucoma."
+The KPIs displayed on the /grading/ dashboard, such as the total counts for glaucoma and DR gradings and the breakdown by impression, represent the overall gradings done by anyone in the entire system.
+ 
+
+When a user clicks the `"Start Glaucoma Grading"` button, the system prioritizes images that are both recent and ungraded by that specific  user. The logic first identifies the 50 most recent images that do not have a corresponding glaucoma grading record for the currently logged-in user. From this pool of 50 recent, ungraded images, it then selects one at random to present for grading. This method ensures that graders are generally working on the newest available images while the randomization helps distribute the workload if multiple graders are active at the same time.
+
+**GRADING:** Grading screen is served at route  `grading.glaucoma_image` accessible at `grading/glaucoma/image/<image UUID>`). This is the primary interface for grading an individual fundus image for glaucoma. It takes an image's unique ID (UUID) from the URL and displays the image to a qualified user, such as an ophthalmologist or optometrist. Alongside the image, it presents a grading form with a predefined list of clinical impressions. 
+
+If the user has previously graded that same image, the form comes pre-filled with their prior assessment, allowing them to  easily review or revise it. This route is focused solely on presenting the image and the form for capturing the user's expert opinion. The template for the glaucoma grading route is designed for an efficient clinical workflow, and the backend saves the data using a robust "upsert" method.  Based on the current implementation, the same grader can submit a glaucoma grade for an image multiple times, but only the most recent grade will be saved. 
+
+The system is designed to "upsert" the grading record, meaning it updates the existing record if one is found for that specific user and image, rather than creating a new one. Because it overwrites the previous assessment, the system does not store a history of a single  user's past gradings for the same image.
+
+**Therefore, with the current functionality, intra-rater agreement cannot be assessed, as there is only ever one grading instance per user per image stored in the database. To measure this, the system would need to be modified to store multiple, separate grading records from  the same user for the same image.** THIS IS A DEDICATED FEATURE THAT NEEDS TO BE BUILT WITH POISSBLE ITS OWN UNIQUE DATA MODEL
 
 
+- The grading page prominently features an **advanced image viewer** which, based on the project's conventions, includes controls for fullscteen, R, G, B, Y, H and none filters, brightness, and contrast, with keyboard navigation allowing for detailed examination of the fundus image. 
+- The **grading form** itself uses large, color-coded  buttons for quick selection of a clinical impression like "Normal" or "Glaucoma Suspect." If an image is deemed "Not gradable," a  secondary list of buttons appears to let the user specify the reason. 
+
+- When a user selects the "Not gradable" option during grading, a list of predefined reasons appears as clickable buttons. The reasons are:
+   * Disc not focussed
+   * Retina not focussed
+   * Disc not complete
+   * Artefacts
+   * Other
+
+  Clicking one of these buttons automatically appends that reason to the "Remarks" text field, providing a quick and standardized way to explain why the image could not be assessed. Text in that field can be edited anytime. The data is saved in as it is form.
+
+- The form also includes "Save & Next" and "Save & Close" buttons to  streamline the process of grading multiple images in a single session. There is also a 'Clear" button to reset choices and a back to "Grading Dashboard" button.
+- **Results**   When a grading is submitted, the system uses an "upsert" (a combination of update and insert) logic. It checks the ImageGrading table to see if the current user has already graded that specific image for glaucoma. If a previous grading exists, the system simply updates that record with the new impression and remarks. If it's the first time the user is grading that image, a new record is created in the ImageGrading table, linking the user, the image, their role, and their clinical assessment.
+
+Patient details are  masked in these screens. Hence confidential patinet data will be proetcted from the viewers. 
+
+##### Grading of Dianetic Retnopathy
+The grading.dr_image route is the dedicated interface for grading a fundus image for Diabetic Retinopathy (DR). Similar to its glaucoma  counterpart, it takes an image's UUID and displays the image along with a grading form to a qualified user. The route also prefills the  form with the user's previous DR grading for that image, if one exists, allowing for review or revision.
+
+The specific grades collected for DR are based on the standard classification for the disease. The user must select one of the following  impressions from a predefined list: "No DR", "Mild NPDR", "Moderate NPDR", "Severe NPDR", "PDR" (Proliferative Diabetic Retinopathy), or  "Not gradable". This selection, along with any optional remarks, is then saved to the database as the user's official grading for that  image.
 
 
 ### Core Technologies

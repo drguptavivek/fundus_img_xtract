@@ -94,13 +94,25 @@
             </div>
 
             {% if uploads %}
-                <!-- Bulk Edit Form -->
-                <form method="POST" id="bulk-edit-form">
+                <!-- Bulk Operations Form -->
+                <form method="POST" id="bulk-operations-form">
                     {{ csrf_field() }}
-                    <input type="hidden" name="action" value="bulk_edit">
                     
-                    <!-- Bulk Edit Controls -->
-                    <div class="row g-2 mb-3 align-items-end">
+                    <!-- Selected Count and Actions -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="small text-muted">Selected: <span id="selected-count">0</span>/30 files</span>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-danger" id="bulk-delete-btn" disabled onclick="confirmDelete()">Delete Selected</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="bulk-edit-btn" disabled onclick="showBulkEdit()">Edit Selected</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Bulk Edit Controls (Hidden by default) -->
+                    <div id="bulk-edit-controls" class="row g-2 mb-3 align-items-end d-none">
+                        <input type="hidden" name="action" value="bulk_edit" id="bulk-action-field">
+                        
                         <div class="col-md-2">
                             <label class="form-label small">Hospital</label>
                             <select class="form-select form-select-sm" name="new_hospital_id">
@@ -153,7 +165,8 @@
                             </div>
                         </div>
                         <div class="col-md-1">
-                            <button type="submit" class="btn btn-primary btn-sm" id="bulk-edit-btn" disabled>Apply</button>
+                            <button type="submit" class="btn btn-success btn-sm">Apply</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="hideBulkEdit()">Cancel</button>
                         </div>
                     </div>
 
@@ -229,61 +242,142 @@
         const selectAllCheckbox = document.getElementById('select-all');
         const uploadCheckboxes = document.querySelectorAll('.upload-checkbox');
         const bulkEditBtn = document.getElementById('bulk-edit-btn');
-        const bulkEditForm = document.getElementById('bulk-edit-form');
+        const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        const bulkOperationsForm = document.getElementById('bulk-operations-form');
+        const bulkEditControls = document.getElementById('bulk-edit-controls');
+        const bulkActionField = document.getElementById('bulk-action-field');
 
         // Select all checkboxes
         selectAllCheckbox.addEventListener('change', function() {
-            uploadCheckboxes.forEach(checkbox => {
-                checkbox.checked = this.checked;
-            });
-            updateBulkEditButton();
+            // Limit selection to 30 files
+            const checkboxesToSelect = Array.from(uploadCheckboxes);
+            if (this.checked && checkboxesToSelect.length > 30) {
+                // If trying to select all and there are more than 30, only select first 30
+                checkboxesToSelect.slice(0, 30).forEach(checkbox => {
+                    checkbox.checked = true;
+                });
+                checkboxesToSelect.slice(30).forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                this.checked = false; // Uncheck select all since we didn't select everything
+                alert('Maximum 30 files can be selected for bulk operations.');
+            } else {
+                checkboxesToSelect.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+            }
+            updateBulkButtons();
+            updateSelectedCount();
         });
 
-        // Update bulk edit button state when individual checkboxes change
+        // Update bulk buttons state when individual checkboxes change
         uploadCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', updateBulkEditButton);
+            checkbox.addEventListener('change', function() {
+                // Enforce 30 file limit
+                const checkedBoxes = Array.from(uploadCheckboxes).filter(cb => cb.checked);
+                if (checkedBoxes.length > 30) {
+                    this.checked = false;
+                    alert('Maximum 30 files can be selected for bulk operations.');
+                }
+                updateBulkButtons();
+                updateSelectedCount();
+                
+                // Update select all checkbox state
+                const allChecked = Array.from(uploadCheckboxes).every(cb => cb.checked);
+                selectAllCheckbox.checked = allChecked;
+            });
         });
 
-        // Update bulk edit button state
-        function updateBulkEditButton() {
+        // Update bulk buttons state
+        function updateBulkButtons() {
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             bulkEditBtn.disabled = !anyChecked;
+            bulkDeleteBtn.disabled = !anyChecked;
         }
 
-        // Confirm bulk edit action
-        bulkEditForm.addEventListener('submit', function(e) {
+        // Update selected count
+        function updateSelectedCount() {
+            const checkedCount = Array.from(uploadCheckboxes).filter(cb => cb.checked).length;
+            const countElement = document.getElementById('selected-count');
+            if (countElement) {
+                countElement.textContent = checkedCount;
+            }
+        }
+
+        // Show bulk edit controls
+        window.showBulkEdit = function() {
+            const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
+            if (!anyChecked) {
+                alert('Please select at least one upload to edit.');
+                return;
+            }
+            
+            bulkActionField.value = 'bulk_edit';
+            bulkEditControls.classList.remove('d-none');
+            // Scroll to bulk edit controls
+            bulkEditControls.scrollIntoView({ behavior: 'smooth' });
+        };
+
+        // Hide bulk edit controls
+        window.hideBulkEdit = function() {
+            bulkEditControls.classList.add('d-none');
+            // Reset form fields
+            bulkOperationsForm.reset();
+        };
+
+        // Confirm delete action
+        window.confirmDelete = function() {
+            const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
+            if (!anyChecked) {
+                alert('Please select at least one upload to delete.');
+                return;
+            }
+
+            const checkedCount = Array.from(uploadCheckboxes).filter(cb => cb.checked).length;
+            if (confirm(`Are you sure you want to delete ${checkedCount} selected upload(s)? This action cannot be undone.`)) {
+                // Set action to delete and submit form
+                bulkActionField.value = 'bulk_delete';
+                bulkOperationsForm.submit();
+            }
+        };
+
+        // Form submission validation
+        bulkOperationsForm.addEventListener('submit', function(e) {
+            const action = bulkActionField.value;
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             
             if (!anyChecked) {
                 e.preventDefault();
-                alert('Please select at least one upload to edit.');
+                if (action === 'bulk_edit') {
+                    alert('Please select at least one upload to edit.');
+                } else if (action === 'bulk_delete') {
+                    alert('Please select at least one upload to delete.');
+                }
                 return;
             }
 
-            // Check if any fields have been selected for update
-            const hospitalSelect = document.querySelector('select[name="new_hospital_id"]');
-            const labUnitSelect = document.querySelector('select[name="new_lab_unit_id"]');
-            const cameraSelect = document.querySelector('select[name="new_camera_id"]');
-            const diseaseSelect = document.querySelector('select[name="new_disease_id"]');
-            const areaSelect = document.querySelector('select[name="new_area_id"]');
-            const mydriaticCheckbox = document.querySelector('input[name="new_is_mydriatic"]');
+            // For edit action, check if any fields have been selected for update
+            if (action === 'bulk_edit') {
+                const hospitalSelect = document.querySelector('select[name="new_hospital_id"]');
+                const labUnitSelect = document.querySelector('select[name="new_lab_unit_id"]');
+                const cameraSelect = document.querySelector('select[name="new_camera_id"]');
+                const diseaseSelect = document.querySelector('select[name="new_disease_id"]');
+                const areaSelect = document.querySelector('select[name="new_area_id"]');
+                const mydriaticCheckbox = document.querySelector('input[name="new_is_mydriatic"]');
 
-            const anyFieldSelected = 
-                (hospitalSelect.value !== '') ||
-                (labUnitSelect.value !== '') ||
-                (cameraSelect.value !== '') ||
-                (diseaseSelect.value !== '') ||
-                (areaSelect.value !== '') ||
-                (mydriaticCheckbox.checked);
+                const anyFieldSelected = 
+                    (hospitalSelect.value !== '') ||
+                    (labUnitSelect.value !== '') ||
+                    (cameraSelect.value !== '') ||
+                    (diseaseSelect.value !== '') ||
+                    (areaSelect.value !== '') ||
+                    (mydriaticCheckbox.checked);
 
-            if (!anyFieldSelected) {
-                e.preventDefault();
-                alert('Please select at least one field to update.');
-                return;
-            }
-
-            if (!confirm('Are you sure you want to update the selected uploads?')) {
-                e.preventDefault();
+                if (!anyFieldSelected) {
+                    e.preventDefault();
+                    alert('Please select at least one field to update.');
+                    return;
+                }
             }
         });
     });

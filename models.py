@@ -290,6 +290,17 @@ class DirectImageUpload(Base):
     camera: Mapped["Camera"] = relationship()
     disease: Mapped["Disease"] = relationship()
     area: Mapped["Area"] = relationship()
+    
+    # Property to get absolute path from relative path
+    @property
+    def absolute_filepath(self):
+        from models import BASE_DIR, DIRECT_UPLOAD_DIR
+        return str(BASE_DIR / self.filepath)
+    
+    # Property to get relative path (stored in DB)
+    @property
+    def relative_filepath(self):
+        return self.filepath
 
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):

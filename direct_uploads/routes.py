@@ -1,7 +1,7 @@
 from flask import jsonify, request, render_template, redirect, url_for, flash, current_app, session
 from flask_login import current_user, login_required
 from . import bp
-from models import User, LabUnit, Hospital, Session, DIRECT_UPLOAD_DIR, DirectImageUpload, Camera, Disease, Area, Job, JobItem
+from models import User, LabUnit, Hospital, Session, DIRECT_UPLOAD_DIR, DirectImageUpload, Camera, Disease, Area, Job, JobItem, BASE_DIR
 from auth.roles import roles_required
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -139,10 +139,11 @@ def upload():
                                     with open(file_path, "wb") as f:
                                         f.write(file_content)
 
-                                    # Save metadata to DB
+                                    # Save metadata to DB with relative path
+                                    relative_path = str(file_path.relative_to(BASE_DIR))
                                     direct_upload = DirectImageUpload(
                                         filename=filename,
-                                        filepath=str(file_path),
+                                        filepath=relative_path,
                                         file_hash=md5_hash,
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
@@ -233,10 +234,15 @@ def upload_processing(job_id):
 def dashboard():
     db_session = Session()
     try:
-        # Handle bulk edit POST request
+        # Handle bulk operations POST request
         if request.method == "POST":
             selected_ids = request.form.getlist('selected_uploads')
             action = request.form.get('action')
+            
+            # Limit bulk operations to 30 files
+            if len(selected_ids) > 30:
+                flash("Maximum 30 files can be processed in a single operation.", "danger")
+                return redirect(url_for("direct_uploads.dashboard"))
             
             if action == 'bulk_edit' and selected_ids:
                 # Get the new values from the form
@@ -276,8 +282,37 @@ def dashboard():
                 
                 db_session.commit()
                 flash(f"Successfully updated {updated_count} uploads.", "success")
+                
+            elif action == 'bulk_delete' and selected_ids:
+                # Build the delete query
+                delete_query = select(DirectImageUpload).where(DirectImageUpload.id.in_([int(id) for id in selected_ids]))
+                
+                # If user is not admin or data_manager, filter by uploader_id
+                if not current_user.has_role('admin', 'data_manager'):
+                    delete_query = delete_query.where(DirectImageUpload.uploader_id == current_user.id)
+                
+                # Get the uploads to delete
+                uploads_to_delete = db_session.execute(delete_query).scalars().all()
+                
+                # Delete the selected uploads
+                deleted_count = 0
+                for upload in uploads_to_delete:
+                    # Delete the file from disk using absolute path
+                    try:
+                        absolute_path = upload.absolute_filepath
+                        if os.path.exists(absolute_path):
+                            os.remove(absolute_path)
+                    except Exception as e:
+                        current_app.logger.warning("Failed to delete file %s: %s", upload.absolute_filepath, e)
+                    
+                    # Delete from database
+                    db_session.delete(upload)
+                    deleted_count += 1
+                
+                db_session.commit()
+                flash(f"Successfully deleted {deleted_count} uploads.", "success")
             else:
-                flash("No uploads selected for update.", "warning")
+                flash("No uploads selected for operation.", "warning")
             
             # Redirect to the same page to show updated data
             return redirect(url_for("direct_uploads.dashboard"))

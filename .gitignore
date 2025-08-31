@@ -67,7 +67,7 @@ process_log.txt
 
 
 # MAC OS
-.DS_Store
-.AppleDouble
-.LSOverride
+**/.DS_Store
+**/.AppleDouble
+**/.LSOverride
 

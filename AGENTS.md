@@ -24,24 +24,34 @@
 - First understand the request and ask clarifying questions
 - Explain your approach step-by-step before writing any code.
 - No unrelated edits - focus on just the task you're on
+- Follow PEP 8 style guidelines
+- Apply PEP 484 type annotations
+- Follow Python's Zen (import this)
+- Proper memory management
+- always close db sessions
+- Choose efficent query loading
+- Use proper dependency injection
+- Implement proper request validation
+- Implement efficient response handling
+- Implement proper error handling and exceptions
 - Build Logic First, then build front-end template. 
 - Use Secure Coding practices
 - Ensure CSRF protection in all forms  @templates/_forms.html   
 - Enusre SQL Injection 
+- Add allowed roles for each route
 - No sweeping changes
 - Commit small, frequent changes for readable diffs
 - Use explicit error handling, no unwraps in production code
-- Include docstrings 
 - Use Success and error Loggers from create_app  in @app.py 
 - Use Flash toasts for user feedback
 - Use avaibale styles only as much as possible
 - Keep code modular using blueprints
+- Include docstrings 
 - Organize templates in sub-folders
-- Ensure no data is lost 
+- Ensure no data is lost.
 - Give migration scipts in @scrips/folder. 
 - Udpate @scripts/setup_db.py when models change as needed
 - Update @scripts/migrations.md with instructions
-
 
 
 ## 1. Project Overview

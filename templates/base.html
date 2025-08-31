@@ -293,11 +293,9 @@
 
 
   <!--  {# --- Core/vendor scripts first (e.g., bootstrap bundle, photoswipe, etc.) --- #} -->
-  <!-- Local Bootstrap JS (bundle includes Popper) -->
   <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
 
-  <!--  {# Optional: your global/boot code #} -->
-  <!-- Optional: your own app.js -->
+  <!-- Global JS  -->
   <script src="{{ url_for('static', filename='js/app.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
   <script src="{{ url_for('static', filename='js/flash-toasts.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
     defer></script>

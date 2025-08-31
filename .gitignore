@@ -36,6 +36,7 @@ htmlcov/
 # Environments
 *.env
 .env
+.venv
 
 
 # Logs
@@ -46,6 +47,8 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+.python-version
+
 
 node_modules/**/*
 package-lock.json
@@ -61,5 +64,11 @@ zip_processing*.db-*
 pdf_error_log.txt
 pdf_success_log.txt
 process_log.txt
-node_modules/@parcel/watcher/LICENSE
-node_modules/@parcel/watcher-darwin-arm64/LICENSE
+
+
+# MAC OS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+

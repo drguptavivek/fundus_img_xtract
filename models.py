@@ -7,14 +7,10 @@ from typing import Optional
 from dotenv import load_dotenv   
 from uuid import uuid4
 
-
-
-
 # --- Load environment ---
 load_dotenv()
 
 # --- Database and File Path Configuration ---
-# Central place for all path and DB configurations
 BASE_DIR = Path(__file__).resolve().parent
 
 
@@ -178,9 +174,6 @@ class ImageGrading(Base):
 
 
 # --- Jobs: persist async processing state ---
-
-
-
 class Job(Base):
     __tablename__ = "jobs"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -220,9 +213,7 @@ class JobItem(Base):
 
 
 
-
-
-# --- existing User model: ADD the relationship + helper methods ---
+# --- User model: ADD the relationship + helper methods ---
 class User(Base):
     __tablename__ = "users"
 
@@ -241,7 +232,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    # NEW: roles many-to-many
+    # : roles many-to-many
     roles: Mapped[list["Role"]] = relationship(
         "Role",
         secondary="user_roles",
@@ -250,7 +241,7 @@ class User(Base):
     )
 
 
-    # Flask-Login helpers (keep as before) ...
+    # Flask-Login helpers  
     @property
     def is_authenticated(self) -> bool:  # noqa
         return True
@@ -260,7 +251,7 @@ class User(Base):
     def get_id(self) -> str:  # noqa
         return str(self.id)
 
-    # NEW: convenience checks
+    # Convenience checks
     def has_role(self, *names: str) -> bool:
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return any(n.lower() in user_roles for n in names)
@@ -269,7 +260,7 @@ class User(Base):
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return all(n.lower() in user_roles for n in names)
 
-# --- NEW: Role model ---
+# --- Role model ---
 class Role(Base):
     __tablename__ = "roles"
 
@@ -282,7 +273,7 @@ class Role(Base):
         back_populates="roles",
     )
 
-# --- NEW: association table ---
+# --- User Role ssociation table ---
 class UserRole(Base):
     __tablename__ = "user_roles"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
@@ -329,8 +320,9 @@ class IpLock(Base):
 
 # --- Engine and Session Creation ---
 # A single engine and session factory can be imported by other scripts
-# If you’ll process jobs in background threads, update your engine to allow cross-thread use:
+# Since we process jobs in background threads, update your engine to allow cross-thread use:
 # ✅ Engine with thread safety for SQLite
+
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:

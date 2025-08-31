@@ -29,7 +29,7 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
 
 
 ### Progress So far
-- ```app.py```: Application factory and entry-point for the Flask app. Initializes configuration, environment, logging, DB schema, thread pool, and registers all blueprints. Provides the homepage route (`/`). Has features for security, and protetcion of routes
+- ```app.py```: Application factory and entry-point for the Flask app. Initializes configuration, environment, logging, DB schema, thread pool, and registers all blueprints. Provides the homepage route (`/`). Has features for security, and protection of routes. [Documentation](app.md)
 - ```models.py```: 
 
 - ```main.py``` : Data processing pipeline designed to extract and analyze medical reports from Remedio FOP camera zip files which contain a named directory about the encounter with sub-directories for images and PDF report on Diabetic Retinopathy and Glaucoma screening results. The workflow begins by ingesting multiple zip files, extracting their contents (PDFs and images).

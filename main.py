@@ -6,9 +6,8 @@ import re
 import shutil
 from pathlib import Path
 from datetime import datetime, date as _date
-from dotenv import load_dotenv  # ✅ load .env first
+from dotenv import load_dotenv  
 load_dotenv()
-
 
 
 # --- Model and DB Imports ---
@@ -110,9 +109,6 @@ def parse_capture_date(s: str | None) -> _date | None:
         except Exception:
             continue
     return None
-
-
-
 
 
 def log_status(filename: str, status: str, message: str = ""):

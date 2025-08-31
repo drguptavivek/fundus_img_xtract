@@ -8,7 +8,7 @@ from auth.roles import roles_required
 from . import bp
 
 # Use your existing configured IMAGE_DIR from models.py
-from models import IMAGE_DIR, PDF_DIR, Session, EncounterFile  # Path objects and DB
+from models import IMAGE_DIR, PDF_DIR, DIRECT_UPLOAD_DIR, Session, EncounterFile  # Path objects and DB
 
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
@@ -25,6 +25,55 @@ def serve_image(filename: str):
     directory, fname = _safe_image(IMAGE_DIR, filename)
     # Let the browser display the image inline; open in new tab via target=_blank in templates
     return send_from_directory(directory=directory, path=fname, as_attachment=False)
+
+
+@bp.route("/direct_upload/<path:filepath>", methods=["GET"])
+@roles_required("admin")
+def serve_direct_upload(filepath: str):
+    """Serve a direct upload image by its relative path."""
+    # Security: Ensure the filepath is within the DIRECT_UPLOAD_DIR
+    try:
+        from models import BASE_DIR
+        
+        # Create a Path object for the requested file
+        requested_path = Path(filepath)
+        
+        # Resolve the full path to prevent directory traversal attacks
+        full_path = (BASE_DIR / requested_path).resolve()
+        print(f"Full path: {full_path}")
+        
+        # Ensure the resolved path is still within the DIRECT_UPLOAD_DIR
+        direct_upload_dir_resolved = DIRECT_UPLOAD_DIR.resolve()
+        try:
+            relative_path = full_path.relative_to(direct_upload_dir_resolved)
+        except ValueError:
+            # The path is not within the allowed directory
+            print(f"Security violation: Requested path {filepath} is not within {direct_upload_dir_resolved}")
+            abort(403)
+        
+        # Check if file exists and is a file (not a directory)
+        if not full_path.exists() or not full_path.is_file():
+            print(f"File not found: {full_path}")
+            abort(404)
+            
+        # Check if file has an allowed extension
+        if full_path.suffix.lower() not in ALLOWED_IMAGE_EXT:
+            print(f"File extension not allowed: {full_path.suffix}")
+            abort(404)
+            
+        print(f"Serving file: {full_path}")
+        print(f"Relative path: {relative_path}")
+        print(f"Direct upload dir resolved: {direct_upload_dir_resolved}")
+            
+        # Serve the file
+        return send_from_directory(
+            directory=str(direct_upload_dir_resolved), 
+            path=str(relative_path), 
+            as_attachment=False
+        )
+    except Exception as e:
+        print(f"Error serving direct upload: {e}")
+        abort(404)
 
 
 @bp.route("/file/<uuid>", methods=["GET"])

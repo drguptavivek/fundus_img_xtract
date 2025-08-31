@@ -570,3 +570,71 @@ def get_hospital(lab_unit_id):
     hospital = {"id": lab_unit.hospital.id, "name": lab_unit.hospital.name}
     db_session.close()
     return jsonify(hospital)
+
+
+@bp.route("/direct/upload/edit/<int:upload_id>", methods=["GET", "POST"])
+@roles_required('contributor', 'data_manager', 'admin')
+def edit_upload(upload_id):
+    db_session = Session()
+    try:
+        # Get the upload record
+        upload = db_session.get(DirectImageUpload, upload_id)
+        if not upload:
+            flash("Upload not found.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+        
+        # Check permissions - only admins/data_managers or the uploader can edit
+        if not current_user.has_role('admin', 'data_manager') and upload.uploader_id != current_user.id:
+            flash("You don't have permission to edit this upload.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+        
+        if request.method == "POST":
+            # Get form data
+            hospital_id = request.form.get("hospital_id")
+            lab_unit_id = request.form.get("lab_unit_id")
+            camera_id = request.form.get("camera_id")
+            disease_id = request.form.get("disease_id")
+            area_id = request.form.get("area_id")
+            is_mydriatic = request.form.get("is_mydriatic") == "on"
+            
+            # Validate required fields
+            if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
+                flash("All fields are required.", "danger")
+                return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id))
+            
+            # Update the upload record
+            upload.hospital_id = int(hospital_id)
+            upload.lab_unit_id = int(lab_unit_id)
+            upload.camera_id = int(camera_id)
+            upload.disease_id = int(disease_id)
+            upload.area_id = int(area_id)
+            upload.is_mydriatic = is_mydriatic
+            
+            db_session.commit()
+            flash("Upload metadata updated successfully.", "success")
+            return redirect(url_for("direct_uploads.dashboard"))
+        
+        # GET request - show edit form
+        # Get related objects for the form
+        hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
+        lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
+        cameras = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
+        diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
+        areas = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
+        
+        return render_template(
+            "direct_uploads/edit_upload.html",
+            upload=upload,
+            hospitals=hospitals,
+            lab_units=lab_units,
+            cameras=cameras,
+            diseases=diseases,
+            areas=areas
+        )
+    except Exception as e:
+        db_session.rollback()
+        current_app.logger.exception("Error editing upload %s: %s", upload_id, e)
+        flash("An error occurred while editing the upload.", "danger")
+        return redirect(url_for("direct_uploads.dashboard"))
+    finally:
+        db_session.close()

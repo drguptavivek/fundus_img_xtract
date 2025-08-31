@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Edit Upload Metadata{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Edit Upload Metadata</h1>
+        <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="ratio ratio-1x1 bg-light">
+                        {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg')) %}
+                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
+                                 class="object-fit-cover rounded" 
+                                 alt="{{ upload.filename }}"
+                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
+                                 loading="lazy">
+                        {% else %}
+                            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                <i class="bi bi-file-earmark fs-1"></i>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <h5 class="card-title">{{ upload.filename }}</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            <p class="mb-1"><strong>Uploader:</strong> {{ upload.uploader.username }}</p>
+                            <p class="mb-1"><strong>File Hash:</strong> {{ upload.file_hash }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1"><strong>Mydriatic:</strong> 
+                                {% if upload.is_mydriatic %}
+                                    <span class="badge bg-success">Yes</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">No</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <form method="post" novalidate>
+                {{ csrf_field() }}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Hospital <span class="text-danger">*</span></label>
+                        <select class="form-select" name="hospital_id" required>
+                            <option value="">-- Select Hospital --</option>
+                            {% for hospital in hospitals %}
+                            <option value="{{ hospital.id }}" {% if hospital.id == upload.hospital_id %}selected{% endif %}>{{ hospital.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Lab Unit <span class="text-danger">*</span></label>
+                        <select class="form-select" name="lab_unit_id" required>
+                            <option value="">-- Select Lab Unit --</option>
+                            {% for lab_unit in lab_units %}
+                            <option value="{{ lab_unit.id }}" {% if lab_unit.id == upload.lab_unit_id %}selected{% endif %}>{{ lab_unit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Camera <span class="text-danger">*</span></label>
+                        <select class="form-select" name="camera_id" required>
+                            <option value="">-- Select Camera --</option>
+                            {% for camera in cameras %}
+                            <option value="{{ camera.id }}" {% if camera.id == upload.camera_id %}selected{% endif %}>{{ camera.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Disease <span class="text-danger">*</span></label>
+                        <select class="form-select" name="disease_id" required>
+                            <option value="">-- Select Disease --</option>
+                            {% for disease in diseases %}
+                            <option value="{{ disease.id }}" {% if disease.id == upload.disease_id %}selected{% endif %}>{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label">Area <span class="text-danger">*</span></label>
+                        <select class="form-select" name="area_id" required>
+                            <option value="">-- Select Area --</option>
+                            {% for area in areas %}
+                            <option value="{{ area.id }}" {% if area.id == upload.area_id %}selected{% endif %}>{{ area.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic" {% if upload.is_mydriatic %}checked{% endif %}>
+                            <label class="form-check-label" for="is_mydriatic" id="mydriatic-label">
+                                {% if upload.is_mydriatic %}Mydriatic{% else %}Non Mydriatic{% endif %}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Update Metadata</button>
+                    <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle mydriatic checkbox label change
+        const mydriaticCheckbox = document.getElementById('is_mydriatic');
+        const mydriaticLabel = document.getElementById('mydriatic-label');
+        
+        if (mydriaticCheckbox && mydriaticLabel) {
+            mydriaticCheckbox.addEventListener('change', function() {
+                mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
+            });
+        }
+    });
+</script>
+{% endblock %}

@@ -31,6 +31,13 @@
         top: 0.1rem;
         left: 0.35rem;
     }
+    
+    .filter-section {
+        background-color: #f8f9fa;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
 </style>
 {% endblock %}
 
@@ -113,6 +120,96 @@
             </div>
         </div>
     </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <h5 class="mb-3">Filter Uploads</h5>
+        <form method="GET" id="filter-form">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Date From</label>
+                    <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filter_date_from or '' }}">
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Date To</label>
+                    <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filter_date_to or '' }}">
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Hospital</label>
+                    <select class="form-select form-select-sm" name="hospital_id">
+                        <option value="">All Hospitals</option>
+                        {% for hospital in all_hospitals %}
+                        <option value="{{ hospital.id }}" {% if filter_hospital_id and filter_hospital_id|string == hospital.id|string %}selected{% endif %}>{{ hospital.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Lab Unit</label>
+                    <select class="form-select form-select-sm" name="lab_unit_id">
+                        <option value="">All Lab Units</option>
+                        {% for lab_unit in all_lab_units %}
+                        <option value="{{ lab_unit.id }}" {% if filter_lab_unit_id and filter_lab_unit_id|string == lab_unit.id|string %}selected{% endif %}>{{ lab_unit.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                {% if current_user_has('admin', 'data_manager') %}
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Uploader</label>
+                    <select class="form-select form-select-sm" name="uploader_id">
+                        <option value="">All Users</option>
+                        {% for user in all_users %}
+                        <option value="{{ user.id }}" {% if filter_uploader_id and filter_uploader_id|string == user.id|string %}selected{% endif %}>{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Camera</label>
+                    <select class="form-select form-select-sm" name="camera_id">
+                        <option value="">All Cameras</option>
+                        {% for camera in all_cameras %}
+                        <option value="{{ camera.id }}" {% if filter_camera_id and filter_camera_id|string == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Disease</label>
+                    <select class="form-select form-select-sm" name="disease_id">
+                        <option value="">All Diseases</option>
+                        {% for disease in all_diseases %}
+                        <option value="{{ disease.id }}" {% if filter_disease_id and filter_disease_id|string == disease.id|string %}selected{% endif %}>{{ disease.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Area</label>
+                    <select class="form-select form-select-sm" name="area_id">
+                        <option value="">All Areas</option>
+                        {% for area in all_areas %}
+                        <option value="{{ area.id }}" {% if filter_area_id and filter_area_id|string == area.id|string %}selected{% endif %}>{{ area.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2 col-sm-4">
+                    <div class="d-flex gap-1">
+                        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+                        <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Gap between filters and images -->
+    <div class="mb-4"></div>
 
     <div class="card shadow-sm">
         <div class="card-body">

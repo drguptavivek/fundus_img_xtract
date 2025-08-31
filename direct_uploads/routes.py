@@ -322,6 +322,16 @@ def dashboard():
         page = request.args.get('page', 1, type=int)
         per_page = 50
         
+        # Get filter parameters
+        filter_date_from = request.args.get('date_from')
+        filter_date_to = request.args.get('date_to')
+        filter_lab_unit_id = request.args.get('lab_unit_id')
+        filter_uploader_id = request.args.get('uploader_id')
+        filter_hospital_id = request.args.get('hospital_id')
+        filter_camera_id = request.args.get('camera_id')
+        filter_disease_id = request.args.get('disease_id')
+        filter_area_id = request.args.get('area_id')
+        
         # Validate page number
         if page < 1:
             page = 1
@@ -329,9 +339,46 @@ def dashboard():
         # Build base query for filtering
         base_query = select(DirectImageUpload)
         
+        # Apply date filters
+        if filter_date_from:
+            try:
+                date_from = datetime.strptime(filter_date_from, '%Y-%m-%d')
+                base_query = base_query.where(DirectImageUpload.created_at >= date_from)
+            except ValueError:
+                pass  # Invalid date format, ignore filter
+        
+        if filter_date_to:
+            try:
+                date_to = datetime.strptime(filter_date_to, '%Y-%m-%d')
+                # Add one day to include the entire end date
+                date_to = date_to.replace(hour=23, minute=59, second=59)
+                base_query = base_query.where(DirectImageUpload.created_at <= date_to)
+            except ValueError:
+                pass  # Invalid date format, ignore filter
+        
+        # Apply other filters
+        if filter_lab_unit_id:
+            base_query = base_query.where(DirectImageUpload.lab_unit_id == filter_lab_unit_id)
+        
+        if filter_hospital_id:
+            base_query = base_query.where(DirectImageUpload.hospital_id == filter_hospital_id)
+        
+        if filter_camera_id:
+            base_query = base_query.where(DirectImageUpload.camera_id == filter_camera_id)
+        
+        if filter_disease_id:
+            base_query = base_query.where(DirectImageUpload.disease_id == filter_disease_id)
+        
+        if filter_area_id:
+            base_query = base_query.where(DirectImageUpload.area_id == filter_area_id)
+        
         # If user is not admin or data_manager, filter by uploader_id
         if not current_user.has_role('admin', 'data_manager'):
             base_query = base_query.where(DirectImageUpload.uploader_id == current_user.id)
+            # For non-admin users, we don't allow filtering by uploader
+            filter_uploader_id = None
+        elif filter_uploader_id:
+            base_query = base_query.where(DirectImageUpload.uploader_id == filter_uploader_id)
             
         # Get total count for pagination
         count_query = select(func.count()).select_from(base_query.subquery())
@@ -383,12 +430,13 @@ def dashboard():
             select(User).where(User.id.in_(user_ids))
         ).scalars().all()} if user_ids else {}
         
-        # Get all available options for bulk edit dropdowns
+        # Get all available options for bulk edit dropdowns and filters
         all_hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
         all_lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
         all_cameras = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
         all_diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         all_areas = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
+        all_users = db_session.execute(select(User).order_by(User.username)).scalars().all()
         
         # KPI Data - Total uploads
         kpi_total_uploads = total_count
@@ -455,6 +503,7 @@ def dashboard():
             all_cameras=all_cameras,
             all_diseases=all_diseases,
             all_areas=all_areas,
+            all_users=all_users,
             current_page=page,
             total_pages=total_pages,
             total_count=total_count,
@@ -462,7 +511,16 @@ def dashboard():
             kpi_total_uploads=kpi_total_uploads,
             camera_kpis=camera_kpis,
             disease_kpis=disease_kpis,
-            area_kpis=area_kpis
+            area_kpis=area_kpis,
+            # Pass filter parameters back to template
+            filter_date_from=filter_date_from,
+            filter_date_to=filter_date_to,
+            filter_lab_unit_id=filter_lab_unit_id,
+            filter_uploader_id=filter_uploader_id,
+            filter_hospital_id=filter_hospital_id,
+            filter_camera_id=filter_camera_id,
+            filter_disease_id=filter_disease_id,
+            filter_area_id=filter_area_id
         )
     except Exception as e:
         db_session.rollback()

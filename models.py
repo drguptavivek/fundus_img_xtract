@@ -1,10 +1,13 @@
 import os
 from pathlib import Path
-from sqlalchemy import Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint
+from sqlalchemy import (
+    Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text,
+    Index, UniqueConstraint, Table, Column
+)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
-from typing import Optional
-from dotenv import load_dotenv   
+from typing import Optional, List
+from dotenv import load_dotenv
 from uuid import uuid4
 
 # --- Load environment ---
@@ -12,217 +15,159 @@ load_dotenv()
 
 # --- Database and File Path Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
-
-
-# Database URL (already wired)
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'zip_processing.db'}")
-
-# --- File processing directories from .env ---
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/uploaded")
 IMAGE_DIR = BASE_DIR / os.getenv("IMAGE_DIR", "files/images")
 PDF_DIR = BASE_DIR / os.getenv("PDF_DIR", "files/pdfs")
 PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/processed")
 PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/processing_error")
+DIRECT_UPLOAD_DIR = BASE_DIR / os.getenv("DIRECT_UPLOAD_DIR", "files/direct_uploads")
+
+
 
 def utcnow():
     return datetime.now(timezone.utc)
 
-
 # --- SQLAlchemy Setup ---
-# Base class for our declarative models using modern syntax
 class Base(DeclarativeBase):
     pass
 
+# --- Association Table for User <-> LabUnit ---
+user_lab_units = Table(
+    'user_lab_units', Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
+    Column('lab_unit_id', Integer, ForeignKey('lab_units.id', ondelete="CASCADE"), primary_key=True)
+)
+
 class ZipFile(Base):
-    """SQLAlchemy model for the zip_files table."""
     __tablename__ = 'zip_files'
     id: Mapped[int] = mapped_column(primary_key=True)
     zip_filename: Mapped[str] = mapped_column(unique=True)
     md5_hash: Mapped[str] = mapped_column(unique=True)
-    
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="zip_file", uselist=False, cascade="all, delete-orphan")
 
 class PatientEncounters(Base):
-    """SQLAlchemy model for the patient_encounters table."""
     __tablename__ = 'patient_encounters'
     id: Mapped[int] = mapped_column(primary_key=True)
     zip_file_id: Mapped[int] = mapped_column(ForeignKey('zip_files.id'), unique=True)
     name: Mapped[str]
     patient_id: Mapped[str]
     capture_date: Mapped[str]
-    # Glaucoma verification fields
     glaucoma_verified_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     glaucoma_verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     glaucoma_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # DR verification fields
     dr_verified_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     dr_verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     dr_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # New: proper Date column for reliable queries (nullable until backfilled)
     capture_date_dt: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
-    
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
-    encounter_files: Mapped[list["EncounterFile"]] = relationship(
-        back_populates="patient_encounter", cascade="all, delete-orphan"
-    )
-    dr_reports: Mapped[list["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
-    glaucoma_reports: Mapped[list["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
 
 class EncounterFile(Base):
-    """SQLAlchemy model for the encounter_files table."""
     __tablename__ = 'encounter_files'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
     filename: Mapped[str]
     file_type: Mapped[str]
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
-    # New: stable unique identifier for each extracted file
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
-    # Optional: laterality annotation for images ('right', 'left', 'cannot_tell')
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
-    
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
-    gradings: Mapped[list["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
+    gradings: Mapped[List["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
 
 class DiabeticRetinopathyReport(Base):
-    """Stores extracted data from DR reports."""
     __tablename__ = 'diabetic_retinopathy_reports'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
-    # Stable identifier for public/secure links to split DR PDFs
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     result: Mapped[str]
-    # New field to store additional qualitative results from OCR
     qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
-    # New field to store the name of the split DR PDF file
     report_file_name: Mapped[str | None] = mapped_column(nullable=True)
-    
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="dr_reports")
 
 class GlaucomaReport(Base):
-    """Stores extracted data from Glaucoma reports."""
     __tablename__ = 'glaucoma_reports'
     id: Mapped[int] = mapped_column(primary_key=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
-    # Stable identifier for public/secure links to split Glaucoma PDFs
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     vcdr_right: Mapped[str | None]
     vcdr_left: Mapped[str | None]
     result: Mapped[str]
-    # New field to store additional qualitative results from OCR
     qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
-    # New field to store the name of the split Glaucoma PDF file
     report_file_name: Mapped[str | None] = mapped_column(nullable=True)
-    
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="glaucoma_reports")
 
-
 class GlaucomaResultsCleaned(Base):
-    """Numeric, cleaned snapshot of glaucoma results for analytics.
-    One row per original GlaucomaReport.
-    """
     __tablename__ = 'glaucoma_results_cleaned'
     id: Mapped[int] = mapped_column(primary_key=True)
     glaucoma_report_id: Mapped[int] = mapped_column(ForeignKey('glaucoma_reports.id'), unique=True, index=True)
     patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'), index=True)
-
-    # Parsed numeric VCDR values (0.00–1.00), nullable if parsing fails
     vcdr_right_num: Mapped[float | None] = mapped_column(nullable=True)
     vcdr_left_num: Mapped[float | None] = mapped_column(nullable=True)
-
-    # Keep originals for traceability
     original_vcdr_right: Mapped[str | None] = mapped_column(nullable=True)
     original_vcdr_left: Mapped[str | None] = mapped_column(nullable=True)
-
-    # Copy over headline results for convenience
     result: Mapped[str | None] = mapped_column(nullable=True)
     qualitative_result: Mapped[str | None] = mapped_column(nullable=True)
     report_uuid: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     report_file_name: Mapped[str | None] = mapped_column(nullable=True)
-
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-
-    # Relationships for convenience
     patient_encounter: Mapped["PatientEncounters"] = relationship("PatientEncounters")
     glaucoma_report: Mapped["GlaucomaReport"] = relationship("GlaucomaReport")
 
-
 class ImageGrading(Base):
-    """A grading record per image per grader (user+role).
-    Captures impression and optional remarks.
-    """
     __tablename__ = 'image_gradings'
     id: Mapped[int] = mapped_column(primary_key=True)
     encounter_file_id: Mapped[int] = mapped_column(ForeignKey('encounter_files.id'), index=True)
     grader_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
     grader_username: Mapped[str | None] = mapped_column(String(150), nullable=True)
-    grader_role: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # 'optometrist'|'ophthalmologist'|'admin' etc.
-    graded_for: Mapped[str] = mapped_column(String(32), index=True)  # glaucoma|dr|amd
-    impression: Mapped[str] = mapped_column(String(32))  # Normal|Glaucoma Suspect|Glaucoma|Other Retinal|Not gradable
+    grader_role: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    graded_for: Mapped[str] = mapped_column(String(32), index=True)
+    impression: Mapped[str] = mapped_column(String(32))
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-
     image: Mapped["EncounterFile"] = relationship(back_populates="gradings")
     grader: Mapped["User"] = relationship("User", foreign_keys=[grader_user_id])
+    __table_args__ = (Index('ix_image_gradings_image_user_role_for', 'encounter_file_id', 'grader_user_id', 'grader_role', 'graded_for'),)
 
-    __table_args__ = (
-        Index('ix_image_gradings_image_user_role_for', 'encounter_file_id', 'grader_user_id', 'grader_role', 'graded_for'),
-    )
-
-
-
-# --- Jobs: persist async processing state ---
 class Job(Base):
     __tablename__ = "jobs"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # optional external/public token if you prefer non-sequential ids
     token: Mapped[str] = mapped_column(unique=True)
-    status: Mapped[str] = mapped_column(default="queued")   # queued|processing|done|error
+    status: Mapped[str] = mapped_column(default="queued")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    rejected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # one-line summary
+    rejected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Uploader metadata (captured at upload time)
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
-    items: Mapped[list["JobItem"]] = relationship(
-        back_populates="job", cascade="all, delete-orphan"
-    )
+    items: Mapped[List["JobItem"]] = relationship(back_populates="job", cascade="all, delete-orphan")
 
 class JobItem(Base):
     __tablename__ = "job_items"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
     filename: Mapped[str]
-    state: Mapped[str] = mapped_column(default="queued")  # queued|processing|ok|error
+    state: Mapped[str] = mapped_column(default="queued")
     detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-    # Uploader metadata (denormalized to each item for auditing)
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
     job: Mapped["Job"] = relationship(back_populates="items")
 
-
-
-# --- User model: ADD the relationship + helper methods ---
 class User(Base):
     __tablename__ = "users"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # --- Profile fields ---
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -231,98 +176,122 @@ class User(Base):
     last_date_of_service: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    file_upload_quota: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    file_upload_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
+    lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
 
-    # : roles many-to-many
-    roles: Mapped[list["Role"]] = relationship(
-        "Role",
-        secondary="user_roles",
-        back_populates="users",
-        lazy="selectin",
-    )
-
-
-    # Flask-Login helpers  
     @property
-    def is_authenticated(self) -> bool:  # noqa
-        return True
+    def is_authenticated(self) -> bool: return True
     @property
-    def is_anonymous(self) -> bool:  # noqa
-        return False
-    def get_id(self) -> str:  # noqa
-        return str(self.id)
-
-    # Convenience checks
+    def is_anonymous(self) -> bool: return False
+    def get_id(self) -> str: return str(self.id)
     def has_role(self, *names: str) -> bool:
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return any(n.lower() in user_roles for n in names)
-
     def has_all_roles(self, *names: str) -> bool:
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return all(n.lower() in user_roles for n in names)
 
-# --- Role model ---
 class Role(Base):
     __tablename__ = "roles"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    users: Mapped[List["User"]] = relationship("User", secondary="user_roles", back_populates="roles")
 
-    users: Mapped[list["User"]] = relationship(
-        "User",
-        secondary="user_roles",
-        back_populates="roles",
-    )
-
-# --- User Role ssociation table ---
 class UserRole(Base):
     __tablename__ = "user_roles"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"),
-        Index("ix_user_roles_user", "user_id"),
-        Index("ix_user_roles_role", "role_id"),
-    )
-
+    __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"), Index("ix_user_roles_user", "user_id"), Index("ix_user_roles_role", "role_id"))
 
 class LoginAttempt(Base):
-    """
-    Record every login attempt (success or failure) with typed username and client IP.
-    We aggregate by rolling windows to decide throttling/lockouts.
-    """
     __tablename__ = "login_attempts"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    username_input: Mapped[str] = mapped_column(String(150), nullable=False)  # exactly what user typed
+    username_input: Mapped[str] = mapped_column(String(150), nullable=False)
     ip_address: Mapped[str] = mapped_column(String(64), nullable=False)
     success: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True, nullable=False)
-
-    __table_args__ = (
-        Index("ix_login_attempts_username_created", "username_input", "created_at"),
-        Index("ix_login_attempts_ip_created", "ip_address", "created_at"),
-    )
+    __table_args__ = (Index("ix_login_attempts_username_created", "username_input", "created_at"), Index("ix_login_attempts_ip_created", "ip_address", "created_at"))
 
 class IpLock(Base):
-    """
-    Locks a client IP for a period.
-    """
     __tablename__ = "ip_locks"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     ip_address: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     locked_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
     __table_args__ = (UniqueConstraint("ip_address", name="uq_iplock_ip"),)
 
- 
+# --- New Lookup Tables (Masters) ---
+class Hospital(Base):
+    __tablename__ = 'hospitals'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+
+    lab_units: Mapped[List["LabUnit"]] = relationship(
+        back_populates="hospital", lazy="selectin", cascade="all, delete-orphan"
+    )
+
+
+class LabUnit(Base):
+    __tablename__ = 'lab_units'
+    __table_args__ = (
+        UniqueConstraint("name", "hospital_id", name="uq_labunit_name_per_hospital"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    hospital_id: Mapped[int] = mapped_column(ForeignKey('hospitals.id'), nullable=False)
+
+    hospital: Mapped["Hospital"] = relationship(
+        back_populates="lab_units", lazy="selectin"
+    )
+    users: Mapped[List["User"]] = relationship(
+        "User", secondary=user_lab_units, back_populates="lab_units", lazy="selectin"
+    )
+
+
+
+class Camera(Base):
+    __tablename__ = 'cameras'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+
+class Disease(Base):
+    __tablename__ = 'diseases'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+
+class Area(Base):
+    __tablename__ = 'areas'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+
+# --- New Direct Image Upload Table ---
+class DirectImageUpload(Base):
+    __tablename__ = 'direct_image_uploads'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    filepath: Mapped[str] = mapped_column(String(1024), nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    uploader_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
+    hospital_id: Mapped[int] = mapped_column(ForeignKey('hospitals.id'), nullable=False)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id'), nullable=False)
+    camera_id: Mapped[int] = mapped_column(ForeignKey('cameras.id'), nullable=False)
+    disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False)
+    area_id: Mapped[int] = mapped_column(ForeignKey('areas.id'), nullable=False)
+    is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    
+    uploader: Mapped["User"] = relationship()
+    hospital: Mapped["Hospital"] = relationship()
+    lab_unit: Mapped["LabUnit"] = relationship()
+    camera: Mapped["Camera"] = relationship()
+    disease: Mapped["Disease"] = relationship()
+    area: Mapped["Area"] = relationship()
 
 # --- Engine and Session Creation ---
-# A single engine and session factory can be imported by other scripts
-# Since we process jobs in background threads, update your engine to allow cross-thread use:
-# ✅ Engine with thread safety for SQLite
-
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:

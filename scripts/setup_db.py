@@ -104,6 +104,11 @@ def main() -> None:
         help="Add uploader metadata columns to jobs and job_items",
     )
     parser.add_argument(
+        "--migrate-direct-uploads",
+        action="store_true",
+        help="Create tables for direct image uploads feature",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -146,6 +151,12 @@ def main() -> None:
             mig_job_upl(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_job_uploader: {e}")
+    if args.migrate_direct_uploads:
+        try:
+            from migrate_direct_uploads import migrate as mig_direct_upl
+            mig_direct_upl()
+        except Exception as e:
+            print(f"Failed to import migrate_direct_uploads: {e}")
 
 
 if __name__ == "__main__":

@@ -31,13 +31,14 @@
   </script>
 </head>
 
-<body class="bg-body d-flex flex-column min-vh-100 theme-{{ request.blueprint|default('root', true) }} {% block body_classes %}{% endblock %}">
+<body
+  class="bg-body d-flex flex-column min-vh-100 theme-{{ request.blueprint|default('root', true) }} {% block body_classes %}{% endblock %}">
 
   <nav class="navbar navbar-expand-lg theme-auto bg-body border-bottom mb-4">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('homepage') }}">
-        <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}"
-             alt="Fundus retina logo" width="36" height="36" loading="eager">
+        <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Fundus retina logo" width="36"
+          height="36" loading="eager">
         <span>Fundus Image Manager</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
@@ -53,13 +54,14 @@
           </li>
 
           {# Work menu: visible to admin, fileUploader, optometrist, data_manager #}
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader') or current_user_has('optometrist') or current_user_has('data_manager')) %}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader') or
+          current_user_has('optometrist') or current_user_has('data_manager')) %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle
                       {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs','audit']
                                         or (request.endpoint|default('', true)).startswith('jobs.')
-                                        or (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow') else '' }}" href="#"
-              id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        or (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow') else '' }}"
+              href="#" id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Work
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
@@ -80,11 +82,11 @@
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
-                   href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
+                  href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if request.blueprint == 'audit' else '' }}"
-                   href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
+                  href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
               </li>
             </ul>
           </li>
@@ -102,26 +104,28 @@
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'glaucoma' else '' }}" href="#"
-               id="glaucomaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              id="glaucomaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Glaucoma
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="glaucomaMenu">
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_list' else '' }}"
-                   href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
+                  href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
-                   href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+                  href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
               </li>
               {# Clean Data moved to Work menu #}
             </ul>
           </li>
           {% endif %}
 
-                    {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('optometrist') or current_user_has('ophthalmologist')) %}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('optometrist') or
+          current_user_has('ophthalmologist')) %}
           <li class="nav-item">
-            <a class="nav-link {{ 'active' if request.blueprint == 'grading' else '' }}" href="{{ url_for('grading.index') }}">Grading</a>
+            <a class="nav-link {{ 'active' if request.blueprint == 'grading' else '' }}"
+              href="{{ url_for('grading.index') }}">Grading</a>
           </li>
           {% endif %}
 
@@ -136,13 +140,48 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
               <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
               <li>
                 <hr class="dropdown-divider">
               </li>
+
+              <li><a class="dropdown-item" href="{{ url_for('admin.add_user') }}">Add user</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.change_password') }}">Change user password</a></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
+
+                            <li>
+                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='hospital') }}">
+                  Hospitals
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='lab_unit') }}">
+                  Units / Labs.
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='camera') }}">
+                  Devices / Cameras
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='disease') }}">
+                  Diseases
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='area') }}">
+                  Areas
+                </a>
+              </li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+
+
               <li><a class="dropdown-item" href="{{ url_for('style_guide') }}">Style Guide</a></li>
               <li>
                 <hr class="dropdown-divider">
@@ -161,8 +200,11 @@
               Account
             </a>
             <ul class="dropdown-menu dropdown-menu-end">
-              <li class="dropdown-header">Signed in as <strong>{{ current_user.username|default('User', true) }}</strong></li>
-              <li><hr class="dropdown-divider"></li>
+              <li class="dropdown-header">Signed in as <strong>{{ current_user.username|default('User', true)
+                  }}</strong></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               <li><a class="dropdown-item" href="{{ url_for('account.profile') }}">My profile</a></li>
               <li><a class="dropdown-item" href="{{ url_for('account.change_password_self') }}">Change password</a></li>
               <li>
@@ -213,17 +255,19 @@
 
     {% endblock %}
   </div>
-  <br/>
+  <br />
 
 
   <footer class="site-footer mt-auto">
     <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
       <!-- GitHub icon (left) -->
       <a class="link-body-emphasis d-inline-flex align-items-center text-decoration-none" aria-label="GitHub repository"
-         href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}" target="_blank" rel="noopener">
+        href="{{ config.get('GITHUB_REPO_URL') or 'https://github.com/drguptavivek/fundus_img_xtract' }}"
+        target="_blank" rel="noopener">
         <span class="d-inline-block" aria-hidden="true">
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z"/>
+            <path
+              d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.79 8.21 11.38.6.11.82-.26.82-.58 0-.29-.01-1.06-.02-2.08-3.34.73-4.04-1.61-4.04-1.61-.55-1.4-1.35-1.77-1.35-1.77-1.1-.76.08-.74.08-.74 1.22.09 1.86 1.25 1.86 1.25 1.08 1.85 2.84 1.31 3.53 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.48-1.34-5.48-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.5.12-3.12 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.62.24 2.82.12 3.12.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.28 0 .32.22.7.83.58C20.56 21.79 24 17.3 24 12 24 5.37 18.63 0 12 0z" />
           </svg>
         </span>
       </a>
@@ -237,7 +281,7 @@
   </footer>
 
 
-  
+
 
   <!-- Global SVG color filters (hidden) For Images-->
   <svg width="0" height="0" style="position:absolute;left:-9999px;visibility:hidden" aria-hidden="true"
@@ -314,13 +358,8 @@
   {% endblock %}
 
   <!-- Floating theme toggle (fixed on right edge) -->
-  <button
-    class="btn btn-sm btn-secondary position-fixed top-50 end-0 translate-middle-y me-2 shadow-sm"
-    type="button"
-    data-theme-toggle
-    aria-label="Toggle dark mode"
-    title="Toggle dark mode"
-    style="z-index:1300">
+  <button class="btn btn-sm btn-secondary position-fixed top-50 end-0 translate-middle-y me-2 shadow-sm" type="button"
+    data-theme-toggle aria-label="Toggle dark mode" title="Toggle dark mode" style="z-index:1300">
     <span data-theme-icon>🌙</span>
   </button>
 
@@ -335,7 +374,7 @@
       }
       function setTheme(theme) {
         document.documentElement.setAttribute('data-bs-theme', theme);
-        try { localStorage.setItem('theme', theme); } catch(e) {}
+        try { localStorage.setItem('theme', theme); } catch (e) { }
         updateToggle(theme);
       }
       // initialize toggle state based on current attribute

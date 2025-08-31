@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password
-from models import Role, Session, User, BASE_DIR  # ← uses your session factory & model
+from models import Area, Camera, Disease, Hospital, LabUnit, Role, Session, User, BASE_DIR  # ← uses your session factory & model
 import os
 from pathlib import Path
 import re as _re
@@ -56,9 +56,13 @@ def add_user():
     pre_email = (request.form.get("email") or "").strip()
     pre_yj = (request.form.get("year_of_joining") or "").strip()
     pre_ldos = (request.form.get("last_date_of_service") or "").strip()
+    pre_file_upload_quota = int(request.form.get("file_upload_quota") or 0) if request.method == "POST" else 0
+    pre_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units")) if request.method == "POST" else set()
 
     with Session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+        hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+        lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
 
     if request.method == "POST":
         username = pre_username
@@ -95,16 +99,23 @@ def add_user():
 
         ok, msg, ldos_date = parse_iso_date(pre_ldos)
         if not ok:
-            return _add_user_err(msg, roles, username, pre_active, pre_roles,
-                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos)
+            return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
+                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                 pre_file_upload_quota, pre_lab_unit_ids)
+
+        if pre_file_upload_quota < 0:
+            return _add_user_err("File upload quota cannot be negative.", roles, hospitals, lab_units, username, pre_active, pre_roles,
+                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                 pre_file_upload_quota, pre_lab_unit_ids)
 
         with Session() as db:
             exists = db.execute(
                 select(User).where(func.lower(User.username) == username.lower())
             ).scalar_one_or_none()
             if exists:
-                return _add_user_err("Username already exists.", roles, username, pre_active, pre_roles,
-                                     pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos)
+                return _add_user_err("Username already exists.", roles, hospitals, lab_units, username, pre_active, pre_roles,
+                                     pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                     pre_file_upload_quota, pre_lab_unit_ids)
 
             user = User(
                 username=username,
@@ -117,11 +128,16 @@ def add_user():
                 email=pre_email or None,
                 year_of_joining=yj_int,
                 last_date_of_service=ldos_date,
+                file_upload_quota=pre_file_upload_quota,
             )
 
             if pre_roles:
                 role_objs = db.execute(select(Role).where(Role.name.in_(pre_roles))).scalars().all()
                 for r in role_objs: user.roles.append(r)
+
+            if pre_lab_unit_ids:
+                lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
+                for lu in lab_unit_objs: user.lab_units.append(lu)
 
             db.add(user); db.commit()
 
@@ -129,16 +145,20 @@ def add_user():
         return redirect(url_for("admin.users_list"))
 
     return render_template("admin/add_user.html",
-                           roles=roles, username=pre_username, active=pre_active, selected_roles=pre_roles,
+                           roles=roles, hospitals=hospitals, lab_units=lab_units,
+                           username=pre_username, active=pre_active, selected_roles=pre_roles,
                            full_name=pre_full_name, phone=pre_phone, designation=pre_designation, email=pre_email,
-                           year_of_joining=pre_yj, last_date_of_service=pre_ldos)
+                           year_of_joining=pre_yj, last_date_of_service=pre_ldos,
+                           file_upload_quota=pre_file_upload_quota, selected_lab_units=pre_lab_unit_ids)
 
-def _add_user_err(msg, roles, username, active, selected_roles, full_name, phone, designation, email, yj, ldos):
+def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_roles, full_name, phone, designation, email, yj, ldos, file_upload_quota, selected_lab_units):
     flash(msg, "danger")
     return render_template("admin/add_user.html",
-                           roles=roles, username=username, active=active, selected_roles=selected_roles,
+                           roles=roles, hospitals=hospitals, lab_units=lab_units,
+                           username=username, active=active, selected_roles=selected_roles,
                            full_name=full_name, phone=phone, designation=designation, email=email,
-                           year_of_joining=yj, last_date_of_service=ldos)
+                           year_of_joining=yj, last_date_of_service=ldos,
+                           file_upload_quota=file_upload_quota, selected_lab_units=selected_lab_units)
 
 
 
@@ -150,6 +170,9 @@ def edit_user(user_id: int):
         if not user:
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
+        hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+        lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
+
         if request.method == "POST":
             full_name = (request.form.get("full_name") or "").strip()
             designation = (request.form.get("designation") or "").strip()
@@ -157,23 +180,29 @@ def edit_user(user_id: int):
             phone = (request.form.get("phone") or "").strip()
             yj = (request.form.get("year_of_joining") or "").strip()
             ldos = (request.form.get("last_date_of_service") or "").strip()
+            file_upload_quota = int(request.form.get("file_upload_quota") or 0)
+            selected_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units"))
 
             ok, msg = validate_email(email)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user)
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             ok, msg = validate_phone(phone)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user)
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             yj_int = None
             if yj:
                current_year = date.today().year
                if not yj.isdigit() or not (1970 <= int(yj) <= current_year + 1):
                      flash("Year of joining must be a valid year.", "danger")
-                     return render_template("admin/edit_user.html", user=user)
+                     return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
                yj_int = int(yj)
 
             ok, msg, ldos_date = parse_iso_date(ldos)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user)
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+
+            if file_upload_quota < 0:
+                flash("File upload quota cannot be negative.", "danger")
+                return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             user.full_name = full_name or None
             user.designation = designation or None
@@ -181,13 +210,20 @@ def edit_user(user_id: int):
             user.phone = phone or None
             user.year_of_joining = yj_int
             user.last_date_of_service = ldos_date
+            user.file_upload_quota = file_upload_quota
+
+            # Update lab units
+            user.lab_units.clear()
+            if selected_lab_unit_ids:
+                lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(selected_lab_unit_ids))).scalars().all()
+                for lu in lab_unit_objs: user.lab_units.append(lu)
 
             db.add(user); db.commit()
             flash("Profile updated.", "success")
             return redirect(url_for("admin.users_list"))
 
         # GET
-        return render_template("admin/edit_user.html", user=user)
+        return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
 
 # ROUTE FOR ROLES AND TO MAKE ACTIVE/INACTIVE
@@ -435,3 +471,150 @@ def malicious_uploads():
         top_reasons=top_reasons,
         top_ips=top_ips,
     )
+
+
+# --- Generic CRUD for Lookup Tables ---
+def _get_model_by_name(name):
+    return {
+        "hospital": Hospital,
+        "lab_unit": LabUnit,
+        "camera": Camera,
+        "disease": Disease,
+        "area": Area
+    }.get(name)
+
+
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
+
+@admin_bp.route("/<string:model_name>", methods=["GET", "POST"])
+@roles_required("admin")
+def list_and_create_lookup(model_name):
+    Model = _get_model_by_name(model_name)
+    if not Model:
+        flash(f"Invalid master list: {model_name}", "danger")
+        return redirect(url_for("admin.users_list"))
+
+    # --- Handle form submission ---
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Name is required.", "danger")
+            return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+        with Session() as db:
+            if model_name == "lab_unit":
+                hospital_id = request.form.get("hospital_id")
+                if not hospital_id:
+                    flash("Hospital is required for a Lab Unit.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+                hospital_id = int(hospital_id)
+
+                # Check for duplicate LabUnit for this hospital
+                exists = db.execute(
+                    select(LabUnit)
+                    .where(func.lower(LabUnit.name) == name.lower())
+                    .where(LabUnit.hospital_id == hospital_id)
+                ).scalar_one_or_none()
+
+                if exists:
+                    flash(f"Lab Unit '{name}' already exists for this hospital.", "warning")
+                else:
+                    db.add(LabUnit(name=name, hospital_id=hospital_id))
+                    db.commit()
+                    flash(f"Lab Unit '{name}' added successfully.", "success")
+
+            else:
+                # Check for duplicate name globally
+                exists = db.execute(
+                    select(Model)
+                    .where(func.lower(Model.name) == name.lower())
+                ).scalar_one_or_none()
+
+                if exists:
+                    flash(f"{model_name.replace('_', ' ').title()} '{name}' already exists.", "warning")
+                else:
+                    db.add(Model(name=name))
+                    db.commit()
+                    flash(f"{model_name.replace('_', ' ').title()} '{name}' added successfully.", "success")
+
+        return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+    # --- Handle listing ---
+    with Session() as db:
+        stmt = select(Model).order_by(Model.id)
+
+        # Eager-load hospital relationship if model is LabUnit
+        if model_name == "lab_unit":
+            stmt = stmt.options(selectinload(LabUnit.hospital))
+
+        items = db.scalars(stmt).all()
+        hospitals = db.scalars(select(Hospital).order_by(Hospital.id)).all() if model_name == "lab_unit" else None
+
+    return render_template(
+        "admin/lookup_list.html",
+        items=items,
+        model_name=model_name,
+        title=model_name.replace("_", " ").title(),
+        hospitals=hospitals
+    )
+
+
+
+@admin_bp.route("/<string:model_name>/<int:item_id>/edit", methods=["GET", "POST"])
+@roles_required("admin")
+def edit_lookup(model_name, item_id):
+    Model = _get_model_by_name(model_name)
+    if not Model:
+        flash(f"Invalid master list: {model_name}", "danger")
+        return redirect(url_for("admin.users_list"))
+
+    with Session() as db:
+        item = db.get(Model, item_id)
+        if not item:
+            flash("Item not found.", "danger")
+            return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+        if request.method == "POST":
+            name = request.form.get("name", "").strip()
+            if not name:
+                flash("Name is required.", "danger")
+            else:
+                item.name = name
+                if model_name == "lab_unit":
+                    hospital_id = request.form.get("hospital_id")
+                    if not hospital_id:
+                        flash("Hospital is required for a Lab Unit.", "danger")
+                        return redirect(url_for("admin.edit_lookup", model_name=model_name, item_id=item_id))
+                    item.hospital_id = int(hospital_id)
+
+                db.commit()
+                flash(f"{model_name.replace('_', ' ').title()} updated.", "success")
+                return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+        hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all() if model_name == "lab_unit" else None
+
+    return render_template(
+        "admin/lookup_edit.html",
+        item=item,
+        model_name=model_name,
+        title=f"Edit {model_name.replace('_', ' ').title()}",
+        hospitals=hospitals
+    )
+
+
+@admin_bp.route("/<string:model_name>/<int:item_id>/delete", methods=["POST"])
+@roles_required("admin")
+def delete_lookup(model_name, item_id):
+    Model = _get_model_by_name(model_name)
+    if not Model:
+        flash(f"Invalid master list: {model_name}", "danger")
+        return redirect(url_for("admin.users_list"))
+    with Session() as db:
+        item = db.get(Model, item_id)
+        if item:
+            db.delete(item)
+            db.commit()
+            flash(f"{model_name.replace('_', ' ').title()} deleted.", "success")
+    return redirect(url_for(f"admin.list_and_create_lookup", model_name=model_name))

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Manage {{ title }}s</h2>
+
+    <div class="card mb-4">
+        <div class="card-header">Add New {{ title }}</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.list_and_create_lookup', model_name=model_name) }}">
+                {{ csrf_field() }}
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    {% if model_name == 'lab_unit' and hospitals %}
+                    <div class="col-md-4">
+                        <label for="hospital_id" class="form-label">Hospital</label>
+                        <select class="form-select" id="hospital_id" name="hospital_id" required>
+                            {% for hospital in hospitals %}
+                            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-md-2 align-self-end">
+                        <button type="submit" class="btn btn-primary w-100">Add</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Existing {{ title }}s</div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        {% if model_name == 'lab_unit' %}
+                        <th>Hospital</th>
+                        {% endif %}
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>{{ item.name }}</td>
+                        {% if model_name == 'lab_unit' %}
+                        <td>{{ item.hospital.name if item.hospital else 'N/A' }}</td>
+                        {% endif %}
+                        <td class="text-end">
+                            <a href="{{ url_for('admin.edit_lookup', model_name=model_name, item_id=item.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                            <form method="POST" action="{{ url_for('admin.delete_lookup', model_name=model_name, item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure?');">
+                                {{ csrf_field() }}
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

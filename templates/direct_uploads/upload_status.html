@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Upload Status{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Upload Status</h1>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload') }}">New Upload</a>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Upload Summary</h5>
+            <p class="card-text">Total files uploaded successfully: <span class="badge bg-success">{{ results.uploaded_count }}</span></p>
+            <p class="card-text">Total files failed to upload: <span class="badge bg-danger">{{ results.failed_count }}</span></p>
+        </div>
+    </div>
+
+    {% if results.failed_uploads %}
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title text-danger">Failed Uploads Details</h5>
+            <ul class="list-group list-group-flush">
+                {% for item in results.failed_uploads %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ item.filename }}</span>
+                    <span class="badge bg-warning text-dark">{{ item.reason }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Direct Image Upload{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Direct Image Upload</h1>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('direct_uploads.upload') }}" enctype="multipart/form-data" novalidate>
+                {{ csrf_field() }}
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label for="hospital_id" class="form-label">Hospital <span class="text-danger">*</span></label>
+                        <select class="form-select" id="hospital_id" name="hospital_id" required>
+                            <option value="">Select Hospital</option>
+                            {% for hospital in hospitals %}
+                            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="lab_unit_id" class="form-label">Lab Unit <span class="text-danger">*</span></label>
+                        <select class="form-select" id="lab_unit_id" name="lab_unit_id" required>
+                            <option value="">Select Lab Unit</option>
+                            {% for lab_unit in lab_units %}
+                            <option value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}">{{ lab_unit.name }} ({{ lab_unit.hospital.name }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="camera_id" class="form-label">Camera <span class="text-danger">*</span></label>
+                        <select class="form-select" id="camera_id" name="camera_id" required>
+                            <option value="">Select Camera</option>
+                            {% for camera in cameras %}
+                            <option value="{{ camera.id }}">{{ camera.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="disease_id" class="form-label">Disease <span class="text-danger">*</span></label>
+                        <select class="form-select" id="disease_id" name="disease_id" required>
+                            <option value="">Select Disease</option>
+                            {% for disease in diseases %}
+                            <option value="{{ disease.id }}">{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label for="area_id" class="form-label">Area <span class="text-danger">*</span></label>
+                        <select class="form-select" id="area_id" name="area_id" required>
+                            <option value="">Select Area</option>
+                            {% for area in areas %}
+                            <option value="{{ area.id }}">{{ area.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic">
+                            <label class="form-check-label" for="is_mydriatic">Is Mydriatic?</label>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label for="files" class="form-label">Select Images (Max {{ config['MAX_FILES_PER_UPLOAD'] }} files, {{ config['PER_FILE_MAX_BYTES'] / (1024*1024) }}MB per file) <span class="text-danger">*</span></label>
+                        <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Upload Images</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const hospitalSelect = document.getElementById('hospital_id');
+        const labUnitSelect = document.getElementById('lab_unit_id');
+        const allLabUnitOptions = Array.from(labUnitSelect.options);
+
+        hospitalSelect.addEventListener('change', function() {
+            const selectedHospitalId = this.value;
+            
+            // Clear current lab unit options
+            labUnitSelect.innerHTML = '<option value="">Select Lab Unit</option>';
+
+            if (selectedHospitalId) {
+                allLabUnitOptions.forEach(option => {
+                    if (option.dataset.hospitalId === selectedHospitalId) {
+                        labUnitSelect.appendChild(option.cloneNode(true));
+                    }
+                });
+            }
+        });
+
+        // Trigger change on load if a hospital is pre-selected (e.g., after form submission error)
+        if (hospitalSelect.value) {
+            hospitalSelect.dispatchEvent(new Event('change'));
+        }
+    });
+</script>
+{% endblock %}

@@ -40,7 +40,37 @@
             <input class="form-control" id="last_date_of_service" name="last_date_of_service" type="date"
                    value="{{ user.last_date_of_service }}">
           </div>
+          <div class="col-md-3">
+            <label for="file_upload_quota" class="form-label">File Upload Quota</label>
+            <input type="number" class="form-control" id="file_upload_quota" name="file_upload_quota"
+                value="{{ user.file_upload_quota or 0 }}" min="0" required>
+          </div>
         </div>
+
+        <div class="col-12 mt-3">
+            <label class="form-label">Associated Lab Units</label>
+            {% if hospitals %}
+            <div class="row g-2">
+                {% for hospital in hospitals %}
+                <div class="col-md-6">
+                    <div class="card card-body bg-light p-2">
+                        <h6 class="mb-2">{{ hospital.name }}</h6>
+                        {% for lu in lab_units if lu.hospital_id == hospital.id %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="labunit-{{ lu.id }}"
+                                name="lab_units" value="{{ lu.id }}" {% if lu.id in (selected_lab_units or []) %}checked{% endif %}>
+                            <label class="form-check-label" for="labunit-{{ lu.id }}">{{ lu.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted small">No hospitals or lab units defined yet.</div>
+            {% endif %}
+        </div>
+
         <div class="mt-3">
           <button class="btn btn-primary" type="submit">Save changes</button>
         </div>

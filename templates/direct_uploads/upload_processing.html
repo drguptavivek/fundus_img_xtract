@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Upload Processing{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Upload Processing</h1>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload') }}">New Upload</a>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Job ID: {{ job_id }}</h5>
+            <p class="card-text">Overall Status: <span id="overall-status" class="badge bg-info">Processing...</span></p>
+            <div class="progress mb-3">
+                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+            </div>
+            <div id="completion-message" class="alert alert-success d-none" role="alert">
+                Upload processing complete! <a href="{{ url_for('direct_uploads.upload_results', job_id=job_id) }}" class="alert-link">View Results</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">File Status Details</h5>
+            <ul id="file-status-list" class="list-group list-group-flush">
+                <li class="list-group-item text-muted">Loading file statuses...</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const jobId = {{ job_id }};
+        const overallStatusSpan = document.getElementById('overall-status');
+        const progressBar = document.getElementById('progress-bar');
+        const fileStatusList = document.getElementById('file-status-list');
+        const completionMessage = document.getElementById('completion-message');
+        let pollingInterval;
+
+        function fetchStatus() {
+            fetch(`/api/direct/upload/status/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        overallStatusSpan.textContent = `Error: ${data.error}`;
+                        overallStatusSpan.className = 'badge bg-danger';
+                        clearInterval(pollingInterval);
+                        return;
+                    }
+
+                    overallStatusSpan.textContent = data.job_status.charAt(0).toUpperCase() + data.job_status.slice(1);
+                    
+                    let completedItems = 0;
+                    fileStatusList.innerHTML = ''; // Clear previous list
+
+                    data.items.forEach(item => {
+                        const listItem = document.createElement('li');
+                        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        
+                        let badgeClass = 'bg-secondary';
+                        if (item.state === 'completed') {
+                            badgeClass = 'bg-success';
+                            completedItems++;
+                        } else if (item.state === 'error') {
+                            badgeClass = 'bg-danger';
+                        } else if (item.state === 'processing') {
+                            badgeClass = 'bg-info';
+                        }
+
+                        listItem.innerHTML = `
+                            <span>${item.filename}</span>
+                            <span class="badge ${badgeClass}">${item.state.charAt(0).toUpperCase() + item.state.slice(1)}</span>
+                        `;
+                        if (item.detail) {
+                            const detailSpan = document.createElement('span');
+                            detailSpan.className = 'text-muted small ms-2';
+                            detailSpan.textContent = `(${item.detail})`;
+                            listItem.appendChild(detailSpan);
+                        }
+                        fileStatusList.appendChild(listItem);
+                    });
+
+                    const totalItems = data.items.length;
+                    const progress = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+                    progressBar.style.width = `${progress}%`;
+                    progressBar.setAttribute('aria-valuenow', progress);
+                    progressBar.textContent = `${Math.round(progress)}%`;
+
+                    if (data.job_status === 'completed' || data.job_status === 'error') {
+                        clearInterval(pollingInterval);
+                        progressBar.classList.remove('progress-bar-animated');
+                        if (data.job_status === 'completed') {
+                            overallStatusSpan.className = 'badge bg-success';
+                            completionMessage.classList.remove('d-none');
+                        } else {
+                            overallStatusSpan.className = 'badge bg-danger';
+                            completionMessage.classList.add('d-none'); // Hide success message on error
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching upload status:', error);
+                    overallStatusSpan.textContent = 'Error fetching status';
+                    overallStatusSpan.className = 'badge bg-danger';
+                    clearInterval(pollingInterval);
+                });
+        }
+
+        // Initial fetch and then poll every 3 seconds
+        fetchStatus();
+        pollingInterval = setInterval(fetchStatus, 3000);
+    });
+</script>
+{% endblock %}

@@ -1,18 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Upload Status{% endblock %}
+{% block title %}Upload Results{% endblock %}
 
 {% block content %}
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h4 mb-0">Upload Status</h1>
+        <h1 class="h4 mb-0">Upload Results for Job {{ job.id }}</h1>
         <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload') }}">New Upload</a>
     </div>
 
     <div class="card shadow-sm mb-3">
         <div class="card-body">
             <h5 class="card-title">Upload Summary</h5>
-            <p class="card-text">Total files uploaded successfully: <span class="badge bg-success">{{ results.uploaded_count }}</span></p>
-            <p class="card-text">Total files failed to upload: <span class="badge bg-danger">{{ results.failed_count }}</span></p>
+            <p class="card-text">Overall Job Status: <span class="badge bg-{{ 'success' if job.status == 'completed' else 'danger' }}">{{ job.status.capitalize() }}</span></p>
+            <p class="card-text">Total files processed: <span class="badge bg-primary">{{ results.uploaded_count + results.failed_count }}</span></p>
+            <p class="card-text">Files uploaded successfully: <span class="badge bg-success">{{ results.uploaded_count }}</span></p>
+            <p class="card-text">Files failed to upload: <span class="badge bg-danger">{{ results.failed_count }}</span></p>
         </div>
     </div>
 

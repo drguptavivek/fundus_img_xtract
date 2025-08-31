@@ -73,6 +73,19 @@
                 <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
                   href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
               </li>
+              
+              {# Direct Uploads - only for contributor, data_manager, admin #}
+              {% if current_user_has('contributor') or current_user_has('data_manager') or current_user_has('admin') %}
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.upload') }}">Direct Upload</a>
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.dashboard') }}">Direct Upload Dashboard</a>
+              </li>
+              {% endif %}
+              
               <li>
                 <hr class="dropdown-divider">
               </li>

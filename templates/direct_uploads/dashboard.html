@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "direct_uploads/_pagination.html" import render_pagination %}
+
+{% block title %}Direct Upload Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Direct Upload Dashboard</h1>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <!-- Total Uploads -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card kpi--primary h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-semibold opacity-75">Total Uploads</div>
+                    <div class="display-6 fw-bold">{{ kpi_total_uploads }}</div>
+                    <div class="small opacity-75">All time</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Camera Types -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card kpi--info h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-semibold opacity-75">Camera Types</div>
+                    <div class="display-6 fw-bold">{{ camera_kpis|length }}</div>
+                    <div class="small opacity-75">
+                        {% set sorted_camera_kpis = camera_kpis|dictsort(false, 'value')|reverse|list %}
+                        {% for name, count in sorted_camera_kpis %}
+                            {% if loop.index <= 3 %}
+                                {{ name }}: {{ count }}<br>
+                            {% endif %}
+                        {% else %}
+                            No data
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Diseases -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card kpi--success h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-semibold opacity-75">Diseases</div>
+                    <div class="display-6 fw-bold">{{ disease_kpis|length }}</div>
+                    <div class="small opacity-75">
+                        {% set sorted_disease_kpis = disease_kpis|dictsort(false, 'value')|reverse|list %}
+                        {% for name, count in sorted_disease_kpis %}
+                            {% if loop.index <= 3 %}
+                                {{ name }}: {{ count }}<br>
+                            {% endif %}
+                        {% else %}
+                            No data
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Areas -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card kpi--warning h-100">
+                <div class="card-body">
+                    <div class="text-uppercase small fw-semibold opacity-75">Areas</div>
+                    <div class="display-6 fw-bold">{{ area_kpis|length }}</div>
+                    <div class="small opacity-75">
+                        {% set sorted_area_kpis = area_kpis|dictsort(false, 'value')|reverse|list %}
+                        {% for name, count in sorted_area_kpis %}
+                            {% if loop.index <= 3 %}
+                                {{ name }}: {{ count }}<br>
+                            {% endif %}
+                        {% else %}
+                            No data
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h5 mb-0">Uploaded Images</h2>
+                <div class="text-muted">
+                    {% set end_display = [current_page * per_page, total_count] | min %}
+                    Showing {{ (current_page - 1) * per_page + 1 }} to {{ end_display }} of {{ total_count }} entries
+                </div>
+            </div>
+
+            {% if uploads %}
+                <!-- Pagination Top -->
+                {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
+
+                <!-- Table -->
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Filename</th>
+                                <th>Uploaded By</th>
+                                <th>Hospital</th>
+                                <th>Lab Unit</th>
+                                <th>Camera</th>
+                                <th>Disease</th>
+                                <th>Area</th>
+                                <th>Mydriatic</th>
+                                <th>Uploaded At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for upload in uploads %}
+                            <tr>
+                                <td>{{ upload.filename }}</td>
+                                <td>{{ users[upload.uploader_id].username if users[upload.uploader_id] else 'Unknown' }}</td>
+                                <td>{{ hospitals[upload.hospital_id].name if hospitals[upload.hospital_id] else 'Unknown' }}</td>
+                                <td>{{ lab_units[upload.lab_unit_id].name if lab_units[upload.lab_unit_id] else 'Unknown' }}</td>
+                                <td>{{ cameras[upload.camera_id].name if cameras[upload.camera_id] else 'Unknown' }}</td>
+                                <td>{{ diseases[upload.disease_id].name if diseases[upload.disease_id] else 'Unknown' }}</td>
+                                <td>{{ areas[upload.area_id].name if areas[upload.area_id] else 'Unknown' }}</td>
+                                <td>
+                                    {% if upload.is_mydriatic %}
+                                    <span class="badge bg-success">Mydriatic</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Non-Mydriatic</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ upload.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Bottom -->
+                {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
+            {% else %}
+                <div class="text-center py-5">
+                    <p class="text-muted">No direct uploads found.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -23,7 +23,7 @@ This is the central function that orchestrates the processing of a single ZIP fi
 
 #### Key Workflow Steps:
 
-1.  **Duplicate Check**: It first calculates the MD5 hash of the ZIP file. If the hash already exists in the `zip_files` table, the file is considered a duplicate, moved to a dedicated `dupmd5` directory, and skipped.
+1.  **Duplicate Check**: It first calculates the MD5 hash of the ZIP file.  When a new ZIP file is processed, the system first calculates its MD5 hash, which is a unique digital fingerprint of the file's content. It then queries the database to see if this exact hash has been recorded from a previous upload.  If the hash already exists in the `zip_files` table, the file is considered a duplicate, moved to a dedicated `dupmd5` dated directory, and skipped. This content-based checking is more reliable than just comparing filenames.
 2.  **Security Validation**:
     *   **File Type Allowlist**: It strictly enforces that only files with `.pdf`, `.jpg`, and `.jpeg` extensions are present. Any other file type results in the rejection and deletion of the ZIP.
     *   **Path Traversal**: It checks for and rejects any ZIP files containing relative paths (`../`) or absolute paths (`/`) to prevent directory traversal attacks.
@@ -37,7 +37,7 @@ This is the central function that orchestrates the processing of a single ZIP fi
 5.  **Database Persistence**:
     *   A `ZipFile` record is created to log the processed archive and its MD5 hash.
     *   A `PatientEncounters` record is created using the parsed metadata.
-    *   An `EncounterFile` record is created for each extracted file, linked to the `PatientEncounters` record. A unique `uuid` is generated for each file.
+    *   An `EncounterFile` record is created for each extracted file, linked to the `PatientEncounters` record. A unique `uuid` is generated for each file. In ```models.py```, the uuid column in the ```EncounterFiles``` table is defined with a  default value that automatically generates a UUID. This means that even though main.py doesn't explicitly create a UUID when it  creates new EncounterFiles records, the database handles it automatically. As a result, every original image and every original report gets it own unique UUID.  [Documentation](docs/main.md). 
 6.  **Transaction Management**: All database operations for a single ZIP file are committed as a single transaction. If any error occurs, the transaction is rolled back.
 7.  **Archive Management**:
     *   On **success**, the original ZIP file is moved to the `files/processed/` directory.

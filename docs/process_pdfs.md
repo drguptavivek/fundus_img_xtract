@@ -7,7 +7,7 @@ Here’s a tight, developer-focused doc for your **PDF OCR + persistence** runne
 
 1. Iterate over PDFs saved by the ZIP ingestor in `files/pdfs`.
 2. Use `ocr_extraction.find_report_pages_by_coords_with_grid()` to extract DR/Glaucoma text snippets + page numbers.
-3. Persist results to `DiabeticRetinopathyReport` / `GlaucomaReport`.
+3. Persist results to `DiabeticRetinopathyReport` / `GlaucomaReport`. In ```models.py```, the uuid column in the DiabeticRetinopathyReport, and GlaucomaReport tables is defined with a  default value that automatically generates a UUID. This means that even though process_pdfs.py doesn't explicitly create a UUID when it  creates new report records, the database handles it automatically. As a result, every split PDF report gets it own unique UUID. 
 4. Optionally **split and save** the detected DR/GL pages to dedicated folders.
 5. Mark the corresponding `EncounterFile.ocr_processed = True`.
 6. Log success/error lines.

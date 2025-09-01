@@ -63,10 +63,10 @@ def restore_original(upload_id: int):
                 return jsonify({"error": "Upload not found."}), 404
 
             if not require_owner_or_roles(upload, 'admin', 'data_manager'):
-                return jsonify({"error": "Permission denied."}),
+                return jsonify({"error": "Permission denied."}), 403
 
             if not upload.edited_filename:
-                return jsonify({"message": "No edited version to restore."}),
+                return jsonify({"message": "No edited version to restore."}), 200
 
             # Delete the edited file
             edited_path = abs_from_parts(upload.folder_rel, upload.edited_filename, kind="edited")
@@ -87,5 +87,5 @@ def restore_original(upload_id: int):
             db.rollback()
             current_app.logger.error("Error restoring original for upload %s:\n%s",
                                      upload_id, traceback.format_exc())
-            return jsonify({"error": "An unexpected error occurred."}),
+            return jsonify({"error": "An unexpected error occurred."}), 500
 

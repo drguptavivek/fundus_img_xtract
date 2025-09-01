@@ -26,37 +26,67 @@ def relfolder(folder: Path) -> str:
 
 def abs_from_parts(folder_rel: str, filename: str, kind: str = "orig") -> Path:
     """
-    Resolve absolute path from:
-      - folder_rel: POSIX path relative to BASE_DIR (e.g. 'files/direct_uploads/2025_09_01_user7')
-      - filename:   basename only (e.g. 'foo.jpg')
-      - kind:       'orig' | 'edited'
-    Ensures the final path is under DIRECT_UPLOAD_DIR.
+    Resolve absolute path under DIRECT_UPLOAD_DIR:
+      - folder_rel: e.g. '2025_09_01_user7'  (DB value)
+      - filename:   basename only, e.g. 'foo.jpg'
+      - kind:       'orig' | 'edited' | 'dup'
+    
+    Returns absolute Path. Ensures it's inside DIRECT_UPLOAD_DIR.
     """
-    folder_rel = (folder_rel or "").replace("\\", "/")
+    if not folder_rel or "/" in folder_rel or "\\" in folder_rel:
+        raise ValueError(f"Invalid folder_rel: {folder_rel!r}")
+
     if not filename or "/" in filename or "\\" in filename:
-        raise ValueError(f"Invalid basename: {filename!r}")
+        raise ValueError(f"Invalid filename: {filename!r}")
 
-    base = (BASE_DIR / folder_rel).resolve()
+    # Base folder
+    base = (DIRECT_UPLOAD_DIR / folder_rel).resolve()
+
+    # Kind subfolder
+    if kind == "edited":
+        target = base / "edited" / filename
+    elif kind == "dup":
+        target = base / "dup" / filename
+    else:  # orig
+        target = base / filename
+
+    # Security check
     root = DIRECT_UPLOAD_DIR.resolve()
-    if not _is_inside(base, root):
-        raise ValueError(f"Folder outside DIRECT_UPLOAD_DIR: {base}")
+    if not _is_inside(target, root):
+        raise ValueError(f"Resolved path escapes DIRECT_UPLOAD_DIR: {target}")
 
-    target = base / ("edited" if kind == "edited" else "") / filename
-    return target.resolve()
+    return target
 
-def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path, Path, Path]:
+
+
+
+def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path, Path, Path, str]:
     """
-    Create/return (orig_dir, edited_dir, dup_dir) for this user/day:
-      DIRECT_UPLOAD_DIR/YYYY_MM_DD_user<id>/{edited,dup}
+    Create/return (orig_dir, edited_dir, dup_dir, folder_rel) for this user/day:
+      - orig_dir:   full path e.g. BASE/files/direct_uploads/2025_09_01_user7
+      - edited_dir: subfolder 'edited'
+      - dup_dir:    subfolder 'dup'
+      - folder_rel: string '2025_09_01_user7' for DB storage
     """
     when = when or datetime.now()
     date_str = when.strftime("%Y_%m_%d")
-    base = ensure_root() / f"{date_str}_user{user_id}"
-    orig_dir, edited_dir, dup_dir = base, base / "edited", base / "dup"
+
+    # String for DB storage
+    folder_rel = f"{date_str}_user{user_id}"
+
+    # Full paths on disk
+    base = ensure_root() / folder_rel
+    orig_dir = base
+    edited_dir = base / "edited"
+    dup_dir = base / "dup"
+
+    # Ensure dirs exist
     orig_dir.mkdir(parents=True, exist_ok=True)
     edited_dir.mkdir(parents=True, exist_ok=True)
     dup_dir.mkdir(parents=True, exist_ok=True)
-    return orig_dir, edited_dir, dup_dir
+
+    return orig_dir, edited_dir, dup_dir, folder_rel
+
 
 def uniquify(dest_dir: Path, filename: str) -> Path:
     p = dest_dir / filename

@@ -16,7 +16,7 @@ from models import (
     Camera, Disease, Area, Job, JobItem
 )
 
-from .paths import get_upload_dirs, relfolder, uniquify
+from .paths import get_upload_dirs, uniquify
 
 
 def _to_int(v):
@@ -96,7 +96,8 @@ def upload():
                                     new_job.id, current_user.username, current_user.id)
 
             # ---- dirs for this user/day ----
-            orig_dir, edited_dir, dup_dir = get_upload_dirs(current_user.id)
+            orig_dir, edited_dir, dup_dir, folder_rel = get_upload_dirs(current_user.id)
+    
 
             # ---- process files ----
             files = files[:MAX_FILES_ALLOWED]  # hard-cap
@@ -154,7 +155,7 @@ def upload():
                                     # create DB row (folder-based; store basenames only)
                                     db_session.add(DirectImageUpload(
                                         filename=dest.name,                 # basename stored
-                                        folder_rel=relfolder(orig_dir),     # POSIX relative dir stored
+                                        folder_rel=folder_rel,    
                                         edited_filename=None,               # not yet
                                         file_hash=md5_hash,
                                         uploader_id=current_user.id,

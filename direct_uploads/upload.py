@@ -1,3 +1,5 @@
+# direct_uploads/uploads.py
+
 import os, uuid, hashlib, magic
 from datetime import datetime
 from werkzeug.utils import secure_filename
@@ -5,24 +7,36 @@ from flask import request, render_template, redirect, url_for, flash, current_ap
 from flask_login import current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+
 from . import bp
 from .utils import with_session
 from auth.roles import roles_required
 from models import (
-    User, LabUnit, Hospital, Session, DIRECT_UPLOAD_DIR, DirectImageUpload,
-    Camera, Disease, Area, Job, JobItem, BASE_DIR
+    User, LabUnit, Hospital, DirectImageUpload,
+    Camera, Disease, Area, Job, JobItem
 )
+
+from .paths import get_upload_dirs, relfolder, uniquify
+
+
+def _to_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
 
 @bp.route("/direct/upload", methods=["GET", "POST"])
 @roles_required('contributor', 'data_manager', 'admin')
 def upload():
     with with_session() as db_session:
         if request.method == "POST":
-            hospital_id = request.form.get("hospital_id")
-            lab_unit_id = request.form.get("lab_unit_id")
-            camera_id = request.form.get("camera_id")
-            disease_id = request.form.get("disease_id")
-            area_id = request.form.get("area_id")
+            # ---- form fields ----
+            hospital_id = _to_int(request.form.get("hospital_id"))
+            lab_unit_id = _to_int(request.form.get("lab_unit_id"))
+            camera_id   = _to_int(request.form.get("camera_id"))
+            disease_id  = _to_int(request.form.get("disease_id"))
+            area_id     = _to_int(request.form.get("area_id"))
             is_mydriatic = request.form.get("is_mydriatic") == "on"
             files = request.files.getlist("files")
 
@@ -35,31 +49,39 @@ def upload():
                 hospital_id, lab_unit_id, camera_id, disease_id, area_id, is_mydriatic
             )
 
-            MAX_FILES_ALLOWED = int(os.getenv("DIRECT_UPLOAD_MAX_FILES", 100))
-            MAX_FILE_SIZE_MB = int(os.getenv("DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5))
+            # ---- limits & allowed types ----
+            MAX_FILES_ALLOWED   = int(os.getenv("DIRECT_UPLOAD_MAX_FILES", 100))
+            MAX_FILE_SIZE_MB    = int(os.getenv("DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5))
             MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-            ALLOWED_MIMETYPES = os.getenv(
+            ALLOWED_MIMETYPES   = [m.strip() for m in os.getenv(
                 "DIRECT_UPLOAD_ALLOWED_MIMETYPES", "image/jpeg,image/png"
-            ).split(",")
+            ).split(",")]
 
+            # ---- validate required fields ----
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
                 current_app.logger.warning("Direct upload failed: missing fields for user %s (%s)",
                                            current_user.username, current_user.id)
                 flash("All fields are required.", "danger")
-                return redirect(url_for("direct_uploads.upload"))
+                return redirect(url_for("direct_uploads.upload"), code=303)
 
             hospital = db_session.get(Hospital, hospital_id)
             lab_unit = db_session.get(LabUnit, lab_unit_id)
-            camera = db_session.get(Camera, camera_id)
-            disease = db_session.get(Disease, disease_id)
-            area = db_session.get(Area, area_id)
+            camera   = db_session.get(Camera,   camera_id)
+            disease  = db_session.get(Disease,  disease_id)
+            area     = db_session.get(Area,     area_id)
 
             if not all([hospital, lab_unit, camera, disease, area]):
                 current_app.logger.warning("Direct upload failed: invalid selection for user %s (%s)",
                                            current_user.username, current_user.id)
                 flash("Invalid selection for one or more fields.", "danger")
-                return redirect(url_for("direct_uploads.upload"))
+                return redirect(url_for("direct_uploads.upload"), code=303)
 
+            # Optional consistency: lab unit must belong to hospital
+            if getattr(lab_unit, "hospital_id", None) != hospital.id:
+                flash("Selected Lab Unit does not belong to the selected Hospital.", "danger")
+                return redirect(url_for("direct_uploads.upload"), code=303)
+
+            # ---- job bookkeeping ----
             job_token = str(uuid.uuid4())
             new_job = Job(
                 token=job_token,
@@ -70,20 +92,21 @@ def upload():
             )
             db_session.add(new_job)
             db_session.flush()
-
             current_app.logger.info("Created new job %s for user %s (%s)",
                                     new_job.id, current_user.username, current_user.id)
 
-            today_str = datetime.now().strftime("%Y_%m_%d")
-            upload_dir = DIRECT_UPLOAD_DIR / today_str
-            upload_dir.mkdir(parents=True, exist_ok=True)
+            # ---- dirs for this user/day ----
+            orig_dir, edited_dir, dup_dir = get_upload_dirs(current_user.id)
 
-            dup_user_id_dir = upload_dir / f"dup_{current_user.id}"
-            dup_user_id_dir.mkdir(parents=True, exist_ok=True)
+            # ---- process files ----
+            files = files[:MAX_FILES_ALLOWED]  # hard-cap
+            if not files:
+                flash("No files selected.", "warning")
+                return redirect(url_for("direct_uploads.upload"), code=303)
+
+            current_app.logger.info("Processing %s files for upload", len(files))
 
             job_items = []
-            files = files[:MAX_FILES_ALLOWED]  # hard-cap
-            current_app.logger.info("Processing %s files for upload", len(files))
 
             for file in files:
                 filename = secure_filename(file.filename or "")
@@ -110,24 +133,29 @@ def upload():
                             existing = db_session.execute(
                                 select(DirectImageUpload).filter_by(file_hash=md5_hash)
                             ).scalar_one_or_none()
+
                             if existing:
-                                path = dup_user_id_dir / filename
+                                # save a copy to dup folder (no DB row)
+                                path = uniquify(dup_dir, filename)
                                 path.write_bytes(content)
                                 state, detail = "error", "Duplicate file"
                                 current_app.logger.info("Duplicate: %s", filename)
                             else:
+                                # per-request quota (optional; your config key)
                                 if current_user.file_upload_count >= current_app.config.get("MAX_FILES_PER_UPLOAD", 50):
                                     state, detail = "error", "Upload quota exceeded"
                                     current_app.logger.warning("Quota exceeded for user %s (%s)",
                                                                current_user.username, current_user.id)
                                 else:
-                                    path = upload_dir / filename
-                                    path.write_bytes(content)
+                                    # write original
+                                    dest = uniquify(orig_dir, filename)
+                                    dest.write_bytes(content)
 
-                                    relative = str(path.relative_to(BASE_DIR))
+                                    # create DB row (folder-based; store basenames only)
                                     db_session.add(DirectImageUpload(
-                                        filename=filename,
-                                        filepath=relative,
+                                        filename=dest.name,                 # basename stored
+                                        folder_rel=relfolder(orig_dir),     # POSIX relative dir stored
+                                        edited_filename=None,               # not yet
                                         file_hash=md5_hash,
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
@@ -139,7 +167,7 @@ def upload():
                                     ))
                                     current_user.file_upload_count += 1
                                     state, detail = "completed", "File uploaded successfully"
-                                    current_app.logger.info("Uploaded: %s", filename)
+                                    current_app.logger.info("Uploaded: %s", dest.name)
 
                 job_items.append(JobItem(
                     job_id=new_job.id,
@@ -160,9 +188,9 @@ def upload():
             current_app.logger.info("Job %s done. Success:%s Errors:%s", new_job.id, ok, err)
 
             flash("Upload process initiated. Check status for details.", "info")
-            return redirect(url_for("direct_uploads.upload_processing", job_id=new_job.id))
+            return redirect(url_for("direct_uploads.upload_processing", job_id=new_job.id), code=303)
 
-        # GET: page data
+        # ---------------- GET: build form data ----------------
         current_app.logger.info("Direct upload page accessed by %s (%s)", current_user.username, current_user.id)
 
         user = db_session.get(User, current_user.id)  # attaches to session
@@ -187,6 +215,7 @@ def upload():
         return render_template("direct_uploads/upload.html",
                                hospitals=hospitals, lab_units=lab_units,
                                cameras=cameras, diseases=diseases, areas=areas)
+
 
 @bp.route("/direct/upload/processing/<int:job_id>", methods=["GET"])
 @roles_required('contributor', 'data_manager', 'admin')

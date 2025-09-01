@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from sqlalchemy import (
-    Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text,
+    CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text,
     Index, UniqueConstraint, Table, Column
 )
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
@@ -267,42 +267,73 @@ class Area(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 
-# --- New Direct Image Upload Table ---
+
+
+# --- Direct Image Upload Table ---
 class DirectImageUpload(Base):
-    __tablename__ = 'direct_image_uploads'
+    __tablename__ = "direct_image_uploads"
+
     id: Mapped[int] = mapped_column(primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
-    filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    filepath: Mapped[str] = mapped_column(String(1024), nullable=False)
-    edited_image_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+
+    # SQLite-friendly UUID-as-string
+    uuid: Mapped[str] = mapped_column(
+        String(36), unique=True, index=True, default=lambda: str(uuid4())
+    )
+
+    # Basenames only
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)          # original file name (basename)
+    edited_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # edited basename (under <folder_rel>/edited/)
+
+    # POSIX-style relative directory from BASE_DIR (e.g., "files/direct_uploads/2025_09_01_user7")
+    folder_rel: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+
     file_hash: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
-    uploader_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
-    hospital_id: Mapped[int] = mapped_column(ForeignKey('hospitals.id'), nullable=False)
-    lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id'), nullable=False)
-    camera_id: Mapped[int] = mapped_column(ForeignKey('cameras.id'), nullable=False)
-    disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False)
-    area_id: Mapped[int] = mapped_column(ForeignKey('areas.id'), nullable=False)
-    is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    
+    uploader_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    hospital_id: Mapped[int] = mapped_column(ForeignKey("hospitals.id"), nullable=False)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id"), nullable=False)
+    camera_id: Mapped[int] = mapped_column(ForeignKey("cameras.id"), nullable=False)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False)
+    area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
+
+    is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+    )
+
+    # Relationships
     uploader: Mapped["User"] = relationship()
     hospital: Mapped["Hospital"] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
     camera: Mapped["Camera"] = relationship()
     disease: Mapped["Disease"] = relationship()
     area: Mapped["Area"] = relationship()
-    
-    # Property to get absolute path from relative path
-    @property
-    def absolute_filepath(self):
-        from models import BASE_DIR, DIRECT_UPLOAD_DIR
-        return str(BASE_DIR / self.filepath)
-    
-    # Property to get relative path (stored in DB)
-    @property
-    def relative_filepath(self):
-        return self.filepath
 
+    __table_args__ = (
+        # Basename only (no slashes)
+        CheckConstraint("instr(filename, '/') = 0", name="ck_diu_filename_no_slash"),
+        CheckConstraint(
+            "edited_filename IS NULL OR instr(edited_filename, '/') = 0",
+            name="ck_diu_edited_filename_no_slash",
+        ),
+        # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
+        CheckConstraint("substr(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
+        CheckConstraint("instr(folder_rel, '\\\\') = 0", name="ck_diu_folder_no_backslash"),
+        # Helpful composite indexes
+        Index("ix_diu_uploader_created", "uploader_id", "created_at"),
+        Index("ix_diu_folder_created", "folder_rel", "created_at"),
+    )
+
+    # Convenience (display/debug only; do NOT serve from here)
+    @property
+    def rel_dir(self) -> str:
+        return self.folder_rel
+
+    @property
+    def has_edited(self) -> bool:
+        return bool(self.edited_filename)
+    
+
+    
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

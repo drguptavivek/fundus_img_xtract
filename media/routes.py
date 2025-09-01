@@ -1,85 +1,52 @@
 # media/routes.py
+
 import os
 from pathlib import Path
-from flask import abort, send_from_directory
-from werkzeug.utils import secure_filename
+from flask import abort, current_app, send_from_directory, Response
+from flask_login import current_user
+from sqlalchemy import select
+from uuid import UUID  # only used by EncounterFile route
 
 from auth.roles import roles_required
 from . import bp
 
-# Use your existing configured IMAGE_DIR from models.py
-from models import IMAGE_DIR, PDF_DIR, DIRECT_UPLOAD_DIR, Session, EncounterFile  # Path objects and DB
+from models import (
+    IMAGE_DIR, PDF_DIR, DIRECT_UPLOAD_DIR,
+    Session, EncounterFile, DirectImageUpload
+)
+from direct_uploads.paths import abs_from_parts
+
 
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
-def _safe_image(base_dir: Path, filename: str) -> tuple[str, str]:
-    fname = secure_filename(os.path.basename(filename))
-    full = base_dir / fname
-    if not full.exists() or not full.is_file() or full.suffix.lower() not in ALLOWED_IMAGE_EXT:
-        abort(404)
-    return (str(base_dir), fname)
+
+# ---------------- Admin-only legacy image & file serving ----------------
 
 @bp.route("/img/<path:filename>", methods=["GET"])
 @roles_required("admin")
 def serve_image(filename: str):
-    directory, fname = _safe_image(IMAGE_DIR, filename)
-    # Let the browser display the image inline; open in new tab via target=_blank in templates
-    return send_from_directory(directory=directory, path=fname, as_attachment=False)
-
-
-@bp.route("/direct_upload/<path:filepath>", methods=["GET"])
-@roles_required("admin")
-def serve_direct_upload(filepath: str):
-    """Serve a direct upload image by its relative path."""
-    # Security: Ensure the filepath is within the DIRECT_UPLOAD_DIR
-    try:
-        from models import BASE_DIR
-        
-        # Create a Path object for the requested file
-        requested_path = Path(filepath)
-        
-        # Resolve the full path to prevent directory traversal attacks
-        full_path = (BASE_DIR / requested_path).resolve()
-        print(f"Full path: {full_path}")
-        
-        # Ensure the resolved path is still within the DIRECT_UPLOAD_DIR
-        direct_upload_dir_resolved = DIRECT_UPLOAD_DIR.resolve()
-        try:
-            relative_path = full_path.relative_to(direct_upload_dir_resolved)
-        except ValueError:
-            # The path is not within the allowed directory
-            print(f"Security violation: Requested path {filepath} is not within {direct_upload_dir_resolved}")
-            abort(403)
-        
-        # Check if file exists and is a file (not a directory)
-        if not full_path.exists() or not full_path.is_file():
-            print(f"File not found: {full_path}")
-            abort(404)
-            
-        # Check if file has an allowed extension
-        if full_path.suffix.lower() not in ALLOWED_IMAGE_EXT:
-            print(f"File extension not allowed: {full_path.suffix}")
-            abort(404)
-            
-        print(f"Serving file: {full_path}")
-        print(f"Relative path: {relative_path}")
-        print(f"Direct upload dir resolved: {direct_upload_dir_resolved}")
-            
-        # Serve the file
-        return send_from_directory(
-            directory=str(direct_upload_dir_resolved), 
-            path=str(relative_path), 
-            as_attachment=False
-        )
-    except Exception as e:
-        print(f"Error serving direct upload: {e}")
+    """
+    Serve an image from IMAGE_DIR by basename, admin-only.
+    """
+    fname = os.path.basename(filename)
+    if fname != filename:
         abort(404)
+    if Path(fname).suffix.lower() not in ALLOWED_IMAGE_EXT:
+        abort(404)
+
+    full = IMAGE_DIR / fname
+    if not full.exists() or not full.is_file():
+        abort(404)
+
+    return send_from_directory(directory=str(IMAGE_DIR), path=fname, as_attachment=False)
 
 
 @bp.route("/file/<uuid>", methods=["GET"])
 @roles_required("admin")
 def serve_file_by_uuid(uuid: str):
-    """Serve an EncounterFile by its UUID, selecting the correct base dir and mimetype."""
+    """
+    Serve an EncounterFile by UUID from IMAGE_DIR or PDF_DIR, admin-only.
+    """
     db = Session()
     try:
         ef = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
@@ -89,12 +56,14 @@ def serve_file_by_uuid(uuid: str):
     if not ef or not ef.filename:
         abort(404)
 
-    fname = secure_filename(os.path.basename(ef.filename))
+    fname = os.path.basename(ef.filename)
+    if fname != ef.filename:
+        abort(404)
+
     ext = Path(fname).suffix.lower()
-    # Decide location and mimetype
     if (ef.file_type or '').lower().startswith('image') or ext in ALLOWED_IMAGE_EXT:
         base_dir = IMAGE_DIR
-        mimetype = None  # let Flask detect from extension
+        mimetype = None
     elif ext == '.pdf' or (ef.file_type or '').lower() == 'pdf':
         base_dir = PDF_DIR
         mimetype = "application/pdf"
@@ -108,3 +77,91 @@ def serve_file_by_uuid(uuid: str):
     return send_from_directory(directory=str(base_dir), path=fname, as_attachment=False, mimetype=mimetype)
 
 
+# ---------------- New direct-upload ID-based routes (no path params) ----------------
+def _serve_path(ap) -> Response:
+    if not ap.exists() or not ap.is_file() or ap.suffix.lower() not in ALLOWED_IMAGE_EXT:
+        abort(404)
+    root = DIRECT_UPLOAD_DIR.resolve()
+    rel_to_root = ap.resolve().relative_to(root)
+    resp: Response = send_from_directory(str(root), str(rel_to_root), as_attachment=False)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Cache-Control", "private, max-age=600")
+    return resp
+
+@bp.route("/direct_upload/img_orig/<int:upload_id>", methods=["GET"])
+@roles_required("contributor", "data_manager", "admin")
+def serve_img_orig(upload_id: int):
+    db = Session()
+    try:
+        q = select(DirectImageUpload).where(DirectImageUpload.id == upload_id)
+        if not current_user.has_role("admin", "data_manager"):
+            q = q.where(DirectImageUpload.uploader_id == current_user.id)
+        u = db.execute(q).scalar_one_or_none()
+        if not u:
+            abort(404)
+
+        # ✅ Use folder_rel + filename
+        ap = abs_from_parts(u.folder_rel, u.filename, "orig")
+        if not ap.exists() or not ap.is_file():
+            abort(404)
+
+        root = DIRECT_UPLOAD_DIR.resolve()
+        rel_to_root = ap.resolve().relative_to(root)
+        resp: Response = send_from_directory(
+            str(root),
+            str(rel_to_root),
+            as_attachment=False
+        )
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Cache-Control", "private, max-age=600")
+        return resp
+    finally:
+        db.close()
+
+
+@bp.route("/direct_upload/img_edited/<int:upload_id>", methods=["GET"])
+@roles_required("contributor", "data_manager", "admin")
+def serve_img_edited(upload_id: int):
+    db = Session()
+    try:
+        q = select(DirectImageUpload).where(DirectImageUpload.id == upload_id)
+        if not current_user.has_role("admin", "data_manager"):
+            q = q.where(DirectImageUpload.uploader_id == current_user.id)
+        u = db.execute(q).scalar_one_or_none()
+        if not u or not u.edited_filename:
+            abort(404)
+        ap = abs_from_parts(u.folder_rel, u.edited_filename, "edited")
+        return _serve_path(ap)
+    finally:
+        db.close()
+
+@bp.route("/direct_upload/imgs/uuid/<uuid_str>", methods=["GET"])
+@roles_required("contributor", "data_manager", "admin")
+def serve_img_by_uuid_preferring_edited(uuid_str: str):
+    try:
+        _ = UUID(uuid_str)
+    except Exception:
+        abort(404)
+
+    db = Session()
+    try:
+        q = select(DirectImageUpload).where(DirectImageUpload.uuid == str(uuid_str))
+        if not current_user.has_role("admin", "data_manager"):
+            q = q.where(DirectImageUpload.uploader_id == current_user.id)
+        u = db.execute(q).scalar_one_or_none()
+        if not u:
+            abort(404)
+
+        # prefer edited if present, else original
+        if u.edited_filename:
+            try:
+                ap = abs_from_parts(u.folder_rel, u.edited_filename, "edited")
+                return _serve_path(ap)
+            except Exception:
+                pass
+
+        ap = abs_from_parts(u.folder_rel, u.filename, "orig")
+        return _serve_path(ap)
+    finally:
+        db.close()
+        

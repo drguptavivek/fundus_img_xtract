@@ -13,12 +13,12 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         cursor: pointer;
     }
-    
+
     .upload-checkbox:checked {
         background-color: #0d6efd !important;
         border-color: #0d6efd !important;
     }
-    
+
     .upload-checkbox:checked::after {
         content: "";
         display: block;
@@ -31,20 +31,20 @@
         top: 0.1rem;
         left: 0.35rem;
     }
-    
+
     .filter-section {
         background-color: #f8f9fa;
         border-radius: 0.375rem;
         padding: 1rem;
         margin-bottom: 1rem;
     }
-    
+
     .image-container {
         position: relative;
         overflow: hidden;
     }
-    
-    .toggle-image-switch:checked ~ .form-check-label small {
+
+    .toggle-image-switch:checked~.form-check-label small {
         color: #0d6efd !important;
     }
 </style>
@@ -78,12 +78,11 @@
                     <div class="small opacity-75">
                         {% set sorted_camera_kpis = camera_kpis|dictsort(false, 'value')|reverse|list %}
                         {% for name, count in sorted_camera_kpis %}
-                            {% if loop.index <= 3 %}
-                                {{ name }}: {{ count }}<br>
+                        {% if loop.index <= 3 %} {{ name }}: {{ count }}<br>
                             {% endif %}
-                        {% else %}
+                            {% else %}
                             No data
-                        {% endfor %}
+                            {% endfor %}
                     </div>
                 </div>
             </div>
@@ -98,12 +97,11 @@
                     <div class="small opacity-75">
                         {% set sorted_disease_kpis = disease_kpis|dictsort(false, 'value')|reverse|list %}
                         {% for name, count in sorted_disease_kpis %}
-                            {% if loop.index <= 3 %}
-                                {{ name }}: {{ count }}<br>
+                        {% if loop.index <= 3 %} {{ name }}: {{ count }}<br>
                             {% endif %}
-                        {% else %}
+                            {% else %}
                             No data
-                        {% endfor %}
+                            {% endfor %}
                     </div>
                 </div>
             </div>
@@ -118,12 +116,11 @@
                     <div class="small opacity-75">
                         {% set sorted_area_kpis = area_kpis|dictsort(false, 'value')|reverse|list %}
                         {% for name, count in sorted_area_kpis %}
-                            {% if loop.index <= 3 %}
-                                {{ name }}: {{ count }}<br>
+                        {% if loop.index <= 3 %} {{ name }}: {{ count }}<br>
                             {% endif %}
-                        {% else %}
+                            {% else %}
                             No data
-                        {% endfor %}
+                            {% endfor %}
                     </div>
                 </div>
             </div>
@@ -137,80 +134,92 @@
             <div class="row g-2 align-items-end">
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Date From</label>
-                    <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filter_date_from or '' }}">
+                    <input type="date" class="form-control form-control-sm" name="date_from"
+                        value="{{ filter_date_from or '' }}">
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Date To</label>
-                    <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filter_date_to or '' }}">
+                    <input type="date" class="form-control form-control-sm" name="date_to"
+                        value="{{ filter_date_to or '' }}">
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Hospital</label>
                     <select class="form-select form-select-sm" name="hospital_id">
                         <option value="">All Hospitals</option>
                         {% for hospital in all_hospitals %}
-                        <option value="{{ hospital.id }}" {% if filter_hospital_id and filter_hospital_id|string == hospital.id|string %}selected{% endif %}>{{ hospital.name }}</option>
+                        <option value="{{ hospital.id }}" {% if filter_hospital_id and
+                            filter_hospital_id|string==hospital.id|string %}selected{% endif %}>{{ hospital.name }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Lab Unit</label>
                     <select class="form-select form-select-sm" name="lab_unit_id">
                         <option value="">All Lab Units</option>
                         {% for lab_unit in all_lab_units %}
-                        <option value="{{ lab_unit.id }}" {% if filter_lab_unit_id and filter_lab_unit_id|string == lab_unit.id|string %}selected{% endif %}>{{ lab_unit.name }}</option>
+                        <option value="{{ lab_unit.id }}" {% if filter_lab_unit_id and
+                            filter_lab_unit_id|string==lab_unit.id|string %}selected{% endif %}>{{ lab_unit.name }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 {% if current_user_has('admin', 'data_manager') %}
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Uploader</label>
                     <select class="form-select form-select-sm" name="uploader_id">
                         <option value="">All Users</option>
                         {% for user in all_users %}
-                        <option value="{{ user.id }}" {% if filter_uploader_id and filter_uploader_id|string == user.id|string %}selected{% endif %}>{{ user.username }}</option>
+                        <option value="{{ user.id }}" {% if filter_uploader_id and
+                            filter_uploader_id|string==user.id|string %}selected{% endif %}>{{ user.username }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% endif %}
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Camera</label>
                     <select class="form-select form-select-sm" name="camera_id">
                         <option value="">All Cameras</option>
                         {% for camera in all_cameras %}
-                        <option value="{{ camera.id }}" {% if filter_camera_id and filter_camera_id|string == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+                        <option value="{{ camera.id }}" {% if filter_camera_id and
+                            filter_camera_id|string==camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Disease</label>
                     <select class="form-select form-select-sm" name="disease_id">
                         <option value="">All Diseases</option>
                         {% for disease in all_diseases %}
-                        <option value="{{ disease.id }}" {% if filter_disease_id and filter_disease_id|string == disease.id|string %}selected{% endif %}>{{ disease.name }}</option>
+                        <option value="{{ disease.id }}" {% if filter_disease_id and
+                            filter_disease_id|string==disease.id|string %}selected{% endif %}>{{ disease.name }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <label class="form-label small">Area</label>
                     <select class="form-select form-select-sm" name="area_id">
                         <option value="">All Areas</option>
                         {% for area in all_areas %}
-                        <option value="{{ area.id }}" {% if filter_area_id and filter_area_id|string == area.id|string %}selected{% endif %}>{{ area.name }}</option>
+                        <option value="{{ area.id }}" {% if filter_area_id and filter_area_id|string==area.id|string
+                            %}selected{% endif %}>{{ area.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                
+
                 <div class="col-md-2 col-sm-4">
                     <div class="d-flex gap-1">
                         <button type="submit" class="btn btn-primary btn-sm">Apply</button>
-                        <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+                        <a href="{{ url_for('direct_uploads.dashboard') }}"
+                            class="btn btn-outline-secondary btn-sm">Clear</a>
                     </div>
                 </div>
             </div>
@@ -231,239 +240,247 @@
             </div>
 
             {% if uploads %}
-                <!-- Bulk Operations Form -->
-                <form method="POST" id="bulk-operations-form">
-                    {{ csrf_field() }}
-                    
-                    <!-- Selected Count and Actions -->
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <span class="small text-muted">Selected: <span id="selected-count">0</span>/30 files</span>
-                        </div>
-                        <div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-selection-btn" disabled>Clear</button>
-                            <button type="button" class="btn btn-sm btn-danger" id="bulk-delete-btn" disabled onclick="confirmDelete()">Delete Selected</button>
-                            <button type="button" class="btn btn-sm btn-primary" id="bulk-edit-btn" disabled onclick="showBulkEdit()">Edit Selected</button>
+            <!-- Bulk Operations Form -->
+            <form method="POST" id="bulk-operations-form">
+                {{ csrf_field() }}
+
+                <!-- Selected Count and Actions -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <span class="small text-muted">Selected: <span id="selected-count">0</span>/30 files</span>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-selection-btn"
+                            disabled>Clear</button>
+                        <button type="button" class="btn btn-sm btn-danger" id="bulk-delete-btn" disabled
+                            onclick="confirmDelete()">Delete Selected</button>
+                        <button type="button" class="btn btn-sm btn-primary" id="bulk-edit-btn" disabled
+                            onclick="showBulkEdit()">Edit Selected</button>
+                    </div>
+                </div>
+
+                <!-- Bulk Edit Controls (Hidden by default) -->
+                <div id="bulk-edit-controls" class="row g-2 mb-3 align-items-end d-none">
+                    <input type="hidden" name="action" value="bulk_edit" id="bulk-action-field">
+
+                    <div class="col-md-2">
+                        <label class="form-label small">Hospital</label>
+                        <select class="form-select form-select-sm" name="new_hospital_id">
+                            <option value="">-- Select --</option>
+                            {% for hospital in all_hospitals %}
+                            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Lab Unit</label>
+                        <select class="form-select form-select-sm" name="new_lab_unit_id">
+                            <option value="">-- Select --</option>
+                            {% for lab_unit in all_lab_units %}
+                            <option value="{{ lab_unit.id }}">{{ lab_unit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Camera</label>
+                        <select class="form-select form-select-sm" name="new_camera_id">
+                            <option value="">-- Select --</option>
+                            {% for camera in all_cameras %}
+                            <option value="{{ camera.id }}">{{ camera.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Disease</label>
+                        <select class="form-select form-select-sm" name="new_disease_id">
+                            <option value="">-- Select --</option>
+                            {% for disease in all_diseases %}
+                            <option value="{{ disease.id }}">{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Area</label>
+                        <select class="form-select form-select-sm" name="new_area_id">
+                            <option value="">-- Select --</option>
+                            {% for area in all_areas %}
+                            <option value="{{ area.id }}">{{ area.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-1">
+                        <label class="form-label small">Mydriatic</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="new_is_mydriatic" role="switch">
                         </div>
                     </div>
-                    
-                    <!-- Bulk Edit Controls (Hidden by default) -->
-                    <div id="bulk-edit-controls" class="row g-2 mb-3 align-items-end d-none">
-                        <input type="hidden" name="action" value="bulk_edit" id="bulk-action-field">
-                        
-                        <div class="col-md-2">
-                            <label class="form-label small">Hospital</label>
-                            <select class="form-select form-select-sm" name="new_hospital_id">
-                                <option value="">-- Select --</option>
-                                {% for hospital in all_hospitals %}
-                                <option value="{{ hospital.id }}">{{ hospital.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">Lab Unit</label>
-                            <select class="form-select form-select-sm" name="new_lab_unit_id">
-                                <option value="">-- Select --</option>
-                                {% for lab_unit in all_lab_units %}
-                                <option value="{{ lab_unit.id }}">{{ lab_unit.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">Camera</label>
-                            <select class="form-select form-select-sm" name="new_camera_id">
-                                <option value="">-- Select --</option>
-                                {% for camera in all_cameras %}
-                                <option value="{{ camera.id }}">{{ camera.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">Disease</label>
-                            <select class="form-select form-select-sm" name="new_disease_id">
-                                <option value="">-- Select --</option>
-                                {% for disease in all_diseases %}
-                                <option value="{{ disease.id }}">{{ disease.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small">Area</label>
-                            <select class="form-select form-select-sm" name="new_area_id">
-                                <option value="">-- Select --</option>
-                                {% for area in all_areas %}
-                                <option value="{{ area.id }}">{{ area.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-1">
-                            <label class="form-label small">Mydriatic</label>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" name="new_is_mydriatic" role="switch">
-                            </div>
-                        </div>
-                        <div class="col-md-1">
-                            <button type="submit" class="btn btn-success btn-sm">Apply</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="hideBulkEdit()">Cancel</button>
-                        </div>
+                    <div class="col-md-1">
+                        <button type="submit" class="btn btn-success btn-sm">Apply</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            onclick="hideBulkEdit()">Cancel</button>
                     </div>
+                </div>
 
-                    <!-- Pagination Top -->
-                    {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
+                <!-- Pagination Top -->
+                {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
 
-                    <!-- Card Grid -->
-                    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4 mb-4">
-                        {% for upload in uploads %}
-                        <div class="col">
-                            <div class="card h-100 shadow-sm">
-                                
-                                <!-- Image Thumbnail -->
-                                <div class="bg-light position-relative" style="height: 200px;">
-                                    {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg')) %}
-                                        <!-- Image container with toggle -->
-                                        <div class="image-container w-100 h-100 d-flex align-items-center justify-content-center">
-                                            <!-- Original image -->
-                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
-                                                 class="img-fluid mh-100 mw-100 original-image" 
-                                                 alt="{{ upload.filename }}"
-                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
-                                                 loading="lazy"
-                                                 data-upload-id="{{ upload.id }}"
-                                                 style="object-fit: contain; display: none;">
-                                            
-                                            <!-- Edited image (if exists) -->
-                                            {% if upload.edited_image_path %}
-                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.edited_image_path) }}" 
-                                                 class="img-fluid mh-100 mw-100 edited-image" 
-                                                 alt="{{ upload.filename }} (edited)"
-                                                 onerror="this.onerror=null; this.classList.add('d-none'); this.previousElementSibling.classList.remove('d-none');"
-                                                 loading="lazy"
-                                                 data-upload-id="{{ upload.id }}"
-                                                 style="object-fit: contain;">
-                                            {% else %}
-                                            <!-- Show original if no edited version exists -->
-                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
-                                                 class="img-fluid mh-100 mw-100 original-image" 
-                                                 alt="{{ upload.filename }}"
-                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
-                                                 loading="lazy"
-                                                 data-upload-id="{{ upload.id }}"
-                                                 style="object-fit: contain;">
-                                            {% endif %}
-                                        </div>
+                <!-- Card Grid -->
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-4 mb-4">
+                    {% for upload in uploads %}
+                    <div class="col">
+                        <div class="card h-100 shadow-sm">
+
+                            <!-- Image Thumbnail -->
+                            <div class="bg-light position-relative" style="height: 200px;">
+                                {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif',
+                                '.bmp')) %}
+                                <div
+                                    class="image-container w-100 h-100 d-flex align-items-center justify-content-center">
+                                    {% if upload.edited_filename %}
+                                    <!-- hidden original as fallback -->
+                                    <img src="{{ url_for('media.serve_img_orig', upload_id=upload.id) }}"
+                                        class="img-fluid mh-100 mw-100 original-image d-none"
+                                        alt="{{ upload.filename }}" loading="lazy" style="object-fit: contain;"
+                                        onerror="this.onerror=null; this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';">
+                                    <!-- edited shown first -->
+                                    <img src="{{ url_for('media.serve_img_edited', upload_id=upload.id) }}"
+                                        class="img-fluid mh-100 mw-100 edited-image"
+                                        alt="{{ upload.filename }} (edited)" loading="lazy" style="object-fit: contain;"
+                                        onerror="this.onerror=null; const o=this.previousElementSibling; if(o){o.classList.remove('d-none'); this.remove();} else { this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>'; }">
                                     {% else %}
-                                        <div class="d-flex align-items-center justify-content-center h-100 text-muted">
-                                            <i class="bi bi-file-earmark fs-1"></i>
-                                        </div>
+                                    <!-- no edited: single original -->
+                                    <img src="{{ url_for('media.serve_img_orig', upload_id=upload.id) }}"
+                                        class="img-fluid mh-100 mw-100" alt="{{ upload.filename }}" loading="lazy"
+                                        style="object-fit: contain;"
+                                        onerror="this.onerror=null; this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';">
                                     {% endif %}
-                                    <!-- Selection Checkbox -->
-                                    <div class="form-check position-absolute top-0 end-0 m-2 z-1">
-                                        <input class="form-check-input upload-checkbox" type="checkbox" name="selected_uploads" value="{{ upload.id }}">
-                                    </div>
                                 </div>
-                                
-                                <!-- Image Toggle -->
-                                {% if upload.edited_image_path %}
-                                <div class="card-footer bg-transparent p-2">
-                                    <div class="d-flex align-items-center">
-                                        <small class="me-2 text-muted">Edited</small>
-                                        <div class="form-check form-switch mb-0">
-                                            <input class="form-check-input toggle-image-switch" type="checkbox" role="switch" 
-                                                   id="toggle-{{ upload.id }}" data-upload-id="{{ upload.id }}" checked>
-                                            <label class="form-check-label" for="toggle-{{ upload.id }}">
-                                                <small class="text-muted">Original</small>
-                                            </label>
-                                        </div>
-                                    </div>
+                                {% else %}
+                                <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                                    <i class="bi bi-file-earmark fs-1"></i>
                                 </div>
                                 {% endif %}
-                                
-                                <div class="card-body">
-                                    <h6 class="card-title text-truncate" title="{{ upload.filename }}">{{ upload.filename }}</h6>
-                                    
-                                    <div class="small">
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Uploaded:</span>
-                                            <span>{{ upload.created_at.strftime('%Y-%m-%d') }}</span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">By:</span>
-                                            <span class="text-truncate" title="{{ users[upload.uploader_id].username if users[upload.uploader_id] else 'Unknown' }}">
-                                                {{ users[upload.uploader_id].username if users[upload.uploader_id] else 'Unknown' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Hospital:</span>
-                                            <span class="text-truncate" title="{{ hospitals[upload.hospital_id].name if hospitals[upload.hospital_id] else 'Unknown' }}">
-                                                {{ hospitals[upload.hospital_id].name if hospitals[upload.hospital_id] else 'Unknown' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Camera:</span>
-                                            <span class="text-truncate" title="{{ cameras[upload.camera_id].name if cameras[upload.camera_id] else 'Unknown' }}">
-                                                {{ cameras[upload.camera_id].name if cameras[upload.camera_id] else 'Unknown' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Disease:</span>
-                                            <span class="text-truncate" title="{{ diseases[upload.disease_id].name if diseases[upload.disease_id] else 'Unknown' }}">
-                                                {{ diseases[upload.disease_id].name if diseases[upload.disease_id] else 'Unknown' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Area:</span>
-                                            <span class="text-truncate" title="{{ areas[upload.area_id].name if areas[upload.area_id] else 'Unknown' }}">
-                                                {{ areas[upload.area_id].name if areas[upload.area_id] else 'Unknown' }}
-                                            </span>
-                                        </div>
-                                        
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Mydriatic:</span>
-                                            <span>
-                                                {% if upload.is_mydriatic %}
-                                                    <span class="badge bg-success">Yes</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">No</span>
-                                                {% endif %}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Edit Button -->
-                                    <div class="mt-2">
-                                        <a href="{{ url_for('direct_uploads.edit_upload', upload_id=upload.id) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-pencil"></i> Edit
-                                        </a>
-                                        <a href="{{ url_for('direct_uploads.edit_image', upload_id=upload.id) }}" class="btn btn-sm btn-outline-secondary">
-                                            <i class="bi bi-image"></i> Edit Image
-                                        </a>
+                                <div class="form-check position-absolute top-0 end-0 m-2 z-1">
+                                    <input class="form-check-input upload-checkbox" type="checkbox"
+                                        name="selected_uploads" value="{{ upload.id }}">
+                                </div>
+                            </div>
+
+                            <!-- Image Toggle -->
+                            {% if upload.edited_image_path %}
+                            <div class="card-footer bg-transparent p-2">
+                                <div class="d-flex align-items-center">
+                                    <small class="me-2 text-muted">Edited</small>
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input toggle-image-switch" type="checkbox"
+                                            role="switch" id="toggle-{{ upload.id }}" data-upload-id="{{ upload.id }}"
+                                            checked>
+                                        <label class="form-check-label" for="toggle-{{ upload.id }}">
+                                            <small class="text-muted">Original</small>
+                                        </label>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        {% endfor %}
-                    </div>
+                            {% endif %}
 
-                    <!-- Select All Checkboxes -->
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="select-all-top">
-                            <label class="form-check-label" for="select-all-top">Select all visible uploads</label>
+                            <div class="card-body">
+                                <h6 class="card-title text-truncate" title="{{ upload.filename }}">{{ upload.filename }}
+                                </h6>
+
+                                <div class="small">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Uploaded:</span>
+                                        <span>{{ upload.created_at.strftime('%Y-%m-%d') }}</span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">By:</span>
+                                        <span class="text-truncate"
+                                            title="{{ users[upload.uploader_id].username if users[upload.uploader_id] else 'Unknown' }}">
+                                            {{ users[upload.uploader_id].username if users[upload.uploader_id] else
+                                            'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Hospital:</span>
+                                        <span class="text-truncate"
+                                            title="{{ hospitals[upload.hospital_id].name if hospitals[upload.hospital_id] else 'Unknown' }}">
+                                            {{ hospitals[upload.hospital_id].name if hospitals[upload.hospital_id] else
+                                            'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Camera:</span>
+                                        <span class="text-truncate"
+                                            title="{{ cameras[upload.camera_id].name if cameras[upload.camera_id] else 'Unknown' }}">
+                                            {{ cameras[upload.camera_id].name if cameras[upload.camera_id] else
+                                            'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Disease:</span>
+                                        <span class="text-truncate"
+                                            title="{{ diseases[upload.disease_id].name if diseases[upload.disease_id] else 'Unknown' }}">
+                                            {{ diseases[upload.disease_id].name if diseases[upload.disease_id] else
+                                            'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Area:</span>
+                                        <span class="text-truncate"
+                                            title="{{ areas[upload.area_id].name if areas[upload.area_id] else 'Unknown' }}">
+                                            {{ areas[upload.area_id].name if areas[upload.area_id] else 'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Mydriatic:</span>
+                                        <span>
+                                            {% if upload.is_mydriatic %}
+                                            <span class="badge bg-success">Yes</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">No</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- Edit Button -->
+                                <div class="mt-2">
+                                    <a href="{{ url_for('direct_uploads.edit_upload', upload_id=upload.id) }}"
+                                        class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </a>
+                                    <a href="{{ url_for('direct_uploads.edit_image', upload_id=upload.id) }}"
+                                        class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-image"></i> Edit Image
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- Pagination Bottom -->
-                    {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
-                </form>
-            {% else %}
-                <div class="text-center py-5">
-                    <p class="text-muted">No direct uploads found.</p>
+                    {% endfor %}
                 </div>
+
+                <!-- Select All Checkboxes -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="select-all-top">
+                        <label class="form-check-label" for="select-all-top">Select all visible uploads</label>
+                    </div>
+                </div>
+
+                <!-- Pagination Bottom -->
+                {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
+            </form>
+            {% else %}
+            <div class="text-center py-5">
+                <p class="text-muted">No direct uploads found.</p>
+            </div>
             {% endif %}
         </div>
     </div>
@@ -472,7 +489,7 @@
 
 {% block page_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const selectAllTopCheckbox = document.getElementById('select-all-top');
         const uploadCheckboxes = document.querySelectorAll('.upload-checkbox');
         const bulkEditBtn = document.getElementById('bulk-edit-btn');
@@ -519,7 +536,7 @@
 
         // Select all checkboxes (top)
         if (selectAllTopCheckbox) {
-            selectAllTopCheckbox.addEventListener('change', function() {
+            selectAllTopCheckbox.addEventListener('change', function () {
                 handleSelectAll(this);
             });
         }
@@ -531,7 +548,7 @@
 
         // Update bulk buttons state when individual checkboxes change
         uploadCheckboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', function() {
+            checkbox.addEventListener('change', function () {
                 // Enforce 30 file limit
                 const checkedBoxes = Array.from(uploadCheckboxes).filter(cb => cb.checked);
                 if (checkedBoxes.length > 30) {
@@ -540,7 +557,7 @@
                 }
                 updateBulkButtons();
                 updateSelectedCount();
-                
+
                 // Update select all checkbox states
                 const allChecked = Array.from(uploadCheckboxes).every(cb => cb.checked);
                 if (selectAllTopCheckbox) selectAllTopCheckbox.checked = allChecked;
@@ -565,13 +582,13 @@
         }
 
         // Show bulk edit controls
-        window.showBulkEdit = function() {
+        window.showBulkEdit = function () {
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             if (!anyChecked) {
                 alert('Please select at least one upload to edit.');
                 return;
             }
-            
+
             bulkActionField.value = 'bulk_edit';
             bulkEditControls.classList.remove('d-none');
             // Scroll to bulk edit controls
@@ -579,14 +596,14 @@
         };
 
         // Hide bulk edit controls
-        window.hideBulkEdit = function() {
+        window.hideBulkEdit = function () {
             bulkEditControls.classList.add('d-none');
             // Reset form fields
             bulkOperationsForm.reset();
         };
 
         // Confirm delete action
-        window.confirmDelete = function() {
+        window.confirmDelete = function () {
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             if (!anyChecked) {
                 alert('Please select at least one upload to delete.');
@@ -602,10 +619,10 @@
         };
 
         // Form submission validation
-        bulkOperationsForm.addEventListener('submit', function(e) {
+        bulkOperationsForm.addEventListener('submit', function (e) {
             const action = bulkActionField.value;
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
-            
+
             if (!anyChecked) {
                 e.preventDefault();
                 if (action === 'bulk_edit') {
@@ -625,7 +642,7 @@
                 const areaSelect = document.querySelector('select[name="new_area_id"]');
                 const mydriaticCheckbox = document.querySelector('input[name="new_is_mydriatic"]');
 
-                const anyFieldSelected = 
+                const anyFieldSelected =
                     (hospitalSelect.value !== '') ||
                     (labUnitSelect.value !== '') ||
                     (cameraSelect.value !== '') ||
@@ -649,7 +666,7 @@
     function initializeImageToggle() {
         // Add event listeners to all toggle switches
         document.querySelectorAll('.toggle-image-switch').forEach(switchElement => {
-            switchElement.addEventListener('change', function() {
+            switchElement.addEventListener('change', function () {
                 const uploadId = this.getAttribute('data-upload-id');
                 toggleImage(uploadId);
             });
@@ -660,14 +677,14 @@
     function toggleImage(uploadId) {
         const switchElement = document.getElementById(`toggle-${uploadId}`);
         const container = document.querySelector(`.image-container [data-upload-id="${uploadId}"]`)?.closest('.image-container');
-        
+
         if (!container) return;
-        
+
         const originalImage = container.querySelector('.original-image');
         const editedImage = container.querySelector('.edited-image');
-        
+
         if (!originalImage || !editedImage) return;
-        
+
         if (switchElement && switchElement.checked) {
             // Show edited image
             originalImage.style.display = 'none';

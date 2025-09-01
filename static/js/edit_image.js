@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // Use the validated image URL passed from the route
-    img.src = "{{ image_url }}";
+    img.src = canvas.dataset.imageUrl;
     
     // Tool selection
     document.querySelectorAll('input[name="tool"]').forEach(radio => {
@@ -123,17 +123,19 @@ document.addEventListener('DOMContentLoaded', function() {
     saveImageBtn.addEventListener('click', function() {
         // Get the edited image data
         const imageData = canvas.toDataURL();
+        const saveUrl = saveImageBtn.dataset.saveUrl;
+        const csrfToken = document.getElementById('csrf_token').value;
         
         // Log the data for debugging
         console.log('Image data length:', imageData.length);
         console.log('Image data preview:', imageData.substring(0, 100));
         
         // Send the image data to the server
-        fetch('{{ url_for("direct_uploads.save_edited_image", upload_id=upload.id) }}', {
+        fetch(saveUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token() }}'
+                'X-CSRFToken': csrfToken
             },
             body: JSON.stringify({
                 image_data: imageData
@@ -156,6 +158,41 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    const restoreBtn = document.getElementById('restore-original');
+    if (restoreBtn) {
+        restoreBtn.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete the edited version and restore the original? This cannot be undone.')) {
+                const restoreUrl = restoreBtn.dataset.restoreUrl;
+                const csrfToken = document.getElementById('csrf_token').value;
+
+                fetch(restoreUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                    } else {
+                        // The backend will flash a message, and we should reload to see the original.
+                        if (data.redirect_url) {
+                            window.location.href = data.redirect_url;
+                        } else {
+                            window.location.reload();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An unexpected error occurred.');
+                });
+            }
+        });
+    }
+
     // Drawing functions
     function startDrawing(e) {
         isDrawing = true;

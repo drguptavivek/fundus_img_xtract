@@ -15,16 +15,15 @@
             <div class="row mb-4">
                 <div class="col-md-4">
                     <div class="ratio ratio-1x1 bg-light">
-                        {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg')) %}
-                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
-                                 class="object-fit-cover rounded" 
-                                 alt="{{ upload.filename }}"
-                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
-                                 loading="lazy">
+                        {% if upload.filename and (upload.filename|lower).endswith(('.png', '.jpg', '.jpeg')) %}
+                        <img src="{{ url_for('media.serve_img_orig', upload_id=upload.id) }}"
+                            class="img-fluid object-fit-cover rounded" alt="{{ upload.filename }}"
+                            onerror="this.onerror=null; this.replaceWith('<div class=\'d-flex align-items-center justify-content-center text-muted border rounded p-3\'><i class=\'bi bi-image fs-1\'></i></div>');"
+                            loading="lazy">
                         {% else %}
-                            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
-                                <i class="bi bi-file-earmark fs-1"></i>
-                            </div>
+                        <div class="d-flex align-items-center justify-content-center text-muted border rounded p-3">
+                            <i class="bi bi-file-earmark fs-1"></i>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -32,16 +31,17 @@
                     <h5 class="card-title">{{ upload.filename }}</h5>
                     <div class="row">
                         <div class="col-md-6">
-                            <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M')
+                                }}</p>
                             <p class="mb-1"><strong>Uploader:</strong> {{ upload.uploader.username }}</p>
                             <p class="mb-1"><strong>File Hash:</strong> {{ upload.file_hash }}</p>
                         </div>
                         <div class="col-md-6">
-                            <p class="mb-1"><strong>Mydriatic:</strong> 
+                            <p class="mb-1"><strong>Mydriatic:</strong>
                                 {% if upload.is_mydriatic %}
-                                    <span class="badge bg-success">Yes</span>
+                                <span class="badge bg-success">Yes</span>
                                 {% else %}
-                                    <span class="badge bg-secondary">No</span>
+                                <span class="badge bg-secondary">No</span>
                                 {% endif %}
                             </p>
                         </div>
@@ -58,7 +58,8 @@
                         <select class="form-select" name="hospital_id" required>
                             <option value="">-- Select Hospital --</option>
                             {% for hospital in hospitals %}
-                            <option value="{{ hospital.id }}" {% if hospital.id == upload.hospital_id %}selected{% endif %}>{{ hospital.name }}</option>
+                            <option value="{{ hospital.id }}" {% if hospital.id==upload.hospital_id %}selected{% endif
+                                %}>{{ hospital.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -68,7 +69,8 @@
                         <select class="form-select" name="lab_unit_id" required>
                             <option value="">-- Select Lab Unit --</option>
                             {% for lab_unit in lab_units %}
-                            <option value="{{ lab_unit.id }}" {% if lab_unit.id == upload.lab_unit_id %}selected{% endif %}>{{ lab_unit.name }}</option>
+                            <option value="{{ lab_unit.id }}" {% if lab_unit.id==upload.lab_unit_id %}selected{% endif
+                                %}>{{ lab_unit.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -78,7 +80,8 @@
                         <select class="form-select" name="camera_id" required>
                             <option value="">-- Select Camera --</option>
                             {% for camera in cameras %}
-                            <option value="{{ camera.id }}" {% if camera.id == upload.camera_id %}selected{% endif %}>{{ camera.name }}</option>
+                            <option value="{{ camera.id }}" {% if camera.id==upload.camera_id %}selected{% endif %}>{{
+                                camera.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -88,7 +91,8 @@
                         <select class="form-select" name="disease_id" required>
                             <option value="">-- Select Disease --</option>
                             {% for disease in diseases %}
-                            <option value="{{ disease.id }}" {% if disease.id == upload.disease_id %}selected{% endif %}>{{ disease.name }}</option>
+                            <option value="{{ disease.id }}" {% if disease.id==upload.disease_id %}selected{% endif %}>
+                                {{ disease.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -98,14 +102,16 @@
                         <select class="form-select" name="area_id" required>
                             <option value="">-- Select Area --</option>
                             {% for area in areas %}
-                            <option value="{{ area.id }}" {% if area.id == upload.area_id %}selected{% endif %}>{{ area.name }}</option>
+                            <option value="{{ area.id }}" {% if area.id==upload.area_id %}selected{% endif %}>{{
+                                area.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
 
                     <div class="col-md-6 d-flex align-items-end">
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic" {% if upload.is_mydriatic %}checked{% endif %}>
+                            <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic" {% if
+                                upload.is_mydriatic %}checked{% endif %}>
                             <label class="form-check-label" for="is_mydriatic" id="mydriatic-label">
                                 {% if upload.is_mydriatic %}Mydriatic{% else %}Non Mydriatic{% endif %}
                             </label>
@@ -125,13 +131,13 @@
 
 {% block page_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         // Handle mydriatic checkbox label change
         const mydriaticCheckbox = document.getElementById('is_mydriatic');
         const mydriaticLabel = document.getElementById('mydriatic-label');
-        
+
         if (mydriaticCheckbox && mydriaticLabel) {
-            mydriaticCheckbox.addEventListener('change', function() {
+            mydriaticCheckbox.addEventListener('change', function () {
                 mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
             });
         }

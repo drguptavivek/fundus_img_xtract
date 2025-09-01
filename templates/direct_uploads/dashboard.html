@@ -337,7 +337,7 @@
                                 <div
                                     class="image-container w-100 h-100 d-flex align-items-center justify-content-center">
                                     {% if upload.edited_filename %}
-                                    <!-- hidden original as fallback -->
+                                    <!-- hidden original as fallback --> 
                                     <img src="{{ url_for('media.serve_img_orig', upload_id=upload.id) }}"
                                         class="img-fluid mh-100 mw-100 original-image d-none"
                                         alt="{{ upload.filename }}" loading="lazy" style="object-fit: contain;"

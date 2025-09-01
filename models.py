@@ -274,6 +274,7 @@ class DirectImageUpload(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     filepath: Mapped[str] = mapped_column(String(1024), nullable=False)
+    edited_image_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_hash: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
     uploader_id: Mapped[int] = mapped_column(ForeignKey('users.id'), nullable=False)
     hospital_id: Mapped[int] = mapped_column(ForeignKey('hospitals.id'), nullable=False)

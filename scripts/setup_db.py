@@ -109,6 +109,11 @@ def main() -> None:
         help="Create tables for direct image uploads feature",
     )
     parser.add_argument(
+        "--migrate-direct-uploads-edited-image",
+        action="store_true",
+        help="Add edited_image_path column to direct_image_uploads table",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -157,6 +162,12 @@ def main() -> None:
             mig_direct_upl()
         except Exception as e:
             print(f"Failed to import migrate_direct_uploads: {e}")
+    if args.migrate_direct_uploads_edited_image:
+        try:
+            from migrate_direct_uploads_edited_image import migrate as mig_direct_upl_edited
+            mig_direct_upl_edited(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_direct_uploads_edited_image: {e}")
 
 
 if __name__ == "__main__":

@@ -38,6 +38,15 @@
         padding: 1rem;
         margin-bottom: 1rem;
     }
+    
+    .image-container {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .toggle-image-switch:checked ~ .form-check-label small {
+        color: #0d6efd !important;
+    }
 </style>
 {% endblock %}
 
@@ -309,13 +318,39 @@
                             <div class="card h-100 shadow-sm">
                                 
                                 <!-- Image Thumbnail -->
-                                <div class="ratio ratio-1x1 bg-light position-relative">
+                                <div class="bg-light position-relative" style="height: 200px;">
                                     {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg')) %}
-                                        <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
-                                             class="object-fit-cover rounded-top" 
-                                             alt="{{ upload.filename }}"
-                                             onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
-                                             loading="lazy">
+                                        <!-- Image container with toggle -->
+                                        <div class="image-container w-100 h-100 d-flex align-items-center justify-content-center">
+                                            <!-- Original image -->
+                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
+                                                 class="img-fluid mh-100 mw-100 original-image" 
+                                                 alt="{{ upload.filename }}"
+                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
+                                                 loading="lazy"
+                                                 data-upload-id="{{ upload.id }}"
+                                                 style="object-fit: contain; display: none;">
+                                            
+                                            <!-- Edited image (if exists) -->
+                                            {% if upload.edited_image_path %}
+                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.edited_image_path) }}" 
+                                                 class="img-fluid mh-100 mw-100 edited-image" 
+                                                 alt="{{ upload.filename }} (edited)"
+                                                 onerror="this.onerror=null; this.classList.add('d-none'); this.previousElementSibling.classList.remove('d-none');"
+                                                 loading="lazy"
+                                                 data-upload-id="{{ upload.id }}"
+                                                 style="object-fit: contain;">
+                                            {% else %}
+                                            <!-- Show original if no edited version exists -->
+                                            <img src="{{ url_for('media.serve_direct_upload', filepath=upload.relative_filepath) }}" 
+                                                 class="img-fluid mh-100 mw-100 original-image" 
+                                                 alt="{{ upload.filename }}"
+                                                 onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';"
+                                                 loading="lazy"
+                                                 data-upload-id="{{ upload.id }}"
+                                                 style="object-fit: contain;">
+                                            {% endif %}
+                                        </div>
                                     {% else %}
                                         <div class="d-flex align-items-center justify-content-center h-100 text-muted">
                                             <i class="bi bi-file-earmark fs-1"></i>
@@ -326,6 +361,22 @@
                                         <input class="form-check-input upload-checkbox" type="checkbox" name="selected_uploads" value="{{ upload.id }}">
                                     </div>
                                 </div>
+                                
+                                <!-- Image Toggle -->
+                                {% if upload.edited_image_path %}
+                                <div class="card-footer bg-transparent p-2">
+                                    <div class="d-flex align-items-center">
+                                        <small class="me-2 text-muted">Edited</small>
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input toggle-image-switch" type="checkbox" role="switch" 
+                                                   id="toggle-{{ upload.id }}" data-upload-id="{{ upload.id }}" checked>
+                                            <label class="form-check-label" for="toggle-{{ upload.id }}">
+                                                <small class="text-muted">Original</small>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
                                 
                                 <div class="card-body">
                                     <h6 class="card-title text-truncate" title="{{ upload.filename }}">{{ upload.filename }}</h6>
@@ -387,6 +438,9 @@
                                     <div class="mt-2">
                                         <a href="{{ url_for('direct_uploads.edit_upload', upload_id=upload.id) }}" class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-pencil"></i> Edit
+                                        </a>
+                                        <a href="{{ url_for('direct_uploads.edit_image', upload_id=upload.id) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-image"></i> Edit Image
                                         </a>
                                     </div>
                                 </div>
@@ -586,6 +640,43 @@
                 }
             }
         });
+
+        // Initialize image toggle functionality
+        initializeImageToggle();
     });
+
+    // Function to initialize image toggle functionality
+    function initializeImageToggle() {
+        // Add event listeners to all toggle switches
+        document.querySelectorAll('.toggle-image-switch').forEach(switchElement => {
+            switchElement.addEventListener('change', function() {
+                const uploadId = this.getAttribute('data-upload-id');
+                toggleImage(uploadId);
+            });
+        });
+    }
+
+    // Function to toggle between original and edited images
+    function toggleImage(uploadId) {
+        const switchElement = document.getElementById(`toggle-${uploadId}`);
+        const container = document.querySelector(`.image-container [data-upload-id="${uploadId}"]`)?.closest('.image-container');
+        
+        if (!container) return;
+        
+        const originalImage = container.querySelector('.original-image');
+        const editedImage = container.querySelector('.edited-image');
+        
+        if (!originalImage || !editedImage) return;
+        
+        if (switchElement && switchElement.checked) {
+            // Show edited image
+            originalImage.style.display = 'none';
+            editedImage.style.display = 'block';
+        } else {
+            // Show original image
+            originalImage.style.display = 'block';
+            editedImage.style.display = 'none';
+        }
+    }
 </script>
 {% endblock %}

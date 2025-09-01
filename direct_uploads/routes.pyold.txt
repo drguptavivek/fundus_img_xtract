@@ -696,3 +696,162 @@ def edit_upload(upload_id):
         return redirect(url_for("direct_uploads.dashboard"))
     finally:
         db_session.close()
+
+import traceback
+from werkzeug.exceptions import NotFound
+
+@bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
+@roles_required('contributor', 'data_manager', 'admin')
+def edit_image(upload_id):
+    db_session = Session()
+    try:
+        upload = db_session.get(DirectImageUpload, upload_id)
+        if not upload:
+            flash("Upload not found.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        # Permission check
+        if not current_user.has_role('admin', 'data_manager') and upload.uploader_id != current_user.id:
+            flash("You don't have permission to edit this upload.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        # --- choose display path (edited -> original) ---
+        display_path = upload.edited_image_path or upload.filepath
+        if not display_path:
+            current_app.logger.warning("No edited/original path for upload_id=%s", upload_id)
+            flash("No image available to display for this upload.", "warning")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        # --- validate on disk; your files are under DIRECT_UPLOAD_DIR ---
+        from models import DIRECT_UPLOAD_DIR  # a pathlib.Path
+        abs_path = (DIRECT_UPLOAD_DIR / display_path).resolve()
+
+        try:
+            # Ensure path stays inside DIRECT_UPLOAD_DIR (prevent traversal)
+            base = DIRECT_UPLOAD_DIR.resolve()
+            if base not in abs_path.parents and abs_path != base:
+                raise NotFound("Forbidden path")
+        except Exception:
+            current_app.logger.error(
+                "Path traversal or invalid path for upload_id=%s: %s", upload_id, display_path
+            )
+            flash("Invalid image path.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        if not abs_path.exists():
+            current_app.logger.error(
+                "Missing file for upload_id=%s at %s (display_path=%s)",
+                upload_id, abs_path, display_path
+            )
+            flash("Image file not found on server.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        image_url = url_for("media.serve_direct_upload", filepath=display_path)
+        current_app.logger.info(
+            "Edit image %s using '%s' (edited first, fallback to original).",
+            upload_id, display_path
+        )
+
+        # Related objects if you need them in the UI
+        hospital = db_session.get(Hospital, upload.hospital_id)
+        lab_unit = db_session.get(LabUnit, upload.lab_unit_id)
+        camera = db_session.get(Camera, upload.camera_id)
+        disease = db_session.get(Disease, upload.disease_id)
+        area = db_session.get(Area, upload.area_id)
+        uploader = db_session.get(User, upload.uploader_id)
+
+        return render_template(
+            "direct_uploads/edit_image.html",
+            upload=upload,
+            hospital=hospital,
+            lab_unit=lab_unit,
+            camera=camera,
+            disease=disease,
+            area=area,
+            uploader=uploader,
+            image_url=image_url,           # <— pass guaranteed-good URL
+        )
+
+    except Exception:
+        db_session.rollback()
+        current_app.logger.error(
+            "Error loading image editor for upload %s:\n%s",
+            upload_id, traceback.format_exc()
+        )
+        flash("An error occurred while loading the image editor.", "danger")
+        return redirect(url_for("direct_uploads.dashboard"))
+    finally:
+        db_session.close()
+
+
+@bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
+@roles_required('contributor', 'data_manager', 'admin')
+def save_edited_image(upload_id):
+    db_session = Session()
+    try:
+        # Log the request data for debugging
+        current_app.logger.info("Received save image request for upload_id: %s", upload_id)
+        current_app.logger.info("Request content type: %s", request.content_type)
+        current_app.logger.info("Request data: %s", request.get_data())
+        
+        # Get the upload record
+        upload = db_session.get(DirectImageUpload, upload_id)
+        if not upload:
+            current_app.logger.warning("Upload not found for id: %s", upload_id)
+            return jsonify({"error": "Upload not found."}), 404
+        
+        # Check permissions - only admins/data_managers or the uploader can edit
+        if not current_user.has_role('admin', 'data_manager') and upload.uploader_id != current_user.id:
+            current_app.logger.warning("User %s does not have permission to edit upload %s", current_user.id, upload_id)
+            return jsonify({"error": "You don't have permission to edit this upload."}), 403
+        
+        # Get the image data from the request
+        image_data = None
+        if request.is_json:
+            json_data = request.get_json()
+            image_data = json_data.get('image_data') if json_data else None
+        else:
+            # If not JSON, try to get from form data
+            image_data = request.form.get('image_data')
+            
+        current_app.logger.info("Image data present: %s", image_data is not None)
+        
+        if not image_data:
+            current_app.logger.warning("No image data provided for upload %s", upload_id)
+            return jsonify({"error": "No image data provided."}), 400
+        
+        # Remove the data URL prefix
+        if image_data.startswith('data:image'):
+            image_data = image_data.split(',')[1]
+        
+        # Decode the base64 image data
+        import base64
+        try:
+            image_bytes = base64.b64decode(image_data)
+        except Exception as e:
+            current_app.logger.error("Error decoding base64 image data for upload %s: %s", upload_id, e)
+            return jsonify({"error": "Invalid image data provided."}), 400
+        
+        # Save the edited image to the server
+        # We'll save it with a suffix to distinguish it from the original
+        from pathlib import Path
+        original_path = Path(upload.absolute_filepath)
+        edited_filename = f"edited_{upload.filename}"
+        edited_path = original_path.parent / edited_filename
+        
+        with open(edited_path, 'wb') as f:
+            f.write(image_bytes)
+        
+        # Update the database record to point to the edited image
+        upload.edited_image_path = str(edited_path).replace(str(BASE_DIR) + '/', '')
+        db_session.commit()
+        
+        current_app.logger.info("Saved edited image for upload %s by user %s", upload_id, current_user.id)
+        return jsonify({"message": "Image saved successfully."}), 200
+        
+    except Exception as e:
+        db_session.rollback()
+        current_app.logger.exception("Error saving edited image for upload %s: %s", upload_id, e)
+        return jsonify({"error": "An error occurred while saving the image."}), 500
+    finally:
+        db_session.close()

@@ -8,4 +8,4 @@ bp = Blueprint(
     static_url_path="/static/direct_uploads",
 )
 
-from . import routes
+from . import upload, dashboard, jobs, api, edit_upload, edit_image, save_image  # noqa: E402,F401

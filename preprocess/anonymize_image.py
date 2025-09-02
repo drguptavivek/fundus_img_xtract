@@ -12,65 +12,37 @@ from direct_uploads.paths import abs_from_parts
 from direct_uploads.utils import with_session, require_owner_or_roles
 
 
-@bp.route("/anonymize_image/", methods=["GET"])
+@bp.route("/dashboard", methods=["GET"])
 @roles_required('contributor', 'data_manager', 'admin')
 def anonymization_dashboard():
+    """
+    Shows Total Anonmized Images
+    Shows Recent Anonmized Images my all users (admin, data_maanger), or self
+    
+    Allows starting Anonmization process by automactially selecting an image.
+    Has a section to select filters of Hospital, Lab_unit, Image_type, Disease, Area
+    Prefer New to old.
+    Users who are Admin, data_managers can verify  any image
+    Non-admins can only verify images of their asscociated lab_units only
+    """
     # TODO
-    return render_template("preprocess/anonymization_dashboard.html")    
+    return render_template("preprocess/anonymization_dashboard.html")   
+     
 
-@bp.route("/anonymize_image/<str:uuid>", methods=["GET"])
+
+@bp.route("/anonymize_image/<str:uuid>", methods=["GET", "POST"])
 @roles_required('contributor', 'data_manager', 'admin')
 def anonymize_image(upload_id: int):
-    with with_session() as db:
-        try:
-            upload = db.get(DirectImageUpload, upload_id)
-            if not upload:
-                flash("Upload not found.", "danger")
-                return redirect(flask_url_for("direct_uploads.dashboard"))
-
-            if not require_owner_or_roles(upload, 'admin', 'data_manager'):
-                flash("You don't have permission to edit this upload.", "danger")
-                return redirect(flask_url_for("direct_uploads.dashboard"))
-
-            has_edited_version = bool(upload.edited_filename)
-            if has_edited_version:
-                image_url = flask_url_for("media.serve_img_edited", upload_id=upload.id)
-                current_app.logger.info("Loading EDITED image %s for editing", upload_id)
-            else:
-                image_url = flask_url_for("media.serve_img_orig", upload_id=upload.id)
-                current_app.logger.info("Loading ORIGINAL image %s for editing", upload_id)
-
-            hospital = db.get(Hospital, upload.hospital_id)
-            lab_unit = db.get(LabUnit, upload.lab_unit_id)
-            camera   = db.get(Camera, upload.camera_id)
-            disease  = db.get(Disease, upload.disease_id)
-            area     = db.get(Area, upload.area_id)
-            uploader = db.get(User, upload.uploader_id)
-
-            return render_template("preprocess/anonymize_image.html",
-                                   upload=upload, hospital=hospital, lab_unit=lab_unit,
-                                   camera=camera, disease=disease, area=area,
-                                   uploader=uploader, image_url=image_url,
-                                   has_edited_version=has_edited_version)
-        except FileNotFoundError as e:
-            current_app.logger.error("Missing file for upload_id=%s at %s", upload_id, e)
-            flash("Image file not found on server.", "danger")
-            return redirect(flask_url_for("direct_uploads.dashboard"))
-        except Exception:
-            current_app.logger.error("Error loading image editor for upload %s:\n%s",
-                                     upload_id, traceback.format_exc())
-            flash("An error occurred while loading the image editor.", "danger")
-            return redirect(flask_url_for("direct_uploads.dashboard"))
-
-
-@bp.route("/anonymize_image//anonymize_image/<str:uuid>", methods=["POST"])
-@roles_required('contributor', 'data_manager', 'admin')
-def anonymize_image_post(upload_id: int):
-    with with_session() as db:
-        try:
-            # TODO
-            flash("TODO.", "success")
-            return jsonify({"message": "Image anonymized.", "redirect_url": flask_url_for('direct_uploads.edit_image', upload_id=upload_id)}), 200
-
-        except Exception as e:
-            flash("TODO.", "Error")
+    # TODO
+    """
+    Gets an image from the class DirectImageUpload(Base). 
+    
+    Image is served based on UUID. No other data about the image to be shown.
+    The user edits the image and ensures any IDs  etc are deleted from the image.
+    Ability to restore orginal image 
+    Uses a toggle to mark Verify / Unverify. 
+    Can give optional remarks
+    Saves results in DirectImageVerify table. image UUID, Verified status, remarks, verified_by, verified_at, 
+    Redirect to next image after 3 seconds
+    """
+    return render_template("preprocess/anonymize_image.html")   

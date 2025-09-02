@@ -135,7 +135,8 @@ def serve_img_edited(upload_id: int):
     finally:
         db.close()
 
-@bp.route("/direct_upload/imgs/uuid/<uuid_str>", methods=["GET"])
+
+@bp.route("/direct_upload/img/<uuid_str>", methods=["GET"])
 @roles_required("contributor", "data_manager", "admin")
 def serve_img_by_uuid_preferring_edited(uuid_str: str):
     try:
@@ -164,10 +165,3 @@ def serve_img_by_uuid_preferring_edited(uuid_str: str):
         return _serve_path(ap)
     finally:
         db.close()
-        
-
-@bp.route("/direct_upload/uuid/<uuid_str>", methods=["GET"])
-@roles_required("contributor", "data_manager", "admin")
-def direct_upload_uuid():
-    # TODO
-    print("direct_upload by UUID Done")

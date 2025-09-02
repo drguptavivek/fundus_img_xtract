@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Edit Image{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .tools-panel {
+        gap: 1rem;
+        padding-bottom: 12px;
+    }
+
+    .image-info-row .info-item {
+        display: inline-block;
+        flex-shrink: 0
+    }
+
+    .canvas-container {
+        border: 1px solid #dee2e6;
+        border-radius: .375rem;
+        justify-content: center;
+        align-items: center;
+        overflow: auto;
+        position: relative
+    }
+
+    #imageCanvas {
+        max-width: 100%;
+        max-height: 100%;
+        cursor: crosshair
+    }
+
+    .color-picker-container label,
+    .slider-container label {
+        font-size: .7rem;
+        display: block;
+        text-align: center;
+        margin-bottom: .25rem
+    }
+
+    .slider-container input[type=range] {
+        width: 100%
+    }
+
+    .color-picker-container input[type=color] {
+        width: 100%;
+        height: 30px;
+        padding: 0
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="width: 1200px;">
+    <h1>Image Anonymziaytion</h1>
+    <div class="row" style="padding: 1rem 0rem;">
+        <div class="col-10">
+            <div class="image-info-row">
+                <strong>File UUID:</strong> {{ upload.uuid }}
+                <strong>Hospital:</strong> {{ hospital.name }}
+                <strong>Lab Unit:</strong> {{ lab_unit.name }}
+                <br />
+                <strong>Camera:</strong> {{ camera.name }}
+                <strong>Disease:</strong> {{ disease.name }}
+                <strong>Area:</strong> {{ area.name }}
+                <strong>Mydriatic:</strong>
+                {% if upload.is_mydriatic %}
+                <span class="badge bg-success">Yes</span>
+                {% else %}
+                <span class="badge bg-secondary">No</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-1">
+            <a href="{{ url_for('preprocess.dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+    <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="image-editor-wrapper card p-3">
+        <div class="card-header">
+            Editor
+        </div>
+
+        <div class="editor-main card-body row">
+
+            <!-- Tools Panel  -->
+            <div class="tools-panel row">
+                <!-- Tool Selection -->
+                <div class="tool-group col-3">
+                    <div class="tool-label">Tools</div>
+                    <input type="radio" class="btn-check" name="tool" id="brush-tool" value="brush" autocomplete="off"
+                        checked>
+                    <label class="btn btn-outline-primary tool-btn" for="brush-tool">
+                        <i class="bi bi-brush"></i> Brush
+                    </label>
+
+                    <input type="radio" class="btn-check" name="tool" id="eraser-tool" value="eraser"
+                        autocomplete="off">
+                    <label class="btn btn-outline-primary tool-btn" for="eraser-tool">
+                        <i class="bi bi-eraser"></i> Eraser
+                    </label>
+
+                    <input type="radio" class="btn-check" name="tool" id="crop-tool" value="crop" autocomplete="off">
+                    <label class="btn btn-outline-primary tool-btn" for="crop-tool">
+                        <i class="bi bi-crop"></i> Crop
+                    </label>
+                </div>
+
+                <!-- Brush Size -->
+                <div class="tool-group col-3">
+                    <div class="tool-label">Size</div>
+                    <div class="slider-container">
+                        <label id="brush-size-value">10px</label>
+                        <input type="range" class="form-range" id="brush-size" min="1" max="50" value="10">
+                    </div>
+                </div>
+                <!-- Brush Color -->
+                <div class="tool-group col-1">
+                    <div class="tool-label">Color</div>
+                    <div class="color-picker-container">
+                        <input type="color" class="form-control form-control-color" id="brush-color" value="#000000"
+                            title="Choose brush color" style="border-width: 2px; border-color: rgb(195, 190, 190);">
+                    </div>
+                </div>
+                <!-- Actions -->
+                <div class="tool-group col">
+                    <div class="tool-label">Actions</div>
+                    <div class="action-buttons">
+                        <button id="clear-canvas" class="btn btn-warning btn-sm">
+                            <i class="bi bi-trash"></i> Clear
+                        </button>
+                        <button id="undo" class="btn btn-secondary btn-sm" disabled>
+                            <i class="bi bi-arrow-counterclockwise"></i> Undo
+                        </button>
+                        <button id="redo" class="btn btn-secondary btn-sm" disabled>
+                            <i class="bi bi-arrow-clockwise"></i> Redo
+                        </button>
+                        <button id="apply-crop" class="btn btn-primary btn-sm" style="display: none;">
+                            <i class="bi bi-check-lg"></i> Apply Crop
+                        </button>
+                        <button id="save-image" class="btn btn-success btn-sm"
+                            data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
+                            <i class="bi bi-save"></i> Save
+                        </button>
+                        {% if has_edited_version %}
+                        <button id="restore-original" class="btn btn-danger btn-sm"
+                            data-restore-url="{{ url_for('direct_uploads.restore_original', upload_id=upload.id) }}">
+                            <i class="bi bi-arrow-repeat"></i> Restore Original
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas Container (90% width) -->
+            {% include '_img_editor_canvas.html' %}
+
+
+        </div>
+    </div><!-- Image Editor Wrapper -->
+    
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
+    defer></script>
+{% endblock %}

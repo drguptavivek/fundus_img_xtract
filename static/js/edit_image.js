@@ -92,16 +92,25 @@ document.addEventListener('DOMContentLoaded', function() {
     applyCropBtn.addEventListener('click', applyCrop);
 
     // --- MAIN DRAWING LOGIC ---
+    // Helper to get canvas coordinates
+    function getCanvasCoordinates(e) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    }
+
     function start(e) {
-        const { offsetX, offsetY } = e;
+        const { x, y } = getCanvasCoordinates(e);
         if (currentTool === 'crop') {
             isCropping = true;
-            cropStart = { x: offsetX, y: offsetY };
-            cropEnd = { x: offsetX, y: offsetY };
+            cropStart = { x: x, y: y };
+            cropEnd = { x: x, y: y };
         } else {
             isDrawing = true;
-            lastX = offsetX;
-            lastY = offsetY;
+            lastX = x;
+            lastY = y;
         }
     }
 
@@ -117,14 +126,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function draw(e) {
-        const { offsetX, offsetY } = e;
+        const { x: currentX, y: currentY } = getCanvasCoordinates(e);
         if (isCropping) {
-            cropEnd = { x: offsetX, y: offsetY };
+            cropEnd = { x: currentX, y: currentY };
             redrawWithCropOverlay();
         } else if (isDrawing) {
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
-            ctx.lineTo(offsetX, offsetY);
+            ctx.lineTo(currentX, currentY);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.lineWidth = brushSize;
@@ -136,8 +145,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 ctx.globalCompositeOperation = 'destination-out';
             }
             ctx.stroke();
-            lastX = offsetX;
-            lastY = offsetY;
+            lastX = currentX;
+            lastY = currentY;
         }
     }
 

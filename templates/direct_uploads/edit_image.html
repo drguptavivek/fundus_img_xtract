@@ -3,44 +3,94 @@
 
 {% block extra_styles %}
 <style>
-   .image-info-row,.tools-panel{border-radius:.375rem;gap:1rem}.canvas-container,.image-info-row,.tools-panel{background-color:#f8f9fa;display:flex}.image-editor-wrapper{display:flex;flex-direction:column;gap:1rem}.image-info-row{padding:.5rem 1rem;flex-wrap:nowrap;align-items:center;overflow-x:auto;white-space:nowrap;font-size:.8rem}.image-info-row .info-item{display:inline-block;flex-shrink:0}.editor-main{display:flex;gap:1rem;height:75vh}.tools-panel{flex:0 0 10%;padding:1rem .5rem;flex-direction:column;min-width:120px}.tool-group{display:flex;flex-direction:column;gap:.5rem}.tool-label{font-size:.7rem;font-weight:700;text-align:center;color:#495057}.action-buttons button,.tool-btn{width:100%;padding:.5rem;font-size:.7rem}.action-buttons,.color-picker-container,.slider-container{padding:0 .5rem}.canvas-container{flex:1;border:1px solid #dee2e6;border-radius:.375rem;justify-content:center;align-items:center;overflow:auto;position:relative}#imageCanvas{max-width:100%;max-height:100%;cursor:crosshair}.color-picker-container label,.slider-container label{font-size:.7rem;display:block;text-align:center;margin-bottom:.25rem}.slider-container input[type=range]{width:100%}.color-picker-container input[type=color]{width:100%;height:30px;padding:0}.action-buttons{display:flex;flex-direction:column;gap:.5rem}.badge{font-size:.7rem}
+    .tools-panel {
+        gap: 1rem;
+        padding-bottom: 12px;
+    }
+
+    .image-info-row .info-item {
+        display: inline-block;
+        flex-shrink: 0
+    }
+
+    .canvas-container {
+        border: 1px solid #dee2e6;
+        border-radius: .375rem;
+        justify-content: center;
+        align-items: center;
+        overflow: auto;
+        position: relative
+    }
+
+    #imageCanvas {
+        max-width: 100%;
+        max-height: 100%;
+        cursor: crosshair
+    }
+
+    .color-picker-container label,
+    .slider-container label {
+        font-size: .7rem;
+        display: block;
+        text-align: center;
+        margin-bottom: .25rem
+    }
+
+    .slider-container input[type=range] {
+        width: 100%
+    }
+
+    .color-picker-container input[type=color] {
+        width: 100%;
+        height: 30px;
+        padding: 0
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h4 mb-0">Image Editor</h1>
-        <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Back to Dashboard
-        </a>
+
+<div style="width: 1200px;">
+    <h1>Image Editor</h1>
+    <div class="row" style="padding: 1rem 0rem;">
+        <div class="col-10">
+            <div class="image-info-row">
+                <strong>Filename:</strong> {{ upload.filename }}
+                <strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M') }}
+                <strong>Uploader:</strong> {{ uploader.username }}
+                <br />
+                <strong>Hospital:</strong> {{ hospital.name }}
+                <strong>Lab Unit:</strong> {{ lab_unit.name }}
+                <br />
+                <strong>Camera:</strong> {{ camera.name }}
+                <strong>Disease:</strong> {{ disease.name }}
+                <strong>Area:</strong> {{ area.name }}
+                <strong>Mydriatic:</strong>
+                {% if upload.is_mydriatic %}
+                <span class="badge bg-success">Yes</span>
+                {% else %}
+                <span class="badge bg-secondary">No</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-1">
+            <a href="{{ url_for('direct_uploads.dashboard') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
     </div>
 
-    <!-- Image Information Row (all in one row with small text) -->
-    <div class="image-info-row">
-            <strong>Filename:</strong> {{ upload.filename }}
-            <strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M') }}
-            <strong>Uploader:</strong> {{ uploader.username }}
-            <strong>Hospital:</strong> {{ hospital.name }}
-            <strong>Lab Unit:</strong> {{ lab_unit.name }}
-            <strong>Camera:</strong> {{ camera.name }}
-            <strong>Disease:</strong> {{ disease.name }}
-            <strong>Area:</strong> {{ area.name }}
-            <strong>Mydriatic:</strong>
-            {% if upload.is_mydriatic %}
-            <span class="badge bg-success">Yes</span>
-            {% else %}
-            <span class="badge bg-secondary">No</span>
-            {% endif %}
-    </div>
-
-    <div class="image-editor-wrapper">
+    <div class="image-editor-wrapper card p-3">
+        <div class="card-header">
+            Editor
+        </div>
         <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
-        <div class="editor-main">
-            <!-- Tools Panel (10% width) -->
-            <div class="tools-panel">
+        <div class="editor-main card-body row">
+
+            <!-- Tools Panel  -->
+            <div class="tools-panel row">
                 <!-- Tool Selection -->
-                <div class="tool-group">
+                <div class="tool-group col-3">
                     <div class="tool-label">Tools</div>
                     <input type="radio" class="btn-check" name="tool" id="brush-tool" value="brush" autocomplete="off"
                         checked>
@@ -61,7 +111,7 @@
                 </div>
 
                 <!-- Brush Size -->
-                <div class="tool-group">
+                <div class="tool-group col-3">
                     <div class="tool-label">Size</div>
                     <div class="slider-container">
                         <label id="brush-size-value">10px</label>
@@ -70,16 +120,16 @@
                 </div>
 
                 <!-- Brush Color -->
-                <div class="tool-group">
+                <div class="tool-group col-1">
                     <div class="tool-label">Color</div>
                     <div class="color-picker-container">
                         <input type="color" class="form-control form-control-color" id="brush-color" value="#000000"
-                            title="Choose brush color">
+                            title="Choose brush color" style="border-width: 2px; border-color: rgb(195, 190, 190);">
                     </div>
                 </div>
 
                 <!-- Actions -->
-                <div class="tool-group">
+                <div class="tool-group col">
                     <div class="tool-label">Actions</div>
                     <div class="action-buttons">
                         <button id="clear-canvas" class="btn btn-warning btn-sm">
@@ -94,27 +144,31 @@
                         <button id="apply-crop" class="btn btn-primary btn-sm" style="display: none;">
                             <i class="bi bi-check-lg"></i> Apply Crop
                         </button>
-                        <button id="save-image" class="btn btn-success btn-sm" data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
+                        <button id="save-image" class="btn btn-success btn-sm"
+                            data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
                             <i class="bi bi-save"></i> Save
                         </button>
                         {% if has_edited_version %}
-                        <button id="restore-original" class="btn btn-danger btn-sm" data-restore-url="{{ url_for('direct_uploads.restore_original', upload_id=upload.id) }}">
+                        <button id="restore-original" class="btn btn-danger btn-sm"
+                            data-restore-url="{{ url_for('direct_uploads.restore_original', upload_id=upload.id) }}">
                             <i class="bi bi-arrow-repeat"></i> Restore Original
                         </button>
                         {% endif %}
                     </div>
                 </div>
+
             </div>
 
             <!-- Canvas Container (90% width) -->
-            <div class="canvas-container">
+            <div class="canvas-container row">
                 <canvas id="imageCanvas" data-image-url="{{ image_url }}"></canvas>
             </div>
         </div>
-    </div>
+    </div><!-- Image Editor Wrapper -->
 </div>
 {% endblock %}
 
 {% block page_scripts %}
-  <script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+<script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
+    defer></script>
 {% endblock %}

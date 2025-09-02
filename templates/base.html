@@ -16,6 +16,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
 
+  {% block extra_styles %}
+
+  {% endblock %}
+
   <!-- Theme bootstrapper: set initial theme ASAP to avoid FOUC -->
   <script>
     (function () {
@@ -29,6 +33,10 @@
       }
     })();
   </script>
+
+
+
+
 </head>
 
 <body

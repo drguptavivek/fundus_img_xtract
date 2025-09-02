@@ -704,3 +704,78 @@
   border-color: var(--bs-light);
 
 }
+
+
+ /* Base styles for the range input to reset browser defaults */
+    .form-range {
+        /* Remove default appearance */
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 8px;
+        /* Set a fixed height for the track */
+        cursor: pointer;
+        background: transparent;
+        /* Makes the default track background transparent */
+    }
+
+    /* Common track styling for all browsers */
+    .form-range::-webkit-slider-runnable-track,
+    .form-range::-moz-range-track {
+        background: #b0b0b0;
+        /* Mid-grey track color */
+        border-radius: 4px;
+        /* Optional: adds rounded corners to the track */
+    }
+
+    /* Common thumb styling for all browsers */
+    .form-range::-webkit-slider-thumb,
+    .form-range::-moz-range-thumb {
+        -webkit-appearance: none;
+        /* Required for styling in WebKit */
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: #ffffff;
+        /* White thumb color */
+        border-radius: 50%;
+        border: 1px solid #999;
+        /* Vertically center the thumb on the track */
+        margin-top: -4px;
+    }
+
+    /* Focus styles for the slider (works on the overall input element) */
+    .form-range:focus {
+        /* This removes the default browser focus ring */
+        outline: none;
+    }
+
+    /* Custom focus outline for the slider thumb */
+    .form-range:focus::-webkit-slider-thumb {
+        outline: 2px solid #5d9cec;
+        /* A clear, vibrant blue outline */
+        outline-offset: 4px;
+        /* Adds space between the thumb and the outline */
+        box-shadow: 0 0 0 2px #ffffff;
+        /* Adds a white shadow for high contrast on dark backgrounds */
+    }
+
+    .form-range:focus::-moz-range-thumb {
+        outline: 2px solid #5d9cec;
+        outline-offset: 4px;
+        /* Firefox renders the outline in the shape of the thumb, so a box-shadow isn't needed. */
+    }
+
+    /* Dark mode adjustments (optional) */
+    /*
+If your page supports dark mode, this ensures the outline is always visible.
+You can use a more specific selector like html[data-theme='dark'] or a class on the body.
+*/
+    @media (prefers-color-scheme: dark) {
+        .form-range:focus::-webkit-slider-thumb {
+            outline: 2px solid #5d9cec;
+            outline-offset: 4px;
+            /* In dark mode, a white box-shadow provides high contrast */
+            box-shadow: 0 0 0 2px #ffffff;
+        }
+    }

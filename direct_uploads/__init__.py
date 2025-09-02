@@ -1,5 +1,5 @@
 from flask import Blueprint
-
+ 
 bp = Blueprint(
     "direct_uploads",
     __name__,

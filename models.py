@@ -316,8 +316,8 @@ class DirectImageUpload(Base):
             name="ck_diu_edited_filename_no_slash",
         ),
         # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
-        CheckConstraint("substr(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
-        CheckConstraint("instr(folder_rel, '\\\\') = 0", name="ck_diu_folder_no_backslash"),
+        CheckConstraint("substr(folder_rel, 1, 1) <> '/", name="ck_diu_folder_not_absolute"),
+        CheckConstraint("instr(folder_rel, '\\') = 0", name="ck_diu_folder_no_backslash"),
         # Helpful composite indexes
         Index("ix_diu_uploader_created", "uploader_id", "created_at"),
         Index("ix_diu_folder_created", "folder_rel", "created_at"),
@@ -332,8 +332,36 @@ class DirectImageUpload(Base):
     def has_edited(self) -> bool:
         return bool(self.edited_filename)
     
+    verifications: Mapped[List["DirectImageVerify"]] = relationship(
+        back_populates="image_upload", cascade="all, delete-orphan"
+    )
 
-    
+
+class DirectImageVerify(Base):
+    __tablename__ = "direct_image_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    image_upload_id: Mapped[int] = mapped_column(
+        ForeignKey("direct_image_uploads.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    verified_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    verified_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    image_upload: Mapped["DirectImageUpload"] = relationship(back_populates="verifications")
+    verified_by: Mapped["User"] = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("image_upload_id", name="uq_direct_image_verify_upload_id"),
+        CheckConstraint(
+            "verified_status IN ('verified', 'unverified', 'pending')",
+            name="ck_di_verify_status",
+        ),
+    )
+
+
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

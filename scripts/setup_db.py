@@ -114,6 +114,11 @@ def main() -> None:
         help="Add edited_image_path column to direct_image_uploads table",
     )
     parser.add_argument(
+        "--migrate-anonymization-verifications",
+        action="store_true",
+        help="Create tables for direct image anonymization verifications feature",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -168,6 +173,12 @@ def main() -> None:
             mig_direct_upl_edited(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_direct_uploads_edited_image: {e}")
+    if args.migrate_anonymization_verifications:
+        try:
+            from migrate_anonymization_verifications import migrate as mig_anon_verif
+            mig_anon_verif(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_anonymization_verifications: {e}")
 
 
 if __name__ == "__main__":

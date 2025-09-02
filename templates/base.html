@@ -122,9 +122,9 @@
           </li>
 
           
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
+          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('contributor')) %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'glaucoma' else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['glaucoma', 'preprocess'] else '' }}" href="#"
               id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Pre-processing
             </a>
@@ -156,6 +156,17 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+              </li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li  class="dropdown-item" style="font-weight: 800;">Image Anonymization</li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'preprocess.anonymization_dashboard' else '' }}"
+                  href="{{ url_for('preprocess.anonymization_dashboard') }}">Anonymization Dashboard</a>
               </li>
             </ul>
           </li>

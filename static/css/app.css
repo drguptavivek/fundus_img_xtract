@@ -720,27 +720,24 @@
     }
 
     /* Common track styling for all browsers */
-    .form-range::-webkit-slider-runnable-track,
     .form-range::-moz-range-track {
-        background: #b0b0b0;
-        /* Mid-grey track color */
-        border-radius: 4px;
-        /* Optional: adds rounded corners to the track */
+        background-color: #0f3100; /* Example: changes track color */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
     }
-
+      .form-range::-webkit-slider-runnable-track {
+        background-color: #0f3100; /* Example: changes track color to blue */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
+    }
     /* Common thumb styling for all browsers */
     .form-range::-webkit-slider-thumb,
     .form-range::-moz-range-thumb {
-        -webkit-appearance: none;
-        /* Required for styling in WebKit */
+        -webkit-appearance: none;      /* Required for styling in WebKit */
         appearance: none;
         width: 16px;
         height: 16px;
-        background: #ffffff;
-        /* White thumb color */
+        background: #ffffff; /* White thumb color */
         border-radius: 50%;
-        border: 1px solid #999;
-        /* Vertically center the thumb on the track */
+        border: 1px solid #999;  /* Vertically center the thumb on the track */
         margin-top: -4px;
     }
 
@@ -778,4 +775,31 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
             /* In dark mode, a white box-shadow provides high contrast */
             box-shadow: 0 0 0 2px #ffffff;
         }
+
+      .form-range::-moz-range-track {
+        background-color: #e7f0e4; /* Example: changes track color */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
     }
+      .form-range::-webkit-slider-runnable-track {
+        background-color: #e7f0e4; /* Example: changes track color to blue */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
+    }
+    }
+
+[data-bs-theme=dark] {
+        .form-range:focus::-webkit-slider-thumb {
+            outline: 2px solid #5d9cec;
+            outline-offset: 4px;
+            /* In dark mode, a white box-shadow provides high contrast */
+            box-shadow: 0 0 0 2px #ffffff;
+        }
+
+      .form-range::-moz-range-track {
+        background-color: #e7f0e4; /* Example: changes track color */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
+    }
+      .form-range::-webkit-slider-runnable-track {
+        background-color: #e7f0e4; /* Example: changes track color to blue */
+        border-radius: 4px;        /* Optional: adds rounded corners to the track */
+    }
+}

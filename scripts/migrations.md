@@ -27,7 +27,6 @@ python -m scripts.assign_roles bob   --roles fileUploader
 
 
 
-
 Added a proper Date column to PatientEncounters
 
 patient_encounters: capture_date_dt: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
@@ -142,4 +141,12 @@ Usage:
   python scripts/init_direct_image_uploads.py
 
 
-  
+**Direct Image Anonymization Verifications**
+
+This migration creates the `direct_image_verifications` table, which stores the verification status and remarks for direct image uploads after anonymization.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-anonymization-verifications
+  python scripts/setup_db.py --migrate-anonymization-verifications --check-only
+```

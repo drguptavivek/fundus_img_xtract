@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Anonymization Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>Anonymization Dashboard</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-header">Total Anonymized Images</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ total_anonymized_images }}</h5>
+                    <p class="card-text">Images verified for anonymization.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-header">Pending Anonymization</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ pending_anonymization_images }}</h5>
+                    <p class="card-text">Images awaiting verification.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-header">Your Verified Images</div>
+                <div class="card-body">
+                    <h5 class="card-title">{{ user_verified_images }}</h5>
+                    <p class="card-text">Images you have personally verified.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            Start Anonymization
+        </div>
+        <div class="card-body">
+            <p>Click the button below to start anonymizing images. The system will automatically select an image for you.</p>
+            <a href="{{ url_for('preprocess.anonymize_image', uuid=next_image_uuid) if next_image_uuid else '#' }}" 
+               class="btn btn-primary {% if not next_image_uuid %}disabled{% endif %}">
+                <i class="bi bi-play-circle"></i> Start Anonymizing
+            </a>
+            {% if not next_image_uuid %}
+                <p class="text-muted mt-2">No images currently available for anonymization based on your permissions.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            Recent Anonymization Activity
+        </div>
+        <div class="card-body">
+            {% if recent_verifications %}
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Image Filename</th>
+                        <th>Status</th>
+                        <th>Verified By</th>
+                        <th>Verified At</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for verification in recent_verifications %}
+                    <tr>
+                        <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
+                        <td>
+                            {% if verification.verified_status == 'verified' %}
+                                <span class="badge bg-success">Verified</span>
+                            {% elif verification.verified_status == 'unverified' %}
+                                <span class="badge bg-danger">Unverified</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ verification.verified_status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ verification.verified_by.username }}</td>
+                        <td>{{ verification.verified_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ verification.remarks or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p>No recent anonymization activity.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            Filters (Coming Soon)
+        </div>
+        <div class="card-body">
+            <p>Filtering options for Hospital, Lab Unit, Image Type, Disease, and Area will be available here.</p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

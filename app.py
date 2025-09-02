@@ -236,6 +236,9 @@ def create_app():
     from direct_uploads import bp as direct_uploads_bp
     app.register_blueprint(direct_uploads_bp)
 
+    from preprocess import bp as preprocess_bp
+    app.register_blueprint(preprocess_bp)
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager

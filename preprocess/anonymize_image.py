@@ -139,8 +139,15 @@ def anonymization_dashboard():
 
         recent_verifications = db_session.execute(
             select(DirectImageVerify)
+            .options(
+                selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.hospital),
+                selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.lab_unit),
+                selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.camera),
+                selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.disease),
+                selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.area),
+            )
             .order_by(DirectImageVerify.verified_at.desc())
-            .limit(10)
+            .limit(20)
         ).scalars().all()
 
         next_uuid = _get_next_unverified_uuid(db_session)

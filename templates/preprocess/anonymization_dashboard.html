@@ -61,6 +61,11 @@
                 <thead>
                     <tr>
                         <th>Image Filename</th>
+                        <th>Hospital</th>
+                        <th>Lab Unit</th>
+                        <th>Camera</th>
+                        <th>Disease</th>
+                        <th>Area</th>
                         <th>Status</th>
                         <th>Verified By</th>
                         <th>Verified At</th>
@@ -71,6 +76,11 @@
                     {% for verification in recent_verifications %}
                     <tr>
                         <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
+                        <td>{{ verification.image_upload.hospital.name if verification.image_upload.hospital else '-' }}</td>
+                        <td>{{ verification.image_upload.lab_unit.name if verification.image_upload.lab_unit else '-' }}</td>
+                        <td>{{ verification.image_upload.camera.name if verification.image_upload.camera else '-' }}</td>
+                        <td>{{ verification.image_upload.disease.name if verification.image_upload.disease else '-' }}</td>
+                        <td>{{ verification.image_upload.area.name if verification.image_upload.area else '-' }}</td>
                         <td>
                             {% if verification.verified_status == 'verified' %}
                                 <span class="badge bg-success">Verified</span>

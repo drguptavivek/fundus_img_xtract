@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
         saveState();
+        brushColor = brushColorPicker.value; // Initialize brushColor from the picker
     };
     img.src = canvas.dataset.imageUrl;
 

@@ -72,61 +72,67 @@ def create_app():
         ensure_roles(db, DEFAULT_ROLES)
 
     # ---------------- HTTP loggers ----------------
-    log_dir = os.path.join(os.path.dirname(__file__), "logs")
+    log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "logs"))
     os.makedirs(log_dir, exist_ok=True)
 
     success_log_path = os.getenv("HTTP_SUCCESS_LOG", os.path.join(log_dir, "http_success.log"))
-    error_log_path = os.getenv("HTTP_ERROR_LOG", os.path.join(log_dir, "http_error.log"))
+    error_log_path   = os.getenv("HTTP_ERROR_LOG",   os.path.join(log_dir, "http_error.log"))
+
+    # Only attach handlers in the reloader child (or when not using the reloader)
+    is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
 
     http_success_logger = logging.getLogger("http_success")
-    http_error_logger = logging.getLogger("http_error")
+    http_error_logger   = logging.getLogger("http_error")
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
-    # Prevent duplicate propagation to root
     http_success_logger.propagate = False
-    http_error_logger.propagate = False
+    http_error_logger.propagate   = False
 
-    # If reloaded (e.g., dev), remove and close existing handlers to release file locks on Windows
-    for lg in (http_success_logger, http_error_logger):
-        if lg.handlers:
+    if is_reloader_child:
+        # Clean up any old handlers (debug reloader / multiple inits)
+        for lg in (http_success_logger, http_error_logger):
             for h in list(lg.handlers):
-                try:
-                    lg.removeHandler(h)
-                finally:
-                    try:
-                        h.close()
-                    except Exception:
-                        pass
+                lg.removeHandler(h)
+                try: h.close()
+                except Exception: pass
 
-    # Build file handlers. Allow opting out of rotation; default off on Windows
-    dr_env = os.getenv("HTTP_LOG_DISABLE_ROTATION")
-    if dr_env is not None:
-        disable_rotation = str(dr_env).lower() in ("1", "true", "yes")
-    else:
-        # No explicit preference: on Windows default to disabling rotation to avoid file locks
-        disable_rotation = (os.name == "nt") and (str(os.getenv("ENABLE_LOG_ROTATION_ON_WINDOWS", "0")).lower() not in ("1","true","yes"))
+        disable_rotation = False
+        dr_env = os.getenv("HTTP_LOG_DISABLE_ROTATION")
+        if dr_env is not None:
+            disable_rotation = str(dr_env).lower() in ("1","true","yes")
+        elif os.name == "nt":
+            disable_rotation = str(os.getenv("ENABLE_LOG_ROTATION_ON_WINDOWS","0")).lower() not in ("1","true","yes")
 
-    if disable_rotation:
-        from logging import FileHandler
-        success_handler = FileHandler(success_log_path, encoding="utf-8", delay=True)
-        error_handler = FileHandler(error_log_path, encoding="utf-8", delay=True)
-    else:
-        # Use delayed open to reduce locking; ensure UTF-8 encoding
-        success_handler = RotatingFileHandler(
-            success_log_path, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8", delay=True
-        )
-        error_handler = RotatingFileHandler(
-            error_log_path, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8", delay=True
-        )
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    success_handler.setFormatter(fmt)
-    error_handler.setFormatter(fmt)
+        if disable_rotation:
+            from logging import FileHandler
+            success_handler = FileHandler(success_log_path, encoding="utf-8", delay=True)
+            error_handler   = FileHandler(error_log_path,   encoding="utf-8", delay=True)
+        else:
+            success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
+            error_handler   = RotatingFileHandler(error_log_path,   maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
 
-    http_success_logger.addHandler(success_handler)
-    http_error_logger.addHandler(error_handler)
+        fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+        success_handler.setFormatter(fmt)
+        error_handler.setFormatter(fmt)
 
-    # prevent double logging to app logger
-    app.logger.handlers = []
+        http_success_logger.addHandler(success_handler)
+        http_error_logger.addHandler(error_handler)
+
+        # Keep app.logger free of its own handlers; route its warnings/errors to error file
+        app.logger.handlers = []
+        app.logger.setLevel(logging.INFO)
+        app.logger.addHandler(error_handler)
+
+        # Also send Werkzeug access lines to success file (nice to have)
+        wz = logging.getLogger("werkzeug")
+        wz.setLevel(logging.INFO)
+        wz.propagate = False
+        wz.handlers = [success_handler]
+
+        # Emit a one-time startup line so you can verify file opens
+        http_success_logger.info("HTTP success logger initialized at %s", success_log_path)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

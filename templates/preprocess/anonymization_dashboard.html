@@ -7,29 +7,29 @@
 
     <div class="row mb-4">
         <div class="col-md-4">
-            <div class="card text-white bg-primary mb-3">
-                <div class="card-header">Total Anonymized Images</div>
+            <div class="card kpi-card kpi--primary ">
+                <div class="card-header">Total Verification</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ total_anonymized_images }}</h5>
-                    <p class="card-text">Images verified for anonymization.</p>
+                    <p class="card-text">Images anonymized</p>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card text-white bg-info mb-3">
-                <div class="card-header">Pending Anonymization</div>
+            <div class="card kpi-card kpi--success">
+                <div class="card-header">Pending Verification</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ pending_anonymization_images }}</h5>
-                    <p class="card-text">Images awaiting verification.</p>
+                    <p class="card-text">Images awaiting anonymization.</p>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card text-white bg-success mb-3">
+            <div class="card kpi-card kpi--info">
                 <div class="card-header">Your Verified Images</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ user_verified_images }}</h5>
-                    <p class="card-text">Images you have personally verified.</p>
+                    <p class="card-text">Images you have anonymized.</p>
                 </div>
             </div>
         </div>
@@ -41,10 +41,10 @@
         </div>
         <div class="card-body">
             <p>Click the button below to start anonymizing images. The system will automatically select an image for you.</p>
-            <a href="{{ url_for('preprocess.anonymize_image', uuid=next_image_uuid) if next_image_uuid else '#' }}" 
-               class="btn btn-primary {% if not next_image_uuid %}disabled{% endif %}">
+                <a href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) if next_unverified_uuid else '#' }}"
+                class="btn btn-primary {% if not next_unverified_uuid %}disabled{% endif %}">
                 <i class="bi bi-play-circle"></i> Start Anonymizing
-            </a>
+                </a>
             {% if not next_image_uuid %}
                 <p class="text-muted mt-2">No images currently available for anonymization based on your permissions.</p>
             {% endif %}

@@ -61,7 +61,6 @@
               href="{{ url_for('homepage') }}">Home</a>
           </li>
 
-          {# Work menu: visible to admin, fileUploader, optometrist, data_manager #}
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader') or
           current_user_has('optometrist') or current_user_has('data_manager')) %}
           <li class="nav-item dropdown">
@@ -75,14 +74,15 @@
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'uploads.upload_form' %}active{% endif %}"
-                  href="{{ url_for('uploads.upload_form') }}">Upload</a>
+                  href="{{ url_for('uploads.upload_form') }}">Upload Zips</a>
               </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
-                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
+                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs Dashboard</a>
               </li>
-              
-              {# Direct Uploads - only for contributor, data_manager, admin #}
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               {% if current_user_has('contributor') or current_user_has('data_manager') or current_user_has('admin') %}
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
@@ -93,14 +93,16 @@
                   href="{{ url_for('direct_uploads.dashboard') }}">Direct Upload Dashboard</a>
               </li>
               {% endif %}
-              
+              {% endif %}
               <li>
                 <hr class="dropdown-divider">
               </li>
+              {% if current_user.is_authenticated %}
               <li>
-                <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
-                  href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+                <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
+                  href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
               </li>
+              {% endif %}
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
@@ -109,26 +111,28 @@
                 <a class="dropdown-item {{ 'active' if request.blueprint == 'audit' else '' }}"
                   href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
               </li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
+                  href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+              </li>
             </ul>
           </li>
-          {% endif %}
 
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
-          <li class="nav-item">
-            <a class="nav-link {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
-              href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
-          </li>
-          {% endif %}
-
-
-          {# Glaucoma nav (admin or ophthalmologist) #}
+          
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist')) %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'glaucoma' else '' }}" href="#"
-              id="glaucomaMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Glaucoma
+              id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Pre-processing
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="glaucomaMenu">
+              <li  class="dropdown-item " style="font-weight: 800;">Glacuoma PDFs</li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_list' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
@@ -137,7 +141,22 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
               </li>
-              {# Clean Data moved to Work menu #}
+              
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li  class="dropdown-item" style="font-weight: 800;">DR PDFs</li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_list' else '' }}"
+                  href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
+                  href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+              </li>
             </ul>
           </li>
           {% endif %}
@@ -173,7 +192,7 @@
               </li>
               <li><a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Roles Master</a></li>
 
-                            <li>
+              <li>
                 <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='hospital') }}">
                   Hospitals
                 </a>
@@ -278,8 +297,15 @@
   </div>
   <br />
 
+  <br />
 
-  <footer class="site-footer mt-auto">
+  <br />
+
+  <br />
+
+  <br />
+
+  <footer class="site-footer mt-auto" style="margin-top: 2rem;">
     <div class="container py-3 d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
       <!-- GitHub icon (left) -->
       <a class="link-body-emphasis d-inline-flex align-items-center text-decoration-none" aria-label="GitHub repository"

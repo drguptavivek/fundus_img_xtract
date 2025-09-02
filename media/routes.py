@@ -165,3 +165,9 @@ def serve_img_by_uuid_preferring_edited(uuid_str: str):
     finally:
         db.close()
         
+
+@bp.route("/direct_upload/uuid/<uuid_str>", methods=["GET"])
+@roles_required("contributor", "data_manager", "admin")
+def direct_upload_uuid():
+    # TODO
+    print("direct_upload by UUID Done")

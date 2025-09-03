@@ -316,8 +316,8 @@ class DirectImageUpload(Base):
             name="ck_diu_edited_filename_no_slash",
         ),
         # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
-        CheckConstraint("substr(folder_rel, 1, 1) <> '/", name="ck_diu_folder_not_absolute"),
-        CheckConstraint("instr(folder_rel, '\\') = 0", name="ck_diu_folder_no_backslash"),
+        CheckConstraint("substr(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
+        CheckConstraint("instr(folder_rel, '\\\\') = 0", name="ck_diu_folder_no_backslash"),
         # Helpful composite indexes
         Index("ix_diu_uploader_created", "uploader_id", "created_at"),
         Index("ix_diu_folder_created", "folder_rel", "created_at"),

@@ -1,8 +1,9 @@
 # media/routes.py
 
 import os
+import mimetypes
 from pathlib import Path
-from flask import abort, current_app, send_from_directory, Response
+from flask import abort, send_file, send_from_directory, Response
 from flask_login import current_user
 from sqlalchemy import select
 from uuid import UUID  # only used by EncounterFile route
@@ -16,8 +17,42 @@ from models import (
 )
 from direct_uploads.paths import abs_from_parts
 
-
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+
+# ---------------- Helpers ----------------
+
+def _send_file_with_headers(abs_path: Path, mimetype: str | None = None) -> Response:
+    """Cross-platform safe file send with sensible headers."""
+    abs_path = abs_path.resolve()
+    if not abs_path.exists() or not abs_path.is_file():
+        abort(404)
+
+    # Guess type if not provided
+    guessed, _ = mimetypes.guess_type(abs_path.name)
+    mt = mimetype or guessed or "application/octet-stream"
+
+    resp: Response = send_file(
+        abs_path,
+        mimetype=mt,
+        as_attachment=False,
+        conditional=True,   # enables range/If-Modified-Since
+        etag=True,
+        last_modified=abs_path.stat().st_mtime
+    )
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Cache-Control", "private, max-age=600")
+    return resp
+
+
+def _ensure_under_root(abs_path: Path, root: Path) -> None:
+    """Ensure abs_path is inside root (prevents traversal / wrong volume)."""
+    abs_path = abs_path.resolve()
+    root = root.resolve()
+    try:
+        abs_path.relative_to(root)
+    except Exception:
+        abort(404)
 
 
 # ---------------- Admin-only legacy image & file serving ----------------
@@ -31,14 +66,15 @@ def serve_image(filename: str):
     fname = os.path.basename(filename)
     if fname != filename:
         abort(404)
-    if Path(fname).suffix.lower() not in ALLOWED_IMAGE_EXT:
+
+    ext = Path(fname).suffix.lower()
+    if ext not in ALLOWED_IMAGE_EXT:
         abort(404)
 
-    full = IMAGE_DIR / fname
-    if not full.exists() or not full.is_file():
-        abort(404)
+    full = (IMAGE_DIR / fname).resolve()
+    _ensure_under_root(full, IMAGE_DIR)
 
-    return send_from_directory(directory=str(IMAGE_DIR), path=fname, as_attachment=False)
+    return _send_file_with_headers(full)
 
 
 @bp.route("/file/<uuid>", methods=["GET"])
@@ -61,32 +97,41 @@ def serve_file_by_uuid(uuid: str):
         abort(404)
 
     ext = Path(fname).suffix.lower()
-    if (ef.file_type or '').lower().startswith('image') or ext in ALLOWED_IMAGE_EXT:
+    file_type = (ef.file_type or "").lower()
+
+    if file_type.startswith("image") or ext in ALLOWED_IMAGE_EXT:
         base_dir = IMAGE_DIR
-        mimetype = None
-    elif ext == '.pdf' or (ef.file_type or '').lower() == 'pdf':
+        mimetype = None  # let mimetypes decide
+    elif ext == ".pdf" or file_type == "pdf":
         base_dir = PDF_DIR
         mimetype = "application/pdf"
     else:
         abort(404)
 
-    full = base_dir / fname
-    if not full.exists() or not full.is_file():
+    full = (base_dir / fname).resolve()
+    _ensure_under_root(full, base_dir)
+
+    return _send_file_with_headers(full, mimetype=mimetype)
+
+
+# ---------------- New direct-upload ID/UUID-based routes ----------------
+
+def _serve_path(ap: Path) -> Response:
+    """
+    Serve a direct-upload image path under DIRECT_UPLOAD_DIR safely.
+    Works on Windows/macOS/Linux.
+    """
+    ap = ap.resolve()
+
+    # Must live under DIRECT_UPLOAD_DIR
+    _ensure_under_root(ap, DIRECT_UPLOAD_DIR)
+
+    # Basic validation
+    if ap.suffix.lower() not in ALLOWED_IMAGE_EXT:
         abort(404)
 
-    return send_from_directory(directory=str(base_dir), path=fname, as_attachment=False, mimetype=mimetype)
+    return _send_file_with_headers(ap)
 
-
-# ---------------- New direct-upload ID-based routes (no path params) ----------------
-def _serve_path(ap) -> Response:
-    if not ap.exists() or not ap.is_file() or ap.suffix.lower() not in ALLOWED_IMAGE_EXT:
-        abort(404)
-    root = DIRECT_UPLOAD_DIR.resolve()
-    rel_to_root = ap.resolve().relative_to(root)
-    resp: Response = send_from_directory(str(root), str(rel_to_root), as_attachment=False)
-    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("Cache-Control", "private, max-age=600")
-    return resp
 
 @bp.route("/direct_upload/img_orig/<int:upload_id>", methods=["GET"])
 @roles_required("contributor", "data_manager", "admin")
@@ -100,21 +145,8 @@ def serve_img_orig(upload_id: int):
         if not u:
             abort(404)
 
-        # ✅ Use folder_rel + filename
         ap = abs_from_parts(u.folder_rel, u.filename, "orig")
-        if not ap.exists() or not ap.is_file():
-            abort(404)
-
-        root = DIRECT_UPLOAD_DIR.resolve()
-        rel_to_root = ap.resolve().relative_to(root)
-        resp: Response = send_from_directory(
-            str(root),
-            str(rel_to_root),
-            as_attachment=False
-        )
-        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-        resp.headers.setdefault("Cache-Control", "private, max-age=600")
-        return resp
+        return _serve_path(ap)
     finally:
         db.close()
 
@@ -130,6 +162,7 @@ def serve_img_edited(upload_id: int):
         u = db.execute(q).scalar_one_or_none()
         if not u or not u.edited_filename:
             abort(404)
+
         ap = abs_from_parts(u.folder_rel, u.edited_filename, "edited")
         return _serve_path(ap)
     finally:
@@ -139,6 +172,7 @@ def serve_img_edited(upload_id: int):
 @bp.route("/direct_upload/img/<uuid_str>", methods=["GET"])
 @roles_required("contributor", "data_manager", "admin")
 def serve_img_by_uuid_preferring_edited(uuid_str: str):
+    # Sanity-check UUID format
     try:
         _ = UUID(uuid_str)
     except Exception:
@@ -153,12 +187,13 @@ def serve_img_by_uuid_preferring_edited(uuid_str: str):
         if not u:
             abort(404)
 
-        # prefer edited if present, else original
+        # Prefer edited if present, else original
         if u.edited_filename:
             try:
-                ap = abs_from_parts(u.folder_rel, u.edited_filename, "edited")
+                ap = abs_from_parts(u.folder_rel, u.edited_filename, "edited").resolve()
                 return _serve_path(ap)
             except Exception:
+                # Fall back to original if edited is missing
                 pass
 
         ap = abs_from_parts(u.folder_rel, u.filename, "orig")

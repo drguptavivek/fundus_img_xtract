@@ -14,10 +14,14 @@ from sqlalchemy import case
 from sqlalchemy import func
 from sqlalchemy.orm import aliased
 
+from math import ceil
 from preprocess import bp
 from auth.roles import roles_required
 from direct_uploads.paths import abs_from_parts
-from models import Session, User, DirectImageUpload, DirectImageVerify
+from models import (
+    Session, User, DirectImageUpload, DirectImageVerify, Hospital, LabUnit, Camera, Disease, Area
+)
+
 # ---------------------------
 # Helpers
 # ---------------------------
@@ -108,25 +112,18 @@ def _get_next_unverified_uuid(db_session) -> str | None:
 def anonymization_dashboard():
     """
     Totals, recents, and a 'next image' UUID for anonymization.
+    Supports filtering and pagination for recent verifications.
     """
     db_session = Session()
     try:
+        # --- KPIs (unchanged) ---
         total_anonymized_images = db_session.execute(
-            select(func.count(DirectImageVerify.id)).where(
-                DirectImageVerify.verified_status == "verified"
-            )
+            select(func.count(DirectImageVerify.id)).where(DirectImageVerify.verified_status == "verified")
         ).scalar_one()
 
         pending_anonymization_images = db_session.execute(
             select(func.count(DirectImageUpload.id)).where(
-                ~exists(
-                    select(1).select_from(DirectImageVerify).where(
-                        and_(
-                            DirectImageVerify.image_upload_id == DirectImageUpload.id,
-                            DirectImageVerify.verified_status == 'verified'
-                        )
-                    )
-                )
+                ~exists(select(1).where(DirectImageVerify.image_upload_id == DirectImageUpload.id))
             )
         ).scalar_one()
 
@@ -137,30 +134,102 @@ def anonymization_dashboard():
             )
         ).scalar_one()
 
-        recent_verifications = db_session.execute(
+        # --- Filters ---
+        page = request.args.get('page', 1, type=int)
+        per_page = 20  # or from config
+        
+        f_hospital_id = request.args.get('hospital_id', '', type=str)
+        f_lab_unit_id = request.args.get('lab_unit_id', '', type=str)
+        f_camera_id = request.args.get('camera_id', '', type=str)
+        f_disease_id = request.args.get('disease_id', '', type=str)
+        f_area_id = request.args.get('area_id', '', type=str)
+        f_status = request.args.get('status', '', type=str)
+        f_verified_by_id = request.args.get('verified_by_id', '', type=str)
+        f_filename = request.args.get('filename', '', type=str)
+
+        # --- Data for filter dropdowns ---
+        hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
+        lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
+        cameras = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
+        diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
+        areas = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
+        users = db_session.execute(select(User).order_by(User.username)).scalars().all()
+        
+        # --- Build Query for Recent Verifications ---
+        query = (
             select(DirectImageVerify)
+            .join(DirectImageVerify.image_upload)
             .options(
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.hospital),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.lab_unit),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.camera),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.disease),
                 selectinload(DirectImageVerify.image_upload).selectinload(DirectImageUpload.area),
+                selectinload(DirectImageVerify.verified_by)
             )
-            .order_by(DirectImageVerify.verified_at.desc())
-            .limit(20)
+        )
+
+        # Apply filters
+        if f_hospital_id:
+            query = query.where(DirectImageUpload.hospital_id == f_hospital_id)
+        if f_lab_unit_id:
+            query = query.where(DirectImageUpload.lab_unit_id == f_lab_unit_id)
+        if f_camera_id:
+            query = query.where(DirectImageUpload.camera_id == f_camera_id)
+        if f_disease_id:
+            query = query.where(DirectImageUpload.disease_id == f_disease_id)
+        if f_area_id:
+            query = query.where(DirectImageUpload.area_id == f_area_id)
+        if f_status:
+            query = query.where(DirectImageVerify.verified_status == f_status)
+        if f_verified_by_id:
+            query = query.where(DirectImageVerify.verified_by_id == f_verified_by_id)
+        if f_filename:
+            query = query.where(DirectImageUpload.filename.ilike(f'%{f_filename}%'))
+
+        # Get total count for pagination
+        total_items = db_session.execute(select(func.count()).select_from(query.subquery())).scalar_one()
+        total_pages = ceil(total_items / per_page)
+
+        # Apply pagination and ordering
+        verifications = db_session.execute(
+            query.order_by(DirectImageVerify.verified_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
         ).scalars().all()
 
         next_uuid = _get_next_unverified_uuid(db_session)
-        current_app.logger.info("pending=%s, next_unverified_uuid=%s",
-                        pending_anonymization_images, next_uuid)
-        
+
         return render_template(
             "preprocess/anonymization_dashboard.html",
             total_anonymized_images=total_anonymized_images,
             pending_anonymization_images=pending_anonymization_images,
             user_verified_images=user_verified_images,
-            recent_verifications=recent_verifications,
+            recent_verifications=verifications,
             next_unverified_uuid=next_uuid,
+            # Pagination
+            page=page,
+            per_page=per_page,
+            total_pages=total_pages,
+            total_items=total_items,
+            # Filters data
+            hospitals=hospitals,
+            lab_units=lab_units,
+            cameras=cameras,
+            diseases=diseases,
+            areas=areas,
+            users=users,
+            # Current filter values
+            filters={
+                'hospital_id': f_hospital_id,
+                'lab_unit_id': f_lab_unit_id,
+                'camera_id': f_camera_id,
+                'disease_id': f_disease_id,
+                'area_id': f_area_id,
+                'status': f_status,
+                'verified_by_id': f_verified_by_id,
+                'filename': f_filename,
+            }
         )
     except Exception as e:
         current_app.logger.exception("Error loading anonymization dashboard: %s", e)
@@ -172,6 +241,9 @@ def anonymization_dashboard():
             user_verified_images=0,
             recent_verifications=[],
             next_unverified_uuid=None,
+            page=1, per_page=20, total_pages=0, total_items=0,
+            hospitals=[], lab_units=[], cameras=[], diseases=[], areas=[], users=[],
+            filters={}
         )
     finally:
         db_session.close()

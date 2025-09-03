@@ -56,49 +56,145 @@
             Recent Anonymization Activity
         </div>
         <div class="card-body">
+            <form method="get" action="{{ url_for('preprocess.anonymization_dashboard') }}" class="mb-4">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="filename" class="form-label">Image Filename</label>
+                        <input type="text" name="filename" id="filename" class="form-control" value="{{ filters.filename }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="hospital_id" class="form-label">Hospital</label>
+                        <select name="hospital_id" id="hospital_id" class="form-select">
+                            <option value="">All</option>
+                            {% for hospital in hospitals %}
+                                <option value="{{ hospital.id }}" {% if filters.hospital_id == hospital.id|string %}selected{% endif %}>{{ hospital.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="lab_unit_id" class="form-label">Lab Unit</label>
+                        <select name="lab_unit_id" id="lab_unit_id" class="form-select">
+                            <option value="">All</option>
+                            {% for lab_unit in lab_units %}
+                                <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id|string %}selected{% endif %}>{{ lab_unit.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="camera_id" class="form-label">Camera</label>
+                        <select name="camera_id" id="camera_id" class="form-select">
+                            <option value="">All</option>
+                            {% for camera in cameras %}
+                                <option value="{{ camera.id }}" {% if filters.camera_id == camera.id|string %}selected{% endif %}>{{ camera.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="disease_id" class="form-label">Disease</label>
+                        <select name="disease_id" id="disease_id" class="form-select">
+                            <option value="">All</option>
+                            {% for disease in diseases %}
+                                <option value="{{ disease.id }}" {% if filters.disease_id == disease.id|string %}selected{% endif %}>{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="area_id" class="form-label">Area</label>
+                        <select name="area_id" id="area_id" class="form-select">
+                            <option value="">All</option>
+                            {% for area in areas %}
+                                <option value="{{ area.id }}" {% if filters.area_id == area.id|string %}selected{% endif %}>{{ area.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select name="status" id="status" class="form-select">
+                            <option value="">All</option>
+                            <option value="verified" {% if filters.status == 'verified' %}selected{% endif %}>Verified</option>
+                            <option value="unverified" {% if filters.status == 'unverified' %}selected{% endif %}>Unverified</option>
+                            <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="verified_by_id" class="form-label">Verified By</label>
+                        <select name="verified_by_id" id="verified_by_id" class="form-select">
+                            <option value="">All</option>
+                            {% for user in users %}
+                                <option value="{{ user.id }}" {% if filters.verified_by_id == user.id|string %}selected{% endif %}>{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <a href="{{ url_for('preprocess.anonymization_dashboard') }}" class="btn btn-secondary">Clear</a>
+                </div>
+            </form>
+
             {% if recent_verifications %}
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>Image Filename</th>
-                        <th>Hospital</th>
-                        <th>Lab Unit</th>
-                        <th>Camera</th>
-                        <th>Disease</th>
-                        <th>Area</th>
-                        <th>Status</th>
-                        <th>Verified By</th>
-                        <th>Verified At</th>
-                        <th>Remarks</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for verification in recent_verifications %}
-                    <tr>
-                        <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
-                        <td>{{ verification.image_upload.hospital.name if verification.image_upload.hospital else '-' }}</td>
-                        <td>{{ verification.image_upload.lab_unit.name if verification.image_upload.lab_unit else '-' }}</td>
-                        <td>{{ verification.image_upload.camera.name if verification.image_upload.camera else '-' }}</td>
-                        <td>{{ verification.image_upload.disease.name if verification.image_upload.disease else '-' }}</td>
-                        <td>{{ verification.image_upload.area.name if verification.image_upload.area else '-' }}</td>
-                        <td>
-                            {% if verification.verified_status == 'verified' %}
-                                <span class="badge bg-success">Verified</span>
-                            {% elif verification.verified_status == 'unverified' %}
-                                <span class="badge bg-danger">Unverified</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ verification.verified_status }}</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ verification.verified_by.username }}</td>
-                        <td>{{ verification.verified_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                        <td>{{ verification.remarks or '-' }}</td>
-                    </tr>
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Image Filename</th>
+                            <th>Hospital</th>
+                            <th>Lab Unit</th>
+                            <th>Camera</th>
+                            <th>Disease</th>
+                            <th>Area</th>
+                            <th>Status</th>
+                            <th>Verified By</th>
+                            <th>Verified At</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for verification in recent_verifications %}
+                        <tr>
+                            <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
+                            <td>{{ verification.image_upload.hospital.name if verification.image_upload.hospital else '-' }}</td>
+                            <td>{{ verification.image_upload.lab_unit.name if verification.image_upload.lab_unit else '-' }}</td>
+                            <td>{{ verification.image_upload.camera.name if verification.image_upload.camera else '-' }}</td>
+                            <td>{{ verification.image_upload.disease.name if verification.image_upload.disease else '-' }}</td>
+                            <td>{{ verification.image_upload.area.name if verification.image_upload.area else '-' }}</td>
+                            <td>
+                                {% if verification.verified_status == 'verified' %}
+                                    <span class="badge bg-success">Verified</span>
+                                {% elif verification.verified_status == 'unverified' %}
+                                    <span class="badge bg-danger">Unverified</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ verification.verified_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ verification.verified_by.username }}</td>
+                            <td>{{ verification.verified_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>{{ verification.remarks or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <nav aria-label="Page navigation">
+                <ul class="pagination">
+                    <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page-1, **filters) }}">Previous</a>
+                    </li>
+                    {% for p in range(1, total_pages + 1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=p, **filters) }}">{{ p }}</a>
+                        </li>
                     {% endfor %}
-                </tbody>
-            </table>
+                    <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                        <a class="page-link" href="{{ url_for('preprocess.anonymization_dashboard', page=page+1, **filters) }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+            <p class="text-muted">Showing {{ recent_verifications|length }} of {{ total_items }} results.</p>
+
             {% else %}
-            <p>No recent anonymization activity.</p>
+            <p>No recent anonymization activity matching the criteria.</p>
             {% endif %}
         </div>
     </div>

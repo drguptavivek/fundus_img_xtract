@@ -4,11 +4,42 @@ To extract data from remedio camera zip files
 Uses PyTesseract, pyUPDF
 
 
-
 ```bash
 git clone https://github.com/drguptavivek/fundus_img_xtract.git
+
+# Install NPM apckages and create directories
+python3 setup_env_and_npm.py 
+python setup_env_and_npm.py 
+
+# Create venv in .venv and install packages listed in uv.lock
 uv init
-uv sync
+uv add -r requirements.txt
+
+
+source .venv/bin/activates
+python -m scripts.setup_db
+
+python -m scripts.create_user
+python -m scripts.assign_roles admin    --roles admin
+
+uv run app.py
+
+python -m scripts.assign_roles admin    --roles admin data_manager
+python -m scripts.assign_roles admin    --roles fileUploader
+
+
+uv run app.py
+
+
+```
+
+
+## To Run
+
+```bash
+uv run app.py
+
+
 
 ```
 

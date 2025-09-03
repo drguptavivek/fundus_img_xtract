@@ -96,11 +96,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Helper to get canvas coordinates
     function getCanvasCoordinates(e) {
         const rect = canvas.getBoundingClientRect();
+        // Map from CSS pixels to canvas pixels
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+        const clientY = (e.touches ? e.touches[0].clientY : e.clientY);
+
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
         };
-    }
+}
 
     function start(e) {
         const { x, y } = getCanvasCoordinates(e);

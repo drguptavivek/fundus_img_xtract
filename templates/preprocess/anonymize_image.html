@@ -24,14 +24,10 @@
       <span class="d-flex gap-2">
         {% if next_unverified_uuid %}
           <a class="btn btn-sm btn-primary"
-             href="{{ url_for('preprocess.anonymize_image', next_uuid=next_uuid) }}">
+             href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) }}">
             Next unverified
           </a>
         {% endif %}
-        <a class="btn btn-sm btn-outline-secondary"
-           href="{{ url_for('preprocess.anonymization_dashboard') }}">
-          Dashboard
-        </a>
       </span>
     </div>
   {% endif %}

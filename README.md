@@ -22,7 +22,7 @@ python -m scripts.setup_db
 python -m scripts.create_user
 python -m scripts.assign_roles admin    --roles admin
 
-uv run app.py
+uv run --actve app.py 
 
 python -m scripts.assign_roles admin    --roles admin data_manager
 python -m scripts.assign_roles admin    --roles fileUploader

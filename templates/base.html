@@ -102,11 +102,12 @@
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
                   href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
               </li>
-              {% endif %}
+          
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
               </li>
+                  
               <li>
                 <a class="dropdown-item {{ 'active' if request.blueprint == 'audit' else '' }}"
                   href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
@@ -118,6 +119,7 @@
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
                   href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
               </li>
+              {% endif %}
             </ul>
           </li>
 

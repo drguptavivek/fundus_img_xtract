@@ -175,6 +175,11 @@ def main() -> None:
         help="Create tables for direct image anonymization verifications feature",
     )
     parser.add_argument(
+        "--migrate-disease-gradings",
+        action="store_true",
+        help="Create tables for disease gradings feature",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -235,6 +240,12 @@ def main() -> None:
             mig_anon_verif(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_anonymization_verifications: {e}")
+    if args.migrate_disease_gradings:
+        try:
+            from migrate_disease_grading import main as mig_disease_grading
+            mig_disease_grading()
+        except Exception as e:
+            print(f"Failed to import migrate_disease_grading: {e}")
     if args.migrate_image_grading_direct_upload:
         try:
             from migrate_image_grading_direct_upload import migrate as mig_img_direct

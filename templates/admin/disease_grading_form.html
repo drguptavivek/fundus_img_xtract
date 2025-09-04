@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if grading else 'Create' }} Disease Grading{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{ 'Edit' if grading else 'Create' }} Disease Grading</h2>
+        <a href="{{ url_for('admin.list_disease_gradings') }}" class="btn btn-secondary">Back to List</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">{{ 'Edit' if grading else 'Create' }} Disease Grading</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.edit_disease_grading', grading_id=grading.id) if grading else url_for('admin.create_disease_grading') }}">
+                {{ csrf_field() }}
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="disease_id" class="form-label">Disease</label>
+                        <select class="form-select" id="disease_id" name="disease_id" required>
+                            <option value="">Select a disease</option>
+                            {% for disease in diseases %}
+                                <option value="{{ disease.id }}" {% if (grading and grading.disease_id == disease.id) or (disease_id and disease_id == disease.id|string) %}selected{% endif %}>
+                                    {{ disease.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="impression" class="form-label">Impression</label>
+                        <input type="text" class="form-control" id="impression" name="impression" 
+                               value="{{ grading.impression if grading else impression }}" required>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="display_order" name="display_order" 
+                               value="{{ grading.display_order if grading else display_order }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="is_active" class="form-label">Status</label>
+                        <select class="form-select" id="is_active" name="is_active">
+                            <option value="1" {% if (grading and grading.is_active) or is_active %}selected{% endif %}>Active</option>
+                            <option value="0" {% if (grading and not grading.is_active) or (is_active is not none and not is_active) %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('admin.list_disease_gradings') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">{{ 'Update' if grading else 'Create' }} Disease Grading</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -379,6 +379,24 @@ class DirectImageVerify(Base):
     )
 
 
+# --- Disease Grading Model ---
+class DiseaseGrading(Base):
+    __tablename__ = 'disease_gradings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False)
+    impression: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    
+    # Relationship
+    disease: Mapped["Disease"] = relationship("Disease", backref="gradings")
+    
+    __table_args__ = (
+        UniqueConstraint('disease_id', 'impression', name='uq_disease_grading_disease_impression'),
+        Index('ix_disease_gradings_disease_order', 'disease_id', 'display_order'),
+    )
+
+
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

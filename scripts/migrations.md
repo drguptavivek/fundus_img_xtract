@@ -172,3 +172,14 @@ Usage:
   python scripts/migrate_image_grading_nullable_columns.py
   python scripts/migrate_image_grading_nullable_columns.py --dry-run
 ```
+
+
+**Add disease_gradings table**
+
+This migration creates the `disease_gradings` table, which stores the impressions and their display order for each disease.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-disease-gradings
+  python scripts/setup_db.py --migrate-disease-gradings --check-only
+```

@@ -1,3 +1,35 @@
 from flask import Blueprint
-admin_bp = Blueprint("admin",    __name__,    url_prefix="/admin",    template_folder="templates")
-from . import routes  # noqa: F401
+
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="templates")
+
+# Import all route handlers
+from .users import users_list, add_user, edit_user, users_update
+from .security import change_password, manage_roles
+from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
+from .disease_gradings import list_disease_gradings, create_disease_grading, edit_disease_grading, delete_disease_grading
+from .uploads import malicious_uploads
+
+# Register routes with the blueprint
+# User management routes
+admin_bp.add_url_rule("/users", view_func=users_list, methods=["GET"])
+admin_bp.add_url_rule("/users/new", view_func=add_user, methods=["GET", "POST"])
+admin_bp.add_url_rule("/users/<int:user_id>/edit", view_func=edit_user, methods=["GET", "POST"])
+admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, methods=["POST"])
+
+# Security routes (password and roles)
+admin_bp.add_url_rule("/change-password", view_func=change_password, methods=["GET", "POST"])
+admin_bp.add_url_rule("/roles", view_func=manage_roles, methods=["GET", "POST"])
+
+# Lookup table routes
+admin_bp.add_url_rule("/<string:model_name>", view_func=list_and_create_lookup, methods=["GET", "POST"])
+admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/edit", view_func=edit_lookup, methods=["GET", "POST"])
+admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/delete", view_func=delete_lookup, methods=["POST"])
+
+# Disease grading routes
+admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease-gradings/new", view_func=create_disease_grading, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/edit", view_func=edit_disease_grading, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/delete", view_func=delete_disease_grading, methods=["POST"])
+
+# Uploads routes
+admin_bp.add_url_rule("/malicious-uploads", view_func=malicious_uploads, methods=["GET"])

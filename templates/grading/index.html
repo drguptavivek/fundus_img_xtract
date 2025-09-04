@@ -195,7 +195,7 @@
           <td class="small text-muted">{{ g.remarks or '' }}</td>
           <td class="text-end">
             {% if g.image and g.image.uuid %}
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.glaucoma_image', uuid=g.image.uuid) }}">Revise</a>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.remedio_glaucoma_image', uuid=g.image.uuid) }}">Revise</a>
             {% endif %}
           </td>
         </tr>

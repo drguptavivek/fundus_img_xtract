@@ -9,7 +9,7 @@ from models import Session, PatientEncounters, EncounterFile, ImageGrading
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def dr_image(uuid: str):
+def remedio_dr_image(uuid: str):
     db = Session()
     try:
         ef = (
@@ -44,11 +44,11 @@ def dr_image(uuid: str):
         "PDR",
         "Not gradable",
     ]
-    return render_template("grading/image_dr.html", image=ef, encounter=enc, impressions=dr_impressions, my_grading=my_grading)
+    return render_template("grading/remedio_dr_image.html", image=ef, encounter=enc, impressions=dr_impressions, my_grading=my_grading)
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def dr_grade():
+def remedio_dr_grade():
     ef_id = request.form.get("ef_id")
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
     impression = (request.form.get("impression") or "").strip()
@@ -138,18 +138,18 @@ def dr_grade():
             candidates = cand_q.all()
             choice = random.choice(candidates) if candidates else None
             if choice and choice.uuid:
-                return redirect(url_for('grading.dr_image', uuid=choice.uuid))
+                return redirect(url_for('grading.remedio_dr_image', uuid=choice.uuid))
             else:
                 flash("No further ungraded DR images found.", "info")
         elif action == 'save_close':
             return redirect(url_for('grading.index'))
-        return redirect(url_for('grading.dr_image', uuid=ef.uuid))
+        return redirect(url_for('grading.remedio_dr_image', uuid=ef.uuid))
     finally:
         db.close()
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def dr_remove():
+def remedio_dr_remove():
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
     grading_id_raw = request.form.get("grading_id")
     if not ef_uuid or not grading_id_raw:
@@ -179,10 +179,10 @@ def dr_remove():
         )
         if not gr:
             flash("No matching DR grading found to remove.", "info")
-            return redirect(url_for('grading.dr_image', uuid=ef.uuid))
+            return redirect(url_for('grading.remedio_dr_image', uuid=ef.uuid))
         db.delete(gr)
         db.commit()
         flash("Removed this DR grading instance.", "success")
-        return redirect(url_for('grading.dr_image', uuid=ef.uuid))
+        return redirect(url_for('grading.remedio_dr_image', uuid=ef.uuid))
     finally:
         db.close()

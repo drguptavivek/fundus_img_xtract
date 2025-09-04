@@ -49,9 +49,9 @@ def index():
                 db.close()
 
             if code_for == 'glaucoma':
-                return redirect(url_for('grading.glaucoma_image', uuid=img_uuid))
+                return redirect(url_for('grading.remedio_glaucoma_image', uuid=img_uuid))
             elif code_for == 'dr':
-                return redirect(url_for('grading.dr_image', uuid=img_uuid))
+                return redirect(url_for('grading.remedio_dr_image', uuid=img_uuid))
         flash("Please enter a valid Image UUID", "warning")
 
     # Stats + most recent encounter with an ungraded glaucoma image
@@ -91,7 +91,7 @@ def index():
         )
         candidates = cand_q.all()
         choice = random.choice(candidates) if candidates else None
-        start_url = url_for('grading.glaucoma_image', uuid=choice.uuid) if choice and choice.uuid else None
+        start_url = url_for('grading.remedio_glaucoma_image', uuid=choice.uuid) if choice and choice.uuid else None
 
         # Build candidate list for DR ungraded by this user (50 recent)
         cand_dr_q = (
@@ -113,7 +113,7 @@ def index():
         )
         candidates_dr = cand_dr_q.all()
         choice_dr = random.choice(candidates_dr) if candidates_dr else None
-        start_dr_url = url_for('grading.dr_image', uuid=choice_dr.uuid) if choice_dr and choice_dr.uuid else None
+        start_dr_url = url_for('grading.remedio_dr_image', uuid=choice_dr.uuid) if choice_dr and choice_dr.uuid else None
 
         # Build candidate list for direct image uploads not yet graded by this user for glaucoma
         # Get the Glaucoma disease ID

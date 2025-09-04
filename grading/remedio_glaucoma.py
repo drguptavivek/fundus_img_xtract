@@ -9,7 +9,7 @@ from models import Session, PatientEncounters, EncounterFile, ImageGrading
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def glaucoma_image(uuid: str):
+def remedio_glaucoma_image(uuid: str):
     db = Session()
     try:
         ef = (
@@ -37,11 +37,11 @@ def glaucoma_image(uuid: str):
         db.close()
 
     impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"]
-    return render_template("grading/image_glaucoma.html", image=ef, encounter=enc, impressions=impressions, my_grading=my_grading)
+    return render_template("grading/remedio_glaucoma_image.html", image=ef, encounter=enc, impressions=impressions, my_grading=my_grading)
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def glaucoma_grade():
+def remedio_glaucoma_grade():
     ef_id = request.form.get("ef_id")
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
     impression = (request.form.get("impression") or "").strip()
@@ -132,19 +132,19 @@ def glaucoma_grade():
             candidates = cand_q.all()
             choice = random.choice(candidates) if candidates else None
             if choice and choice.uuid:
-                return redirect(url_for('grading.glaucoma_image', uuid=choice.uuid))
+                return redirect(url_for('grading.remedio_glaucoma_image', uuid=choice.uuid))
             else:
                 flash("No further ungraded glaucoma images found.", "info")
         elif action == 'save_close':
             return redirect(url_for('grading.index'))
         # Default
-        return redirect(url_for('grading.glaucoma_image', uuid=ef.uuid))
+        return redirect(url_for('grading.remedio_glaucoma_image', uuid=ef.uuid))
     finally:
         db.close()
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
-def glaucoma_remove():
+def remedio_glaucoma_remove():
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
     grading_id_raw = request.form.get("grading_id")
     if not ef_uuid or not grading_id_raw:
@@ -174,10 +174,10 @@ def glaucoma_remove():
         )
         if not gr:
             flash("No matching grading found to remove.", "info")
-            return redirect(url_for('grading.glaucoma_image', uuid=ef.uuid))
+            return redirect(url_for('grading.remedio_glaucoma_image', uuid=ef.uuid))
         db.delete(gr)
         db.commit()
         flash("Removed this grading instance.", "success")
-        return redirect(url_for('grading.glaucoma_image', uuid=ef.uuid))
+        return redirect(url_for('grading.remedio_glaucoma_image', uuid=ef.uuid))
     finally:
         db.close()

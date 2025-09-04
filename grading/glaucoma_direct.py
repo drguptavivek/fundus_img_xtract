@@ -6,8 +6,8 @@ import random
 from auth.roles import roles_required
 from models import Session, DirectImageUpload, ImageGrading, Disease, DirectImageVerify
 
-
-@roles_required("admin", "optometrist", "ophthalmologist")
+# grading/direct/<uuid>", view_func=direct_image, methods=["GET"])
+@roles_required("admin", "ophthalmologist")
 def direct_image(uuid: str):
     db = Session()
     try:
@@ -46,8 +46,8 @@ def direct_image(uuid: str):
     impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"]
     return render_template("grading/direct_image_glaucoma.html", image=diu, impressions=impressions, my_grading=my_grading)
 
-
-@roles_required("admin", "optometrist", "ophthalmologist")
+# bp.add_url_rule("/direct/glaucoma/grade", view_func=direct_glaucoma_grade, methods=["POST"])
+@roles_required("admin", "ophthalmologist")
 def direct_glaucoma_grade():
     uuid = (request.form.get("uuid") or "").strip()
     impression = (request.form.get("impression") or "").strip()
@@ -158,8 +158,8 @@ def direct_glaucoma_grade():
     finally:
         db.close()
 
-
-@roles_required("admin", "optometrist", "ophthalmologist")
+# bp.add_url_rule("/direct/glaucoma/remove", view_func=direct_glaucoma_remove, methods=["POST"])
+@roles_required("admin", "ophthalmologist")
 def direct_glaucoma_remove():
     uuid = (request.form.get("uuid") or "").strip()
     grading_id_raw = request.form.get("grading_id")

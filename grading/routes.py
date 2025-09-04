@@ -667,6 +667,7 @@ def direct_glaucoma_grade():
                 grader_user_id=user_id,
                 grader_username=username,
                 grader_role=role,
+                encounter_file_id ="NA",
                 graded_for='glaucoma',
                 impression=impression,
                 remarks=remarks,

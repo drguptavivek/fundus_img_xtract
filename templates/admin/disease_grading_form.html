@@ -9,17 +9,6 @@
         <a href="{{ url_for('admin.list_disease_gradings') }}" class="btn btn-secondary">Back to List</a>
     </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
     <div class="card">
         <div class="card-header">{{ 'Edit' if grading else 'Create' }} Disease Grading</div>
         <div class="card-body">

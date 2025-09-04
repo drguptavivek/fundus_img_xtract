@@ -10,11 +10,6 @@
         padding: 1.5rem;
         margin-bottom: 2rem;
     }
-    .list-section {
-        background-color: #ffffff;
-        border-radius: 0.375rem;
-        padding: 1.5rem;
-    }
 </style>
 {% endblock %}
 
@@ -23,17 +18,6 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Disease Gradings</h2>
     </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
 
     <!-- Add Form Section -->
     <div class="form-section">
@@ -76,39 +60,59 @@
         </form>
     </div>
 
-    <!-- List Section -->
-    <div class="list-section">
-        <h4 class="mb-3">Existing Disease Gradings</h4>
-        <div id="disease-gradings-list">
-            {% include "admin/partials/disease_gradings_list.html" %}
+    <div class="card">
+        <div class="card-header">Existing Disease Gradings</div>
+        <div class="card-body">
+            <div id="disease-gradings-list">
+                {% include "admin/partials/disease_gradings_list.html" %}
+            </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block extra_scripts %}
+{% block page_scripts %}
 <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
 <script>
-    // Handle form submission success
-    document.getElementById('disease-grading-form').addEventListener('htmx:after-request', function(event) {
-        if (event.detail.successful) {
-            // Show success message
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-success alert-dismissible fade show';
-            alertDiv.role = 'alert';
-            alertDiv.innerHTML = 'Disease grading created successfully.' +
-                '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
-            
-            // Insert alert before the form
-            this.closest('.form-section').before(alertDiv);
-            
-            // Auto-dismiss after 3 seconds
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    alertDiv.remove();
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle form submission success for HTMX
+        document.body.addEventListener('htmx:afterRequest', function(event) {
+            if (event.detail.pathInfo.requestPath === '/admin/disease-gradings' && event.detail.successful) {
+                // Reset the form
+                document.getElementById('disease-grading-form').reset();
+                
+                // Show success toast using the existing flash-toasts system
+                // We'll create a temporary toast and trigger the flash-toasts.js logic
+                const toastContainer = document.getElementById('flash-toasts');
+                if (toastContainer) {
+                    const toastHTML = `
+                        <div class="toast text-bg-success border-0 shadow-sm small" role="alert" aria-live="polite" aria-atomic="true" data-bs-autohide="true" data-bs-delay="3000">
+                            <div class="d-flex">
+                                <div class="toast-body py-1">Disease grading created successfully.</div>
+                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                            </div>
+                        </div>
+                    `;
+                    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
+                    
+                    // Initialize and show the new toast using the existing flash-toasts.js logic
+                    const newToastEl = toastContainer.lastElementChild;
+                    if (window.bootstrap && window.bootstrap.Toast) {
+                        const newToast = window.bootstrap.Toast.getOrCreateInstance(newToastEl, { 
+                            autohide: true, 
+                            delay: 3000 
+                        });
+                        newToast.show();
+                    } else {
+                        // Fallback without Bootstrap JS
+                        newToastEl.classList.add('show');
+                        setTimeout(function () { 
+                            newToastEl.classList.remove('show'); 
+                        }, 3000);
+                    }
                 }
-            }, 3000);
-        }
+            }
+        });
     });
 </script>
 {% endblock %}

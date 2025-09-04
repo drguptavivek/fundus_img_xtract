@@ -31,6 +31,7 @@ The primary component of `app.py` is the `create_app()` function, which follows 
         *   `http_success.log`: Records all successful requests (status codes `< 400`).
         *   `http_error.log`: Records all client and server errors (status codes `>= 400`).
     *   Uses `RotatingFileHandler` to prevent log files from growing indefinitely.
+    *   For detailed information about the logging system, including how to add logging to new routes, see [Logging.md](Logging.md).
 
 5.  **Request Hooks:**
     *   `@app.before_request`:
@@ -50,6 +51,7 @@ The primary component of `app.py` is the `create_app()` function, which follows 
         *   `jobs_bp`: Manages job status and results.
         *   `auth_bp`: User authentication (login, logout).
         *   `admin_bp`: Admin-specific functionalities.
+        *   `grading_bp`: Clinical image grading system. For detailed information about grading routes and access controls, see [Grading.md](Grading.md).
         *   And others for screenings, reports, etc.
 
 8.  **Authentication and Authorization:**

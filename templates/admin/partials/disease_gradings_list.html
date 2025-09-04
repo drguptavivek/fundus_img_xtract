@@ -1,4 +1,5 @@
 {% if gradings %}
+{% from "_forms.html" import csrf_field %}
     <div class="table-responsive"> 
         <table class="table table-striped">
             <thead>
@@ -24,8 +25,17 @@
                         {% endif %}
                     </td>
                     <td>
-                        <a href="{{ url_for('admin.edit_disease_grading', grading_id=grading.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                        <form method="POST" action="{{ url_for('admin.delete_disease_grading', grading_id=grading.id) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this grading?')">
+                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                hx-get="{{ url_for('admin.get_disease_grading_json', grading_id=grading.id) }}"
+                                hx-swap="none"
+                                hx-indicator="#disease-grading-form">
+                            Edit
+                        </button>
+                        <form method="POST"
+                              hx-post="{{ url_for('admin.delete_disease_grading', grading_id=grading.id) }}"
+                              hx-target="#disease-gradings-list"
+                              hx-confirm="Are you sure you want to delete this grading?"
+                              class="d-inline">
                             {{ csrf_field() }}
                             <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
                         </form>

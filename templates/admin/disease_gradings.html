@@ -19,15 +19,15 @@
         <h2>Disease Gradings</h2>
     </div>
 
-    <!-- Add Form Section -->
+    <!-- Add/Edit Form Section -->
     <div class="form-section">
-        <h4 class="mb-3">Add New Disease Grading</h4>
-        <form id="disease-grading-form" method="POST" action="{{ url_for('admin.list_disease_gradings') }}" 
+        <h4 class="mb-3" id="form-title">Add New Disease Grading</h4>
+        <form id="disease-grading-form" method="POST" 
               hx-post="{{ url_for('admin.list_disease_gradings') }}" 
               hx-target="#disease-gradings-list" 
-              hx-swap="innerHTML"
-              hx-on:htmx:after-request="if (event.detail.successful) { this.reset(); }">
+              hx-swap="innerHTML">
             {{ csrf_field() }}
+            <input type="hidden" name="grading_id" id="grading_id" value="">
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label for="disease_id" class="form-label">Disease</label>
@@ -55,7 +55,8 @@
                 </div>
             </div>
             <div class="d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">Add Disease Grading</button>
+                <button type="button" id="cancel-edit-btn" class="btn btn-secondary me-2" style="display: none;">Cancel</button>
+                <button type="submit" id="submit-button" class="btn btn-primary">Add Disease Grading</button>
             </div>
         </form>
     </div>
@@ -72,47 +73,52 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Handle form submission success for HTMX
-        document.body.addEventListener('htmx:afterRequest', function(event) {
-            if (event.detail.pathInfo.requestPath === '/admin/disease-gradings' && event.detail.successful) {
-                // Reset the form
-                document.getElementById('disease-grading-form').reset();
-                
-                // Show success toast using the existing flash-toasts system
-                // We'll create a temporary toast and trigger the flash-toasts.js logic
-                const toastContainer = document.getElementById('flash-toasts');
-                if (toastContainer) {
-                    const toastHTML = `
-                        <div class="toast text-bg-success border-0 shadow-sm small" role="alert" aria-live="polite" aria-atomic="true" data-bs-autohide="true" data-bs-delay="3000">
-                            <div class="d-flex">
-                                <div class="toast-body py-1">Disease grading created successfully.</div>
-                                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                            </div>
-                        </div>
-                    `;
-                    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
-                    
-                    // Initialize and show the new toast using the existing flash-toasts.js logic
-                    const newToastEl = toastContainer.lastElementChild;
-                    if (window.bootstrap && window.bootstrap.Toast) {
-                        const newToast = window.bootstrap.Toast.getOrCreateInstance(newToastEl, { 
-                            autohide: true, 
-                            delay: 3000 
-                        });
-                        newToast.show();
-                    } else {
-                        // Fallback without Bootstrap JS
-                        newToastEl.classList.add('show');
-                        setTimeout(function () { 
-                            newToastEl.classList.remove('show'); 
-                        }, 3000);
-                    }
-                }
-            }
-        });
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('disease-grading-form');
+    const formTitle = document.getElementById('form-title');
+    const submitButton = document.getElementById('submit-button');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    const gradingIdInput = document.getElementById('grading_id');
+
+    function resetFormToAddMode() {
+        form.reset();
+        gradingIdInput.value = '';
+        formTitle.textContent = 'Add New Disease Grading';
+        submitButton.textContent = 'Add Disease Grading';
+        submitButton.classList.remove('btn-success');
+        submitButton.classList.add('btn-primary');
+        cancelEditBtn.style.display = 'none';
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    cancelEditBtn.addEventListener('click', resetFormToAddMode);
+
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        const xhr = event.detail.xhr;
+        const requestPath = event.detail.requestConfig.path;
+
+        if (requestPath.includes('/json') && event.detail.successful) {
+            const data = JSON.parse(xhr.responseText);
+            
+            form.querySelector('#disease_id').value = data.disease_id;
+            form.querySelector('#impression').value = data.impression;
+            form.querySelector('#display_order').value = data.display_order;
+            form.querySelector('#is_active').value = data.is_active ? '1' : '0';
+            gradingIdInput.value = data.id;
+
+            formTitle.textContent = 'Edit Disease Grading';
+            submitButton.textContent = 'Update Grading';
+            submitButton.classList.remove('btn-primary');
+            submitButton.classList.add('btn-success');
+            cancelEditBtn.style.display = 'block';
+
+            form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        } else if (event.detail.requestConfig.verb === 'post' && event.detail.successful) {
+            resetFormToAddMode();
+        }
     });
+});
 </script>
 {% endblock %}

@@ -35,35 +35,42 @@
         </div>
     </div>
 
-    <div class="card mb-4">
-        <div class="card-header">
-            Start Anonymization
-        </div>
-        <div class="card-body">
-            <p>Click the button below to start anonymizing images. The system will automatically select an image for you.</p>
-                <a href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) if next_unverified_uuid else '#' }}"
-                class="btn btn-primary {% if not next_unverified_uuid %}disabled{% endif %}">
-                <i class="bi bi-play-circle"></i> Start Anonymizing
-                </a>
-            {% if not next_image_uuid %}
-                <p class="text-muted mt-2">No images currently available for anonymization based on your permissions.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Pending Images Chart -->
-    {% if chart_data %}
-    <div class="card mb-4">
-        <div class="card-header">
-            Pending Images by Disease
-        </div>
-        <div class="card-body">
-            <div class="chart-container" style="position: relative; height:300px; width:100%">
-                <canvas id="pendingImagesChart"></canvas>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4 h-100">
+                <div class="card-header">
+                    Start Anonymization
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <p>Click the button below to start anonymizing images. The system will automatically select an image for you.</p>
+                    <div class="mt-auto">
+                        <a href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) if next_unverified_uuid else '#' }}"
+                        class="btn btn-primary {% if not next_unverified_uuid %}disabled{% endif %}">
+                        <i class="bi bi-play-circle"></i> Start Anonymizing
+                        </a>
+                        {% if not next_unverified_uuid %}
+                            <p class="text-muted mt-2">No images currently available for anonymization based on your permissions.</p>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
+        
+        {% if chart_data %}
+        <div class="col-md-6">
+            <div class="card mb-4 h-100">
+                <div class="card-header">
+                    Pending Images by Disease
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:250px; width:100%">
+                        <canvas id="pendingImagesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <div class="card mb-4">
         <div class="card-header">

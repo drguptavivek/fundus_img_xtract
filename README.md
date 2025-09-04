@@ -18,7 +18,7 @@ The Fundus Image Extract project provides a comprehensive system for managing fu
 5. Follow the on-screen instructions to complete the setup.
 
 ## Workflow
-The application allows users to upload images and runs OCR on Remedio images. All uploaded images undergo verification. During this process, an online image editor is used to hide patient data embedded directly in the images within the browser. Only verified images are coded in a confidential manner to ensure patient identity is protected.
+The application allows users to upload images and runs OCR on Remedio images. All uploaded images undergo verification. During this process, an online image editor is used to hide patient data embedded within the images.
 
 ## Python Virtual Environment Setup
 1. Ensure Python is installed on your system. You can download it from [python.org](https://www.python.org/downloads/).
@@ -50,5 +50,20 @@ The application allows users to upload images and runs OCR on Remedio images. Al
    command --version
    ```
 3. Configure the system binaries as required for the project.
+   Replace `package_name` with the actual package names needed for the specific setup.
 
-Replace `package_name` with the actual package names needed for the specific setup.
+## Additional Tools Installation
+
+### Tesseract and python-magic Setup
+
+- **Tesseract**: This is an OCR (Optical Character Recognition) tool required for text extraction from images. Install it using:
+   ```bash
+   sudo apt-get install tesseract-ocr
+   ```
+
+- **python-magic**: This library is used to identify file types and is essential for file format validation. You can install it via pip:
+   ```bash
+   pip install python-magic
+   ```
+
+Ensure these packages are installed correctly to enable full functionality of the application.

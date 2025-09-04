@@ -66,29 +66,329 @@
   </div>
 
   <!-- KPIs -->
-  <div class="row g-3">
-    <div class="col-12 col-md-6">
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--primary h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
           <div class="display-6 fw-bold">{{ images_count or 0 }}</div>
-          <div class="small opacity-75">All images detected across uploads</div>
+          <div class="small opacity-75">From ZIP uploads</div>
         </div>
       </div>
     </div>
 
-    <div class="col-12 col-md-6">
+    <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--info h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">Total Screenings</div>
           <div class="display-6 fw-bold">{{ screenings_count or 0 }}</div>
-          <div class="small opacity-75">Patient encounters processed</div>
+          <div class="small opacity-75">Patient encounters</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--success h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Direct Images</div>
+          <div class="display-6 fw-bold">{{ direct_images_count or 0 }}</div>
+          <div class="small opacity-75">Direct uploads</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--warning h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Verified Images</div>
+          <div class="display-6 fw-bold">{{ verified_direct_images_count or 0 }}</div>
+          <div class="small opacity-75">Anonymized & verified</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Grading KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card kpi-card kpi--purple h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
+          <div class="display-6 fw-bold">{{ total_gradings_count or 0 }}</div>
+          <div class="small opacity-75">All image gradings</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-4">
+      <div class="card kpi-card kpi--danger h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Glaucoma Gradings</div>
+          <div class="display-6 fw-bold">{{ glaucoma_gradings_count or 0 }}</div>
+          <div class="small opacity-75">Glaucoma assessments</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-4">
+      <div class="card kpi-card kpi--teal h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">DR Gradings</div>
+          <div class="display-6 fw-bold">{{ dr_gradings_count or 0 }}</div>
+          <div class="small opacity-75">Diabetic Retinopathy</div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="mt-4"></div>
+  <!-- Charts Section -->
+  <div class="row g-4 mb-4">
+    <!-- Disease Distribution Chart -->
+    {% if disease_distribution %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Top Diseases by Patient Count</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="diseaseChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- Grading Distribution Chart -->
+    {% if grading_distribution %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Grading Distribution</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="gradingChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- VCDR Ranges Chart -->
+    {% if vcdr_ranges %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>VCDR Value Distribution</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="vcdrChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- DR Impression Distribution Chart -->
+    {% if dr_impression_distribution %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>DR Impression Distribution</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="drImpressionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- Glaucoma Impression Distribution Chart -->
+    {% if glaucoma_impression_distribution %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Glaucoma Impression Distribution</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="glaucomaImpressionChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
 
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Disease Distribution Chart
+    {% if disease_distribution %}
+    var diseaseCtx = document.getElementById('diseaseChart').getContext('2d');
+    var diseaseChart = new Chart(diseaseCtx, {
+      type: 'bar',
+      data: {
+        labels: [{% for item in disease_distribution %}'{{ item[0] }}',{% endfor %}],
+        datasets: [{
+          label: 'Patient Count',
+          data: [{% for item in disease_distribution %}{{ item[1] }},{% endfor %}],
+          backgroundColor: '#1f77b4',
+          borderColor: '#1f77b4',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: 0
+            }
+          }
+        }
+      }
+    });
+    {% endif %}
+    
+    // Grading Distribution Chart
+    {% if grading_distribution %}
+    var gradingCtx = document.getElementById('gradingChart').getContext('2d');
+    var gradingLabels = [{% for item in grading_distribution %}'{{ item[0] }}',{% endfor %}];
+    var gradingData = [{% for item in grading_distribution %}{{ item[1] }},{% endfor %}];
+    var gradingColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
+    
+    var gradingChart = new Chart(gradingCtx, {
+      type: 'doughnut',
+      data: {
+        labels: gradingLabels,
+        datasets: [{
+          data: gradingData,
+          backgroundColor: gradingColors.slice(0, gradingLabels.length),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+          }
+        }
+      }
+    });
+    {% endif %}
+    
+    // VCDR Ranges Chart
+    {% if vcdr_ranges %}
+    var vcdrCtx = document.getElementById('vcdrChart').getContext('2d');
+    var vcdrChart = new Chart(vcdrCtx, {
+      type: 'bar',
+      data: {
+        labels: ['Right Eye', 'Left Eye'],
+        datasets: [
+          {
+            label: 'Normal (< 0.5)',
+            data: [{{ vcdr_ranges.normal_right or 0 }}, {{ vcdr_ranges.normal_left or 0 }}],
+            backgroundColor: '#2ca02c'
+          },
+          {
+            label: 'Borderline (0.5-0.7)',
+            data: [{{ vcdr_ranges.borderline_right or 0 }}, {{ vcdr_ranges.borderline_left or 0 }}],
+            backgroundColor: '#ff7f0e'
+          },
+          {
+            label: 'Abnormal (≥ 0.7)',
+            data: [{{ vcdr_ranges.abnormal_right or 0 }}, {{ vcdr_ranges.abnormal_left or 0 }}],
+            backgroundColor: '#d62728'
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: true,
+            ticks: {
+              precision: 0
+            }
+          },
+          y: {
+            stacked: true
+          }
+        }
+      }
+    });
+    {% endif %}
+    
+    // DR Impression Distribution Chart
+    {% if dr_impression_distribution %}
+    var drCtx = document.getElementById('drImpressionChart').getContext('2d');
+    var drChart = new Chart(drCtx, {
+      type: 'pie',
+      data: {
+        labels: [{% for item in dr_impression_distribution %}'{{ item[0] }}',{% endfor %}],
+        datasets: [{
+          data: [{% for item in dr_impression_distribution %}{{ item[1] }},{% endfor %}],
+          backgroundColor: [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+          }
+        }
+      }
+    });
+    {% endif %}
+    
+    // Glaucoma Impression Distribution Chart
+    {% if glaucoma_impression_distribution %}
+    var glaucomaCtx = document.getElementById('glaucomaImpressionChart').getContext('2d');
+    var glaucomaChart = new Chart(glaucomaCtx, {
+      type: 'pie',
+      data: {
+        labels: [{% for item in glaucoma_impression_distribution %}'{{ item[0] }}',{% endfor %}],
+        datasets: [{
+          data: [{% for item in glaucoma_impression_distribution %}{{ item[1] }},{% endfor %}],
+          backgroundColor: [
+            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+          }
+        }
+      }
+    });
+    {% endif %}
+  });
+</script>
 {% endblock %}

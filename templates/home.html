@@ -143,22 +143,6 @@
 
   <!-- Charts Section -->
   <div class="row g-4 mb-4">
-    <!-- Disease Distribution Chart -->
-    {% if disease_distribution %}
-    <div class="col-12 col-lg-6">
-      <div class="card h-100">
-        <div class="card-header">
-          <strong>Top Diseases by Patient Count</strong>
-        </div>
-        <div class="card-body">
-          <div class="chart-container" style="position: relative; height:300px; width:100%">
-            <canvas id="diseaseChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-    
     <!-- Grading Distribution Chart -->
     {% if grading_distribution %}
     <div class="col-12 col-lg-6">
@@ -231,36 +215,6 @@
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    // Disease Distribution Chart
-    {% if disease_distribution %}
-    var diseaseCtx = document.getElementById('diseaseChart').getContext('2d');
-    var diseaseChart = new Chart(diseaseCtx, {
-      type: 'bar',
-      data: {
-        labels: [{% for item in disease_distribution %}'{{ item[0] }}',{% endfor %}],
-        datasets: [{
-          label: 'Patient Count',
-          data: [{% for item in disease_distribution %}{{ item[1] }},{% endfor %}],
-          backgroundColor: '#1f77b4',
-          borderColor: '#1f77b4',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: {
-              precision: 0
-            }
-          }
-        }
-      }
-    });
-    {% endif %}
-    
     // Grading Distribution Chart
     {% if grading_distribution %}
     var gradingCtx = document.getElementById('gradingChart').getContext('2d');

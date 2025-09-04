@@ -80,7 +80,10 @@
           </div>
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
-            <button type="submit" class="btn btn-primary btn-sm">Save Grading</button>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+            </div>
           </div>
         </form>
         {% if my_grading %}

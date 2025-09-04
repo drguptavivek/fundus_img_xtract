@@ -673,6 +673,43 @@ def direct_glaucoma_grade():
             ))
         db.commit()
         flash("Grading saved.", "success")
+        
+        # Save & Next flow
+        action = (request.form.get('action') or '').strip().lower()
+        if action == 'save_next':
+            # Build candidate list for direct image uploads not yet graded by this user for glaucoma
+            grader_id = getattr(current_user, 'id', None)
+            glaucoma_disease = db.query(Disease).filter(Disease.name == 'Glaucoma').first()
+            if glaucoma_disease:
+                # Outer join to filter where no record exists for this user & 'glaucoma'
+                cand_direct_q = (
+                    db.query(DirectImageUpload)
+                    .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                    .outerjoin(
+                        ImageGrading,
+                        and_(
+                            ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                            ImageGrading.graded_for == 'glaucoma',
+                            ImageGrading.grader_user_id == grader_id,
+                        ),
+                    )
+                    .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                    .filter(DirectImageVerify.verified_status == 'verified')
+                    .filter(ImageGrading.id.is_(None))
+                    .order_by(DirectImageUpload.created_at.desc())
+                    .limit(50)
+                )
+                candidates_direct = cand_direct_q.all()
+                choice_direct = random.choice(candidates_direct) if candidates_direct else None
+                if choice_direct and choice_direct.uuid:
+                    return redirect(url_for('grading.direct_image', uuid=choice_direct.uuid))
+                else:
+                    flash("No further ungraded direct images found.", "info")
+            else:
+                flash("No further ungraded direct images found.", "info")
+        elif action == 'save_close':
+            return redirect(url_for('grading.index'))
+        # Default
         return redirect(url_for('grading.direct_image', uuid=uuid))
     finally:
         db.close()

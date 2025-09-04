@@ -5,8 +5,10 @@
 
 - **Backend:** Python, Flask
 - **Database:** SQLAlchemy (ORM)
-- **Frontend:** Jinja2 Templates, Vanilla JavaScript, Bootstrap 5.3 via SASS
-- **Key Libraries:** Pytesseract (OCR), Pandas, Numpys
+- **Frontend:** Jinja2 Templates, Vanilla JavaScript, Bootstrap 5.3 via SASS, HTMX. 
+- **Custom JS:** Flash-Toasts.js, photoswipe, edit_image.js, app.js, 
+- **Reusable Partials:** -  _forms.html for CSRF, _direct_viewer_card.html and _viewer_card.html
+- **Key Libraries:** Pytesseract (OCR), Pandas, Numpy, Maplotlib
 - **Dependency Management:** uv
 - **Environment:**  .env and .env.example
 

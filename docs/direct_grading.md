@@ -67,7 +67,8 @@ The grading dashboard (`/grading`) was updated to include a "Start Direct Image 
 ### Direct Image Grading Page
 
 The direct image grading page (`/grading/direct/<uuid>`) includes:
-- Image display with support for edited versions
+- Image display with support for edited versions using the `_direct_viewer_card.html` template
+- Image viewing controls (filters, brightness, contrast)
 - Glaucoma grading form with impression options
 - Remarks field for additional notes
 - "Save & Close" and "Save & Next" buttons

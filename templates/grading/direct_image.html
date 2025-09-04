@@ -12,19 +12,7 @@
 <div class="row g-3">
   <!-- Large image on left -->
   <div class="col-12 col-lg-9">
-    <div class="card shadow-sm">
-      <div class="card-body p-2">
-        <div class="position-relative" style="height: 70vh; min-height: 500px;">
-          {% if image.has_edited %}
-            <img src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=image.uuid) }}" 
-                 class="img-fluid h-100 w-100 object-fit-contain" alt="Image">
-          {% else %}
-            <img src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=image.uuid) }}" 
-                 class="img-fluid h-100 w-100 object-fit-contain" alt="Image">
-          {% endif %}
-        </div>
-      </div>
-    </div>
+    {% include 'grading/_direct_viewer_card.html' %}
   </div>
   <!-- Narrow right column with stacked buttons -->
   <div class="col-12 col-lg-3">

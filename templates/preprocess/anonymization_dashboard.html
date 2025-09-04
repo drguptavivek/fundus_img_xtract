@@ -51,6 +51,20 @@
         </div>
     </div>
 
+    <!-- Pending Images Chart -->
+    {% if chart_data %}
+    <div class="card mb-4">
+        <div class="card-header">
+            Pending Images by Disease
+        </div>
+        <div class="card-body">
+            <div class="chart-container" style="position: relative; height:300px; width:100%">
+                <canvas id="pendingImagesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card mb-4">
         <div class="card-header">
             Recent Anonymization Activity
@@ -161,7 +175,13 @@
                                          onerror="this.style.display='none'">
                                 </a>
                             </td>
-                            <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
+                            <td style="max-width: 150px; word-wrap: break-word;">
+                                <a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}" 
+                                   title="{{ verification.image_upload.filename }}">
+                                    {{ verification.image_upload.filename[:15] }}
+                                    {% if verification.image_upload.filename|length > 15 %}...{% endif %}
+                                </a>
+                            </td>
                             <td>{{ verification.image_upload.hospital.name if verification.image_upload.hospital else '-' }}</td>
                             <td>{{ verification.image_upload.lab_unit.name if verification.image_upload.lab_unit else '-' }}</td>
                             <td>{{ verification.image_upload.camera.name if verification.image_upload.camera else '-' }}</td>
@@ -218,4 +238,93 @@
     </div>
 
 </div>
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Check if we have chart data
+    var chartData = {{ chart_data|tojson|safe }};
+    
+    if (chartData && Object.keys(chartData).length > 0) {
+      // Prepare data for Chart.js
+      var diseases = Object.keys(chartData);
+      
+      // Get all unique lab units
+      var labUnits = new Set();
+      diseases.forEach(function(disease) {
+        Object.keys(chartData[disease]).forEach(function(labUnit) {
+          labUnits.add(labUnit);
+        });
+      });
+      labUnits = Array.from(labUnits);
+      
+      // Generate colors for each lab unit
+      var colors = [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+      ];
+      
+      // Create datasets for each lab unit
+      var datasets = labUnits.map(function(labUnit, index) {
+        return {
+          label: labUnit,
+          data: diseases.map(function(disease) {
+            return chartData[disease][labUnit] || 0;
+          }),
+          backgroundColor: colors[index % colors.length],
+          borderColor: colors[index % colors.length],
+          borderWidth: 1
+        };
+      });
+      
+      // Get canvas context
+      var ctx = document.getElementById('pendingImagesChart').getContext('2d');
+      
+      // Create the chart
+      var pendingImagesChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: diseases,
+          datasets: datasets
+        },
+        options: {
+          indexAxis: 'y', // Horizontal bar chart
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            },
+            y: {
+              stacked: true
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                footer: function(tooltipItems) {
+                  var sum = 0;
+                  tooltipItems.forEach(function(tooltipItem) {
+                    sum += tooltipItem.parsed.x;
+                  });
+                  return 'Total: ' + sum;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
 {% endblock %}

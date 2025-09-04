@@ -200,6 +200,41 @@ def anonymization_dashboard():
 
         next_uuid = _get_next_unverified_uuid(db_session)
 
+        # --- Chart Data: Pending images by disease, stacked by lab unit ---
+        # Get all diseases
+        all_diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
+        
+        # Get all lab units (for current user if not admin/data_manager)
+        is_admin = current_user.has_role("admin")
+        is_dm = current_user.has_role("data_manager")
+        if is_admin or is_dm:
+            all_lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
+        else:
+            user = _user_with_lab_units(db_session)
+            all_lab_units = user.lab_units or []
+        
+        # Build chart data
+        chart_data = {}
+        for disease in all_diseases:
+            chart_data[disease.name] = {}
+            for lab_unit in all_lab_units:
+                # Count pending images for this disease and lab unit
+                pending_count = db_session.execute(
+                    select(func.count(DirectImageUpload.id))
+                    .where(
+                        DirectImageUpload.disease_id == disease.id,
+                        DirectImageUpload.lab_unit_id == lab_unit.id,
+                        ~exists(select(1).where(
+                            and_(
+                                DirectImageVerify.image_upload_id == DirectImageUpload.id,
+                                DirectImageVerify.verified_status == 'verified'
+                            )
+                        ))
+                    )
+                ).scalar_one()
+                if pending_count > 0:
+                    chart_data[disease.name][lab_unit.name] = pending_count
+
         return render_template(
             "preprocess/anonymization_dashboard.html",
             total_anonymized_images=total_anonymized_images,
@@ -207,6 +242,7 @@ def anonymization_dashboard():
             user_verified_images=user_verified_images,
             recent_verifications=verifications,
             next_unverified_uuid=next_uuid,
+            chart_data=chart_data,
             # Pagination
             page=page,
             per_page=per_page,

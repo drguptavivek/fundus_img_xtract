@@ -62,15 +62,17 @@ def homepage():
             .group_by(ImageGrading.graded_for)
         ).all()
         
-        # VCDR value ranges for chart
+        # VCDR value ranges for chart (adjusted cutoffs)
         vcdr_ranges = db.execute(
             select(
                 func.sum(case((GlaucomaResultsCleaned.vcdr_right_num < 0.5, 1), else_=0)).label('normal_right'),
                 func.sum(case((and_(GlaucomaResultsCleaned.vcdr_right_num >= 0.5, GlaucomaResultsCleaned.vcdr_right_num < 0.7), 1), else_=0)).label('borderline_right'),
-                func.sum(case((GlaucomaResultsCleaned.vcdr_right_num >= 0.7, 1), else_=0)).label('abnormal_right'),
+                func.sum(case((and_(GlaucomaResultsCleaned.vcdr_right_num >= 0.7, GlaucomaResultsCleaned.vcdr_right_num < 0.8), 1), else_=0)).label('abnormal_right'),
+                func.sum(case((GlaucomaResultsCleaned.vcdr_right_num >= 0.8, 1), else_=0)).label('severely_abnormal_right'),
                 func.sum(case((GlaucomaResultsCleaned.vcdr_left_num < 0.5, 1), else_=0)).label('normal_left'),
                 func.sum(case((and_(GlaucomaResultsCleaned.vcdr_left_num >= 0.5, GlaucomaResultsCleaned.vcdr_left_num < 0.7), 1), else_=0)).label('borderline_left'),
-                func.sum(case((GlaucomaResultsCleaned.vcdr_left_num >= 0.7, 1), else_=0)).label('abnormal_left')
+                func.sum(case((and_(GlaucomaResultsCleaned.vcdr_left_num >= 0.7, GlaucomaResultsCleaned.vcdr_left_num < 0.8), 1), else_=0)).label('abnormal_left'),
+                func.sum(case((GlaucomaResultsCleaned.vcdr_left_num >= 0.8, 1), else_=0)).label('severely_abnormal_left')
             )
             .where(
                 or_(
@@ -79,6 +81,22 @@ def homepage():
                 )
             )
         ).first()
+        
+        # Calculate ungradable images
+        total_gradable_images = db.execute(
+            select(func.count(ImageGrading.id))
+            .where(ImageGrading.graded_for.in_(["glaucoma", "dr"]))
+        ).scalar_one()
+        
+        ungradable_images = db.execute(
+            select(func.count(ImageGrading.id))
+            .where(and_(
+                ImageGrading.graded_for.in_(["glaucoma", "dr"]),
+                ImageGrading.impression == "Not gradable"
+            ))
+        ).scalar_one()
+        
+        gradable_images = total_gradable_images - ungradable_images
         
         # DR grading distribution
         dr_impression_distribution = db.execute(
@@ -110,4 +128,6 @@ def homepage():
         vcdr_ranges=vcdr_ranges,
         dr_impression_distribution=dr_impression_distribution,
         glaucoma_impression_distribution=glaucoma_impression_distribution,
+        gradable_images=gradable_images,
+        ungradable_images=ungradable_images
     )

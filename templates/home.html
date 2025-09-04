@@ -141,7 +141,8 @@
     </div>
   </div>
 
-  <!-- Charts Section -->
+  <!-- Charts Section (Visible only to logged-in users) -->
+  {% if current_user.is_authenticated %}
   <div class="row g-4 mb-4">
     <!-- Grading Distribution Chart -->
     {% if grading_distribution %}
@@ -175,6 +176,20 @@
     </div>
     {% endif %}
     
+    <!-- Ungradable Images Chart -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Ungradable Images</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="ungradableChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <!-- DR Impression Distribution Chart -->
     {% if dr_impression_distribution %}
     <div class="col-12 col-lg-6">
@@ -207,6 +222,7 @@
     </div>
     {% endif %}
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -215,11 +231,18 @@
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // Helper function to format percentage labels
+    function getPercentageLabel(value, total) {
+      if (total === 0) return '0%';
+      return Math.round((value / total) * 100) + '%';
+    }
+    
     // Grading Distribution Chart
     {% if grading_distribution %}
     var gradingCtx = document.getElementById('gradingChart').getContext('2d');
     var gradingLabels = [{% for item in grading_distribution %}'{{ item[0] }}',{% endfor %}];
     var gradingData = [{% for item in grading_distribution %}{{ item[1] }},{% endfor %}];
+    var gradingTotal = gradingData.reduce((a, b) => a + b, 0);
     var gradingColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
     
     var gradingChart = new Chart(gradingCtx, {
@@ -238,15 +261,26 @@
         plugins: {
           legend: {
             position: 'right',
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, gradingTotal) + ')';
+              }
+            }
           }
         }
       }
     });
     {% endif %}
     
-    // VCDR Ranges Chart
+    // VCDR Ranges Chart (with adjusted cutoffs)
     {% if vcdr_ranges %}
     var vcdrCtx = document.getElementById('vcdrChart').getContext('2d');
+    // Calculate totals for each eye
+    var rightTotal = {{ vcdr_ranges.normal_right or 0 }} + {{ vcdr_ranges.borderline_right or 0 }} + {{ vcdr_ranges.abnormal_right or 0 }} + {{ vcdr_ranges.severely_abnormal_right or 0 }};
+    var leftTotal = {{ vcdr_ranges.normal_left or 0 }} + {{ vcdr_ranges.borderline_left or 0 }} + {{ vcdr_ranges.abnormal_left or 0 }} + {{ vcdr_ranges.severely_abnormal_left or 0 }};
+    
     var vcdrChart = new Chart(vcdrCtx, {
       type: 'bar',
       data: {
@@ -263,9 +297,14 @@
             backgroundColor: '#ff7f0e'
           },
           {
-            label: 'Abnormal (≥ 0.7)',
+            label: 'Abnormal (0.7-0.8)',
             data: [{{ vcdr_ranges.abnormal_right or 0 }}, {{ vcdr_ranges.abnormal_left or 0 }}],
             backgroundColor: '#d62728'
+          },
+          {
+            label: 'Severely Abnormal (≥ 0.8)',
+            data: [{{ vcdr_ranges.severely_abnormal_right or 0 }}, {{ vcdr_ranges.severely_abnormal_left or 0 }}],
+            backgroundColor: '#9467bd'
           }
         ]
       },
@@ -283,20 +322,64 @@
           y: {
             stacked: true
           }
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                var total = context.datasetIndex === 0 ? rightTotal : leftTotal;
+                return context.dataset.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, total) + ')';
+              }
+            }
+          }
         }
       }
     });
     {% endif %}
     
+    // Ungradable Images Chart
+    var ungradableCtx = document.getElementById('ungradableChart').getContext('2d');
+    var ungradableTotal = {{ gradable_images }} + {{ ungradable_images }};
+    var ungradableChart = new Chart(ungradableCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Gradable Images', 'Not Gradable Images'],
+        datasets: [{
+          data: [{{ gradable_images }}, {{ ungradable_images }}],
+          backgroundColor: ['#2ca02c', '#d62728'],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, ungradableTotal) + ')';
+              }
+            }
+          }
+        }
+      }
+    });
+    
     // DR Impression Distribution Chart
     {% if dr_impression_distribution %}
     var drCtx = document.getElementById('drImpressionChart').getContext('2d');
+    var drLabels = [{% for item in dr_impression_distribution %}'{{ item[0] }}',{% endfor %}];
+    var drData = [{% for item in dr_impression_distribution %}{{ item[1] }},{% endfor %}];
+    var drTotal = drData.reduce((a, b) => a + b, 0);
     var drChart = new Chart(drCtx, {
       type: 'pie',
       data: {
-        labels: [{% for item in dr_impression_distribution %}'{{ item[0] }}',{% endfor %}],
+        labels: drLabels,
         datasets: [{
-          data: [{% for item in dr_impression_distribution %}{{ item[1] }},{% endfor %}],
+          data: drData,
           backgroundColor: [
             '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
@@ -310,6 +393,13 @@
         plugins: {
           legend: {
             position: 'right',
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, drTotal) + ')';
+              }
+            }
           }
         }
       }
@@ -319,12 +409,15 @@
     // Glaucoma Impression Distribution Chart
     {% if glaucoma_impression_distribution %}
     var glaucomaCtx = document.getElementById('glaucomaImpressionChart').getContext('2d');
+    var glaucomaLabels = [{% for item in glaucoma_impression_distribution %}'{{ item[0] }}',{% endfor %}];
+    var glaucomaData = [{% for item in glaucoma_impression_distribution %}{{ item[1] }},{% endfor %}];
+    var glaucomaTotal = glaucomaData.reduce((a, b) => a + b, 0);
     var glaucomaChart = new Chart(glaucomaCtx, {
       type: 'pie',
       data: {
-        labels: [{% for item in glaucoma_impression_distribution %}'{{ item[0] }}',{% endfor %}],
+        labels: glaucomaLabels,
         datasets: [{
-          data: [{% for item in glaucoma_impression_distribution %}{{ item[1] }},{% endfor %}],
+          data: glaucomaData,
           backgroundColor: [
             '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
@@ -338,6 +431,13 @@
         plugins: {
           legend: {
             position: 'right',
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, glaucomaTotal) + ')';
+              }
+            }
           }
         }
       }

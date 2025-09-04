@@ -599,7 +599,7 @@ def direct_image(uuid: str):
         db.close()
 
     impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"]
-    return render_template("grading/direct_image.html", image=diu, impressions=impressions, my_grading=my_grading)
+    return render_template("grading/direct_image_glaucoma.html", image=diu, impressions=impressions, my_grading=my_grading)
 
 
 @bp.route("/direct/glaucoma/grade", methods=["POST"])

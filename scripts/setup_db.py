@@ -160,6 +160,11 @@ def main() -> None:
         help="Add edited_image_path column to direct_image_uploads table",
     )
     parser.add_argument(
+        "--migrate-image-grading-direct-upload",
+        action="store_true",
+        help="Add direct_image_upload_id column to image_gradings table",
+    )
+    parser.add_argument(
         "--migrate-anonymization-verifications",
         action="store_true",
         help="Create tables for direct image anonymization verifications feature",
@@ -225,6 +230,12 @@ def main() -> None:
             mig_anon_verif(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_anonymization_verifications: {e}")
+    if args.migrate_image_grading_direct_upload:
+        try:
+            from migrate_image_grading_direct_upload import migrate as mig_img_direct
+            mig_img_direct(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_image_grading_direct_upload: {e}")
 
 
 if __name__ == "__main__":

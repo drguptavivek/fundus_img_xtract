@@ -120,7 +120,8 @@ class GlaucomaResultsCleaned(Base):
 class ImageGrading(Base):
     __tablename__ = 'image_gradings'
     id: Mapped[int] = mapped_column(primary_key=True)
-    encounter_file_id: Mapped[int] = mapped_column(ForeignKey('encounter_files.id'), index=True)
+    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id'), index=True, nullable=True)
+    direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id'), index=True, nullable=True)
     grader_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
     grader_username: Mapped[str | None] = mapped_column(String(150), nullable=True)
     grader_role: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
@@ -130,8 +131,18 @@ class ImageGrading(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     image: Mapped["EncounterFile"] = relationship(back_populates="gradings")
+    direct_image: Mapped["DirectImageUpload"] = relationship()
     grader: Mapped["User"] = relationship("User", foreign_keys=[grader_user_id])
-    __table_args__ = (Index('ix_image_gradings_image_user_role_for', 'encounter_file_id', 'grader_user_id', 'grader_role', 'graded_for'),)
+    __table_args__ = (
+        Index('ix_image_gradings_image_user_role_for', 'encounter_file_id', 'grader_user_id', 'grader_role', 'graded_for'),
+        Index('ix_image_gradings_direct_user_role_for', 'direct_image_upload_id', 'grader_user_id', 'grader_role', 'graded_for'),
+        # Ensure that either encounter_file_id or direct_image_upload_id is set, but not both
+        CheckConstraint(
+            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL)",
+            name="ck_image_grading_either_encounter_or_direct"
+        )
+    )
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -334,6 +345,12 @@ class DirectImageUpload(Base):
     
     verifications: Mapped[List["DirectImageVerify"]] = relationship(
         back_populates="image_upload", cascade="all, delete-orphan"
+    )
+    
+    gradings: Mapped[List["ImageGrading"]] = relationship(
+        foreign_keys="ImageGrading.direct_image_upload_id",
+        back_populates="direct_image",
+        cascade="all, delete-orphan"
     )
 
 

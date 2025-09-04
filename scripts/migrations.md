@@ -150,3 +150,14 @@ Usage:
   python scripts/setup_db.py --migrate-anonymization-verifications
   python scripts/setup_db.py --migrate-anonymization-verifications --check-only
 ```
+
+
+**Add direct_image_upload_id column to image_gradings table**
+
+This migration adds a direct_image_upload_id column to the image_gradings table to support grading of direct image uploads.
+
+Usage:
+```bash
+  python scripts/migrate_image_grading_direct_upload.py
+  python scripts/migrate_image_grading_direct_upload.py --dry-run
+```

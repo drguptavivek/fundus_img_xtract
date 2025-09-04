@@ -165,6 +165,11 @@ def main() -> None:
         help="Add direct_image_upload_id column to image_gradings table",
     )
     parser.add_argument(
+        "--migrate-image-grading-nullable-columns",
+        action="store_true",
+        help="Modify image_gradings table to allow NULL values for encounter_file_id and direct_image_upload_id",
+    )
+    parser.add_argument(
         "--migrate-anonymization-verifications",
         action="store_true",
         help="Create tables for direct image anonymization verifications feature",
@@ -236,6 +241,12 @@ def main() -> None:
             mig_img_direct(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_image_grading_direct_upload: {e}")
+    if args.migrate_image_grading_nullable_columns:
+        try:
+            from migrate_image_grading_nullable_columns import migrate as mig_img_nullable
+            mig_img_nullable(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_image_grading_nullable_columns: {e}")
 
 
 if __name__ == "__main__":

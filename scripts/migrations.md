@@ -161,3 +161,14 @@ Usage:
   python scripts/migrate_image_grading_direct_upload.py
   python scripts/migrate_image_grading_direct_upload.py --dry-run
 ```
+
+
+**Modify image_gradings table to allow NULL values for encounter_file_id and direct_image_upload_id**
+
+This migration modifies the image_gradings table to allow NULL values for both encounter_file_id and direct_image_upload_id columns, and ensures the check constraint is properly defined.
+
+Usage:
+```bash
+  python scripts/migrate_image_grading_nullable_columns.py
+  python scripts/migrate_image_grading_nullable_columns.py --dry-run
+```

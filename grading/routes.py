@@ -6,7 +6,7 @@ import random
 
 from auth.roles import roles_required
 from . import bp
-from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, utcnow
+from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, utcnow
 
 
 @bp.route("/", methods=["GET", "POST"])
@@ -117,7 +117,32 @@ def index():
         choice_dr = random.choice(candidates_dr) if candidates_dr else None
         start_dr_url = url_for('grading.dr_image', uuid=choice_dr.uuid) if choice_dr and choice_dr.uuid else None
 
-        # My gradings (paginated)
+        # Build candidate list for direct image uploads not yet graded by this user for glaucoma
+        # Get the Glaucoma disease ID
+        glaucoma_disease = db.query(Disease).filter(Disease.name == 'Glaucoma').first()
+        start_direct_url = None
+        if glaucoma_disease:
+            # Outer join to filter where no record exists for this user & 'glaucoma'
+            cand_direct_q = (
+                db.query(DirectImageUpload)
+                .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                .outerjoin(
+                    ImageGrading,
+                    and_(
+                        ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                        ImageGrading.graded_for == 'glaucoma',
+                        ImageGrading.grader_user_id == grader_id,
+                    ),
+                )
+                .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                .filter(DirectImageVerify.verified_status == 'verified')
+                .filter(ImageGrading.id.is_(None))
+                .order_by(DirectImageUpload.created_at.desc())
+                .limit(50)
+            )
+            candidates_direct = cand_direct_q.all()
+            choice_direct = random.choice(candidates_direct) if candidates_direct else None
+            start_direct_url = url_for('grading.direct_image', uuid=choice_direct.uuid) if choice_direct and choice_direct.uuid else None
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
         per_page = 20
@@ -156,6 +181,7 @@ def index():
         type_counts=type_counts,
         start_url=start_url,
         start_dr_url=start_dr_url,
+        start_direct_url=start_direct_url,
         my_items=items_mine,
         my_total=total_mine,
         my_page=page,

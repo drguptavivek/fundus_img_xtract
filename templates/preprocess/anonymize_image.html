@@ -142,32 +142,21 @@
 
         <!-- RIGHT VERIFICATION RESULTS -->
         <div class="col-12 col-lg-6">
-          <form method="POST" action="{{ url_for('preprocess.anonymize_image', uuid=uuid) }}">
+          <form method="POST" action="{{ url_for('preprocess.anonymize_image', uuid=uuid) }}" id="verification-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3 align-items-end">
-              <!-- First panel: dropdown + button -->
+              <!-- First panel: toggle switch -->
               <div class="col-12 col-md-6">
                 <label for="verified_status" class="form-label mb-1">Verification Status</label>
-                <select class="form-select mb-2" id="verified_status" name="verified_status" required>
-                  <option value="">Select Status</option>
-                  <option value="verified"
-                          {% if current_verification and current_verification.verified_status == 'verified' %}selected{% endif %}>
-                    Verified
-                  </option>
-                  <option value="unverified"
-                          {% if current_verification and current_verification.verified_status == 'unverified' %}selected{% endif %}>
-                    Unverified
-                  </option>
-                  <option value="pending"
-                          {% if current_verification and current_verification.verified_status == 'pending' %}selected{% endif %}>
-                    Pending
-                  </option>
-                </select>
-                <button type="submit" class="btn btn-primary">
-                  <i class="bi bi-check-circle"></i> Save
-                </button>
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" id="verified_status" name="verified_status" value="verified" 
+                         {% if current_verification and current_verification.verified_status == 'verified' %}checked{% endif %}>
+                  <label class="form-check-label" for="verified_status">
+                    {% if current_verification and current_verification.verified_status == 'verified' %}Verified{% else %}Unverified{% endif %}
+                  </label>
+                </div>
                 {% if next_unverified_uuid %}
-                  <a class="btn btn-outline-secondary ms-2"
+                  <a class="btn btn-outline-secondary"
                      href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) }}">
                     Skip to next
                   </a>
@@ -196,4 +185,32 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const toggle = document.getElementById('verified_status');
+    const label = toggle.nextElementSibling;
+    const form = document.getElementById('verification-form');
+    const remarks = document.getElementById('remarks');
+    
+    // Update label text when toggle changes
+    toggle.addEventListener('change', function() {
+      label.textContent = this.checked ? 'Verified' : 'Unverified';
+      
+      // Automatically submit the form after a short delay to allow UI to update
+      setTimeout(function() {
+        form.submit();
+      }, 300);
+    });
+    
+    // Submit form when remarks change (with debounce)
+    let remarksTimeout;
+    remarks.addEventListener('input', function() {
+      clearTimeout(remarksTimeout);
+      remarksTimeout = setTimeout(function() {
+        // Only submit if the verification status has actually changed or if there are remarks
+        form.submit();
+      }, 1000);
+    });
+  });
+</script>
 {% endblock %}

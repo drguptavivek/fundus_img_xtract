@@ -3,6 +3,7 @@ from flask_login import current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, distinct, func
 import random
+import json
 
 from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify
@@ -76,12 +77,29 @@ def index():
                 elif code_for == 'dr':
                     return redirect(url_for('grading.remedio_dr_image', uuid=img_uuid))
             elif diu:
-                # For direct images, we only support glaucoma grading
-                if code_for in ['glaucoma', 'dr']:
-                    return redirect(url_for('grading.direct_image', uuid=img_uuid))
-                else:
-                    flash("AMD grading is not available for direct images.", "warning")
-                    return redirect(url_for('grading.index'))
+                # For direct images, check if it's a supported disease
+                db = Session()
+                try:
+                    disease = db.query(Disease).filter(Disease.id == diu.disease_id).first()
+                    if not disease:
+                        flash("Disease not found for this direct image.", "danger")
+                        return redirect(url_for('grading.index'))
+                    
+                    disease_name_lower = disease.name.lower()
+                    if code_for == 'glaucoma' and disease_name_lower == 'glaucoma':
+                        return redirect(url_for('grading.direct_image', uuid=img_uuid))
+                    elif code_for == 'dr' and disease_name_lower == 'diabetic retinopathy':
+                        # For DR direct images, we'll use the disease-based route
+                        return redirect(url_for('grading.direct_disease_image', uuid=img_uuid, disease_id=diu.disease_id))
+                    elif code_for == disease_name_lower:
+                        # For other diseases, use the disease-based route
+                        return redirect(url_for('grading.direct_disease_image', uuid=img_uuid, disease_id=diu.disease_id))
+                    else:
+                        # If the requested grading type doesn't match the image's disease
+                        flash(f"This image is for {disease.name}, not {code_for.upper()}.", "warning")
+                        return redirect(url_for('grading.index'))
+                finally:
+                    db.close()
         flash("Please enter a valid Image UUID", "warning")
 
     # Stats + most recent encounter with an ungraded glaucoma image
@@ -146,11 +164,64 @@ def index():
         start_dr_url = url_for('grading.remedio_dr_image', uuid=choice_dr.uuid) if choice_dr and choice_dr.uuid else None
 
         # Build candidate list for direct image uploads not yet graded by this user for glaucoma
-        # Get the Glaucoma disease ID
-        glaucoma_disease = db.query(Disease).filter(Disease.name == 'Glaucoma').first()
-        start_direct_url = None
-        if glaucoma_disease:
-            # Outer join to filter where no record exists for this user & 'glaucoma'
+        # Get all diseases
+        all_diseases = db.query(Disease).all()
+        start_direct_urls = {}
+        
+        # Collect disease statistics for the graph
+        disease_stats = {}
+        
+        for disease in all_diseases:
+            # Count verified ungraded direct images for this disease
+            direct_ungraded_count = (
+                db.query(DirectImageUpload)
+                .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                .outerjoin(
+                    ImageGrading,
+                    and_(
+                        ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                        ImageGrading.graded_for == disease.name.lower(),
+                        ImageGrading.grader_user_id == grader_id,
+                    ),
+                )
+                .filter(DirectImageUpload.disease_id == disease.id)
+                .filter(DirectImageVerify.verified_status == 'verified')
+                .filter(ImageGrading.id.is_(None))
+                .count()
+            )
+            
+            # Count ungraded remedio images for this disease (currently only glaucoma and dr supported)
+            remedio_ungraded_count = 0
+            if disease.name.lower() in ['glaucoma', 'dr']:
+                # For DR, we need to check the graded_for field
+                disease_name_for_query = disease.name.lower()
+                if disease.name.lower() == 'dr':
+                    disease_name_for_query = 'dr'
+                    
+                remedio_ungraded_count = (
+                    db.query(EncounterFile)
+                    .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                    .outerjoin(
+                        ImageGrading,
+                        and_(
+                            ImageGrading.encounter_file_id == EncounterFile.id,
+                            ImageGrading.graded_for == disease_name_for_query,
+                            ImageGrading.grader_user_id == grader_id,
+                        ),
+                    )
+                    .filter(PatientEncounters.capture_date_dt.isnot(None))
+                    .filter(EncounterFile.file_type == 'image')
+                    .filter(ImageGrading.id.is_(None))
+                    .count()
+                )
+            
+            disease_stats[disease.name] = {
+                'direct': direct_ungraded_count,
+                'remedio': remedio_ungraded_count
+            }
+            
+            # Create start URLs for diseases that have ungraded images
+            # Outer join to filter where no record exists for this user & disease
             cand_direct_q = (
                 db.query(DirectImageUpload)
                 .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
@@ -158,19 +229,26 @@ def index():
                     ImageGrading,
                     and_(
                         ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                        ImageGrading.graded_for == 'glaucoma',
+                        ImageGrading.graded_for == disease.name.lower(),
                         ImageGrading.grader_user_id == grader_id,
                     ),
                 )
-                .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                .filter(DirectImageUpload.disease_id == disease.id)
                 .filter(DirectImageVerify.verified_status == 'verified')
                 .filter(ImageGrading.id.is_(None))
                 .order_by(DirectImageUpload.created_at.desc())
-                .limit(50)
+                .limit(10)  # Limit to 10 per disease to avoid overwhelming the dashboard
             )
             candidates_direct = cand_direct_q.all()
             choice_direct = random.choice(candidates_direct) if candidates_direct else None
-            start_direct_url = url_for('grading.direct_image', uuid=choice_direct.uuid) if choice_direct and choice_direct.uuid else None
+            if choice_direct and choice_direct.uuid:
+                if disease.name.lower() == 'glaucoma':
+                    start_direct_urls[disease.name.lower()] = url_for('grading.direct_image', uuid=choice_direct.uuid)
+                else:
+                    start_direct_urls[disease.name.lower()] = url_for('grading.direct_disease_image', uuid=choice_direct.uuid, disease_id=disease.id)
+                    
+        # Convert disease_stats to JSON for Chart.js
+        disease_stats_json = json.dumps(disease_stats)
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
         per_page = 20
@@ -212,7 +290,9 @@ def index():
         type_counts=type_counts,
         start_url=start_url,
         start_dr_url=start_dr_url,
-        start_direct_url=start_direct_url,
+        start_direct_urls=start_direct_urls,
+        disease_stats=disease_stats,
+        disease_stats_json=disease_stats_json,
         my_items=items_mine,
         my_total=total_mine,
         my_page=page,

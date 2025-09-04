@@ -39,6 +39,20 @@
   <h3 class="mb-0">Image Grading</h3>
 </div>
 
+<!-- Disease Stats Graph -->
+{% if disease_stats %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <strong>Verified Ungraded Images by Disease Type</strong>
+  </div>
+  <div class="card-body">
+    <div class="chart-container" style="position: relative; height:300px; width:100%">
+      <canvas id="diseaseStatsChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {# Primary CTAs: Start grading flows #}
 <div class="mb-3 d-flex flex-wrap align-items-center gap-3">
   <div>
@@ -64,14 +78,22 @@
     {% endif %}
   </div>
   <div>
-    <a class="btn btn-info btn-lg {% if not start_direct_url %}disabled{% endif %}"
-       href="{{ start_direct_url or '#' }}">
-      Start Direct Image Grading
-    </a>
-    {% if not start_direct_url %}
-      <span class="ms-2 text-muted">No ungraded direct images found.</span>
-    {% else %}
-      <span class="ms-2 small text-muted">Jumps to a random verified direct image with Glaucoma disease.</span>
+    <div class="d-flex flex-wrap gap-2">
+      {% if start_direct_urls %}
+        {% for disease_name, url in start_direct_urls.items() %}
+          <a class="btn btn-info btn-lg" href="{{ url }}">
+            Start {{ disease_name.title() }} Grading
+          </a>
+        {% endfor %}
+      {% else %}
+        <button class="btn btn-info btn-lg disabled" disabled>
+          Start Direct Image Grading
+        </button>
+        <span class="ms-2 text-muted">No ungraded direct images found.</span>
+      {% endif %}
+    </div>
+    {% if start_direct_urls %}
+      <span class="ms-2 small text-muted">Jumps to a random verified direct image.</span>
     {% endif %}
   </div>
   <hr class="w-100 mt-2 mb-0"/>
@@ -217,4 +239,88 @@
   </div>
 </div>
 
+{% endblock %}
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Check if we have disease stats data
+    var diseaseStatsData = {{ disease_stats_json|safe }};
+    
+    if (diseaseStatsData && Object.keys(diseaseStatsData).length > 0) {
+      // Prepare data for Chart.js
+      var diseases = Object.keys(diseaseStatsData);
+      var remedioData = diseases.map(function(disease) {
+        return diseaseStatsData[disease].remedio;
+      });
+      var directData = diseases.map(function(disease) {
+        return diseaseStatsData[disease].direct;
+      });
+      
+      // Get canvas context
+      var ctx = document.getElementById('diseaseStatsChart').getContext('2d');
+      
+      // Create the chart
+      var diseaseStatsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: diseases,
+          datasets: [
+            {
+              label: 'Remedio',
+              data: remedioData,
+              backgroundColor: '#1f77b4',
+              borderColor: '#1f77b4',
+              borderWidth: 1
+            },
+            {
+              label: 'Direct',
+              data: directData,
+              backgroundColor: '#ff7f0e',
+              borderColor: '#ff7f0e',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              stacked: true,
+              beginAtZero: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                footer: function(tooltipItems) {
+                  var sum = 0;
+                  tooltipItems.forEach(function(tooltipItem) {
+                    sum += tooltipItem.parsed.y;
+                  });
+                  return 'Total: ' + sum;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
 {% endblock %}

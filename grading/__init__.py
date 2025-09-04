@@ -7,6 +7,7 @@ from .dashboard import index
 from .remedio_glaucoma import remedio_glaucoma_image, remedio_glaucoma_grade, remedio_glaucoma_remove
 from .remedio_dr import remedio_dr_image, remedio_dr_grade, remedio_dr_remove
 from .glaucoma_direct import direct_image, direct_glaucoma_grade, direct_glaucoma_remove
+from .direct_disease import direct_disease_image, direct_disease_grade, direct_disease_remove
 
 # Register routes with the blueprint
 bp.add_url_rule("/", view_func=index, methods=["GET", "POST"])
@@ -19,4 +20,7 @@ bp.add_url_rule("/remedio/dr/remove", view_func=remedio_dr_remove, methods=["POS
 bp.add_url_rule("/direct/glaucoma/<uuid>", view_func=direct_image, methods=["GET"])
 bp.add_url_rule("/direct/glaucoma/grade", view_func=direct_glaucoma_grade, methods=["POST"])
 bp.add_url_rule("/direct/glaucoma/remove", view_func=direct_glaucoma_remove, methods=["POST"])
+bp.add_url_rule("/direct/disease/<uuid>/<int:disease_id>", view_func=direct_disease_image, methods=["GET"])
+bp.add_url_rule("/direct/disease/grade", view_func=direct_disease_grade, methods=["POST"])
+bp.add_url_rule("/direct/disease/remove", view_func=direct_disease_remove, methods=["POST"])
 

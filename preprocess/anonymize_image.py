@@ -300,12 +300,9 @@ def anonymize_image(uuid: UUID):
         ).scalar_one_or_none()
 
         if request.method == "POST":
-            verified_status = request.form.get("verified_status")
+            # Handle the toggle switch - if checked, it will be "verified", otherwise it won't be in form data
+            verified_status = request.form.get("verified_status", "unverified")
             remarks = request.form.get("remarks")
-
-            if not verified_status:
-                flash("Verification status is required.", "danger")
-                return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
 
             if current_verification:
                 current_verification.verified_status = verified_status
@@ -322,6 +319,26 @@ def anonymize_image(uuid: UUID):
                         verified_at=func.now(),
                     )
                 )
+
+            try:
+                db_session.commit()
+                flash(f"Image {upload.filename} marked as {verified_status}.", "success")
+
+                # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
+                next_uuid = _get_next_unverified_uuid(db_session)
+                if next_uuid:
+                    return redirect(url_for("preprocess.anonymize_image", uuid=next_uuid))
+
+                flash("No more images to anonymize.", "info")
+                return redirect(url_for("preprocess.anonymization_dashboard"))
+
+            except Exception as e:
+                current_app.logger.exception(
+                    "Failed to update verification status for image UUID %s: %s", uuid_val, e
+                )
+                db_session.rollback()
+                flash("Failed to save verification status due to a database error.", "danger")
+                return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
 
             try:
                 db_session.commit()

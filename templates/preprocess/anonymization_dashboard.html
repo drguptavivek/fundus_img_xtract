@@ -137,7 +137,8 @@
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Image Filename</th>
+                            <th>Image</th>
+                            <th>Filename</th>
                             <th>Hospital</th>
                             <th>Lab Unit</th>
                             <th>Camera</th>
@@ -152,6 +153,14 @@
                     <tbody>
                         {% for verification in recent_verifications %}
                         <tr>
+                            <td>
+                                <a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">
+                                    <img src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=verification.image_upload.uuid) }}" 
+                                         alt="{{ verification.image_upload.filename }}" 
+                                         style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"
+                                         onerror="this.style.display='none'">
+                                </a>
+                            </td>
                             <td><a href="{{ url_for('preprocess.anonymize_image', uuid=verification.image_upload.uuid) }}">{{ verification.image_upload.filename }}</a></td>
                             <td>{{ verification.image_upload.hospital.name if verification.image_upload.hospital else '-' }}</td>
                             <td>{{ verification.image_upload.lab_unit.name if verification.image_upload.lab_unit else '-' }}</td>

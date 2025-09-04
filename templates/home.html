@@ -190,6 +190,38 @@
       </div>
     </div>
     
+    <!-- Images by Lab Unit and Disease Chart -->
+    {% if images_by_lab_unit_disease %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Images by Lab Unit and Disease</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="labUnitDiseaseChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
+    <!-- Verified Images by Lab Unit and Disease Chart -->
+    {% if verified_images_by_lab_unit_disease %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Verified Images by Lab Unit and Disease</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="verifiedLabUnitDiseaseChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    
     <!-- DR Impression Distribution Chart -->
     {% if dr_impression_distribution %}
     <div class="col-12 col-lg-6">
@@ -229,12 +261,17 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/chartjs-plugin-datalabels.js') }}"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // Register the datalabels plugin
+    Chart.register(ChartDataLabels);
+    
     // Helper function to format percentage labels
     function getPercentageLabel(value, total) {
       if (total === 0) return '0%';
-      return Math.round((value / total) * 100) + '%';
+      var percentage = (value / total) * 100;
+      return percentage.toFixed(1) + '%';
     }
     
     // Grading Distribution Chart
@@ -262,6 +299,15 @@
           legend: {
             position: 'right',
           },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold'
+            },
+            formatter: function(value, context) {
+              return getPercentageLabel(value, gradingTotal);
+            }
+          },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -277,10 +323,6 @@
     // VCDR Ranges Chart (with adjusted cutoffs)
     {% if vcdr_ranges %}
     var vcdrCtx = document.getElementById('vcdrChart').getContext('2d');
-    // Calculate totals for each eye
-    var rightTotal = {{ vcdr_ranges.normal_right or 0 }} + {{ vcdr_ranges.borderline_right or 0 }} + {{ vcdr_ranges.abnormal_right or 0 }} + {{ vcdr_ranges.severely_abnormal_right or 0 }};
-    var leftTotal = {{ vcdr_ranges.normal_left or 0 }} + {{ vcdr_ranges.borderline_left or 0 }} + {{ vcdr_ranges.abnormal_left or 0 }} + {{ vcdr_ranges.severely_abnormal_left or 0 }};
-    
     var vcdrChart = new Chart(vcdrCtx, {
       type: 'bar',
       data: {
@@ -324,11 +366,13 @@
           }
         },
         plugins: {
+          datalabels: {
+            display: false // No data labels for bar charts as requested
+          },
           tooltip: {
             callbacks: {
               label: function(context) {
-                var total = context.datasetIndex === 0 ? rightTotal : leftTotal;
-                return context.dataset.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, total) + ')';
+                return context.dataset.label + ': ' + context.raw;
               }
             }
           }
@@ -340,10 +384,12 @@
     // Ungradable Images Chart
     var ungradableCtx = document.getElementById('ungradableChart').getContext('2d');
     var ungradableTotal = {{ gradable_images }} + {{ ungradable_images }};
+    var ungradableLabels = ['Gradable Images', 'Not Gradable Images'];
+    
     var ungradableChart = new Chart(ungradableCtx, {
       type: 'doughnut',
       data: {
-        labels: ['Gradable Images', 'Not Gradable Images'],
+        labels: ungradableLabels,
         datasets: [{
           data: [{{ gradable_images }}, {{ ungradable_images }}],
           backgroundColor: ['#2ca02c', '#d62728'],
@@ -357,6 +403,15 @@
           legend: {
             position: 'right',
           },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold'
+            },
+            formatter: function(value, context) {
+              return getPercentageLabel(value, ungradableTotal);
+            }
+          },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -368,12 +423,169 @@
       }
     });
     
+    // Images by Lab Unit and Disease Chart
+    {% if images_by_lab_unit_disease %}
+    // Process data for stacked bar chart
+    var labUnitData = {};
+    var diseaseSet = new Set();
+    
+    var imagesByLabUnitDiseaseData = [
+      {% for item in images_by_lab_unit_disease %}
+      {labUnit: "{{ item.lab_unit_name }}", disease: "{{ item.disease_name }}", count: {{ item.image_count }}},
+      {% endfor %}
+    ];
+    
+    // Only process data if we have any
+    if (imagesByLabUnitDiseaseData.length > 0) {
+      imagesByLabUnitDiseaseData.forEach(function(item) {
+        if (!labUnitData[item.labUnit]) {
+          labUnitData[item.labUnit] = {};
+        }
+        labUnitData[item.labUnit][item.disease] = item.count;
+        diseaseSet.add(item.disease);
+      });
+      
+      var diseases = Array.from(diseaseSet);
+      var labUnits = Object.keys(labUnitData);
+      
+      // Create datasets for each disease
+      var datasets = diseases.map(function(disease, index) {
+        var colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+        return {
+          label: disease,
+          data: labUnits.map(function(labUnit) {
+            return labUnitData[labUnit][disease] || 0;
+          }),
+          backgroundColor: colors[index % colors.length]
+        };
+      });
+      
+      var labUnitDiseaseCtx = document.getElementById('labUnitDiseaseChart').getContext('2d');
+      var labUnitDiseaseChart = new Chart(labUnitDiseaseCtx, {
+        type: 'bar',
+        data: {
+          labels: labUnits,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              ticks: {
+                precision: 0
+              }
+            },
+            y: {
+              stacked: true,
+              ticks: {
+                precision: 0
+              }
+            }
+          },
+          plugins: {
+            datalabels: {
+              display: false // No data labels for bar charts as requested
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false
+            },
+            legend: {
+              position: 'right'
+            }
+          }
+        }
+      });
+    }
+    {% endif %}
+    
+    // Verified Images by Lab Unit and Disease Chart
+    {% if verified_images_by_lab_unit_disease %}
+    // Process data for percentage chart
+    var verificationData = {};
+    
+    var verifiedImagesByLabUnitDiseaseData = [
+      {% for item in verified_images_by_lab_unit_disease %}
+      {labUnit: "{{ item.lab_unit_name }}", disease: "{{ item.disease_name }}", total: {{ item.total_images }}, verified: {{ item.verified_images or 0 }}},
+      {% endfor %}
+    ];
+    
+    // Only process data if we have any
+    if (verifiedImagesByLabUnitDiseaseData.length > 0) {
+      verifiedImagesByLabUnitDiseaseData.forEach(function(item) {
+        var key = item.labUnit + ' - ' + item.disease;
+        var percentage = item.total > 0 ? (item.verified / item.total) * 100 : 0;
+        verificationData[key] = {
+          percentage: percentage,
+          total: item.total,
+          verified: item.verified
+        };
+      });
+      
+      var verificationLabels = Object.keys(verificationData);
+      var verificationPercentages = verificationLabels.map(function(key) {
+        return verificationData[key].percentage;
+      });
+      
+      var verifiedLabUnitDiseaseCtx = document.getElementById('verifiedLabUnitDiseaseChart').getContext('2d');
+      var verifiedLabUnitDiseaseChart = new Chart(verifiedLabUnitDiseaseCtx, {
+        type: 'bar',
+        data: {
+          labels: verificationLabels,
+          datasets: [{
+            label: 'Percentage Verified',
+            data: verificationPercentages,
+            backgroundColor: '#1f77b4'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                callback: function(value) {
+                  return value + '%';
+                }
+              }
+            }
+          },
+          plugins: {
+            datalabels: {
+              color: '#000',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value, context) {
+                return value.toFixed(1) + '%';
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  var key = context.label;
+                  var data = verificationData[key];
+                  return 'Verified: ' + data.verified + '/' + data.total + ' (' + data.percentage.toFixed(1) + '%)';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+    {% endif %}
+    
     // DR Impression Distribution Chart
     {% if dr_impression_distribution %}
     var drCtx = document.getElementById('drImpressionChart').getContext('2d');
     var drLabels = [{% for item in dr_impression_distribution %}'{{ item[0] }}',{% endfor %}];
     var drData = [{% for item in dr_impression_distribution %}{{ item[1] }},{% endfor %}];
     var drTotal = drData.reduce((a, b) => a + b, 0);
+    
     var drChart = new Chart(drCtx, {
       type: 'pie',
       data: {
@@ -394,6 +606,15 @@
           legend: {
             position: 'right',
           },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold'
+            },
+            formatter: function(value, context) {
+              return getPercentageLabel(value, drTotal);
+            }
+          },
           tooltip: {
             callbacks: {
               label: function(context) {
@@ -412,6 +633,7 @@
     var glaucomaLabels = [{% for item in glaucoma_impression_distribution %}'{{ item[0] }}',{% endfor %}];
     var glaucomaData = [{% for item in glaucoma_impression_distribution %}{{ item[1] }},{% endfor %}];
     var glaucomaTotal = glaucomaData.reduce((a, b) => a + b, 0);
+    
     var glaucomaChart = new Chart(glaucomaCtx, {
       type: 'pie',
       data: {
@@ -431,6 +653,15 @@
         plugins: {
           legend: {
             position: 'right',
+          },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold'
+            },
+            formatter: function(value, context) {
+              return getPercentageLabel(value, glaucomaTotal);
+            }
           },
           tooltip: {
             callbacks: {

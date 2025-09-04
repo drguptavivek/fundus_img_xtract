@@ -3,7 +3,7 @@ from sqlalchemy import select, func, or_, distinct, case, and_
 from models import (
     Session, EncounterFile, PatientEncounters, ImageGrading, 
     GlaucomaReport, GlaucomaResultsCleaned, DiabeticRetinopathyReport,
-    DirectImageUpload, DirectImageVerify
+    DirectImageUpload, DirectImageVerify, LabUnit, Disease
 )
 
 def homepage():
@@ -113,6 +113,34 @@ def homepage():
             .group_by(ImageGrading.impression)
             .order_by(func.count(ImageGrading.id).desc())
         ).all()
+        
+        # Images by lab unit and disease (stacked bar chart)
+        images_by_lab_unit_disease = db.execute(
+            select(
+                LabUnit.name.label('lab_unit_name'),
+                Disease.name.label('disease_name'),
+                func.count(DirectImageUpload.id).label('image_count')
+            )
+            .join(DirectImageUpload.lab_unit)
+            .join(DirectImageUpload.disease)
+            .group_by(LabUnit.name, Disease.name)
+            .order_by(LabUnit.name, Disease.name)
+        ).all()
+        
+        # Verified images by lab unit and disease (percentage chart)
+        verified_images_by_lab_unit_disease = db.execute(
+            select(
+                LabUnit.name.label('lab_unit_name'),
+                Disease.name.label('disease_name'),
+                func.count(DirectImageUpload.id).label('total_images'),
+                func.sum(case((DirectImageVerify.verified_status == "verified", 1), else_=0)).label('verified_images')
+            )
+            .join(DirectImageUpload.lab_unit)
+            .join(DirectImageUpload.disease)
+            .outerjoin(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+            .group_by(LabUnit.name, Disease.name)
+            .order_by(LabUnit.name, Disease.name)
+        ).all()
 
     return render_template(
         "home.html",
@@ -129,5 +157,7 @@ def homepage():
         dr_impression_distribution=dr_impression_distribution,
         glaucoma_impression_distribution=glaucoma_impression_distribution,
         gradable_images=gradable_images,
-        ungradable_images=ungradable_images
+        ungradable_images=ungradable_images,
+        images_by_lab_unit_disease=images_by_lab_unit_disease,
+        verified_images_by_lab_unit_disease=verified_images_by_lab_unit_disease
     )

@@ -1,0 +1,40 @@
+{% if gradings %}
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Disease</th>
+                    <th>Impression</th>
+                    <th>Display Order</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for grading in gradings %}
+                <tr>
+                    <td>{{ grading.disease.name }}</td>
+                    <td>{{ grading.impression }}</td>
+                    <td>{{ grading.display_order }}</td>
+                    <td>
+                        {% if grading.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin.edit_disease_grading', grading_id=grading.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                        <form method="POST" action="{{ url_for('admin.delete_disease_grading', grading_id=grading.id) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this grading?')">
+                            {{ csrf_field() }}
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <p class="text-muted">No disease gradings found.</p>
+{% endif %}

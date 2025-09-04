@@ -1,3 +1,17 @@
+function getCSRFToken() {
+  // Prefer hidden input (Flask-WTF forms)
+  const input = document.querySelector('input[name="csrf_token"]');
+  if (input && input.value) return input.value;
+
+  // Fallback to meta tag if you render one in your layout
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta && meta.content) return meta.content;
+
+  return '';
+}
+
+
+
 document.addEventListener('DOMContentLoaded', function() {
     const canvas = document.getElementById('imageCanvas');
     const ctx = canvas.getContext('2d');
@@ -15,10 +29,18 @@ document.addEventListener('DOMContentLoaded', function() {
     let lastX = 0;
     let lastY = 0;
 
-    // Cropping state
-    let isCropping = false;
-    let cropStart = null;
-    let cropEnd = null;
+    // Cropping state (single ellipse)
+    let isCropping = false;         // actively interacting (down → move → up)
+    let crop = null;                // { cx, cy, rx, ry } OR null
+    let cropBase = null;            // offscreen snapshot for overlay
+    let cropMode = null;            // 'creating' | 'moving' | 'resizing'
+    let activeHandle = null;        // 'N' | 'S' | 'E' | 'W' | null
+    let dragDX = 0, dragDY = 0;     // for moving (pointer offset from center)
+
+    const HANDLE_SIZE = 10;         // px
+    const MIN_RADIUS = 8;           // minimum rx/ry
+    let antsOffset = 0;             // marching ants
+    let antsRAF = null;
 
     // --- DOM ELEMENTS ---
     const brushSizeSlider = document.getElementById('brush-size');
@@ -33,11 +55,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- INITIALIZATION ---
     img.onload = function() {
+        // Set canvas to image pixel size (simple mode; if you need HiDPI crispness, we can add DPR scaling)
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
         saveState();
-        brushColor = brushColorPicker.value; // Initialize brushColor from the picker
+        brushColor = brushColorPicker.value; // Initialize brush color from the picker
     };
     img.src = canvas.dataset.imageUrl;
 
@@ -45,7 +68,18 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('input[name="tool"]').forEach(radio => {
         radio.addEventListener('change', function() {
             currentTool = this.value;
-            applyCropBtn.style.display = (currentTool === 'crop' && cropStart) ? 'block' : 'none';
+            if (currentTool !== 'crop') {
+                stopAnts();
+                applyCropBtn.style.display = 'none';
+                // Clear overlay by restoring base snapshot if present
+                if (cropBase) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(cropBase, 0, 0);
+                }
+                cropBase = null;
+            } else {
+                applyCropBtn.style.display = crop ? 'block' : 'none';
+            }
             updateCursor();
         });
     });
@@ -55,7 +89,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- BRUSH CONTROLS ---
-    brushSizeSlider.addEventListener('input', () => { brushSize = parseInt(brushSizeSlider.value); brushSizeValue.textContent = brushSize + 'px'; });
+    brushSizeSlider.addEventListener('input', () => {
+        brushSize = parseInt(brushSizeSlider.value, 10);
+        brushSizeValue.textContent = brushSize + 'px';
+    });
     brushColorPicker.addEventListener('input', () => { brushColor = brushColorPicker.value; });
 
     // --- HISTORY MANAGEMENT (UNDO/REDO) ---
@@ -73,12 +110,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function restoreState(index) {
         const imgData = new Image();
-        imgData.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(imgData, 0, 0); };
+        imgData.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(imgData, 0, 0);
+        };
         imgData.src = history[index];
     }
 
-    undoBtn.addEventListener('click', () => { if (historyIndex > 0) { historyIndex--; restoreState(historyIndex); } });
-    redoBtn.addEventListener('click', () => { if (historyIndex < history.length - 1) { historyIndex++; restoreState(historyIndex); } });
+    undoBtn.addEventListener('click', () => {
+        if (historyIndex > 0) {
+            historyIndex--;
+            restoreState(historyIndex);
+        }
+    });
+    redoBtn.addEventListener('click', () => {
+        if (historyIndex < history.length - 1) {
+            historyIndex++;
+            restoreState(historyIndex);
+        }
+    });
 
     // --- ACTIONS ---
     clearCanvasBtn.addEventListener('click', () => {
@@ -92,11 +142,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     applyCropBtn.addEventListener('click', applyCrop);
 
-    // --- MAIN DRAWING LOGIC ---
-    // Helper to get canvas coordinates
+    // --- POINTER → CANVAS COORD MAP (handles visual scaling) ---
     function getCanvasCoordinates(e) {
         const rect = canvas.getBoundingClientRect();
-        // Map from CSS pixels to canvas pixels
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
 
@@ -107,38 +155,217 @@ document.addEventListener('DOMContentLoaded', function() {
             x: (clientX - rect.left) * scaleX,
             y: (clientY - rect.top) * scaleY
         };
-}
-
-    function start(e) {
-        const { x, y } = getCanvasCoordinates(e);
-        if (currentTool === 'crop') {
-            isCropping = true;
-            cropStart = { x: x, y: y };
-            cropEnd = { x: x, y: y };
-        } else {
-            isDrawing = true;
-            lastX = x;
-            lastY = y;
-        }
     }
 
-    function stop() {
-        if (isDrawing) {
-            isDrawing = false;
-            saveState();
+    // --- CROP HELPERS ---
+    function pointInEllipse(x, y, cx, cy, rx, ry) {
+        if (rx <= 0 || ry <= 0) return false;
+        const dx = (x - cx) / rx;
+        const dy = (y - cy) / ry;
+        return (dx*dx + dy*dy) <= 1;
+    }
+
+    function handlePositions(c) {
+        if (!c) return [];
+        const { cx, cy, rx, ry } = c;
+        return [
+            { id: 'E', x: cx + rx, y: cy     },
+            { id: 'W', x: cx - rx, y: cy     },
+            { id: 'N', x: cx,      y: cy - ry},
+            { id: 'S', x: cx,      y: cy + ry},
+        ];
+    }
+
+    function hitTestHandle(x, y, c) {
+        const hs = HANDLE_SIZE;
+        for (const h of handlePositions(c)) {
+            if (Math.abs(x - h.x) <= hs && Math.abs(y - h.y) <= hs) {
+                return h.id;
+            }
         }
-        if (isCropping) {
-            isCropping = false;
-            applyCropBtn.style.display = 'block';
+        return null;
+    }
+
+    function setCropCursor(x, y) {
+        if (!crop) { canvas.style.cursor = 'crosshair'; return; }
+        const h = hitTestHandle(x, y, crop);
+        if (h === 'E' || h === 'W') { canvas.style.cursor = 'ew-resize'; return; }
+        if (h === 'N' || h === 'S') { canvas.style.cursor = 'ns-resize'; return; }
+        if (pointInEllipse(x, y, crop.cx, crop.cy, crop.rx, crop.ry)) {
+            canvas.style.cursor = 'move'; return;
         }
+        canvas.style.cursor = 'crosshair';
+    }
+
+    function clampCropInBounds(c) {
+        // Keep crop radii and center within canvas bounds
+        c.rx = Math.max(MIN_RADIUS, Math.min(c.rx, canvas.width  / 2));
+        c.ry = Math.max(MIN_RADIUS, Math.min(c.ry, canvas.height / 2));
+        c.cx = Math.max(c.rx, Math.min(canvas.width  - c.rx, c.cx));
+        c.cy = Math.max(c.ry, Math.min(canvas.height - c.ry, c.cy));
+    }
+
+    // --- OVERLAY DRAW ---
+    function redrawWithCropOverlay() {
+        if (!cropBase) return;
+
+        // Base
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(cropBase, 0, 0);
+
+        if (!crop) return;
+        const { cx, cy, rx, ry } = crop;
+
+        // Dim outside (spotlight)
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, canvas.height);
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill('evenodd');
+        ctx.restore();
+
+        // Double border (white + marching ants)
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+        ctx.setLineDash([]);
+        ctx.stroke();
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#000';
+        ctx.setLineDash([8, 6]);
+        ctx.lineDashOffset = antsOffset;
+        ctx.stroke();
+        ctx.restore();
+
+        // Handles
+        for (const h of handlePositions(crop)) drawHandle(h.x, h.y);
+
+        // Size label
+        drawLabel(`${Math.round(rx*2)} × ${Math.round(ry*2)} px`, cx, cy - ry - 14);
+    }
+
+    function drawHandle(x, y) {
+        const s = HANDLE_SIZE;
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.rect(x - s/2, y - s/2, s, s);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawLabel(text, x, y) {
+        ctx.save();
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        const w = ctx.measureText(text).width + 12;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(x - w/2, y - 16, w, 16);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(text, x, y - 2);
+        ctx.restore();
+    }
+
+    // --- MARCHING ANTS ---
+    function tickAnts() {
+        antsOffset = (antsOffset - 1) % 14;
+        redrawWithCropOverlay();
+        antsRAF = requestAnimationFrame(tickAnts);
+    }
+    function startAnts() { if (!antsRAF) antsRAF = requestAnimationFrame(tickAnts); }
+    function stopAnts()  { if (antsRAF) { cancelAnimationFrame(antsRAF); antsRAF = null; } }
+
+    // --- EVENT HANDLERS ---
+    function start(e) {
+        e.preventDefault();
+        const { x, y } = getCanvasCoordinates(e);
+
+        if (currentTool === 'crop') {
+            isCropping = true;
+
+            // Snapshot base once per interaction
+            cropBase = document.createElement('canvas');
+            cropBase.width = canvas.width;
+            cropBase.height = canvas.height;
+            cropBase.getContext('2d').drawImage(canvas, 0, 0);
+
+            // Decide interaction mode
+            if (crop) {
+                const h = hitTestHandle(x, y, crop);
+                if (h) {
+                    cropMode = 'resizing';
+                    activeHandle = h;
+                    startAnts();
+                    redrawWithCropOverlay();
+                    return;
+                }
+                if (pointInEllipse(x, y, crop.cx, crop.cy, crop.rx, crop.ry)) {
+                    cropMode = 'moving';
+                    activeHandle = null;
+                    dragDX = x - crop.cx;
+                    dragDY = y - crop.cy;
+                    startAnts();
+                    redrawWithCropOverlay();
+                    return;
+                }
+            }
+
+            // Else: start creating a NEW single ellipse (replaces any existing)
+            cropMode = 'creating';
+            activeHandle = null;
+            crop = { cx: x, cy: y, rx: 0, ry: 0 };
+            startAnts();
+            redrawWithCropOverlay();
+            return;
+        }
+
+        // Brush/Eraser path
+        isDrawing = true;
+        lastX = x;
+        lastY = y;
     }
 
     function draw(e) {
-        const { x: currentX, y: currentY } = getCanvasCoordinates(e);
-        if (isCropping) {
-            cropEnd = { x: currentX, y: currentY };
+        e.preventDefault();
+        const pt = getCanvasCoordinates(e);
+
+        if (currentTool === 'crop') {
+            if (!isCropping || !crop) {
+                setCropCursor(pt.x, pt.y); // hover feedback
+                return;
+            }
+
+            const { x, y } = pt;
+            if (cropMode === 'creating') {
+                crop.rx = Math.max(MIN_RADIUS, Math.abs(x - crop.cx));
+                crop.ry = Math.max(MIN_RADIUS, Math.abs(y - crop.cy));
+            } else if (cropMode === 'moving') {
+                crop.cx = x - dragDX;
+                crop.cy = y - dragDY;
+            } else if (cropMode === 'resizing') {
+                if (activeHandle === 'E' || activeHandle === 'W') {
+                    crop.rx = Math.max(MIN_RADIUS, Math.abs(x - crop.cx));
+                } else if (activeHandle === 'N' || activeHandle === 'S') {
+                    crop.ry = Math.max(MIN_RADIUS, Math.abs(y - crop.cy));
+                }
+            }
+            clampCropInBounds(crop);
             redrawWithCropOverlay();
-        } else if (isDrawing) {
+            return;
+        }
+
+        // Brush/Eraser draw
+        if (isDrawing) {
+            const { x: currentX, y: currentY } = pt;
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
             ctx.lineTo(currentX, currentY);
@@ -158,64 +385,48 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- CROP-SPECIFIC FUNCTIONS ---
-    function redrawWithCropOverlay() {
-        // Restore the last saved state to clear previous overlay
-        restoreState(historyIndex);
-
-        if (!cropStart || !cropEnd) return;
-
-        const centerX = (cropStart.x + cropEnd.x) / 2;
-        const centerY = (cropStart.y + cropEnd.y) / 2;
-        const radiusX = Math.abs((cropEnd.x - cropStart.x) / 2);
-        const radiusY = Math.abs((cropEnd.y - cropStart.y) / 2);
-
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-        ctx.stroke();
-        ctx.restore();
+    function stop() {
+        if (isDrawing) {
+            isDrawing = false;
+            saveState();
+        }
+        if (isCropping) {
+            isCropping = false;
+            stopAnts();
+            applyCropBtn.style.display = crop ? 'block' : 'none';
+        }
     }
 
+    // --- APPLY CROP ---
     function applyCrop() {
-        if (!cropStart || !cropEnd) return;
+        if (!crop) return;
 
-        const centerX = (cropStart.x + cropEnd.x) / 2;
-        const centerY = (cropStart.y + cropEnd.y) / 2;
-        const radiusX = Math.abs((cropEnd.x - cropStart.x) / 2);
-        const radiusY = Math.abs((cropEnd.y - cropStart.y) / 2);
+        const { cx, cy, rx, ry } = crop;
 
-        // Get the current canvas content
         const currentImage = new Image();
         currentImage.onload = () => {
-            // Clear the canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Create a clipping mask
+
             ctx.save();
             ctx.beginPath();
-            ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+            ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
             ctx.clip();
-            
-            // Draw the image inside the clip
+
             ctx.drawImage(currentImage, 0, 0);
-            
-            // Restore context, removing the clip
             ctx.restore();
-            
-            // Save the new cropped state
+
             saveState();
-            
-            // Reset crop state
-            cropStart = null;
-            cropEnd = null;
+
+            // Reset to single clean state
+            crop = null;
+            cropBase = null;
+            cropMode = null;
+            activeHandle = null;
             applyCropBtn.style.display = 'none';
-            document.getElementById('brush-tool').click(); // Switch back to brush tool
+            const brushRadio = document.getElementById('brush-tool');
+            if (brushRadio) brushRadio.click();
         };
-        currentImage.src = history[historyIndex]; // Use the last saved state
+        currentImage.src = history[historyIndex];
     }
 
     // --- EVENT LISTENERS ---
@@ -224,14 +435,21 @@ document.addEventListener('DOMContentLoaded', function() {
     canvas.addEventListener('mouseup', stop);
     canvas.addEventListener('mouseout', stop);
 
-    // --- SAVE/RESTORE LISTENERS (unchanged) ---
+    // End drag even if mouse leaves the canvas
+    window.addEventListener('mouseup', stop);
+
+    // (Optional) Basic touch support
+    canvas.addEventListener('touchstart', (e) => { start(e); }, { passive: false });
+    canvas.addEventListener('touchmove',  (e) => { draw(e);  }, { passive: false });
+    canvas.addEventListener('touchend',   (e) => { stop();   }, { passive: false });
+
+    // --- SAVE/RESTORE (unchanged) ---
     saveImageBtn.addEventListener('click', function() {
         const imageData = canvas.toDataURL();
         const saveUrl = saveImageBtn.dataset.saveUrl;
-        const csrfToken = document.getElementById('csrf_token').value;
         fetch(saveUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
             body: JSON.stringify({ image_data: imageData })
         })
         .then(response => response.json())
@@ -254,7 +472,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) { alert('Error: ' + data.error); }
-                    else { if (data.redirect_url) { window.location.href = data.redirect_url; } else { window.location.reload(); } }
+                    else {
+                        if (data.redirect_url) { window.location.href = data.redirect_url; }
+                        else { window.location.reload(); }
+                    }
                 })
                 .catch(error => { console.error('Error:', error); alert('An unexpected error occurred.'); });
             }

@@ -5,7 +5,7 @@ from flask_login import current_user
 from sqlalchemy import select, func
 from datetime import datetime, timezone
 from models import (
-    User, LabUnit, Hospital, DirectImageUpload, Camera, Disease, Area
+    User, LabUnit, Hospital, DirectImageUpload, Camera, Disease, Area, ImageGrading
 )
 
 from . import bp
@@ -184,6 +184,21 @@ def dashboard():
         )
         uploads = db_session.execute(main_q).scalars().all()
 
+        # Fetch gradings for these uploads
+        upload_ids = [u.id for u in uploads]
+        gradings = {}
+        if upload_ids:
+            grading_rows = db_session.execute(
+                select(ImageGrading)
+                .where(ImageGrading.direct_image_upload_id.in_(upload_ids))
+            ).scalars().all()
+            
+            # Group gradings by upload_id
+            for grading in grading_rows:
+                if grading.direct_image_upload_id not in gradings:
+                    gradings[grading.direct_image_upload_id] = []
+                gradings[grading.direct_image_upload_id].append(grading)
+
         # Side lookups for the current page
         ids = lambda attr: {getattr(u, attr) for u in uploads}
         hospitals = {h.id: h for h in db_session.execute(select(Hospital).where(Hospital.id.in_(ids("hospital_id")))).scalars().all()} if uploads else {}
@@ -237,6 +252,7 @@ def dashboard():
         return render_template(
             "direct_uploads/dashboard.html",
             uploads=uploads,
+            gradings=gradings,
             hospitals=hospitals, lab_units=lab_units, cameras=cameras,
             diseases=diseases, areas=areas, users=users,
             all_hospitals=all_hospitals, all_lab_units=all_lab_units,

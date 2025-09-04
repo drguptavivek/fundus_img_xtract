@@ -189,19 +189,21 @@
         {% for g in my_items %}
         <tr>
           <td class="text-nowrap">{{ (g.updated_at or g.created_at).strftime('%Y-%m-%d %H:%M') if g.updated_at or g.created_at else '-' }}</td>
-          <td class="text-break"><code>{{ g.image.uuid if g.image else '—' }}</code></td>
+          <td class="text-break"><code>{% if g.image %}{{ g.image.uuid }}{% elif g.direct_image %}{{ g.direct_image.uuid }}{% else %}&#8212;{% endif %}</code></td>
           <td class="text-nowrap">{{ badge_for_for(g.graded_for)|safe }}</td>
           <td>{{ badge_for_impression(g.impression)|safe }}</td>
           <td class="small text-muted">{{ g.remarks or '' }}</td>
           <td class="text-end">
             {% if g.image and g.image.uuid %}
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.remedio_glaucoma_image', uuid=g.image.uuid) }}">Revise</a>
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.remedio_glaucoma_image', uuid=g.image.uuid) if g.graded_for == 'glaucoma' else url_for('grading.remedio_dr_image', uuid=g.image.uuid) }}">Revise</a>
+            {% elif g.direct_image and g.direct_image.uuid %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.direct_image', uuid=g.direct_image.uuid) }}">Revise</a>
             {% endif %}
           </td>
         </tr>
         {% endfor %}
       {% else %}
-        <tr><td colspan="5" class="text-center text-muted p-3">No gradings found.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted p-3">No gradings found.</td></tr>
       {% endif %}
       </tbody>
     </table>

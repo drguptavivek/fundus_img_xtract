@@ -19,25 +19,46 @@ def index():
             # Validate UUID points to an image we can grade; add clear messaging for scenarios
             db = Session()
             try:
+                # First check if it's an EncounterFile UUID
                 ef = db.query(EncounterFile).filter(EncounterFile.uuid == img_uuid).first()
+                diu = None
                 if not ef:
+                    # If not found, check if it's a DirectImageUpload UUID
+                    diu = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == img_uuid).first()
+                
+                if not ef and not diu:
                     flash("No image found for that UUID.", "danger")
                     return redirect(url_for('grading.index'))
-                # Basic image check by type or extension
-                ext = ef.filename.rsplit('.', 1)[-1].lower() if ef.filename and '.' in ef.filename else ''
-                if not ((ef.file_type or '').lower().startswith('image') or ext in {"png","jpg","jpeg","gif","bmp","webp"}):
-                    flash("That UUID does not reference an image.", "danger")
-                    return redirect(url_for('grading.index'))
-
+                
+                # Basic image check by type or extension for EncounterFile
+                if ef:
+                    ext = ef.filename.rsplit('.', 1)[-1].lower() if ef.filename and '.' in ef.filename else ''
+                    if not ((ef.file_type or '').lower().startswith('image') or ext in {"png","jpg","jpeg","gif","bmp","webp"}):
+                        flash("That UUID does not reference an image.", "danger")
+                        return redirect(url_for('grading.index'))
+                
+                # For DirectImageUpload, we assume it's always an image
+                
                 # Message depending on whether the current user already graded it for the selected type
                 my_id = getattr(current_user, 'id', None)
-                has_my = (
-                    db.query(ImageGrading)
-                      .filter(ImageGrading.encounter_file_id == ef.id,
-                              ImageGrading.graded_for == code_for,
-                              ImageGrading.grader_user_id == my_id)
-                      .count()
-                )
+                has_my = False
+                if ef:
+                    has_my = (
+                        db.query(ImageGrading)
+                          .filter(ImageGrading.encounter_file_id == ef.id,
+                                  ImageGrading.graded_for == code_for,
+                                  ImageGrading.grader_user_id == my_id)
+                          .count()
+                    )
+                elif diu:
+                    has_my = (
+                        db.query(ImageGrading)
+                          .filter(ImageGrading.direct_image_upload_id == diu.id,
+                                  ImageGrading.graded_for == code_for,
+                                  ImageGrading.grader_user_id == my_id)
+                          .count()
+                    )
+                
                 if code_for == 'amd':
                     flash("AMD grading is not available yet.", "warning")
                     return redirect(url_for('grading.index'))
@@ -48,10 +69,19 @@ def index():
             finally:
                 db.close()
 
-            if code_for == 'glaucoma':
-                return redirect(url_for('grading.remedio_glaucoma_image', uuid=img_uuid))
-            elif code_for == 'dr':
-                return redirect(url_for('grading.remedio_dr_image', uuid=img_uuid))
+            # Redirect to appropriate endpoint based on image type
+            if ef:
+                if code_for == 'glaucoma':
+                    return redirect(url_for('grading.remedio_glaucoma_image', uuid=img_uuid))
+                elif code_for == 'dr':
+                    return redirect(url_for('grading.remedio_dr_image', uuid=img_uuid))
+            elif diu:
+                # For direct images, we only support glaucoma grading
+                if code_for in ['glaucoma', 'dr']:
+                    return redirect(url_for('grading.direct_image', uuid=img_uuid))
+                else:
+                    flash("AMD grading is not available for direct images.", "warning")
+                    return redirect(url_for('grading.index'))
         flash("Please enter a valid Image UUID", "warning")
 
     # Stats + most recent encounter with an ungraded glaucoma image
@@ -149,7 +179,10 @@ def index():
         gfor = (request.args.get('gfor') or 'all').strip().lower()
         my_q = (
             db.query(ImageGrading)
-              .options(joinedload(ImageGrading.image))
+              .options(
+                  joinedload(ImageGrading.image),
+                  joinedload(ImageGrading.direct_image)
+              )
               .filter(ImageGrading.grader_user_id == getattr(current_user, 'id', None))
               .order_by(ImageGrading.updated_at.desc())
         )

@@ -28,7 +28,7 @@
           {% else %}-{% endif %}
         </strong></div>
 
-        <form method="post" action="{{ url_for('grading.dr_grade') }}">
+        <form method="post" action="{{ url_for('grading.remedio_dr_grade') }}">
           {{ csrf_field() }}
           <input type="hidden" name="ef_uuid" value="{{ image.uuid }}">
           <div class="mb-2">
@@ -82,7 +82,7 @@
 <div class="row g-3 mt-2">
   <div class="col-12 col-lg-3 ms-auto">
     {% if my_grading %}
-    <form method="post" action="{{ url_for('grading.dr_remove') }}" onsubmit="return confirm('Remove your DR grading for this image?');">
+    <form method="post" action="{{ url_for('grading.remedio_dr_remove') }}" onsubmit="return confirm('Remove your DR grading for this image?');">
       {{ csrf_field() }}
       <input type="hidden" name="ef_uuid" value="{{ image.uuid }}">
       <input type="hidden" name="grading_id" value="{{ my_grading.id }}">

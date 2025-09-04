@@ -16,10 +16,10 @@
       <div class="card-body p-2">
         <div class="position-relative" style="height: 70vh; min-height: 500px;">
           {% if image.has_edited %}
-            <img src="{{ url_for('direct_uploads.serve_image', folder=image.folder_rel, filename=image.edited_filename) }}" 
+            <img src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=image.uuid) }}" 
                  class="img-fluid h-100 w-100 object-fit-contain" alt="Image">
           {% else %}
-            <img src="{{ url_for('direct_uploads.serve_image', folder=image.folder_rel, filename=image.filename) }}" 
+            <img src="{{ url_for('media.serve_img_by_uuid_preferring_edited', uuid_str=image.uuid) }}" 
                  class="img-fluid h-100 w-100 object-fit-contain" alt="Image">
           {% endif %}
         </div>

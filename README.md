@@ -60,10 +60,10 @@ python app.py
 
 - [App Architecture](docs/app.md)
 - [Database Models](docs/models.md)
-- [Main Processing Pipeline](docs/main.md)
-- [PDF Processing](docs/process_pdfs.md)
-- [OCR Extraction](docs/ocr_extraction.md)
 - [ZIP Uploads](docs/zip_uploads.md)
+    - [Main Processing Pipeline](docs/main.md)
+    - [PDF Processing](docs/process_pdfs.md)
+    - [OCR Extraction](docs/ocr_extraction.md)
 - [Direct Uploads](docs/direct_uploads.md)
 - [Audit Workflows](docs/audit.md)
 - [Grading System](docs/Grading.md)

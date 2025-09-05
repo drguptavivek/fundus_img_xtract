@@ -1,4 +1,3 @@
-
 # Fundus Image Manager
 
 A comprehensive system for an eye hospital to manage retinal fundus images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD).

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from models import Role
 
-DEFAULT_ROLES = ["admin", "fileUploader", "ophthalmologist", "data_manager", "contributor"]
+DEFAULT_ROLES = ["admin", "fileUploader", "ophthalmologist", "data_manager", "contributor", "resident"]
 
 def ensure_roles(db: Session, names: Iterable[str] = DEFAULT_ROLES) -> None:
     existing = {r.name for r in db.scalars(select(Role)).all()}

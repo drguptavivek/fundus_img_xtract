@@ -7,7 +7,7 @@ from auth.roles import roles_required
 from models import Session, DirectImageUpload, ImageGrading, Disease, DiseaseGrading, DirectImageVerify
 
 
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_disease_image(uuid: str, disease_id: int):
     db = Session()
     try:
@@ -65,7 +65,7 @@ def direct_disease_image(uuid: str, disease_id: int):
     )
 
 
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_disease_grade():
     uuid = (request.form.get("uuid") or "").strip()
     disease_id_raw = request.form.get("disease_id")
@@ -108,9 +108,9 @@ def direct_disease_grade():
     role = None
     try:
         if current_user.has_role('ophthalmologist'):
-            role = 'ophthalmologist'
-        elif current_user.has_role('optometrist'):
-            role = 'optometrist'
+            role = 'consultant'
+        elif current_user.has_role('resident'):
+            role = 'resident'
         elif current_user.has_role('admin'):
             role = 'admin'
     except Exception:
@@ -198,7 +198,7 @@ def direct_disease_grade():
         db.close()
 
 
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_disease_remove():
     uuid = (request.form.get("uuid") or "").strip()
     disease_id_raw = request.form.get("disease_id")

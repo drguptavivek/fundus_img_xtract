@@ -8,7 +8,7 @@ from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, ImageGrading
 
 
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "resident", "ophthalmologist")
 def remedio_glaucoma_image(uuid: str):
     db = Session()
     try:
@@ -38,7 +38,7 @@ def remedio_glaucoma_image(uuid: str):
         user_role = None
         if current_user.has_role('ophthalmologist'):
             user_role = 'consultant'
-        elif current_user.has_role('optometrist'):
+        elif current_user.has_role('resident'):
             user_role = 'resident'
         elif current_user.has_role('admin'):
             user_role = 'admin'
@@ -71,7 +71,7 @@ def remedio_glaucoma_image(uuid: str):
                           my_grading=my_grading, user_role=user_role, grading_status=grading_status)
 
 
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "resident", "ophthalmologist")
 def remedio_glaucoma_grade():
     ef_id = request.form.get("ef_id")
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
@@ -99,7 +99,7 @@ def remedio_glaucoma_grade():
     try:
         if current_user.has_role('ophthalmologist'):
             role = 'consultant'
-        elif current_user.has_role('optometrist'):
+        elif current_user.has_role('resident'):
             role = 'resident'
         elif current_user.has_role('admin'):
             role = 'admin'
@@ -232,7 +232,7 @@ def remedio_glaucoma_grade():
         db.close()
 
 
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "resident", "ophthalmologist")
 def remedio_glaucoma_remove():
     ef_uuid = (request.form.get("ef_uuid") or request.form.get("uuid") or "").strip()
     grading_id_raw = request.form.get("grading_id")

@@ -7,7 +7,7 @@ from auth.roles import roles_required
 from models import Session, DirectImageUpload, ImageGrading, Disease, DirectImageVerify
 
 # grading/direct/<uuid>", view_func=direct_image, methods=["GET"])
-@roles_required("admin", "ophthalmologist", "optometrist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_image(uuid: str):
     db = Session()
     try:
@@ -45,7 +45,7 @@ def direct_image(uuid: str):
         user_role = None
         if current_user.has_role('ophthalmologist'):
             user_role = 'consultant'
-        elif current_user.has_role('optometrist'):
+        elif current_user.has_role('resident'):
             user_role = 'resident'
         elif current_user.has_role('admin'):
             user_role = 'admin'
@@ -78,7 +78,7 @@ def direct_image(uuid: str):
                           my_grading=my_grading, user_role=user_role, grading_status=grading_status)
 
 # bp.add_url_rule("/direct/glaucoma/grade", view_func=direct_glaucoma_grade, methods=["POST"])
-@roles_required("admin", "ophthalmologist", "optometrist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_glaucoma_grade():
     uuid = (request.form.get("uuid") or "").strip()
     impression = (request.form.get("impression") or "").strip()
@@ -109,7 +109,7 @@ def direct_glaucoma_grade():
     try:
         if current_user.has_role('ophthalmologist'):
             role = 'consultant'
-        elif current_user.has_role('optometrist'):
+        elif current_user.has_role('resident'):
             role = 'resident'
         elif current_user.has_role('admin'):
             role = 'admin'
@@ -247,7 +247,7 @@ def direct_glaucoma_grade():
         db.close()
 
 # bp.add_url_rule("/direct/glaucoma/remove", view_func=direct_glaucoma_remove, methods=["POST"])
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "resident")
 def direct_glaucoma_remove():
     uuid = (request.form.get("uuid") or "").strip()
     grading_id_raw = request.form.get("grading_id")

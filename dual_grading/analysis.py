@@ -27,10 +27,10 @@ def paired_gradings():
         paired_gradings_query = db.query(
             EncounterFile, 
             PatientEncounters,
-            func.max(case([(ImageGrading.grader_role == 'resident', ImageGrading.impression)], else_='')).label('resident_impression'),
-            func.max(case([(ImageGrading.grader_role == 'consultant', ImageGrading.impression)], else_='')).label('consultant_impression'),
-            func.max(case([(ImageGrading.grader_role == 'resident', ImageGrading.id)], else_=0)).label('resident_grading_id'),
-            func.max(case([(ImageGrading.grader_role == 'consultant', ImageGrading.id)], else_=0)).label('consultant_grading_id')
+            func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')).label('resident_impression'),
+            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_='')).label('consultant_impression'),
+            func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.id), else_=0)).label('resident_grading_id'),
+            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.id), else_=0)).label('consultant_grading_id')
         ).join(
             PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
         ).join(
@@ -85,10 +85,10 @@ def discrepancy_analysis():
         discrepancy_query = db.query(
             EncounterFile, 
             PatientEncounters,
-            func.max(case([(ImageGrading.grader_role == 'resident', ImageGrading.impression)], else_='')).label('resident_impression'),
-            func.max(case([(ImageGrading.grader_role == 'consultant', ImageGrading.impression)], else_='')).label('consultant_impression'),
-            func.max(case([(ImageGrading.grader_role == 'resident', ImageGrading.id)], else_=0)).label('resident_grading_id'),
-            func.max(case([(ImageGrading.grader_role == 'consultant', ImageGrading.id)], else_=0)).label('consultant_grading_id')
+            func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')).label('resident_impression'),
+            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_='')).label('consultant_impression'),
+            func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.id), else_=0)).label('resident_grading_id'),
+            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.id), else_=0)).label('consultant_grading_id')
         ).join(
             PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
         ).join(
@@ -100,8 +100,8 @@ def discrepancy_analysis():
         ).group_by(
             EncounterFile.id, PatientEncounters.id
         ).having(
-            func.max(case([(ImageGrading.grader_role == 'resident', ImageGrading.impression)], else_='')) != 
-            func.max(case([(ImageGrading.grader_role == 'consultant', ImageGrading.impression)], else_=''))
+            func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')) != 
+            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_=''))
         ).order_by(
             desc(EncounterFile.id)
         )

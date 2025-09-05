@@ -63,6 +63,8 @@ grading.remedio_glaucoma_grade                   POST       /grading/remedio/gla
 grading.remedio_glaucoma_image                   GET        /grading/remedio/glaucoma/image/<uuid>                  
 grading.remedio_glaucoma_remove                  POST       /grading/remedio/glaucoma/remove                        
 
+<!-- Note: The direct disease grading routes (grading.direct_disease_*) now allow 'optometrist' users in addition to 'ophthalmologist' and 'admin' users -->
+
 healthz                                          GET        /healthz                                                
 
 jobs.job_status_json                             GET        /jobs/<job_token>                                       

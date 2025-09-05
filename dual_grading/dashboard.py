@@ -1,7 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, distinct, func, or_
+from sqlalchemy import and_, distinct, func, or_, text
 import json
 
 from auth.roles import roles_required
@@ -12,36 +12,35 @@ from models import Session, PatientEncounters, EncounterFile, ImageGrading, Dire
 def index():
     db = Session()
     try:
-        # Stats for dual gradings
         # Count of images graded by both resident and consultant
-        dual_graded_count = db.query(func.count(distinct(ImageGrading.encounter_file_id))).filter(
+        # First, get encounter file IDs that have been graded by both roles
+        dual_graded_subq = db.query(ImageGrading.encounter_file_id, func.count(ImageGrading.id).label('grading_count')).filter(
             ImageGrading.graded_for == 'glaucoma',
             ImageGrading.grader_role.in_(['resident', 'consultant'])
-        ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).count()
+        ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).subquery()
+        
+        dual_graded_count = db.query(func.count(dual_graded_subq.c.encounter_file_id)).scalar()
         
         # Count of images graded by resident only
-        resident_only_count = db.query(func.count(distinct(ImageGrading.encounter_file_id))).outerjoin(
-            db.query(ImageGrading.encounter_file_id).filter(
-                ImageGrading.graded_for == 'glaucoma',
-                ImageGrading.grader_role == 'consultant'
-            ).subquery()
-        ).filter(
+        # Get all resident-graded encounter file IDs
+        resident_graded_ids = set([row[0] for row in db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role == 'resident',
-            ImageGrading.encounter_file_id.is_(None)  # No matching consultant grading
-        ).count()
+            ImageGrading.grader_role == 'resident'
+        ).all()])
         
-        # Count of images graded by consultant only
-        consultant_only_count = db.query(func.count(distinct(ImageGrading.encounter_file_id))).outerjoin(
-            db.query(ImageGrading.encounter_file_id).filter(
-                ImageGrading.graded_for == 'glaucoma',
-                ImageGrading.grader_role == 'resident'
-            ).subquery()
-        ).filter(
+        # Get all consultant-graded encounter file IDs
+        consultant_graded_ids = set([row[0] for row in db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role == 'consultant',
-            ImageGrading.encounter_file_id.is_(None)  # No matching resident grading
-        ).count()
+            ImageGrading.grader_role == 'consultant'
+        ).all()])
+        
+        # Find intersection and difference
+        both_graded_ids = resident_graded_ids.intersection(consultant_graded_ids)
+        resident_only_ids = resident_graded_ids.difference(consultant_graded_ids)
+        consultant_only_ids = consultant_graded_ids.difference(resident_graded_ids)
+        
+        resident_only_count = len(resident_only_ids)
+        consultant_only_count = len(consultant_only_ids)
         
         # Count of images not graded at all
         # Total images with capture_date_dt
@@ -52,26 +51,13 @@ def index():
             EncounterFile.file_type == 'image'
         ).count()
         
-        # Images with any glaucoma grading
-        graded_images = db.query(func.count(distinct(ImageGrading.encounter_file_id))).filter(
-            ImageGrading.graded_for == 'glaucoma'
-        ).scalar()
-        
-        not_graded_count = total_images - graded_images
-        
-        # Agreement statistics
-        # Get paired gradings (same image, one resident and one consultant)
-        paired_gradings = db.query(ImageGrading).join(
-            ImageGrading.image
-        ).join(
-            PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
-        ).filter(
-            ImageGrading.graded_for == 'glaucoma'
-        ).all()
+        # Total graded images (by either role)
+        all_graded_count = len(resident_graded_ids.union(consultant_graded_ids))
+        not_graded_count = max(0, total_images - all_graded_count)
         
         # Prepare data for chart
         agreement_stats = {
-            'both_graded': dual_graded_count,
+            'both_graded': dual_graded_count or 0,
             'resident_only': resident_only_count,
             'consultant_only': consultant_only_count,
             'not_graded': not_graded_count

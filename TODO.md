@@ -19,7 +19,7 @@ The existing `ImageGrading` model in `models.py` already supports the requiremen
 
 ### Key Findings:
 1. The `grader_role` field comes from the user's role in the system:
-   - In existing code, roles are determined based on user permissions ('ophthalmologist', 'optometrist', 'admin')
+   - In existing code, roles are determined based on user permissions ('ophthalmologist', 'resident', 'admin')
    - For the dual grading system, we will use 'resident' for residents and 'consultant' for consultants
 
 2. The existing schema already supports:
@@ -38,8 +38,8 @@ A detailed workflow design has been created and documented in `workflow_design_d
 ### Key Design Decisions:
 
 1. Role Distinction:
-   - Residents will be identified by a 'resident' role (users with 'optometrist' role)
-   - Consultants will be identified by a 'consultant' role (users with 'ophthalmologist' role)
+   - Residents are users with the 'resident' role and will be assigned the 'resident' grader_role during grading
+   - Consultants are users with the 'ophthalmologist' role and will be assigned the 'consultant' grader_role during grading
    - Admin users can be assigned either role based on context
 
 2. Dual Grading Requirement:
@@ -52,7 +52,7 @@ A detailed workflow design has been created and documented in `workflow_design_d
    - Remed.io ZIP File Images: Update role determination logic to identify residents vs consultants
 
 4. Key Features:
-   - Role determination logic updated to assign 'resident' or 'consultant' roles
+   - Role determination logic updated to assign 'resident' or 'consultant' roles based on user's actual role
    - Grading status tracking to show which roles have graded an image
    - Enhanced "Save & Next" feature to prioritize images that haven't been graded by both roles
 

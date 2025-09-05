@@ -81,5 +81,5 @@ def serve_glaucoma_pdf_by_uuid(uuid: str):
 @roles_required("admin")
 def glaucoma_results_redirect():
     # Redirect old path to new blueprint path
-    return redirect(url_for("glaucoma.glaucoma_results"), code=302)
+    return redirect(url_for("verify_remedio_glaucoma.glaucoma_results"), code=302)
  

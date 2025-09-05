@@ -67,7 +67,7 @@
             <a class="nav-link dropdown-toggle
                       {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs','audit']
                                         or (request.endpoint|default('', true)).startswith('jobs.')
-                                        or (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow') else '' }}"
+                                        or (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_clean_workflow') else '' }}"
               href="#" id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Work
             </a>
@@ -105,8 +105,8 @@
               {% if current_user.is_authenticated %}
               
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
-                  href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_clean_workflow' else '' }}"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
               </li>
                   
               <li>
@@ -139,12 +139,12 @@
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_list' else '' }}"
-                  href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_list' else '' }}"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">Verify</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
-                  href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_results' else '' }}"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Dashboard</a>
               </li>
               
               <li>
@@ -155,8 +155,8 @@
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'dr.dr_list' else '' }}"
-                  href="{{ url_for('dr.dr_list') }}">Verify</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_dr.verify_dr_list' else '' }}"
+                  href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">Verify</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'dr.dr_results' else '' }}"

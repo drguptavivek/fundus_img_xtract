@@ -19,11 +19,11 @@
           {% endif %}
           <div class="btn-group btn-group-sm ms-2" role="group" aria-label="Verify filter">
             <a class="btn btn-outline-secondary {% if ver=='all' %}active{% endif %}"
-              href="{{ url_for('dr.dr_list', page=page, ver='all') }}">All</a>
+              href="{{ url_for('verify_remedio_dr.verify_dr_list', page=page, ver='all') }}">All</a>
             <a class="btn btn-outline-secondary {% if ver=='yes' %}active{% endif %}"
-              href="{{ url_for('dr.dr_list', page=page, ver='yes') }}">Verified</a>
+              href="{{ url_for('verify_remedio_dr.verify_dr_list', page=page, ver='yes') }}">Verified</a>
             <a class="btn btn-outline-secondary {% if ver=='no' %}active{% endif %}"
-              href="{{ url_for('dr.dr_list', page=page, ver='no') }}">Unverified</a>
+              href="{{ url_for('verify_remedio_dr.verify_dr_list', page=page, ver='no') }}">Unverified</a>
           </div>
           <a class="btn btn-sm btn-warning ms-2 {% if not recent_unverified_url %}disabled{% endif %}"
             href="{{ recent_unverified_url or '#' }}">Most Recent Unverified</a>
@@ -33,12 +33,12 @@
 
         <!-- Right: Datepicker + Pager -->
         <div class="d-inline-flex align-items-center gap-2">
-          <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('dr.dr_list') }}">
+          <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
             <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date or '' }}"
               aria-label="Pick date">
             <button class="btn btn-sm btn-outline-primary text-bg-danger" type="submit">Go</button>
             {% if selected_date %}
-            <a class="btn btn-sm btn-outline-secondary .shadow-sm" href="{{ url_for('dr.dr_list') }}">Clear</a>
+            <a class="btn btn-sm btn-outline-secondary .shadow-sm" href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">Clear</a>
             {% endif %}
             {% if ver and ver!='all' %}
             <input type="hidden" name="ver" value="{{ ver }}">
@@ -48,7 +48,7 @@
           <a class="btn btn-outline-secondary btn-sm {% if not has_prev %}disabled{% endif %}"
             href="{{ prev_url or '#' }}" tabindex="{% if not has_prev %}-1{% else %}0{% endif %}">← Prev</a>
 
-          <form class="d-inline" method="get" action="{{ url_for('dr.dr_list') }}">
+          <form class="d-inline" method="get" action="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
             <label for="goto-page" class="visually-hidden">Go to page</label>
             <div class="page-box btn-sm">
               <input type="number" id="goto-page" name="page" class="page-input" inputmode="numeric" min="1"
@@ -94,7 +94,7 @@
               <td class="text-end">
                 <div class="btn-group btn-group-sm" role="group">
                   <a class="btn btn-outline-secondary"
-                    href="{{ url_for('dr.dr_detail', report_id=dr.id) }}">View</a>
+                    href="{{ url_for('verify_remedio_dr.verify_dr_detail', report_id=dr.id) }}">View</a>
                   {% if dr.report_file_name %}
                   <a class="btn btn-outline-secondary"
                     href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" target="_blank"
@@ -103,7 +103,7 @@
                   {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager')
                   %}
                   <a class="btn btn-outline-primary"
-                    href="{{ url_for('dr.dr_edit', report_id=dr.id) }}">Verify</a>
+                    href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=dr.id) }}">Verify</a>
                   {% endif %}
                 </div>
               </td>
@@ -154,7 +154,7 @@
             <td>{{ dr.result or '-' }}</td>
             <td class="text-end">
               <a class="btn btn-sm btn-outline-secondary"
-                href="{{ url_for('dr.dr_detail', report_id=dr.id) }}">View</a>
+                href="{{ url_for('verify_remedio_dr.verify_dr_detail', report_id=dr.id) }}">View</a>
             </td>
           </tr>
           {% endfor %}

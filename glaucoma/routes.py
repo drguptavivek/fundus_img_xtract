@@ -211,7 +211,7 @@ def glaucoma_list():
         recent_unverified_url = None
         if most_recent_unverified and most_recent_unverified in dates:
             ru_idx = dates.index(most_recent_unverified) + 1
-            recent_unverified_url = url_for('glaucoma.glaucoma_list', page=ru_idx, ver='no')
+            recent_unverified_url = url_for('verify_remedio_glaucoma.glaucoma_list', page=ru_idx, ver='no')
 
         # Pull all reports for the focused date
         if focus_date is not None:
@@ -264,8 +264,8 @@ def glaucoma_list():
         total_pages=total_pages,
         has_prev=has_prev,
         has_next=has_next,
-        prev_url=url_for("glaucoma.glaucoma_list", page=page-1, ver=ver) if has_prev else None,
-        next_url=url_for("glaucoma.glaucoma_list", page=page+1, ver=ver) if has_next else None,
+        prev_url=url_for("verify_remedio_glaucoma.glaucoma_list", page=page-1, ver=ver) if has_prev else None,
+        next_url=url_for("verify_remedio_glaucoma.glaucoma_list", page=page+1, ver=ver) if has_next else None,
         selected_date=selected_date,
         ver=ver,
         recent_unverified_url=recent_unverified_url,
@@ -457,8 +457,8 @@ def glaucoma_detail(clean_id: int):
             .first()
         )
 
-        prev_url = url_for("glaucoma.glaucoma_detail", clean_id=prev_row.id) if prev_row else None
-        next_url = url_for("glaucoma.glaucoma_detail", clean_id=next_row.id) if next_row else None
+        prev_url = url_for("verify_remedio_glaucoma.glaucoma_detail", clean_id=prev_row.id) if prev_row else None
+        next_url = url_for("verify_remedio_glaucoma.glaucoma_detail", clean_id=next_row.id) if next_row else None
 
         # Build images list from encounter files
         images = []
@@ -491,7 +491,7 @@ def glaucoma_detail(clean_id: int):
             dates = [r[0] for r in date_rows]
             if enc.capture_date_dt in dates:
                 page_idx = dates.index(enc.capture_date_dt) + 1
-    back_url = url_for("glaucoma.glaucoma_list", page=page_idx)
+    back_url = url_for("verify_remedio_glaucoma.glaucoma_list", page=page_idx)
     back_label = f"Date {enc.capture_date_dt.strftime('%Y-%m-%d') if enc.capture_date_dt else ''}"
 
     # Reuse the screenings detail template for consistent UI
@@ -579,7 +579,7 @@ def glaucoma_edit(clean_id: int):
                 flash(f"Saved. {missing} image(s) still untagged. Please mark Right/Left/Cannot tell.", "danger")
             else:
                 flash("Saved. All images are tagged.", "success")
-            return redirect(url_for("glaucoma.glaucoma_edit", clean_id=row.id))
+            return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=row.id))
 
         # Compute prev/next neighbors for navigation on edit page
         enc = row.patient_encounter
@@ -608,8 +608,8 @@ def glaucoma_edit(clean_id: int):
                 .order_by(PatientEncounters.capture_date_dt.desc(), GlaucomaResultsCleaned.id.desc())
                 .first()
             )
-        prev_url = url_for("glaucoma.glaucoma_edit", clean_id=prev_row.id) if prev_row else None
-        next_url = url_for("glaucoma.glaucoma_edit", clean_id=next_row.id) if next_row else None
+        prev_url = url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=prev_row.id) if prev_row else None
+        next_url = url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=next_row.id) if next_row else None
         # Compute back_url to glaucoma list page for this date
         back_url = None
         if enc and enc.capture_date_dt is not None:
@@ -624,7 +624,7 @@ def glaucoma_edit(clean_id: int):
             dates = [r[0] for r in date_rows]
             if enc.capture_date_dt in dates:
                 page_idx = dates.index(enc.capture_date_dt) + 1
-                back_url = url_for("glaucoma.glaucoma_list", page=page_idx)
+                back_url = url_for("verify_remedio_glaucoma.glaucoma_list", page=page_idx)
     finally:
         db.close()
 
@@ -687,7 +687,7 @@ def glaucoma_verify(clean_id: int):
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "incomplete", "message": msg}, 400
             flash(msg, "danger")
-            return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+            return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
 
         if enc:
             enc.glaucoma_verified_status = 'verified'
@@ -702,7 +702,7 @@ def glaucoma_verify(clean_id: int):
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": enc.glaucoma_verified_status if enc else 'verified', "by": enc.glaucoma_verified_by if enc else current_user.username}
         flash("Encounter verified.", "success")
-        return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+        return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
     finally:
         db.close()
 
@@ -727,7 +727,7 @@ def glaucoma_unverify(clean_id: int):
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": enc.glaucoma_verified_status if enc else None}
         flash("Encounter unverified.", "warning")
-        return redirect(url_for('glaucoma.glaucoma_edit', clean_id=clean_id))
+        return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
     finally:
         db.close()
 
@@ -741,14 +741,14 @@ def glaucoma_mark_eye(clean_id: int):
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": False, "error": "invalid_side"}, 400
         flash("Invalid selection.", "danger")
-        return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+        return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
     try:
         ef_id_int = int(ef_id)
     except Exception:
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": False, "error": "invalid_image"}, 400
         flash("Invalid image id.", "danger")
-        return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+        return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
 
     db = Session()
     try:
@@ -761,7 +761,7 @@ def glaucoma_mark_eye(clean_id: int):
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "not_found"}, 404
             flash("Image not found for this encounter.", "danger")
-            return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+            return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
         ef.eye_side = side
         db.add(ef)
         db.commit()
@@ -771,4 +771,4 @@ def glaucoma_mark_eye(clean_id: int):
         flash("Image laterality updated.", "success")
     finally:
         db.close()
-    return redirect(url_for("glaucoma.glaucoma_edit", clean_id=clean_id))
+    return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))

@@ -1,6 +1,6 @@
 from flask import Blueprint
 
-bp = Blueprint("glaucoma", __name__, url_prefix="/glaucoma")
+bp = Blueprint("verify_remedio_glaucoma", __name__, url_prefix="/verify_remedio_glaucoma")
 
 from . import routes  # noqa
 

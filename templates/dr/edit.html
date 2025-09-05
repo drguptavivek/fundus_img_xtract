@@ -12,7 +12,7 @@
         <div class="row align-items-center g-2">
           <!-- Left: Back to List -->
           <div class="col-12 col-md-4 d-flex align-items-center">
-            <a class="btn btn-sm btn-outline-secondary" href="{{ back_url or url_for('dr.dr_list') }}">&larr; Back to List</a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ back_url or url_for('verify_remedio_dr.verify_dr_list') }}">&larr; Back to List</a>
           </div>
           <!-- Center: Title -->
           <div class="col-12 col-md-4 text-center">
@@ -51,8 +51,8 @@
             <input class="form-check-input {% if not (row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified') %}state-not-verified{% endif %}" type="checkbox" role="switch" id="verify-toggle"
                    aria-label="Toggle verification"
                    title="Toggle verification"
-                   data-verify-url="{{ url_for('dr.dr_verify', report_id=row.id) }}"
-                   data-unverify-url="{{ url_for('dr.dr_unverify', report_id=row.id) }}"
+                   data-verify-url="{{ url_for('verify_remedio_dr.verify_dr_verify', report_id=row.id) }}"
+                   data-unverify-url="{{ url_for('verify_remedio_dr.verify_dr_unverify', report_id=row.id) }}"
                    {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}checked{% endif %}>
           </div>
           <span id="verify-status" class="small mb-1 {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
@@ -97,7 +97,7 @@
                   <div class="mb-2" style="width:100%; height:240px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
                     <img src="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
                   </div>
-                  <form method="post" action="{{ url_for('dr.dr_mark_eye', report_id=row.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
+                  <form method="post" action="{{ url_for('verify_remedio_dr.verify_dr_mark_eye', report_id=row.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
                     {{ csrf_field() }}
                     <input type="hidden" name="ef_id" value="{{ ef.id }}">
                     {% set sel = (ef.eye_side or '') %}

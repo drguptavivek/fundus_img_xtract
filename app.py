@@ -230,6 +230,9 @@ def create_app():
     from dr import bp as dr_bp
     app.register_blueprint(dr_bp)
 
+    from verify_remedio_dr import bp as verify_remedio_dr_bp
+    app.register_blueprint(verify_remedio_dr_bp)
+
     from media import bp as media_bp
     app.register_blueprint(media_bp)
 

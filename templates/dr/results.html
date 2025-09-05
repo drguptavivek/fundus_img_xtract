@@ -1,91 +1,96 @@
 {% extends "base.html" %}
+{% block title %}DR Results KPIs{% endblock %}
 
-{% block title %}DR Results{% endblock %}
 
 {% block content %}
-<div class="container my-4">
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Diabetic Retinopathy Results</h2>
-    <a href="{{ url_for('dr.dr_list') }}" class="btn btn-primary">View Reports</a>
+<div class="py-3 theme-contrast">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">DR Results</h3>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('screenings.list_screenings') }}">&larr; Back to Screenings</a>
   </div>
 
-  <div class="row mb-4">
-    <div class="col-md-3">
-      <div class="card text-white bg-primary mb-3">
-        <div class="card-header">Total Reports</div>
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--primary shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title">{{ total_reports }}</h5>
+          <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">📈</span> Total DR Reports</div>
+          <div class="display-6">{{ total_reports }}</div>
+          <div class="text-muted small">Rows in diabetic_retinopathy_reports</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-success mb-3">
-        <div class="card-header">With PDF</div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--success shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title">{{ total_with_pdf }}</h5>
+          <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">🧩</span> Reports With Split PDF</div>
+          <div class="display-6">{{ total_with_pdf }}</div>
+          <div class="text-muted small">report_file_name not null</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-info mb-3">
-        <div class="card-header">PDFs on Disk</div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--info shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title">{{ present_on_disk }}</h5>
+          <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">💾</span> PDFs Present On Disk</div>
+          <div class="display-6">{{ present_on_disk }}</div>
+          <div class="text-muted small">Files found in DR PDF dir</div>
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card text-white bg-warning mb-3">
-        <div class="card-header">Unique Patients</div>
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--warning shadow-sm h-100">
         <div class="card-body">
-          <h5 class="card-title">{{ unique_patients }}</h5>
+          <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">🧑‍⚕️</span> Unique Patients Tested</div>
+          <div class="display-6">{{ unique_patients }}</div>
+          <div class="text-muted small">Distinct Patient IDs with reports</div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="row">
-    <div class="col-md-6">
-      <div class="card mb-4">
-        <div class="card-header">Result Distribution</div>
-        <div class="card-body">
-          <table class="table table-striped">
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>Result</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
             <thead>
               <tr>
-                <th>Result</th>
-                <th>Count</th>
+                <th>Value</th>
+                <th class="text-end">Count</th>
               </tr>
             </thead>
             <tbody>
-              {% for result, count in result_counts %}
+            {% for val, cnt in result_counts %}
               <tr>
-                <td>{{ result or "(empty)" }}</td>
-                <td>{{ count }}</td>
+                <td>{{ val or '—' }}</td>
+                <td class="text-end">{{ cnt }}</td>
               </tr>
-              {% endfor %}
+            {% endfor %}
             </tbody>
           </table>
         </div>
       </div>
     </div>
-    <div class="col-md-6">
-      <div class="card mb-4">
-        <div class="card-header">Qualitative Result Distribution</div>
-        <div class="card-body">
-          <table class="table table-striped">
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header"><strong>Qualitative Result</strong></div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0">
             <thead>
               <tr>
-                <th>Qualitative Result</th>
-                <th>Count</th>
+                <th>Value</th>
+                <th class="text-end">Count</th>
               </tr>
             </thead>
             <tbody>
-              {% for result, count in qualitative_counts %}
+            {% for val, cnt in qualitative_counts %}
               <tr>
-                <td>{{ result or "(empty)" }}</td>
-                <td>{{ count }}</td>
+                <td>{{ val or '—' }}</td>
+                <td class="text-end">{{ cnt }}</td>
               </tr>
-              {% endfor %}
+            {% endfor %}
             </tbody>
           </table>
         </div>

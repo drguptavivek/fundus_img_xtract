@@ -129,12 +129,12 @@
           
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('contributor')) %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['glaucoma', 'preprocess'] else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['glaucoma', 'dr', 'preprocess'] else '' }}" href="#"
               id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Pre-processing
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="glaucomaMenu">
-              <li  class="dropdown-item " style="font-weight: 800;">Glacuoma PDFs</li>
+              <li  class="dropdown-item " style="font-weight: 800;">Glaucoma PDFs</li>
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -155,12 +155,12 @@
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_list' else '' }}"
-                  href="{{ url_for('glaucoma.glaucoma_list') }}">Verify</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'dr.dr_list' else '' }}"
+                  href="{{ url_for('dr.dr_list') }}">Verify</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_results' else '' }}"
-                  href="{{ url_for('glaucoma.glaucoma_results') }}">Dashboard</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'dr.dr_results' else '' }}"
+                  href="{{ url_for('dr.dr_results') }}">Dashboard</a>
               </li>
               <li>
                 <hr class="dropdown-divider">

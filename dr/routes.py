@@ -120,6 +120,18 @@ def dr_list():
         )
         most_recent_unverified = unv_rows[0][0] if unv_rows else None
 
+        # Find most recent date that has at least one verified encounter
+        ver_rows = (
+            db.query(PatientEncounters.capture_date_dt)
+              .join(DiabeticRetinopathyReport, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.capture_date_dt.isnot(None))
+              .filter(PatientEncounters.dr_verified_status == 'verified')
+              .distinct()
+              .order_by(PatientEncounters.capture_date_dt.desc())
+              .all()
+        )
+        most_recent_verified = ver_rows[0][0] if ver_rows else None
+
         total_pages = max(1, len(dates))
         # Determine focused date by selected_date or page index
         focus_idx = 0
@@ -146,6 +158,12 @@ def dr_list():
             ru_idx = dates.index(most_recent_unverified) + 1
             recent_unverified_url = url_for('dr.dr_list', page=ru_idx, ver='no')
 
+        # Recent verified page index
+        recent_verified_url = None
+        if most_recent_verified and most_recent_verified in dates:
+            rv_idx = dates.index(most_recent_verified) + 1
+            recent_verified_url = url_for('dr.dr_list', page=rv_idx, ver='yes')
+
         # Pull all reports for the focused date
         if focus_date is not None:
             items = (
@@ -160,7 +178,7 @@ def dr_list():
             if ver == "yes":
                 items = [dr for dr in items if dr.patient_encounter and dr.patient_encounter.dr_verified_status == 'verified']
             elif ver == "no":
-                items = [dr for dr in items if not dr.patient_encounter or dr.patient_encounter.dr_verified_status != 'verified']
+                items = [dr for dr in items if dr.patient_encounter and (dr.patient_encounter.dr_verified_status is None or dr.patient_encounter.dr_verified_status != 'verified')]
         else:
             items = []
 
@@ -202,6 +220,7 @@ def dr_list():
         selected_date=selected_date,
         ver=ver,
         recent_unverified_url=recent_unverified_url,
+        recent_verified_url=recent_verified_url,
         my_recent_verified=my_recent_verified,
     )
 

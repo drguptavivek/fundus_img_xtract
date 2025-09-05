@@ -227,6 +227,9 @@ def create_app():
     from glaucoma import bp as glaucoma_bp
     app.register_blueprint(glaucoma_bp)
 
+    from dr import bp as dr_bp
+    app.register_blueprint(dr_bp)
+
     from media import bp as media_bp
     app.register_blueprint(media_bp)
 

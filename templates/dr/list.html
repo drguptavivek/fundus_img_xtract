@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}DR Reports{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Diabetic Retinopathy Reports</h2>
+    <a href="{{ url_for('dr.dr_results') }}" class="btn btn-primary">View Results</a>
+  </div>
+
+  {% if recent_unverified_url %}
+  <div class="mb-3">
+    <a href="{{ recent_unverified_url }}" class="btn btn-warning">Recent Unverified Encounters</a>
+  </div>
+  {% endif %}
+
+  {% if my_recent_verified %}
+  <div class="card mb-4">
+    <div class="card-header">My Recently Verified Encounters</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-striped mb-0">
+          <thead>
+            <tr>
+              <th>Patient ID</th>
+              <th>Patient Name</th>
+              <th>Capture Date</th>
+              <th>Result</th>
+              <th>Verified At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dr in my_recent_verified %}
+            <tr>
+              <td>{{ dr.patient_encounter.patient_id }}</td>
+              <td>{{ dr.patient_encounter.name }}</td>
+              <td>{{ dr.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') if dr.patient_encounter.capture_date_dt else dr.patient_encounter.capture_date }}</td>
+              <td>{{ dr.result }}</td>
+              <td>{{ dr.patient_encounter.dr_verified_at.strftime('%Y-%m-%d %H:%M') if dr.patient_encounter.dr_verified_at else '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>DR Reports by Date</span>
+      <div>
+        <a href="{{ url_for('dr.dr_list', ver='all', date=selected_date) }}" class="btn btn-sm btn-outline-primary {{ 'active' if ver == 'all' }}">All</a>
+        <a href="{{ url_for('dr.dr_list', ver='yes', date=selected_date) }}" class="btn btn-sm btn-outline-success {{ 'active' if ver == 'yes' }}">Verified</a>
+        <a href="{{ url_for('dr.dr_list', ver='no', date=selected_date) }}" class="btn btn-sm btn-outline-warning {{ 'active' if ver == 'no' }}">Unverified</a>
+      </div>
+    </div>
+    <div class="card-body p-0">
+      {% if items %}
+      <div class="table-responsive">
+        <table class="table table-striped mb-0">
+          <thead>
+            <tr>
+              <th>Patient ID</th>
+              <th>Patient Name</th>
+              <th>Capture Date</th>
+              <th>Result</th>
+              <th>Has PDF</th>
+              <th>Verified</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dr in items %}
+            <tr>
+              <td>{{ dr.patient_encounter.patient_id }}</td>
+              <td>{{ dr.patient_encounter.name }}</td>
+              <td>{{ dr.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') if dr.patient_encounter.capture_date_dt else dr.patient_encounter.capture_date }}</td>
+              <td>{{ dr.result }}</td>
+              <td>
+                {% if dr.report_file_name %}
+                <span class="badge bg-success">Yes</span>
+                {% else %}
+                <span class="badge bg-secondary">No</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if dr.patient_encounter.dr_verified_status == 'verified' %}
+                <span class="badge bg-success">Verified</span>
+                {% else %}
+                <span class="badge bg-warning">Unverified</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ url_for('dr.dr_detail', report_id=dr.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                <a href="{{ url_for('dr.dr_edit', report_id=dr.id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-4 text-center text-muted">
+        No DR reports found.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if total_pages > 1 %}
+  <nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+      {% if has_prev %}
+      <li class="page-item">
+        <a class="page-link" href="{{ prev_url }}" aria-label="Previous">
+          <span aria-hidden="true">&laquo;</span>
+        </a>
+      </li>
+      {% endif %}
+      
+      {% for p in range(1, total_pages + 1) %}
+      <li class="page-item {{ 'active' if p == page }}">
+        <a class="page-link" href="{{ url_for('dr.dr_list', page=p, ver=ver) }}">{{ p }}</a>
+      </li>
+      {% endfor %}
+      
+      {% if has_next %}
+      <li class="page-item">
+        <a class="page-link" href="{{ next_url }}" aria-label="Next">
+          <span aria-hidden="true">&raquo;</span>
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

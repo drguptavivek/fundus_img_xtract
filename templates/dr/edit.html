@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Edit DR Report{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Edit DR Report</h2>
+    <div>
+      {% if prev_url %}
+      <a href="{{ prev_url }}" class="btn btn-outline-primary">Previous</a>
+      {% endif %}
+      {% if next_url %}
+      <a href="{{ next_url }}" class="btn btn-outline-primary">Next</a>
+      {% endif %}
+      {% if back_url %}
+      <a href="{{ back_url }}" class="btn btn-secondary">Back to List</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card mb-4">
+        <div class="card-header">DR Report Details</div>
+        <div class="card-body">
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div class="mb-3">
+              <label for="patient_id" class="form-label">Patient ID</label>
+              <input type="text" class="form-control" id="patient_id" name="patient_id" value="{{ row.patient_encounter.patient_id if row.patient_encounter else '' }}">
+            </div>
+            <div class="mb-3">
+              <label for="capture_date_dt" class="form-label">Capture Date</label>
+              <input type="date" class="form-control" id="capture_date_dt" name="capture_date_dt" value="{{ row.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') if row.patient_encounter and row.patient_encounter.capture_date_dt else '' }}">
+            </div>
+            <div class="mb-3">
+              <label for="result" class="form-label">Result</label>
+              <input type="text" class="form-control" id="result" name="result" value="{{ row.result or '' }}">
+            </div>
+            <div class="mb-3">
+              <label for="qualitative_result" class="form-label">Qualitative Result</label>
+              <input type="text" class="form-control" id="qualitative_result" name="qualitative_result" value="{{ row.qualitative_result or '' }}">
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+            {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}
+            <button type="submit" formaction="{{ url_for('dr.dr_unverify', report_id=row.id) }}" class="btn btn-warning">Unverify</button>
+            {% else %}
+            <button type="submit" formaction="{{ url_for('dr.dr_verify', report_id=row.id) }}" class="btn btn-success">Verify</button>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card mb-4">
+        <div class="card-header">Images</div>
+        <div class="card-body">
+          {% if row.patient_encounter and row.patient_encounter.encounter_files %}
+          <div class="row">
+            {% for ef in row.patient_encounter.encounter_files %}
+            {% if ef.file_type and ef.file_type.startswith('image/') %}
+            <div class="col-6 mb-3">
+              <div class="card">
+                <img src="{{ url_for('media.serve_image', uuid=ef.uuid) }}" class="card-img-top" alt="Image">
+                <div class="card-body p-2">
+                  <form method="POST" action="{{ url_for('dr.dr_mark_eye', report_id=row.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                    <input type="hidden" name="ef_id" value="{{ ef.id }}" />
+                    <select name="side" class="form-select form-select-sm" onchange="this.form.submit()">
+                      <option value="">Select Eye</option>
+                      <option value="right" {{ 'selected' if ef.eye_side == 'right' }}>Right</option>
+                      <option value="left" {{ 'selected' if ef.eye_side == 'left' }}>Left</option>
+                      <option value="cannot_tell" {{ 'selected' if ef.eye_side == 'cannot_tell' }}>Cannot Tell</option>
+                    </select>
+                  </form>
+                  <small class="text-muted">{{ ef.filename }}</small>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted">No images found for this encounter.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

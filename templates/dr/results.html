@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}DR Results{% endblock %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Diabetic Retinopathy Results</h2>
+    <a href="{{ url_for('dr.dr_list') }}" class="btn btn-primary">View Reports</a>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-3">
+      <div class="card text-white bg-primary mb-3">
+        <div class="card-header">Total Reports</div>
+        <div class="card-body">
+          <h5 class="card-title">{{ total_reports }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-success mb-3">
+        <div class="card-header">With PDF</div>
+        <div class="card-body">
+          <h5 class="card-title">{{ total_with_pdf }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-info mb-3">
+        <div class="card-header">PDFs on Disk</div>
+        <div class="card-body">
+          <h5 class="card-title">{{ present_on_disk }}</h5>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-white bg-warning mb-3">
+        <div class="card-header">Unique Patients</div>
+        <div class="card-body">
+          <h5 class="card-title">{{ unique_patients }}</h5>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">Result Distribution</div>
+        <div class="card-body">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Result</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for result, count in result_counts %}
+              <tr>
+                <td>{{ result or "(empty)" }}</td>
+                <td>{{ count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">Qualitative Result Distribution</div>
+        <div class="card-body">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Qualitative Result</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for result, count in qualitative_counts %}
+              <tr>
+                <td>{{ result or "(empty)" }}</td>
+                <td>{{ count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

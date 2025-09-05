@@ -33,11 +33,42 @@ def remedio_glaucoma_image(uuid: str):
               .order_by(ImageGrading.updated_at.desc(), ImageGrading.id.desc())
               .first()
         )
+        
+        # Determine user's role for grading (resident or consultant)
+        user_role = None
+        if current_user.has_role('ophthalmologist'):
+            user_role = 'consultant'
+        elif current_user.has_role('optometrist'):
+            user_role = 'resident'
+        elif current_user.has_role('admin'):
+            user_role = 'admin'
+            
+        # Fetch existing gradings for this image to determine grading status
+        existing_gradings = (
+            db.query(ImageGrading)
+              .filter(ImageGrading.encounter_file_id == ef.id,
+                      ImageGrading.graded_for == 'glaucoma')
+              .all()
+        )
+        
+        # Determine grading status
+        resident_grading = any(g.grader_role == 'resident' for g in existing_gradings)
+        consultant_grading = any(g.grader_role == 'consultant' for g in existing_gradings)
+        
+        if resident_grading and consultant_grading:
+            grading_status = "Both Graded"
+        elif resident_grading:
+            grading_status = "Resident Only"
+        elif consultant_grading:
+            grading_status = "Consultant Only"
+        else:
+            grading_status = "Not Graded"
     finally:
         db.close()
 
     impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"]
-    return render_template("grading/remedio_glaucoma_image.html", image=ef, encounter=enc, impressions=impressions, my_grading=my_grading)
+    return render_template("grading/remedio_glaucoma_image.html", image=ef, encounter=enc, impressions=impressions, 
+                          my_grading=my_grading, user_role=user_role, grading_status=grading_status)
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
@@ -63,12 +94,13 @@ def remedio_glaucoma_grade():
     finally:
         db.close()
 
+    # Determine user's role for grading (resident or consultant)
     role = None
     try:
         if current_user.has_role('ophthalmologist'):
-            role = 'ophthalmologist'
+            role = 'consultant'
         elif current_user.has_role('optometrist'):
-            role = 'optometrist'
+            role = 'resident'
         elif current_user.has_role('admin'):
             role = 'admin'
     except Exception:
@@ -112,24 +144,81 @@ def remedio_glaucoma_grade():
         action = (request.form.get('action') or '').strip().lower()
         if action == 'save_next':
             grader_id = getattr(current_user, 'id', None)
-            cand_q = (
-                db.query(EncounterFile)
-                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-                  .outerjoin(
-                      ImageGrading,
-                      and_(
-                          ImageGrading.encounter_file_id == EncounterFile.id,
-                          ImageGrading.graded_for == 'glaucoma',
-                          ImageGrading.grader_user_id == grader_id,
-                      ),
-                  )
-                  .filter(PatientEncounters.capture_date_dt.isnot(None))
-                  .filter(EncounterFile.file_type == 'image')
-                  .filter(ImageGrading.id.is_(None))
-                  .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
-                  .limit(50)
-            )
-            candidates = cand_q.all()
+            
+            # If user is a resident or consultant, prioritize images that have been graded by the other role
+            if role in ['resident', 'consultant']:
+                other_role = 'consultant' if role == 'resident' else 'resident'
+                
+                # Subquery to find images graded by the other role
+                other_role_graded = (
+                    db.query(ImageGrading.encounter_file_id)
+                    .filter(ImageGrading.graded_for == 'glaucoma',
+                            ImageGrading.grader_role == other_role)
+                    .subquery()
+                )
+                
+                # Query to find images that have been graded by the other role but not by the current user's role
+                cand_q = (
+                    db.query(EncounterFile)
+                      .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                      .join(other_role_graded, EncounterFile.id == other_role_graded.c.encounter_file_id)
+                      .outerjoin(
+                          ImageGrading,
+                          and_(
+                              ImageGrading.encounter_file_id == EncounterFile.id,
+                              ImageGrading.graded_for == 'glaucoma',
+                              ImageGrading.grader_user_id == grader_id,
+                              ImageGrading.grader_role == role,
+                          ),
+                      )
+                      .filter(PatientEncounters.capture_date_dt.isnot(None))
+                      .filter(EncounterFile.file_type == 'image')
+                      .filter(ImageGrading.id.is_(None))
+                      .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
+                      .limit(50)
+                )
+                candidates = cand_q.all()
+                
+                # If no candidates found, look for any ungraded images
+                if not candidates:
+                    cand_q = (
+                        db.query(EncounterFile)
+                          .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                          .outerjoin(
+                              ImageGrading,
+                              and_(
+                                  ImageGrading.encounter_file_id == EncounterFile.id,
+                                  ImageGrading.graded_for == 'glaucoma',
+                              ),
+                          )
+                          .filter(PatientEncounters.capture_date_dt.isnot(None))
+                          .filter(EncounterFile.file_type == 'image')
+                          .filter(ImageGrading.id.is_(None))
+                          .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
+                          .limit(50)
+                    )
+                    candidates = cand_q.all()
+            else:
+                # For admin users, use the existing logic
+                cand_q = (
+                    db.query(EncounterFile)
+                      .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                      .outerjoin(
+                          ImageGrading,
+                          and_(
+                              ImageGrading.encounter_file_id == EncounterFile.id,
+                              ImageGrading.graded_for == 'glaucoma',
+                              ImageGrading.grader_user_id == grader_id,
+                          ),
+                      )
+                      .filter(PatientEncounters.capture_date_dt.isnot(None))
+                      .filter(EncounterFile.file_type == 'image')
+                      .filter(ImageGrading.id.is_(None))
+                      .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
+                      .limit(50)
+                )
+                candidates = cand_q.all()
+                
             choice = random.choice(candidates) if candidates else None
             if choice and choice.uuid:
                 return redirect(url_for('grading.remedio_glaucoma_image', uuid=choice.uuid))

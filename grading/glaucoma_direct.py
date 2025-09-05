@@ -7,7 +7,7 @@ from auth.roles import roles_required
 from models import Session, DirectImageUpload, ImageGrading, Disease, DirectImageVerify
 
 # grading/direct/<uuid>", view_func=direct_image, methods=["GET"])
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "optometrist")
 def direct_image(uuid: str):
     db = Session()
     try:
@@ -40,14 +40,45 @@ def direct_image(uuid: str):
               .order_by(ImageGrading.updated_at.desc(), ImageGrading.id.desc())
               .first()
         )
+        
+        # Determine user's role for grading (resident or consultant)
+        user_role = None
+        if current_user.has_role('ophthalmologist'):
+            user_role = 'consultant'
+        elif current_user.has_role('optometrist'):
+            user_role = 'resident'
+        elif current_user.has_role('admin'):
+            user_role = 'admin'
+            
+        # Fetch existing gradings for this image to determine grading status
+        existing_gradings = (
+            db.query(ImageGrading)
+              .filter(ImageGrading.direct_image_upload_id == diu.id,
+                      ImageGrading.graded_for == 'glaucoma')
+              .all()
+        )
+        
+        # Determine grading status
+        resident_grading = any(g.grader_role == 'resident' for g in existing_gradings)
+        consultant_grading = any(g.grader_role == 'consultant' for g in existing_gradings)
+        
+        if resident_grading and consultant_grading:
+            grading_status = "Both Graded"
+        elif resident_grading:
+            grading_status = "Resident Only"
+        elif consultant_grading:
+            grading_status = "Consultant Only"
+        else:
+            grading_status = "Not Graded"
     finally:
         db.close()
 
     impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"]
-    return render_template("grading/direct_image_glaucoma.html", image=diu, impressions=impressions, my_grading=my_grading)
+    return render_template("grading/direct_image_glaucoma.html", image=diu, impressions=impressions, 
+                          my_grading=my_grading, user_role=user_role, grading_status=grading_status)
 
 # bp.add_url_rule("/direct/glaucoma/grade", view_func=direct_glaucoma_grade, methods=["POST"])
-@roles_required("admin", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "optometrist")
 def direct_glaucoma_grade():
     uuid = (request.form.get("uuid") or "").strip()
     impression = (request.form.get("impression") or "").strip()
@@ -73,12 +104,13 @@ def direct_glaucoma_grade():
     finally:
         db.close()
 
+    # Determine user's role for grading (resident or consultant)
     role = None
     try:
         if current_user.has_role('ophthalmologist'):
-            role = 'ophthalmologist'
+            role = 'consultant'
         elif current_user.has_role('optometrist'):
-            role = 'optometrist'
+            role = 'resident'
         elif current_user.has_role('admin'):
             role = 'admin'
     except Exception:
@@ -125,25 +157,81 @@ def direct_glaucoma_grade():
             grader_id = getattr(current_user, 'id', None)
             glaucoma_disease = db.query(Disease).filter(Disease.name == 'Glaucoma').first()
             if glaucoma_disease:
-                # Outer join to filter where no record exists for this user & 'glaucoma'
-                cand_direct_q = (
-                    db.query(DirectImageUpload)
-                    .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
-                    .outerjoin(
-                        ImageGrading,
-                        and_(
-                            ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                            ImageGrading.graded_for == 'glaucoma',
-                            ImageGrading.grader_user_id == grader_id,
-                        ),
+                # First, try to find images that haven't been graded by the current user's role
+                if role in ['resident', 'consultant']:
+                    # Get images that have been graded by the other role but not by the current user's role
+                    other_role = 'consultant' if role == 'resident' else 'resident'
+                    
+                    # Subquery to find images graded by the other role
+                    other_role_graded = (
+                        db.query(ImageGrading.direct_image_upload_id)
+                        .filter(ImageGrading.graded_for == 'glaucoma',
+                                ImageGrading.grader_role == other_role)
+                        .subquery()
                     )
-                    .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
-                    .filter(DirectImageVerify.verified_status == 'verified')
-                    .filter(ImageGrading.id.is_(None))
-                    .order_by(DirectImageUpload.created_at.desc())
-                    .limit(50)
-                )
-                candidates_direct = cand_direct_q.all()
+                    
+                    # Query to find images that have been graded by the other role but not by the current user's role
+                    cand_direct_q = (
+                        db.query(DirectImageUpload)
+                        .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                        .join(other_role_graded, DirectImageUpload.id == other_role_graded.c.direct_image_upload_id)
+                        .outerjoin(
+                            ImageGrading,
+                            and_(
+                                ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                                ImageGrading.graded_for == 'glaucoma',
+                                ImageGrading.grader_user_id == grader_id,
+                                ImageGrading.grader_role == role,
+                            ),
+                        )
+                        .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                        .filter(DirectImageVerify.verified_status == 'verified')
+                        .filter(ImageGrading.id.is_(None))
+                        .order_by(DirectImageUpload.created_at.desc())
+                        .limit(50)
+                    )
+                    candidates_direct = cand_direct_q.all()
+                    
+                    # If no candidates found, look for any ungraded images
+                    if not candidates_direct:
+                        cand_direct_q = (
+                            db.query(DirectImageUpload)
+                            .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                            .outerjoin(
+                                ImageGrading,
+                                and_(
+                                    ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                                    ImageGrading.graded_for == 'glaucoma',
+                                ),
+                            )
+                            .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                            .filter(DirectImageVerify.verified_status == 'verified')
+                            .filter(ImageGrading.id.is_(None))
+                            .order_by(DirectImageUpload.created_at.desc())
+                            .limit(50)
+                        )
+                        candidates_direct = cand_direct_q.all()
+                else:
+                    # For admin users, use the existing logic
+                    cand_direct_q = (
+                        db.query(DirectImageUpload)
+                        .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
+                        .outerjoin(
+                            ImageGrading,
+                            and_(
+                                ImageGrading.direct_image_upload_id == DirectImageUpload.id,
+                                ImageGrading.graded_for == 'glaucoma',
+                                ImageGrading.grader_user_id == grader_id,
+                            ),
+                        )
+                        .filter(DirectImageUpload.disease_id == glaucoma_disease.id)
+                        .filter(DirectImageVerify.verified_status == 'verified')
+                        .filter(ImageGrading.id.is_(None))
+                        .order_by(DirectImageUpload.created_at.desc())
+                        .limit(50)
+                    )
+                    candidates_direct = cand_direct_q.all()
+                
                 choice_direct = random.choice(candidates_direct) if candidates_direct else None
                 if choice_direct and choice_direct.uuid:
                     return redirect(url_for('grading.direct_image', uuid=choice_direct.uuid))

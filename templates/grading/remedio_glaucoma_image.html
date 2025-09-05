@@ -19,13 +19,23 @@
     <div class="card shadow-sm">
       <div class="card-body">
         <div class="mb-1 small text-muted">Image UUID: <code>{{ image.uuid }}</code></div>
-        <div class="mb-3 small text-muted">Date: <strong>
+        <div class="mb-1 small text-muted">Date: <strong>
           {% if encounter and encounter.capture_date_dt %}
             {{ encounter.capture_date_dt.strftime('%Y-%m-%d') }}
           {% elif encounter and encounter.capture_date %}
             {{ encounter.capture_date }}
           {% else %}-{% endif %}
         </strong></div>
+        {% if user_role %}
+        <div class="mb-1 small text-muted">Your Role: <strong class="text-capitalize">{{ user_role }}</strong></div>
+        {% endif %}
+        {% if grading_status %}
+        <div class="mb-3 small text-muted">Grading Status: 
+          <strong class="{% if grading_status == 'Both Graded' %}text-success{% elif grading_status == 'Not Graded' %}text-danger{% else %}text-warning{% endif %}">
+            {{ grading_status }}
+          </strong>
+        </div>
+        {% endif %}
 
         <form method="post" action="{{ url_for('grading.remedio_glaucoma_grade') }}">
           {{ csrf_field() }}

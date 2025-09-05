@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Dual Grading{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Dual Glaucoma Grading System</h3>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'dual_grading.index' %}active{% endif %}" 
+       href="{{ url_for('dual_grading.index') }}">Dashboard</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'dual_grading.paired_gradings' %}active{% endif %}" 
+       href="{{ url_for('dual_grading.paired_gradings') }}">Paired Gradings</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'dual_grading.discrepancy_analysis' %}active{% endif %}" 
+       href="{{ url_for('dual_grading.discrepancy_analysis') }}">Discrepancy Analysis</a>
+  </li>
+</ul>
+
+{% block dual_grading_content %}{% endblock %}
+{% endblock %}

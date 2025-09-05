@@ -1,0 +1,100 @@
+{% extends "dual_grading/base.html" %}
+{% block title %}Discrepancy Analysis{% endblock %}
+
+{% block dual_grading_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Discrepancy Analysis</h4>
+  <span class="small text-muted">
+    {{ total_discrepancies or 0 }} discrepancies found 
+    ({{ "%.1f"|format(agreement_percentage) }}% agreement)
+  </span>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <h5>Inter-rater Reliability</h5>
+    <p>
+      The overall agreement between residents and consultants is 
+      <strong>{{ "%.1f"|format(agreement_percentage) }}%</strong>. 
+      Discrepancies are highlighted below for review and quality improvement.
+    </p>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <table class="table table-sm table-striped table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width: 150px;">Date</th>
+          <th style="width: 200px;">Patient ID</th>
+          <th style="width: 200px;">Image UUID</th>
+          <th>Resident Impression</th>
+          <th>Consultant Impression</th>
+          <th style="width: 120px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% if discrepancies %}
+        {% for encounter_file, patient_encounter, resident_impression, consultant_impression, resident_grading_id, consultant_grading_id in discrepancies %}
+        <tr class="table-warning">
+          <td class="text-nowrap">
+            {% if patient_encounter.capture_date_dt %}
+              {{ patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+            {% else %}
+              {{ patient_encounter.capture_date or '-' }}
+            {% endif %}
+          </td>
+          <td class="text-nowrap">{{ patient_encounter.patient_id or '-' }}</td>
+          <td class="text-break"><code>{{ encounter_file.uuid or '-' }}</code></td>
+          <td>
+            {% if resident_impression == 'Normal' %}
+              <span class="badge rounded-pill badge-soft-success">{{ resident_impression }}</span>
+            {% elif resident_impression == 'Glaucoma Suspect' %}
+              <span class="badge rounded-pill badge-soft-warning">{{ resident_impression }}</span>
+            {% elif resident_impression == 'Glaucoma' %}
+              <span class="badge rounded-pill badge-soft-danger">{{ resident_impression }}</span>
+            {% elif resident_impression == 'Other Retinal' %}
+              <span class="badge rounded-pill badge-soft-info">{{ resident_impression }}</span>
+            {% elif resident_impression == 'Not gradable' %}
+              <span class="badge rounded-pill badge-soft-secondary">{{ resident_impression }}</span>
+            {% else %}
+              <span class="badge rounded-pill badge-soft-secondary">{{ resident_impression or '-' }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if consultant_impression == 'Normal' %}
+              <span class="badge rounded-pill badge-soft-success">{{ consultant_impression }}</span>
+            {% elif consultant_impression == 'Glaucoma Suspect' %}
+              <span class="badge rounded-pill badge-soft-warning">{{ consultant_impression }}</span>
+            {% elif consultant_impression == 'Glaucoma' %}
+              <span class="badge rounded-pill badge-soft-danger">{{ consultant_impression }}</span>
+            {% elif consultant_impression == 'Other Retinal' %}
+              <span class="badge rounded-pill badge-soft-info">{{ consultant_impression }}</span>
+            {% elif consultant_impression == 'Not gradable' %}
+              <span class="badge rounded-pill badge-soft-secondary">{{ consultant_impression }}</span>
+            {% else %}
+              <span class="badge rounded-pill badge-soft-secondary">{{ consultant_impression or '-' }}</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" 
+               href="{{ url_for('grading.remedio_glaucoma_image', uuid=encounter_file.uuid) }}">View</a>
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="6" class="text-center text-muted p-3">No discrepancies found.</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <div class="small text-muted">Page {{ page }} of {{ total_pages }}</div>
+    <div class="btn-group btn-group-sm" role="group">
+      <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">Prev</a>
+      <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

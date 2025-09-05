@@ -1,6 +1,6 @@
 # `app.py` Documentation
 
-This document provides an overview of the `app.py` file, which serves as the main entry point and configuration hub for the Flask web application.
+This document provides a comprehensive overview of the `app.py` file, which serves as the main entry point and configuration hub for the Flask web application.
 
 ## Core Function: `create_app()`
 
@@ -10,64 +10,72 @@ The primary component of `app.py` is the `create_app()` function, which follows 
 
 1.  **Application Initialization and Configuration:**
     *   **Environment Loading:** Loads application settings from a `.env` file using `python-dotenv`. This keeps sensitive data and environment-specific variables out of the source code.
-    *   **Flask App Instantiation:** Creates the core `Flask` object.
-    *   **Configuration Loading:** Sets up various application configurations, including:
+    *   **Flask App Instantiation:** Creates the core `Flask` object, explicitly setting the `static_folder` for clarity.
+    *   **Configuration Loading:** Sets up various application configurations by reading from environment variables with sensible defaults. This includes:
         *   `SECRET_KEY`: For signing session cookies and other security-related needs.
-        *   `MAX_CONTENT_LENGTH`: Limits the size of incoming request data.
-        *   Session Management: Configures session cookie security (e.g., `HTTPOnly`, `Samesite`) and an automatic inactivity timeout.
+        *   File Upload Limits: `MAX_CONTENT_LENGTH`, `PER_FILE_MAX_BYTES`, `MAX_FILES_PER_UPLOAD`.
+        *   Pagination: `UPLOADED_RESULTS_PAGE_SIZE`, `SCREENINGS_PAGE_SIZE`.
+        *   Performance: `WORKERS` for the thread pool.
+        *   Session Management: Configures session cookie security (e.g., `HTTPOnly`, `Samesite`, `Secure`) and an automatic inactivity timeout with a sliding window.
         *   `ThreadPoolExecutor`: A pool of threads is initialized and attached to the app config, allowing background tasks to be executed without blocking web requests.
 
 2.  **CSRF Protection:**
-    *   Initializes `Flask-WTF`'s `CSRFProtect` extension to guard against Cross-Site Request Forgery attacks on all POST requests.
+    *   Initializes `Flask-WTF`'s `CSRFProtect` extension to guard against Cross-Site Request Forgery attacks on all POST requests. The CSRF token is set to expire after one hour.
 
 3.  **Environment and Database Setup:**
     *   Calls `setup_environment()` from `main.py` to ensure that all necessary directories (e.g., for uploads, logs) exist.
-    *   Uses SQLAlchemy to create all database tables defined in `models.py` via `Base.metadata.create_all(engine)`.
-    *   **Role-Based Access Control (RBAC):** Seeds the database with a predefined set of user roles (e.g., 'admin', 'user') by calling `ensure_roles()`. This is an idempotent operation, meaning it can be run safely multiple times.
+    *   Uses SQLAlchemy to create all database tables defined in `models.py` via `Base.metadata.create_all(engine)`. This is idempotent and safe to run on every startup.
+    *   **Role-Based Access Control (RBAC):** Seeds the database with a predefined set of user roles (e.g., 'admin', 'user') by calling `auth.roles.ensure_roles()`. This is also an idempotent operation.
 
 4.  **Logging:**
-    *   Configures robust logging for HTTP requests.
+    *   Configures robust, rotating file-based logging for HTTP requests.
     *   Two separate log files are created in the `logs/` directory:
         *   `http_success.log`: Records all successful requests (status codes `< 400`).
         *   `http_error.log`: Records all client and server errors (status codes `>= 400`).
-    *   Uses `RotatingFileHandler` to prevent log files from growing indefinitely.
+    *   Uses `RotatingFileHandler` to prevent log files from growing indefinitely, with log rotation disabled on Windows by default unless explicitly enabled.
     *   For detailed information about the logging system, including how to add logging to new routes, see [Logging.md](Logging.md).
 
-5.  **Request Hooks:**
+5.  **Request Hooks (`before_request` / `after_request`):**
     *   `@app.before_request`:
-        *   Starts a timer to measure request processing duration.
-        *   Enforces an inactivity timeout by checking the time since the user's last activity and logging them out if the limit is exceeded.
+        *   `start_timer()`: Starts a timer on every request to measure processing duration.
+        *   `_enforce_inactivity_timeout()`: Checks the time since the user's last activity and logs them out if the configured limit is exceeded, enhancing security.
     *   `@app.after_request`:
-        *   Logs detailed information about every response, including the client IP, request method, URL, status code, user agent, and processing duration.
+        *   `log_response()`: Logs detailed information about every response, including the client IP, request method, URL, status code, user agent, and the total processing duration.
 
 6.  **Template Context Processor:**
     *   `@app.context_processor`:
         *   Injects a helper function `current_user_has(*roles)` into all Jinja2 templates. This allows for easy and clean implementation of role-based access control directly within the templates (e.g., `{% if current_user_has('admin') %}`).
 
 7.  **Blueprint Registration:**
-    *   The application is organized into modular components using Flask Blueprints. Each blueprint corresponds to a specific feature area (e.g., authentication, file uploads, job status).
+    *   The application is organized into modular components using Flask Blueprints. Each blueprint corresponds to a specific feature area.
     *   `create_app()` imports and registers all blueprints, connecting their routes to the main application. The registered blueprints include:
-        *   `uploads_bp`: Handles ZIP file uploads. For detailed information about ZIP upload routes and access controls, see [zip_uploads.md](zip_uploads.md).
-        *   `direct_uploads_bp`: Handles direct image uploads. For detailed information about direct upload routes and access controls, see [direct_uploads.md](direct_uploads.md).
-        *   `audit_bp`: Provides data quality assurance tools. For detailed information about audit workflows and access controls, see [audit.md](audit.md).
-        *   `jobs_bp`: Manages job status and results.
-        *   `auth_bp`: User authentication (login, logout).
-        *   `admin_bp`: Admin-specific functionalities.
-        *   `grading_bp`: Clinical image grading system. For detailed information about grading routes and access controls, see [Grading.md](Grading.md).
-        *   And others for screenings, reports, etc.
+        *   `uploads_bp`: Handles ZIP file uploads. See [zip_uploads.md](zip_uploads.md).
+        *   `direct_uploads_bp`: Handles direct image uploads. See [direct_uploads.md](direct_uploads.md).
+        *   `jobs_bp`: Manages the status and results of background processing jobs.
+        *   `screenings_bp`: Provides interfaces for browsing patient encounter data.
+        *   `reports_bp`: Serves PDF reports associated with encounters.
+        *   `glaucoma_bp`: Contains workflows for data cleaning and verification.
+        *   `media_bp`: Securely serves image files.
+        *   `account_bp`: Handles user self-service account management.
+        *   `audit_bp`: Provides data quality assurance tools. See [audit.md](audit.md).
+        *   `grading_bp`: The clinical image grading system. See [Grading.md](Grading.md).
+        *   `preprocess_bp`: Handles image preprocessing tasks like anonymization.
+        *   `auth_bp`: Manages user authentication (login, logout).
+        *   `admin_bp`: Contains all administrative functionalities.
 
 8.  **Authentication and Authorization:**
     *   Initializes the `Flask-Login` extension for managing user sessions.
-    *   A global `@app.before_request` hook (`_require_login_everywhere`) is registered to protect all routes by default, redirecting unauthenticated users to the login page. A few pages like the homepage and login page are explicitly excluded from this guard.
+    *   A global `@app.before_request` hook (`_require_login_everywhere`) is registered to protect all routes by default, redirecting unauthenticated users to the login page. A few public pages (homepage, login, static assets) are explicitly excluded from this guard.
 
 9.  **Error Handling:**
-    *   Custom error handlers are defined for common HTTP status codes (`404`, `405`, `500`, etc.) to display user-friendly error pages.
-    *   A specific handler for `CSRFError` is included to provide clear feedback to the user when a security check fails.
-    *   A generic handler for `HTTPException` ensures that any unhandled HTTP error still results in a gracefully rendered error page.
+    *   Custom error handlers are defined for common HTTP status codes (`404`, `405`, `500`, `501`) to display user-friendly error pages.
+    *   A specific handler for `CSRFError` is included to provide clear feedback to the user when a security check fails, redirecting them to the previous page.
+    *   A generic handler for `HTTPException` ensures that any unhandled HTTP error still results in a gracefully rendered error page, preventing generic server error messages from being shown to the user.
 
 10. **Core Routes:**
-    *   **Homepage (`/`):** Renders the main landing page, which displays summary statistics like the total number of processed images and screenings.
-    *   **Health Check (`/healthz`):** An endpoint for monitoring the application's health. It checks the database connection and returns the status of processing jobs.
+    *   **Homepage (`/`):** Renders the main landing page.
+    *   **Favicon (`/favicon.ico`):** Serves the application's favicon.
+    *   **Health Check (`/healthz`):** An endpoint for monitoring the application's health. It checks the database connection and returns the status of processing jobs (total, queued, processing, errors).
     *   **Style Guide (`/style_guide`):** A development route to display and verify the application's visual components and styling.
 
 ## Running the Application

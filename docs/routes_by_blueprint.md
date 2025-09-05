@@ -95,9 +95,7 @@ This document organizes all application routes by their respective blueprints fo
 
 ## DR Dashboard (dr)
 
-| Route Path | URL For | HTTP Methods | Roles Required |
-|------------|---------|--------------|----------------|
-| /dr/results | dr.dr_results | GET | admin |
+The DR blueprint has been removed as its functionality was moved to the verify_remedio_dr blueprint.
 
 ## Glaucoma Verification (verify_remedio_glaucoma)
 

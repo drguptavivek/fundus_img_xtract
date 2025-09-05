@@ -158,10 +158,7 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_dr.verify_dr_list' else '' }}"
                   href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">Verify</a>
               </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'dr.dr_results' else '' }}"
-                  href="{{ url_for('dr.dr_results') }}">Dashboard</a>
-              </li>
+              <!-- DR Dashboard link removed as the route no longer exists -->
               <li>
                 <hr class="dropdown-divider">
               </li>

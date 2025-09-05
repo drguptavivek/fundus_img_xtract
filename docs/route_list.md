@@ -47,7 +47,7 @@ direct_uploads.static                            GET        /static/direct_uploa
 audit.missing_capture_date                       GET        /audit/missing_capture_date                             
 
 
-dr.dr_results                                    GET        /dr/results                                             
+<!-- dr.dr_results                                    GET        /dr/results (route removed) -->                                             
 
 grading.direct_disease_grade                     POST       /grading/direct/disease/grade                           
 grading.direct_disease_image                     GET        /grading/direct/disease/<uuid>/<int:disease_id>         

@@ -51,7 +51,7 @@ All of the following url_for calls in templates were verified to correspond to a
 38. uploads.upload_form
 39. uploaded_results.list_uploaded_results
 40. audit.missing_capture_date
-41. dr.dr_results
+40. dr.dr_results (route removed)
 42. verify_remedio_dr.verify_dr_verify
 43. verify_remedio_dr.verify_dr_unverify
 44. verify_remedio_glaucoma.glaucoma_verify

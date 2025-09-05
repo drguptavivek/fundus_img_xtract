@@ -45,7 +45,7 @@ This document lists all the routes in the Fundus Image Manager application, orga
 | /verify_remedio_dr/edit/\<int:report_id\>/verify | verify_remedio_dr.verify_dr_verify | POST | verify_remedio_dr/routes.py | admin, optometrist |
 | /verify_remedio_dr/edit/\<int:report_id\>/unverify | verify_remedio_dr.verify_dr_unverify | POST | verify_remedio_dr/routes.py | admin, optometrist |
 | /verify_remedio_dr/edit/\<int:report_id\>/mark_eye | verify_remedio_dr.verify_dr_mark_eye | POST | verify_remedio_dr/routes.py | admin, optometrist, data_manager |
-| /dr/results | dr.dr_results | GET | dr/routes.py | admin |
+<!-- /dr/results route removed -->
 | /verify_remedio_glaucoma/results | verify_remedio_glaucoma.glaucoma_results | GET | glaucoma/routes.py | admin |
 | /verify_remedio_glaucoma/list | verify_remedio_glaucoma.glaucoma_list | GET | glaucoma/routes.py | admin |
 | /verify_remedio_glaucoma/clean | verify_remedio_glaucoma.glaucoma_clean_workflow | GET, POST | glaucoma/routes.py | admin |

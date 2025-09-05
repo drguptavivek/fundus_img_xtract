@@ -21,6 +21,12 @@ The Fundus Image Manager is a comprehensive system for managing retinal fundus i
 - Data quality assurance and auditing
 - User management with role-based access control
 
+## Recent Changes
+
+- The `/dr/results` route has been removed as its functionality was redundant with the verify_remedio_dr blueprint
+- The entire `dr` blueprint has been removed
+- All DR-related functionality is now handled by the `verify_remedio_dr` blueprint
+
 ## Technology Stack
 
 - **Backend**: Python, Flask

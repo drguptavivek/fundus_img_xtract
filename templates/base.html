@@ -78,7 +78,12 @@
               </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
-                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs Dashboard</a>
+                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
+              </li>
+
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
+                  href="{{ url_for('screenings.list_screenings') }}">Screenings Extracted</a>
               </li>
               <li>
                 <hr class="dropdown-divider">
@@ -86,11 +91,11 @@
               {% if current_user_has('contributor') or current_user_has('data_manager') or current_user_has('admin') %}
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
-                  href="{{ url_for('direct_uploads.upload') }}">Direct Upload</a>
+                  href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
               </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
-                  href="{{ url_for('direct_uploads.dashboard') }}">Direct Upload Dashboard</a>
+                  href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>
               {% endif %}
               {% endif %}
@@ -98,11 +103,7 @@
                 <hr class="dropdown-divider">
               </li>
               {% if current_user.is_authenticated %}
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
-                  href="{{ url_for('screenings.list_screenings') }}">Screenings</a>
-              </li>
-          
+              
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'glaucoma.glaucoma_clean_workflow' else '' }}"
                   href="{{ url_for('glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
@@ -117,8 +118,10 @@
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
-                  href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
+                  href="{{ url_for('jobs.list_recent_jobs') }}">All Upload Jobs</a>
               </li>
+              
+              
               {% endif %}
             </ul>
           </li>

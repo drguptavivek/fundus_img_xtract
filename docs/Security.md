@@ -1,62 +1,92 @@
- # Security Block Logic in app.py and auth system:
+# Malicious Upload Handling and Logging
 
-## 1. Authentication and Authorization:
-- **Global authentication guard**: The `_require_login_everywhere()` function in app.py requires authentication for all routes except:
-  - `/` (homepage)
-  - `/login`
-  - `/static/` files
-  - `/favicon.ico`
-  - `/style_guide`
-- **Flask-Login**: Used for user session management with proper user loader
-- **CSRF Protection**: Enabled via Flask-WTF with a 1-hour time limit
+## Overview
 
-## 2. Login Security Features:
-- **Rate limiting**: 
-  - Max 5 failed attempts per username in 30 minutes
-  - Max 5 failed attempts per IP in 10 minutes
-- **Account locking**: 
-  - User accounts locked for 4 hours after repeated failures
-  - IPs locked for 4 hours after repeated failures
-- **Password security**: 
-  - Argon2id hashing with pepper
-  - Strong password requirements (min 10 chars, uppercase, lowercase, special chars)
-  - Protection against common weak patterns
+The system implements multiple layers of security checks to detect and prevent malicious uploads. These checks occur both during the initial upload process and during the ZIP file processing phase.
 
-## 3. Session Security:
-- **Inactivity timeout**: Configurable sliding window (default 30 minutes)
-- **Secure cookies**: HTTPOnly, SameSite, and Secure flags (configurable)
-- **Session refresh**: Cookie refreshed on each request
+## Malicious Upload Detection
 
-## 4. 404 Error Handling:
-- **Custom 404 page**: Template at `templates/errors/404.html` that extends `error.html`
-- **Error logging**: 404 errors are logged to the HTTP error log
-- **User-friendly error page**: Shows error code, title, and message with navigation options
+### 1. Initial Upload Validation (uploads/routes.py)
 
-## 5. Additional Security Measures:
-- **Audit logging**: Login attempts are recorded in the `login_attempts` table
-- **IP locking**: Failed attempts trigger IP-based locks
-- **User locking**: Repeated failures lock user accounts
-- **Password policy**: Enforced strong password requirements
-- **Input validation**: Username and password validation with regex patterns
+During the initial upload via the web interface:
+- Only ZIP files are accepted (based on file extension)
+- File size limits are enforced
+- Resource fork files (starting with `._`) are rejected
+- Upload metadata is recorded in sidecar JSON files
 
-## 6. Error Handling:
-- **Custom error pages**: Specific templates for 404, 405, 500, 501 errors
-- **Fallback error handler**: Generic handler for other HTTP exceptions
-- **Logging**: Separate logging for successful requests and errors
-- **Security error handling**: CSRF errors show user-friendly messages
+### 2. ZIP Processing Security Checks (main.py)
 
-## 7. Logging System:
-- **Comprehensive logging**: Detailed documentation available in [Logging.md](Logging.md)
-- **HTTP request logging**: All requests logged with IP, method, URL, status, and duration
-- **Authentication logging**: Login attempts stored in database for audit purposes
-- **Security event logging**: Account locks, IP blocks, and other security events tracked
-- **Log rotation**: Automatic log file rotation to prevent excessive disk usage
+During ZIP file processing, the system performs several security checks:
 
-## 8. Grading System Access Controls:
-- **Role-based access**: Detailed documentation available in [Grading.md](Grading.md)
-- **Granular permissions**: Different roles have access to different grading features
-- **LabUnit restrictions**: Ophthalmologists can only access images from their own facilities
-- **Masked grading**: Patient information hidden during grading to prevent bias
-- **Audit trails**: All grading activities logged for compliance and quality assurance
+#### Path Traversal Protection
+- Blocks absolute paths (starting with `/`)
+- Blocks paths containing parent directory references (`..`)
+- Logs violations with user and IP information
 
-The security implementation is quite comprehensive, with proper authentication, rate limiting, account locking, and error handling. The 404 errors are handled gracefully with custom error pages that maintain the site's styling while providing helpful navigation options back to valid pages. For detailed information about the logging system, see [Logging.md](Logging.md). For information about grading system access controls, see [Grading.md](Grading.md).
+#### File Type Validation
+- Only allows files with extensions `.pdf`, `.jpg`, and `.jpeg`
+- Performs content-type sniffing to detect files with mismatched extensions
+- Rejects executables, scripts, and other potentially dangerous file types
+- Logs violations with detailed information about the disallowed file
+
+#### Content Verification
+- Uses magic byte detection to verify that files match their extensions
+- Detects when a file claiming to be a PDF is actually an executable, etc.
+- Logs content mismatches with details about expected vs. detected types
+
+## Logging System
+
+### Main Processing Log
+- Location: `logs/zip_main_process_log.txt` (configurable via `ZIP_INGEST_LOG` environment variable)
+- Records processing status for each file (SUCCESS, ERROR, SKIPPED, etc.)
+- Includes timestamp and brief status messages
+
+### Malicious Upload Log
+- Location: `logs/malicious_uploads.log` (configurable via `MALICIOUS_UPLOAD_LOG` environment variable)
+- Records detailed information about rejected malicious uploads
+- Log format: `[timestamp] zip=filename user=username ip=ip_address reason=reason entry=affected_entry`
+- Includes user and IP information from upload metadata when available
+
+### HTTP Request Logging
+- Success requests logged to `logs/http_success.log`
+- Error requests logged to `logs/http_error.log`
+- Includes client IP, request method, URL, status code, user agent, and processing duration
+
+### Sidecar Metadata
+When files are uploaded via the web interface, metadata is stored in JSON files in the `upload_meta` directory:
+- Filename
+- Upload timestamp
+- Uploader username and ID
+- Client IP address
+- User agent string
+
+This metadata is used to enrich malicious upload logs with user information.
+
+## Response to Malicious Uploads
+
+When a malicious upload is detected:
+1. The ZIP file is immediately deleted from the system
+2. Related metadata files are also deleted
+3. Detailed information is logged to the malicious upload log
+4. A `MaliciousZipError` is raised to ensure the job processing system records the error
+5. The file is not moved to the processed or error directories (since it's deleted)
+
+## Error Handling
+
+The system distinguishes between different types of errors:
+- Malicious uploads are deleted and logged with specific reasons
+- Processing errors (corrupted ZIPs, etc.) are moved to the error directory
+- Valid uploads are moved to the processed directory after successful extraction
+
+## Configuration
+
+### Environment Variables
+- `ZIP_INGEST_LOG`: Path to the main processing log file (default: `logs/zip_main_process_log.txt`)
+- `MALICIOUS_UPLOAD_LOG`: Path to the malicious upload log file (default: `logs/malicious_uploads.log`)
+
+### File Locations
+- Upload directory: `files/uploaded/`
+- Metadata directory: `files/upload_meta/`
+- Processed files: `files/processed/`
+- Error files: `files/error/`
+- Duplicate files: `files/dupmd5_YYYY-MM-DD/`

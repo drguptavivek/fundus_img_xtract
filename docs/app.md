@@ -47,7 +47,9 @@ The primary component of `app.py` is the `create_app()` function, which follows 
 7.  **Blueprint Registration:**
     *   The application is organized into modular components using Flask Blueprints. Each blueprint corresponds to a specific feature area (e.g., authentication, file uploads, job status).
     *   `create_app()` imports and registers all blueprints, connecting their routes to the main application. The registered blueprints include:
-        *   `uploads_bp`: Handles file uploads.
+        *   `uploads_bp`: Handles ZIP file uploads. For detailed information about ZIP upload routes and access controls, see [zip_uploads.md](zip_uploads.md).
+        *   `direct_uploads_bp`: Handles direct image uploads. For detailed information about direct upload routes and access controls, see [direct_uploads.md](direct_uploads.md).
+        *   `audit_bp`: Provides data quality assurance tools. For detailed information about audit workflows and access controls, see [audit.md](audit.md).
         *   `jobs_bp`: Manages job status and results.
         *   `auth_bp`: User authentication (login, logout).
         *   `admin_bp`: Admin-specific functionalities.

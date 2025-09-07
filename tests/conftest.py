@@ -1,25 +1,32 @@
+"""Pytest configuration and fixtures for the Fundus Image Manager."""
+
 import pytest
 import os
+import sys
 import tempfile
+from pathlib import Path
+# Add the project root to the path so we can import app
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from app import create_app
 from models import Base, engine, Session, User, Role
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
-import tempfile
-from pathlib import Path
 from auth.security import hash_password
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def app():
     """Create a Flask app instance for testing."""
-    # Create a temporary directory for the test database
-    db_fd, db_path = tempfile.mkstemp(suffix='.db')
+    # Use the test environment file
+    test_env_path = Path(__file__).parent / '.env.test'
+    if test_env_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(test_env_path)
     
-    # Set environment variables for testing
-    os.environ['DATABASE_URL'] = f'sqlite:///{db_path}'
+    # Set additional test environment variables
     os.environ['TESTING'] = 'True'
     
+    # Create app with test configuration
     app = create_app()
     app.config['TESTING'] = True
     
@@ -27,10 +34,6 @@ def app():
         # Create all tables
         Base.metadata.create_all(engine)
         yield app
-    
-    # Cleanup
-    os.close(db_fd)
-    os.unlink(db_path)
 
 
 @pytest.fixture
@@ -78,15 +81,21 @@ def admin_user():
             db.add(admin_role)
             db.flush()
         
-        # Create admin user
-        admin_user = User(
-            username='admin',
-            password_hash=hash_password('adminpassword'),
-            is_active=True
-        )
-        admin_user.roles.append(admin_role)
-        db.add(admin_user)
-        db.commit()
+        # Check if admin user exists, create if not
+        admin_user = db.execute(
+            select(User).where(User.username == 'admin')
+        ).scalar_one_or_none()
+        
+        if not admin_user:
+            admin_user = User(
+                username='admin',
+                password_hash=hash_password('adminpassword'),
+                is_active=True,
+                full_name='Test Administrator'
+            )
+            admin_user.roles.append(admin_role)
+            db.add(admin_user)
+            db.commit()
         
         return admin_user
 
@@ -102,3 +111,10 @@ def authenticated_admin_client(client, admin_user):
     
     assert response.status_code in [200, 302]
     return client
+
+
+@pytest.fixture(scope="session")
+def setup_test_data():
+    """Setup test data including master data and users."""
+    # This fixture will be implemented in a separate module
+    pass

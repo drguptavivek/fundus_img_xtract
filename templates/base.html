@@ -73,7 +73,7 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
               <li>
-                <a class="dropdown-item {% if request.endpoint == 'uploads.upload_form' %}active{% endif %}"
+                <a class="dropdown-item {% if request.endpoint == 'remedio_zip_uploads.upload_form' %}active{% endif %}"
                   href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload Zips</a>
               </li>
               <li>

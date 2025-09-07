@@ -244,6 +244,9 @@ def create_app():
     from direct_uploads import bp as direct_uploads_bp
     app.register_blueprint(direct_uploads_bp)
 
+    from remedio_zip_uploads import bp as remedio_zip_uploads_bp
+    app.register_blueprint(remedio_zip_uploads_bp)
+
     from preprocess import bp as preprocess_bp
     app.register_blueprint(preprocess_bp)
 

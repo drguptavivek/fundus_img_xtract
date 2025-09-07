@@ -74,8 +74,14 @@ class EncounterFile(Base):
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # Fields for matching and arbitration
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_arbitration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    arbitrated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     gradings: Mapped[List["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
+    arbitrator: Mapped["User"] = relationship("User", foreign_keys=[arbitrated_by])
 
 class DiabeticRetinopathyReport(Base):
     __tablename__ = 'diabetic_retinopathy_reports'
@@ -311,13 +317,20 @@ class DirectImageUpload(Base):
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
 
+    # Fields for matching and arbitration
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_arbitration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    arbitrated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
+
     # Relationships
-    uploader: Mapped["User"] = relationship()
+    uploader: Mapped["User"] = relationship(foreign_keys=[uploader_id])
     hospital: Mapped["Hospital"] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
     camera: Mapped["Camera"] = relationship()
     disease: Mapped["Disease"] = relationship()
     area: Mapped["Area"] = relationship()
+    arbitrator: Mapped["User"] = relationship("User", foreign_keys=[arbitrated_by])
 
     __table_args__ = (
         # Basename only (no slashes)
@@ -328,7 +341,7 @@ class DirectImageUpload(Base):
         ),
         # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
         CheckConstraint("substr(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
-        CheckConstraint("instr(folder_rel, '\\\\') = 0", name="ck_diu_folder_no_backslash"),
+        CheckConstraint("instr(folder_rel, '') = 0", name="ck_diu_folder_no_backslash"),
         # Helpful composite indexes
         Index("ix_diu_uploader_created", "uploader_id", "created_at"),
         Index("ix_diu_folder_created", "folder_rel", "created_at"),

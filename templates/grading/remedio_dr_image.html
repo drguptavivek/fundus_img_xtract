@@ -27,6 +27,13 @@
             {{ encounter.capture_date }}
           {% else %}-{% endif %}
         </strong></div>
+        {% if image.is_locked %}
+        <div class="mb-3 small text-muted">Lock Status: 
+          <strong class="text-danger">
+            LOCKED - This image has been matched and cannot be edited
+          </strong>
+        </div>
+        {% endif %}
 
         <form method="post" action="{{ url_for('grading.remedio_dr_grade') }}">
           {{ csrf_field() }}
@@ -41,7 +48,7 @@
                 {% if 'npdr' in opt.lower() %}{% set btn_class = 'btn-warning' %}{% endif %}
                 {% if opt == 'PDR' %}{% set btn_class = 'btn-danger' %}{% endif %}
                 {% if opt == 'Not gradable' %}{% set btn_class = 'btn-secondary' %}{% endif %}
-                <input type="radio" class="btn-check" name="impression" id="{{ oid }}" value="{{ opt }}" autocomplete="off" required {% if my_grading and my_grading.impression == opt %}checked{% endif %}>
+                <input type="radio" class="btn-check" name="impression" id="{{ oid }}" value="{{ opt }}" autocomplete="off" required {% if my_grading and my_grading.impression == opt %}checked{% endif %} {% if image.is_locked %}disabled{% endif %}>
                 <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
                   <span>{{ opt }}</span>
                   <span class="sel-icon d-none">✓</span>
@@ -52,25 +59,25 @@
           <div id="dr-ng-reasons" class="mb-3 d-none">
             <label class="form-label">Not gradable – select reason</label>
             <div class="d-flex flex-column gap-2">
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Poor focus">Poor focus</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Media opacity (cataract/flare)">Media opacity (cataract/flare)</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Over/underexposed">Over/underexposed</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Macula not centered">Macula not centered</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Inadequate field">Inadequate field</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Obscured by lids/lashes">Obscured by lids/lashes</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Artefacts">Artefacts</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Other">Other</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Poor focus" {% if image.is_locked %}disabled{% endif %}>Poor focus</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Media opacity (cataract/flare)" {% if image.is_locked %}disabled{% endif %}>Media opacity (cataract/flare)</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Over/underexposed" {% if image.is_locked %}disabled{% endif %}>Over/underexposed</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Macula not centered" {% if image.is_locked %}disabled{% endif %}>Macula not centered</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Inadequate field" {% if image.is_locked %}disabled{% endif %}>Inadequate field</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Obscured by lids/lashes" {% if image.is_locked %}disabled{% endif %}>Obscured by lids/lashes</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Artefacts" {% if image.is_locked %}disabled{% endif %}>Artefacts</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm dr-ng-reason-btn" data-text="Other" {% if image.is_locked %}disabled{% endif %}>Other</button>
             </div>
           </div>
           <div class="mb-2">
             <label class="form-label">Remarks (optional)</label>
-            <textarea name="remarks" class="form-control form-control-sm" rows="2">{{ my_grading.remarks if my_grading and my_grading.remarks else '' }}</textarea>
+            <textarea name="remarks" class="form-control form-control-sm" rows="2" {% if image.is_locked %}disabled{% endif %}>{{ my_grading.remarks if my_grading and my_grading.remarks else '' }}</textarea>
           </div>
           <div class="d-flex justify-content-between gap-2">
-            <button type="button" id="dr-clear-imp" class="btn btn-outline-secondary btn-sm">Clear</button>
+            <button type="button" id="dr-clear-imp" class="btn btn-outline-secondary btn-sm" {% if image.is_locked %}disabled{% endif %}>Clear</button>
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
-              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" {% if image.is_locked %}disabled{% endif %}>Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" {% if image.is_locked %}disabled{% endif %}>Save & Next</button>
             </div>
           </div>
         </form>
@@ -81,7 +88,7 @@
 
 <div class="row g-3 mt-2">
   <div class="col-12 col-lg-3 ms-auto">
-    {% if my_grading %}
+    {% if my_grading and not image.is_locked %}
     <form method="post" action="{{ url_for('grading.remedio_dr_remove') }}" onsubmit="return confirm('Remove your DR grading for this image?');">
       {{ csrf_field() }}
       <input type="hidden" name="ef_uuid" value="{{ image.uuid }}">

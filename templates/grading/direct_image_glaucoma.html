@@ -32,6 +32,13 @@
           </strong>
         </div>
         {% endif %}
+        {% if image.is_locked %}
+        <div class="mb-3 small text-muted">Lock Status: 
+          <strong class="text-danger">
+            LOCKED - This image has been matched and cannot be edited
+          </strong>
+        </div>
+        {% endif %}
 
         <form method="post" action="{{ url_for('grading.direct_glaucoma_grade') }}">
           {{ csrf_field() }}
@@ -53,7 +60,7 @@
                 {% elif opt == 'Not gradable' %}
                   {% set btn_class = 'btn-secondary' %}
                 {% endif %}
-                <input type="radio" class="btn-check" name="impression" id="{{ oid }}" value="{{ opt }}" autocomplete="off" required {% if my_grading and my_grading.impression == opt %}checked{% endif %}>
+                <input type="radio" class="btn-check" name="impression" id="{{ oid }}" value="{{ opt }}" autocomplete="off" required {% if my_grading and my_grading.impression == opt %}checked{% endif %} {% if image.is_locked %}disabled{% endif %}>
                 <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
                   <span>{{ opt }}</span>
                   <span class="sel-icon d-none">✓</span>
@@ -65,26 +72,26 @@
           <div id="ng-reasons" class="mb-3 d-none">
             <label class="form-label">Not gradable – select reason</label>
             <div class="d-flex flex-column gap-2">
-              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Disc not focussed">Disc not focussed</button>
-              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Retina not focussed">Retina not focussed</button>
-              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Disc not complete">Disc not complete</button>
-              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Artefacts">Artefacts</button>
-              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Other">Other</button>
+              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Disc not focussed" {% if image.is_locked %}disabled{% endif %}>Disc not focussed</button>
+              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Retina not focussed" {% if image.is_locked %}disabled{% endif %}>Retina not focussed</button>
+              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Disc not complete" {% if image.is_locked %}disabled{% endif %}>Disc not complete</button>
+              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Artefacts" {% if image.is_locked %}disabled{% endif %}>Artefacts</button>
+              <button type="button" class="btn btn-outline-secondary ng-reason-btn" data-text="Other" {% if image.is_locked %}disabled{% endif %}>Other</button>
             </div>
           </div>
           <div class="mb-2">
             <label class="form-label">Remarks (optional)</label>
-            <textarea name="remarks" class="form-control form-control-sm" rows="2">{{ my_grading.remarks if my_grading and my_grading.remarks else '' }}</textarea>
+            <textarea name="remarks" class="form-control form-control-sm" rows="2" {% if image.is_locked %}disabled{% endif %}>{{ my_grading.remarks if my_grading and my_grading.remarks else '' }}</textarea>
           </div>
           <div class="d-flex justify-content-between gap-2">
-            <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
+            <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm" {% if image.is_locked %}disabled{% endif %}>Clear</button>
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
-              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" {% if image.is_locked %}disabled{% endif %}>Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" {% if image.is_locked %}disabled{% endif %}>Save & Next</button>
             </div>
           </div>
         </form>
-        {% if my_grading %}
+        {% if my_grading and not image.is_locked %}
         <form method="post" action="{{ url_for('grading.direct_glaucoma_remove') }}" class="mt-3" onsubmit="return confirm('Remove your grading for this image?');">
           {{ csrf_field() }}
           <input type="hidden" name="uuid" value="{{ image.uuid }}">

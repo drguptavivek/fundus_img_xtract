@@ -19,6 +19,10 @@
     <a class="nav-link {% if request.endpoint == 'dual_grading.discrepancy_analysis' %}active{% endif %}" 
        href="{{ url_for('dual_grading.discrepancy_analysis') }}">Discrepancy Analysis</a>
   </li>
+  <li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'dual_grading.matching_dashboard' %}active{% endif %}" 
+       href="{{ url_for('dual_grading.matching_dashboard') }}">Matching</a>
+  </li>
 </ul>
 
 {% block dual_grading_content %}{% endblock %}

@@ -2,6 +2,15 @@
 {% block title %}Dual Grading Dashboard{% endblock %}
 
 {% block dual_grading_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Dual Glaucoma Grading Dashboard</h3>
+  {% if current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('data_manager') %}
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('dual_grading.matching_dashboard') }}">
+    Matching Dashboard
+  </a>
+  {% endif %}
+</div>
+
 <div class="row g-3 mb-4">
   <div class="col-12 col-md-3">
     <div class="card kpi-card kpi--success shadow-sm h-100">

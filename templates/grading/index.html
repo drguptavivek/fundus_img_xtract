@@ -37,9 +37,16 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Image Grading</h3>
-  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('dual_grading.index') }}">
-    Dual Grading Dashboard
-  </a>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('dual_grading.index') }}">
+      Dual Grading Dashboard
+    </a>
+    {% if current_user_has('admin') or current_user_has('ophthalmologist') %}
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('grading.arbitration_dashboard') }}">
+      Arbitration Dashboard
+    </a>
+    {% endif %}
+  </div>
 </div>
 
 <!-- Disease Stats Graph -->

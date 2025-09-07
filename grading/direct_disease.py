@@ -102,6 +102,11 @@ def direct_disease_grade():
             if diu.lab_unit_id not in user_lab_unit_ids:
                 flash("Access denied.", "danger")
                 return redirect(request.referrer or url_for("grading.index"))
+        
+        # Check if image is locked
+        if diu.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(request.referrer or url_for("grading.index"))
     finally:
         db.close()
 
@@ -144,6 +149,12 @@ def direct_disease_grade():
                       ImageGrading.graded_for == disease.name.lower())
               .first()
         )
+        
+        # Check if existing grading is locked
+        if existing and diu.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(url_for('grading.direct_disease_image', uuid=uuid, disease_id=disease_id))
+        
         if existing:
             existing.impression = impression
             existing.remarks = remarks
@@ -181,6 +192,7 @@ def direct_disease_grade():
                 .filter(DirectImageUpload.disease_id == disease_id)
                 .filter(DirectImageVerify.verified_status == 'verified')
                 .filter(ImageGrading.id.is_(None))
+                .filter(DirectImageUpload.is_locked == False)  # Only unlocked images
                 .order_by(DirectImageUpload.created_at.desc())
                 .limit(50)
             )
@@ -234,6 +246,11 @@ def direct_disease_remove():
             if diu.lab_unit_id not in user_lab_unit_ids:
                 flash("Access denied.", "danger")
                 return redirect(request.referrer or url_for("grading.index"))
+        
+        # Check if image is locked
+        if diu.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(url_for('grading.direct_disease_image', uuid=uuid, disease_id=disease_id))
 
         user_id = getattr(current_user, 'id', None)
         gr = (

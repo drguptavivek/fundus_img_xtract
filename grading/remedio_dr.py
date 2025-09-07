@@ -67,6 +67,11 @@ def remedio_dr_grade():
         if not ef:
             flash("Invalid image.", "danger")
             return redirect(request.referrer or url_for("grading.index"))
+        
+        # Check if image is locked
+        if ef.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(request.referrer or url_for("grading.index"))
     finally:
         db.close()
 
@@ -98,6 +103,12 @@ def remedio_dr_grade():
                       ImageGrading.graded_for == 'dr')
               .first()
         )
+        
+        # Check if existing grading is locked
+        if existing and ef.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(url_for('grading.remedio_dr_image', uuid=ef.uuid))
+        
         if existing:
             existing.impression = impression
             existing.remarks = remarks
@@ -132,6 +143,7 @@ def remedio_dr_grade():
                   .filter(PatientEncounters.capture_date_dt.isnot(None))
                   .filter(EncounterFile.file_type == 'image')
                   .filter(ImageGrading.id.is_(None))
+                  .filter(EncounterFile.is_locked == False)  # Only unlocked images
                   .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
                   .limit(50)
             )
@@ -167,6 +179,11 @@ def remedio_dr_remove():
         if not ef:
             flash("Image not found.", "danger")
             return redirect(url_for('grading.index'))
+        
+        # Check if image is locked
+        if ef.is_locked:
+            flash("This image has been locked for editing after matching. No further changes allowed.", "danger")
+            return redirect(url_for('grading.remedio_dr_image', uuid=ef.uuid))
 
         user_id = getattr(current_user, 'id', None)
         gr = (

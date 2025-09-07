@@ -1,0 +1,114 @@
+{% extends "grading/base.html" %}
+{% block title %}Arbitration - {{ image.uuid }}{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Arbitration - {{ disease.name if disease else disease|title }}</h3>
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('grading.arbitration_dashboard') }}">
+    Back to Dashboard
+  </a>
+</div>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <strong>Image Viewer</strong>
+      </div>
+      <div class="card-body">
+        {% if image_type == "encounter" %}
+          {% include "grading/_viewer_card.html" %}
+        {% else %}
+          {% include "grading/_direct_viewer_card.html" %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header">
+        <strong>Grading Information</strong>
+      </div>
+      <div class="card-body">
+        <h5>Discrepancy Details</h5>
+        <table class="table table-sm">
+          <tr>
+            <td><strong>Resident Impression:</strong></td>
+            <td>
+              {% if resident_grading %}
+                <span class="badge bg-secondary">{{ resident_grading.impression }}</span>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Consultant Impression:</strong></td>
+            <td>
+              {% if consultant_grading %}
+                <span class="badge bg-secondary">{{ consultant_grading.impression }}</span>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Disease:</strong></td>
+            <td>{{ disease.name if disease else disease|title }}</td>
+          </tr>
+        </table>
+        
+        {% if arbitration_grading %}
+          <div class="alert alert-success">
+            <h5>Arbitration Already Performed</h5>
+            <p><strong>Final Impression:</strong> <span class="badge bg-success">{{ arbitration_grading.impression }}</span></p>
+            <p><strong>Remarks:</strong> {{ arbitration_grading.remarks or 'None' }}</p>
+            <p><strong>Arbitrated by:</strong> {{ arbitration_grading.grader_username }}</p>
+          </div>
+        {% else %}
+          <form method="post" action="{{ url_for('grading.arbitration_grade') }}">
+            {{ csrf_field() }}
+            <input type="hidden" name="uuid" value="{{ image.uuid }}">
+            <input type="hidden" name="image_type" value="{{ image_type }}">
+            {% if image_type == "direct" %}
+              <input type="hidden" name="disease_id" value="{{ disease.id }}">
+            {% endif %}
+            
+            <div class="mb-3">
+              <label class="form-label"><strong>Arbitration Impression</strong></label>
+              {% if image_type == "encounter" %}
+                <!-- For Remed.io images, use glaucoma impressions -->
+                {% set impressions = ["Normal", "Glaucoma Suspect", "Glaucoma", "Other Retinal", "Not gradable"] %}
+              {% else %}
+                <!-- For direct images, use disease-specific impressions -->
+                {% set impressions = disease.gradings | selectattr('is_active', 'equalto', true) | map(attribute='impression') | list %}
+              {% endif %}
+              
+              <select class="form-select" name="impression" required>
+                <option value="">Select Impression</option>
+                {% for imp in impressions %}
+                  <option value="{{ imp }}">{{ imp }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label">Remarks</label>
+              <textarea class="form-control" name="remarks" rows="3"></textarea>
+            </div>
+            
+            <div class="d-flex gap-2">
+              <button type="submit" name="action" value="save" class="btn btn-primary">Save Arbitration</button>
+              <button type="submit" name="action" value="save_next" class="btn btn-success">Save & Next</button>
+              <a href="{{ url_for('grading.arbitration_dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "dual_grading/base.html" %}
+{% block title %}Matching Dashboard{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Matching Dashboard</h3>
+  <a class="btn btn-outline-primary btn-sm" href="{{ url_for('dual_grading.index') }}">
+    Back to Dashboard
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-4">
+    <div class="card kpi-card kpi--primary shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-semibold d-flex align-items-center gap-2">
+          <span class="kpi-icon" aria-hidden="true">🔒</span> Matched Images
+        </div>
+        <div class="display-6">{{ stats.locked_encounters + stats.locked_directs }}</div>
+        <div class="small text-muted">
+          Remed.io: {{ stats.locked_encounters }} | Direct: {{ stats.locked_directs }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card kpi-card kpi--success shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-semibold d-flex align-items-center gap-2">
+          <span class="kpi-icon" aria-hidden="true">⚖️</span> Arbitrated Images
+        </div>
+        <div class="display-6">{{ stats.arbitrated_encounters + stats.arbitrated_directs }}</div>
+        <div class="small text-muted">
+          Remed.io: {{ stats.arbitrated_encounters }} | Direct: {{ stats.arbitrated_directs }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-4">
+    <div class="card kpi-card kpi--warning shadow-sm h-100">
+      <div class="card-body">
+        <div class="fw-semibold d-flex align-items-center gap-2">
+          <span class="kpi-icon" aria-hidden="true">📋</span> Ready for Matching
+        </div>
+        <div class="display-6">{{ stats.encounters_with_both + stats.direct_with_both }}</div>
+        <div class="small text-muted">
+          Remed.io: {{ stats.encounters_with_both }} | Direct: {{ stats.direct_with_both }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <strong>Matching Process</strong>
+  </div>
+  <div class="card-body">
+    <p>
+      The matching process identifies images that have been graded by both a resident and a consultant.
+      Once matched, images are locked to prevent further editing of the original gradings.
+    </p>
+    
+    <p>
+      Images with discrepancies between resident and consultant gradings will be available for arbitration
+      by consultants after matching.
+    </p>
+    
+    <form method="post" action="{{ url_for('dual_grading.run_matching_process') }}">
+      {{ csrf_field() }}
+      <button type="submit" class="btn btn-primary">
+        Run Matching Process
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header">
+    <strong>Statistics</strong>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Remed.io ZIP Files</th>
+            <th>Direct Uploads</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Total Images</td>
+            <td>{{ stats.total_encounters }}</td>
+            <td>{{ stats.total_directs }}</td>
+            <td>{{ stats.total_encounters + stats.total_directs }}</td>
+          </tr>
+          <tr>
+            <td>Matched Images</td>
+            <td>{{ stats.locked_encounters }}</td>
+            <td>{{ stats.locked_directs }}</td>
+            <td>{{ stats.locked_encounters + stats.locked_directs }}</td>
+          </tr>
+          <tr>
+            <td>Arbitrated Images</td>
+            <td>{{ stats.arbitrated_encounters }}</td>
+            <td>{{ stats.arbitrated_directs }}</td>
+            <td>{{ stats.arbitrated_encounters + stats.arbitrated_directs }}</td>
+          </tr>
+          <tr>
+            <td>Ready for Matching</td>
+            <td>{{ stats.encounters_with_both }}</td>
+            <td>{{ stats.direct_with_both }}</td>
+            <td>{{ stats.encounters_with_both + stats.direct_with_both }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

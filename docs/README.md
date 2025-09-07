@@ -1,35 +1,45 @@
 # Fundus Image Manager Documentation
 
-This directory contains documentation for the Fundus Image Manager application.
+This folder contains documentation for the Fundus Image Manager application.
 
-## Documentation Files
+## Available Documentation
 
-1. **routes.md** - Complete list of all application routes with details
-2. **routes_by_blueprint.md** - Routes organized by blueprint for easier navigation
-3. **template_route_links_check.md** - Verification of template links to ensure no broken routes
+- [API Documentation](api.md) - Comprehensive documentation for all RESTful API endpoints
+- [OpenAPI Specification](openapi.yaml) - Machine-readable OpenAPI 3.0 specification for the API
+- [Application Overview](../DETAILS.md) - General information about the application
+- [Main Processing Pipeline](../docs/main.md) - Documentation for the main data processing pipeline
+- [Models](../docs/models.md) - Database schema documentation
+- [App Factory](../docs/app.md) - Documentation for the application factory
 
-## Overview
+## API Documentation
 
-The Fundus Image Manager is a comprehensive system for managing retinal fundus images in an eye hospital setting. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD).
+The [API documentation](api.md) provides detailed information about all available RESTful API endpoints, including:
 
-## Key Features
+- Endpoint URLs and HTTP methods
+- Required authentication and authorization
+- Request parameters
+- Response formats
+- Error codes
 
-- Data ingestion from ZIP archives and standalone images
-- Image processing and anonymization
-- Automated and manual verification workflows
-- Masked clinical grading for unbiased assessments
-- Data quality assurance and auditing
-- User management with role-based access control
+## OpenAPI Specification
 
-## Recent Changes
+The [OpenAPI specification](openapi.yaml) provides a machine-readable description of the API that can be used with tools like:
 
-- The `/dr/results` route has been removed as its functionality was redundant with the verify_remedio_dr blueprint
-- The entire `dr` blueprint has been removed
-- All DR-related functionality is now handled by the `verify_remedio_dr` blueprint
+- Swagger UI for interactive API documentation
+- Code generation tools to create client SDKs
+- API testing tools
+- Documentation generators
 
-## Technology Stack
+This specification follows the OpenAPI 3.0 standard and includes comprehensive schema definitions for all request and response objects.
 
-- **Backend**: Python, Flask
-- **Database**: SQLAlchemy (ORM)
-- **Frontend**: Jinja2 Templates, Vanilla JavaScript, Bootstrap 5.3
-- **Key Libraries**: Pytesseract (OCR), Pandas, Numpy, Maplotlib
+## Other Documentation
+
+Additional documentation files provide information about the application architecture, data processing pipeline, and database schema.
+
+## Usage
+
+Developers can use this documentation to:
+- Integrate with the Fundus Image Manager API
+- Extend the application's functionality
+- Troubleshoot issues
+- Understand the system architecture

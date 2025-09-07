@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
 from flask import send_from_directory
+from flask_cors import CORS
 from models import Base, Job, Session, engine
 from main import setup_environment
 from dotenv import load_dotenv  
@@ -59,6 +60,15 @@ def create_app():
     # app.config["WTF_CSRF_CHECK_DEFAULT"] = True  # default True
 
     csrf.init_app(app)
+    
+    # Initialize CORS for API endpoints
+    # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["http://localhost:5000", "http://127.0.0.1:5000"],
+            "supports_credentials": True
+        }
+    }, supports_credentials=True)
 
     # Ensure folders + schema (idempotent)
     setup_environment()
@@ -271,6 +281,7 @@ def create_app():
             or path.startswith("/static/")
             or path == "/favicon.ico"
             or path == "/style_guide"
+            or path.startswith("/docs/")
         ):
             return  # allowed without auth
         if not current_user.is_authenticated:
@@ -284,6 +295,9 @@ def create_app():
 
     from api import api_bp
     app.register_blueprint(api_bp)
+
+    from docs import docs_bp
+    app.register_blueprint(docs_bp)
 
 
 

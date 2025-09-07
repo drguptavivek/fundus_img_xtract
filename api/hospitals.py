@@ -24,7 +24,6 @@ def get_hospitals():
         return jsonify([{
             "id": h.id,
             "name": h.name,
-            "created_at": h.created_at.isoformat() if h.created_at else None
         } for h in hospitals])
 
 
@@ -39,7 +38,6 @@ def get_hospital_by_id(hospital_id):
         return jsonify({
             "id": hospital.id,
             "name": hospital.name,
-            "created_at": hospital.created_at.isoformat() if hospital.created_at else None
         })
 
 
@@ -62,7 +60,6 @@ def get_hospital_lab_units(hospital_id):
             "id": lu.id,
             "name": lu.name,
             "hospital_id": lu.hospital_id,
-            "created_at": lu.created_at.isoformat() if lu.created_at else None
         } for lu in lab_units])
 
 

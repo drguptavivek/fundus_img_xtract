@@ -35,8 +35,7 @@ def get_user_lab_units(user_id):
             "id": lu.id,
             "name": lu.name,
             "hospital_id": lu.hospital_id,
-            "hospital_name": lu.hospital.name if lu.hospital else None,
-            "created_at": lu.created_at.isoformat() if lu.created_at else None
+            "hospital_name": lu.hospital.name if lu.hospital else None
         } for lu in lab_units])
 
 
@@ -65,5 +64,6 @@ def get_user_hospitals(user_id):
         return jsonify([{
             "id": h.id,
             "name": h.name,
-            "created_at": h.created_at.isoformat() if h.created_at else None
+            "lab_unit_ids": [lu.id for lu in user.lab_units if lu.hospital_id == h.id],
+            "lab_unit_names": [lu.name for lu in user.lab_units if lu.hospital_id == h.id]
         } for h in hospitals])

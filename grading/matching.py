@@ -51,7 +51,7 @@ def _match_encounter_files(db):
                 # Has consultant grading
                 db.query(ImageGrading.id).filter(
                     ImageGrading.encounter_file_id == EncounterFile.id,
-                    ImageGrading.grader_role == 'consultant'
+                    ImageGrading.grader_role == 'ophthalmologist'
                 ).exists()
             )
         )
@@ -85,7 +85,7 @@ def _match_direct_uploads(db):
                 # Has consultant grading
                 db.query(ImageGrading.id).filter(
                     ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                    ImageGrading.grader_role == 'consultant'
+                    ImageGrading.grader_role == 'ophthalmologist'
                 ).exists()
             )
         )
@@ -134,7 +134,7 @@ def get_matching_stats(db=None):
                     ).exists(),
                     db.query(ImageGrading.id).filter(
                         ImageGrading.encounter_file_id == EncounterFile.id,
-                        ImageGrading.grader_role == 'consultant'
+                        ImageGrading.grader_role == 'ophthalmologist'
                     ).exists()
                 )
             )
@@ -151,7 +151,7 @@ def get_matching_stats(db=None):
                     ).exists(),
                     db.query(ImageGrading.id).filter(
                         ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                        ImageGrading.grader_role == 'consultant'
+                        ImageGrading.grader_role == 'ophthalmologist'
                     ).exists()
                 )
             )

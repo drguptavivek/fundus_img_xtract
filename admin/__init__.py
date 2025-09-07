@@ -4,7 +4,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="te
 
 # Import all route handlers
 from .users import users_list, add_user, edit_user, users_update
-from .security import change_password, manage_roles
+from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
 from .disease_gradings import list_disease_gradings, get_disease_grading_json, delete_disease_grading
 from .uploads import malicious_uploads
@@ -19,6 +19,8 @@ admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, met
 # Security routes (password and roles)
 admin_bp.add_url_rule("/change-password", view_func=change_password, methods=["GET", "POST"])
 admin_bp.add_url_rule("/roles", view_func=manage_roles, methods=["GET", "POST"])
+admin_bp.add_url_rule("/role-usage", view_func=role_usage, methods=["GET"])
+admin_bp.add_url_rule("/routes-by-role/<string:role_name>", view_func=routes_by_role, methods=["GET"])
 
 # Lookup table routes
 admin_bp.add_url_rule("/<string:model_name>", view_func=list_and_create_lookup, methods=["GET", "POST"])

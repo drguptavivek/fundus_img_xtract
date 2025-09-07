@@ -3,73 +3,97 @@
 
 {% block content %}
 <div class="container py-4">
-
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h4 mb-0">Users &amp; Roles</h1>
-  <a class="btn btn-success btn-sm" href="{{ url_for('admin.add_user') }}">Add user</a>
-</div>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Users</h1>
+    <a class="btn btn-success" href="{{ url_for('admin.add_user') }}">Add User</a>
+  </div>
 
   {% if not users %}
     <div class="alert alert-info">No users yet.</div>
   {% else %}
-    <div class="table-responsive">
-      <table class="table table-sm align-middle">
-        <thead>
-          <tr>
-            <th style="width:70px">ID</th>
-            <th>Username</th>
-            <th>Active</th>
-            <th>Roles</th>
-            <th style="width:220px"></th>
-          </tr>
-        </thead>
-        <tbody>
-        {% for u in users %}
-          <tr>
-            <td class="text-muted">{{ u.id }}</td>
-            <td><strong>{{ u.username }}</strong></td>
-            <td>
-              <form method="post" action="{{ url_for('admin.users_update', user_id=u.id) }}" class="d-inline">
-                {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" id="active-{{ u.id }}" name="active" value="1" {% if u.is_active %}checked{% endif %}>
-                  <label class="form-check-label small" for="active-{{ u.id }}">Active</label>
-                </div>
-
-                {# Roles as checkboxes #}
-                <div class="d-flex flex-wrap gap-2 mt-2">
-                  {% for r in roles %}
-                    {% set has = (u.roles|map(attribute='name')|list)|select('equalto', r.name)|list|length > 0 %}
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="role-{{ u.id }}-{{ r.name }}" name="roles" value="{{ r.name }}" {% if has %}checked{% endif %}>
-                      <label class="form-check-label small" for="role-{{ u.id }}-{{ r.name }}">{{ r.name }}</label>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+      {% for u in users %}
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-header bg-white py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h6 class="mb-0 text-truncate">{{ u.username }}</h6>
+                {% if u.full_name %}
+                  <small class="text-muted">{{ u.full_name }}</small>
+                {% endif %}
+              </div>
+              <div>
+                {% if u.is_active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="card-body py-2">
+            <div class="mb-2">
+              <h6 class="text-muted small mb-1">Roles</h6>
+              <div>
+                {% if u.roles %}
+                  {% for r in u.roles %}
+                    <span class="badge text-bg-secondary me-1">{{ r.name }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">No roles assigned</span>
+                {% endif %}
+              </div>
+            </div>
+            
+            <div class="mb-2">
+              <h6 class="text-muted small mb-1">Lab Unit Associations</h6>
+              <div class="small">
+                {% if u.lab_units %}
+                  {% set grouped_units = {} %}
+                  {% for lu in u.lab_units %}
+                    {% if lu.hospital.name not in grouped_units %}
+                      {% set _ = grouped_units.update({lu.hospital.name: []}) %}
+                    {% endif %}
+                    {% set _ = grouped_units[lu.hospital.name].append(lu.name) %}
+                  {% endfor %}
+                  
+                  {% for hospital_name, unit_names in grouped_units.items() %}
+                    <div class="mb-1">
+                      <strong>{{ hospital_name }}:</strong>
+                      <div class="ms-2">
+                        {% for unit_name in unit_names %}
+                          <span class="badge bg-primary-subtle text-primary-emphasis me-1">{{ unit_name }}</span>
+                        {% endfor %}
+                      </div>
                     </div>
                   {% endfor %}
-                </div>
-
-                <div class="mt-2 d-flex gap-2">
-                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
-                  <a class="btn btn-sm btn-outline-secondary"
-                     href="{{ url_for('admin.change_password', username=u.username) }}">
-                    Change password
-                  </a>
-                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
-                    Edit profile
-                    </a>
-
-                </div>
-              </form>
-            </td>
-            <td class="text-nowrap">
-              {% for r in u.roles or [] %}
-                <span class="badge text-bg-secondary">{{ r.name }}</span>
-              {% endfor %}
-            </td>
-            <td></td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+                {% else %}
+                  <span class="text-muted">No lab units assigned</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="card-footer bg-white py-2">
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="small text-muted">
+                {% if u.created_at %}
+                  Created: {{ u.created_at.strftime('%Y-%m-%d') }}
+                {% endif %}
+              </div>
+              <div>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('admin.change_password', username=u.username) }}">
+                  Password
+                </a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
+                  Edit
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
   {% endif %}
 </div>

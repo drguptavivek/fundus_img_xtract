@@ -9,19 +9,15 @@ from models import User, Role, Hospital, LabUnit, Session
 
 
 def users_list():
-    """List all users with roles and active status."""
+    """List all users with roles, hospitals, and lab units."""
     with Session() as db:
         users = db.execute(
             select(User)
-            .options(selectinload(User.roles))
+            .options(selectinload(User.roles), selectinload(User.lab_units))
             .order_by(User.username.asc())
         ).scalars().all()
 
-        roles = db.execute(
-            select(Role).order_by(Role.name.asc())
-        ).scalars().all()
-
-    return render_template("admin/users.html", users=users, roles=roles)
+    return render_template("admin/users.html", users=users)
 
 
 def add_user():
@@ -154,10 +150,50 @@ def edit_user(user_id: int):
         if not user:
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
+        roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
         hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
 
         if request.method == "POST":
+            # Handle role assignments
+            if "save_roles" in request.form:
+                selected_roles = set(request.form.getlist("roles"))
+                # Normalize role names to ones that exist in DB (ignore stray/unknown values)
+                valid_role_names = {r.name for r in roles}
+                selected_roles &= valid_role_names
+
+                existing = {r.name for r in (user.roles or [])}
+                will_remove = existing - selected_roles
+                will_add = selected_roles - existing
+
+                # Ensure at least one ACTIVE admin remains after this change
+                if "admin" in existing and "admin" not in selected_roles and user.is_active:
+                    active_admins = db.execute(
+                        select(func.count(User.id))
+                        .join(User.roles)
+                        .where(Role.name == "admin", User.is_active.is_(True), User.id != user.id)
+                    ).scalar_one() or 0
+                    
+                    if active_admins < 1:
+                        flash("There must be at least one active admin user.", "warning")
+                        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+
+                # remove roles
+                if user.roles:
+                    user.roles[:] = [r for r in user.roles if r.name not in will_remove]
+
+                # add roles
+                if will_add:
+                    add_objs = db.execute(select(Role).where(Role.name.in_(will_add))).scalars().all()
+                    for r in add_objs:
+                        user.roles.append(r)
+
+                db.add(user)
+                db.commit()
+                flash("Roles updated.", "success")
+                return redirect(url_for("admin.edit_user", user_id=user_id))
+
+            # Handle profile updates (including is_active)
             full_name = (request.form.get("full_name") or "").strip()
             designation = (request.form.get("designation") or "").strip()
             email = (request.form.get("email") or "").strip()
@@ -165,28 +201,43 @@ def edit_user(user_id: int):
             yj = (request.form.get("year_of_joining") or "").strip()
             ldos = (request.form.get("last_date_of_service") or "").strip()
             file_upload_quota = int(request.form.get("file_upload_quota") or 0)
+            is_active = bool(request.form.get("is_active"))
             selected_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units"))
 
+            # Check if we're trying to deactivate an admin user
+            if user.is_active and not is_active:
+                is_admin = "admin" in {r.name for r in (user.roles or [])}
+                if is_admin:
+                    active_admins = db.execute(
+                        select(func.count(User.id))
+                        .join(User.roles)
+                        .where(Role.name == "admin", User.is_active.is_(True), User.id != user.id)
+                    ).scalar_one() or 0
+                    
+                    if active_admins < 1:
+                        flash("There must be at least one active admin user.", "warning")
+                        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+
             ok, msg = validate_email(email)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             ok, msg = validate_phone(phone)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             yj_int = None
             if yj:
                current_year = date.today().year
                if not yj.isdigit() or not (1970 <= int(yj) <= current_year + 1):
                      flash("Year of joining must be a valid year.", "danger")
-                     return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+                     return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
                yj_int = int(yj)
 
             ok, msg, ldos_date = parse_iso_date(ldos)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             if file_upload_quota < 0:
                 flash("File upload quota cannot be negative.", "danger")
-                return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+                return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
             user.full_name = full_name or None
             user.designation = designation or None
@@ -195,6 +246,7 @@ def edit_user(user_id: int):
             user.year_of_joining = yj_int
             user.last_date_of_service = ldos_date
             user.file_upload_quota = file_upload_quota
+            user.is_active = is_active
 
             # Update lab units
             user.lab_units.clear()
@@ -207,15 +259,14 @@ def edit_user(user_id: int):
             return redirect(url_for("admin.users_list"))
 
         # GET
-        return render_template("admin/edit_user.html", user=user, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
 
 
 def users_update(user_id: int):
     """
-    Update a user's active flag and roles from the users list.
+    Update a user's active flag from the users list.
     Prevents self-deactivation and prevents removing/deactivating the last active admin.
     """
-    selected_roles = set(request.form.getlist("roles"))       # role names
     new_active = bool(request.form.get("active"))             # checkbox present -> True
 
     with Session() as db:
@@ -229,14 +280,6 @@ def users_update(user_id: int):
             flash("You cannot deactivate your own account.", "warning")
             return redirect(url_for("admin.users_list"))
 
-        # Normalize role names to ones that exist in DB (ignore stray/unknown values)
-        valid_role_names = set(db.execute(select(Role.name)).scalars().all())
-        selected_roles &= valid_role_names
-
-        existing = {r.name for r in (user.roles or [])}
-        will_remove = existing - selected_roles
-        will_add = selected_roles - existing
-
         # 2) Ensure at least one ACTIVE admin remains after this change
         active_admins = db.execute(
             select(func.count(User.id))
@@ -244,11 +287,10 @@ def users_update(user_id: int):
             .where(Role.name == "admin", User.is_active.is_(True))
         ).scalar_one() or 0
 
-        is_admin_before = ("admin" in existing) and bool(user.is_active)
-        is_admin_after  = ("admin" in selected_roles) and bool(new_active)
+        is_admin_before = ("admin" in {r.name for r in (user.roles or [])}) and bool(user.is_active)
 
-        if is_admin_before and not is_admin_after:
-            # This change would remove/deactivate an active admin account.
+        if is_admin_before and not new_active:
+            # This change would deactivate an active admin account.
             if active_admins <= 1:
                 flash("There must be at least one active admin user.", "warning")
                 return redirect(url_for("admin.users_list"))
@@ -256,26 +298,15 @@ def users_update(user_id: int):
         # 3) Apply changes
         user.is_active = new_active
 
-        # remove roles
-        if user.roles:
-            user.roles[:] = [r for r in user.roles if r.name not in will_remove]
-
-        # add roles
-        if will_add:
-            add_objs = db.execute(select(Role).where(Role.name.in_(will_add))).scalars().all()
-            for r in add_objs:
-                user.roles.append(r)
-
         db.add(user)
         db.commit()
 
         try:
             current_app.logger.info(
-                "Admin '%s' updated user '%s': active=%s, roles=%s",
+                "Admin '%s' updated user '%s': active=%s",
                 getattr(current_user, "username", "unknown"),
                 user.username,
                 user.is_active,
-                [r.name for r in (user.roles or [])],
             )
         except Exception:
             pass

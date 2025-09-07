@@ -60,10 +60,13 @@ class PatientEncounters(Base):
     dr_verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     dr_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     capture_date_dt: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+    
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    lab_unit: Mapped["LabUnit"] = relationship()
 
 class EncounterFile(Base):
     __tablename__ = 'encounter_files'
@@ -74,6 +77,7 @@ class EncounterFile(Base):
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
     # Fields for matching and arbitration
     matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
@@ -82,6 +86,7 @@ class EncounterFile(Base):
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     gradings: Mapped[List["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
     arbitrator: Mapped["User"] = relationship("User", foreign_keys=[arbitrated_by])
+    lab_unit: Mapped["LabUnit"] = relationship()
 
 class DiabeticRetinopathyReport(Base):
     __tablename__ = 'diabetic_retinopathy_reports'
@@ -178,6 +183,14 @@ class JobItem(Base):
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     job: Mapped["Job"] = relationship(back_populates="items")
 
+# Association table for User <-> Disease specialization
+user_disease_specializations = Table(
+    'user_disease_specializations', Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
+    Column('disease_id', Integer, ForeignKey('diseases.id', ondelete="CASCADE"), primary_key=True)
+)
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -197,6 +210,7 @@ class User(Base):
     file_upload_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
+    disease_specializations: Mapped[List["Disease"]] = relationship("Disease", secondary=user_disease_specializations, back_populates="specialists")
 
     @property
     def is_authenticated(self) -> bool: return True
@@ -209,6 +223,12 @@ class User(Base):
     def has_all_roles(self, *names: str) -> bool:
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return all(n.lower() in user_roles for n in names)
+    def can_grade_disease(self, disease_id: int) -> bool:
+        """Check if this user can grade the specified disease."""
+        return disease_id in [d.id for d in self.disease_specializations]
+    def can_grade_disease_name(self, disease_name: str) -> bool:
+        """Check if this user can grade the specified disease by name."""
+        return disease_name.lower() in [d.name.lower() for d in self.disease_specializations]
 
 class Role(Base):
     __tablename__ = "roles"
@@ -278,6 +298,9 @@ class Disease(Base):
     __tablename__ = 'diseases'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    
+    specialists: Mapped[List["User"]] = relationship("User", secondary=user_disease_specializations, back_populates="disease_specializations")
+    disease_gradings: Mapped[List["DiseaseGrading"]] = relationship("DiseaseGrading", back_populates="disease")
 
 class Area(Base):
     __tablename__ = 'areas'
@@ -402,7 +425,7 @@ class DiseaseGrading(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     
     # Relationship
-    disease: Mapped["Disease"] = relationship("Disease", backref="gradings")
+    disease: Mapped["Disease"] = relationship("Disease", back_populates="disease_gradings")
     
     __table_args__ = (
         UniqueConstraint('disease_id', 'impression', name='uq_disease_grading_disease_impression'),

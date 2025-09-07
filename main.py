@@ -378,10 +378,25 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
 
             clean_name = clean_filename(zip_path.name)
             new_zip_file = ZipFile(zip_filename=clean_name, md5_hash=md5_hash)
+            
+            # Read metadata to get lab unit information
+            lab_unit_id = None
+            try:
+                meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                meta_path = meta_dir / f"{zip_path.name}.json"
+                if meta_path.exists():
+                    import json
+                    with open(meta_path, "r", encoding="utf-8") as mf:
+                        meta = json.load(mf)
+                        lab_unit_id = meta.get("lab_unit_id")
+            except Exception:
+                pass  # If metadata is not available or invalid, continue without lab_unit_id
+            
             new_patient_encounter = PatientEncounters(
                 name=name,
                 patient_id=patient_id,
                 capture_date=capture_date,
+                lab_unit_id=lab_unit_id,
             )
             # Populate proper Date column when possible
             parsed_dt = parse_capture_date(capture_date)
@@ -416,7 +431,7 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
                 with zf.open(member_info) as source, open(target_path, "wb") as target:
                     shutil.copyfileobj(source, target)
 
-                files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4())))
+                files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
                 if file_type == 'pdf':
                     added_pdf_filenames.append(new_filename)
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")

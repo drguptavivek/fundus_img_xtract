@@ -16,7 +16,7 @@ def index():
         # First, get encounter file IDs that have been graded by both roles
         dual_graded_subq = db.query(ImageGrading.encounter_file_id, func.count(ImageGrading.id).label('grading_count')).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).subquery()
         
         dual_graded_count = db.query(func.count(dual_graded_subq.c.encounter_file_id)).scalar()
@@ -31,7 +31,7 @@ def index():
         # Get all consultant-graded encounter file IDs
         consultant_graded_ids = set([row[0] for row in db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role == 'consultant'
+            ImageGrading.grader_role == 'ophthalmologist'
         ).all()])
         
         # Find intersection and difference

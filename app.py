@@ -253,6 +253,9 @@ def create_app():
     from dual_grading import bp as dual_grading_bp
     app.register_blueprint(dual_grading_bp)
 
+    from disease_specializations import bp as disease_specializations_bp
+    app.register_blueprint(disease_specializations_bp)
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager
@@ -278,6 +281,9 @@ def create_app():
 
     from admin import admin_bp
     app.register_blueprint(admin_bp)
+
+    from dashboard import dashboard_bp
+    app.register_blueprint(dashboard_bp)
 
 
 

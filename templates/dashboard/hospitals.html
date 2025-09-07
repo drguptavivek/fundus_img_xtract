@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Hospital Dashboard{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Hospital Dashboard</h1>
+  </div>
+
+  {% if not hospitals %}
+    <div class="alert alert-info">No hospitals found.</div>
+  {% else %}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+      {% for hospital in hospitals %}
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">{{ hospital.name }}</h5>
+          </div>
+          <div class="card-body">
+            <div class="d-flex justify-content-between mb-3">
+              <div>
+                <h6 class="text-muted small mb-1">Users</h6>
+                <h4 class="mb-0">{{ user_counts[hospital.id] or 0 }}</h4>
+              </div>
+              <div>
+                <h6 class="text-muted small mb-1">Images</h6>
+                <h4 class="mb-0">{{ image_counts[hospital.id] or 0 }}</h4>
+              </div>
+            </div>
+            <a href="{{ url_for('dashboard.hospital_detail', hospital_id=hospital.id) }}" class="btn btn-outline-primary w-100">
+              View Details
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

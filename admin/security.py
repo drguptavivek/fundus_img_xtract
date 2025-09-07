@@ -1,9 +1,11 @@
 import re
+import os
 from flask import render_template, request, redirect, url_for, flash, current_app
 from sqlalchemy import select, func
 from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password, check_password_strength
+from auth.route_analyzer import analyze_all_routes, get_role_usage_statistics, get_routes_by_role
 from models import User, Role, Session
 
 
@@ -69,33 +71,63 @@ def change_password():
 
 def manage_roles():
     """
-    Show all roles and allow admins to add a new role.
-    - Names are lowercase, 2–32 chars, start with a letter, then letters/digits/_.
-    - Duplicate names (case-insensitive) are rejected.
+    Show all roles.
+    Note: Roles cannot be created through the UI as they must be defined in code.
     """
-    if request.method == "POST":
-        name_raw = (request.form.get("name") or "").strip()
-        name = name_raw.lower()
-
-        # Validate name
-        if not re.fullmatch(r"[a-z][a-z0-9_]{1,31}", name):
-            flash("Role name must be 2–32 chars, lowercase, start with a letter, and contain only letters, digits, or _.", "danger")
-            # fall through to re-render list below
-        else:
-            with Session() as db:
-                exists = db.execute(
-                    select(Role).where(func.lower(Role.name) == name)
-                ).scalar_one_or_none()
-                if exists:
-                    flash(f"Role '{name}' already exists.", "warning")
-                else:
-                    db.add(Role(name=name))
-                    db.commit()
-                    flash(f"Role '{name}' added.", "success")
-                    return redirect(url_for("admin.manage_roles"))
-
-    # GET (or POST with validation errors): show current roles
+    # GET: show current roles
     with Session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
 
     return render_template("admin/roles.html", roles=roles)
+
+
+@roles_required("admin")
+def role_usage():
+    """
+    Show role usage statistics and which routes require which roles.
+    """
+    # Analyze all routes
+    routes_info = analyze_all_routes()
+    
+    # Get role usage statistics
+    role_stats = get_role_usage_statistics(routes_info)
+    
+    # Get all roles from database
+    with Session() as db:
+        all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
+    
+    # Sort routes by file and function name
+    routes_info.sort(key=lambda x: (x['file'], x['function']))
+    
+    return render_template(
+        "admin/role_usage.html",
+        routes_info=routes_info,
+        role_stats=role_stats,
+        all_roles=all_roles
+    )
+
+
+@roles_required("admin")
+def routes_by_role(role_name):
+    """
+    Show all routes that require a specific role.
+    """
+    # Analyze all routes
+    routes_info = analyze_all_routes()
+    
+    # Filter routes by role
+    matching_routes = get_routes_by_role(routes_info, role_name)
+    
+    # Sort routes by file and function name
+    matching_routes.sort(key=lambda x: (x['file'], x['function']))
+    
+    # Get all roles from database
+    with Session() as db:
+        all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
+    
+    return render_template(
+        "admin/routes_by_role.html",
+        role_name=role_name,
+        routes_info=matching_routes,
+        all_roles=all_roles
+    )

@@ -180,6 +180,21 @@ def main() -> None:
         help="Create tables for disease gradings feature",
     )
     parser.add_argument(
+        "--migrate-missing-roles",
+        action="store_true",
+        help="Add any missing roles to the database",
+    )
+    parser.add_argument(
+        "--migrate-encounter-files-lab-unit",
+        action="store_true",
+        help="Add lab_unit_id column to encounter_files table",
+    )
+    parser.add_argument(
+        "--migrate-user-disease-specializations",
+        action="store_true",
+        help="Create user_disease_specializations table",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -258,6 +273,48 @@ def main() -> None:
             mig_img_nullable(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_image_grading_nullable_columns: {e}")
+    if args.migrate_missing_roles:
+        try:
+            from migrate_missing_roles import migrate_missing_roles
+            migrate_missing_roles(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_missing_roles: {e}")
+            
+    if args.migrate_encounter_files_lab_unit:
+        try:
+            migrate_encounter_files_lab_unit(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to run migrate_encounter_files_lab_unit: {e}")
+            
+    if args.migrate_user_disease_specializations:
+        try:
+            migrate_user_disease_specializations(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to run migrate_user_disease_specializations: {e}")
+
+def migrate_user_disease_specializations(dry_run: bool = False) -> None:
+    """Create user_disease_specializations table."""
+    print("Preparing to create user_disease_specializations table...")
+    try:
+        from migrate_user_disease_specializations import migrate
+        if not dry_run:
+            migrate()
+        else:
+            print("Dry run: Would create user_disease_specializations table")
+    except Exception as e:
+        print(f"Failed to import migrate_user_disease_specializations: {e}")
+
+def migrate_encounter_files_lab_unit(dry_run: bool = False) -> None:
+    """Add lab_unit_id column to encounter_files table."""
+    print("Preparing to add lab_unit_id column to encounter_files table...")
+    try:
+        from migrate_encounter_files_lab_unit import migrate
+        if not dry_run:
+            migrate()
+        else:
+            print("Dry run: Would add lab_unit_id column to encounter_files table")
+    except Exception as e:
+        print(f"Failed to import migrate_encounter_files_lab_unit: {e}")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 from flask import render_template
 from sqlalchemy.orm import selectinload
 
-from auth.roles import roles_required
+from auth.roles import roles_required, ROLE_ADMIN
 from . import bp
 from models import Session, PatientEncounters
 
 
 @bp.route("/missing_capture_date", methods=["GET"])
-@roles_required("admin")
+@roles_required(ROLE_ADMIN)
 def missing_capture_date():
     db = Session()
     try:

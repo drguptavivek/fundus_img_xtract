@@ -20,7 +20,7 @@ def paired_gradings():
         # First, get encounter file IDs that have been graded by both roles
         dual_graded_ids = db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).subquery()
         
         # Get the actual paired gradings with encounter file details
@@ -28,9 +28,9 @@ def paired_gradings():
             EncounterFile, 
             PatientEncounters,
             func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')).label('resident_impression'),
-            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_='')).label('consultant_impression'),
+            func.max(case((ImageGrading.grader_role == 'ophthalmologist', ImageGrading.impression), else_='')).label('consultant_impression'),
             func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.id), else_=0)).label('resident_grading_id'),
-            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.id), else_=0)).label('consultant_grading_id')
+            func.max(case((ImageGrading.grader_role == 'ophthalmologist', ImageGrading.id), else_=0)).label('consultant_grading_id')
         ).join(
             PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
         ).join(
@@ -38,7 +38,7 @@ def paired_gradings():
         ).filter(
             EncounterFile.id.in_(dual_graded_ids),
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(
             EncounterFile.id, PatientEncounters.id
         ).order_by(
@@ -78,7 +78,7 @@ def discrepancy_analysis():
         # First, get encounter file IDs that have been graded by both roles
         dual_graded_ids = db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).subquery()
         
         # Get the actual paired gradings with encounter file details where impressions differ
@@ -86,9 +86,9 @@ def discrepancy_analysis():
             EncounterFile, 
             PatientEncounters,
             func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')).label('resident_impression'),
-            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_='')).label('consultant_impression'),
+            func.max(case((ImageGrading.grader_role == 'ophthalmologist', ImageGrading.impression), else_='')).label('consultant_impression'),
             func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.id), else_=0)).label('resident_grading_id'),
-            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.id), else_=0)).label('consultant_grading_id')
+            func.max(case((ImageGrading.grader_role == 'ophthalmologist', ImageGrading.id), else_=0)).label('consultant_grading_id')
         ).join(
             PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
         ).join(
@@ -96,12 +96,12 @@ def discrepancy_analysis():
         ).filter(
             EncounterFile.id.in_(dual_graded_ids),
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(
             EncounterFile.id, PatientEncounters.id
         ).having(
             func.max(case((ImageGrading.grader_role == 'resident', ImageGrading.impression), else_='')) != 
-            func.max(case((ImageGrading.grader_role == 'consultant', ImageGrading.impression), else_=''))
+            func.max(case((ImageGrading.grader_role == 'ophthalmologist', ImageGrading.impression), else_=''))
         ).order_by(
             desc(EncounterFile.id)
         )
@@ -116,7 +116,7 @@ def discrepancy_analysis():
         # Calculate overall agreement percentage
         total_paired = db.query(ImageGrading.encounter_file_id).filter(
             ImageGrading.graded_for == 'glaucoma',
-            ImageGrading.grader_role.in_(['resident', 'consultant'])
+            ImageGrading.grader_role.in_(['resident', 'ophthalmologist'])
         ).group_by(ImageGrading.encounter_file_id).having(func.count(ImageGrading.id) >= 2).count()
         
         agreement_percentage = (total_paired - total_discrepancies) / total_paired * 100 if total_paired > 0 else 0

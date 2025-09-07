@@ -41,14 +41,18 @@ def direct_image(uuid: str):
               .first()
         )
         
-        # Determine user's role for grading (resident or consultant)
+        # Determine user's role for grading (resident or ophthalmologist)
         user_role = None
         if current_user.has_role('ophthalmologist'):
-            user_role = 'consultant'
+            user_role = 'ophthalmologist'
         elif current_user.has_role('resident'):
             user_role = 'resident'
         elif current_user.has_role('admin'):
-            user_role = 'admin'
+            # If admin also has ophthalmologist role, record as ophthalmologist
+            if current_user.has_role('ophthalmologist'):
+                user_role = 'ophthalmologist'
+            else:
+                user_role = 'admin'
             
         # Fetch existing gradings for this image to determine grading status
         existing_gradings = (
@@ -60,14 +64,14 @@ def direct_image(uuid: str):
         
         # Determine grading status
         resident_grading = any(g.grader_role == 'resident' for g in existing_gradings)
-        consultant_grading = any(g.grader_role == 'consultant' for g in existing_gradings)
+        ophthalmologist_grading = any(g.grader_role == 'ophthalmologist' for g in existing_gradings)
         
-        if resident_grading and consultant_grading:
+        if resident_grading and ophthalmologist_grading:
             grading_status = "Both Graded"
         elif resident_grading:
             grading_status = "Resident Only"
-        elif consultant_grading:
-            grading_status = "Consultant Only"
+        elif ophthalmologist_grading:
+            grading_status = "Ophthalmologist Only"
         else:
             grading_status = "Not Graded"
     finally:
@@ -109,15 +113,19 @@ def direct_glaucoma_grade():
     finally:
         db.close()
 
-    # Determine user's role for grading (resident or consultant)
+    # Determine user's role for grading (resident or ophthalmologist)
     role = None
     try:
         if current_user.has_role('ophthalmologist'):
-            role = 'consultant'
+            role = 'ophthalmologist'
         elif current_user.has_role('resident'):
             role = 'resident'
         elif current_user.has_role('admin'):
-            role = 'admin'
+            # If admin also has ophthalmologist role, record as ophthalmologist
+            if current_user.has_role('ophthalmologist'):
+                role = 'ophthalmologist'
+            else:
+                role = 'admin'
     except Exception:
         role = 'unknown'
 

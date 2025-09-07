@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Hospital Not Found{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body text-center">
+          <h1 class="h3 mb-3">Hospital Not Found</h1>
+          <p class="mb-4">The requested hospital could not be found.</p>
+          <a href="{{ url_for('dashboard.hospital_dashboard') }}" class="btn btn-primary">Back to Hospital Dashboard</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

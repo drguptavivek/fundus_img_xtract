@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Role Usage - Admin{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col">
+      <h1>Role Usage Statistics</h1>
+      
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>Role Distribution</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>Routes Using This Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for role in all_roles %}
+                <tr>
+                  <td><code>{{ role }}</code></td>
+                  <td>{{ role_stats.get(role, 0) }}</td>
+                  <td>
+                    <a href="{{ url_for('admin.routes_by_role', role_name=role) }}" class="btn btn-sm btn-outline-primary">
+                      View Routes
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <h5>All Routes with Role Requirements</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Function</th>
+                  <th>Route</th>
+                  <th>Methods</th>
+                  <th>Required Roles</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for route in routes_info %}
+                <tr>
+                  <td><code>{{ route.file }}</code></td>
+                  <td><code>{{ route.function }}</code></td>
+                  <td><code>{{ route.route }}</code></td>
+                  <td>
+                    {% for method in route.methods %}
+                    <span class="badge bg-secondary">{{ method }}</span>
+                    {% endfor %}
+                  </td>
+                  <td>
+                    {% if 'roles' in route %}
+                      {% for role in route.roles %}
+                      <span class="badge bg-primary">{{ role }}</span>
+                      {% endfor %}
+                    {% else %}
+                      <span class="text-muted">No role requirements</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

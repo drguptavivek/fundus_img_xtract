@@ -78,11 +78,15 @@ def remedio_dr_grade():
     role = None
     try:
         if current_user.has_role('ophthalmologist'):
-            role = 'consultant'
+            role = 'ophthalmologist'
         elif current_user.has_role('resident'):
             role = 'resident'
         elif current_user.has_role('admin'):
-            role = 'admin'
+            # If admin also has ophthalmologist role, record as ophthalmologist
+            if current_user.has_role('ophthalmologist'):
+                role = 'ophthalmologist'
+            else:
+                role = 'admin'
     except Exception:
         role = 'unknown'
 

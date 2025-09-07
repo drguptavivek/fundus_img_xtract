@@ -13,7 +13,7 @@ def arbitration_dashboard():
     """Display the arbitration dashboard with images that have discrepancies."""
     db = Session()
     try:
-        # Get encounter files with discrepancies (both resident and consultant graded but with different impressions)
+        # Get encounter files with discrepancies (both resident and ophthalmologist graded but with different impressions)
         encounter_discrepancies = (
             db.query(EncounterFile)
             .join(ImageGrading, EncounterFile.id == ImageGrading.encounter_file_id)
@@ -23,7 +23,7 @@ def arbitration_dashboard():
                 and_(
                     # Has both resident and consultant gradings
                     func.count(case((ImageGrading.grader_role == 'resident', 1))) > 0,
-                    func.count(case((ImageGrading.grader_role == 'consultant', 1))) > 0,
+                    func.count(case((ImageGrading.grader_role == 'ophthalmologist', 1))) > 0,
                     # But the impressions are different
                     func.count(distinct(ImageGrading.impression)) > 1
                 )
@@ -41,7 +41,7 @@ def arbitration_dashboard():
                 and_(
                     # Has both resident and consultant gradings
                     func.count(case((ImageGrading.grader_role == 'resident', 1))) > 0,
-                    func.count(case((ImageGrading.grader_role == 'consultant', 1))) > 0,
+                    func.count(case((ImageGrading.grader_role == 'ophthalmologist', 1))) > 0,
                     # But the impressions are different
                     func.count(distinct(ImageGrading.impression)) > 1
                 )
@@ -81,14 +81,14 @@ def arbitration_image(uuid: str):
                 .all()
             )
             
-            # Separate resident and consultant gradings
+            # Separate resident and ophthalmologist gradings
             resident_grading = None
-            consultant_grading = None
+            ophthalmologist_grading = None
             for grading in existing_gradings:
                 if grading.grader_role == 'resident':
                     resident_grading = grading
-                elif grading.grader_role == 'consultant':
-                    consultant_grading = grading
+                elif grading.grader_role == 'ophthalmologist':
+                    ophthalmologist_grading = grading
             
             # Get arbitration grading if exists
             arbitration_grading = None
@@ -105,7 +105,7 @@ def arbitration_image(uuid: str):
                 image=ef,
                 image_type="encounter",
                 resident_grading=resident_grading,
-                consultant_grading=consultant_grading,
+                consultant_grading=ophthalmologist_grading,
                 arbitration_grading=arbitration_grading,
                 disease=disease
             )
@@ -125,14 +125,14 @@ def arbitration_image(uuid: str):
                 .all()
             )
             
-            # Separate resident and consultant gradings
+            # Separate resident and ophthalmologist gradings
             resident_grading = None
-            consultant_grading = None
+            ophthalmologist_grading = None
             for grading in existing_gradings:
                 if grading.grader_role == 'resident':
                     resident_grading = grading
-                elif grading.grader_role == 'consultant':
-                    consultant_grading = grading
+                elif grading.grader_role == 'ophthalmologist':
+                    ophthalmologist_grading = grading
             
             # Get arbitration grading if exists
             arbitration_grading = None
@@ -149,7 +149,7 @@ def arbitration_image(uuid: str):
                 image=diu,
                 image_type="direct",
                 resident_grading=resident_grading,
-                consultant_grading=consultant_grading,
+                consultant_grading=ophthalmologist_grading,
                 arbitration_grading=arbitration_grading,
                 disease=disease
             )
@@ -245,7 +245,7 @@ def arbitration_grade():
                 encounter_file_id=ef.id,
                 grader_user_id=user_id,
                 grader_username=username,
-                grader_role='consultant',  # Arbitration is done by consultant
+                grader_role='ophthalmologist',  # Arbitration is done by ophthalmologist
                 graded_for=disease_name,
                 impression=impression,
                 remarks=remarks,
@@ -261,7 +261,7 @@ def arbitration_grade():
                 direct_image_upload_id=diu.id,
                 grader_user_id=user_id,
                 grader_username=username,
-                grader_role='consultant',  # Arbitration is done by consultant
+                grader_role='ophthalmologist',  # Arbitration is done by ophthalmologist
                 graded_for=disease_name,
                 impression=impression,
                 remarks=remarks,

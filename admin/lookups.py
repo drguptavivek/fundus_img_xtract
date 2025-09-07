@@ -99,11 +99,31 @@ def edit_lookup(model_name, item_id):
             flash("Item not found.", "danger")
             return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
 
+        # Prevent editing of core diseases to change their names
+        core_disease_names = None
+        if model_name == "disease":
+            from ensure_core_diseases import is_core_disease, CORE_DISEASES
+            if is_core_disease(item_id):
+                core_disease_names = {v.lower(): k for k, v in CORE_DISEASES.items()}
+
         if request.method == "POST":
             name = request.form.get("name", "").strip()
             if not name:
                 flash("Name is required.", "danger")
             else:
+                # Check if trying to change a core disease name
+                if model_name == "disease" and core_disease_names is not None:
+                    original_name = item.name
+                    if original_name.lower() in core_disease_names and name.lower() != original_name.lower():
+                        flash(f"Core disease '{original_name}' cannot be renamed. The name must remain '{original_name}'.", "danger")
+                        return render_template(
+                            "admin/lookup_edit.html",
+                            item=item,
+                            model_name=model_name,
+                            title=f"Edit {model_name.replace('_', ' ').title()}",
+                            hospitals=None
+                        )
+
                 item.name = name
                 if model_name == "lab_unit":
                     hospital_id = request.form.get("hospital_id")
@@ -132,10 +152,18 @@ def delete_lookup(model_name, item_id):
     if not Model:
         flash(f"Invalid master list: {model_name}", "danger")
         return redirect(url_for("admin.users_list"))
+    
+    # Prevent deletion of core diseases
+    if model_name == "disease":
+        from ensure_core_diseases import is_core_disease
+        if is_core_disease(item_id):
+            flash("Core diseases (Glaucoma, DR, AMD) cannot be deleted.", "danger")
+            return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+    
     with Session() as db:
         item = db.get(Model, item_id)
         if item:
             db.delete(item)
             db.commit()
             flash(f"{model_name.replace('_', ' ').title()} deleted.", "success")
-    return redirect(url_for(f"admin.list_and_create_lookup", model_name=model_name))
+    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))

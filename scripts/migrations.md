@@ -57,3 +57,20 @@ Or you can run the standalone script:
 ```bash
   python scripts/migrate_user_disease_specializations.py
 ```
+
+**Ensure core diseases exist**
+
+This migration ensures that the core diseases (Glaucoma, DR, AMD) exist with their specific IDs (1, 2, 3 respectively). These diseases cannot be deleted or renamed through the UI.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-core-diseases
+  python scripts/setup_db.py --migrate-core-diseases --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_core_diseases.py
+  python scripts/migrate_core_diseases.py --dry-run
+```

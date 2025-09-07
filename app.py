@@ -77,9 +77,12 @@ def create_app():
     # --- RBAC: seed core roles once ---
     from sqlalchemy.orm import sessionmaker
     from auth.roles import ensure_roles, DEFAULT_ROLES
+    from ensure_core_diseases import ensure_core_diseases
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     with SessionLocal() as db:
         ensure_roles(db, DEFAULT_ROLES)
+        # Ensure core diseases are always present
+        ensure_core_diseases(db)
 
     # ---------------- HTTP loggers ----------------
     log_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "logs"))

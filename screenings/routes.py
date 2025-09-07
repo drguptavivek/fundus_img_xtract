@@ -8,7 +8,7 @@ from sqlalchemy import and_, or_
 
 from auth.roles import roles_required
 from . import bp
-from models import Session, PatientEncounters
+from models import Session, PatientEncounters, LabUnit, Hospital
  
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "ophthalmologist")  # allow both per your ACL
@@ -22,9 +22,16 @@ def list_screenings():
 
     db = Session()
     try:
-        # Base query
+        # Base query with eager loading of lab_unit and hospital relationships
         base_q = (
             db.query(PatientEncounters)
+            .options(
+                joinedload(PatientEncounters.zip_file),
+                selectinload(PatientEncounters.glaucoma_reports),
+                selectinload(PatientEncounters.dr_reports),
+                selectinload(PatientEncounters.encounter_files),
+                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
+            )
             .order_by(
                 PatientEncounters.capture_date_dt.desc().nullslast(),
                 PatientEncounters.id.desc(),
@@ -71,12 +78,6 @@ def list_screenings():
         # Page items with eager loads
         items = (
             base_q
-            .options(
-                joinedload(PatientEncounters.zip_file),
-                selectinload(PatientEncounters.glaucoma_reports),
-                selectinload(PatientEncounters.dr_reports),
-                selectinload(PatientEncounters.encounter_files),
-            )
             .offset((page - 1) * per_page)
             .limit(per_page)
             .all()
@@ -117,6 +118,7 @@ def screening_detail(encounter_id: int):
                 selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
+                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
             )
             .filter(PatientEncounters.id == encounter_id)
             .first()

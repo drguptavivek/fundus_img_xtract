@@ -67,3 +67,28 @@ def get_user_hospitals(user_id):
             "lab_unit_ids": [lu.id for lu in user.lab_units if lu.hospital_id == h.id],
             "lab_unit_names": [lu.name for lu in user.lab_units if lu.hospital_id == h.id]
         } for h in hospitals])
+
+
+@api_bp.route('/users/<int:user_id>/disease-specializations', methods=['GET'])
+@roles_required("admin")
+def get_user_disease_specializations(user_id):
+    """Get all disease specializations for a specific user."""
+    # Import here to avoid circular imports
+    from disease_specialzation_utils import get_user_disease_specializations
+    
+    with Session() as db:
+        user = db.get(User, user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Check if user is an ophthalmologist
+        if not user.has_role("ophthalmologist"):
+            return jsonify({"diseases": []})
+        
+        try:
+            specializations = get_user_disease_specializations(user_id)
+            return jsonify({
+                "diseases": [{"id": d.id, "name": d.name} for d in specializations]
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500

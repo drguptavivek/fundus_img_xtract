@@ -73,6 +73,15 @@
                 {% endif %}
               </div>
             </div>
+            
+            {% if u.has_role("ophthalmologist") %}
+            <div class="mb-2">
+              <h6 class="text-muted small mb-1">Disease Specializations</h6>
+              <div class="small disease-specializations" data-user-id="{{ u.id }}">
+                <span class="text-muted">Loading...</span>
+              </div>
+            </div>
+            {% endif %}
           </div>
           <div class="card-footer bg-white py-2">
             <div class="d-flex justify-content-between align-items-center">
@@ -88,6 +97,11 @@
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
                   Edit
                 </a>
+                {% if u.has_role("ophthalmologist") %}
+                <a class="btn btn-sm btn-outline-info" href="{{ url_for('admin.manage_specializations', user_id=u.id) }}">
+                  Manage Specializations
+                </a>
+                {% endif %}
               </div>
             </div>
           </div>
@@ -97,4 +111,37 @@
     </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Fetch disease specializations for all ophthalmologist users
+  const diseaseSpecializationElements = document.querySelectorAll('.disease-specializations');
+  
+  diseaseSpecializationElements.forEach(element => {
+    const userId = element.getAttribute('data-user-id');
+    
+    // Fetch disease specializations from API
+    fetch(`/api/users/${userId}/disease-specializations`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.diseases && data.diseases.length > 0) {
+          // Display the diseases
+          let diseasesHtml = '';
+          data.diseases.forEach(disease => {
+            diseasesHtml += `<span class="badge bg-info-subtle text-info-emphasis me-1">${disease.name}</span>`;
+          });
+          element.innerHTML = diseasesHtml;
+        } else {
+          element.innerHTML = '<span class="text-muted">No specializations assigned</span>';
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching disease specializations:', error);
+        element.innerHTML = '<span class="text-muted">Error loading specializations</span>';
+      });
+  });
+});
+</script>
 {% endblock %}

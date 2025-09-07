@@ -27,8 +27,7 @@ def index():
 @roles_required("admin")
 def manage_specializations(user_id):
     """Manage disease specializations for a specific ophthalmologist."""
-    db = Session()
-    try:
+    with Session() as db:
         # Get the user
         user = db.query(User).options(selectinload(User.disease_specializations)).filter(User.id == user_id).first()
         if not user:
@@ -50,7 +49,7 @@ def manage_specializations(user_id):
             else:
                 flash("Failed to update disease specializations.", "danger")
             
-            return redirect(url_for("admin.manage_specializations", user_id=user_id))
+            return redirect(url_for("admin.index"))
         
         # GET request - show the form
         diseases = get_all_diseases()
@@ -63,8 +62,6 @@ def manage_specializations(user_id):
             diseases=diseases,
             user_specialization_ids=user_specialization_ids
         )
-    finally:
-        db.close()
 
 
 @roles_required("admin")

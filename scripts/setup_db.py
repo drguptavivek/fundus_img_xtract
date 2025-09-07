@@ -195,6 +195,11 @@ def main() -> None:
         help="Create user_disease_specializations table",
     )
     parser.add_argument(
+        "--migrate-core-diseases",
+        action="store_true",
+        help="Ensure core diseases (Glaucoma, DR, AMD) exist with correct IDs",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -288,9 +293,17 @@ def main() -> None:
             
     if args.migrate_user_disease_specializations:
         try:
-            migrate_user_disease_specializations(dry_run=args.check_only)
+            from migrate_user_disease_specializations import migrate
+            migrate(dry_run=args.check_only)
         except Exception as e:
-            print(f"Failed to run migrate_user_disease_specializations: {e}")
+            print(f"Failed to import migrate_user_disease_specializations: {e}")
+            
+    if args.migrate_core_diseases:
+        try:
+            from migrate_core_diseases import migrate as migrate_core
+            migrate_core(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_core_diseases: {e}")
 
 def migrate_user_disease_specializations(dry_run: bool = False) -> None:
     """Create user_disease_specializations table."""

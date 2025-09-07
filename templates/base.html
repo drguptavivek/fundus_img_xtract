@@ -252,6 +252,11 @@
                 </a>
               </li>
               <li>
+                <a class="dropdown-item" href="{{ url_for('admin.index') }}">
+                  Disease Specializations
+                </a>
+              </li>
+              <li>
                 <a class="dropdown-item" href="{{ url_for('admin.list_and_create_lookup', model_name='area') }}">
                   Areas
                 </a>
@@ -444,6 +449,9 @@
 
   <!-- HTMX -->
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+
+  </script>
+
 
   <!-- {# Page-specific scripts go here #} -->
   {% block page_scripts %}

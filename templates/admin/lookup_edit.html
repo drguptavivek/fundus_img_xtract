@@ -5,6 +5,12 @@
 {% block content %}
 <div class="container mt-4">
     <h2>{{ title }}</h2>
+    
+    {% if model_name == 'disease' and item.id in [1, 2, 3] %}
+    <div class="alert alert-info">
+        <strong>Core Disease:</strong> This is a core disease that cannot be renamed. The name must remain "{{ item.name }}".
+    </div>
+    {% endif %}
 
     <div class="card">
         <div class="card-body">
@@ -12,7 +18,8 @@
                 {{ csrf_field() }}
                 <div class="mb-3">
                     <label for="name" class="form-label">Name</label>
-                    <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" required>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" 
+                           {% if model_name == 'disease' and item.id in [1, 2, 3] %}readonly{% endif %} required>
                 </div>
                 {% if model_name == 'lab_unit' and hospitals %}
                 <div class="mb-3">
@@ -24,7 +31,10 @@
                     </select>
                 </div>
                 {% endif %}
-                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <button type="submit" class="btn btn-primary"
+                        {% if model_name == 'disease' and item.id in [1, 2, 3] %}disabled{% endif %}>
+                    Save Changes
+                </button>
                 <a href="{{ url_for('admin.list_and_create_lookup', model_name=model_name) }}" class="btn btn-secondary">Cancel</a>
             </form>
         </div>

@@ -64,6 +64,12 @@
                             -
                           {% endif %}
                         </dd>
+                        {% if encounter.lab_unit %}
+                        <dt class="col-5">Hospital</dt>
+                        <dd class="col-7">{{ encounter.lab_unit.hospital.name if encounter.lab_unit.hospital else "-" }}</dd>
+                        <dt class="col-5">Lab Unit</dt>
+                        <dd class="col-7">{{ encounter.lab_unit.name or "-" }}</dd>
+                        {% endif %}
                         <dt class="col-5">Zip File</dt>
                         <dd class="col-7">{% if encounter.zip_file %}{{ encounter.zip_file.zip_filename }}{% else %}-{%
                             endif %}</dd>

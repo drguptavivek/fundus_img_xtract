@@ -3,6 +3,6 @@
 # All API routes have been moved to modular files
 
 # Import all route handlers from modular files
-from . import disease_gradings, disease_specializations, direct_uploads, jobs
+from . import disease_gradings, disease_specializations, direct_uploads, jobs, hospitals, users
 
 # The blueprint is imported from the modular files

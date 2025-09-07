@@ -1,6 +1,129 @@
-# CHANGELOG
 
-## 7 Sept 2005
+# CHANGELOG 7 Sep 2025 2020 IST
+
+  Summary of New API Endpoints
+
+  I've successfully added several new useful API endpoints to the API blueprint, organized into modular files:
+
+  1. Hospitals API (api/hospitals.py)
+
+  a. Get All Hospitals
+   - Endpoint: GET /api/hospitals
+   - Description: Returns a list of all hospitals
+   - Access: Admins and data managers only
+
+  b. Get Hospital by ID
+   - Endpoint: GET /api/hospitals/<int:hospital_id>
+   - Description: Returns details of a specific hospital
+   - Access: Admins and data managers only
+
+  c. Get Lab Units for Hospital
+   - Endpoint: GET /api/hospitals/<int:hospital_id>/lab-units
+   - Description: Returns all lab units associated with a specific hospital
+   - Access: Admins and data managers only
+
+  d. Get Specialists for Disease at Hospital
+   - Endpoint: GET /api/hospitals/<int:hospital_id>/specializations/<int:disease_id>/users
+   - Description: Returns all users specialized in a specific disease at a specific hospital
+   - Access: Admins and data managers only
+
+  2. Users API (api/users.py)
+
+  a. Get Lab Units for User
+   - Endpoint: GET /api/users/<int:user_id>/lab-units
+   - Description: Returns all lab units associated with a specific user
+   - Access: Logged-in users (can only access their own data unless admin/data manager)
+
+  b. Get Hospitals for User
+   - Endpoint: GET /api/users/<int:user_id>/hospitals
+   - Description: Returns all hospitals associated with a specific user (through their lab units)
+   - Access: Logged-in users (can only access their own data unless admin/data manager)
+
+  Benefits of These New Endpoints
+
+   1. Better Data Navigation: Users can now navigate the relationships between hospitals, lab units, users, and disease specializations
+   2. Enhanced Admin Capabilities: Admins can get detailed information about the organizational structure
+   3. Improved User Management: Better understanding of user assignments and specializations
+   4. Resource Planning: Hospital administrators can see which specialists are available for specific diseases
+
+  Security Considerations
+
+   - All endpoints follow the principle of least privilege
+   - User-specific endpoints check if the requesting user has permission to access the data
+   - Admin-only endpoints are properly protected
+   - Data managers have appropriate access to organizational data
+
+  Testing Verification
+
+   - All Python files compile without syntax errors
+   - The application creates successfully without issues
+   - No duplicate endpoint function names
+   - All endpoints are accessible at their defined URLs
+
+  These new endpoints significantly enhance the API's capabilities for managing and querying the relationships between the core entities in the
+  system.
+
+
+
+
+## 7 Sept 2005 2025 IST
+ I've successfully refactored the API routes into modular files, making the codebase more organized and maintainable. Here's what I did:
+
+  1. Created Modular Route Files
+
+  a. api/disease_gradings.py
+   - Contains the get_disease_grading endpoint
+   - Handles fetching a single disease grading by ID
+   - Restricted to admin users only
+
+  b. api/disease_specializations.py
+   - Contains two endpoints:
+     - get_user_disease_specializations_api (GET) - Get disease specializations for a user
+     - set_user_disease_specializations_api (POST) - Set disease specializations for a user
+   - Both endpoints restricted to admin users only
+
+  c. api/direct_uploads.py
+   - Contains three endpoints:
+     - get_lab_units - Get lab units for a user
+     - get_hospital - Get hospital for a lab unit
+     - get_upload_status - Get status of an upload job
+   - These endpoints use different authentication requirements:
+     - get_lab_units and get_hospital require login
+     - get_upload_status requires login
+
+  d. api/jobs.py
+   - Contains the get_job_status endpoint
+   - Handles fetching job status by token
+   - Restricted to admin users only
+
+  2. Updated api/routes.py
+   - Simplified the main routes file to only import from the modular files
+   - Kept it for backward compatibility and blueprint initialization
+   - Removed all the actual route definitions
+
+  3. Benefits of This Refactoring
+   - Better Organization: Each API category is in its own file
+   - Easier Maintenance: Changes to one API category don't affect others
+   - Improved Readability: Each file has a clear, focused purpose
+   - Scalability: Adding new endpoints to a category is straightforward
+   - Team Development: Multiple developers can work on different API categories simultaneously
+
+  4. Verification
+   - All Python files compile without syntax errors
+   - The application creates successfully without issues
+   - All API endpoints are still accessible at the same URLs:
+     - /api/disease-gradings/<int:grading_id>
+     - /api/users/<int:user_id>/disease-specializations (GET/POST)
+     - /api/users/<int:user_id>/lab-units
+     - /api/lab-units/<int:lab_unit_id>/hospital
+     - /api/upload-jobs/<int:job_id>/status
+     - /api/upload-jobs/<job_token>
+
+  The refactored API blueprint is now much more maintainable and organized while preserving all existing functionality.
+
+
+## 7 Sept 2005 2010 IST
+
 
   Summary of Changes
 

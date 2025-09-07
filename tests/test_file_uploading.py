@@ -11,9 +11,9 @@ from auth.security import hash_password
 class TestFileUploading:
     """Test cases for file uploading functionality."""
 
-    def test_zip_upload_requires_authentication(self, client):
-        """Test that ZIP upload requires authentication."""
-        response = client.get('/upload_files')
+    def test_upload_form_requires_auth(client):
+        # Accessing the upload form without authentication should redirect to login
+        response = client.get('/remedio_zip_uploads/upload_files')
         # Should redirect to login
         assert response.status_code == 302
         assert '/login' in response.location
@@ -39,32 +39,17 @@ class TestFileUploading:
         auth_client.login('testuser_zip', 'testpassword')
         
         # Try to access upload page
-        response = client.get('/upload_files')
+        response = client.get('/remedio_zip_uploads/upload_files')
         # Should be forbidden
         assert response.status_code in [403, 302]
 
-    def test_zip_upload_page_loads(self, client, auth_client):
-        """Test that ZIP upload page loads for authorized users."""
-        # Create a user with fileUploader role
-        with Session() as db:
-            uploader_role = Role(name='fileUploader')
-            db.add(uploader_role)
-            db.flush()
-            
-            test_user = User(
-                username='uploader_zip',
-                password_hash=hash_password('testpassword'),
-                is_active=True
-            )
-            test_user.roles.append(uploader_role)
-            db.add(test_user)
-            db.commit()
-
-        # Login as uploader
-        auth_client.login('uploader_zip', 'testpassword')
-        
-        # Access upload page
-        response = client.get('/upload_files')
+    def test_upload_form_accessible_to_file_uploader(self, client, file_uploader_user):
+        # Log in as file uploader
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(file_uploader_user.id)
+    
+        # Accessing the upload form should work now
+        response = client.get('/remedio_zip_uploads/upload_files')
         assert response.status_code == 200
         assert b'Upload' in response.data
 

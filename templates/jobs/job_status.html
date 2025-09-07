@@ -9,7 +9,7 @@
         <h5 class="mb-0">Job <code>{{ job_id }}</code></h5>
         <div class="d-flex gap-2">
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('uploads.upload_form') }}">Upload</a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload</a>
         </div>
       </div>
       <div class="card-body">
@@ -38,7 +38,7 @@
 
         <div class="d-flex gap-2 mt-3">
           <button id="refreshBtn" class="btn btn-outline-primary">Refresh now</button>
-          <a class="btn btn-secondary" href="{{ url_for('uploads.upload_form') }}">Back</a>
+          <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Back</a>
         </div>
       </div>
     </div>
@@ -64,7 +64,7 @@
   async function poll() {
     const jobId = "{{ job_id }}";
     try {
-      const res = await fetch(`/jobs/${jobId}`, { cache: 'no-store' });
+      const res = await fetch(`/api/upload-jobs/${jobId}`, { cache: 'no-store' });
       const data = await res.json();
 
       const statusEl = document.getElementById('status');

@@ -4,7 +4,8 @@ Example usage of the disease specialization system.
 This script demonstrates how to programmatically manage ophthalmologist disease specializations.
 """
 
-from disease_specializations import (
+# Import from the new location (disease_specialzation_utils)
+from disease_specialzation_utils import (
     get_all_diseases, 
     get_all_ophthalmologists, 
     add_user_disease_specialization,

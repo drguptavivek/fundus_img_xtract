@@ -9,29 +9,29 @@
         <h5 class="mb-0">Upload ZIP files</h5>
       </div>
       <div class="card-body">
-        <form method="post" action="{{ url_for('uploads.upload') }}" enctype="multipart/form-data">
+        <form method="post" action="{{ url_for('remedio_zip_uploads.upload_files') }}" enctype="multipart/form-data">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           
           <!-- Hospital Selection -->
           <div class="mb-3">
-            <label for="hospital_id" class="form-label">Hospital *</label>
-            <select id="hospital_id" name="hospital_id" class="form-select" required>
-              <option value="">Select a hospital</option>
+            <label class="form-label">Hospital <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="hospital-buttons">
               {% for hospital in hospitals %}
-              <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+              <input type="radio" class="btn-check" name="hospital_id" id="hospital_{{ hospital.id }}" value="{{ hospital.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="hospital_{{ hospital.id }}">{{ hospital.name }}</label>
               {% endfor %}
-            </select>
+            </div>
           </div>
           
           <!-- Lab Unit Selection -->
           <div class="mb-3">
-            <label for="lab_unit_id" class="form-label">Lab Unit *</label>
-            <select id="lab_unit_id" name="lab_unit_id" class="form-select" required>
-              <option value="">Select a lab unit</option>
+            <label class="form-label">Lab Unit <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="lab-unit-buttons">
               {% for lab_unit in lab_units %}
-              <option value="{{ lab_unit.id }}" data-hospital="{{ lab_unit.hospital_id }}">{{ lab_unit.name }}</option>
+              <input type="radio" class="btn-check" name="lab_unit_id" id="lab_unit_{{ lab_unit.id }}" value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="lab_unit_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
               {% endfor %}
-            </select>
+            </div>
           </div>
           
           <!-- File Upload -->
@@ -57,28 +57,33 @@
 <!-- JavaScript to filter lab units based on hospital selection -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const hospitalSelect = document.getElementById('hospital_id');
-    const labUnitSelect = document.getElementById('lab_unit_id');
-    const labUnitOptions = labUnitSelect.querySelectorAll('option[data-hospital]');
-    
-    hospitalSelect.addEventListener('change', function() {
-        const selectedHospitalId = this.value;
-        
-        // Reset lab unit selection
-        labUnitSelect.value = '';
-        
-        // Show/hide lab units based on hospital selection
-        labUnitOptions.forEach(option => {
-            if (selectedHospitalId === '' || option.dataset.hospital === selectedHospitalId) {
-                option.style.display = '';
-            } else {
-                option.style.display = 'none';
-            }
+    const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
+    const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
+
+    hospitalButtons.forEach(button => {
+        button.addEventListener('change', function() {
+            const selectedHospitalId = this.value;
+            
+            // Show/hide lab unit buttons based on hospital selection
+            labUnitButtons.forEach(labButton => {
+                const label = document.querySelector(`label[for="${labButton.id}"]`);
+                if (labButton.dataset.hospitalId === selectedHospitalId) {
+                    labButton.parentElement.style.display = 'inline-block';
+                    label.style.display = 'inline-block';
+                } else {
+                    labButton.parentElement.style.display = 'none';
+                    label.style.display = 'none';
+                }
+            });
         });
     });
-    
-    // Trigger change event on page load to set initial state
-    hospitalSelect.dispatchEvent(new Event('change'));
+
+    // Initially hide all lab unit buttons until a hospital is selected
+    labUnitButtons.forEach(labButton => {
+        const label = document.querySelector(`label[for="${labButton.id}"]`);
+        labButton.parentElement.style.display = 'none';
+        label.style.display = 'none';
+    });
 });
 </script>
 {% endblock %}

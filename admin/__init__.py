@@ -8,6 +8,7 @@ from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
 from .disease_gradings import list_disease_gradings, get_disease_grading_json, delete_disease_grading
 from .uploads import malicious_uploads
+from .disease_specializations import index, manage_specializations, api_get_user_diseases, api_set_user_diseases
 
 # Register routes with the blueprint
 # User management routes
@@ -31,6 +32,12 @@ admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/delete", view_func=del
 admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/json", view_func=get_disease_grading_json, methods=["GET"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/delete", view_func=delete_disease_grading, methods=["POST"])
+
+# Disease specializations routes
+admin_bp.add_url_rule("/disease-specializations", view_func=index, methods=["GET"])
+admin_bp.add_url_rule("/disease-specializations/manage/<int:user_id>", view_func=manage_specializations, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease-specializations/api/users/<int:user_id>/diseases", view_func=api_get_user_diseases, methods=["GET"])
+admin_bp.add_url_rule("/disease-specializations/api/users/<int:user_id>/diseases", view_func=api_set_user_diseases, methods=["POST"])
 
 # Uploads routes
 admin_bp.add_url_rule("/malicious-uploads", view_func=malicious_uploads, methods=["GET"])

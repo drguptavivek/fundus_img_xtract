@@ -43,7 +43,7 @@
         let pollingInterval;
 
         function fetchStatus() {
-            fetch(`/api/direct/upload/status/${jobId}`)
+            fetch(`/api/upload-jobs/${jobId}/status`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {

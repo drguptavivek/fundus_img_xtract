@@ -1,15 +1,8 @@
-# disease_specializations/routes.py
 from flask import render_template, request, redirect, url_for, flash, jsonify
-from flask_login import login_required
 from sqlalchemy.orm import selectinload
+from disease_specialzation_utils import get_all_diseases, get_all_ophthalmologists, get_user_disease_specializations, set_user_disease_specializations
 from models import Session, User, Disease
 from auth.roles import roles_required
-from ..disease_specializations import (
-    get_all_diseases, 
-    get_all_ophthalmologists, 
-    get_user_disease_specializations,
-    set_user_disease_specializations
-)
 
 
 @roles_required("admin")
@@ -24,7 +17,7 @@ def index():
         ophth_specializations[ophth.id] = get_user_disease_specializations(ophth.id)
     
     return render_template(
-        "disease_specializations/index.html",
+        "admin/disease_specializations/index.html",
         ophthalmologists=ophthalmologists,
         diseases=diseases,
         ophth_specializations=ophth_specializations
@@ -40,12 +33,12 @@ def manage_specializations(user_id):
         user = db.query(User).options(selectinload(User.disease_specializations)).filter(User.id == user_id).first()
         if not user:
             flash("User not found.", "danger")
-            return redirect(url_for("disease_specializations.index"))
+            return redirect(url_for("admin.index"))
         
         # Check if user is an ophthalmologist
         if not user.has_role("ophthalmologist"):
             flash("User is not an ophthalmologist.", "danger")
-            return redirect(url_for("disease_specializations.index"))
+            return redirect(url_for("admin.index"))
         
         if request.method == "POST":
             # Get selected disease IDs from form
@@ -57,7 +50,7 @@ def manage_specializations(user_id):
             else:
                 flash("Failed to update disease specializations.", "danger")
             
-            return redirect(url_for("disease_specializations.manage_specializations", user_id=user_id))
+            return redirect(url_for("admin.manage_specializations", user_id=user_id))
         
         # GET request - show the form
         diseases = get_all_diseases()
@@ -65,7 +58,7 @@ def manage_specializations(user_id):
         user_specialization_ids = [d.id for d in user_specializations]
         
         return render_template(
-            "disease_specializations/manage.html",
+            "admin/disease_specializations/manage.html",
             user=user,
             diseases=diseases,
             user_specialization_ids=user_specialization_ids

@@ -423,6 +423,7 @@ class DiseaseGrading(Base):
     impression: Mapped[str] = mapped_column(String(64), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    guidelines: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Relationship
     disease: Mapped["Disease"] = relationship("Disease", back_populates="disease_gradings")

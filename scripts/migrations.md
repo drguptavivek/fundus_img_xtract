@@ -74,3 +74,20 @@ Or you can run the standalone script:
   python scripts/migrate_core_diseases.py
   python scripts/migrate_core_diseases.py --dry-run
 ```
+
+**Add guidelines column to disease_gradings table**
+
+This migration adds a guidelines column to the disease_gradings table to store markdown guidelines for each grading.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-disease-grading-guidelines
+  python scripts/setup_db.py --migrate-disease-grading-guidelines --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_disease_grading_guidelines.py
+  python scripts/migrate_disease_grading_guidelines.py --dry-run
+```

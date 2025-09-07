@@ -200,6 +200,11 @@ def main() -> None:
         help="Ensure core diseases (Glaucoma, DR, AMD) exist with correct IDs",
     )
     parser.add_argument(
+        "--migrate-disease-grading-guidelines",
+        action="store_true",
+        help="Add guidelines column to disease_gradings table",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -304,6 +309,13 @@ def main() -> None:
             migrate_core(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_core_diseases: {e}")
+            
+    if args.migrate_disease_grading_guidelines:
+        try:
+            from migrate_disease_grading_guidelines import migrate as migrate_guidelines
+            migrate_guidelines(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_disease_grading_guidelines: {e}")
 
 def migrate_user_disease_specializations(dry_run: bool = False) -> None:
     """Create user_disease_specializations table."""

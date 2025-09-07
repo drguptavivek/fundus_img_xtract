@@ -14,6 +14,7 @@ def list_disease_gradings():
             impression = request.form.get("impression", "").strip()
             display_order = request.form.get("display_order", 0)
             is_active = request.form.get("is_active") == "1"
+            guidelines = request.form.get("guidelines", "").strip()
             
             error = None
             if not disease_id or not impression:
@@ -49,6 +50,7 @@ def list_disease_gradings():
                         grading.impression = impression
                         grading.display_order = display_order
                         grading.is_active = is_active
+                        grading.guidelines = guidelines or None
                         flash("Disease grading updated successfully.", "success")
                     else:
                         flash("Error: Disease grading not found for update.", "danger")
@@ -58,7 +60,8 @@ def list_disease_gradings():
                         disease_id=disease_id,
                         impression=impression,
                         display_order=display_order,
-                        is_active=is_active
+                        is_active=is_active,
+                        guidelines=guidelines or None
                     )
                     db.add(grading)
                     flash("Disease grading created successfully.", "success")
@@ -100,6 +103,7 @@ def get_disease_grading_json(grading_id):
             "impression": grading.impression,
             "display_order": grading.display_order,
             "is_active": grading.is_active,
+            "guidelines": grading.guidelines or ""
         })
 
 

@@ -209,9 +209,6 @@ def create_app():
         return response
 
     #  relative imports
-    from api import api_bp
-    app.register_blueprint(api_bp)
-    
     from jobs import jobs_bp
     app.register_blueprint(jobs_bp)
     

@@ -23,6 +23,8 @@ except ImportError:
         return False
 
 
+from . import api_bp
+
 # -------------------
 # Disease Gradings API
 # -------------------

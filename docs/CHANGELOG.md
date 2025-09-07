@@ -40,7 +40,25 @@
 
   All API routes are now consolidated under the /api prefix, making the API more organized and easier to maintain. The application compiles without
   syntax errors, and all references to the old API endpoints have been updated to use the new centralized API blueprint.
-  
+
+    Issue and Fix
+
+  Problem: The application was failing to start with the error "The name 'api' is already registered for this blueprint".
+
+  Root Cause: The API blueprint was being registered twice in app.py:
+   1. First registration at lines 212-213
+   2. Second registration at lines 285-286
+
+  Solution:
+   1. Removed the duplicate registration of the API blueprint
+   2. Changed the blueprint name from "api" to "fundus_api" to ensure uniqueness (though this wasn't the main issue)
+
+  Verification:
+   - The app now creates successfully without errors
+   - All Python files compile without syntax errors
+
+
+
 
 
 ## 7 Sept 2025: 2000 IST

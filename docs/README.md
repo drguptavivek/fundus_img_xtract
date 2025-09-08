@@ -39,43 +39,43 @@ Additional documentation files provide information about the application archite
 ## Application Workflow Flowchart
 
 ```mermaid
-graph TD
+flowchart TD
     subgraph Ingestion & Initial Processing
-        A[ZIP Upload] --> B{Extract Files (Images & PDFs)};
-        B --> C{Validate & MD5 Hash};
+        A[ZIP Upload] --> B[Extract Files - Images & PDFs];
+        B --> C[Validate & MD5 Hash];
         C --> D1[Assign UUIDs to Images];
         C --> D2[Assign UUIDs to PDFs];
 
-        E[Direct Image Upload] --> F{Assign UUID & Metadata};
+        E[Direct Image Upload] --> F[Assign UUID & Metadata];
     end
 
     subgraph Processing & Anonymization
         D1 --> G[Image Anonymization];
         F --> G;
 
-        D2 --> H{Process PDFs (OCR & Data Extraction)};
+        D2 --> H[Process PDFs - OCR & Data Extraction];
         H --> I[Store OCR Data in DB & Assign UUIDs to Reports];
     end
 
     subgraph Verification
-        I --> J[Manual Data Verification (OCR Data & Laterality Tagging)];
+        I --> J[Manual Data Verification - OCR Data & Laterality Tagging];
         G --> K[Direct Image Anonymization Verification];
     end
 
     subgraph Clinical Grading
-        J --> L{Image Ready for Grading};
+        J --> L[Image Ready for Grading];
         K --> L;
 
         L --> M[Grading Dashboard];
-        M --> N[Start Grading (Random Ungraded Image)];
+        M --> N[Start Grading - Random Ungraded Image];
         N --> O[Advanced Image Viewer & Impression Selection];
-        O --> P[Save Grade (Upsert Logic)];
+        O --> P[Save Grade - Upsert Logic];
     end
 
     subgraph Dual Grading & Arbitration
-        P --> Q{Image Graded by Multiple Users?};
+        P --> Q[Image Graded by Multiple Users?];
         Q -- Yes --> R[Matching Grades];
-        R --> S{Discrepancy in Grades?};
+        R --> S[Discrepancy in Grades?];
         S -- Yes --> T[Arbitration by Senior Grader];
         S -- No --> U[Grades Finalized];
         T --> U;
@@ -87,6 +87,7 @@ graph TD
     style A fill:#f9f,stroke:#333,stroke-width:2px;
     style E fill:#f9f,stroke:#333,stroke-width:2px;
     style V fill:#bbf,stroke:#333,stroke-width:2px;
+
 ```
 
 ## Usage

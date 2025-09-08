@@ -27,13 +27,14 @@
                     </td>
                     <td>
                         {% if grading.guidelines %}
-                            <button class="btn btn-sm btn-outline-info" 
+                            <button class="btn btn-sm btn-outline-info view-guidelines-btn" 
                                     type="button" 
                                     data-bs-toggle="modal" 
                                     data-bs-target="#guidelinesModal"
-                                    data-guidelines="{{ grading.guidelines|e }}"
+                                    data-grading-id="{{ grading.id }}"
                                     data-impression="{{ grading.impression|e }}"
-                                    data-disease="{{ grading.disease.name|e }}">
+                                    data-disease="{{ grading.disease.name|e }}"
+                                    data-guidelines="{{ grading.guidelines|e }}">
                                 View Guidelines
                             </button>
                         {% else %}
@@ -81,65 +82,54 @@
     </div>
     
     <script>
-    // Handle guidelines modal
-    document.addEventListener('DOMContentLoaded', function() {
-        var guidelinesModal = document.getElementById('guidelinesModal');
-        guidelinesModal.addEventListener('show.bs.modal', function(event) {
-            var button = event.relatedTarget;
-            var guidelines = button.getAttribute('data-guidelines');
+    // Function to initialize guidelines modal
+    function initializeGuidelinesModal() {
+        // Remove any existing event listeners to prevent duplicates
+        document.removeEventListener('click', handleGuidelinesButtonClick);
+        document.addEventListener('click', handleGuidelinesButtonClick);
+    }
+    
+    // Function to handle button clicks
+    function handleGuidelinesButtonClick(event) {
+        if (event.target.closest('.view-guidelines-btn')) {
+            var button = event.target.closest('.view-guidelines-btn');
             var impression = button.getAttribute('data-impression');
             var disease = button.getAttribute('data-disease');
+            var guidelines = button.getAttribute('data-guidelines');
             
-            var modalTitleDisease = guidelinesModal.querySelector('#modal-disease');
-            var modalTitleImpression = guidelinesModal.querySelector('#modal-impression');
-            var modalGuidelines = guidelinesModal.querySelector('#modal-guidelines');
+            var modalTitleDisease = document.getElementById('modal-disease');
+            var modalTitleImpression = document.getElementById('modal-impression');
+            var modalGuidelines = document.getElementById('modal-guidelines');
             
-            modalTitleDisease.textContent = disease;
-            modalTitleImpression.textContent = impression;
-            modalGuidelines.innerHTML = renderMarkdown(guidelines);
-        });
-    });
-    
-    // Simple markdown renderer for guidelines
-    function renderMarkdown(text) {
-        if (!text) return '';
-        
-        // Convert markdown to HTML
-        var html = text;
-        
-        // Headers
-        html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-        html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-        html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-        
-        // Bold
-        html = html.replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>');
-        
-        // Italic
-        html = html.replace(/\*(.*)\*/gim, '<em>$1</em>');
-        
-        // Inline code
-        html = html.replace(/`([^`]+)`/gim, '<code>$1</code>');
-        
-        // Code blocks
-        html = html.replace(/```([\\s\\S]*?)```/gim, '<pre><code>$1</code></pre>');
-        
-        // Unordered lists
-        html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>');
-        
-        // Ordered lists
-        html = html.replace(/^\d+\. (.*$)/gim, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/gim, '<ol>$1</ol>');
-        
-        // Paragraphs
-        html = html.replace(/^\s*$(.*?)^\s*$/gim, '<p>$1</p>');
-        
-        // Line breaks
-        html = html.replace(/\n/g, '<br>');
-        
-        return html;
+            if (modalTitleDisease) modalTitleDisease.textContent = disease;
+            if (modalTitleImpression) modalTitleImpression.textContent = impression;
+            
+            // Handle guidelines content
+            if (guidelines && guidelines.trim() !== '') {
+                // Decode HTML entities properly
+                var textArea = document.createElement('textarea');
+                textArea.innerHTML = guidelines;
+                var decodedGuidelines = textArea.value;
+                
+                // Set the HTML content directly (render as HTML)
+                if (modalGuidelines) {
+                    modalGuidelines.innerHTML = decodedGuidelines;
+                }
+            } else {
+                if (modalGuidelines) {
+                    modalGuidelines.innerHTML = '<p>No guidelines available</p>';
+                }
+            }
+        }
     }
+    
+    // Initialize the modal when the partial is loaded
+    initializeGuidelinesModal();
+    
+    // Also initialize when HTMX finishes swapping content
+    document.addEventListener('htmx:afterSettle', function(evt) {
+        initializeGuidelinesModal();
+    });
     </script>
 {% else %}
     <p class="text-muted">No disease gradings found.</p>

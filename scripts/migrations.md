@@ -91,3 +91,20 @@ Or you can run the standalone script:
   python scripts/migrate_disease_grading_guidelines.py
   python scripts/migrate_disease_grading_guidelines.py --dry-run
 ```
+
+**Separate PDF files into encounter_file_pdfs table**
+
+This migration separates PDF files from the encounter_files table into a new encounter_file_pdfs table, retaining the encounter_files table for images only.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-encounter-file-pdfs
+  python scripts/setup_db.py --migrate-encounter-file-pdfs --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_encounter_file_pdfs.py
+  python scripts/migrate_encounter_file_pdfs.py --check-only
+```

@@ -64,6 +64,7 @@ class PatientEncounters(Base):
     
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    encounter_file_pdfs: Mapped[List["EncounterFilePDF"]] = relationship(cascade="all, delete-orphan")
     dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     lab_unit: Mapped["LabUnit"] = relationship()
@@ -87,6 +88,43 @@ class EncounterFile(Base):
     gradings: Mapped[List["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
     arbitrator: Mapped["User"] = relationship("User", foreign_keys=[arbitrated_by])
     lab_unit: Mapped["LabUnit"] = relationship()
+    
+    # Add a check constraint to ensure only image files are stored in this table
+    __table_args__ = (
+        CheckConstraint("file_type != 'pdf'", name="ck_encounter_file_not_pdf"),
+    )
+
+
+class EncounterFilePDF(Base):
+    __tablename__ = 'encounter_file_pdfs'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id'))
+    filename: Mapped[str]
+    file_type: Mapped[str] = mapped_column(String(16), default='pdf')
+    ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
+    eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+    # Fields for matching and arbitration
+    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    is_arbitration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    arbitrated_by: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True, index=True)
+    patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_file_pdfs")
+    arbitrator: Mapped["User"] = relationship("User", foreign_keys=[arbitrated_by])
+    lab_unit: Mapped["LabUnit"] = relationship()
+    
+    # Add a check constraint to ensure only PDF files are stored in this table
+    __table_args__ = (
+        CheckConstraint("file_type = 'pdf'", name="ck_encounter_file_pdf_only"),
+        Index('ix_encounter_file_pdfs_patient_encounter_id', 'patient_encounter_id'),
+        Index('ix_encounter_file_pdfs_eye_side', 'eye_side'),
+        Index('ix_encounter_file_pdfs_lab_unit_id', 'lab_unit_id'),
+        Index('ix_encounter_file_pdfs_matched_at', 'matched_at'),
+        Index('ix_encounter_file_pdfs_is_locked', 'is_locked'),
+        Index('ix_encounter_file_pdfs_is_arbitration', 'is_arbitration'),
+        Index('ix_encounter_file_pdfs_arbitrated_by', 'arbitrated_by'),
+    )
 
 class DiabeticRetinopathyReport(Base):
     __tablename__ = 'diabetic_retinopathy_reports'

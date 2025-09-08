@@ -205,6 +205,11 @@ def main() -> None:
         help="Add guidelines column to disease_gradings table",
     )
     parser.add_argument(
+        "--migrate-encounter-file-pdfs",
+        action="store_true",
+        help="Separate PDF files into encounter_file_pdfs table",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -316,6 +321,13 @@ def main() -> None:
             migrate_guidelines(dry_run=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_disease_grading_guidelines: {e}")
+            
+    if args.migrate_encounter_file_pdfs:
+        try:
+            from migrate_encounter_file_pdfs import migrate_encounter_file_pdfs
+            migrate_encounter_file_pdfs(check_only=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_encounter_file_pdfs: {e}")
 
 def migrate_user_disease_specializations(dry_run: bool = False) -> None:
     """Create user_disease_specializations table."""

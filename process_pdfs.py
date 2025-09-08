@@ -19,16 +19,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 
 # Import database models and configurations
-from models import (
-    engine,
-    Session, # Session factory
-    PDF_DIR,
-    DiabeticRetinopathyReport,
-    GlaucomaReport,
-    PatientEncounters,
-    EncounterFile,
-    Base # Import Base for metadata if needed for direct table creation (though main.py handles it)
-)
+from models import PDF_DIR, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF
 
 
 # --- Directories from .env ---
@@ -90,17 +81,16 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
     print(f"Created directories: {DR_PDF_DIR} and {GLAUCOMA_PDF_DIR}")
 
     try:
-        # Build a targeted worklist from DB: only unprocessed EncounterFile PDFs
+        # Build a targeted worklist from DB: only unprocessed EncounterFilePDFs
         rows = (
-            db_session.query(EncounterFile, PatientEncounters)
-            .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-            .filter(EncounterFile.file_type == 'pdf')
-            .filter((EncounterFile.ocr_processed == False) | (EncounterFile.ocr_processed.is_(None)))
+            db_session.query(EncounterFilePDF, PatientEncounters)
+            .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
+            .filter((EncounterFilePDF.ocr_processed == False) | (EncounterFilePDF.ocr_processed.is_(None)))
             .all()
         )
 
         if not rows:
-            print("\nNo unprocessed PDFs found (EncounterFile.ocr_processed==False). Nothing to do.")
+            print("\nNo unprocessed PDFs found (EncounterFilePDF.ocr_processed==False). Nothing to do.")
             return
 
         work_items: list[tuple[Path, PatientEncounters, str]] = []  # (pdf_path, encounter, filename)
@@ -130,7 +120,7 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
             if already_dr or already_gl:
                 log_error(pdf_path.name, f"Reports for patient ID  {extracted_patient_id}  already exist. Skipping OCR")
                 # Optionally mark as processed to avoid repeated attempts
-                enc_file = db_session.query(EncounterFile).filter_by(patient_encounter_id=patient_encounter.id, filename=pdf_path.name).first()
+                enc_file = db_session.query(EncounterFilePDF).filter_by(patient_encounter_id=patient_encounter.id, filename=pdf_path.name).first()
                 if enc_file and not enc_file.ocr_processed:
                     enc_file.ocr_processed = True
                     db_session.add(enc_file)
@@ -146,8 +136,8 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
                 print(f"Reports for patient ID '{extracted_patient_id}' from '{pdf_path.name}' already exist. Skipping OCR.")
                 log_error(pdf_path.name, f"Reports for patient ID  {extracted_patient_id}  already exist. Skipping OCR")
                 
-                # Optionally, update the EncounterFile's ocr_processed flag if not already set
-                encounter_file = db_session.query(EncounterFile).filter_by(
+                # Optionally, update the EncounterFilePDF's ocr_processed flag if not already set
+                encounter_file = db_session.query(EncounterFilePDF).filter_by(
                     patient_encounter_id=patient_encounter.id, filename=pdf_path.name
                 ).first()
                 if encounter_file and not encounter_file.ocr_processed:
@@ -245,19 +235,19 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
 
             # Update the ocr_processed flag for the specific PDF file
             # This is important to know which files have had their OCR extracted and stored
-            encounter_file = db_session.query(EncounterFile).filter_by(
+            encounter_file = db_session.query(EncounterFilePDF).filter_by(
                 patient_encounter_id=patient_encounter.id, filename=pdf_path.name
             ).first()
 
             if encounter_file:
                 encounter_file.ocr_processed = True
                 db_session.add(encounter_file)
-                msg = f"Marked '{pdf_path.name}' as OCR processed in EncounterFile."
+                msg = f"Marked '{pdf_path.name}' as OCR processed in EncounterFilePDF."
                 print(f"  {msg}")
                 log_success(pdf_path.name, msg)
                 
             else:
-                warn = f"Could not find EncounterFile entry for '{pdf_path.name}'."
+                warn = f"Could not find EncounterFilePDF entry for '{pdf_path.name}'."
                 print(f"  Warning: {warn}")
                 log_error(pdf_path.name, warn)
 

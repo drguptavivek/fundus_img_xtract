@@ -13,15 +13,7 @@ except ImportError:
 
 # --- Model and DB Imports ---
 # Import everything needed from the new models.py file
-from models import (
-    Base,
-    EncounterFile,
-    DiabeticRetinopathyReport,
-    GlaucomaReport,
-    engine,
-    Session,
-    PDF_DIR
-)
+from models import Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF
 
 # --- Tesseract Configuration ---
 # If Tesseract is not in your system's PATH, you may need to set its location manually.
@@ -98,7 +90,7 @@ def process_pdf_files(session):
     print("\n--- Starting PDF OCR Processing ---")
     
     # Query all PDF files from the database, not just unprocessed ones.
-    all_pdfs = session.query(EncounterFile).filter_by(file_type='pdf').all()
+    all_pdfs = session.query(EncounterFilePDF).all()
     if not all_pdfs:
         print("No PDFs found in the database to process.")
         return

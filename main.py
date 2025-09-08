@@ -17,6 +17,7 @@ from models import (
     ZipFile,
     PatientEncounters,
     EncounterFile,
+    EncounterFilePDF,
     engine,
     Session,
     BASE_DIR, 
@@ -408,19 +409,24 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
             print(f"  Extracted Info -> Name: {name}, Patient ID: {patient_id}, Capture Date: {capture_date}")
 
             files_to_add = []
-            for member_info in zf.infolist():
-                # skip directories or items outside the identified parent dir
-                if member_info.is_dir() or not str(Path(member_info.filename)).startswith(str(dir_in_zip)):
-                    continue
-
+            files_to_add_pdfs = []
+            # Filter files to only include those in the identified directory
+            valid_files = [info for info in zf.infolist() 
+                          if not info.is_dir() and info.filename.startswith(str(dir_in_zip)) and
+                          not info.filename.startswith("__MACOSX/") and 
+                          not Path(info.filename).name.startswith("._")]
+            
+            for member_info in valid_files:
                 original_filepath = Path(member_info.filename)
-                ext = original_filepath.suffix.lower()
-                new_filename = f"{patient_id}_{name.replace(' ', '_')}_{capture_date}_{original_filepath.name.replace('/', '_')}"
+                file_ext = original_filepath.suffix.lower()
 
-                # Only allow JPG/JPEG images and PDFs (as per requirement)
-                if ext in {'.jpg', '.jpeg'}:
+                # New safe, UUID-based filename with preserved extension
+                new_filename = f"{uuid4()}{file_ext}"
+
+                # Determine destination directory and file type
+                if file_ext in {'.jpg', '.jpeg'}:
                     dest_dir, file_type = IMAGE_DIR, 'image'
-                elif ext == '.pdf':
+                elif file_ext == '.pdf':
                     dest_dir, file_type = PDF_DIR, 'pdf'
                 else:
                     # Should not reach here due to pre-check, but keep defensive
@@ -431,13 +437,17 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
                 with zf.open(member_info) as source, open(target_path, "wb") as target:
                     shutil.copyfileobj(source, target)
 
-                files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
+                # Create appropriate model instance
                 if file_type == 'pdf':
+                    files_to_add_pdfs.append(EncounterFilePDF(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
                     added_pdf_filenames.append(new_filename)
+                else:
+                    files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add
-            session.add(new_zip_file)
+            new_patient_encounter.encounter_file_pdfs = files_to_add_pdfs
+        session.add(new_zip_file)
 
         # --- OUTSIDE the with-block: the ZIP file handle is closed now ---
         session.commit()

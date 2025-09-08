@@ -1,6 +1,14 @@
 # Fundus Image Manager
 
 
+##  Common Commands
+### Development
+- `uv run app.py` - Run the application 
+- `.venv\bin\activate` or `.venv\Scripts\activate` - Activate the virtual environment
+- `uv pip install` - Install dependencies with uv
+- `npn run build:css` - Build Theme 
+
+
 ##  Technical Details
 
 - **Backend:** Python, Flask
@@ -11,12 +19,6 @@
 - **Environment:**  .env and .env.example
 
 
-##  Common Commands
-### Development
-- `.venv\bin\activate` or `.venv\Scripts\activate` - Activate the virtual environment
-- `python app.py` - Run the application 
-- `uv pip install` - Install dependencies with uv
-- `npn run build:css` - Build Theme 
 
 
 ## CODING PROTOCOL ##

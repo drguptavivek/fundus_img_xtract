@@ -1,7 +1,8 @@
 # docs/routes.py
 import os
 import markdown
-from flask import send_from_directory, abort, render_template_string
+from markdown_mermaid import makeExtension
+from flask import send_from_directory, abort, render_template_string, current_app
 from . import docs_bp
 
 # Get the base directory of the application
@@ -42,6 +43,12 @@ MARKDOWN_TEMPLATE = """
         {{ content|safe }}
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+    <script>
+        console.log("Mermaid.js script loaded.");
+        mermaid.initialize({ startOnLoad: true });
+        console.log("Mermaid.js initialized with startOnLoad: true.");
+    </script>
 </body>
 </html>
 """
@@ -61,7 +68,7 @@ def api_docs_html():
     docs_dir = os.path.join(BASE_DIR, 'docs')
     try:
         with open(os.path.join(docs_dir, 'api.md'), 'r', encoding='utf-8') as f:
-            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables'])
+            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables', makeExtension()])
         
         return render_template_string(MARKDOWN_TEMPLATE, 
                                     title="API Documentation", 
@@ -94,7 +101,10 @@ def docs_index():
     docs_dir = os.path.join(BASE_DIR, 'docs')
     try:
         with open(os.path.join(docs_dir, 'README.md'), 'r', encoding='utf-8') as f:
-            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables'])
+            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables', makeExtension()])
+        current_app.logger.info("--- DEBUG: Markdown Content ---")
+        current_app.logger.info(content)
+        current_app.logger.info("--- END DEBUG ---")
         
         return render_template_string(MARKDOWN_TEMPLATE, 
                                     title="Documentation", 

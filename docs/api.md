@@ -17,7 +17,6 @@ Different endpoints require different user roles:
 - `data_manager`: Access to most data management endpoints
 - `ophthalmologist`: Access to disease-related and grading endpoints
 - `resident`: Limited access to specific endpoints
-- `fileUploader`: Access to upload-related endpoints
 
 ## Base URL
 
@@ -38,13 +37,11 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 [
   {
     "id": 1,
-    "name": "Glaucoma",
-    "created_at": "2023-01-15T10:30:00"
+    "name": "Glaucoma"
   },
   {
     "id": 2,
-    "name": "Diabetic Retinopathy",
-    "created_at": "2023-01-15T10:30:00"
+    "name": "Diabetic Retinopathy"
   }
 ]
 ```
@@ -64,8 +61,7 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 ```json
 {
   "id": 1,
-  "name": "Glaucoma",
-  "created_at": "2023-01-15T10:30:00"
+  "name": "Glaucoma"
 }
 ```
 
@@ -141,8 +137,7 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 [
   {
     "id": 1,
-    "name": "City General Hospital",
-    "created_at": "2023-01-15T10:30:00"
+    "name": "City General Hospital"
   }
 ]
 ```
@@ -162,8 +157,7 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 ```json
 {
   "id": 1,
-  "name": "City General Hospital",
-  "created_at": "2023-01-15T10:30:00"
+  "name": "City General Hospital"
 }
 ```
 
@@ -184,8 +178,7 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
   {
     "id": 1,
     "name": "Main Lab",
-    "hospital_id": 1,
-    "created_at": "2023-01-15T10:30:00"
+    "hospital_id": 1
   }
 ]
 ```
@@ -234,7 +227,7 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
   "name": "Main Lab",
   "hospital_id": 1,
   "hospital_name": "City General Hospital",
-  "created_at": "2023-01-15T10:30:00"
+  "created_at": "2023-01-15T10:30:00.000000"
 }
 ```
 
@@ -286,30 +279,6 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 
 ## User Endpoints
 
-### Get Lab Units for User
-
-**Endpoint**: `GET /api/users/{user_id}/lab-units`
-
-**Description**: Returns all lab units for a specific user.
-
-**Required Role**: Logged-in user (can only access their own data unless admin/data manager)
-
-**Parameters**:
-- `user_id` (path): The ID of the user
-
-**Response**:
-```json
-[
-  {
-    "id": 1,
-    "name": "Main Lab",
-    "hospital_id": 1,
-    "hospital_name": "City General Hospital",
-    "created_at": "2023-01-15T10:30:00"
-  }
-]
-```
-
 ### Get Hospitals for User
 
 **Endpoint**: `GET /api/users/{user_id}/hospitals`
@@ -327,7 +296,6 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
   {
     "id": 1,
     "name": "City General Hospital",
-    "created_at": "2023-01-15T10:30:00",
     "lab_unit_ids": [1],
     "lab_unit_names": ["Main Lab"]
   }

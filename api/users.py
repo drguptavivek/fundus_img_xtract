@@ -15,28 +15,7 @@ from models import Session, User, Hospital, LabUnit
 # Users API
 # -------------------
 
-@api_bp.route('/users/<int:user_id>/lab-units', methods=['GET'])
-@login_required
-def get_user_lab_units(user_id):
-    """Get all lab units for a specific user."""
-    with Session() as db:
-        user = db.get(User, user_id)
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-        
-        # Check if current user can access this user's data
-        from flask_login import current_user
-        if not (current_user.has_role('admin', 'data_manager') or current_user.id == user_id):
-            return jsonify({"error": "Forbidden"}), 403
-        
-        lab_units = user.lab_units
-        
-        return jsonify([{
-            "id": lu.id,
-            "name": lu.name,
-            "hospital_id": lu.hospital_id,
-            "hospital_name": lu.hospital.name if lu.hospital else None
-        } for lu in lab_units])
+
 
 
 @api_bp.route('/users/<int:user_id>/hospitals', methods=['GET'])
@@ -67,28 +46,3 @@ def get_user_hospitals(user_id):
             "lab_unit_ids": [lu.id for lu in user.lab_units if lu.hospital_id == h.id],
             "lab_unit_names": [lu.name for lu in user.lab_units if lu.hospital_id == h.id]
         } for h in hospitals])
-
-
-@api_bp.route('/users/<int:user_id>/disease-specializations', methods=['GET'])
-@roles_required("admin")
-def get_user_disease_specializations(user_id):
-    """Get all disease specializations for a specific user."""
-    # Import here to avoid circular imports
-    from disease_specialzation_utils import get_user_disease_specializations
-    
-    with Session() as db:
-        user = db.get(User, user_id)
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-        
-        # Check if user is an ophthalmologist
-        if not user.has_role("ophthalmologist"):
-            return jsonify({"diseases": []})
-        
-        try:
-            specializations = get_user_disease_specializations(user_id)
-            return jsonify({
-                "diseases": [{"id": d.id, "name": d.name} for d in specializations]
-            })
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500

@@ -8,7 +8,7 @@
     <div class="row mb-4">
         <div class="col-md-4">
             <div class="card kpi-card kpi--primary ">
-                <div class="card-header">Total Verification</div>
+                <div class="card-header">Total Anonymization</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ total_anonymized_images }}</h5>
                     <p class="card-text">Images anonymized</p>
@@ -17,7 +17,7 @@
         </div>
         <div class="col-md-4">
             <div class="card kpi-card kpi--success">
-                <div class="card-header">Pending Verification</div>
+                <div class="card-header">Pending Anonymization</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ pending_anonymization_images }}</h5>
                     <p class="card-text">Images awaiting anonymization.</p>
@@ -26,7 +26,7 @@
         </div>
         <div class="col-md-4">
             <div class="card kpi-card kpi--info">
-                <div class="card-header">Your Verified Images</div>
+                <div class="card-header">Your Anonymized Images</div>
                 <div class="card-body">
                     <h5 class="card-title">{{ user_verified_images }}</h5>
                     <p class="card-text">Images you have anonymized.</p>
@@ -132,7 +132,7 @@
                         <label for="status" class="form-label">Status</label>
                         <select name="status" id="status" class="form-select">
                             <option value="">All</option>
-                            <option value="verified" {% if filters.status == 'verified' %}selected{% endif %}>Verified</option>
+                            <option value="verified" {% if filters.status == 'verified' %}selected{% endif %}>Anonymized</option>
                             <option value="unverified" {% if filters.status == 'unverified' %}selected{% endif %}>Unverified</option>
                             <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
                         </select>
@@ -196,7 +196,7 @@
                             <td>{{ verification.image_upload.area.name if verification.image_upload.area else '-' }}</td>
                             <td>
                                 {% if verification.verified_status == 'verified' %}
-                                    <span class="badge bg-success">Verified</span>
+                                    <span class="badge bg-success">Anonymized</span>
                                 {% elif verification.verified_status == 'unverified' %}
                                     <span class="badge bg-danger">Unverified</span>
                                 {% else %}

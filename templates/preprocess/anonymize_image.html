@@ -17,10 +17,10 @@
 <div style="width: 1200px;">
   <h1>Anonymize Image</h1>
 
-  {# Minimal helpful banner: only if the current image is already verified #}
+  {# Minimal helpful banner: only if the current image is already anonymized #}
   {% if is_verified %}
     <div class="alert alert-warning py-2 d-flex justify-content-between align-items-center">
-      <span>This image is already verified.</span>
+      <span>This image is already anonymized.</span>
       <span class="d-flex gap-2">
         {% if next_unverified_uuid %}
           <a class="btn btn-sm btn-primary"
@@ -140,19 +140,19 @@
           </div>
         </div>
 
-        <!-- RIGHT VERIFICATION RESULTS -->
+        <!-- RIGHT ANONYMIZATION RESULTS -->
         <div class="col-12 col-lg-6">
-          <form method="POST" action="{{ url_for('preprocess.anonymize_image', uuid=uuid) }}" id="verification-form">
+          <form method="POST" action="{{ url_for('preprocess.anonymize_image', uuid=uuid) }}" id="anonymization-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row g-3 align-items-end">
               <!-- First panel: toggle switch -->
               <div class="col-12 col-md-6">
-                <label for="verified_status" class="form-label mb-1">Verification Status</label>
+                <label for="verified_status" class="form-label mb-1">Anonymization Status</label>
                 <div class="form-check form-switch mb-2">
                   <input class="form-check-input" type="checkbox" id="verified_status" name="verified_status" value="verified" 
                          {% if current_verification and current_verification.verified_status == 'verified' %}checked{% endif %}>
                   <label class="form-check-label" for="verified_status">
-                    {% if current_verification and current_verification.verified_status == 'verified' %}Verified{% else %}Unverified{% endif %}
+                    {% if current_verification and current_verification.verified_status == 'verified' %}Anonymized{% else %}Unverified{% endif %}
                   </label>
                 </div>
                 {% if next_unverified_uuid %}
@@ -189,12 +189,12 @@
   document.addEventListener('DOMContentLoaded', function() {
     const toggle = document.getElementById('verified_status');
     const label = toggle.nextElementSibling;
-    const form = document.getElementById('verification-form');
+    const form = document.getElementById('anonymization-form');
     const remarks = document.getElementById('remarks');
     
     // Update label text when toggle changes
     toggle.addEventListener('change', function() {
-      label.textContent = this.checked ? 'Verified' : 'Unverified';
+      label.textContent = this.checked ? 'Anonymized' : 'Unverified';
       
       // Automatically submit the form after a short delay to allow UI to update
       setTimeout(function() {
@@ -207,7 +207,7 @@
     remarks.addEventListener('input', function() {
       clearTimeout(remarksTimeout);
       remarksTimeout = setTimeout(function() {
-        // Only submit if the verification status has actually changed or if there are remarks
+        // Only submit if the anonymization status has actually changed or if there are remarks
         form.submit();
       }, 1000);
     });

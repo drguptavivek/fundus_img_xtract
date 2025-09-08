@@ -464,7 +464,7 @@ document.addEventListener('DOMContentLoaded', function() {
         restoreBtn.addEventListener('click', function() {
             if (confirm('Are you sure you want to delete the edited version and restore the original? This cannot be undone.')) {
                 const restoreUrl = restoreBtn.dataset.restoreUrl;
-                const csrfToken = document.getElementById('csrf_token').value;
+                const csrfToken = getCSRFToken();
                 fetch(restoreUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken }

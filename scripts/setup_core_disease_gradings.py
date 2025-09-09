@@ -21,10 +21,10 @@ STANDARD_GRADINGS = {
     # Glaucoma gradings
     "Glaucoma": [
         {"impression": "Normal", "display_order": 1, "is_active": True, "guidelines": "No signs of glaucomatous changes. No Other Referrable disease"},
-        {"impression": "Suspect", "display_order": 2, "is_active": True, "guidelines": "Vertical CDR >= 0.8 / ISNT Rule  violated / Baring of Circulminear vessels / Bayonet Sign / Beta Zone PPA  OD haemmorhages "},
-        {"impression": "Glaucoma", "display_order": 3, "is_active": True, "guidelines": "<b>Hard Signs of Glaucoma </b>:  RNFL Loss / Focal NRR defects / Total cupping."},
+        {"impression": "Suspect", "display_order": 2, "is_active": True, "guidelines": "<ul><li>Vertical CDR &gt;= 0.8&nbsp;</li><li>ISNT Rule &nbsp;violated&nbsp;</li><li>Baring of Circulminear vessels&nbsp;</li><li>Bayonet Sign&nbsp;</li><li>Beta Zone PPA &nbsp;</li><li>OD haemmorhages</li></ul>"},
+        {"impression": "Glaucoma", "display_order": 3, "is_active": True, "guidelines": "<p><strong>Hard Signs of Glaucoma&nbsp;</strong></p><ul><li>RNFL Loss&nbsp;</li><li>Focal NRR defects&nbsp;</li><li>Total cupping.</li></ul>"},
         {"impression": "Other Retinal", "display_order": 4, "is_active": True, "guidelines": "If  No Glaucoma/ Not Glaucoma suspect BUT Any other retinal or disc pathology. Note disease in remarks"},
-        {"impression": "Not Gradable", "display_order": 5, "is_active": True, "guidelines": "If cannot grade, mark as not gradable. Note signs in remarks."},
+        {"impression": "Not Gradable", "display_order": 5, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable.&nbsp;</p><p>Note reason not gradable in remarks.</p>"},
     ],
     
     # Diabetic Retinopathy (DR) gradings
@@ -33,7 +33,7 @@ STANDARD_GRADINGS = {
         {"impression": "Minimal/Mild DR", "display_order": 2, "is_active": True, "guidelines": "Few microaneurysms only."},
         {"impression": "Moderate NPDR", "display_order": 3, "is_active": True, "guidelines": "Microaneurysms, small hemorrhages, and hard exudates only."},
         {"impression": "PDR/DME", "display_order": 4, "is_active": True, "guidelines": "Any of the following: >20 hemorrhages in each of 4 quadrants, definite venous beading in 2+ quadrants, prominent IRMA in 1+ quadrant."},
-        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "If  No DR / DME , BUT Any other retinal or disc pathology. Note disease in remarks."},
+        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No DR / DME , <strong>BUT Any other retinal or disc pathology</strong>. Note disease in remarks.</p>"},
         {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
     ],
     
@@ -43,22 +43,80 @@ STANDARD_GRADINGS = {
         {"impression": "Early AMD", "display_order": 2, "is_active": True, "guidelines": "Few small drusen, pigmentary changes in the macula."},
         {"impression": "Intermediate AMD", "display_order": 3, "is_active": True, "guidelines": "Many medium-sized drusen, one or more large drusen, pigmentary changes."},
         {"impression": "Late AMD", "display_order": 4, "is_active": True, "guidelines": "Geographic atrophy (dry) or neovascular AMD (wet)."},
-        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "If  No AMD , BUT Any other retinal or disc pathology. Note disease in remarks."},
-        {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
+        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No AMD , <strong>BUT Any other retinal or disc pathology.</strong> Note disease in remarks.</p>"},
+        {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable. Note reasons in remarks.</p>"}
     ]
 }
 
 
-def setup_core_disease_gradings(dry_run: bool = False) -> None:
+def count_existing_core_disease_gradings(db):
+    """
+    Count how many core disease gradings already exist in the database.
+    
+    Args:
+        db: Database session
+        
+    Returns:
+        int: Number of existing core disease gradings
+    """
+    # Get core diseases from database
+    core_disease_ids = []
+    for disease_id in CORE_DISEASES.keys():
+        disease = db.get(Disease, disease_id)
+        if disease:
+            core_disease_ids.append(disease_id)
+    
+    if not core_disease_ids:
+        return 0
+    
+    # Count gradings for core diseases
+    count = db.query(DiseaseGrading).filter(
+        DiseaseGrading.disease_id.in_(core_disease_ids)
+    ).count()
+    
+    return count
+
+
+def confirm_action(message):
+    """
+    Ask user for confirmation.
+    
+    Args:
+        message: Confirmation message to display
+        
+    Returns:
+        bool: True if user confirms, False otherwise
+    """
+    while True:
+        response = input(f"{message} (y/n): ").strip().lower()
+        if response in ['y', 'yes']:
+            return True
+        elif response in ['n', 'no']:
+            return False
+        else:
+            print("Please enter 'y' for yes or 'n' for no.")
+
+
+def setup_core_disease_gradings(dry_run: bool = False, force: bool = False) -> None:
     """
     Set up standard gradings for core diseases.
     
     Args:
         dry_run: If True, only print what would be done without making changes
+        force: If True, skip confirmation prompt
     """
     print("Preparing to set up standard gradings for core diseases...")
     
     with Session() as db:
+        # Check if core disease gradings already exist
+        existing_count = count_existing_core_disease_gradings(db)
+        
+        if existing_count > 0 and not force and not dry_run:
+            print(f"Found {existing_count} existing core disease gradings in the database.")
+            if not confirm_action("Do you want to update/overwrite these gradings?"):
+                print("Operation cancelled by user.")
+                return
+        
         # Get core diseases from database
         core_diseases = {}
         for disease_id, disease_name in CORE_DISEASES.items():
@@ -152,6 +210,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Show what would be done without making changes"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Skip confirmation prompt when gradings already exist"
+    )
     args = parser.parse_args()
     
-    setup_core_disease_gradings(dry_run=args.dry_run)
+    setup_core_disease_gradings(dry_run=args.dry_run, force=args.force)

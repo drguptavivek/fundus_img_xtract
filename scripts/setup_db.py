@@ -160,6 +160,16 @@ def main() -> None:
         help="Add edited_image_path column to direct_image_uploads table",
     )
     parser.add_argument(
+        "--migrate-direct-uploads-matching-fields",
+        action="store_true",
+        help="Add matching fields (matched_at, is_locked, etc.) to direct_image_uploads table",
+    )
+    parser.add_argument(
+        "--setup-core-disease-gradings",
+        action="store_true",
+        help="Set up standard gradings for core diseases (Glaucoma, DR, AMD)",
+    )
+    parser.add_argument(
         "--migrate-image-grading-direct-upload",
         action="store_true",
         help="Add direct_image_upload_id column to image_gradings table",
@@ -208,6 +218,16 @@ def main() -> None:
         "--migrate-encounter-file-pdfs",
         action="store_true",
         help="Separate PDF files into encounter_file_pdfs table",
+    )
+    parser.add_argument(
+        "--migrate-patient-encounters-lab-unit",
+        action="store_true",
+        help="Add lab_unit_id column to patient_encounters table",
+    )
+    parser.add_argument(
+        "--backfill-patient-encounters-lab-unit",
+        action="store_true",
+        help="Backfill lab_unit_id = 1 for existing patient encounters",
     )
     parser.add_argument(
         "--batch-size",
@@ -328,6 +348,34 @@ def main() -> None:
             migrate_encounter_file_pdfs(check_only=args.check_only)
         except Exception as e:
             print(f"Failed to import migrate_encounter_file_pdfs: {e}")
+            
+    if args.migrate_patient_encounters_lab_unit:
+        try:
+            from migrate_patient_encounters_lab_unit import migrate as migrate_pe_lab_unit
+            migrate_pe_lab_unit(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_patient_encounters_lab_unit: {e}")
+            
+    if args.backfill_patient_encounters_lab_unit:
+        try:
+            from backfill_patient_encounters_lab_unit import backfill as backfill_pe_lab_unit
+            backfill_pe_lab_unit(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import backfill_patient_encounters_lab_unit: {e}")
+            
+    if args.migrate_direct_uploads_matching_fields:
+        try:
+            from migrate_direct_uploads_matching_fields import migrate as migrate_diu_matching
+            migrate_diu_matching(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_direct_uploads_matching_fields: {e}")
+            
+    if args.setup_core_disease_gradings:
+        try:
+            from setup_core_disease_gradings import setup_core_disease_gradings as setup_gradings
+            setup_gradings(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import setup_core_disease_gradings: {e}")
 
 def migrate_user_disease_specializations(dry_run: bool = False) -> None:
     """Create user_disease_specializations table."""
@@ -352,6 +400,58 @@ def migrate_encounter_files_lab_unit(dry_run: bool = False) -> None:
             print("Dry run: Would add lab_unit_id column to encounter_files table")
     except Exception as e:
         print(f"Failed to import migrate_encounter_files_lab_unit: {e}")
+
+
+def migrate_patient_encounters_lab_unit(dry_run: bool = False) -> None:
+    """Add lab_unit_id column to patient_encounters table."""
+    print("Preparing to add lab_unit_id column to patient_encounters table...")
+    try:
+        from migrate_patient_encounters_lab_unit import migrate
+        if not dry_run:
+            migrate()
+        else:
+            print("Dry run: Would add lab_unit_id column to patient_encounters table")
+    except Exception as e:
+        print(f"Failed to import migrate_patient_encounters_lab_unit: {e}")
+
+
+def backfill_patient_encounters_lab_unit(dry_run: bool = False) -> None:
+    """Backfill lab_unit_id = 1 for existing patient encounters."""
+    print("Preparing to backfill lab_unit_id = 1 for patient encounters...")
+    try:
+        from backfill_patient_encounters_lab_unit import backfill
+        if not dry_run:
+            backfill()
+        else:
+            print("Dry run: Would backfill lab_unit_id = 1 for patient encounters")
+    except Exception as e:
+        print(f"Failed to import backfill_patient_encounters_lab_unit: {e}")
+
+
+def migrate_direct_uploads_matching_fields(dry_run: bool = False) -> None:
+    """Add matching fields to direct_image_uploads table."""
+    print("Preparing to add matching fields to direct_image_uploads table...")
+    try:
+        from migrate_direct_uploads_matching_fields import migrate
+        if not dry_run:
+            migrate()
+        else:
+            print("Dry run: Would add matching fields to direct_image_uploads table")
+    except Exception as e:
+        print(f"Failed to import migrate_direct_uploads_matching_fields: {e}")
+
+
+def setup_core_disease_gradings(dry_run: bool = False) -> None:
+    """Set up standard gradings for core diseases."""
+    print("Preparing to set up standard gradings for core diseases...")
+    try:
+        from setup_core_disease_gradings import setup_core_disease_gradings as setup_gradings
+        if not dry_run:
+            setup_gradings()
+        else:
+            print("Dry run: Would set up standard gradings for core diseases")
+    except Exception as e:
+        print(f"Failed to import setup_core_disease_gradings: {e}")
 
 
 if __name__ == "__main__":

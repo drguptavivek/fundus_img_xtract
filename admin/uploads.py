@@ -1,7 +1,7 @@
 import os
 import re as _re
 from collections import Counter
-from flask import render_template
+from flask import flash, render_template
 from sqlalchemy import select
 from auth.roles import roles_required
 from models import BASE_DIR, Session

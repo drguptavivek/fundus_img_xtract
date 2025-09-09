@@ -21,6 +21,8 @@
           <th>Patient</th>
           <th>Patient ID</th>
           <th>Capture Date</th>
+          <th>Lab Unit</th>
+          <th>Hospital</th>
         </tr>
       </thead>
       <tbody>
@@ -33,9 +35,11 @@
           <td>{{ enc.name if enc else '-' }}</td>
           <td>{{ enc.patient_id if enc else '-' }}</td>
           <td>{{ enc.capture_date if enc else '-' }}</td>
+          <td>{{ enc.lab_unit.name if enc and enc.lab_unit else '-' }}</td>
+          <td>{{ enc.lab_unit.hospital.name if enc and enc.lab_unit and enc.lab_unit.hospital else '-' }}</td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-center text-muted p-4">No uploads yet.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted p-4">No uploads yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

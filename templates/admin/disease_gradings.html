@@ -162,13 +162,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Execute the command
                 if (command === 'bold') {
-                    wrapSelectionWithTags('<b>', '</b>');
+                    wrapSelectionWithTags('**', '**');
                 } else if (command === 'italic') {
-                    wrapSelectionWithTags('<i>', '</i>');
+                    wrapSelectionWithTags('*', '*');
                 } else if (command === 'underline') {
                     wrapSelectionWithTags('<u>', '</u>');
-                } else {
-                    document.execCommand(command, false, value);
+                } else if (command === 'insertUnorderedList') {
+                    insertListAtCursor('- ');
+                } else if (command === 'insertOrderedList') {
+                    insertListAtCursor('1. ');
+                } else if (command === 'formatBlock') {
+                    if (value === '<h3>') {
+                        wrapSelectionWithTags('### ', '');
+                    } else {
+                        // Default to paragraph, which is just normal text
+                    }
                 }
             }
         });
@@ -186,6 +194,30 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Set cursor position after the inserted text
         const newCursorPos = start + openTag.length + selectedText.length + closeTag.length;
+        guidelinesInput.setSelectionRange(newCursorPos, newCursorPos);
+        guidelinesInput.focus();
+    }
+    
+    // Function to insert list markers at the beginning of lines
+    function insertListAtCursor(listMarker) {
+        const start = guidelinesInput.selectionStart;
+        const end = guidelinesInput.selectionEnd;
+        const text = guidelinesInput.value;
+        
+        // Find the beginning of the line
+        let lineStart = start;
+        while (lineStart > 0 && text[lineStart - 1] !== '\n') {
+            lineStart--;
+        }
+        
+        // Insert the list marker
+        const beforeText = text.substring(0, lineStart);
+        const afterText = text.substring(lineStart);
+        
+        guidelinesInput.value = beforeText + listMarker + afterText;
+        
+        // Set cursor position after the inserted marker
+        const newCursorPos = start + listMarker.length;
         guidelinesInput.setSelectionRange(newCursorPos, newCursorPos);
         guidelinesInput.focus();
     }
@@ -207,7 +239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const xhr = event.detail.xhr;
         const requestPath = event.detail.requestConfig.path;
 
-        if (requestPath.includes('/json') && event.detail.successful) {
+        if (requestPath.includes('/disease-gradings/') && requestPath.includes('/json') && event.detail.successful) {
             const data = JSON.parse(xhr.responseText);
             
             form.querySelector('#disease_id').value = data.disease_id;

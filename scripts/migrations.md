@@ -42,6 +42,57 @@ Or you can run the standalone script:
   python scripts/migrate_encounter_files_lab_unit.py
 ```
 
+**Add lab_unit_id to PatientEncounters table**
+
+This migration adds the `lab_unit_id` column to the `patient_encounters` table, allowing each PatientEncounter to be directly associated with a LabUnit.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-patient-encounters-lab-unit
+  python scripts/setup_db.py --migrate-patient-encounters-lab-unit --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_patient_encounters_lab_unit.py
+  python scripts/migrate_patient_encounters_lab_unit.py --dry-run
+```
+
+**Add matching fields to DirectImageUploads table**
+
+This migration adds the matching fields (`matched_at`, `is_locked`, `is_arbitration`, `arbitrated_by`) to the `direct_image_uploads` table, which are used for image matching and arbitration workflows.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-direct-uploads-matching-fields
+  python scripts/setup_db.py --migrate-direct-uploads-matching-fields --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_direct_uploads_matching_fields.py
+  python scripts/migrate_direct_uploads_matching_fields.py --dry-run
+```
+
+**Set up standard gradings for core diseases**
+
+This setup creates standard gradings for the core diseases (Glaucoma, DR, AMD) with appropriate guidelines and display order.
+
+Usage:
+```bash
+  python scripts/setup_db.py --setup-core-disease-gradings
+  python scripts/setup_db.py --setup-core-disease-gradings --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/setup_core_disease_gradings.py
+  python scripts/setup_core_disease_gradings.py --dry-run
+```
+
 **Create user_disease_specializations table**
 
 This migration creates the `user_disease_specializations` table, which stores the many-to-many relationship between users (ophthalmologists) and diseases they can grade.

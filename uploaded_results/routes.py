@@ -4,8 +4,8 @@ from flask import render_template, request, current_app, url_for
 
 from auth.roles import roles_required
 from . import bp
-from models import Session, ZipFile
-from sqlalchemy.orm import joinedload  
+from models import Session, ZipFile, PatientEncounters, LabUnit, Hospital
+from sqlalchemy.orm import selectinload  
 
 
 @bp.route("/uploaded_results", methods=["GET"])
@@ -17,23 +17,23 @@ def list_uploaded_results():
     page = 1 if page < 1 else page
 
     db = Session()
-    db = Session()
     try:
+        # Create a separate query for counting (without expensive joins)
+        total = db.query(ZipFile).count()
+        
         # ✅ Eager-load the one-to-one relationship to avoid DetachedInstanceError
-        base_q = (
-            db.query(ZipFile)
-              .options(joinedload(ZipFile.patient_encounter))
-              .order_by(ZipFile.id.desc())
-        )
-
-        total = base_q.count()
+        # Also load lab_unit and hospital information
         items = (
-            base_q
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
+            db.query(ZipFile)
+              .options(selectinload(ZipFile.patient_encounter)
+                       .selectinload(PatientEncounters.lab_unit)
+                       .selectinload(LabUnit.hospital))
+              .order_by(ZipFile.id.desc())
+              .offset((page - 1) * per_page)
+              .limit(per_page)
+              .all()
         )
-        # Now `z.patient_encounter` is already loaded on each item
+        # Now `z.patient_encounter` and its relationships are already loaded on each item
     finally:
         db.close()
         

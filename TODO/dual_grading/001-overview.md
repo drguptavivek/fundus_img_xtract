@@ -49,3 +49,64 @@ Out of Scope (Initial)
 - Intra-rater reliability resurfacing (can be added later without schema changes).
 
 
+## Mermaid Diagram — End-to-End Flow
+
+```mermaid
+flowchart TD
+    %% Verification gating before any task creation
+    S[Start] --> VG{Verification Gating}
+    VG -->|Direct Upload| VGD[DirectImageVerify.verified == 'verified'?]
+    VG -->|Remed.io DR| VDR[PatientEncounters.dr_verified_status == 'verified'?]
+    VG -->|Remed.io Glaucoma| VGL[PatientEncounters.glaucoma_verified_status == 'verified'?]
+
+    VGdNo[Block: not verified]:::stop
+    VdrNo[Block: not verified]:::stop
+    VglNo[Block: not verified]:::stop
+
+    VGdYes[OK]:::ok
+    VdrYes[OK]:::ok
+    VglYes[OK]:::ok
+
+    VGD -->|No| VGdNo
+    VGD -->|Yes| VGdYes
+    VDR -->|No| VdrNo
+    VDR -->|Yes| VdrYes
+    VGL -->|No| VglNo
+    VGL -->|Yes| VglYes
+
+    %% Task creation (native disease or ensure_task)
+    VGdYes --> CT[Create or Get GradingTask (image,disease,lab)]
+    VdrYes --> CT
+    VglYes --> CT
+
+    %% Eligibility check per slot prior to grading
+    CT --> EC{Eligibility Check}
+    EC -->|Resident slot| ER{user_roles has 'resident' AND
+    user_disease_unit_role.can_grade_resident}
+    EC -->|Faculty slot| EF{user_roles has 'ophthalmologist' AND
+    user_disease_unit_role.can_grade_faculty}
+    EC -->|Arbitration| EA{user_roles has 'ophthalmologist' AND
+    user_disease_unit_role.can_arbitrate AND
+    user not prior grader}
+
+    ER -->|Fail| BR[Block]
+    EF -->|Fail| BF[Block]
+    EA -->|Fail| BA[Block]
+    ER -->|Pass| GR[Submit Grade role=resident]
+    EF -->|Pass| GF[Submit Grade role=faculty]
+    EA -->|Pass| GA[Submit Grade role=arbitrator]
+
+    %% Dual grading convergence
+    GR --> CK{Resident & Faculty present?}
+    GF --> CK
+    CK -->|No| WAIT[State = resident_done or faculty_done]
+    CK -->|Yes| MATCH{Labels match?}
+    MATCH -->|Yes| CM[Consensus(method=match); State=final]
+    MATCH -->|No| ARB[State=arbitration; build arbitrator pool]
+    ARB --> GA
+    GA --> CA[Consensus(method=adjudication); State=final]
+
+    classDef stop fill:#fdd,stroke:#c33,stroke-width:1px,color:#600
+    classDef ok fill:#dfd,stroke:#393,stroke-width:1px,color:#060
+```
+

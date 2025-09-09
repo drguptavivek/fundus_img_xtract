@@ -230,6 +230,11 @@ def main() -> None:
         help="Backfill lab_unit_id = 1 for existing patient encounters",
     )
     parser.add_argument(
+        "--migrate-remove-matching-arbitration-fields",
+        action="store_true",
+        help="Remove matching and arbitration fields from encounter_file_pdfs and direct_image_uploads tables",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1000,
@@ -370,6 +375,13 @@ def main() -> None:
         except Exception as e:
             print(f"Failed to import migrate_direct_uploads_matching_fields: {e}")
             
+    if args.migrate_remove_matching_arbitration_fields:
+        try:
+            from migrate_remove_matching_arbitration_fields import migrate as migrate_remove_matching
+            migrate_remove_matching(dry_run=args.check_only)
+        except Exception as e:
+            print(f"Failed to import migrate_remove_matching_arbitration_fields: {e}")
+            
     if args.setup_core_disease_gradings:
         try:
             from setup_core_disease_gradings import setup_core_disease_gradings as setup_gradings
@@ -452,6 +464,19 @@ def setup_core_disease_gradings(dry_run: bool = False) -> None:
             print("Dry run: Would set up standard gradings for core diseases")
     except Exception as e:
         print(f"Failed to import setup_core_disease_gradings: {e}")
+
+
+def migrate_remove_matching_arbitration_fields(dry_run: bool = False) -> None:
+    """Remove matching and arbitration fields from encounter_file_pdfs and direct_image_uploads tables."""
+    print("Preparing to remove matching and arbitration fields from database tables...")
+    try:
+        from migrate_remove_matching_arbitration_fields import migrate
+        if not dry_run:
+            migrate()
+        else:
+            print("Dry run: Would remove matching and arbitration fields from database tables")
+    except Exception as e:
+        print(f"Failed to import migrate_remove_matching_arbitration_fields: {e}")
 
 
 if __name__ == "__main__":

@@ -41,14 +41,6 @@ Additional documentation files provide information about the application archite
 - [Changelog](CHANGELOG.html)
 - [Direct Grading Documentation](direct_grading.html)
 - [Direct Uploads Documentation](direct_uploads.html)
-- [Dual Grading Current State Summary](Dual_grading/current_state_summary.html)
-- [Dual Grading System](Dual_grading/dual_grading_system.html)
-- [Dual Grading Final Confirmation](Dual_grading/FINAL_CONFIRMATION.html)
-- [Dual Grading Implementation Summary](Dual_grading/IMPLEMENTATION_SUMMARY.html)
-- [Dual Grading README](Dual_grading/README.html)
-- [Dual Grading Technical Documentation](Dual_grading/technical_documentation.html)
-- [Dual Grading TODO](Dual_grading/TODO.html)
-- [Dual Grading User Guide](Dual_grading/user_guide.html)
 - [Grading Documentation](Grading.html)
 - [Logging Documentation](Logging.html)
 - [OCR Extraction Documentation](ocr_extraction.html)
@@ -96,21 +88,11 @@ flowchart TD
         O --> P[Save Grade - Upsert Logic];
     end
 
-    subgraph Dual Grading & Arbitration
-        P --> Q[Image Graded by Multiple Users?];
-        Q -- Yes --> R[Matching Grades];
-        R --> S[Discrepancy in Grades?];
-        S -- Yes --> T[Arbitration by Senior Grader];
-        S -- No --> U[Grades Finalized];
-        T --> U;
-        Q -- No --> U;
-    end
-
-    U --> V[Data Ready for AI Model Training/Validation];
+    P --> Q[Image Ready for AI Model Training/Validation];
 
     style A fill:#f9f,stroke:#333,stroke-width:2px;
     style E fill:#f9f,stroke:#333,stroke-width:2px;
-    style V fill:#bbf,stroke:#333,stroke-width:2px;
+    style Q fill:#bbf,stroke:#333,stroke-width:2px;
 
 ```
 

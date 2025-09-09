@@ -159,3 +159,20 @@ Or you can run the standalone script:
   python scripts/migrate_encounter_file_pdfs.py
   python scripts/migrate_encounter_file_pdfs.py --check-only
 ```
+
+**Remove matching and arbitration fields**
+
+This migration removes the matching and arbitration fields (`matched_at`, `is_locked`, `is_arbitration`, `arbitrated_by`) from the `encounter_file_pdfs` and `direct_image_uploads` tables, which are no longer needed after removing the dual grading, matching, and arbitration workflows.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-remove-matching-arbitration-fields
+  python scripts/setup_db.py --migrate-remove-matching-arbitration-fields --check-only
+```
+
+Or you can run the standalone script:
+
+```bash
+  python scripts/migrate_remove_matching_arbitration_fields.py
+  python scripts/migrate_remove_matching_arbitration_fields.py --dry-run
+```

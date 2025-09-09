@@ -177,7 +177,7 @@
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('optometrist') or
           current_user_has('ophthalmologist')) %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading', 'dual_grading'] else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
               id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Grading
             </a>
@@ -186,19 +186,6 @@
                 <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
                   href="{{ url_for('grading.index') }}">Image Grading</a>
               </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if request.blueprint == 'dual_grading' else '' }}"
-                  href="{{ url_for('dual_grading.index') }}">Dual Grading</a>
-              </li>
-              {% if current_user_has('admin') or current_user_has('ophthalmologist') %}
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li>
-                <a class="dropdown-item"
-                  href="{{ url_for('grading.arbitration_dashboard') }}">Arbitration</a>
-              </li>
-              {% endif %}
             </ul>
           </li>
           {% endif %}

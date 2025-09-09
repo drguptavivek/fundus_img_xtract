@@ -118,8 +118,8 @@ flowchart LR
     A[Admin UI: Assign Eligibility] --> F1[Select User]
     F1 --> F2[Select Diseases]
     F2 --> F3[Select Grading Lab Units]
-    F3 --> F4[Toggle Slot Flags\nresident | faculty | arbitrator]
-    F4 --> API[/POST /api/grading-eligibility/users/<user_id>\nitems:[{disease_id, lab_unit_id, flags}] /]
+    F3 --> F4[Toggle Slot Flags\nresident faculty arbitrator]
+    F4 --> API[POST api/grading-eligibility/users/user_id\nitems: disease_id, lab_unit_id, flags]
     API --> DUR[(user_disease_unit_role)]
 
     subgraph Verification Triggers
@@ -128,9 +128,9 @@ flowchart LR
       V3[Encounter Glaucoma verified]
     end
 
-    V1 --> SVC1[create_or_get_task\n(direct_image_upload_id, native disease, lab)]
-    V2 --> SVC2[create_or_get_task\n(for each image, DR disease, lab)]
-    V3 --> SVC3[create_or_get_task\n(for each image, Glaucoma disease, lab)]
+    V1 --> SVC1["create_or_get_task\n(direct_image_upload_id, native disease, lab)"]
+    V2 --> SVC2["create_or_get_task\n(for each image, DR disease, lab)"]
+    V3 --> SVC3["create_or_get_task\n(for each image, Glaucoma disease, lab)"]
 
     SVC1 --> GT[(grading_tasks)]
     SVC2 --> GT
@@ -143,7 +143,7 @@ flowchart LR
     end
     B1 --> B2 --> B3 --> GT
 
-    GT --> Q[Grading Queues\n(visible only if user eligible via DUR + user_roles)]
+    GT --> Q["Grading Queues\n(visible only if user eligible via DUR + user_roles)"]
 
     %% Reporting/Exports
     GT -.-> VIEW[[Denormalized View\nimage×disease: resident, faculty, final, method]]

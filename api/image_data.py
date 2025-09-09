@@ -52,7 +52,7 @@ def get_image_data_by_uuid(uuid: str):
             # Check if file exists
             if os.path.exists(image_path):
                 # Serve file with UUID as filename to prevent exposing original filename
-                return send_file(image_path, as_attachment=True, download_name=f"{uuid}{file_extension}")
+                return send_file(image_path, download_name=f"{uuid}{file_extension}")
             else:
                 return jsonify({"error": "Image file not found on disk"}), 404
         
@@ -75,7 +75,7 @@ def get_image_data_by_uuid(uuid: str):
             # Check if file exists
             if os.path.exists(image_path):
                 # Serve file with UUID as filename to prevent exposing original filename
-                return send_file(image_path, as_attachment=True, download_name=f"{uuid}{file_extension}")
+                return send_file(image_path,  download_name=f"{uuid}{file_extension}")
             else:
                 return jsonify({"error": "Image file not found on disk"}), 404
         

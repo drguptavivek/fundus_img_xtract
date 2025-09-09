@@ -4,16 +4,16 @@ This folder contains documentation for the Fundus Image Manager application.
 
 ## Available Documentation
 
-- [API Documentation](api.md) - Comprehensive documentation for all RESTful API endpoints
+- [API Documentation](api.html) - Comprehensive documentation for all RESTful API endpoints
 - [OpenAPI Specification](openapi.yaml) - Machine-readable OpenAPI 3.0 specification for the API
-- [Application Overview](../DETAILS.md) - General information about the application
-- [Main Processing Pipeline](../docs/main.md) - Documentation for the main data processing pipeline
-- [Models](../docs/models.md) - Database schema documentation
-- [App Factory](../docs/app.md) - Documentation for the application factory
+- [Application Overview](details.html) - General information about the application
+- [Main Processing Pipeline](main.html) - Documentation for the main data processing pipeline
+- [Models](models.html) - Database schema documentation
+- [App Factory](app.html) - Documentation for the application factory
 
 ## API Documentation
 
-The [API documentation](api.md) provides detailed information about all available RESTful API endpoints, including:
+The [API documentation](api.html) provides detailed information about all available RESTful API endpoints, including:
 
 - Endpoint URLs and HTTP methods
 - Required authentication and authorization
@@ -35,6 +35,30 @@ This specification follows the OpenAPI 3.0 standard and includes comprehensive s
 ## Other Documentation
 
 Additional documentation files provide information about the application architecture, data processing pipeline, and database schema.
+
+- [Audit Documentation](audit.html)
+- [Build Themes Documentation](BUILD_THEMES.html)
+- [Changelog](CHANGELOG.html)
+- [Direct Grading Documentation](direct_grading.html)
+- [Direct Uploads Documentation](direct_uploads.html)
+- [Dual Grading Current State Summary](Dual_grading/current_state_summary.html)
+- [Dual Grading System](Dual_grading/dual_grading_system.html)
+- [Dual Grading Final Confirmation](Dual_grading/FINAL_CONFIRMATION.html)
+- [Dual Grading Implementation Summary](Dual_grading/IMPLEMENTATION_SUMMARY.html)
+- [Dual Grading README](Dual_grading/README.html)
+- [Dual Grading Technical Documentation](Dual_grading/technical_documentation.html)
+- [Dual Grading TODO](Dual_grading/TODO.html)
+- [Dual Grading User Guide](Dual_grading/user_guide.html)
+- [Grading Documentation](Grading.html)
+- [Logging Documentation](Logging.html)
+- [OCR Extraction Documentation](ocr_extraction.html)
+- [Process PDFs Documentation](process_pdfs.html)
+- [Route List](route_list.html)
+- [Routes by Blueprint](routes_by_blueprint.html)
+- [Routes Documentation](routes.html)
+- [Security Documentation](Security.html)
+- [Template Route Links Check](template_route_links_check.html)
+- [ZIP Uploads Documentation](zip_uploads.html)
 
 ## Application Workflow Flowchart
 
@@ -97,7 +121,3 @@ Developers can use this documentation to:
 - Extend the application's functionality
 - Troubleshoot issues
 - Understand the system architecture
-
-## DB Schema
-
-![DB Schema](db_schema_overview.png )

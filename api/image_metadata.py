@@ -69,8 +69,8 @@ def get_image_metadata_by_uuid(uuid: str):
                     "id": direct_image.uploader.id,
                     "full_name": direct_image.uploader.full_name
                 } if direct_image.uploader else None,
-                "capture_date": direct_image.patient_encounter.capture_date_dt.isoformat() if 
-                               (direct_image.patient_encounter and direct_image.patient_encounter.capture_date_dt) else None
+                "capture_date": direct_image.created_at.date().isoformat() if 
+                               direct_image.created_at else None
             })
         
         # If not found in DirectImageUpload, try EncounterFile

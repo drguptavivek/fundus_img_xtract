@@ -97,3 +97,7 @@ Developers can use this documentation to:
 - Extend the application's functionality
 - Troubleshoot issues
 - Understand the system architecture
+
+## DB Schema
+
+![DB Schema](db_schema_overview.png )

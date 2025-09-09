@@ -624,6 +624,92 @@ All API endpoints are prefixed with `/api`. For example: `https://your-domain.co
 }
 ```
 
+## Image Details Endpoint
+
+### Get Image Metadata by UUID
+
+**Endpoint**: `GET /api/images/{uuid}/metadata`
+
+**Description**: Get metadata for a specific image by its UUID. Does not return file paths or original filenames for security.
+
+**Required Role**: `admin`, `data_manager`, `ophthalmologist`, `optometrist`, or `resident`
+
+**Parameters**:
+- `uuid` (path): The UUID of the image
+
+**Response**:
+```json
+{
+  "type": "direct_upload",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "source": "DirectUpload",
+  "has_edited": true,
+  "is_mydriatic": true,
+  "created_at": "2023-01-01T10:30:00.000000",
+  "hospital": {
+    "id": 1,
+    "name": "City General Hospital"
+  },
+  "lab_unit": {
+    "id": 1,
+    "name": "Main Lab"
+  },
+  "disease": {
+    "id": 1,
+    "name": "Glaucoma"
+  },
+  "camera": {
+    "id": 1,
+    "name": "Topcon Maestro2"
+  },
+  "area": {
+    "id": 1,
+    "name": "OPD"
+  },
+  "uploader": {
+    "id": 1,
+    "username": "dr_smith",
+    "full_name": "Dr. John Smith"
+  },
+  "capture_date": "2023-01-01"
+}
+```
+
+### Get Image Data by UUID
+
+**Endpoint**: `GET /api/images/{uuid}/data`
+
+**Description**: Serve image data for a specific image by its UUID. For DirectImageUpload, prefers edited images when available.
+
+**Required Role**: `admin`, `data_manager`, `ophthalmologist`, `optometrist`, or `resident`
+
+**Parameters**:
+- `uuid` (path): The UUID of the image
+
+**Response**:
+```
+Binary image data (JPEG, PNG, etc.)
+```
+
+### Get PDF Data by UUID
+
+**Endpoint**: `GET /api/pdfs/{uuid}/data`
+
+**Description**: Serve PDF data for a specific PDF by its UUID.
+
+**Required Role**: `admin`, `data_manager`, `ophthalmologist`, `optometrist`, or `resident`
+
+**Parameters**:
+- `uuid` (path): The UUID of the PDF
+
+**Response**:
+```
+Binary PDF data
+```
+
+## Error Responses
+```
+
 ## Job Endpoints
 
 ### Get Upload Job Status by Token

@@ -75,7 +75,7 @@ flowchart TD
     VGL -->|Yes| VglYes
 
     %% Task creation (native disease or ensure_task)
-    VGdYes --> CT[Create or Get GradingTask (image,disease,lab)]
+    VGdYes --> CT["Create or Get GradingTask (image,disease,lab)"]
     VdrYes --> CT
     VglYes --> CT
 
@@ -92,21 +92,65 @@ flowchart TD
     ER -->|Fail| BR[Block]
     EF -->|Fail| BF[Block]
     EA -->|Fail| BA[Block]
-    ER -->|Pass| GR[Submit Grade role=resident]
-    EF -->|Pass| GF[Submit Grade role=faculty]
-    EA -->|Pass| GA[Submit Grade role=arbitrator]
+    ER -->|Pass| GR["Submit Grade role=resident"]
+    EF -->|Pass| GF["Submit Grade role=faculty"]
+    EA -->|Pass| GA["Submit Grade role=arbitrator"]
 
     %% Dual grading convergence
     GR --> CK{Resident & Faculty present?}
     GF --> CK
     CK -->|No| WAIT[State = resident_done or faculty_done]
     CK -->|Yes| MATCH{Labels match?}
-    MATCH -->|Yes| CM[Consensus(method=match); State=final]
+    MATCH -->|Yes| CM["Consensus - method=match; State=final"]
     MATCH -->|No| ARB[State=arbitration; build arbitrator pool]
     ARB --> GA
-    GA --> CA[Consensus(method=adjudication); State=final]
+    GA --> CA["Consensus - method=adjudication; State=final"]
 
     classDef stop fill:#fdd,stroke:#c33,stroke-width:1px,color:#600
     classDef ok fill:#dfd,stroke:#393,stroke-width:1px,color:#060
+
 ```
 
+## Mermaid Diagram — Admin Eligibility & Auto-Tasks
+
+```mermaid
+flowchart LR
+    A[Admin UI: Assign Eligibility] --> F1[Select User]
+    F1 --> F2[Select Diseases]
+    F2 --> F3[Select Grading Lab Units]
+    F3 --> F4[Toggle Slot Flags\nresident | faculty | arbitrator]
+    F4 --> API[/POST /api/grading-eligibility/users/<user_id>\nitems:[{disease_id, lab_unit_id, flags}] /]
+    API --> DUR[(user_disease_unit_role)]
+
+    subgraph Verification Triggers
+      V1[DirectImageVerify → verified]
+      V2[Encounter DR verified]
+      V3[Encounter Glaucoma verified]
+    end
+
+    V1 --> SVC1[create_or_get_task\n(direct_image_upload_id, native disease, lab)]
+    V2 --> SVC2[create_or_get_task\n(for each image, DR disease, lab)]
+    V3 --> SVC3[create_or_get_task\n(for each image, Glaucoma disease, lab)]
+
+    SVC1 --> GT[(grading_tasks)]
+    SVC2 --> GT
+    SVC3 --> GT
+
+    subgraph Optional Admin Backfill
+      B1[Select Disease + Lab Unit]
+      B2[Scan verified images without tasks]
+      B3[Bulk create missing tasks]
+    end
+    B1 --> B2 --> B3 --> GT
+
+    GT --> Q[Grading Queues\n(visible only if user eligible via DUR + user_roles)]
+
+    %% Reporting/Exports
+    GT -.-> VIEW[[Denormalized View\nimage×disease: resident, faculty, final, method]]
+    VIEW --> CSV[CSV Exports / Dashboards]
+
+    classDef db fill:#eef,stroke:#66f,stroke-width:1px
+    classDef svc fill:#efe,stroke:#393,stroke-width:1px
+    class DUR,GT,VIEW db
+    class SVC1,SVC2,SVC3 svc
+```

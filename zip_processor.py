@@ -18,7 +18,6 @@ from models import (
     PatientEncounters,
     EncounterFile,
     EncounterFilePDF,
-    engine,
     Session,
     BASE_DIR, 
     UPLOAD_DIR,
@@ -79,12 +78,6 @@ def setup_environment():
     PROCESSING_ERROR_DIR.mkdir(parents=True, exist_ok=True)
     print("Directories are ready.")
 
-def setup_database():
-    """Initializes the database and creates tables from the SQLAlchemy models."""
-    print("Setting up the database...", flush=True)
-    Base.metadata.create_all(engine)
-
-    print("Database is ready.", flush=True)
 
 def calculate_md5(filepath):
     """Calculates the MD5 hash of a file for unique identification."""
@@ -502,8 +495,7 @@ def main():
     """Main function to run the entire workflow."""
     print("Starting ZIP file processing workflow...")
     setup_environment()
-    setup_database()
-    
+
     session = Session()
 
     # Filter out macOS resource fork artifacts like '._*.zip'

@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from models import Session, Disease, DiseaseGrading
-from ensure_core_diseases import CORE_DISEASES
+from utils.ensure_core_diseases import CORE_DISEASES
 
 
 # Standard gradings for each core disease

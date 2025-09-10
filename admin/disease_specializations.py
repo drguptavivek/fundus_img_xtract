@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy.orm import selectinload
-from disease_specialzation_utils import get_all_diseases, get_all_ophthalmologists, get_user_disease_specializations, set_user_disease_specializations
+from utils.disease_specialzation_utils import get_all_diseases, get_all_ophthalmologists, get_user_disease_specializations, set_user_disease_specializations
 from models import Session, User, Disease
 from auth.roles import roles_required
 

@@ -2,7 +2,7 @@
 from pathlib import Path
 from flask import current_app
 from models import Session
-from main import setup_environment, setup_database, process_zip_file
+from zip_processor import setup_environment, setup_database, process_zip_file
 from process_pdfs import process_all_pdfs_for_ocr
 from job_store import (
     db_set_job_status, db_set_item_state, db_any_item_error,

@@ -12,7 +12,7 @@ from models import Session, Disease, DiseaseGrading, User, LabUnit, Job, JobItem
 
 # Import utility functions from other modules
 try:
-    from disease_specialzation_utils import get_user_disease_specializations, set_user_disease_specializations
+    from utils.disease_specialzation_utils import get_user_disease_specializations, set_user_disease_specializations
 except ImportError:
     # Fallback if the module is not available
     def get_user_disease_specializations(user_id):

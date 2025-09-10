@@ -16,7 +16,7 @@
 ##  Common Commands
 ### Development
 - `.venv\bin\activate` or `.venv\Scripts\activate` - Activate the virtual environment
-- `python3 app.py` - Run the application 
+- `uv run  app.py` - Run the application 
 - `uv pip install` - Install dependencies with uv
 - `npn run build:css` - Build Theme 
 
@@ -44,14 +44,13 @@
 - No sweeping changes
 - Commit small, frequent changes for readable diffs
 - Use explicit error handling, no unwraps in production code
-- Use Success and error Loggers from create_app  in @app.py 
 - Use Flash toasts for user feedback
 - Use avaibale styles only as much as possible
 - Keep code modular using blueprints
 - Include docstrings 
 - Organize templates in sub-folders
 - Ensure no data is lost.
-- Give migration scipts in @scrips/folder. 
+- Give migration scipts in @scripts. 
 - Udpate @scripts/setup_db.py when models change as needed
 - Update @scripts/migrations.md with instructions
 
@@ -99,9 +98,3 @@ The application is built using Flask and is organized into modular blueprints, e
 - **Patient Encounter Review (`/screenings`)**: The main interface for browsing patient data. It offers a searchable, paginated list of all encounters. The detail view displays all images and reports for an encounter. **Note: Patient-identifying information is visible on these screens, and access must be strictly controlled.**
 
 - **Manual Data Verification (`/glaucoma`)**: A workflow for clinical staff to verify the accuracy of extracted OCR data. Users can correct data, tag the laterality (left/right eye) of each image, and mark the encounter as "verified" only after all images have been tagged.
-
-- **Clinical Image Grading (`/grading`)**: This blueprint provides the interface for masked clinical grading of images for DR and Glaucoma.
-    - **Dashboard**: The grading dashboard offers statistics on grading activity and a "Start Grading" button that directs the user to a random, recent, ungraded image to ensure an efficient workflow.
-    - **Confidentiality**: The grading process is fully masked. Graders cannot see patient-identifying information, nor can they see the grades submitted by other users, ensuring unbiased, independent assessments.
-    - **Grading Interface**: The grading screen features an advanced image viewer with controls for zoom, brightness, and color filters. The user submits their assessment by selecting from a predefined list of clinical impressions.
-    - **Saving Grades**: The system uses an "upsert" logic, saving only the most recent grade for each user per image. **Therefore, intra-rater agreement cannot be assessed with the current implementation.**

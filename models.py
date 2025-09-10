@@ -15,17 +15,18 @@ load_dotenv()
 
 # --- Database and File Path Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'zip_processing.db'}")
-UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/uploaded")
-IMAGE_DIR = BASE_DIR / os.getenv("IMAGE_DIR", "files/images")
-PDF_DIR = BASE_DIR / os.getenv("PDF_DIR", "files/pdfs")
-PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/processed")
-PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/processing_error")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")
+UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/zip_upload_zips")
+PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/zips_upload_processed")
+PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/zip_upload_processing_error")
+IMAGE_DIR = BASE_DIR / os.getenv("IMAGE_DIR", "files/zip_upload_images")
+PDF_DIR = BASE_DIR / os.getenv("PDF_DIR", "files/zip_upload_pdfs")
+DR_PDF_DIR = BASE_DIR / os.getenv("DR_PDF_DIR", "files/zip_dr_pdfs")
+GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/zip_glaucoma_pdfs")
 DIRECT_UPLOAD_DIR = BASE_DIR / os.getenv("DIRECT_UPLOAD_DIR", "files/direct_uploads")
 
 
-
-def utcnow():
+def utcnow():    
     return datetime.now(timezone.utc)
 
 # --- SQLAlchemy Setup ---

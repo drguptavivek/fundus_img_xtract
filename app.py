@@ -7,7 +7,7 @@ from flask import Flask, current_app, jsonify, render_template, request, redirec
 from flask import send_from_directory
 from flask_cors import CORS
 from models import Base, Job, Session, engine
-from main import setup_environment
+from zip_processor import setup_environment
 from dotenv import load_dotenv  
 import time
 from datetime import timedelta
@@ -77,7 +77,7 @@ def create_app():
     # --- RBAC: seed core roles once ---
     from sqlalchemy.orm import sessionmaker
     from auth.roles import ensure_roles, DEFAULT_ROLES
-    from ensure_core_diseases import ensure_core_diseases
+    from utils.ensure_core_diseases import ensure_core_diseases
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     with SessionLocal() as db:
         ensure_roles(db, DEFAULT_ROLES)

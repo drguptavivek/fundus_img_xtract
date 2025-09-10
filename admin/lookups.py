@@ -102,7 +102,7 @@ def edit_lookup(model_name, item_id):
         # Prevent editing of core diseases to change their names
         core_disease_names = None
         if model_name == "disease":
-            from ensure_core_diseases import is_core_disease, CORE_DISEASES
+            from utils.ensure_core_diseases import is_core_disease, CORE_DISEASES
             if is_core_disease(item_id):
                 core_disease_names = {v.lower(): k for k, v in CORE_DISEASES.items()}
 
@@ -155,7 +155,7 @@ def delete_lookup(model_name, item_id):
     
     # Prevent deletion of core diseases
     if model_name == "disease":
-        from ensure_core_diseases import is_core_disease
+        from utils.ensure_core_diseases import is_core_disease
         if is_core_disease(item_id):
             flash("Core diseases (Glaucoma, DR, AMD) cannot be deleted.", "danger")
             return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))

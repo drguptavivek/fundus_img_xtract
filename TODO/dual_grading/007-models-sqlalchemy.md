@@ -28,6 +28,8 @@ class GradingTask(Base):
     direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id'), nullable=True, index=True)
 
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False, index=True)
+    # lab_unit_id is used strictly for grading assignment and queue scoping.
+    # It does not redefine image identity; uniqueness is enforced across labs.
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id'), nullable=False, index=True)
 
     state: Mapped[str] = mapped_column(String(24), default='pending', nullable=False, index=True)
@@ -50,7 +52,8 @@ class GradingTask(Base):
             "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL)",
             name='ck_grading_task_either_encounter_or_direct'
         ),
-        # Unique per image×disease (SQLite treats NULLs as distinct; works with the check above)
+        # Unique per image×disease across all lab units (enforces single task/gold standard globally).
+        # SQLite treats NULLs as distinct; works with the one-of-two FK check above.
         UniqueConstraint('encounter_file_id', 'disease_id', name='uq_task_encounter_disease'),
         UniqueConstraint('direct_image_upload_id', 'disease_id', name='uq_task_direct_disease'),
         CheckConstraint(
@@ -196,4 +199,5 @@ class AIGrade(Base):
 - Do not modify existing global roles. Slot permissions are enforced via `UserDiseaseUnitRole` + `user_roles` at request time.
 - Keep `ImageGrading` for legacy history if desired; new flows should write into `Grade` with normalized `disease_grading_id`.
 - Consider adding lightweight helpers for slot checks and verification gating in services.
+ - Do not mutate `lab_unit_id` on an existing task; reassignment across lab units is not allowed once created. A final task (state = `final`) represents the gold standard and must not be recreated or moved for the same image×disease in any lab.
 

@@ -3,7 +3,7 @@
 Purpose: Introduce a normalized, extensible grading workflow where each image can be graded independently per disease by a Resident and Faculty; disagreements are resolved by a third Ophthalmologist (Arbitrator). Eligibility to grade/arbitrate is controlled per user, per disease, and per lab unit. Only anonymized/verified images enter the grading flow.
 
 Scope and Principles
-- Per-disease tasks: One grading task per image-per-disease.
+- Per-disease tasks: Exactly one grading task per image×disease globally. The optional `lab_unit_id` on a task is for grading assignment and queue scoping only (which graders see/work the task); it does not redefine image identity. Once any image×disease task reaches a final consensus (agreement or adjudication) in any lab unit, the gold standard is established and the image must not be re-tasked for the same disease in another lab unit.
 - Dual independent grading: Resident and Faculty submit independently and are masked from each other.
 - Arbitration: If Resident and Faculty disagree, a third Ophthalmologist adjudicates; adjudicator sees grader identities (per requirement).
 - Eligibility model: No new global roles. Slot permissions derive from existing `user_roles` (resident/ophthalmologist) AND a new grading eligibility matrix per user×disease×lab_unit.
@@ -97,12 +97,12 @@ flowchart TD
     EA -->|Pass| GA["Submit Grade role=arbitrator"]
 
     %% Dual grading convergence
-    GR --> CK{Resident & Faculty present?}
+    GR --> CK{"Resident & Faculty present?"}
     GF --> CK
-    CK -->|No| WAIT[State = resident_done or faculty_done]
+    CK -->|No| WAIT["State = resident_done or faculty_done"]
     CK -->|Yes| MATCH{Labels match?}
     MATCH -->|Yes| CM["Consensus - method=match; State=final"]
-    MATCH -->|No| ARB[State=arbitration; build arbitrator pool]
+    MATCH -->|No| ARB["State=arbitration; build arbitrator pool"]
     ARB --> GA
     GA --> CA["Consensus - method=adjudication; State=final"]
 

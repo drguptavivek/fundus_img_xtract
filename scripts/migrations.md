@@ -1,3 +1,23 @@
+# Migrations
+
+## Dual Grading Schema
+
+This migration adds the tables required for the dual grading feature. The new tables are:
+- `grading_tasks`
+- `grades`
+- `consensus`
+- `user_disease_unit_role`
+- `ai_grades` (optional)
+
+These tables are created by ensuring the models are defined in `models.py` and running the `setup_db.py` script.
+
+Usage:
+```bash
+  python scripts/setup_db.py --migrate-dual-grading
+```
+
+---
+
 **Add disease_gradings table**
 
 This migration creates the `disease_gradings` table, which stores the impressions and their display order for each disease.

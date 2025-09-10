@@ -1,0 +1,134 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Edit Grading Eligibility for {{ user.username }}{% endblock %}
+
+{% block content %}
+  <h2>Edit Grading Eligibility for {{ user.username }}</h2>
+
+  <form id="eligibility-form">
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm">
+        <thead>
+          <tr>
+            <th scope="col">Disease</th>
+            {% for lab_unit in lab_units %}
+              <th scope="col">{{ lab_unit.name }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for disease in diseases %}
+            <tr>
+              <td>{{ disease.name }}</td>
+              {% for lab_unit in lab_units %}
+                <td>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="res-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident">
+                    <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_faculty">
+                    <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Faculty</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
+                    <label class="form-check-label" for="arb-{{ disease.id }}-{{ lab_unit.id }}">Arbitrator</label>
+                  </div>
+                </td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+  </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const userId = {{ user.id }};
+    const form = document.getElementById('eligibility-form');
+
+    // Fetch initial data
+    fetch(`/api/grading-eligibility/users/${userId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.eligibility) {
+          data.eligibility.forEach(rule => {
+            if (rule.active) {
+              if (rule.can_grade_resident) {
+                const el = document.getElementById(`res-${rule.disease_id}-${rule.lab_unit_id}`);
+                if (el) el.checked = true;
+              }
+              if (rule.can_grade_faculty) {
+                const el = document.getElementById(`fac-${rule.disease_id}-${rule.lab_unit_id}`);
+                if (el) el.checked = true;
+              }
+              if (rule.can_arbitrate) {
+                const el = document.getElementById(`arb-${rule.disease_id}-${rule.lab_unit_id}`);
+                if (el) el.checked = true;
+              }
+            }
+          });
+        }
+      });
+
+    // Handle form submission
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const payload = { items: [] };
+      const itemsMap = new Map();
+
+      form.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        const diseaseId = checkbox.dataset.diseaseId;
+        const labUnitId = checkbox.dataset.labUnitId;
+        const role = checkbox.dataset.role;
+        const key = `${diseaseId}-${labUnitId}`;
+
+        if (!itemsMap.has(key)) {
+          itemsMap.set(key, {
+            disease_id: parseInt(diseaseId),
+            lab_unit_id: parseInt(labUnitId),
+            can_grade_resident: false,
+            can_grade_faculty: false,
+            can_arbitrate: false,
+            active: true
+          });
+        }
+
+        if (checkbox.checked) {
+          const item = itemsMap.get(key);
+          item[role] = true;
+        }
+      });
+
+      payload.items = Array.from(itemsMap.values()).filter(item => item.can_grade_resident || item.can_grade_faculty || item.can_arbitrate);
+
+      fetch(`/api/grading-eligibility/users/${userId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add CSRF token header if needed by your app
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.ok) {
+          // You would typically use a flash message system here
+          alert('Eligibility updated successfully!');
+          window.location.reload();
+        } else {
+          alert('Error updating eligibility: ' + (data.error || 'Unknown error'));
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('An unexpected error occurred.');
+      });
+    });
+  });
+</script>
+{% endblock %}

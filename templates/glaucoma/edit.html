@@ -104,7 +104,7 @@
               <div class="col-12 col-md-6">
                 <div class="border rounded p-2 h-100 d-flex flex-column">
                   <div class="mb-2" style="width:100%; height:240px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
-                    <img src="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
+                    <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
                   </div>
                   <form method="post" action="{{ url_for('verify_remedio_glaucoma.glaucoma_mark_eye', clean_id=row.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
                     {{ csrf_field() }}

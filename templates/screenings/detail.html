@@ -167,7 +167,7 @@
                         <!-- Large viewer -->
                         <div class="sv-main bg-black rounded position-relative mb-2">
                             <img class="sv-main-img"
-                                src="{{ url_for('media._encounterImageByUUID', uuid=images[0].uuid) }}"
+                                src="{{ url_for('media._encounterImageByUUID', uuid_str=images[0].uuid) }}"
                                 alt="Image" data-index="0" />
                             <div class="sv-counter">1 / {{ images|length }}</div>
                             <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
@@ -184,7 +184,7 @@
                             <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
                                 data-index="{{ loop.index0 }}" title="Thumbnail">
                                 <img class="sv-thumb-img"
-                                    src="{{ url_for('media._encounterImageByUUID', uuid=img.uuid) }}"
+                                    src="{{ url_for('media._encounterImageByUUID', uuid_str=img.uuid) }}"
                                     alt="Thumbnail" loading="lazy" />
                             </a>
                             {% endfor %}

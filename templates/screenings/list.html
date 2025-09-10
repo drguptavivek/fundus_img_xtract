@@ -252,7 +252,7 @@
                   <div class="d-flex flex-wrap gap-2 mb-3">
                     {% for ef in image_files[:4] %}
                     <div class="scr-thumb-container">
-                      <img src="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" 
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" 
                            alt="Thumbnail" 
                            class="scr-thumb-img"
                            loading="lazy">
@@ -272,7 +272,7 @@
                   <!-- Hidden PSWP gallery -->
                   <div id="{{ gallery_id }}" class="pswp-gallery d-none">
                     {% for ef in image_files %}
-                    <a href="{{ url_for('media.serve_file_by_uuid', uuid=ef.uuid) }}" data-pswp-type="image" title="Image"></a>
+                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" data-pswp-type="image" title="Image"></a>
                     {% endfor %}
                     {% for dr in enc.dr_reports if dr.report_file_name %}
                     <a href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" data-pswp-type="html"

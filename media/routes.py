@@ -5,10 +5,10 @@ from utils.utilsImgServe import (directImgFinalByUUID,
 
 from . import bp
 
-@bp.route("/encounter/img/<uuid>", methods=["GET"])
+@bp.route("/encounter/img/<uuid_str>", methods=["GET"])
 @roles_required("admin")
-def _encounterImageByUUID(uuid: str):
-    return encounterImageByUUID(uuid)
+def _encounterImageByUUID(uuid_str: str):
+    return encounterImageByUUID(uuid_str)
 
 @bp.route("/direct_upload/org_img/<uuid_str>", methods=["GET"])
 @roles_required("contributor", "data_manager", "admin")

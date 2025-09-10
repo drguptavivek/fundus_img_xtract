@@ -10,7 +10,7 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow
+from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow, LabUnit
 from process_pdfs import GLAUCOMA_PDF_DIR
 
 
@@ -411,6 +411,7 @@ def glaucoma_detail(clean_id: int):
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.encounter_files),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.dr_reports),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
+                joinedload(GlaucomaResultsCleaned.patient_encounter).joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
             .filter(GlaucomaResultsCleaned.id == clean_id)
             .first()

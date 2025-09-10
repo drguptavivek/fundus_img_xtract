@@ -243,7 +243,7 @@ class GlaucomaResultsCleaned(Base):
     report_file_name: Mapped[str | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-    patient_encounter: Mapped["PatientEncounters"] = relationship("PatientEncounters")
+    patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="glaucoma_results_cleaned")
     glaucoma_report: Mapped["GlaucomaReport"] = relationship("GlaucomaReport")
 
 class ImageGrading(Base):

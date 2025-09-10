@@ -21,6 +21,7 @@ Quick Setup
   - CHECK: exactly one of `encounter_file_id` or `direct_image_upload_id` is non‑null.
   - CHECK: `grade.role_slot` ∈ {resident, faculty, arbitrator}.
   - CHECK: `user_disease_unit_role` has at least one true flag among resident/faculty/arbitrate.
+  - Mapper pairings: `GradingTask.grades ↔ Grade.task` and `GradingTask.consensus ↔ Consensus.task` are explicitly linked with `back_populates`; no SAWarnings/ArgumentError during import.
 
 Example (Python shell):
 - `uv run python -c "from models import Base, engine; print([t.name for t in Base.metadata.sorted_tables])"`
@@ -111,6 +112,7 @@ Example (Python shell):
 13) Automated Tests (Recommended Set)
 - Add test module (examples):
   - `tests/test_dual_grading_schema.py`: table existence, constraints sanity.
+    - Assert model import initializes without SAWarnings/ArgumentError (capture warnings).
   - `tests/test_grading_eligibility.py`: role + matrix enforcement.
   - `tests/test_task_creation.py`: auto‑create on verification, idempotency, verification gating.
   - `tests/test_consensus_flow.py`: match path and arbitration path.

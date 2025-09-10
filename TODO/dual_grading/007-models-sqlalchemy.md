@@ -42,7 +42,8 @@ class GradingTask(Base):
     lab_unit: Mapped['LabUnit'] = relationship('LabUnit')
     encounter_file: Mapped['EncounterFile'] = relationship('EncounterFile')
     direct_image: Mapped['DirectImageUpload'] = relationship('DirectImageUpload')
-    grades: Mapped[list['Grade']] = relationship('Grade', cascade="all, delete-orphan")
+    # Pair to Grade.task for clarity and to avoid mapper confusion
+    grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     # Pair the one-to-one to avoid SAWarning overlaps; single_parent supports delete-orphan.
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
@@ -89,7 +90,8 @@ class Grade(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    task: Mapped['GradingTask'] = relationship('GradingTask')
+    # Inverse of GradingTask.grades
+    task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')
     grader: Mapped['User'] = relationship('User')
     label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
 
@@ -203,5 +205,11 @@ class AIGrade(Base):
 - Do not modify existing global roles. Slot permissions are enforced via `UserDiseaseUnitRole` + `user_roles` at request time.
 - Keep `ImageGrading` for legacy history if desired; new flows should write into `Grade` with normalized `disease_grading_id`.
 - Consider adding lightweight helpers for slot checks and verification gating in services.
- - Do not mutate `lab_unit_id` on an existing task; reassignment across lab units is not allowed once created. A final task (state = `final`) represents the gold standard and must not be recreated or moved for the same image×disease in any lab.
+- Do not mutate `lab_unit_id` on an existing task; reassignment across lab units is not allowed once created. A final task (state = `final`) represents the gold standard and must not be recreated or moved for the same image×disease in any lab.
+
+Mapper Configuration Notes
+- Pair relationships explicitly to avoid SAWarnings/ArgumentError during mapper configuration:
+  - `GradingTask.grades` ↔ `Grade.task` (both with `back_populates`)
+  - `GradingTask.consensus` ↔ `Consensus.task` (one-to-one, `uselist=False`, `single_parent=True` on the GradingTask side)
+- This prevents SQLAlchemy from guessing reverse properties incorrectly (e.g., pairing `Grade.task` with `GradingTask.consensus`).
 

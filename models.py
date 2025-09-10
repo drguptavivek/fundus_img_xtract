@@ -475,7 +475,7 @@ class GradingTask(Base):
     lab_unit: Mapped['LabUnit'] = relationship('LabUnit', foreign_keys=[lab_unit_id])
     encounter_file: Mapped['EncounterFile'] = relationship('EncounterFile')
     direct_image: Mapped['DirectImageUpload'] = relationship('DirectImageUpload')
-    grades: Mapped[list['Grade']] = relationship('Grade', cascade="all, delete-orphan")
+    grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
     )
@@ -518,7 +518,7 @@ class Grade(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='consensus')
+    task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')
     grader: Mapped['User'] = relationship('User')
     label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
 
@@ -543,7 +543,7 @@ class Consensus(Base):
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    task: Mapped['GradingTask'] = relationship('GradingTask')
+    task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='consensus')
     final_label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
     decided_by: Mapped['User | None'] = relationship('User')
 

@@ -19,16 +19,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 
 # Import database models and configurations
-from models import PDF_DIR, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile
+from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile
 
 
-# --- Directories from .env ---
-DR_PDF_DIR = BASE_DIR / os.getenv("DR_PDF_DIR", "files/dr_pdfs")
-GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/glaucoma_pdfs")
 
 # --- Logs from .env ---
-SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.txt")
-ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
 
 
 # Import the OCR extraction function from your separate file

@@ -3,10 +3,10 @@ from pathlib import Path
 from flask import request, jsonify, current_app
 from flask_login import current_user
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from auth.roles import roles_required
 from models import DirectImageUpload, BASE_DIR
-from .paths import abs_from_parts
+from utils.fileUtils import abs_from_parts
 
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
 @roles_required('contributor', 'data_manager', 'admin')

@@ -1,14 +1,64 @@
-# direct_uploads/paths.py
-from __future__ import annotations
-
-from pathlib import Path
 from datetime import datetime
+import mimetypes
+import os
+from pathlib import Path
 from typing import Optional
-from models import BASE_DIR, DIRECT_UPLOAD_DIR
+from flask import Response, abort, send_file
+from werkzeug.utils import secure_filename
+from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, Session, EncounterFile, PatientEncounters, ZipFile
+
+ 
+def _safe_file(base_dir: Path, filename: str) -> tuple[str, str]:
+    """
+    Prevent path traversal & ensure file exists inside base_dir.
+    Returns (directory_str, filename_str) for send_from_directory.
+    """
+    # Strip any path parts the client may try to sneak in
+    fname = secure_filename(os.path.basename(filename))
+    full = base_dir / fname
+    if not full.exists() or not full.is_file():
+        abort(404)
+    return (str(base_dir), fname)
+
+
+def _ensure_under_root(abs_path: Path, root: Path) -> None:
+    """Ensure abs_path is inside root (prevents traversal / wrong volume)."""
+    abs_path = abs_path.resolve()
+    root = root.resolve()
+    try:
+        abs_path.relative_to(root)
+    except Exception:
+        abort(404)
+
+
+def _send_file_with_headers(abs_path: Path, mimetype: str | None = None) -> Response:
+    """Cross-platform safe file send with sensible headers."""
+    abs_path = abs_path.resolve()
+    if not abs_path.exists() or not abs_path.is_file():
+        abort(404)
+
+    # Guess type if not provided
+    guessed, _ = mimetypes.guess_type(abs_path.name)
+    mt = mimetype or guessed or "application/octet-stream"
+
+    resp: Response = send_file(
+        abs_path,
+        mimetype=mt,
+        as_attachment=False,
+        conditional=True,   # enables range/If-Modified-Since
+        etag=True,
+        last_modified=abs_path.stat().st_mtime
+    )
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Cache-Control", "private, max-age=600")
+    return resp
+
+
 
 def ensure_root() -> Path:
     DIRECT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     return DIRECT_UPLOAD_DIR
+
 
 def _is_inside(child: Path, root: Path) -> bool:
     try:
@@ -59,7 +109,6 @@ def abs_from_parts(folder_rel: str, filename: str, kind: str = "orig") -> Path:
 
 
 
-
 def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path, Path, Path, str]:
     """
     Create/return (orig_dir, edited_dir, dup_dir, folder_rel) for this user/day:
@@ -88,14 +137,3 @@ def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path
     return orig_dir, edited_dir, dup_dir, folder_rel
 
 
-def uniquify(dest_dir: Path, filename: str) -> Path:
-    p = dest_dir / filename
-    if not p.exists():
-        return p
-    stem, suffix = p.stem, p.suffix
-    i = 1
-    while True:
-        cand = dest_dir / f"{stem}__{i}{suffix}"
-        if not cand.exists():
-            return cand
-        i += 1

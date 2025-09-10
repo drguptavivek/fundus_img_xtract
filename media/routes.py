@@ -1,87 +1,72 @@
 # media/routes.py
 
 import os
-import mimetypes
 from pathlib import Path
-from flask import abort, send_file, send_from_directory, Response
+from flask import abort, Response
 from flask_login import current_user
 from sqlalchemy import select
 from uuid import UUID  # only used by EncounterFile route
-
 from auth.roles import roles_required
+
+# Import utility functions from fileUtils
+from utils.fileUtils import  _ensure_under_root, _send_file_with_headers, _serve_path,  get_image_folder_path_by_uuid, get_image_path_by_uuid, abs_from_parts
+
 from . import bp
 
 from models import (
-    IMAGE_DIR, PDF_DIR, DIRECT_UPLOAD_DIR,
+    ALLOWED_IMAGE_EXT, IMAGE_DIR, PDF_DIR, DIRECT_UPLOAD_DIR,
     Session, EncounterFile, DirectImageUpload
 )
-from direct_uploads.paths import abs_from_parts
-
-ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
 
 
-# ---------------- Helpers ----------------
 
-def _send_file_with_headers(abs_path: Path, mimetype: str | None = None) -> Response:
-    """Cross-platform safe file send with sensible headers."""
-    abs_path = abs_path.resolve()
-    if not abs_path.exists() or not abs_path.is_file():
-        abort(404)
-
-    # Guess type if not provided
-    guessed, _ = mimetypes.guess_type(abs_path.name)
-    mt = mimetype or guessed or "application/octet-stream"
-
-    resp: Response = send_file(
-        abs_path,
-        mimetype=mt,
-        as_attachment=False,
-        conditional=True,   # enables range/If-Modified-Since
-        etag=True,
-        last_modified=abs_path.stat().st_mtime
-    )
-    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
-    resp.headers.setdefault("Cache-Control", "private, max-age=600")
-    return resp
-
-
-def _ensure_under_root(abs_path: Path, root: Path) -> None:
-    """Ensure abs_path is inside root (prevents traversal / wrong volume)."""
-    abs_path = abs_path.resolve()
-    root = root.resolve()
-    try:
-        abs_path.relative_to(root)
-    except Exception:
-        abort(404)
-
-
-# ---------------- Admin-only legacy image & file serving ----------------
-
-@bp.route("/img/<path:filename>", methods=["GET"])
+@bp.route("/img/<uuid>", methods=["GET"])
 @roles_required("admin")
-def serve_image(filename: str):
+def serve_img_by_uuid(uuid: str):
+    """ 
+    Search in EncounterFile for UUID. If Found serve image based on encounterfiles.filename from zipFile_upload subDir
+    Else Search in DirectImageUploads - Check UUID. If UUID Check edited_filename. If editedFilename, serve based on edited_filename, else serve based on filename
     """
-    Serve an image from IMAGE_DIR by basename, admin-only.
-    """
-    fname = os.path.basename(filename)
-    if fname != filename:
-        abort(404)
+    # First try to find the image in EncounterFile (ZIP uploads)
+    db = Session()
+    try:
+        # Try to find in EncounterFile first
+        ef = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
+        if ef and ef.filename:
+            # Get the image path using our utility function
+            image_path = get_image_path_by_uuid(uuid)
+            if image_path:
+                abs_path = Path(image_path).resolve()
+                return _send_file_with_headers(abs_path)
+        
+        # If not found in EncounterFile, try DirectImageUpload
+        diu = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        if diu:
+            # Prefer edited if present, else original
+            if diu.edited_filename:
+                try:
+                    ap = abs_from_parts(diu.folder_rel, diu.edited_filename, "edited").resolve()
+                    return _serve_path(ap)
+                except Exception:
+                    # Fall back to original if edited is missing
+                    pass
 
-    ext = Path(fname).suffix.lower()
-    if ext not in ALLOWED_IMAGE_EXT:
-        abort(404)
+            ap = abs_from_parts(diu.folder_rel, diu.filename, "orig")
+            return _serve_path(ap)
+    finally:
+        db.close()
+    
+    # If we get here, the image wasn't found
+    abort(404)
 
-    full = (IMAGE_DIR / fname).resolve()
-    _ensure_under_root(full, IMAGE_DIR)
-
-    return _send_file_with_headers(full)
 
 
+# Serve ZIP_Upload images by UUID
 @bp.route("/file/<uuid>", methods=["GET"])
 @roles_required("admin")
 def serve_file_by_uuid(uuid: str):
     """
-    Serve an EncounterFile by UUID from IMAGE_DIR or PDF_DIR, admin-only.
+    Serve an EncounterFile by UUID from IMAGE_DIR, admin-only.
     """
     db = Session()
     try:
@@ -116,21 +101,6 @@ def serve_file_by_uuid(uuid: str):
 
 # ---------------- New direct-upload ID/UUID-based routes ----------------
 
-def _serve_path(ap: Path) -> Response:
-    """
-    Serve a direct-upload image path under DIRECT_UPLOAD_DIR safely.
-    Works on Windows/macOS/Linux.
-    """
-    ap = ap.resolve()
-
-    # Must live under DIRECT_UPLOAD_DIR
-    _ensure_under_root(ap, DIRECT_UPLOAD_DIR)
-
-    # Basic validation
-    if ap.suffix.lower() not in ALLOWED_IMAGE_EXT:
-        abort(404)
-
-    return _send_file_with_headers(ap)
 
 
 @bp.route("/direct_upload/img_orig/<int:upload_id>", methods=["GET"])

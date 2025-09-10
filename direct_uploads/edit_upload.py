@@ -7,10 +7,10 @@ from flask_login import current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from direct_uploads.paths import abs_from_parts
+from utils.fileUtils import abs_from_parts
 
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from auth.roles import roles_required
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User
 

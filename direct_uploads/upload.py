@@ -9,14 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from auth.roles import roles_required
 from models import (
     User, LabUnit, Hospital, DirectImageUpload,
     Camera, Disease, Area, Job, JobItem
 )
 
-from .paths import get_upload_dirs, uniquify
+from utils.fileUtils import get_upload_dirs, uniquify
 
 
 def _to_int(v):

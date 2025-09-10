@@ -17,7 +17,7 @@ from sqlalchemy.orm import aliased
 from math import ceil
 from preprocess import bp
 from auth.roles import roles_required
-from direct_uploads.paths import abs_from_parts
+from utils.fileUtils import abs_from_parts
 from models import (
     Session, User, DirectImageUpload, DirectImageVerify, Hospital, LabUnit, Camera, Disease, Area
 )

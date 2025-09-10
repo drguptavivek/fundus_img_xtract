@@ -2,7 +2,7 @@ from flask import render_template, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from auth.roles import roles_required
 from models import Job, JobItem
 

@@ -9,9 +9,9 @@ from models import (
 )
 
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from auth.roles import roles_required
-from direct_uploads.paths import abs_from_parts
+from utils.fileUtils import abs_from_parts
 
 
 

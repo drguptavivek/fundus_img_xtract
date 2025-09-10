@@ -4,10 +4,10 @@ from flask import render_template, redirect, url_for, flash, current_app, url_fo
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
 from . import bp
-from .utils import with_session, require_owner_or_roles
+from utils.utils import with_session, require_owner_or_roles
 from auth.roles import roles_required
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User
-from .paths import abs_from_parts
+from utils.fileUtils import abs_from_parts
 
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
 @roles_required('contributor', 'data_manager', 'admin')

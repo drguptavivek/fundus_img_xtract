@@ -2,7 +2,7 @@ from flask import jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from . import bp
-from .utils import with_session
+from utils.utils import with_session
 from models import User, LabUnit
 
 @bp.route("/api/lab-units/<int:user_id>", methods=["GET"])

@@ -43,7 +43,10 @@ class GradingTask(Base):
     encounter_file: Mapped['EncounterFile'] = relationship('EncounterFile')
     direct_image: Mapped['DirectImageUpload'] = relationship('DirectImageUpload')
     grades: Mapped[list['Grade']] = relationship('Grade', cascade="all, delete-orphan")
-    consensus: Mapped['Consensus | None'] = relationship('Consensus', uselist=False, cascade="all, delete-orphan")
+    # Pair the one-to-one to avoid SAWarning overlaps; single_parent supports delete-orphan.
+    consensus: Mapped['Consensus | None'] = relationship(
+        'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
+    )
 
     __table_args__ = (
         # Ensure one and only one image reference is set
@@ -114,7 +117,8 @@ class Consensus(Base):
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
-    task: Mapped['GradingTask'] = relationship('GradingTask')
+    # Inverse side of GradingTask.consensus
+    task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='consensus')
     final_label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
     decided_by: Mapped['User | None'] = relationship('User')
 

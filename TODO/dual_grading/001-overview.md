@@ -115,9 +115,9 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    A[Admin UI: Assign Eligibility] --> F1[Select User]
-    F1 --> F2[Select Diseases]
-    F2 --> F3[Select Grading Lab Units]
+    A["Admin UI: Assign Eligibility"] --> F1["Select User"]
+    F1 --> F2["Select Diseases"]
+    F2 --> F3["Select Grading Lab Units"]
     F3 --> F4"["Toggle Slot Flags \n resident faculty arbitrator"]
     F4 --> API["POST api/grading-eligibility/users/user_id \n items: disease_id, lab_unit_id, flags"]
     API --> DUR[(user_disease_unit_role)]

@@ -102,7 +102,12 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
 
         work_items: list[tuple[Path, PatientEncounters, str, ZipFile]] = []  # (pdf_path, encounter, filename, zip_file)
         for ef, enc, zip_file in rows:
-            pdf_path = PDF_DIR / (ef.filename or "")
+            # Get the upload date from the zip file record and format as yyyy_mm_dd
+            upload_date = zip_file.upload_date
+            upload_date_str = upload_date.strftime("%Y_%m_%d") if upload_date else datetime.now().strftime("%Y_%m_%d")
+            
+            # Construct PDF path with date subdirectory: PDF_DIR/yyyy_mm_dd/filename
+            pdf_path = PDF_DIR / upload_date_str / (ef.filename or "")
             if not ef.filename:
                 continue
             if limit_filenames is not None and ef.filename not in limit_filenames:

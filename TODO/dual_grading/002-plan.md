@@ -16,6 +16,7 @@ Phases and Deliverables
 - Implement `create_or_get_task(image_ref, disease_id, lab_unit_id)` with idempotency.
 - Implement `ensure_task(image_uuid, disease_id)` resolving Encounter vs Direct.
 - Hook auto-creation in verification flows (direct verification, DR verify, Glaucoma verify).
+ - Enforce global uniqueness per image×disease across labs; never mutate `lab_unit_id` on existing tasks; if a task is final, block cross‑lab reassignment (gold standard established).
 
 4) Grading Flow (Routes)
 - Resident/Faculty submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table.
@@ -25,6 +26,7 @@ Phases and Deliverables
 5) Dashboard and “Start Grading”
 - Next-task selection prioritizes: images graded by the other slot but not by me; otherwise any pending verified tasks I’m eligible for.
 - Counts and charts reflect only verified tasks.
+ - Filter queues by `(disease_id, lab_unit_id)` based on the eligibility matrix; exclude tasks I already graded for my slot.
 
 6) Denormalized View (Optional)
 - Create a SQL view to pivot per image-per-disease: resident_label, faculty_label, final_label, method, timestamps.
@@ -38,6 +40,7 @@ Phases and Deliverables
 8) Tests and QA
 - Unit tests for eligibility enforcement, task creation, dual match, arbitration, and verification gating.
 - API tests for eligibility CRUD and ensure_task.
+ - Tests for global uniqueness and gold standard: cross‑lab `ensure_task` returns existing task if not final; returns 409 with a clear message if final.
 
 9) Rollout
 - Feature-flag the new flow; keep legacy `ImageGrading` writes for audit during transition.

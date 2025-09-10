@@ -145,6 +145,13 @@ Validation and Safety
 - Use ORM-bound parameters; never interpolate SQL.
 - Close sessions; return JSON with stable shapes for front-end consumption.
 
+Queue Visibility
+- Purpose: Scope grading queues to tasks the user can work on based on `(disease_id, lab_unit_id)` eligibility.
+- Rule: `lab_unit_id` on tasks is used strictly for visibility/assignment; it does not redefine image identity.
+- Resident queue filter (sketch): tasks in states `pending|faculty_done|arbitration` where a `user_disease_unit_role` row exists with `active = true` and `can_grade_resident = true` for the task’s `(disease_id, lab_unit_id)`. Exclude tasks already graded by the user for resident.
+- Faculty queue filter: analogous with `can_grade_faculty = true` and eligible states.
+- Optional narrowing: allow query params `disease_id` and/or `lab_unit_id` to further filter queues to the user’s eligible sets.
+
 Next Steps
 - Wire these routes by creating `api/grading_eligibility.py` and importing in `api/__init__.py`.
 - Add unit tests covering CRUD, bad inputs, and authorization.

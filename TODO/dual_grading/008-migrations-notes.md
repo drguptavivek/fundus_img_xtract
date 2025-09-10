@@ -43,6 +43,14 @@ CREATE INDEX IF NOT EXISTS ix_task_direct ON grading_tasks(direct_image_upload_i
 CREATE INDEX IF NOT EXISTS ix_task_disease_lab_state ON grading_tasks(disease_id, lab_unit_id, state);
 ```
 
+Global Uniqueness & Gold Standard
+- The pair `(encounter_file_id, disease_id)` and `(direct_image_upload_id, disease_id)` are each unique, enforcing one task per image×disease globally. `lab_unit_id` scopes assignment/queues only.
+- Once a task reaches `state='final'` (via match or adjudication), treat it as the gold standard for that image×disease across all labs; do not allow creation of another task for the same image×disease.
+
+Operational Guardrails (Service Layer)
+- `create_or_get_task(...)` must first search for an existing image×disease task; if found, return it as‑is and never mutate `lab_unit_id`.
+- `ensure_task(image_uuid, disease_id)` derives the lab from the image and applies verification gating; if an existing task is final, return a 409-style error to callers indicating cross‑lab reassignment is disabled after final consensus.
+
 - grades
 
 ```sql

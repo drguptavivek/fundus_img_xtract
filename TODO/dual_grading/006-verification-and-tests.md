@@ -49,6 +49,11 @@ Example (Python shell):
 - Remed.io DR: after encounter DR verify, confirm one `grading_task` per image for disease DR and lab unit L1.
 - Re‑run auto‑creation; verify idempotency (no duplicates because of unique constraint).
 
+5) Global Uniqueness & Gold Standard
+- From a different lab unit context, call ensure_task for the same image×disease:
+  - If the existing task is not final → the same task is returned (lab_unit_id is NOT mutated).
+  - If the existing task is final → the call fails with 409 and a clear message that cross‑lab reassignment is disabled once a gold standard exists.
+
 5) Verification Gating
 - Make a new DirectImageUpload that is not verified; attempt to create/ensure a task → expect 409/blocked.
 - Toggle Remed.io encounter to unverified; ensure related tasks are not selected by “start grading” queries (or prefer not creating tasks until verified).
@@ -83,6 +88,7 @@ Example (Python shell):
   - Preference: tasks already graded by the other slot should be offered first.
 - For `faculty_user`:
   - Same as above using faculty permission.
+  - Queue filters must respect lab_unit scoping: only tasks for lab units where the user has eligibility are included; do not move tasks between labs.
 
 10) Denormalized View Sanity (Optional)
 - Create the SQL VIEW (or materialized table) that pivots resident/faculty/final labels per image×disease.
@@ -95,6 +101,7 @@ Example (Python shell):
 - Faculty who graded attempts to arbitrate the same task → blocked.
 - Submit with invalid `disease_grading_id` or role_slot → 400 validation error.
 - Attempt to grade a locked image → blocked with friendly message.
+- Attempt to create/ensure a task for an image×disease that is already final in any lab unit → 409 conflict with message indicating gold standard already set and cross‑lab reassignment is disabled.
 
 12) Logging & Auditing
 - Check application logs:

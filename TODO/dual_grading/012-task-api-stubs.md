@@ -46,7 +46,7 @@ from dual_grading_services import ensure_task as svc_ensure_task  # if extracted
 - Errors:
   - 400: invalid body
   - 404: image not found or disease not found
-  - 409: image not verified for this disease or image locked
+  - 409: image not verified for this disease; image locked; or gold standard already set (cross-lab reassignment disabled)
   - 403: user not eligible for requested slot and (disease_id, lab_unit_id)
 
 Pseudocode
@@ -65,7 +65,7 @@ def tasks_ensure():
     except ValueError:
         return jsonify({'error': 'not_found'}), 404
     except PermissionError as e:
-        # could be not verified or locked
+        # not verified / locked / or cross-lab reassignment blocked after final consensus
         return jsonify({'error': 'conflict', 'message': str(e)}), 409
     # Eligibility gate (derive lab_unit from task), using roles+matrix
     if not is_user_eligible_for_slot(current_user, task, slot):

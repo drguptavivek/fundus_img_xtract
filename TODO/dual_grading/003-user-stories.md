@@ -28,4 +28,5 @@ System
 - When a direct image is verified, the system auto-creates a grading task for its native disease.
 - When a Remed.io encounter is verified for DR or Glaucoma, the system auto-creates tasks for all images in that encounter for the verified disease.
 - The system only surfaces verified images for grading, and never allows grading of locked images.
+ - Once a final consensus exists for an image×disease (in any lab unit), the system does not create or reassign another task for the same image×disease in other lab units; the gold standard is set.
 

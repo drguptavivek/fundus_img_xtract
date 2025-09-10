@@ -10,6 +10,7 @@ Schema (SQLAlchemy in models.py)
   - created_at, updated_at (UTC timezone-aware)
   - Indexes: (disease_id, lab_unit_id, state), (encounter_file_id), (direct_image_upload_id)
   - Unique: (encounter_file_id, disease_id) and (direct_image_upload_id, disease_id), each scoped to non-null side
+  - Note: `lab_unit_id` scopes queue visibility and assignment only; identity is image×disease. Do not mutate `lab_unit_id` after creation.
 
 - grade
   - id (PK)
@@ -66,13 +67,15 @@ Verification Gating
 Task Creation Services
 - create_or_get_task(image_ref, disease_id, lab_unit_id)
   - Validate verification and image unlocked (`is_locked == False`).
-  - Insert with unique constraint; on conflict, select existing.
+  - First, attempt to find an existing task for the image×disease; if found, return it without changing `lab_unit_id`.
+  - Else, insert a new task; uniques enforce one task per image×disease globally.
   - Set state = 'pending'.
 
 - ensure_task(image_uuid, disease_id)
   - Resolve to EncounterFile or DirectImageUpload and derive lab_unit_id.
   - Apply disease-specific verification check.
   - Delegate to create_or_get_task.
+  - If an existing task is `final`, return a conflict error to callers indicating the gold standard exists and cross‑lab reassignment is disabled.
 
 Auto-Creation Hooks
 - Direct verify (preprocess/anonymize_image.py): after setting verified, call create_or_get_task for `DirectImageUpload.disease_id`.
@@ -88,6 +91,7 @@ Consensus Logic
 Routes & Policies (Sketch)
 - GET /grading/start?disease_id=...
   - Select next verified task I’m eligible for and haven’t graded in my slot; prioritize tasks graded by the other slot.
+  - Filter by `(disease_id, lab_unit_id)` using `user_disease_unit_role` matrix; do not move tasks between labs.
 
 - POST /grading/submit (resident/faculty)
   - Validate csrf; validate enums; eligibility; verification check; idempotent upsert; update task state; possibly finalize consensus.

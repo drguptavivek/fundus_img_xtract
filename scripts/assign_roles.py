@@ -1,5 +1,15 @@
 # scripts/assign_roles.py
+from pathlib import Path
+import os
 import argparse
+import sys
+
+# Add the project root to the path so we can import models
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+    
+    import argparse
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 from models import engine, User, Role

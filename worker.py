@@ -2,7 +2,7 @@
 from pathlib import Path
 from flask import current_app
 from models import Session
-from zip_processor import setup_environment, setup_database, process_zip_file
+from zip_processor import setup_environment,  process_zip_file
 from process_pdfs import process_all_pdfs_for_ocr
 from job_store import (
     db_set_job_status, db_set_item_state, db_any_item_error,
@@ -16,7 +16,6 @@ def _process_one_zip(zip_path: Path) -> dict:
       - process_all_pdfs_for_ocr()         # OCR all PDFs (your current runner behavior)
     """
     setup_environment()
-    setup_database()
     db = Session()
     try:
         pdfs = process_zip_file(zip_path, db)

@@ -72,12 +72,12 @@ def create_app():
 
     # Ensure folders + schema (idempotent)
     setup_environment()
-    Base.metadata.create_all(engine)
+    # Base.metadata.create_all(engine)
 
     # --- RBAC: seed core roles once ---
     from sqlalchemy.orm import sessionmaker
     from auth.roles import ensure_roles, DEFAULT_ROLES
-    from utils.ensure_core_diseases import ensure_core_diseases
+    from scripts.ensure_core_diseases import ensure_core_diseases
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     with SessionLocal() as db:
         ensure_roles(db, DEFAULT_ROLES)

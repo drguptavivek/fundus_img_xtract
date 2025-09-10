@@ -19,7 +19,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 
 # Import database models and configurations
-from models import PDF_DIR, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF
+from models import PDF_DIR, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile
 
 
 # --- Directories from .env ---
@@ -63,6 +63,17 @@ def log_error(filename: str, message: str):
     print(f"LOG (error): {line}")
 
 
+def get_daily_dirs(upload_date_str):
+    """Get daily subdirectories for organizing files by the upload date from DB."""
+    # Create dated directories using the upload date
+    dr_pdf_daily = DR_PDF_DIR / upload_date_str
+    glaucoma_pdf_daily = GLAUCOMA_PDF_DIR / upload_date_str
+    
+    return {
+        'dr_pdf': dr_pdf_daily,
+        'glaucoma_pdf': glaucoma_pdf_daily
+    }
+
 
 # --- Main PDF Processing Logic ---
 
@@ -75,16 +86,12 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
     print("Starting PDF OCR processing workflow...")
     db_session: DBSession = Session() # Create a session instance
 
-    # Ensure new split PDF directories exist
-    DR_PDF_DIR.mkdir(parents=True, exist_ok=True)
-    GLAUCOMA_PDF_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"Created directories: {DR_PDF_DIR} and {GLAUCOMA_PDF_DIR}")
-
     try:
         # Build a targeted worklist from DB: only unprocessed EncounterFilePDFs
         rows = (
-            db_session.query(EncounterFilePDF, PatientEncounters)
+            db_session.query(EncounterFilePDF, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
+            .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter((EncounterFilePDF.ocr_processed == False) | (EncounterFilePDF.ocr_processed.is_(None)))
             .all()
         )
@@ -93,8 +100,8 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
             print("\nNo unprocessed PDFs found (EncounterFilePDF.ocr_processed==False). Nothing to do.")
             return
 
-        work_items: list[tuple[Path, PatientEncounters, str]] = []  # (pdf_path, encounter, filename)
-        for ef, enc in rows:
+        work_items: list[tuple[Path, PatientEncounters, str, ZipFile]] = []  # (pdf_path, encounter, filename, zip_file)
+        for ef, enc, zip_file in rows:
             pdf_path = PDF_DIR / (ef.filename or "")
             if not ef.filename:
                 continue
@@ -103,11 +110,24 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
             if not pdf_path.exists():
                 log_error(ef.filename, "PDF file missing on disk; skipping")
                 continue
-            work_items.append((pdf_path, enc, ef.filename))
+            work_items.append((pdf_path, enc, ef.filename, zip_file))
 
         total_files = len(work_items)
-        for idx, (pdf_path, patient_encounter, ef_filename) in enumerate(work_items, start=1):
+        for idx, (pdf_path, patient_encounter, ef_filename, zip_file) in enumerate(work_items, start=1):
             print(f"\n--- Processing file {idx}/{total_files}: '{pdf_path.name}' ---")
+
+            # Get the upload date from the zip file record
+            upload_date = zip_file.upload_date
+            # Format the date as YYYY_MM_DD string for directory naming
+            upload_date_str = upload_date.strftime("%Y_%m_%d") if upload_date else datetime.now().strftime("%Y_%m_%d")
+            
+            # Get daily directories based on the upload date
+            daily_dirs = get_daily_dirs(upload_date_str)
+            
+            # Ensure new split PDF directories exist
+            daily_dirs['dr_pdf'].mkdir(parents=True, exist_ok=True)
+            daily_dirs['glaucoma_pdf'].mkdir(parents=True, exist_ok=True)
+            print(f"Created directories: {daily_dirs['dr_pdf']} and {daily_dirs['glaucoma_pdf']}")
 
             # Use data from DB for consistent naming
             extracted_patient_id = patient_encounter.patient_id
@@ -178,7 +198,7 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
                         output_dr_pdf.insert_pdf(pdf_document, from_page=pageNumberDiabeticReport - 1, to_page=pageNumberDiabeticReport - 1)
                         
                         dr_pdf_filename = f"{extracted_patient_id}_{patient_name_for_filename}_{capture_date_for_filename}_DR_Page{pageNumberDiabeticReport}.pdf"
-                        dr_pdf_path = DR_PDF_DIR / dr_pdf_filename
+                        dr_pdf_path = daily_dirs['dr_pdf'] / dr_pdf_filename
                         output_dr_pdf.save(dr_pdf_path)
                         output_dr_pdf.close()
                         print(f"  Saved DR report page {pageNumberDiabeticReport} to '{dr_pdf_path.name}'.")
@@ -205,7 +225,7 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
                         output_gl_pdf.insert_pdf(pdf_document, from_page=pageNumberGlaucomaReport - 1, to_page=pageNumberGlaucomaReport - 1)
                         
                         gl_pdf_filename = f"{extracted_patient_id}_{patient_name_for_filename}_{capture_date_for_filename}_GL_Page{pageNumberGlaucomaReport}.pdf"
-                        gl_pdf_path = GLAUCOMA_PDF_DIR / gl_pdf_filename
+                        gl_pdf_path = daily_dirs['glaucoma_pdf'] / gl_pdf_filename
                         output_gl_pdf.save(gl_pdf_path)
                         output_gl_pdf.close()
                         print(f"  Saved Glaucoma report page {pageNumberGlaucomaReport} to '{gl_pdf_path.name}'.")

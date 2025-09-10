@@ -11,7 +11,7 @@ sys.path.insert(0, str(project_root))
 
 from sqlalchemy import select
 from models import Session, Disease
-from utils.ensure_core_diseases import CORE_DISEASES, ensure_core_diseases
+from scripts.ensure_core_diseases import CORE_DISEASES, ensure_core_diseases
 
 def migrate(dry_run=False):
     """

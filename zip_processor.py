@@ -13,6 +13,8 @@ load_dotenv()
 # --- Model and DB Imports ---
 # Import everything needed from the new models.py file
 from models import (
+    DR_PDF_DIR,
+    GLAUCOMA_PDF_DIR,
     Base,
     ZipFile,
     PatientEncounters,
@@ -68,6 +70,30 @@ def _sniff_member_type(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> str:
 
 # --- Utility Functions ---
 
+def get_daily_dirs():
+    """Get daily subdirectories for organizing files by date."""
+    today_str = datetime.now().strftime("%Y_%m_%d")
+    
+    # Create dated directories
+    upload_daily = UPLOAD_DIR / today_str
+    processed_daily = PROCESSED_DIR / today_str
+    error_daily = PROCESSING_ERROR_DIR / today_str
+    image_daily = IMAGE_DIR / today_str
+    pdf_daily = PDF_DIR / today_str
+    dr_pdf_daily = DR_PDF_DIR / today_str
+    glaucoma_pdf_daily = GLAUCOMA_PDF_DIR / today_str
+    
+    return {
+        'upload': upload_daily,
+        'processed': processed_daily,
+        'error': error_daily,
+        'image': image_daily,
+        'pdf': pdf_daily,
+        'dr_pdf': dr_pdf_daily,
+        'glaucoma_pdf': glaucoma_pdf_daily
+    }
+
+
 def setup_environment():
     """Creates the necessary directories for the script to run."""
     print("Setting up the environment...")
@@ -76,6 +102,14 @@ def setup_environment():
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     PROCESSING_ERROR_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Get daily directories
+    daily_dirs = get_daily_dirs()
+    
+    # Create all directories
+    for dir_path in daily_dirs.values():
+        dir_path.mkdir(parents=True, exist_ok=True)
+    
     print("Directories are ready.")
 
 
@@ -142,6 +176,9 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
                     raise
                 time.sleep(0.2 * (i + 1))
 
+    # Get daily directories for this processing run
+    daily_dirs = get_daily_dirs()
+    
     md5_hash = calculate_md5(zip_path)
     existing = session.query(ZipFile).filter_by(md5_hash=md5_hash).first()
     if existing:
@@ -186,7 +223,7 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
                             if i == 4:
                                 raise
                             time.sleep(0.2 * (i + 1))
-                _safe_move_local(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
+                _safe_move_local(zip_path, daily_dirs['error'] / zip_path.name)
             except PermissionError as pe:
                 print(f"Final move failed for '{zip_path.name}' due to a lock: {pe}.")
             log_status(zip_path.name, "ERROR_BADZIP", "not a zip file")
@@ -418,9 +455,9 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
 
                 # Determine destination directory and file type
                 if file_ext in {'.jpg', '.jpeg'}:
-                    dest_dir, file_type = IMAGE_DIR, 'image'
+                    dest_dir, file_type = daily_dirs['image'], 'image'
                 elif file_ext == '.pdf':
-                    dest_dir, file_type = PDF_DIR, 'pdf'
+                    dest_dir, file_type = daily_dirs['pdf'], 'pdf'
                 else:
                     # Should not reach here due to pre-check, but keep defensive
                     continue
@@ -475,11 +512,11 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
                 # Already deleted due to disallowed content; nothing to move
                 pass
             elif success:
-                safe_move(zip_path, PROCESSED_DIR / zip_path.name)
+                safe_move(zip_path, daily_dirs['processed'] / zip_path.name)
                 print(f"Moved '{zip_path.name}' to processed directory.")
                 log_status(zip_path.name, "SUCCESS")
             else:
-                safe_move(zip_path, PROCESSING_ERROR_DIR / zip_path.name)
+                safe_move(zip_path, daily_dirs['error'] / zip_path.name)
                 print(f"Moved '{zip_path.name}' to error directory.")
                 log_status(zip_path.name, "ERROR", error_message or "")
         except PermissionError as pe:
@@ -498,8 +535,11 @@ def main():
 
     session = Session()
 
+    # Get daily upload directory
+    daily_dirs = get_daily_dirs()
+    
     # Filter out macOS resource fork artifacts like '._*.zip'
-    zip_files = [p for p in UPLOAD_DIR.glob("*.zip") if not p.name.startswith("._")]
+    zip_files = [p for p in daily_dirs['upload'].glob("*.zip") if not p.name.startswith("._")]
     if not zip_files:
         print("\nNo new ZIP files found in 'files/uploaded'.")
     else:

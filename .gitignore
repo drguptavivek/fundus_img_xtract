@@ -58,6 +58,7 @@ yarn.lock
 /files/**/*.pdf
 /files/**/*.zip
 /files/**/*.*  
+/**/*.db
 zip_processing.db
 zip_processing*.db
 zip_processing*.db-*

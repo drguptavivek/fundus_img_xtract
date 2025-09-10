@@ -49,6 +49,12 @@ def _file_size_bytes(file_storage) -> int:
     stream.seek(pos, os.SEEK_SET)
     return size
 
+def get_daily_upload_dir():
+    """Get daily subdirectory for organizing uploaded ZIP files by date."""
+    today_str = datetime.now().strftime("%Y_%m_%d")
+    upload_daily = UPLOAD_DIR / today_str
+    return upload_daily
+
 @bp.route("/upload_files", methods=["GET"])
 @roles_required("admin", "fileUploader")
 def upload_form():
@@ -126,6 +132,9 @@ def upload_files():
     saved_paths: list[Path] = []
     rejected: list[str] = []
 
+    # Get daily upload directory
+    daily_upload_dir = get_daily_upload_dir()
+
     for f in files:
         fname = (f.filename or "").strip()
         if not fname:
@@ -142,8 +151,8 @@ def upload_files():
             rejected.append(f"{fname} (> {int(per_file_max/1024/1024)} MB)")
             continue
 
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        save_path = _uniquify(UPLOAD_DIR, fname)
+        daily_upload_dir.mkdir(parents=True, exist_ok=True)
+        save_path = _uniquify(daily_upload_dir, fname)
         try:
             # ensure stream is at start before saving
             try:
@@ -155,7 +164,7 @@ def upload_files():
 
             # Write sidecar metadata for uploader and IP
             try:
-                meta_dir = UPLOAD_DIR.parent / "upload_meta"
+                meta_dir = daily_upload_dir.parent.parent / "upload_meta"
                 meta_dir.mkdir(parents=True, exist_ok=True)
                 xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
                 ip = xff or (request.remote_addr or "-")

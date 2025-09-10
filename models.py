@@ -45,6 +45,7 @@ class ZipFile(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     zip_filename: Mapped[str] = mapped_column(unique=True)
     md5_hash: Mapped[str] = mapped_column(unique=True)
+    upload_date: Mapped[date] = mapped_column(Date, default=datetime.utcnow().date)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="zip_file", uselist=False, cascade="all, delete-orphan")
 
 class PatientEncounters(Base):
@@ -108,7 +109,6 @@ class EncounterFilePDF(Base):
         CheckConstraint("file_type = 'pdf'", name="ck_encounter_file_pdf_only"),
         Index('ix_encounter_file_pdfs_patient_encounter_id', 'patient_encounter_id'),
         Index('ix_encounter_file_pdfs_eye_side', 'eye_side'),
-        Index('ix_encounter_file_pdfs_lab_unit_id', 'lab_unit_id'),
     )
 
 class DiabeticRetinopathyReport(Base):

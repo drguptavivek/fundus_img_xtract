@@ -137,9 +137,9 @@ flowchart LR
     SVC3 --> GT
 
     subgraph Optional Admin Backfill
-      B1[Select Disease + Lab Unit]
-      B2[Scan verified images without tasks]
-      B3[Bulk create missing tasks]
+      B1["Select Disease + Lab Unit"]
+      B2["Scan verified images without tasks"]
+      B3["Bulk create missing tasks"]
     end
     B1 --> B2 --> B3 --> GT
 

@@ -8,6 +8,8 @@ from flask_login import current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from utils.utils2 import uniquify
+
 from . import bp
 from utils.utils import with_session
 from auth.roles import roles_required
@@ -16,7 +18,7 @@ from models import (
     Camera, Disease, Area, Job, JobItem
 )
 
-from utils.fileUtils import get_upload_dirs, uniquify
+from utils.fileUtils import get_upload_dirs
 
 
 def _to_int(v):

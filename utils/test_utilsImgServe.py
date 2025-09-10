@@ -10,5 +10,11 @@ def test_encounterImageByUUID():
     # You would need to set up a test database with sample data
     print("Test placeholder for encounterImageByUUID")
     
+def test_imgForGradingByUUID():
+    # This is a placeholder for actual tests
+    # You would need to set up a test database with sample data
+    print("Test placeholder for imgForGradingByUUID")
+    
 if __name__ == "__main__":
     test_encounterImageByUUID()
+    test_imgForGradingByUUID()

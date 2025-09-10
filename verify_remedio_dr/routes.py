@@ -7,7 +7,7 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow
+from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow, LabUnit
 from process_pdfs import DR_PDF_DIR
 
 
@@ -172,6 +172,7 @@ def verify_dr_detail(report_id: int):
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.encounter_files),
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.dr_reports),
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
+                joinedload(DiabeticRetinopathyReport.patient_encounter).joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
             .filter(DiabeticRetinopathyReport.id == report_id)
             .first()

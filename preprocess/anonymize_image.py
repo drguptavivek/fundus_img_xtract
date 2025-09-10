@@ -317,15 +317,15 @@ def anonymize_image(uuid: UUID):
 
         # Build URLs for media endpoints (prefer edited if present for display)
         image_url = url_for(
-            "media.serve_img_by_uuid_preferring_edited",
+            "media._directImgFinalByUUID",
             uuid_str=str(upload.uuid),
             _external=False,
         )
 
         edited_image_url = None
-        if upload.has_edited and upload.edited_filename:
+        if upload.edited_filename:
             edited_image_url = url_for(
-                "media.serve_img_by_uuid_preferring_edited",
+                "media._directImgFinalByUUID",
                 uuid_str=str(upload.uuid),
                 _external=False,
             )
@@ -412,7 +412,7 @@ def anonymize_image(uuid: UUID):
             edited_image_url=edited_image_url,
             current_verification=current_verification,
             uuid=uuid_val,
-            has_edited_version=bool(upload.has_edited and upload.edited_filename),
+            has_edited_version=bool(upload.edited_filename),
             is_verified=is_verified,
             next_unverified_uuid=next_unverified_uuid,
         )

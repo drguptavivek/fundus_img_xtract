@@ -25,10 +25,10 @@ def edit_image(upload_id: int):
 
             has_edited_version = bool(upload.edited_filename)
             if has_edited_version:
-                image_url = flask_url_for("media.serve_img_edited", upload_id=upload.id)
+                image_url = flask_url_for("media._directImgEdByUUID", uuid_str=upload.uuid)
                 current_app.logger.info("Loading EDITED image %s for editing", upload_id)
             else:
-                image_url = flask_url_for("media.serve_img_orig", upload_id=upload.id)
+                image_url = flask_url_for("media._directImgOrigByUUID", uuid_str=upload.uuid)
                 current_app.logger.info("Loading ORIGINAL image %s for editing", upload_id)
 
             hospital = db.get(Hospital, upload.hospital_id)

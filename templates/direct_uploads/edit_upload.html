@@ -16,7 +16,7 @@
                 <div class="col-md-4">
                     <div class="ratio ratio-1x1 bg-light">
                         {% if upload.filename and (upload.filename|lower).endswith(('.png', '.jpg', '.jpeg')) %}
-                        <img src="{{ url_for('media.serve_img_orig', upload_id=upload.id) }}"
+                        <img src="{{ url_for('media._directImgOrigByUUID', uuid_str=upload.uuid) }}"
                             class="img-fluid object-fit-cover rounded" alt="{{ upload.filename }}"
                             onerror="this.onerror=null; this.replaceWith('<div class=\'d-flex align-items-center justify-content-center text-muted border rounded p-3\'><i class=\'bi bi-image fs-1\'></i></div>');"
                             loading="lazy">

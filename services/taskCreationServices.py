@@ -195,6 +195,6 @@ def ensure_task(image_uuid: str, disease_id: int) -> GradingTask:
         # Gold standard guard: do not permit cross-lab reassignment after final
         if task.state == 'final' and task.lab_unit_id != lab_unit_id:
             # Visible to callers for UX feedback; also log via app success/error loggers in real implementation
-            raise PermissionError('This image already has a final consensus for the disease; cross-lab reassignment is disabled')
+            raise PermissionError('Gold standard already set - cross-lab reassignment is disabled for finalized tasks')
         return task
 

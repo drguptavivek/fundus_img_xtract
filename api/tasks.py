@@ -76,6 +76,12 @@ def tasks_ensure():
       "disease_id": 1,
       "lab_unit_id": 9
     }
+    
+    Response 409 JSON (when task is final and cross-lab reassignment is attempted):
+    {
+      "error": "conflict",
+      "message": "Gold standard already set - cross-lab reassignment is disabled for finalized tasks"
+    }
     """
     payload = request.get_json(silent=True) or {}
     image_uuid = (payload.get('image_uuid') or '').strip()
@@ -91,7 +97,13 @@ def tasks_ensure():
         return jsonify({'error': 'not_found'}), 404
     except PermissionError as e:
         # not verified / locked / or cross-lab reassignment blocked after final consensus
-        return jsonify({'error': 'conflict', 'message': str(e)}), 409
+        error_message = str(e)
+        if "cross-lab reassignment is disabled" in error_message:
+            # Specific error for finalized tasks
+            return jsonify({'error': 'conflict', 'message': error_message}), 409
+        else:
+            # General permission error
+            return jsonify({'error': 'conflict', 'message': error_message}), 409
     
     # Eligibility gate (derive lab_unit from task), using roles+matrix
     if slot and not is_user_eligible_for_slot(current_user, task, slot):

@@ -22,6 +22,9 @@ from models import (
     Session, User, DirectImageUpload, DirectImageVerify, Hospital, LabUnit, Camera, Disease, Area
 )
 
+# Import task creation services
+from services.taskCreationServices import ensure_task
+
 # ---------------------------
 # Helpers
 # ---------------------------
@@ -358,26 +361,22 @@ def anonymize_image(uuid: UUID):
 
             try:
                 db_session.commit()
-                flash(f"Image {upload.filename} marked as {verified_status}.", "success")
-
-                # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
-                next_uuid = _get_next_unverified_uuid(db_session)
-                if next_uuid:
-                    return redirect(url_for("preprocess.anonymize_image", uuid=next_uuid))
-
-                flash("No more images to anonymize.", "info")
-                return redirect(url_for("preprocess.anonymization_dashboard"))
-
-            except Exception as e:
-                current_app.logger.exception(
-                    "Failed to update verification status for image UUID %s: %s", uuid_val, e
-                )
-                db_session.rollback()
-                flash("Failed to save verification status due to a database error.", "danger")
-                return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
-
-            try:
-                db_session.commit()
+                
+                # If the image was just verified, create a grading task for it
+                if verified_status == "verified":
+                    try:
+                        # Create a grading task for the verified direct image
+                        ensure_task(upload.uuid, upload.disease_id)
+                        current_app.logger.info(
+                            "Created grading task for verified direct image UUID %s", upload.uuid
+                        )
+                    except Exception as task_error:
+                        current_app.logger.exception(
+                            "Failed to create grading task for verified direct image UUID %s: %s", 
+                            upload.uuid, task_error
+                        )
+                        # Don't fail the verification if task creation fails, just log it
+                
                 flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 
                 # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.

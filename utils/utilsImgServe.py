@@ -1,7 +1,12 @@
 import os
 from pathlib import Path
+from typing import Tuple
 from flask import send_file, abort, flash
-from models import Session, EncounterFile, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from models import DirectImageVerify, Disease, Session, EncounterFile, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from sqlalchemy import  and_, select
+
+
+
 
 def encounterImageByUUID(uuid: str):
     db = Session()

@@ -7,8 +7,11 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow, LabUnit
+from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow, LabUnit, Disease
 from process_pdfs import DR_PDF_DIR
+
+# Import task creation services
+from services.taskCreationServices import ensure_task
 
 
 @bp.route("/list", methods=["GET"])
@@ -434,6 +437,40 @@ def verify_dr_verify(report_id: int):
             enc.dr_verified_at = utcnow()
             db.add(enc)
             db.commit()
+            
+            # Create grading tasks for all images in the encounter for DR
+            try:
+                # Get all images in this encounter
+                images = db.query(EncounterFile).filter(
+                    EncounterFile.patient_encounter_id == enc.id
+                ).all()
+                
+                # Create a grading task for each image for DR disease
+                dr_disease = db.query(Disease).filter(
+                    func.lower(Disease.name).in_(['diabetic retinopathy', 'dr'])
+                ).first()
+                
+                if dr_disease:
+                    for image in images:
+                        try:
+                            ensure_task(image.uuid, dr_disease.id)
+                            current_app.logger.info(
+                                "Created DR grading task for image UUID %s", image.uuid
+                            )
+                        except Exception as task_error:
+                            current_app.logger.exception(
+                                "Failed to create DR grading task for image UUID %s: %s", 
+                                image.uuid, task_error
+                            )
+                            # Continue with other images even if one fails
+                else:
+                    current_app.logger.warning("DR disease not found in database")
+            except Exception as e:
+                current_app.logger.exception(
+                    "Failed to create grading tasks for DR verified encounter %s: %s", 
+                    enc.id, e
+                )
+                # Don't fail the verification if task creation fails, just log it
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": enc.dr_verified_status if enc else 'verified', "by": enc.dr_verified_by if enc else current_user.username}

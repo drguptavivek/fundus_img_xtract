@@ -10,8 +10,14 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow, LabUnit
+from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow, LabUnit, Disease
 from process_pdfs import GLAUCOMA_PDF_DIR
+
+# Import task creation services
+from services.taskCreationServices import ensure_task
+
+# Import current_app for logging
+from flask import current_app
 
 
 @bp.route("/results", methods=["GET"])
@@ -699,6 +705,40 @@ def glaucoma_verify(clean_id: int):
             enc.glaucoma_verified_at = utcnow()
             db.add(enc)
             db.commit()
+            
+            # Create grading tasks for all images in the encounter for glaucoma
+            try:
+                # Get all images in this encounter
+                images = db.query(EncounterFile).filter(
+                    EncounterFile.patient_encounter_id == enc.id
+                ).all()
+                
+                # Create a grading task for each image for glaucoma disease
+                glaucoma_disease = db.query(Disease).filter(
+                    func.lower(Disease.name) == 'glaucoma'
+                ).first()
+                
+                if glaucoma_disease:
+                    for image in images:
+                        try:
+                            ensure_task(image.uuid, glaucoma_disease.id)
+                            current_app.logger.info(
+                                "Created glaucoma grading task for image UUID %s", image.uuid
+                            )
+                        except Exception as task_error:
+                            current_app.logger.exception(
+                                "Failed to create glaucoma grading task for image UUID %s: %s", 
+                                image.uuid, task_error
+                            )
+                            # Continue with other images even if one fails
+                else:
+                    current_app.logger.warning("Glaucoma disease not found in database")
+            except Exception as e:
+                current_app.logger.exception(
+                    "Failed to create grading tasks for glaucoma verified encounter %s: %s", 
+                    enc.id, e
+                )
+                # Don't fail the verification if task creation fails, just log it
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": enc.glaucoma_verified_status if enc else 'verified', "by": enc.glaucoma_verified_by if enc else current_user.username}

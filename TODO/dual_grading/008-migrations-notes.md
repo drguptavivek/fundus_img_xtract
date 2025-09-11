@@ -1,4 +1,4 @@
-# Migration Notes — Dual Grading Schema
+# Migration Notes — Dual Grading Schema - DONE and FIXED
 
 This outlines the migration steps to introduce grading tasks, grades, consensus, eligibility, and (optionally) AI grades. Keep migrations small and reversible. Update `scripts/setup_db.py` and `scripts/migrations.md` accordingly.
 
@@ -133,22 +133,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_encounter_model_run ON ai_grades(encount
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_direct_model_run ON ai_grades(direct_image_upload_id, disease_id, model_name, model_version, run_id);
 ```
 
-scripts/setup_db.py
-- Add flags to run this migration (e.g., `--migrate-dual-grading`).
-- Within the flag handler:
-  - Create tables via SQLAlchemy metadata reflect/create or by executing the raw SQL blocks above.
-  - Print progress and handle exceptions with friendly messages.
 
-scripts/migrations.md
-- Document the new migration:
-  - Purpose, tables created, constraints, and indexes.
-  - Rollback plan (DROP TABLES in reverse order) for dev only; avoid drops in production without backups.
 
-Seeding Utilities
-- Write a small seeding routine to build `user_disease_unit_role` rows based on:
-  - `user_roles` (resident → can_grade_resident; ophthalmologist → can_grade_faculty, can_arbitrate)
-  - `user_disease_specializations` (only create rows for diseases the user specializes in)
-  - Selected grading lab units (admin-chosen subset, independent of upload mapping).
 
 Backfill/Auto-Create Hooks
 - Direct verify: in `preprocess/anonymize_image.py` after setting verified, call a service to `create_or_get_task` for the image’s native `disease_id`.
@@ -156,9 +142,7 @@ Backfill/Auto-Create Hooks
 - Glaucoma verify: in `glaucoma/routes.py` after `glaucoma_verified_status='verified'`, iterate related images and create tasks for Glaucoma.
 
 Testing the Migration
-- After running the migration flag, confirm tables exist:
-  - Quick Python: `uv run python - <<'PY'\nfrom models import engine; import sqlite3, os; print('ok')\nPY`
-  - Or inspect via SQLite client.
+- After running the migration flag, confirm tables exist: 
 
 Notes
 - Keep legacy `image_gradings` table for history during transition; do not delete or mutate it yet.

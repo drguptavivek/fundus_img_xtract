@@ -56,6 +56,32 @@ def _is_verified_for_disease(db, kind: str, image_id: int, disease_id: int) -> b
     return False
 
 
+def can_unverify_image(db, *, kind: str, image_id: int) -> bool:
+    """
+    Check if an image can be unverified (i.e., all its tasks are pending).
+    Returns True if the image can be unverified, False otherwise.
+    """
+    if kind not in {'direct','encounter'}:
+        raise ValueError('Invalid image kind')
+
+    # Find all tasks for this image
+    if kind == 'direct':
+        tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.direct_image_upload_id == image_id
+            )
+        ).scalars().all()
+    else:
+        tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.encounter_file_id == image_id
+            )
+        ).scalars().all()
+
+    # Check if all tasks are pending or if there are no tasks
+    return all(task.state == 'pending' for task in tasks)
+
+
 def create_or_get_task(db, *, kind: str, image_id: int, disease_id: int, lab_unit_id: int) -> GradingTask:
     """
     Idempotently create a grading task for (image_ref, disease_id, lab_unit_id).
@@ -108,6 +134,41 @@ def create_or_get_task(db, *, kind: str, image_id: int, disease_id: int, lab_uni
     db.commit()
     db.refresh(task)
     return task
+
+
+def remove_pending_tasks(db, *, kind: str, image_id: int) -> int:
+    """
+    Remove all pending grading tasks for an image.
+    Returns the number of tasks removed.
+    """
+    if kind not in {'direct','encounter'}:
+        raise ValueError('Invalid image kind')
+
+    # Find all tasks for this image
+    if kind == 'direct':
+        tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.direct_image_upload_id == image_id
+            )
+        ).scalars().all()
+    else:
+        tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.encounter_file_id == image_id
+            )
+        ).scalars().all()
+
+    # Remove only pending tasks
+    removed_count = 0
+    for task in tasks:
+        if task.state == 'pending':
+            db.delete(task)
+            removed_count += 1
+    
+    if removed_count > 0:
+        db.commit()
+    
+    return removed_count
 
 
 def ensure_task(image_uuid: str, disease_id: int) -> GradingTask:

@@ -759,11 +759,62 @@ def glaucoma_unverify(clean_id: int):
             abort(404)
         enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
         if enc:
+            # Check if we can unverify the encounter (all tasks must be pending)
+            from services.taskCreationServices import can_unverify_image, remove_pending_tasks
+            can_unverify = True
+            images = db.query(EncounterFile).filter(
+                EncounterFile.patient_encounter_id == enc.id
+            ).all()
+            
+            for image in images:
+                if not can_unverify_image(db, kind="encounter", image_id=image.id):
+                    can_unverify = False
+                    break
+            
+            if not can_unverify:
+                flash("Cannot unverify encounter - some images have non-pending tasks.", "danger")
+                if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                    return {"ok": False, "error": "tasks_in_progress"}, 400
+                return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
+            
+            # Proceed with unverification
             enc.glaucoma_verified_status = None
             enc.glaucoma_verified_by = None
             enc.glaucoma_verified_at = None
             db.add(enc)
             db.commit()
+            
+            # Remove any pending grading tasks for Glaucoma disease for all images in this encounter
+            try:
+                # Remove pending grading tasks for each image
+                from services.taskCreationServices import remove_pending_tasks
+                glaucoma_disease = db.query(Disease).filter(
+                    func.lower(Disease.name) == 'glaucoma'
+                ).first()
+                
+                if glaucoma_disease:
+                    for image in images:
+                        try:
+                            removed_count = remove_pending_tasks(db, kind="encounter", image_id=image.id)
+                            if removed_count > 0:
+                                current_app.logger.info(
+                                    "Removed %d pending Glaucoma grading task(s) for unverified image UUID %s", 
+                                    removed_count, image.uuid
+                                )
+                        except Exception as task_error:
+                            current_app.logger.exception(
+                                "Failed to remove Glaucoma grading tasks for unverified image UUID %s: %s", 
+                                image.uuid, task_error
+                            )
+                            # Continue with other images even if one fails
+                else:
+                    current_app.logger.warning("Glaucoma disease not found in database when trying to remove tasks")
+            except Exception as e:
+                current_app.logger.exception(
+                    "Failed to remove grading tasks for Glaucoma unverified encounter %s: %s", 
+                    enc.id, e
+                )
+                # Don't fail the unverification if task removal fails, just log it
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": enc.glaucoma_verified_status if enc else None}

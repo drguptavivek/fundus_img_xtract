@@ -7,7 +7,7 @@ from models import (
 )
 from services.taskCreationServices import (
     _resolve_image_by_uuid, _is_verified_for_disease, 
-    create_or_get_task, ensure_task
+    create_or_get_task, ensure_task, can_unverify_image, remove_pending_tasks
 )
 
 
@@ -216,3 +216,216 @@ class TestTaskCreationServices:
         
         with pytest.raises(PermissionError, match="Image is locked"):
             ensure_task(direct_image.uuid, disease.id)
+
+    def test_can_unverify_image_no_tasks(self, setup_test_data):
+        """Test that an image with no tasks can be unverified."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        
+        # Check if image can be unverified (should be True as there are no tasks)
+        result = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert result is True
+
+    def test_can_unverify_image_pending_tasks(self, setup_test_data):
+        """Test that an image with only pending tasks can be unverified."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease = test_data['disease']
+        
+        # Create a pending task
+        task = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Verify task is pending
+        assert task.state == 'pending'
+        
+        # Check if image can be unverified (should be True as task is pending)
+        result = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert result is True
+
+    def test_can_unverify_image_non_pending_tasks(self, setup_test_data):
+        """Test that an image with non-pending tasks cannot be unverified."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease = test_data['disease']
+        
+        # Create a task and change its state
+        task = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Change task state to non-pending
+        task.state = 'final'
+        db.add(task)
+        db.commit()
+        
+        # Check if image can be unverified (should be False as task is not pending)
+        result = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert result is False
+
+    def test_remove_pending_tasks_multiple_diseases(self, setup_test_data):
+        """Test removing pending tasks for an image with multiple diseases."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease1 = test_data['disease']
+        disease2 = test_data['dr_disease']
+        
+        # Create tasks for multiple diseases
+        task1 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease1.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        task2 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease2.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Verify tasks exist and are pending
+        assert task1 is not None
+        assert task2 is not None
+        assert task1.state == 'pending'
+        assert task2.state == 'pending'
+        
+        # Remove all pending tasks
+        removed_count = remove_pending_tasks(db, kind='direct', image_id=direct_image.id)
+        
+        assert removed_count == 2
+        
+        # Verify tasks are removed
+        remaining_tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.direct_image_upload_id == direct_image.id
+            )
+        ).scalars().all()
+        
+        assert len(remaining_tasks) == 0
+
+    def test_remove_pending_tasks_mixed_states(self, setup_test_data):
+        """Test removing pending tasks when some are non-pending."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease1 = test_data['disease']
+        disease2 = test_data['dr_disease']
+        
+        # Create tasks for multiple diseases
+        task1 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease1.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        task2 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease2.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Change one task to non-pending state
+        task1.state = 'final'
+        db.add(task1)
+        db.commit()
+        
+        # Check that we cannot unverify the image
+        can_unverify = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert can_unverify is False
+        
+        # Remove pending tasks (should only remove task2)
+        removed_count = remove_pending_tasks(db, kind='direct', image_id=direct_image.id)
+        
+        assert removed_count == 1
+        
+        # Verify only task1 remains
+        remaining_tasks = db.execute(
+            select(GradingTask).where(
+                GradingTask.direct_image_upload_id == direct_image.id
+            )
+        ).scalars().all()
+        
+        assert len(remaining_tasks) == 1
+        assert remaining_tasks[0].id == task1.id
+        assert remaining_tasks[0].state == 'final'
+
+    def test_can_unverify_image_mixed_states(self, setup_test_data):
+        """Test that can_unverify_image returns False when tasks have mixed states."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease1 = test_data['disease']
+        disease2 = test_data['dr_disease']
+        
+        # Create tasks for multiple diseases
+        task1 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease1.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        task2 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease2.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Change one task to non-pending state
+        task1.state = 'resident_done'
+        db.add(task1)
+        db.commit()
+        
+        # Check that we cannot unverify the image
+        can_unverify = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert can_unverify is False
+
+    def test_can_unverify_image_all_pending(self, setup_test_data):
+        """Test that can_unverify_image returns True when all tasks are pending."""
+        db, test_data = setup_test_data
+        direct_image = test_data['direct_image']
+        disease1 = test_data['disease']
+        disease2 = test_data['dr_disease']
+        
+        # Create tasks for multiple diseases, all pending
+        task1 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease1.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        task2 = create_or_get_task(
+            db, 
+            kind='direct', 
+            image_id=direct_image.id, 
+            disease_id=disease2.id, 
+            lab_unit_id=direct_image.lab_unit_id
+        )
+        
+        # Verify both tasks are pending
+        assert task1.state == 'pending'
+        assert task2.state == 'pending'
+        
+        # Check that we can unverify the image
+        can_unverify = can_unverify_image(db, kind='direct', image_id=direct_image.id)
+        assert can_unverify is True

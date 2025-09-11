@@ -360,10 +360,28 @@ def anonymize_image(uuid: UUID):
                 )
 
             try:
-                db_session.commit()
-                
-                # If the image was just verified, create a grading task for it
+                # Handle task creation/removal based on verification status
                 if verified_status == "verified":
+                    # Set the verification status
+                    if current_verification:
+                        current_verification.verified_status = verified_status
+                        current_verification.remarks = remarks
+                        current_verification.verified_by_id = current_user.id
+                        current_verification.verified_at = func.now()
+                    else:
+                        db_session.add(
+                            DirectImageVerify(
+                                image_upload_id=upload.id,
+                                verified_status=verified_status,
+                                remarks=remarks,
+                                verified_by_id=current_user.id,
+                                verified_at=func.now(),
+                            )
+                        )
+                    
+                    # Commit the verification first
+                    db_session.commit()
+                    
                     try:
                         # Create a grading task for the verified direct image
                         ensure_task(upload.uuid, upload.disease_id)
@@ -376,6 +394,79 @@ def anonymize_image(uuid: UUID):
                             upload.uuid, task_error
                         )
                         # Don't fail the verification if task creation fails, just log it
+                
+                elif verified_status != "verified":
+                    # If the image is being unverified, check if we can unverify
+                    try:
+                        from services.taskCreationServices import can_unverify_image
+                        # Check if we can unverify the image (all tasks must be pending)
+                        if not can_unverify_image(db_session, kind="direct", image_id=upload.id):
+                            # Prevent unverification if tasks are not pending
+                            flash("Cannot unverify image - some tasks are in progress.", "danger")
+                            return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
+                        
+                        # If we can unverify, proceed with unverification
+                        if current_verification:
+                            current_verification.verified_status = verified_status
+                            current_verification.remarks = remarks
+                            current_verification.verified_by_id = current_user.id
+                            current_verification.verified_at = func.now()
+                        else:
+                            db_session.add(
+                                DirectImageVerify(
+                                    image_upload_id=upload.id,
+                                    verified_status=verified_status,
+                                    remarks=remarks,
+                                    verified_by_id=current_user.id,
+                                    verified_at=func.now(),
+                                )
+                            )
+                        
+                        db_session.commit()
+                        
+                        # Remove all pending grading tasks for this image
+                        try:
+                            from services.taskCreationServices import remove_pending_tasks
+                            removed_count = remove_pending_tasks(db_session, kind="direct", image_id=upload.id)
+                            if removed_count > 0:
+                                current_app.logger.info(
+                                    "Removed %d pending grading task(s) for unverified direct image UUID %s", 
+                                    removed_count, upload.uuid
+                                )
+                        except Exception as task_error:
+                            current_app.logger.exception(
+                                "Failed to remove grading tasks for unverified direct image UUID %s: %s", 
+                                upload.uuid, task_error
+                            )
+                            # Don't fail the unverification if task removal fails, just log it
+                    
+                    except Exception as task_error:
+                        current_app.logger.exception(
+                            "Failed to check if direct image UUID %s can be unverified: %s", 
+                            upload.uuid, task_error
+                        )
+                        flash("Failed to verify unverification conditions.", "danger")
+                        return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
+                
+                else:
+                    # For other cases, just set and commit the verification
+                    if current_verification:
+                        current_verification.verified_status = verified_status
+                        current_verification.remarks = remarks
+                        current_verification.verified_by_id = current_user.id
+                        current_verification.verified_at = func.now()
+                    else:
+                        db_session.add(
+                            DirectImageVerify(
+                                image_upload_id=upload.id,
+                                verified_status=verified_status,
+                                remarks=remarks,
+                                verified_by_id=current_user.id,
+                                verified_at=func.now(),
+                            )
+                        )
+                    
+                    db_session.commit()
                 
                 flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 

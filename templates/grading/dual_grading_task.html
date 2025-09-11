@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Dual Grading Task{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Dual Grading Task</h3>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
+</div>
+
+<div class="row g-3">
+  <!-- Large image on left -->
+  <div class="col-12 col-lg-9">
+    {% if image_uuid %}
+      {% include 'grading/_viewer_card.html' %}
+    {% else %}
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <p class="text-muted">Image not available</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+  <!-- Narrow right column with grading form -->
+  <div class="col-12 col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="mb-1 small text-muted">Task ID: <code>{{ task.id }}</code></div>
+        <div class="mb-1 small text-muted">Disease: <strong>{{ task.disease.name }}</strong></div>
+        <div class="mb-1 small text-muted">State: <strong class="text-capitalize">{{ task.state }}</strong></div>
+        <div class="mb-3 small text-muted">Lab Unit: <strong>{{ task.lab_unit.name }}</strong></div>
+        
+        {% if task.state == "final" %}
+        <div class="mb-3 small text-muted">Lock Status: 
+          <strong class="text-danger">
+            FINALIZED - This task has been completed
+          </strong>
+        </div>
+        {% endif %}
+        
+        {% if task.consensus %}
+        <div class="mb-3 small text-muted">Consensus: 
+          <strong>{{ task.consensus.final_label.impression }}</strong>
+          <div class="small">Method: {{ task.consensus.method }}</div>
+          {% if task.consensus.decided_by %}
+          <div class="small">Decided by: {{ task.consensus.decided_by.full_name or task.consensus.decided_by.username }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if user_grade %}
+        <div class="mb-3 small text-muted">Your Grade: 
+          <strong>{{ user_grade.label.impression }}</strong>
+        </div>
+        {% endif %}
+        
+        {% if available_slots %}
+        <form method="post" action="{{ url_for('grading.dual_grading_submit') }}">
+          {{ csrf_field() }}
+          <input type="hidden" name="task_id" value="{{ task.id }}">
+          
+          {% if available_slots|length == 1 %}
+            <input type="hidden" name="slot" value="{{ available_slots[0] }}">
+            <div class="mb-2 small text-muted">Role: <strong class="text-capitalize">{{ available_slots[0] }}</strong></div>
+          {% else %}
+            <div class="mb-2">
+              <label class="form-label">Role</label>
+              <select name="slot" class="form-select form-select-sm" required>
+                <option value="">Select role</option>
+                {% for slot in available_slots %}
+                  <option value="{{ slot }}" class="text-capitalize">{{ slot }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+          
+          <div class="mb-2">
+            <label class="form-label">Impression</label>
+            <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
+              {% for opt in disease_gradings %}
+                {% set oid = 'imp-' ~ opt.id %}
+                {% set btn_class = 'btn-outline-primary' %}
+                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required {% if user_grade and user_grade.disease_grading_id == opt.id %}checked{% endif %} {% if task.state == "final" %}disabled{% endif %}>
+                <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
+                  <span>{{ opt.impression }}</span>
+                  <span class="sel-icon d-none">✓</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          
+          <div class="mb-2">
+            <label class="form-label">Remarks (optional)</label>
+            <textarea name="comment" class="form-control form-control-sm" rows="2" {% if task.state == "final" %}disabled{% endif %}>{{ user_grade.comment if user_grade and user_grade.comment else '' }}</textarea>
+          </div>
+          
+          {% if task.state != "final" %}
+          <div class="d-flex justify-content-between gap-2">
+            <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+            </div>
+          </div>
+          {% endif %}
+        </form>
+        {% else %}
+        <div class="alert alert-info">
+          {% if task.state == "final" %}
+            This task has been finalized.
+          {% elif task.state == "arbitration" %}
+            This task is in arbitration and requires an arbitrator.
+          {% else %}
+            You have already graded this task for all eligible roles.
+          {% endif %}
+        </div>
+        {% endif %}
+        
+        {% if grades %}
+        <div class="mt-3">
+          <h6 class="border-bottom pb-1">Previous Grades</h6>
+          {% for grade in grades %}
+          <div class="small mb-2 p-2 bg-light rounded">
+            <div><strong class="text-capitalize">{{ grade.role_slot }}</strong> - {{ grade.grader.full_name or grade.grader.username }}</div>
+            <div>{{ grade.label.impression }}</div>
+            {% if grade.comment %}
+            <div class="text-muted fst-italic">"{{ grade.comment }}"</div>
+            {% endif %}
+            <div class="text-muted">{{ grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block page_scripts %}
+<script>
+  (function(){
+    const group = document.getElementById('impression-group');
+    if (group) {
+      const radios = group.querySelectorAll('input[type="radio"][name="label_id"]');
+      const labels = group.querySelectorAll('label');
+      function syncIcons() {
+        labels.forEach(l => l.querySelector('.sel-icon')?.classList.add('d-none'));
+        const checked = group.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (checked) {
+          const lab = group.querySelector(`label[for="${checked.id}"]`);
+          const icon = lab && lab.querySelector('.sel-icon');
+          if (icon) icon.classList.remove('d-none');
+        }
+      }
+      radios.forEach(r => r.addEventListener('change', syncIcons));
+      document.getElementById('clear-impression')?.addEventListener('click', function(){
+        radios.forEach(r => r.checked = false);
+        labels.forEach(l => l.querySelector('.sel-icon')?.classList.add('d-none'));
+      });
+      // initial state
+      syncIcons();
+    }
+  })();
+</script>
+{% endblock %}

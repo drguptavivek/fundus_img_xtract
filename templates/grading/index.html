@@ -58,6 +58,41 @@
 </div>
 {% endif %}
 
+<!-- Dual Grading Tasks -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header">
+    <strong>Dual Grading Tasks</strong>
+  </div>
+  <div class="card-body">
+    <p class="mb-3">Tasks that require dual grading from both resident and faculty, or arbitration.</p>
+    {% if dual_grading_tasks %}
+      <div class="list-group">
+        {% for task in dual_grading_tasks %}
+          <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <div>
+              <div class="d-flex align-items-center">
+                <span class="me-2">Task #{{ task.id }}</span>
+                <span class="badge bg-secondary">{{ task.disease.name }}</span>
+                <span class="badge bg-info ms-2">{{ task.state }}</span>
+              </div>
+              <small class="text-muted">
+                {% if task.encounter_file %}
+                  Encounter Image: {{ task.encounter_file.uuid[:8] }}...
+                {% elif task.direct_image %}
+                  Direct Image: {{ task.direct_image.uuid[:8] }}...
+                {% endif %}
+              </small>
+            </div>
+            <span class="text-muted">{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted">No dual grading tasks available.</p>
+    {% endif %}
+  </div>
+</div>
+
 {# Primary CTAs: Start grading flows #}
 <div class="mb-3 d-flex flex-wrap align-items-center gap-3">
   <div>

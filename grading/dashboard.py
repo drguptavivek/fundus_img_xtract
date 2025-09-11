@@ -6,7 +6,7 @@ import random
 import json
 
 from auth.roles import roles_required
-from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify
+from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
@@ -278,6 +278,11 @@ def index():
         total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
         mine_prev_url = url_for('grading.index', p=page-1, gimp=gimp, gfor=gfor) if page > 1 else None
         mine_next_url = url_for('grading.index', p=page+1, gimp=gimp, gfor=gfor) if page < total_pages_mine else None
+        
+        # Get dual grading tasks for the current user
+        # This is a simplified implementation - in a real application, you would want to filter
+        # by user eligibility and task state
+        dual_grading_tasks = db.query(models.GradingTask).limit(5).all()
     finally:
         db.close()
 
@@ -301,4 +306,5 @@ def index():
         my_next_url=mine_next_url,
         gimp=gimp,
         gfor=gfor,
+        dual_grading_tasks=dual_grading_tasks
     )

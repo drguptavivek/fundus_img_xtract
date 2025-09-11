@@ -772,10 +772,11 @@ def glaucoma_unverify(clean_id: int):
                     break
             
             if not can_unverify:
-                flash("Cannot unverify encounter - some images have non-pending tasks.", "danger")
                 if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-                    return {"ok": False, "error": "tasks_in_progress"}, 400
-                return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
+                    return {"ok": False, "error": "tasks_in_progress", "message": "Cannot unverify encounter - some images have non-pending tasks."}, 400
+                else:
+                    flash("Cannot unverify encounter - some images have non-pending tasks.", "danger")
+                    return redirect(url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=clean_id))
             
             # Proceed with unverification
             enc.glaucoma_verified_status = None

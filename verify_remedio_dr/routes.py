@@ -504,10 +504,11 @@ def verify_dr_unverify(report_id: int):
                     break
             
             if not can_unverify:
-                flash("Cannot unverify encounter - some images have non-pending tasks.", "danger")
                 if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-                    return {"ok": False, "error": "tasks_in_progress"}, 400
-                return redirect(url_for('verify_remedio_dr.verify_dr_edit', report_id=report_id))
+                    return {"ok": False, "error": "tasks_in_progress", "message": "Cannot unverify encounter - some images have non-pending tasks."}, 400
+                else:
+                    flash("Cannot unverify encounter - some images have non-pending tasks.", "danger")
+                    return redirect(url_for('verify_remedio_dr.verify_dr_edit', report_id=report_id))
             
             # Proceed with unverification
             enc.dr_verified_status = None

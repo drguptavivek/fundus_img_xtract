@@ -129,36 +129,24 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.eligibility_details && Object.keys(data.eligibility_details).length > 0) {
           // Display the eligibility information
           let eligibilityHtml = '';
-          let labUnitCount = 0;
+          let shownLabUnitCount = 0;
           
           for (const labUnitId in data.eligibility_details) {
             const labUnitData = data.eligibility_details[labUnitId];
             
-            if (labUnitCount < 2) { // Limit to 2 lab units for brevity
-              // Show hospital name and lab unit name
-              eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;
-              
-              // Show diseases and roles
-              let diseaseCount = 0;
-              for (const diseaseId in labUnitData.diseases) {
-                const diseaseData = labUnitData.diseases[diseaseId];
-                if (diseaseCount < 2) { // Limit to 2 diseases per lab unit
-                  eligibilityHtml += `<span class="badge bg-success-subtle text-success-emphasis me-1">${diseaseData.disease_name}: ${diseaseData.roles.join(', ')}</span>`;
-                  diseaseCount++;
-                }
-              }
-              
-              if (diseaseCount > 2) {
-                eligibilityHtml += `<span class="text-muted">and ${diseaseCount - 2} more diseases</span>`;
-              }
-              
-              eligibilityHtml += '</div>';
-              labUnitCount++;
+            // Show hospital name and lab unit name
+            eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;
+            
+            // Show diseases and roles
+            let diseaseCount = 0;
+            for (const diseaseId in labUnitData.diseases) {
+              const diseaseData = labUnitData.diseases[diseaseId];
+              eligibilityHtml += `<span class="badge bg-success-subtle text-success-emphasis me-1">${diseaseData.disease_name}: ${diseaseData.roles.join(', ')}</span>`;
+              diseaseCount++;
             }
-          }
-          
-          if (labUnitCount > 2) {
-            eligibilityHtml += `<div><span class="text-muted">and ${Object.keys(data.eligibility_details).length - 2} more lab units</span></div>`;
+            
+            eligibilityHtml += '</div>';
+            shownLabUnitCount++;
           }
           
           element.innerHTML = eligibilityHtml;

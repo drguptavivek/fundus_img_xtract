@@ -263,7 +263,7 @@ def tasks_submit():
         if existing_grade:
             existing_grade.disease_grading_id = label_id
             existing_grade.comment = comment
-            existing_grade.updated_at = datetime.utcnow()
+            existing_grade.updated_at = datetime.now(timezone.utc)
             db.add(existing_grade)
         else:
             new_grade = Grade(

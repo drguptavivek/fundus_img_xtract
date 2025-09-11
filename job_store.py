@@ -65,7 +65,7 @@ def db_set_item_state(job_token: str, filename: str, state: str, detail: str | N
         item = db.query(JobItem).filter_by(job_id=job.id, filename=filename).first()
         if not item:
             return
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if state == "processing":
             item.started_at = now
         if state in ("ok", "error"):

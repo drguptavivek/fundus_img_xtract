@@ -144,7 +144,7 @@ class ZipFile(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     zip_filename: Mapped[str] = mapped_column(unique=True)
     md5_hash: Mapped[str] = mapped_column(unique=True)
-    upload_date: Mapped[date] = mapped_column(Date, default=datetime.utcnow().date)
+    upload_date: Mapped[date] = mapped_column(Date, default=lambda: datetime.now(timezone.utc).date())
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="zip_file", uselist=False, cascade="all, delete-orphan")
 
 class PatientEncounters(Base):

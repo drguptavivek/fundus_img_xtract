@@ -170,7 +170,7 @@ def upload_files():
                 ip = xff or (request.remote_addr or "-")
                 meta = {
                     "filename": save_path.name,
-                    "uploaded_at": datetime.utcnow().isoformat() + "Z",
+                    "uploaded_at": datetime.now(timezone.utc).isoformat() + "Z",
                     "uploader_username": getattr(current_user, "username", None) or "-",
                     "uploader_id": getattr(current_user, "id", None),
                     "ip": ip,

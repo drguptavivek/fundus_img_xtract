@@ -62,10 +62,23 @@ RESTful API endpoints have been added in `/api/tasks.py`:
 6. **Eligibility Checking**: API endpoints validate user eligibility for specific grading slots
 7. **Error Handling**: Graceful handling of various error conditions with appropriate HTTP status codes
 8. **Logging**: Comprehensive logging for debugging and audit purposes
+9. **Cross-Lab Protection**: Prevents cross-lab reassignment of finalized tasks (409 Conflict error)
+
+## Guardrails
+
+### Cross-Lab Reassignment Protection
+A critical guardrail has been implemented to prevent cross-lab reassignment of finalized tasks:
+- If an image×disease task is in the `final` state, any attempt to access it from a different lab will be blocked
+- A friendly 409 Conflict error is returned with the message: "Gold standard already set - cross-lab reassignment is disabled for finalized tasks"
+- This ensures that once a consensus (gold standard) has been reached for a task, it cannot be modified by users from other labs
 
 ## Testing
 
-Unit tests have been added in `/tests/test_task_creation_services.py` to verify the functionality of all service functions including the new task removal and safety check functionality.
+Unit tests have been added in `/tests/test_task_creation_services.py` to verify the functionality of all service functions including:
+- The new cross-lab reassignment protection for finalized tasks
+- Task creation and management
+- Safety checks and error handling
+- The task removal and unverification functionality
 
 ## Future Enhancements
 

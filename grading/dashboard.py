@@ -282,7 +282,12 @@ def index():
         # Get dual grading tasks for the current user
         # This is a simplified implementation - in a real application, you would want to filter
         # by user eligibility and task state
-        dual_grading_tasks = db.query(models.GradingTask).limit(5).all()
+        from sqlalchemy.orm import selectinload
+        dual_grading_tasks = db.query(GradingTask).options(
+            selectinload(GradingTask.disease),
+            selectinload(GradingTask.encounter_file),
+            selectinload(GradingTask.direct_image)
+        ).limit(5).all()
     finally:
         db.close()
 

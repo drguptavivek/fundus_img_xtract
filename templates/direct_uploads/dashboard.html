@@ -246,7 +246,7 @@
                 <!-- Selected Count and Actions -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
-                        <span class="small text-muted">Selected: <span id="selected-count">0</span>/30 files</span>
+                        <span class="small text-muted">Selected: <span id="selected-count">0</span>/50 files</span>
                     </div>
                     <div>
                         <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-selection-btn"
@@ -416,6 +416,15 @@
                                     </div>
 
                                     <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Lab Unit:</span>
+                                        <span class="text-truncate"
+                                            title="{{ lab_units[upload.lab_unit_id].name if lab_units[upload.lab_unit_id] else 'Unknown' }}">
+                                            {{ lab_units[upload.lab_unit_id].name if lab_units[upload.lab_unit_id] else
+                                            'Unknown' }}
+                                        </span>
+                                    </div>
+
+                                    <div class="d-flex justify-content-between">
                                         <span class="text-muted">Camera:</span>
                                         <span class="text-truncate"
                                             title="{{ cameras[upload.camera_id].name if cameras[upload.camera_id] else 'Unknown' }}">
@@ -511,18 +520,18 @@
 
         // Function to handle select all checkboxes
         function handleSelectAll(mainCheckbox) {
-            // Limit selection to 30 files
+            // Limit selection to 50 files
             const checkboxesToSelect = Array.from(uploadCheckboxes);
-            if (mainCheckbox.checked && checkboxesToSelect.length > 30) {
-                // If trying to select all and there are more than 30, only select first 30
-                checkboxesToSelect.slice(0, 30).forEach(checkbox => {
+            if (mainCheckbox.checked && checkboxesToSelect.length > 50) {
+                // If trying to select all and there are more than 50, only select first 50
+                checkboxesToSelect.slice(0, 50).forEach(checkbox => {
                     checkbox.checked = true;
                 });
-                checkboxesToSelect.slice(30).forEach(checkbox => {
+                checkboxesToSelect.slice(50).forEach(checkbox => {
                     checkbox.checked = false;
                 });
                 mainCheckbox.checked = false; // Uncheck select all since we did not select everything
-                alert('Maximum 30 files can be selected for bulk operations.');
+                alert('Maximum 50 files can be selected for bulk operations.');
             } else {
                 checkboxesToSelect.forEach(checkbox => {
                     checkbox.checked = mainCheckbox.checked;
@@ -559,11 +568,11 @@
         // Update bulk buttons state when individual checkboxes change
         uploadCheckboxes.forEach(checkbox => {
             checkbox.addEventListener('change', function () {
-                // Enforce 30 file limit
+                // Enforce 50 file limit
                 const checkedBoxes = Array.from(uploadCheckboxes).filter(cb => cb.checked);
-                if (checkedBoxes.length > 30) {
+                if (checkedBoxes.length > 50) {
                     this.checked = false;
-                    alert('Maximum 30 files can be selected for bulk operations.');
+                    alert('Maximum 50 files can be selected for bulk operations.');
                 }
                 updateBulkButtons();
                 updateSelectedCount();
@@ -624,7 +633,8 @@
             if (confirm(`Are you sure you want to delete ${checkedCount} selected upload(s)? This action cannot be undone.`)) {
                 // Set action to delete and submit form
                 bulkActionField.value = 'bulk_delete';
-                bulkOperationsForm.submit();
+                // Instead of calling submit(), let the form submit naturally
+                bulkOperationsForm.dispatchEvent(new Event('submit'));
             }
         };
 
@@ -653,12 +663,12 @@
                 const mydriaticCheckbox = document.querySelector('input[name="new_is_mydriatic"]');
 
                 const anyFieldSelected =
-                    (hospitalSelect.value !== '') ||
-                    (labUnitSelect.value !== '') ||
-                    (cameraSelect.value !== '') ||
-                    (diseaseSelect.value !== '') ||
-                    (areaSelect.value !== '') ||
-                    (mydriaticCheckbox.checked);
+                    (hospitalSelect && hospitalSelect.value !== '') ||
+                    (labUnitSelect && labUnitSelect.value !== '') ||
+                    (cameraSelect && cameraSelect.value !== '') ||
+                    (diseaseSelect && diseaseSelect.value !== '') ||
+                    (areaSelect && areaSelect.value !== '') ||
+                    (mydriaticCheckbox && mydriaticCheckbox.checked);
 
                 if (!anyFieldSelected) {
                     e.preventDefault();
@@ -666,6 +676,8 @@
                     return;
                 }
             }
+            
+            // Allow the form to submit naturally if validation passes
         });
 
         // Initialize image toggle functionality

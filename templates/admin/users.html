@@ -74,10 +74,10 @@
               </div>
             </div>
             
-            {% if u.has_role("ophthalmologist") %}
+            {% if u.has_role("ophthalmologist") or u.has_role("resident") %}
             <div class="mb-2">
-              <h6 class="text-muted small mb-1">Disease Specializations</h6>
-              <div class="small disease-specializations" data-user-id="{{ u.id }}">
+              <h6 class="text-muted small mb-1">Grading Eligibility</h6>
+              <div class="small grading-eligibility" data-user-id="{{ u.id }}">
                 <span class="text-muted">Loading...</span>
               </div>
             </div>
@@ -97,9 +97,9 @@
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_user', user_id=u.id) }}">
                   Edit
                 </a>
-                {% if u.has_role("ophthalmologist") %}
-                <a class="btn btn-sm btn-outline-info" href="{{ url_for('admin.manage_specializations', user_id=u.id) }}">
-                  Manage Specializations
+                {% if u.has_role("ophthalmologist") or u.has_role("resident") %}
+                <a class="btn btn-sm btn-outline-info" href="{{ url_for('admin.edit_eligibility', user_id=u.id) }}">
+                  Edit Grading Eligibility
                 </a>
                 {% endif %}
               </div>
@@ -116,30 +116,59 @@
 {% block page_scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Fetch disease specializations for all ophthalmologist users
-  const diseaseSpecializationElements = document.querySelectorAll('.disease-specializations');
+  // Fetch grading eligibility for all users with resident or ophthalmologist roles
+  const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');
   
-  diseaseSpecializationElements.forEach(element => {
+  gradingEligibilityElements.forEach(element => {
     const userId = element.getAttribute('data-user-id');
     
-    // Fetch disease specializations from API
-    fetch(`/api/users/${userId}/disease-specializations`)
+    // Fetch detailed grading eligibility from API
+    fetch(`/api/grading-eligibility/users/${userId}/details`)
       .then(response => response.json())
       .then(data => {
-        if (data.diseases && data.diseases.length > 0) {
-          // Display the diseases
-          let diseasesHtml = '';
-          data.diseases.forEach(disease => {
-            diseasesHtml += `<span class="badge bg-info-subtle text-info-emphasis me-1">${disease.name}</span>`;
-          });
-          element.innerHTML = diseasesHtml;
+        if (data.eligibility_details && Object.keys(data.eligibility_details).length > 0) {
+          // Display the eligibility information
+          let eligibilityHtml = '';
+          let labUnitCount = 0;
+          
+          for (const labUnitId in data.eligibility_details) {
+            const labUnitData = data.eligibility_details[labUnitId];
+            
+            if (labUnitCount < 2) { // Limit to 2 lab units for brevity
+              // Show hospital name and lab unit name
+              eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;
+              
+              // Show diseases and roles
+              let diseaseCount = 0;
+              for (const diseaseId in labUnitData.diseases) {
+                const diseaseData = labUnitData.diseases[diseaseId];
+                if (diseaseCount < 2) { // Limit to 2 diseases per lab unit
+                  eligibilityHtml += `<span class="badge bg-success-subtle text-success-emphasis me-1">${diseaseData.disease_name}: ${diseaseData.roles.join(', ')}</span>`;
+                  diseaseCount++;
+                }
+              }
+              
+              if (diseaseCount > 2) {
+                eligibilityHtml += `<span class="text-muted">and ${diseaseCount - 2} more diseases</span>`;
+              }
+              
+              eligibilityHtml += '</div>';
+              labUnitCount++;
+            }
+          }
+          
+          if (labUnitCount > 2) {
+            eligibilityHtml += `<div><span class="text-muted">and ${Object.keys(data.eligibility_details).length - 2} more lab units</span></div>`;
+          }
+          
+          element.innerHTML = eligibilityHtml;
         } else {
-          element.innerHTML = '<span class="text-muted">No specializations assigned</span>';
+          element.innerHTML = '<span class="text-muted">No grading eligibility</span>';
         }
       })
       .catch(error => {
-        console.error('Error fetching disease specializations:', error);
-        element.innerHTML = '<span class="text-muted">Error loading specializations</span>';
+        console.error('Error fetching grading eligibility:', error);
+        element.innerHTML = '<span class="text-muted">Error loading eligibility</span>';
       });
   });
 });

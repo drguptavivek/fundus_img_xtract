@@ -1,55 +1,77 @@
-{% extends "admin/base.html" %}
+{% extends "base.html" %}
 
 {% block title %}Edit Grading Eligibility for {{ user.username }}{% endblock %}
 
 {% block content %}
-  <h2>Edit Grading Eligibility for {{ user.username }}</h2>
+  <h2>Edit Grading Eligibility </h2>
+  <br/>
+   <h4>username :  {{ user.username }}</h4>
 
-  <form id="eligibility-form">
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm">
-        <thead>
-          <tr>
-            <th scope="col">Disease</th>
-            {% for lab_unit in lab_units %}
-              <th scope="col">{{ lab_unit.name }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {% for disease in diseases %}
+  <form id="eligibility-form" method="post" action="{{ url_for('admin.edit_eligibility', user_id=user.id) }}">
+    {{ csrf_field() }}
+    
+    {% set hospitals = {} %}
+    {% for lab_unit in lab_units %}
+      {% if lab_unit.hospital.id not in hospitals %}
+        {% set _ = hospitals.update({lab_unit.hospital.id: {'name': lab_unit.hospital.name, 'lab_units': []}}) %}
+      {% endif %}
+      {% set _ = hospitals[lab_unit.hospital.id].lab_units.append(lab_unit) %}
+    {% endfor %}
+    
+    {% for hospital_id, hospital_data in hospitals|dictsort %}
+    <div class="mb-5">
+      <h3>{{ hospital_data.name }}</h3>
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead>
             <tr>
-              <td>{{ disease.name }}</td>
-              {% for lab_unit in lab_units %}
-                <td>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="res-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident">
-                    <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
-                  </div>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_faculty">
-                    <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Faculty</label>
-                  </div>
-                  <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
-                    <label class="form-check-label" for="arb-{{ disease.id }}-{{ lab_unit.id }}">Arbitrator</label>
-                  </div>
-                </td>
+              <th scope="col">Disease</th>
+              {% for lab_unit in hospital_data.lab_units %}
+                <th scope="col">{{ lab_unit.name }}</th>
               {% endfor %}
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {% for disease in diseases %}
+              <tr>
+                <td>{{ disease.name }}</td>
+                {% for lab_unit in hospital_data.lab_units %}
+                  <td>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="res-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident">
+                      <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_faculty">
+                      <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Faculty</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
+                      <label class="form-check-label" for="arb-{{ disease.id }}-{{ lab_unit.id }}">Arbitrator</label>
+                    </div>
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
+    {% endfor %}
+    
+    <!-- Hidden field to store JSON data -->
+    <input type="hidden" name="items" id="items-data">
+    
     <button type="submit" class="btn btn-primary">Save Changes</button>
   </form>
 {% endblock %}
 
-{% block scripts %}
+{% block page_scripts %}
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const userId = {{ user.id }};
     const form = document.getElementById('eligibility-form');
+    const itemsDataInput = document.getElementById('items-data');
 
     // Fetch initial data
     fetch(`/api/grading-eligibility/users/${userId}`)
@@ -77,7 +99,7 @@
 
     // Handle form submission
     form.addEventListener('submit', function (event) {
-      event.preventDefault();
+      // Collect all checkbox data
       const payload = { items: [] };
       const itemsMap = new Map();
 
@@ -105,29 +127,9 @@
       });
 
       payload.items = Array.from(itemsMap.values()).filter(item => item.can_grade_resident || item.can_grade_faculty || item.can_arbitrate);
-
-      fetch(`/api/grading-eligibility/users/${userId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add CSRF token header if needed by your app
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.ok) {
-          // You would typically use a flash message system here
-          alert('Eligibility updated successfully!');
-          window.location.reload();
-        } else {
-          alert('Error updating eligibility: ' + (data.error || 'Unknown error'));
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('An unexpected error occurred.');
-      });
+      
+      // Set the hidden input value to JSON string
+      itemsDataInput.value = JSON.stringify(payload.items);
     });
   });
 </script>

@@ -30,8 +30,55 @@ def dashboard():
             selected_ids = request.form.getlist('selected_uploads')
             action = request.form.get('action')
 
-            if len(selected_ids) > 30:
-                flash("Maximum 30 files can be processed in a single operation.", "danger")
+            if len(selected_ids) > 50:
+                flash("Maximum 50 files can be processed in a single operation.", "danger")
+                return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+            elif action == "bulk_edit" and selected_ids:
+                # Get the new values from the form
+                new_hospital_id = request.form.get('new_hospital_id')
+                new_lab_unit_id = request.form.get('new_lab_unit_id')
+                new_camera_id = request.form.get('new_camera_id')
+                new_disease_id = request.form.get('new_disease_id')
+                new_area_id = request.form.get('new_area_id')
+                new_is_mydriatic = request.form.get('new_is_mydriatic')
+
+                # Coerce IDs safely
+                try:
+                    ids = [int(x) for x in selected_ids]
+                except Exception:
+                    ids = [int(x) for x in selected_ids if str(x).isdigit()]
+
+                if not ids:
+                    flash("No valid rows selected.", "warning")
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+                q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
+
+                # Non-admins can only edit their own uploads
+                if not current_user.has_role("admin", "data_manager"):
+                    q = q.where(DirectImageUpload.uploader_id == current_user.id)
+                    
+                rows = db_session.execute(q).scalars().all()
+
+                updated_count = 0
+                for upload in rows:
+                    if new_hospital_id:
+                        upload.hospital_id = int(new_hospital_id)
+                    if new_lab_unit_id:
+                        upload.lab_unit_id = int(new_lab_unit_id)
+                    if new_camera_id:
+                        upload.camera_id = int(new_camera_id)
+                    if new_disease_id:
+                        upload.disease_id = int(new_disease_id)
+                    if new_area_id:
+                        upload.area_id = int(new_area_id)
+                    if new_is_mydriatic is not None:
+                        upload.is_mydriatic = new_is_mydriatic == 'on'
+                    updated_count += 1
+
+                db_session.commit()
+                flash(f"Successfully updated {updated_count} uploads.", "success")
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 
             elif action == "bulk_delete" and selected_ids:

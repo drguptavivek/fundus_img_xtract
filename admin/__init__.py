@@ -1,7 +1,5 @@
 from flask import Blueprint
 
-admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="templates")
-
 # Import all route handlers
 from .users import users_list, add_user, edit_user, users_update
 from .security import change_password, manage_roles, role_usage, routes_by_role
@@ -9,20 +7,6 @@ from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
 from .disease_gradings import list_disease_gradings, get_disease_grading_json, delete_disease_grading
 from .uploads import malicious_uploads
 from .disease_specializations import index, manage_specializations, api_get_user_diseases, api_set_user_diseases
-
-# Register routes with the blueprint
-# User management routes
-admin_bp.add_url_rule("/users", view_func=users_list, methods=["GET"])
-admin_bp.add_url_rule("/users/new", view_func=add_user, methods=["GET", "POST"])
-admin_bp.add_url_rule("/users/<int:user_id>/edit", view_func=edit_user, methods=["GET", "POST"])
-admin_bp.add_url_rule("/users/<int:user_id>/update", view_func=users_update, methods=["POST"])
-
-# Security routes (password and roles)
-from flask import Blueprint
-
-admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="templates")
-
-# Import all route handlers
 from .users import users_list, add_user, edit_user, users_update
 from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
@@ -30,6 +14,11 @@ from .disease_gradings import list_disease_gradings, get_disease_grading_json, d
 from .uploads import malicious_uploads
 from .disease_specializations import index, manage_specializations, api_get_user_diseases, api_set_user_diseases
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
+
+
+# Register routes with the blueprint
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin", template_folder="templates")
+
 
 # Register routes with the blueprint
 # User management routes

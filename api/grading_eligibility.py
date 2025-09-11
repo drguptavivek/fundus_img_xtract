@@ -5,12 +5,12 @@ from sqlalchemy.orm import selectinload
 
 from . import api_bp
 from auth.roles import roles_required
-from models import Session, User, Disease, LabUnit, UserDiseaseUnitRole
-
+from models import Session, User, Disease, LabUnit, UserDiseaseUnitRole, Hospital
 
 @api_bp.route('/grading-eligibility/users/<int:user_id>', methods=['GET'])
 @roles_required('admin')
 def get_user_grading_eligibility(user_id: int):
+    print(f"GET request received for user_id: {user_id}")
     with Session() as db:
         user = db.get(User, user_id)
         if not user:
@@ -34,11 +34,82 @@ def get_user_grading_eligibility(user_id: int):
         return jsonify({'user_id': user_id, 'eligibility': out})
 
 
+@api_bp.route('/grading-eligibility/users/<int:user_id>/details', methods=['GET'])
+@roles_required('admin')
+def get_user_grading_eligibility_details(user_id: int):
+    """Get detailed grading eligibility information with lab unit and disease names."""
+    with Session() as db:
+        user = db.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Get all diseases and lab units for reference
+        diseases = {d.id: d.name for d in db.execute(select(Disease)).scalars().all()}
+        lab_units = {lu.id: {'name': lu.name, 'hospital_id': lu.hospital_id} for lu in db.execute(select(LabUnit)).scalars().all()}
+        hospitals = {}  # We'll fetch hospital names as needed
+        
+        rows = db.execute(
+            select(UserDiseaseUnitRole)
+            .where(UserDiseaseUnitRole.user_id == user_id)
+            .where(UserDiseaseUnitRole.active == True)
+        ).scalars().all()
+        
+        # Group by lab unit
+        grouped = {}
+        for r in rows:
+            if r.can_grade_resident or r.can_grade_faculty or r.can_arbitrate:
+                lab_unit_id = r.lab_unit_id
+                disease_id = r.disease_id
+                
+                if lab_unit_id not in grouped:
+                    # Get hospital name if not already fetched
+                    hospital_id = lab_units[lab_unit_id]['hospital_id']
+                    if hospital_id not in hospitals:
+                        hospital = db.get(Hospital, hospital_id)
+                        hospitals[hospital_id] = hospital.name if hospital else 'Unknown Hospital'
+                    
+                    grouped[lab_unit_id] = {
+                        'lab_unit_name': lab_units[lab_unit_id]['name'],
+                        'hospital_name': hospitals[hospital_id],
+                        'diseases': {}
+                    }
+                
+                if disease_id not in grouped[lab_unit_id]['diseases']:
+                    grouped[lab_unit_id]['diseases'][disease_id] = {
+                        'disease_name': diseases.get(disease_id, 'Unknown Disease'),
+                        'roles': []
+                    }
+                
+                # Add roles
+                if r.can_grade_resident:
+                    grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Resident')
+                if r.can_grade_faculty:
+                    grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Faculty')
+                if r.can_arbitrate:
+                    grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Arbitrator')
+        
+        return jsonify({'user_id': user_id, 'eligibility_details': grouped})
+
+
 @api_bp.route('/grading-eligibility/users/<int:user_id>', methods=['POST'])
 @roles_required('admin')
 def set_user_grading_eligibility(user_id: int):
+    print(f"POST request received for user_id: {user_id}")
+    print(f"Request method: {request.method}")
+    print(f"Request headers: {dict(request.headers)}")
+    print(f"Request data: {request.get_data()}")
+    print(f"Is JSON: {request.is_json}")
+    
+    # Check if CSRF token is present in headers
+    csrf_token = request.headers.get('X-CSRFToken')
+    print(f"CSRF Token from header: {csrf_token}")
+    
     payload = request.get_json(silent=True) or {}
+    print(f"Payload: {payload}")
+    
     items = payload.get('items') or []
+    print(f"Items: {items}")
+    
     if not isinstance(items, list):
         return jsonify({'error': 'items must be a list'}), 400
     with Session() as db:
@@ -52,8 +123,6 @@ def set_user_grading_eligibility(user_id: int):
             cgf = bool(it.get('can_grade_faculty', False))
             car = bool(it.get('can_arbitrate', False))
             active = bool(it.get('active', True))
-            if not (cgr or cgf or car):
-                return jsonify({'error': 'At least one permission must be true'}), 400
             # Validate FKs
             if not db.get(Disease, disease_id) or not db.get(LabUnit, lab_unit_id):
                 return jsonify({'error': 'Invalid disease_id or lab_unit_id'}), 400
@@ -65,11 +134,17 @@ def set_user_grading_eligibility(user_id: int):
                 )
             ).scalar_one_or_none()
             if row:
+                print(f"Updating existing row: {row.id}")
                 row.can_grade_resident = cgr
                 row.can_grade_faculty = cgf
                 row.can_arbitrate = car
                 row.active = active
             else:
+                # Only create a new row if at least one permission is set
+                if not (cgr or cgf or car):
+                    print(f"Skipping item with no permissions set: {it}")
+                    continue
+                print(f"Creating new row for disease_id={disease_id}, lab_unit_id={lab_unit_id}")
                 row = UserDiseaseUnitRole(
                     user_id=user_id,
                     disease_id=disease_id,
@@ -83,6 +158,7 @@ def set_user_grading_eligibility(user_id: int):
             db.flush()
             updated.append(row.id)
         db.commit()
+        print(f"Successfully updated {len(updated)} rows: {updated}")
         return jsonify({'ok': True, 'updated_ids': updated})
 
 

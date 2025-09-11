@@ -63,11 +63,22 @@ def edit_eligibility(user_id):
                     can_grade_resident = bool(item.get('can_grade_resident', False))
                     can_grade_faculty = bool(item.get('can_grade_faculty', False))
                     can_arbitrate = bool(item.get('can_arbitrate', False))
-                    active = bool(item.get('active', True))
+                    active = bool(item.get('active', False))
                     
                     # Create key for tracking
                     key = (disease_id, lab_unit_id)
                     submitted_keys.add(key)
+                    
+                    # Validate that resident and faculty are not both selected
+                    if can_grade_resident and can_grade_faculty:
+                        # Get the disease and lab unit names for a more user-friendly error message
+                        disease = db.get(Disease, disease_id)
+                        lab_unit = db.get(LabUnit, lab_unit_id)
+                        disease_name = disease.name if disease else f"Unknown Disease (ID: {disease_id})"
+                        lab_unit_name = lab_unit.name if lab_unit else f"Unknown Lab Unit (ID: {lab_unit_id})"
+                        
+                        flash(f"Error: User cannot be both Resident and Faculty for the same disease and lab unit ({disease_name}, {lab_unit_name}).", "danger")
+                        return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                     
                     # Validate FKs
                     if not db.get(Disease, disease_id) or not db.get(LabUnit, lab_unit_id):
@@ -99,16 +110,15 @@ def edit_eligibility(user_id):
                             db.flush()
                             created.append(row.id)
                 
-                # Delete records that were not submitted (if they exist and are active)
+                # Handle records that were not submitted - delete them
                 for key, row in existing_map.items():
-                    if key not in submitted_keys and row.active:
-                        # Instead of deleting, mark as inactive
-                        row.active = False
-                        updated.append(row.id)
+                    if key not in submitted_keys:
+                        # Delete the record entirely when all roles are removed
+                        db.delete(row)
                         deleted.append(row.id)
                 
                 db.commit()
-                flash(f"Grading eligibility updated successfully. {len(created)} created, {len(updated)} updated, {len(deleted)} deactivated.", "success")
+                flash(f"Grading eligibility updated successfully. {len(created)} created, {len(updated)} updated, {len(deleted)} deleted.", "success")
                 return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                 
             except json.JSONDecodeError as e:

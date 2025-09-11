@@ -13,7 +13,7 @@ def users_list():
     with Session() as db:
         users = db.execute(
             select(User)
-            .options(selectinload(User.roles), selectinload(User.lab_units))
+            .options(selectinload(User.roles), selectinload(User.lab_units).selectinload(LabUnit.hospital))
             .order_by(User.username.asc())
         ).scalars().all()
 

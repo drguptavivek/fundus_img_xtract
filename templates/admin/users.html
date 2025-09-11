@@ -119,6 +119,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Fetch grading eligibility for all users with resident or ophthalmologist roles
   const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');
   
+  // Configure how many lab units to display (set to 0 for unlimited)
+  const shownLabUnitCountLimit = 4; // 0 means show all, any positive number limits the display
+  
   gradingEligibilityElements.forEach(element => {
     const userId = element.getAttribute('data-user-id');
     
@@ -130,9 +133,20 @@ document.addEventListener('DOMContentLoaded', function() {
           // Display the eligibility information
           let eligibilityHtml = '';
           let shownLabUnitCount = 0;
+          const totalLabUnits = Object.keys(data.eligibility_details).length;
           
           for (const labUnitId in data.eligibility_details) {
             const labUnitData = data.eligibility_details[labUnitId];
+            
+            // Check if we've reached the display limit (if set)
+            if (shownLabUnitCountLimit > 0 && shownLabUnitCount >= shownLabUnitCountLimit) {
+              // Add a note about remaining units if we hit the limit
+              const remainingUnits = totalLabUnits - shownLabUnitCount;
+              if (remainingUnits > 0) {
+                eligibilityHtml += `<div><span class="text-muted">and ${remainingUnits} more lab units...</span></div>`;
+              }
+              break;
+            }
             
             // Show hospital name and lab unit name
             eligibilityHtml += `<div class="mb-1"><strong>${labUnitData.hospital_name} - ${labUnitData.lab_unit_name}</strong>: `;

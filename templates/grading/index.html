@@ -44,160 +44,276 @@
   </div>
 </div>
 
-<!-- Disease Stats Graph -->
-{% if disease_stats %}
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <strong>Verified Ungraded Images by Disease Type</strong>
+<!-- Dual Grading Tasks in Three Columns -->
+<div class="row">
+  <!-- Resident Tasks Column -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4 h-100">
+      <div class="card-header">
+        <strong>Resident Tasks</strong>
+      </div>
+      <div class="card-body">
+        {% if resident_tasks %}
+          {% for disease_name, tasks in resident_tasks.items() %}
+            {% if tasks %}
+            <div class="card mb-3">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>{{ disease_name }}</strong>
+                <span class="badge bg-primary">{{ resident_totals[disease_name] }} pending</span>
+              </div>
+              <div class="card-body p-2">
+                <div class="list-group list-group-flush">
+                  {% for task in tasks %}
+                    <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="list-group-item list-group-item-action">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <span class="me-2">Task #{{ task.id }}</span>
+                        <span class="badge bg-info">{{ task.state }}</span>
+                      </div>
+                      <div class="d-flex align-items-center mt-1">
+                        {% if task.encounter_file %}
+                          <div class="me-2">
+                            <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                          </div>
+                          <div>
+                            <small class="text-muted">
+                              Image: {{ task.encounter_file.uuid }}
+                            </small>
+                            <div>
+                              <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
+                            </div>
+                            <div>
+                              <small class="text-muted">
+                                Capture Date: 
+                                {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
+                                  {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                  Unknown
+                                {% endif %}
+                              </small>
+                            </div>
+                          </div>
+                        {% elif task.direct_image %}
+                          <div class="me-2">
+                            <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                          </div>
+                          <div>
+                            <small class="text-muted">
+                              Image: {{ task.direct_image.uuid }}
+                            </small>
+                            <div>
+                              <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
+                            </div>
+                            <div>
+                              <small class="text-muted">
+                                Upload Date: 
+                                {% if task.direct_image.created_at %}
+                                  {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                  Unknown
+                                {% endif %}
+                              </small>
+                            </div>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+              {% if resident_total_pages[disease_name] > 1 %}
+              <div class="card-footer d-flex justify-content-between">
+                <a href="{{ resident_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not resident_prev_urls[disease_name] %}disabled{% endif %}">Prev</a>
+                <span class="small text-muted">Page {{ request.args.get('resident_' + disease_name.replace(' ', '_') + '_p', 1) }} of {{ resident_total_pages[disease_name] }}</span>
+                <a href="{{ resident_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not resident_next_urls[disease_name] %}disabled{% endif %}">Next</a>
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="text-muted">No resident tasks available.</p>
+        {% endif %}
+      </div>
+    </div>
   </div>
-  <div class="card-body">
-    <div class="chart-container" style="position: relative; height:300px; width:100%">
-      <canvas id="diseaseStatsChart"></canvas>
+
+  <!-- Faculty Tasks Column -->
+  <div class="col-md-6">
+    <div class="card shadow-sm mb-4 h-100">
+      <div class="card-header">
+        <strong>Faculty Review</strong>
+      </div>
+      <div class="card-body">
+        {% if faculty_tasks %}
+          {% for disease_name, tasks in faculty_tasks.items() %}
+            {% if tasks %}
+            <div class="card mb-3">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>{{ disease_name }}</strong>
+                <span class="badge bg-primary">{{ faculty_totals[disease_name] }} pending</span>
+              </div>
+              <div class="card-body p-2">
+                <div class="list-group list-group-flush">
+                  {% for task in tasks %}
+                    <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="list-group-item list-group-item-action">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <span class="me-2">Task #{{ task.id }}</span>
+                        <span class="badge bg-info">{{ task.state }}</span>
+                      </div>
+                      <div class="d-flex align-items-center mt-1">
+                        {% if task.encounter_file %}
+                          <div class="me-2">
+                            <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                          </div>
+                          <div>
+                            <small class="text-muted">
+                              Image: {{ task.encounter_file.uuid }}
+                            </small>
+                            <div>
+                              <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
+                            </div>
+                            <div>
+                              <small class="text-muted">
+                                Capture Date: 
+                                {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
+                                  {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                  Unknown
+                                {% endif %}
+                              </small>
+                            </div>
+                          </div>
+                        {% elif task.direct_image %}
+                          <div class="me-2">
+                            <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                          </div>
+                          <div>
+                            <small class="text-muted">
+                              Image: {{ task.direct_image.uuid }}
+                            </small>
+                            <div>
+                              <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
+                            </div>
+                            <div>
+                              <small class="text-muted">
+                                Upload Date: 
+                                {% if task.direct_image.created_at %}
+                                  {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                  Unknown
+                                {% endif %}
+                              </small>
+                            </div>
+                          </div>
+                        {% endif %}
+                      </div>
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+              {% if faculty_total_pages[disease_name] > 1 %}
+              <div class="card-footer d-flex justify-content-between">
+                <a href="{{ faculty_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not faculty_prev_urls[disease_name] %}disabled{% endif %}">Prev</a>
+                <span class="small text-muted">Page {{ request.args.get('faculty_' + disease_name.replace(' ', '_') + '_p', 1) }} of {{ faculty_total_pages[disease_name] }}</span>
+                <a href="{{ faculty_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not faculty_next_urls[disease_name] %}disabled{% endif %}">Next</a>
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="text-muted">No faculty review tasks available.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Arbitration Tasks Below -->
+{% if is_admin and arbitration_tasks %}
+<div class="row">
+  <div class="col-12">
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Arbitration Tasks</strong>
+        <span class="badge bg-primary">{{ arbitration_totals['all'] }} pending</span>
+      </div>
+      <div class="card-body">
+        {% if arbitration_tasks['all'] %}
+          <div class="list-group">
+            {% for task in arbitration_tasks['all'] %}
+              <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="list-group-item list-group-item-action">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="me-2">Task #{{ task.id }}</span>
+                  <span class="badge bg-info">{{ task.state }}</span>
+                </div>
+                <div class="d-flex align-items-center mt-1">
+                  {% if task.encounter_file %}
+                    <div class="me-2">
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: {{ task.encounter_file.uuid }}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Capture Date: 
+                          {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
+                            {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+                          {% else %}
+                            Unknown
+                          {% endif %}
+                        </small>
+                      </div>
+                    </div>
+                  {% elif task.direct_image %}
+                    <div class="me-2">
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: {{ task.direct_image.uuid }}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Upload Date: 
+                          {% if task.direct_image.created_at %}
+                            {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
+                          {% else %}
+                            Unknown
+                          {% endif %}
+                        </small>
+                      </div>
+                    </div>
+                  {% endif %}
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted">No arbitration tasks available.</p>
+        {% endif %}
+      </div>
+      {% if arbitration_total_pages['all'] > 1 %}
+      <div class="card-footer d-flex justify-content-between">
+        <a href="{{ arbitration_prev_url or '#' }}" class="btn btn-sm btn-outline-secondary {% if not arbitration_prev_url %}disabled{% endif %}">Prev</a>
+        <span class="small text-muted">Page {{ arbitration_page }} of {{ arbitration_total_pages['all'] }}</span>
+        <a href="{{ arbitration_next_url or '#' }}" class="btn btn-sm btn-outline-secondary {% if not arbitration_next_url %}disabled{% endif %}">Next</a>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
 {% endif %}
 
-<!-- Dual Grading Tasks -->
-<div class="card shadow-sm mb-4">
-  <div class="card-header">
-    <strong>Dual Grading Tasks</strong>
-  </div>
-  <div class="card-body">
-    <p class="mb-3">Tasks that require dual grading from both resident and faculty, or arbitration.</p>
-    {% if dual_grading_tasks %}
-      <div class="list-group">
-        {% for task in dual_grading_tasks %}
-          <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-            <div>
-              <div class="d-flex align-items-center">
-                <span class="me-2">Task #{{ task.id }}</span>
-                <span class="badge bg-secondary">{{ task.disease.name }}</span>
-                <span class="badge bg-info ms-2">{{ task.state }}</span>
-              </div>
-              <small class="text-muted">
-                {% if task.encounter_file %}
-                  Encounter Image: {{ task.encounter_file.uuid[:8] }}...
-                {% elif task.direct_image %}
-                  Direct Image: {{ task.direct_image.uuid[:8] }}...
-                {% endif %}
-              </small>
-            </div>
-            <span class="text-muted">{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
-          </a>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="text-muted">No dual grading tasks available.</p>
-    {% endif %}
-  </div>
-</div>
-
-{# Primary CTAs: Start grading flows #}
-<div class="mb-3 d-flex flex-wrap align-items-center gap-3">
-  <div>
-    <a class="btn btn-success btn-lg {% if not start_url %}disabled{% endif %}"
-       href="{{ start_url or '#' }}">
-      Start Glaucoma Grading
-    </a>
-    {% if not start_url %}
-      <span class="ms-2 text-muted">No ungraded glaucoma images found.</span>
-    {% else %}
-      <span class="ms-2 small text-muted">Jumps to the most recent ungraded glaucoma image.</span>
-    {% endif %}
-  </div>
-  <div>
-    <a class="btn btn-primary btn-lg {% if not start_dr_url %}disabled{% endif %}"
-       href="{{ start_dr_url or '#' }}">
-      Start DR Grading
-    </a>
-    {% if not start_dr_url %}
-      <span class="ms-2 text-muted">No ungraded DR images found.</span>
-    {% else %}
-      <span class="ms-2 small text-muted">Jumps to the most recent ungraded DR image.</span>
-    {% endif %}
-  </div>
-  <div>
-    <div class="d-flex flex-wrap gap-2">
-      {% if start_direct_urls %}
-        {% for disease_name, url in start_direct_urls.items() %}
-          <a class="btn btn-info btn-lg" href="{{ url }}">
-            Start {{ disease_name.title() }} Grading
-          </a>
-        {% endfor %}
-      {% else %}
-        <button class="btn btn-info btn-lg disabled" disabled>
-          Start Direct Image Grading
-        </button>
-        <span class="ms-2 text-muted">No ungraded direct images found.</span>
-      {% endif %}
-    </div>
-    {% if start_direct_urls %}
-      <span class="ms-2 small text-muted">Jumps to a random verified direct image.</span>
-    {% endif %}
-  </div>
-  <hr class="w-100 mt-2 mb-0"/>
-  </div>
-
-<div class="row g-3 mb-3">
-  <div class="col-12 col-md-3">
-    <div class="card kpi-card kpi--success shadow-sm h-100">
-      <div class="card-body">
-        <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">👤</span> My gradings</div>
-        <div class="display-6">{{ my_total or 0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-md-3">
-    <div class="card kpi-card kpi--primary shadow-sm h-100">
-      <div class="card-body">
-        <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">👁️</span> Glaucoma gradings</div>
-        <div class="display-6">{{ total_glaucoma or 0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-md-3">
-    <div class="card kpi-card kpi--info shadow-sm h-100">
-      <div class="card-body">
-        <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">🩺</span> DR gradings</div>
-        <div class="display-6">{{ total_dr or 0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-12 col-md-3">
-    <div class="card kpi-card kpi--warning shadow-sm h-100">
-      <div class="card-body">
-        <div class="fw-semibold d-flex align-items-center gap-2"><span class="kpi-icon" aria-hidden="true">📊</span> Total gradings</div>
-        <div class="display-6">{{ overall_total or 0 }}</div>
-        <div class="small text-muted">Unique images: {{ total_unique_images or 0 }}</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="card .theme-jobs shadow-sm mb-3">
-  <div class="card-body d-flex flex-wrap align-items-end gap-3">
-    <form method="post" class="row g-2 align-items-center">
-      {{ csrf_field() }}
-      <div class="col-12 col-lg-9">
-        <label for="image_uuid" class="form-label mb-0">Code Specific Image</label>
-        <div class="input-group input-group-sm">
-          <input type="text" class="form-control" id="image_uuid" name="image_uuid" size="60" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
-          <select class="form-select form-select-sm" name="code_for" aria-label="Grading type" style="max-width: 140px;">
-            <option value="glaucoma" selected>Glaucoma</option>
-            <option value="dr">DR</option>
-            <option value="amd">AMD</option>
-          </select>
-          <button type="submit" class="btn btn-primary btn-sm">Open</button>
-        </div>
-      </div>
-    </form>
-
-    {# Start button already shown above as the primary CTA #}
-  </div>
-
-  </div>
-
+<!-- History of My Gradings -->
 <div class="card card-aurora shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center">
     <strong>My Gradings</strong>
@@ -207,22 +323,22 @@
     <div class="p-2 border-bottom">
       <div class="d-flex align-items-center gap-3 flex-wrap">
         <div class="d-flex align-items-center gap-2">
-          <span class="small text-muted">Impression:</span>
-          {% set types = ['all','Normal','Glaucoma Suspect','Glaucoma','Other Retinal','Not gradable'] %}
-          <div class="btn-group btn-group-sm" role="group">
-            {% for t in types %}
-              <a class="btn btn-outline-secondary {% if gimp==t %}active{% endif %}"
-                 href="{{ url_for('grading.index', gimp=t, gfor=gfor, p=1) }}">{{ t|capitalize }}</a>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
           <span class="small text-muted">Type:</span>
           {% set gfor_opts = ['all','glaucoma','dr','amd'] %}
           <div class="btn-group btn-group-sm" role="group">
             {% for f in gfor_opts %}
               <a class="btn btn-outline-secondary text-uppercase {% if gfor==f %}active{% endif %}"
-                 href="{{ url_for('grading.index', gimp=gimp, gfor=f, p=1) }}">{{ f }}</a>
+                 href="{{ url_for('grading.index', gfor=f, task_type=task_type, p=1) }}">{{ f }}</a>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Task Type:</span>
+          {% set task_type_opts = ['all','dual','single'] %}
+          <div class="btn-group btn-group-sm" role="group">
+            {% for t in task_type_opts %}
+              <a class="btn btn-outline-secondary text-uppercase {% if task_type==t %}active{% endif %}"
+                 href="{{ url_for('grading.index', gfor=gfor, task_type=t, p=1) }}">{{ t }}</a>
             {% endfor %}
           </div>
         </div>
@@ -279,87 +395,170 @@
   </div>
 </div>
 
+
+
 {% endblock %}
 {% block page_scripts %}
-<script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script>
-  document.addEventListener('DOMContentLoaded', function() {
-    // Check if we have disease stats data
-    var diseaseStatsData = {{ disease_stats_json|safe }};
+  document.addEventListener(\"DOMContentLoaded\", function() {
+    // Add event listeners for filter buttons
+    const filterButtons = document.querySelectorAll(\".btn-group a\");
+    filterButtons.forEach(button => {
+      button.addEventListener(\"click\", function(e) {
+        e.preventDefault();
+        const url = new URL(this.href);
+        const gfor = url.searchParams.get(\"gfor\") || \"all\";
+        const task_type = url.searchParams.get(\"task_type\") || \"all\";
+        const page = url.searchParams.get(\"p\") || 1;
+        
+        // Update the table with filtered data
+        updateGradingsTable(gfor, task_type, page);
+      });
+    });
     
-    if (diseaseStatsData && Object.keys(diseaseStatsData).length > 0) {
-      // Prepare data for Chart.js
-      var diseases = Object.keys(diseaseStatsData);
-      var remedioData = diseases.map(function(disease) {
-        return diseaseStatsData[disease].remedio;
-      });
-      var directData = diseases.map(function(disease) {
-        return diseaseStatsData[disease].direct;
-      });
-      
-      // Get canvas context
-      var ctx = document.getElementById('diseaseStatsChart').getContext('2d');
-      
-      // Create the chart
-      var diseaseStatsChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: diseases,
-          datasets: [
-            {
-              label: 'Remedio',
-              data: remedioData,
-              backgroundColor: '#1f77b4',
-              borderColor: '#1f77b4',
-              borderWidth: 1
-            },
-            {
-              label: 'Direct',
-              data: directData,
-              backgroundColor: '#ff7f0e',
-              borderColor: '#ff7f0e',
-              borderWidth: 1
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              stacked: true,
-              grid: {
-                display: false
-              }
-            },
-            y: {
-              stacked: true,
-              beginAtZero: true,
-              ticks: {
-                precision: 0
-              }
-            }
-          },
-          plugins: {
-            legend: {
-              position: 'top',
-            },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-              callbacks: {
-                footer: function(tooltipItems) {
-                  var sum = 0;
-                  tooltipItems.forEach(function(tooltipItem) {
-                    sum += tooltipItem.parsed.y;
-                  });
-                  return 'Total: ' + sum;
-                }
-              }
-            }
-          }
+    // Add event listeners for pagination buttons
+    const paginationButtons = document.querySelectorAll(\".card-footer a\");
+    paginationButtons.forEach(button => {
+      button.addEventListener(\"click\", function(e) {
+        e.preventDefault();
+        if (!this.classList.contains(\"disabled\")) {
+          const url = new URL(this.href);
+          const gfor = url.searchParams.get(\"gfor\") || \"all\";
+          const task_type = url.searchParams.get(\"task_type\") || \"all\";
+          const page = url.searchParams.get(\"p\") || 1;
+          
+
+    // Add event listeners for pagination buttons
+    const paginationButtons = document.querySelectorAll(\".card-footer .btn-group-sm a\");
+    paginationButtons.forEach(button => {
+      button.addEventListener(\"click\", function(e) {
+        e.preventDefault();
+        if (!this.classList.contains(\"disabled\")) {
+          const url = new URL(this.href);
+          const page = parseInt(url.searchParams.get(\"p\")) || 1;
+          
+          // Update current filters
+          currentFilters.page = page;
+          
+          // Update the table with paginated data
+          updateGradingsTable(currentFilters.gfor, currentFilters.task_type, page);
         }
       });
+    });
+    
+    // Function to update gradings table with AJAX
+    function updateGradingsTable(gfor, task_type, page) {
+      // Show loading indicator
+      const tableBody = document.querySelector(\"#gradings-table tbody\");
+      tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-muted p-3\\\">Loading...</td></tr>\";
+      
+      // Make AJAX call to fetch filtered and paginated data
+      fetch(`/api/gradings?gfor=${encodeURIComponent(gfor)}&task_type=${encodeURIComponent(task_type)}&page=${page}`)
+        .then(response => response.json())
+        .then(data => {
+          // Update the table with the new data
+          updateTableContent(data);
+          // Update pagination controls
+          updatePagination(data);
+          // Update total count
+          updateTotalCount(data.total);
+        })
+        .catch(error => {
+          console.error(\"Error fetching gradings data:\", error);
+          tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-danger p-3\\\">Error loading data. Please try again.</td></tr>\";
+        });
+    }
+    
+    // Function to update table content
+    function updateTableContent(data) {
+      const tableBody = document.querySelector(\"#gradings-table tbody\");
+      
+      if (data.gradings && data.gradings.length > 0) {
+        let rowsHtml = \"\";
+        data.gradings.forEach(g => {
+          rowsHtml += `
+            <tr>
+              <td class=\"text-nowrap\">${g.graded_at}</td>
+              <td class=\"text-break\"><code>${g.image_uuid || \"&#8212;\"}</code></td>
+              <td class=\"text-nowrap\">${badgeForFor(g.graded_for)}</td>
+              <td>${badgeForImpression(g.impression)}</td>
+              <td class=\"small text-muted\">${g.remarks}</td>
+              <td class=\"text-end\">
+                ${g.revise_url ? `<a class=\"btn btn-sm btn-outline-primary\" href=\"${g.revise_url}\">Revise</a>` : \"\"}
+              </td>
+            </tr>
+          `;
+        });
+        tableBody.innerHTML = rowsHtml;
+      } else {
+        tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-muted p-3\\\">No gradings found.</td></tr>\";
+      }
+    }
+    
+    // Function to update pagination controls
+    function updatePagination(data) {
+      const paginationContainer = document.querySelector(\".card-footer .btn-group-sm\");
+      
+      // Update previous button
+      const prevButton = paginationContainer.querySelector(\"a:first-child\");
+      if (data.has_prev) {
+        prevButton.classList.remove(\"disabled\");
+        prevButton.href = data.prev_url;
+      } else {
+        prevButton.classList.add(\"disabled\");
+        prevButton.href = \"#\";
+      }
+      
+      // Update next button
+      const nextButton = paginationContainer.querySelector(\"a:last-child\");
+      if (data.has_next) {
+        nextButton.classList.remove(\"disabled\");
+        nextButton.href = data.next_url;
+      } else {
+        nextButton.classList.add(\"disabled\");
+        nextButton.href = \"#\";
+      }
+      
+      // Update page info
+      const pageInfo = document.querySelector(\".card-footer .small.text-muted\");
+      pageInfo.textContent = `Page ${data.page} of ${data.total_pages}`;
+    }
+    
+    // Function to update total count
+    function updateTotalCount(total) {
+      const totalCount = document.querySelector(\".card-header .small.text-muted\");
+      totalCount.textContent = `${total} total`;
+    }
+    
+    // Helper functions for badges (simplified versions)
+    function badgeForFor(val) {
+      const v = (val || \"\").toLowerCase();
+      if (v === \"glaucoma\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-primary\\\">Glaucoma</span>\";
+      } else if (v === \"dr\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-info\\\">DR</span>\";
+      } else if (v === \"amd\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-purple\\\">AMD</span>\";
+      } else {
+        return `<span class=\\\"badge rounded-pill badge-soft-secondary\\\">${val || \"-\"}</span>`;
+      }
+    }
+    
+    function badgeForImpression(val) {
+      const t = (val || \"\").toLowerCase();
+      if (t === \"normal\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-success\\\">Normal</span>\";
+      } else if (t === \"glaucoma suspect\" || t === \"suspect\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-warning\\\">Glaucoma Suspect</span>\";
+      } else if (t === \"glaucoma\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-danger\\\">Glaucoma</span>\";
+      } else if (t === \"other retinal\" || t === \"other\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-info\\\">Other Retinal</span>\";
+      } else if (t === \"not gradable\" || t === \"notgradable\" || t === \"ungradable\") {
+        return \"<span class=\\\"badge rounded-pill badge-soft-secondary\\\">Not gradable</span>\";
+      } else {
+        return `<span class=\\\"badge rounded-pill badge-soft-secondary\\\">${val || \"-\"}</span>`;
+      }
     }
   });
 </script>

@@ -105,11 +105,7 @@ def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     db = Session()
     try:
-        total_glaucoma = db.query(ImageGrading).filter(ImageGrading.graded_for == 'glaucoma').count()
-        total_dr = db.query(ImageGrading).filter(ImageGrading.graded_for == 'dr').count()
-        total_unique_images = db.query(distinct(ImageGrading.encounter_file_id)).count()
-        overall_total = db.query(ImageGrading).count()
-        # Counts by impression (overall)
+        # Get impression counts for display
         type_rows = (
             db.query(ImageGrading.impression, func.count(ImageGrading.id))
               .group_by(ImageGrading.impression)
@@ -117,144 +113,12 @@ def index():
         )
         type_counts = {k or 'Unknown': int(v) for k, v in type_rows}
 
-        # Build candidate list: 50 most recent images not yet graded by this user for glaucoma
-        grader_id = getattr(current_user, 'id', None)
-        # Outer join to filter where no record exists for this user & 'glaucoma'
-        cand_q = (
-            db.query(EncounterFile)
-              .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-              .outerjoin(
-                  ImageGrading,
-                  and_(
-                      ImageGrading.encounter_file_id == EncounterFile.id,
-                      ImageGrading.graded_for == 'glaucoma',
-                      ImageGrading.grader_user_id == grader_id,
-                  ),
-              )
-              .filter(PatientEncounters.capture_date_dt.isnot(None))
-              .filter(EncounterFile.file_type == 'image')
-              .filter(ImageGrading.id.is_(None))
-              .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
-              .limit(50)
-        )
-        candidates = cand_q.all()
-        choice = random.choice(candidates) if candidates else None
-        start_url = url_for('grading.remedio_glaucoma_image', uuid=choice.uuid) if choice and choice.uuid else None
-
-        # Build candidate list for DR ungraded by this user (50 recent)
-        cand_dr_q = (
-            db.query(EncounterFile)
-              .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-              .outerjoin(
-                  ImageGrading,
-                  and_(
-                      ImageGrading.encounter_file_id == EncounterFile.id,
-                      ImageGrading.graded_for == 'dr',
-                      ImageGrading.grader_user_id == grader_id,
-                  ),
-              )
-              .filter(PatientEncounters.capture_date_dt.isnot(None))
-              .filter(EncounterFile.file_type == 'image')
-              .filter(ImageGrading.id.is_(None))
-              .order_by(PatientEncounters.capture_date_dt.desc(), EncounterFile.id.desc())
-              .limit(50)
-        )
-        candidates_dr = cand_dr_q.all()
-        choice_dr = random.choice(candidates_dr) if candidates_dr else None
-        start_dr_url = url_for('grading.remedio_dr_image', uuid=choice_dr.uuid) if choice_dr and choice_dr.uuid else None
-
-        # Build candidate list for direct image uploads not yet graded by this user for glaucoma
-        # Get all diseases
-        all_diseases = db.query(Disease).all()
-        start_direct_urls = {}
-        
-        # Collect disease statistics for the graph
-        disease_stats = {}
-        
-        for disease in all_diseases:
-            # Count verified ungraded direct images for this disease
-            direct_ungraded_count = (
-                db.query(DirectImageUpload)
-                .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
-                .outerjoin(
-                    ImageGrading,
-                    and_(
-                        ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                        ImageGrading.graded_for == disease.name.lower(),
-                        ImageGrading.grader_user_id == grader_id,
-                    ),
-                )
-                .filter(DirectImageUpload.disease_id == disease.id)
-                .filter(DirectImageVerify.verified_status == 'verified')
-                .filter(ImageGrading.id.is_(None))
-                .count()
-            )
-            
-            # Count ungraded remedio images for this disease (currently only glaucoma and dr supported)
-            remedio_ungraded_count = 0
-            if disease.name.lower() in ['glaucoma', 'dr']:
-                # For DR, we need to check the graded_for field
-                disease_name_for_query = disease.name.lower()
-                if disease.name.lower() == 'dr':
-                    disease_name_for_query = 'dr'
-                    
-                remedio_ungraded_count = (
-                    db.query(EncounterFile)
-                    .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-                    .outerjoin(
-                        ImageGrading,
-                        and_(
-                            ImageGrading.encounter_file_id == EncounterFile.id,
-                            ImageGrading.graded_for == disease_name_for_query,
-                            ImageGrading.grader_user_id == grader_id,
-                        ),
-                    )
-                    .filter(PatientEncounters.capture_date_dt.isnot(None))
-                    .filter(EncounterFile.file_type == 'image')
-                    .filter(ImageGrading.id.is_(None))
-                    .count()
-                )
-            
-            disease_stats[disease.name] = {
-                'direct': direct_ungraded_count,
-                'remedio': remedio_ungraded_count
-            }
-            
-            # Create start URLs for diseases that have ungraded images
-            # Outer join to filter where no record exists for this user & disease
-            cand_direct_q = (
-                db.query(DirectImageUpload)
-                .join(DirectImageVerify, DirectImageUpload.id == DirectImageVerify.image_upload_id)
-                .outerjoin(
-                    ImageGrading,
-                    and_(
-                        ImageGrading.direct_image_upload_id == DirectImageUpload.id,
-                        ImageGrading.graded_for == disease.name.lower(),
-                        ImageGrading.grader_user_id == grader_id,
-                    ),
-                )
-                .filter(DirectImageUpload.disease_id == disease.id)
-                .filter(DirectImageVerify.verified_status == 'verified')
-                .filter(ImageGrading.id.is_(None))
-                .order_by(DirectImageUpload.created_at.desc())
-                .limit(10)  # Limit to 10 per disease to avoid overwhelming the dashboard
-            )
-            candidates_direct = cand_direct_q.all()
-            choice_direct = random.choice(candidates_direct) if candidates_direct else None
-            if choice_direct and choice_direct.uuid:
-                if disease.name.lower() == 'glaucoma':
-                    start_direct_urls[disease.name.lower()] = url_for('grading.direct_image', uuid=choice_direct.uuid)
-                else:
-                    start_direct_urls[disease.name.lower()] = url_for('grading.direct_disease_image', uuid=choice_direct.uuid, disease_id=disease.id)
-                    
-        # Convert disease_stats to JSON for Chart.js
-        disease_stats_json = json.dumps(disease_stats)
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
         per_page = 20
-        # Filter my gradings by impression type and grading type if provided
-        gimp = (request.args.get('gimp') or 'all').strip()
+        # Filter my gradings by grading type and task type if provided
         gfor = (request.args.get('gfor') or 'all').strip().lower()
+        task_type = (request.args.get('task_type') or 'all').strip().lower()
         my_q = (
             db.query(ImageGrading)
               .options(
@@ -264,10 +128,16 @@ def index():
               .filter(ImageGrading.grader_user_id == getattr(current_user, 'id', None))
               .order_by(ImageGrading.updated_at.desc())
         )
-        if gimp and gimp.lower() != 'all':
-            my_q = my_q.filter(ImageGrading.impression == gimp)
         if gfor and gfor != 'all':
             my_q = my_q.filter(ImageGrading.graded_for == gfor)
+        if task_type and task_type != 'all':
+            # Filter by task type (dual grading tasks vs direct gradings)
+            if task_type == 'dual':
+                # Only show gradings that are part of a dual grading task
+                my_q = my_q.filter(ImageGrading.task_id.isnot(None))
+            elif task_type == 'single':
+                # Only show gradings that are NOT part of a dual grading task
+                my_q = my_q.filter(ImageGrading.task_id.is_(None))
         total_mine = my_q.count()
         items_mine = (
             my_q
@@ -276,40 +146,195 @@ def index():
             .all()
         )
         total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
-        mine_prev_url = url_for('grading.index', p=page-1, gimp=gimp, gfor=gfor) if page > 1 else None
-        mine_next_url = url_for('grading.index', p=page+1, gimp=gimp, gfor=gfor) if page < total_pages_mine else None
+        mine_prev_url = url_for('grading.index', p=page-1, gfor=gfor, task_type=task_type) if page > 1 else None
+        mine_next_url = url_for('grading.index', p=page+1, gfor=gfor, task_type=task_type) if page < total_pages_mine else None
         
-        # Get dual grading tasks for the current user
-        # This is a simplified implementation - in a real application, you would want to filter
-        # by user eligibility and task state
+        # Get dual grading tasks for the current user, separated by disease
+        # and role (resident vs faculty) and arbitration tasks
         from sqlalchemy.orm import selectinload
-        dual_grading_tasks = db.query(GradingTask).options(
-            selectinload(GradingTask.disease),
-            selectinload(GradingTask.encounter_file),
-            selectinload(GradingTask.direct_image)
-        ).limit(5).all()
+        
+        # Get pagination parameters for dual grading tasks - independent pagination for each type and disease
+        resident_page = request.args.get('resident_p', default=1, type=int) or 1
+        resident_page = max(1, resident_page)
+        faculty_page = request.args.get('faculty_p', default=1, type=int) or 1
+        faculty_page = max(1, faculty_page)
+        arbitration_page = request.args.get('arbitration_p', default=1, type=int) or 1
+        arbitration_page = max(1, arbitration_page)
+        dual_per_page = 3  # Changed to 3 items per page
+        
+        # Get user role to determine which tasks to show
+        is_admin = current_user.has_role('admin')
+        is_resident = current_user.has_role('optometrist')
+        is_faculty = current_user.has_role('ophthalmologist')
+        
+        # Initialize task dictionaries and counts
+        resident_tasks = {}
+        faculty_tasks = {}
+        arbitration_tasks = {}
+        resident_totals = {}
+        faculty_totals = {}
+        arbitration_totals = {}
+        resident_total_pages = {}
+        faculty_total_pages = {}
+        arbitration_total_pages = {}
+        
+        # Fetch tasks based on user role with pagination per disease
+        if is_admin or is_resident:
+            # Get all diseases to ensure we have entries for all diseases
+            all_diseases = db.query(Disease).all()
+            
+            # Get pending tasks for residents, grouped by disease
+            for disease in all_diseases:
+                # Create disease-specific page parameter
+                disease_resident_page = request.args.get(f'resident_{disease.name.replace(" ", "_")}_p', default=1, type=int) or 1
+                disease_resident_page = max(1, disease_resident_page)
+                
+                resident_query = db.query(GradingTask).options(
+                    selectinload(GradingTask.disease),
+                    selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
+                    selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
+                    selectinload(GradingTask.lab_unit)  # Include lab_unit information
+                ).filter(
+                    GradingTask.state == 'pending',
+                    GradingTask.disease_id == disease.id
+                )
+                
+                resident_totals[disease.name] = resident_query.count()
+                resident_total_pages[disease.name] = max(1, (resident_totals[disease.name] + dual_per_page - 1) // dual_per_page) if resident_totals[disease.name] else 1
+                
+                resident_task_list = (
+                    resident_query
+                    .offset((disease_resident_page - 1) * dual_per_page)
+                    .limit(dual_per_page)
+                    .all()
+                )
+                
+                resident_tasks[disease.name] = resident_task_list
+        
+        if is_admin or is_faculty:
+            # Get all diseases to ensure we have entries for all diseases
+            all_diseases = db.query(Disease).all()
+            
+            # Get tasks where resident has completed grading (ready for faculty review), grouped by disease
+            for disease in all_diseases:
+                # Create disease-specific page parameter
+                disease_faculty_page = request.args.get(f'faculty_{disease.name.replace(" ", "_")}_p', default=1, type=int) or 1
+                disease_faculty_page = max(1, disease_faculty_page)
+                
+                faculty_query = db.query(GradingTask).options(
+                    selectinload(GradingTask.disease),
+                    selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
+                    selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
+                    selectinload(GradingTask.lab_unit)  # Include lab_unit information
+                ).filter(
+                    GradingTask.state == 'resident_done',
+                    GradingTask.disease_id == disease.id
+                )
+                
+                faculty_totals[disease.name] = faculty_query.count()
+                faculty_total_pages[disease.name] = max(1, (faculty_totals[disease.name] + dual_per_page - 1) // dual_per_page) if faculty_totals[disease.name] else 1
+                
+                faculty_task_list = (
+                    faculty_query
+                    .offset((disease_faculty_page - 1) * dual_per_page)
+                    .limit(dual_per_page)
+                    .all()
+                )
+                
+                faculty_tasks[disease.name] = faculty_task_list
+        
+        if is_admin:
+            # Get tasks that need arbitration
+            arbitration_query = db.query(GradingTask).options(
+                selectinload(GradingTask.disease),
+                selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
+                selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
+                selectinload(GradingTask.lab_unit)  # Include lab_unit information
+            ).filter(GradingTask.state == 'arbitration')
+            
+            arbitration_total = arbitration_query.count()
+            arbitration_total_pages_global = max(1, (arbitration_total + dual_per_page - 1) // dual_per_page) if arbitration_total else 1
+            
+            arbitration_task_list = (
+                arbitration_query
+                .offset((arbitration_page - 1) * dual_per_page)
+                .limit(dual_per_page)
+                .all()
+            )
+            
+            arbitration_tasks['all'] = arbitration_task_list
+            arbitration_totals['all'] = arbitration_total
+            arbitration_total_pages['all'] = arbitration_total_pages_global
+                
+        # Calculate pagination URLs for each disease and task type
+        def build_pagination_urls(base_url, page, total_pages, page_param):
+            prev_url = url_for(base_url, **{page_param: page-1}) if page > 1 else None
+            next_url = url_for(base_url, **{page_param: page+1}) if page < total_pages else None
+            return prev_url, next_url
+        
+        # For resident tasks
+        resident_prev_urls = {}
+        resident_next_urls = {}
+        for disease_name in resident_tasks.keys():
+            # Create disease-specific page parameter
+            page_param = f'resident_{disease_name.replace(" ", "_")}_p'
+            disease_resident_page = request.args.get(page_param, default=1, type=int) or 1
+            disease_resident_page = max(1, disease_resident_page)
+            
+            resident_prev_urls[disease_name], resident_next_urls[disease_name] = build_pagination_urls(
+                'grading.index', disease_resident_page, resident_total_pages.get(disease_name, 1), page_param
+            )
+        
+        # For faculty tasks
+        faculty_prev_urls = {}
+        faculty_next_urls = {}
+        for disease_name in faculty_tasks.keys():
+            # Create disease-specific page parameter
+            page_param = f'faculty_{disease_name.replace(" ", "_")}_p'
+            disease_faculty_page = request.args.get(page_param, default=1, type=int) or 1
+            disease_faculty_page = max(1, disease_faculty_page)
+            
+            faculty_prev_urls[disease_name], faculty_next_urls[disease_name] = build_pagination_urls(
+                'grading.index', disease_faculty_page, faculty_total_pages.get(disease_name, 1), page_param
+            )
+        
+        # For arbitration tasks
+        arbitration_prev_url, arbitration_next_url = build_pagination_urls(
+            'grading.index', arbitration_page, arbitration_total_pages.get('all', 1), 'arbitration_p'
+        )
     finally:
         db.close()
 
     return render_template(
         "grading/index.html",
-        total_glaucoma=total_glaucoma,
-        total_dr=total_dr,
-        total_unique_images=total_unique_images,
-        overall_total=overall_total,
         type_counts=type_counts,
-        start_url=start_url,
-        start_dr_url=start_dr_url,
-        start_direct_urls=start_direct_urls,
-        disease_stats=disease_stats,
-        disease_stats_json=disease_stats_json,
         my_items=items_mine,
         my_total=total_mine,
         my_page=page,
         my_total_pages=total_pages_mine,
         my_prev_url=mine_prev_url,
         my_next_url=mine_next_url,
-        gimp=gimp,
         gfor=gfor,
-        dual_grading_tasks=dual_grading_tasks
+        task_type=task_type,
+        resident_tasks=resident_tasks,
+        faculty_tasks=faculty_tasks,
+        arbitration_tasks=arbitration_tasks,
+        resident_totals=resident_totals,
+        faculty_totals=faculty_totals,
+        arbitration_totals=arbitration_totals,
+        resident_total_pages=resident_total_pages,
+        faculty_total_pages=faculty_total_pages,
+        arbitration_total_pages=arbitration_total_pages,
+        resident_prev_urls=resident_prev_urls,
+        resident_next_urls=resident_next_urls,
+        faculty_prev_urls=faculty_prev_urls,
+        faculty_next_urls=faculty_next_urls,
+        arbitration_prev_url=arbitration_prev_url,
+        arbitration_next_url=arbitration_next_url,
+        resident_page=resident_page,
+        faculty_page=faculty_page,
+        arbitration_page=arbitration_page,
+        is_admin=is_admin,
+        is_resident=is_resident,
+        is_faculty=is_faculty
     )

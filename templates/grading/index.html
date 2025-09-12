@@ -52,7 +52,7 @@
       <div class="card-header">
         <strong>Resident Tasks</strong>
       </div>
-      <div class="card-body">
+      <div id="resident-tasks-container" class="card-body">
         {% if resident_tasks %}
           {% for disease_name, tasks in resident_tasks.items() %}
             {% if tasks %}
@@ -122,9 +122,9 @@
               </div>
               {% if resident_total_pages[disease_name] > 1 %}
               <div class="card-footer d-flex justify-content-between">
-                <a href="{{ resident_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not resident_prev_urls[disease_name] %}disabled{% endif %}">Prev</a>
+                <a href="{{ resident_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary resident-prev-btn {% if not resident_prev_urls[disease_name] %}disabled{% endif %}" data-disease="{{ disease_name }}">Prev</a>
                 <span class="small text-muted">Page {{ request.args.get('resident_' + disease_name.replace(' ', '_') + '_p', 1) }} of {{ resident_total_pages[disease_name] }}</span>
-                <a href="{{ resident_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not resident_next_urls[disease_name] %}disabled{% endif %}">Next</a>
+                <a href="{{ resident_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary resident-next-btn {% if not resident_next_urls[disease_name] %}disabled{% endif %}" data-disease="{{ disease_name }}">Next</a>
               </div>
               {% endif %}
             </div>
@@ -143,7 +143,7 @@
       <div class="card-header">
         <strong>Faculty Review</strong>
       </div>
-      <div class="card-body">
+      <div id="faculty-tasks-container" class="card-body">
         {% if faculty_tasks %}
           {% for disease_name, tasks in faculty_tasks.items() %}
             {% if tasks %}
@@ -213,9 +213,9 @@
               </div>
               {% if faculty_total_pages[disease_name] > 1 %}
               <div class="card-footer d-flex justify-content-between">
-                <a href="{{ faculty_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not faculty_prev_urls[disease_name] %}disabled{% endif %}">Prev</a>
+                <a href="{{ faculty_prev_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary faculty-prev-btn {% if not faculty_prev_urls[disease_name] %}disabled{% endif %}" data-disease="{{ disease_name }}">Prev</a>
                 <span class="small text-muted">Page {{ request.args.get('faculty_' + disease_name.replace(' ', '_') + '_p', 1) }} of {{ faculty_total_pages[disease_name] }}</span>
-                <a href="{{ faculty_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary {% if not faculty_next_urls[disease_name] %}disabled{% endif %}">Next</a>
+                <a href="{{ faculty_next_urls[disease_name] or '#' }}" class="btn btn-sm btn-outline-secondary faculty-next-btn {% if not faculty_next_urls[disease_name] %}disabled{% endif %}" data-disease="{{ disease_name }}">Next</a>
               </div>
               {% endif %}
             </div>
@@ -238,7 +238,7 @@
         <strong>Arbitration Tasks</strong>
         <span class="badge bg-primary">{{ arbitration_totals['all'] }} pending</span>
       </div>
-      <div class="card-body">
+      <div id="arbitration-tasks-container" class="card-body">
         {% if arbitration_tasks['all'] %}
           <div class="list-group">
             {% for task in arbitration_tasks['all'] %}
@@ -303,9 +303,9 @@
       </div>
       {% if arbitration_total_pages['all'] > 1 %}
       <div class="card-footer d-flex justify-content-between">
-        <a href="{{ arbitration_prev_url or '#' }}" class="btn btn-sm btn-outline-secondary {% if not arbitration_prev_url %}disabled{% endif %}">Prev</a>
+        <a href="{{ arbitration_prev_url or '#' }}" class="btn btn-sm btn-outline-secondary arbitration-prev-btn {% if not arbitration_prev_url %}disabled{% endif %}">Prev</a>
         <span class="small text-muted">Page {{ arbitration_page }} of {{ arbitration_total_pages['all'] }}</span>
-        <a href="{{ arbitration_next_url or '#' }}" class="btn btn-sm btn-outline-secondary {% if not arbitration_next_url %}disabled{% endif %}">Next</a>
+        <a href="{{ arbitration_next_url or '#' }}" class="btn btn-sm btn-outline-secondary arbitration-next-btn {% if not arbitration_next_url %}disabled{% endif %}">Next</a>
       </div>
       {% endif %}
     </div>
@@ -351,7 +351,7 @@
         {% endif %}
       </div>
     </div>
-    <table class="table table-sm table-striped table-hover align-middle mb-0">
+    <table id="gradings-table" class="table table-sm table-striped table-hover align-middle mb-0">
       <thead>
         <tr>
           <th style="width: 180px;">Graded At</th>
@@ -389,8 +389,8 @@
   <div class="card-footer d-flex justify-content-between align-items-center">
     <div class="small text-muted">Page {{ my_page }} of {{ my_total_pages }}</div>
     <div class="btn-group btn-group-sm" role="group">
-      <a class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}" href="{{ my_prev_url or '#' }}">Prev</a>
-      <a class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}" href="{{ my_next_url or '#' }}">Next</a>
+      <a class="btn btn-outline-secondary my-prev-btn {% if not my_prev_url %}disabled{% endif %}" href="{{ my_prev_url or '#' }}">Prev</a>
+      <a class="btn btn-outline-secondary my-next-btn {% if not my_next_url %}disabled{% endif %}" href="{{ my_next_url or '#' }}">Next</a>
     </div>
   </div>
 </div>
@@ -400,164 +400,647 @@
 {% endblock %}
 {% block page_scripts %}
 <script>
-  document.addEventListener(\"DOMContentLoaded\", function() {
+  document.addEventListener("DOMContentLoaded", function() {
+    // Store current filter values
+    let currentFilters = {
+      gfor: "{{ gfor }}",
+      task_type: "{{ task_type }}",
+      page: {{ my_page }},
+      resident_page: {{ resident_page }},
+      faculty_page: {{ faculty_page }},
+      arbitration_page: {{ arbitration_page }}
+    };
+
     // Add event listeners for filter buttons
-    const filterButtons = document.querySelectorAll(\".btn-group a\");
+    const filterButtons = document.querySelectorAll(".btn-group a");
     filterButtons.forEach(button => {
-      button.addEventListener(\"click\", function(e) {
+      button.addEventListener("click", function(e) {
         e.preventDefault();
         const url = new URL(this.href);
-        const gfor = url.searchParams.get(\"gfor\") || \"all\";
-        const task_type = url.searchParams.get(\"task_type\") || \"all\";
-        const page = url.searchParams.get(\"p\") || 1;
+        const gfor = url.searchParams.get("gfor") || "all";
+        const task_type = url.searchParams.get("task_type") || "all";
+        const page = url.searchParams.get("p") || 1;
+        
+        // Update current filters
+        currentFilters.gfor = gfor;
+        currentFilters.task_type = task_type;
+        currentFilters.page = 1; // Reset to first page when changing filters
         
         // Update the table with filtered data
-        updateGradingsTable(gfor, task_type, page);
+        updateGradingsTable(gfor, task_type, 1);
       });
     });
     
-    // Add event listeners for pagination buttons
-    const paginationButtons = document.querySelectorAll(\".card-footer a\");
-    paginationButtons.forEach(button => {
-      button.addEventListener(\"click\", function(e) {
+    // Use event delegation for all pagination buttons
+    document.addEventListener("click", function(e) {
+      // Handle resident task pagination
+      if (e.target.classList.contains("resident-prev-btn")) {
         e.preventDefault();
-        if (!this.classList.contains(\"disabled\")) {
-          const url = new URL(this.href);
-          const gfor = url.searchParams.get(\"gfor\") || \"all\";
-          const task_type = url.searchParams.get(\"task_type\") || \"all\";
-          const page = url.searchParams.get(\"p\") || 1;
-          
-
-    // Add event listeners for pagination buttons
-    const paginationButtons = document.querySelectorAll(\".card-footer .btn-group-sm a\");
-    paginationButtons.forEach(button => {
-      button.addEventListener(\"click\", function(e) {
-        e.preventDefault();
-        if (!this.classList.contains(\"disabled\")) {
-          const url = new URL(this.href);
-          const page = parseInt(url.searchParams.get(\"p\")) || 1;
-          
-          // Update current filters
-          currentFilters.page = page;
-          
-          // Update the table with paginated data
-          updateGradingsTable(currentFilters.gfor, currentFilters.task_type, page);
+        if (!e.target.classList.contains("disabled")) {
+          const disease = e.target.getAttribute("data-disease");
+          // Initialize page number if not exists
+          if (currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] === undefined) {
+            currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] = 1;
+          }
+          const page = currentFilters[`resident_${disease.replace(/ /g, "_")}_page`];
+          if (page > 1) {
+            currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] = page - 1;
+            updateResidentTasks(disease, page - 1);
+          }
         }
-      });
+      } else if (e.target.classList.contains("resident-next-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          const disease = e.target.getAttribute("data-disease");
+          // Initialize page number if not exists
+          if (currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] === undefined) {
+            currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] = 1;
+          }
+          const page = currentFilters[`resident_${disease.replace(/ /g, "_")}_page`];
+          currentFilters[`resident_${disease.replace(/ /g, "_")}_page`] = page + 1;
+          updateResidentTasks(disease, page + 1);
+        }
+      }
+      // Handle faculty task pagination
+      else if (e.target.classList.contains("faculty-prev-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          const disease = e.target.getAttribute("data-disease");
+          // Initialize page number if not exists
+          if (currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] === undefined) {
+            currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] = 1;
+          }
+          const page = currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`];
+          if (page > 1) {
+            currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] = page - 1;
+            updateFacultyTasks(disease, page - 1);
+          }
+        }
+      } else if (e.target.classList.contains("faculty-next-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          const disease = e.target.getAttribute("data-disease");
+          // Initialize page number if not exists
+          if (currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] === undefined) {
+            currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] = 1;
+          }
+          const page = currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`];
+          currentFilters[`faculty_${disease.replace(/ /g, "_")}_page`] = page + 1;
+          updateFacultyTasks(disease, page + 1);
+        }
+      }
+      // Handle arbitration task pagination
+      else if (e.target.classList.contains("arbitration-prev-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          // Initialize page number if not exists
+          if (currentFilters.arbitration_page === undefined) {
+            currentFilters.arbitration_page = 1;
+          }
+          const page = currentFilters.arbitration_page;
+          if (page > 1) {
+            currentFilters.arbitration_page = page - 1;
+            updateArbitrationTasks(page - 1);
+          }
+        }
+      } else if (e.target.classList.contains("arbitration-next-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          // Initialize page number if not exists
+          if (currentFilters.arbitration_page === undefined) {
+            currentFilters.arbitration_page = 1;
+          }
+          const page = currentFilters.arbitration_page;
+          currentFilters.arbitration_page = page + 1;
+          updateArbitrationTasks(page + 1);
+        }
+      }
+      // Handle my gradings pagination
+      else if (e.target.classList.contains("my-prev-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          // Initialize page number if not exists
+          if (currentFilters.page === undefined) {
+            currentFilters.page = 1;
+          }
+          const page = currentFilters.page;
+          if (page > 1) {
+            currentFilters.page = page - 1;
+            updateGradingsTable(currentFilters.gfor, currentFilters.task_type, page - 1);
+          }
+        }
+      } else if (e.target.classList.contains("my-next-btn")) {
+        e.preventDefault();
+        if (!e.target.classList.contains("disabled")) {
+          // Initialize page number if not exists
+          if (currentFilters.page === undefined) {
+            currentFilters.page = 1;
+          }
+          const page = currentFilters.page;
+          currentFilters.page = page + 1;
+          updateGradingsTable(currentFilters.gfor, currentFilters.task_type, page + 1);
+        }
+      }
     });
     
     // Function to update gradings table with AJAX
     function updateGradingsTable(gfor, task_type, page) {
       // Show loading indicator
-      const tableBody = document.querySelector(\"#gradings-table tbody\");
-      tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-muted p-3\\\">Loading...</td></tr>\";
+      const tableBody = document.querySelector("#gradings-table tbody");
+      tableBody.innerHTML = "<tr><td colspan=\"6\" class=\"text-center text-muted p-3\">Loading...</td></tr>";
       
       // Make AJAX call to fetch filtered and paginated data
-      fetch(`/api/gradings?gfor=${encodeURIComponent(gfor)}&task_type=${encodeURIComponent(task_type)}&page=${page}`)
+      fetch(`/api/gradings?gfor=${encodeURIComponent(gfor)}&task_type=${encodeURIComponent(task_type)}&page=${page}`, {
+        credentials: 'same-origin'
+      })
         .then(response => response.json())
         .then(data => {
           // Update the table with the new data
           updateTableContent(data);
           // Update pagination controls
-          updatePagination(data);
+          updateGradingsPagination(data);
           // Update total count
           updateTotalCount(data.total);
         })
         .catch(error => {
-          console.error(\"Error fetching gradings data:\", error);
-          tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-danger p-3\\\">Error loading data. Please try again.</td></tr>\";
+          console.error("Error fetching gradings data:", error);
+          tableBody.innerHTML = "<tr><td colspan=\"6\" class=\"text-center text-danger p-3\">Error loading data. Please try again.</td></tr>";
         });
+    }
+    
+    // Function to update resident tasks with AJAX
+    function updateResidentTasks(disease, page) {
+      // Show loading indicator
+      const container = document.querySelector("#resident-tasks-container");
+      container.innerHTML = "<p class=\"text-center text-muted p-3\">Loading...</p>";
+      
+      // Make AJAX call to fetch paginated data
+      fetch(`/api/dual-grading-tasks/resident?disease=${encodeURIComponent(disease)}&page=${page}`, {
+        credentials: 'same-origin'
+      })
+        .then(response => response.json())
+        .then(data => {
+          // Update the container with the new data
+          updateResidentTasksContent(data, disease);
+          // Update pagination controls
+          updateResidentTasksPagination(data, disease);
+        })
+        .catch(error => {
+          console.error("Error fetching resident tasks data:", error);
+          container.innerHTML = "<p class=\"text-center text-danger p-3\">Error loading data. Please try again.</p>";
+        });
+    }
+    
+    // Function to update faculty tasks with AJAX
+    function updateFacultyTasks(disease, page) {
+      // Show loading indicator
+      const container = document.querySelector("#faculty-tasks-container");
+      container.innerHTML = "<p class=\"text-center text-muted p-3\">Loading...</p>";
+      
+      // Make AJAX call to fetch paginated data
+      fetch(`/api/dual-grading-tasks/faculty?disease=${encodeURIComponent(disease)}&page=${page}`, {
+        credentials: 'same-origin'
+      })
+        .then(response => response.json())
+        .then(data => {
+          // Update the container with the new data
+          updateFacultyTasksContent(data, disease);
+          // Update pagination controls
+          updateFacultyTasksPagination(data, disease);
+        })
+        .catch(error => {
+          console.error("Error fetching faculty tasks data:", error);
+          container.innerHTML = "<p class=\"text-center text-danger p-3\">Error loading data. Please try again.</p>";
+        });
+    }
+    
+    // Function to update arbitration tasks with AJAX
+    function updateArbitrationTasks(page) {
+      // Show loading indicator
+      const container = document.querySelector("#arbitration-tasks-container");
+      container.innerHTML = "<p class=\"text-center text-muted p-3\">Loading...</p>";
+      
+      // Make AJAX call to fetch paginated data
+      fetch(`/api/dual-grading-tasks/arbitration?page=${page}`, {
+        credentials: 'same-origin'
+      })
+        .then(response => response.json())
+        .then(data => {
+          // Update the container with the new data
+          updateArbitrationTasksContent(data);
+          // Update pagination controls
+          updateArbitrationTasksPagination(data);
+        })
+        .catch(error => {
+          console.error("Error fetching arbitration tasks data:", error);
+          container.innerHTML = "<p class=\"text-center text-danger p-3\">Error loading data. Please try again.</p>";
+        });
+    }
+    
+    // Function to update resident tasks content
+    function updateResidentTasksContent(data, disease) {
+      const container = document.querySelector("#resident-tasks-container");
+      
+      if (data.tasks && data.tasks.length > 0) {
+        let html = "";
+        html += `
+          <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <strong>${disease}</strong>
+              <span class="badge bg-primary">${data.total} pending</span>
+            </div>
+            <div class="card-body p-2">
+              <div class="list-group list-group-flush">
+        `;
+        
+        data.tasks.forEach(task => {
+          html += `
+                <a href="/grading/dual/${task.id}" class="list-group-item list-group-item-action">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <span class="me-2">Task #${task.id}</span>
+                    <span class="badge bg-info">${task.state}</span>
+                  </div>
+                  <div class="d-flex align-items-center mt-1">
+          `;
+          
+          if (task.encounter_file) {
+            html += `
+                    <div class="me-2">
+                      <img src="/media/img-for-grading/${task.encounter_file.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: ${task.encounter_file.uuid}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Capture Date: 
+                          ${task.patient_encounter && task.patient_encounter.capture_date ? new Date(task.patient_encounter.capture_date).toLocaleDateString() : 'Unknown'}
+                        </small>
+                      </div>
+                    </div>
+            `;
+          } else if (task.direct_image) {
+            html += `
+                    <div class="me-2">
+                      <img src="/media/img-for-grading/${task.direct_image.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: ${task.direct_image.uuid}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Upload Date: 
+                          ${task.direct_image.created_at ? new Date(task.direct_image.created_at).toLocaleDateString() : 'Unknown'}
+                        </small>
+                      </div>
+                    </div>
+            `;
+          }
+          
+          html += `
+                  </div>
+                </a>
+          `;
+        });
+        
+        html += `
+              </div>
+            </div>
+          </div>
+        `;
+        
+        container.innerHTML = html;
+      } else {
+        container.innerHTML = "<p class=\"text-muted\">No resident tasks available.</p>";
+      }
+    }
+    
+    // Function to update faculty tasks content
+    function updateFacultyTasksContent(data, disease) {
+      const container = document.querySelector("#faculty-tasks-container");
+      
+      if (data.tasks && data.tasks.length > 0) {
+        let html = "";
+        html += `
+          <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <strong>${disease}</strong>
+              <span class="badge bg-primary">${data.total} pending</span>
+            </div>
+            <div class="card-body p-2">
+              <div class="list-group list-group-flush">
+        `;
+        
+        data.tasks.forEach(task => {
+          html += `
+                <a href="/grading/dual/${task.id}" class="list-group-item list-group-item-action">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <span class="me-2">Task #${task.id}</span>
+                    <span class="badge bg-info">${task.state}</span>
+                  </div>
+                  <div class="d-flex align-items-center mt-1">
+          `;
+          
+          if (task.encounter_file) {
+            html += `
+                    <div class="me-2">
+                      <img src="/media/img-for-grading/${task.encounter_file.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: ${task.encounter_file.uuid}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Capture Date: 
+                          ${task.patient_encounter && task.patient_encounter.capture_date ? new Date(task.patient_encounter.capture_date).toLocaleDateString() : 'Unknown'}
+                        </small>
+                      </div>
+                    </div>
+            `;
+          } else if (task.direct_image) {
+            html += `
+                    <div class="me-2">
+                      <img src="/media/img-for-grading/${task.direct_image.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <small class="text-muted">
+                        Image: ${task.direct_image.uuid}
+                      </small>
+                      <div>
+                        <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                      </div>
+                      <div>
+                        <small class="text-muted">
+                          Upload Date: 
+                          ${task.direct_image.created_at ? new Date(task.direct_image.created_at).toLocaleDateString() : 'Unknown'}
+                        </small>
+                      </div>
+                    </div>
+            `;
+          }
+          
+          html += `
+                  </div>
+                </a>
+          `;
+        });
+        
+        html += `
+              </div>
+            </div>
+          </div>
+        `;
+        
+        container.innerHTML = html;
+      } else {
+        container.innerHTML = "<p class=\"text-muted\">No faculty tasks available.</p>";
+      }
+    }
+    
+    // Function to update arbitration tasks content
+    function updateArbitrationTasksContent(data) {
+      const container = document.querySelector("#arbitration-tasks-container");
+      
+      if (data.tasks && data.tasks.length > 0) {
+        let html = '<div class="list-group">';
+        
+        data.tasks.forEach(task => {
+          html += `
+            <a href="/grading/dual/${task.id}" class="list-group-item list-group-item-action">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="me-2">Task #${task.id}</span>
+                <span class="badge bg-info">${task.state}</span>
+              </div>
+              <div class="d-flex align-items-center mt-1">
+          `;
+          
+          if (task.encounter_file) {
+            html += `
+                <div class="me-2">
+                  <img src="/media/img-for-grading/${task.encounter_file.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                </div>
+                <div>
+                  <small class="text-muted">
+                    Image: ${task.encounter_file.uuid}
+                  </small>
+                  <div>
+                    <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                  </div>
+                  <div>
+                    <small class="text-muted">
+                      Capture Date: 
+                      ${task.patient_encounter && task.patient_encounter.capture_date ? new Date(task.patient_encounter.capture_date).toLocaleDateString() : 'Unknown'}
+                    </small>
+                  </div>
+                </div>
+            `;
+          } else if (task.direct_image) {
+            html += `
+                <div class="me-2">
+                  <img src="/media/img-for-grading/${task.direct_image.uuid}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                </div>
+                <div>
+                  <small class="text-muted">
+                    Image: ${task.direct_image.uuid}
+                  </small>
+                  <div>
+                    <small class="text-muted">Hospital: ${task.lab_unit ? task.lab_unit.name : 'Unknown'}</small>
+                  </div>
+                  <div>
+                    <small class="text-muted">
+                      Upload Date: 
+                      ${task.direct_image.created_at ? new Date(task.direct_image.created_at).toLocaleDateString() : 'Unknown'}
+                    </small>
+                  </div>
+                </div>
+            `;
+          }
+          
+          html += `
+              </div>
+            </a>
+          `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+      } else {
+        container.innerHTML = "<p class=\"text-muted\">No arbitration tasks available.</p>";
+      }
+    }
+    
+    // Function to update pagination controls for resident tasks
+    function updateResidentTasksPagination(data, disease) {
+      const prevButton = document.querySelector(`.resident-prev-btn[data-disease="${disease}"]`);
+      const nextButton = document.querySelector(`.resident-next-btn[data-disease="${disease}"]`);
+      
+      // Update previous button
+      if (data.has_prev) {
+        prevButton.classList.remove("disabled");
+        prevButton.href = `#`;
+      } else {
+        prevButton.classList.add("disabled");
+        prevButton.href = "#";
+      }
+      
+      // Update next button
+      if (data.has_next) {
+        nextButton.classList.remove("disabled");
+        nextButton.href = `#`;
+      } else {
+        nextButton.classList.add("disabled");
+        nextButton.href = "#";
+      }
+    }
+    
+    // Function to update pagination controls for faculty tasks
+    function updateFacultyTasksPagination(data, disease) {
+      const prevButton = document.querySelector(`.faculty-prev-btn[data-disease="${disease}"]`);
+      const nextButton = document.querySelector(`.faculty-next-btn[data-disease="${disease}"]`);
+      
+      // Update previous button
+      if (data.has_prev) {
+        prevButton.classList.remove("disabled");
+        prevButton.href = `#`;
+      } else {
+        prevButton.classList.add("disabled");
+        prevButton.href = "#";
+      }
+      
+      // Update next button
+      if (data.has_next) {
+        nextButton.classList.remove("disabled");
+        nextButton.href = `#`;
+      } else {
+        nextButton.classList.add("disabled");
+        nextButton.href = "#";
+      }
+    }
+    
+    // Function to update pagination controls for arbitration tasks
+    function updateArbitrationTasksPagination(data) {
+      const prevButton = document.querySelector(".arbitration-prev-btn");
+      const nextButton = document.querySelector(".arbitration-next-btn");
+      
+      // Update previous button
+      if (data.has_prev) {
+        prevButton.classList.remove("disabled");
+        prevButton.href = `#`;
+      } else {
+        prevButton.classList.add("disabled");
+        prevButton.href = "#";
+      }
+      
+      // Update next button
+      if (data.has_next) {
+        nextButton.classList.remove("disabled");
+        nextButton.href = `#`;
+      } else {
+        nextButton.classList.add("disabled");
+        nextButton.href = "#";
+      }
     }
     
     // Function to update table content
     function updateTableContent(data) {
-      const tableBody = document.querySelector(\"#gradings-table tbody\");
+      const tableBody = document.querySelector("#gradings-table tbody");
       
       if (data.gradings && data.gradings.length > 0) {
-        let rowsHtml = \"\";
+        let rowsHtml = "";
         data.gradings.forEach(g => {
           rowsHtml += `
             <tr>
-              <td class=\"text-nowrap\">${g.graded_at}</td>
-              <td class=\"text-break\"><code>${g.image_uuid || \"&#8212;\"}</code></td>
-              <td class=\"text-nowrap\">${badgeForFor(g.graded_for)}</td>
+              <td class="text-nowrap">${g.graded_at}</td>
+              <td class="text-break"><code>${g.image_uuid || "&#8212;"}</code></td>
+              <td class="text-nowrap">${badgeForFor(g.graded_for)}</td>
               <td>${badgeForImpression(g.impression)}</td>
-              <td class=\"small text-muted\">${g.remarks}</td>
-              <td class=\"text-end\">
-                ${g.revise_url ? `<a class=\"btn btn-sm btn-outline-primary\" href=\"${g.revise_url}\">Revise</a>` : \"\"}
+              <td class="small text-muted">${g.remarks}</td>
+              <td class="text-end">
+                ${g.revise_url ? `<a class="btn btn-sm btn-outline-primary" href="${g.revise_url}">Revise</a>` : ""}
               </td>
             </tr>
           `;
         });
         tableBody.innerHTML = rowsHtml;
       } else {
-        tableBody.innerHTML = \"<tr><td colspan=\\\"6\\\" class=\\\"text-center text-muted p-3\\\">No gradings found.</td></tr>\";
+        tableBody.innerHTML = "<tr><td colspan=\"6\" class=\"text-center text-muted p-3\">No gradings found.</td></tr>";
       }
     }
     
-    // Function to update pagination controls
-    function updatePagination(data) {
-      const paginationContainer = document.querySelector(\".card-footer .btn-group-sm\");
+    // Function to update pagination controls for gradings table
+    function updateGradingsPagination(data) {
+      const prevButton = document.querySelector(".my-prev-btn");
+      const nextButton = document.querySelector(".my-next-btn");
       
       // Update previous button
-      const prevButton = paginationContainer.querySelector(\"a:first-child\");
       if (data.has_prev) {
-        prevButton.classList.remove(\"disabled\");
-        prevButton.href = data.prev_url;
+        prevButton.classList.remove("disabled");
+        prevButton.href = `/grading?p=${data.page-1}&gfor=${encodeURIComponent(currentFilters.gfor)}&task_type=${encodeURIComponent(currentFilters.task_type)}`;
       } else {
-        prevButton.classList.add(\"disabled\");
-        prevButton.href = \"#\";
+        prevButton.classList.add("disabled");
+        prevButton.href = "#";
       }
       
       // Update next button
-      const nextButton = paginationContainer.querySelector(\"a:last-child\");
       if (data.has_next) {
-        nextButton.classList.remove(\"disabled\");
-        nextButton.href = data.next_url;
+        nextButton.classList.remove("disabled");
+        nextButton.href = `/grading?p=${data.page+1}&gfor=${encodeURIComponent(currentFilters.gfor)}&task_type=${encodeURIComponent(currentFilters.task_type)}`;
       } else {
-        nextButton.classList.add(\"disabled\");
-        nextButton.href = \"#\";
+        nextButton.classList.add("disabled");
+        nextButton.href = "#";
       }
       
       // Update page info
-      const pageInfo = document.querySelector(\".card-footer .small.text-muted\");
+      const pageInfo = document.querySelector(".card-footer .small.text-muted");
       pageInfo.textContent = `Page ${data.page} of ${data.total_pages}`;
     }
     
     // Function to update total count
     function updateTotalCount(total) {
-      const totalCount = document.querySelector(\".card-header .small.text-muted\");
+      const totalCount = document.querySelector(".card-header .small.text-muted");
       totalCount.textContent = `${total} total`;
     }
     
     // Helper functions for badges (simplified versions)
     function badgeForFor(val) {
-      const v = (val || \"\").toLowerCase();
-      if (v === \"glaucoma\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-primary\\\">Glaucoma</span>\";
-      } else if (v === \"dr\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-info\\\">DR</span>\";
-      } else if (v === \"amd\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-purple\\\">AMD</span>\";
+      const v = (val || "").toLowerCase();
+      if (v === "glaucoma") {
+        return "<span class=\"badge rounded-pill badge-soft-primary\">Glaucoma</span>";
+      } else if (v === "dr") {
+        return "<span class=\"badge rounded-pill badge-soft-info\">DR</span";
+      } else if (v === "amd") {
+        return "<span class=\"badge rounded-pill badge-soft-purple\">AMD</span>";
       } else {
-        return `<span class=\\\"badge rounded-pill badge-soft-secondary\\\">${val || \"-\"}</span>`;
+        return `<span class=\"badge rounded-pill badge-soft-secondary\">${val || "-"}</span>`;
       }
     }
     
     function badgeForImpression(val) {
-      const t = (val || \"\").toLowerCase();
-      if (t === \"normal\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-success\\\">Normal</span>\";
-      } else if (t === \"glaucoma suspect\" || t === \"suspect\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-warning\\\">Glaucoma Suspect</span>\";
-      } else if (t === \"glaucoma\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-danger\\\">Glaucoma</span>\";
-      } else if (t === \"other retinal\" || t === \"other\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-info\\\">Other Retinal</span>\";
-      } else if (t === \"not gradable\" || t === \"notgradable\" || t === \"ungradable\") {
-        return \"<span class=\\\"badge rounded-pill badge-soft-secondary\\\">Not gradable</span>\";
+      const t = (val || "").toLowerCase();
+      if (t === "normal") {
+        return "<span class=\"badge rounded-pill badge-soft-success\">Normal</span>";
+      } else if (t === "glaucoma suspect" || t === "suspect") {
+        return "<span class=\"badge rounded-pill badge-soft-warning\">Glaucoma Suspect</span>";
+      } else if (t === "glaucoma") {
+        return "<span class=\"badge rounded-pill badge-soft-danger\">Glaucoma</span>";
+      } else if (t === "other retinal" || t === "other") {
+        return "<span class=\"badge rounded-pill badge-soft-info\">Other Retinal</span>";
+      } else if (t === "not gradable" || t === "notgradable" || t === "ungradable") {
+        return "<span class=\"badge rounded-pill badge-soft-secondary\">Not gradable</span>";
       } else {
-        return `<span class=\\\"badge rounded-pill badge-soft-secondary\\\">${val || \"-\"}</span>`;
+        return `<span class=\"badge rounded-pill badge-soft-secondary\">${val || "-"}</span>`;
       }
     }
   });

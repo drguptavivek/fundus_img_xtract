@@ -83,11 +83,12 @@ STANDARD_GRADINGS = {
     # Diabetic Retinopathy (DR) gradings
     "DR": [
         {"impression": "No DR", "display_order": 1, "is_active": True, "guidelines": "No signs of diabetic retinopathy."},
-        {"impression": "Minimal/Mild DR", "display_order": 2, "is_active": True, "guidelines": "Few microaneurysms only."},
-        {"impression": "Moderate NPDR", "display_order": 3, "is_active": True, "guidelines": "Microaneurysms, small hemorrhages, and hard exudates only."},
-        {"impression": "PDR/DME", "display_order": 4, "is_active": True, "guidelines": "Any of the following: >20 hemorrhages in each of 4 quadrants, definite venous beading in 2+ quadrants, prominent IRMA in 1+ quadrant."},
-        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No DR / DME , <strong>BUT Any other retinal or disc pathology</strong>. Note disease in remarks.</p>"},
-        {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
+        {"impression": "Mild DR", "display_order": 2, "is_active": True, "guidelines": "Few microaneurysms only."},
+        {"impression": "Moderate NPDR", "display_order": 3, "is_active": True, "guidelines": "Microaneurysms and other signs (such as dot and blot haemorrhages, hard exudates,cotton wool spots), but less than severe nonproliferative diabetic retinopathy."},
+        {"impression": "Severe NPDR", "display_order": 4, "is_active": True, "guidelines": "Moderate NPDR with Any of the following: <ul> <li> >20 hemorrhages in each of 4 quadrants,</li> <li> definite venous beading in 2+ quadrants, </li> <li>  prominent IRMA in 1+ quadrant.</li> </ul> "},
+        {"impression": "PDR", "display_order": 5, "is_active": True, "guidelines": "Severe nonproliferative diabetic retinopathy and one or more of the following:<ul><li> Neovascularization </li> <li> Vitreous / Preretinal Haemmorhage </li> </ul>"},
+        {"impression": "Other Retinal", "display_order": 6, "is_active": True, "guidelines": "<p>If No DR / DME , <strong>BUT Any other retinal or disc pathology</strong>. Note disease in remarks.</p>"},
+        {"impression": "Not Gradable", "display_order": 7, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
     ],
     
     # Age-related Macular Degeneration (AMD) gradings

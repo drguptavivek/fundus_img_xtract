@@ -6,7 +6,7 @@ import random
 import json
 
 from auth.roles import roles_required
-from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask
+from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
@@ -180,6 +180,14 @@ def index():
         
         # Fetch tasks based on user role with pagination per disease
         if is_admin or is_resident:
+            # Get user's lab unit IDs within the session context
+            user_lab_unit_ids = []
+            if hasattr(current_user, 'id'):
+                # Load user with lab_units relationship within the current session
+                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
+                if user_with_lab_units and user_with_lab_units.lab_units:
+                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
+            
             # Get all diseases to ensure we have entries for all diseases
             all_diseases = db.query(Disease).all()
             
@@ -199,6 +207,10 @@ def index():
                     GradingTask.disease_id == disease.id
                 )
                 
+                # Filter by user's lab units if available
+                if user_lab_unit_ids:
+                    resident_query = resident_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+                
                 resident_totals[disease.name] = resident_query.count()
                 resident_total_pages[disease.name] = max(1, (resident_totals[disease.name] + dual_per_page - 1) // dual_per_page) if resident_totals[disease.name] else 1
                 
@@ -212,6 +224,14 @@ def index():
                 resident_tasks[disease.name] = resident_task_list
         
         if is_admin or is_faculty:
+            # Get user's lab unit IDs within the session context
+            user_lab_unit_ids = []
+            if hasattr(current_user, 'id'):
+                # Load user with lab_units relationship within the current session
+                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
+                if user_with_lab_units and user_with_lab_units.lab_units:
+                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
+            
             # Get all diseases to ensure we have entries for all diseases
             all_diseases = db.query(Disease).all()
             
@@ -231,6 +251,10 @@ def index():
                     GradingTask.disease_id == disease.id
                 )
                 
+                # Filter by user's lab units if available
+                if user_lab_unit_ids:
+                    faculty_query = faculty_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+                
                 faculty_totals[disease.name] = faculty_query.count()
                 faculty_total_pages[disease.name] = max(1, (faculty_totals[disease.name] + dual_per_page - 1) // dual_per_page) if faculty_totals[disease.name] else 1
                 
@@ -244,6 +268,14 @@ def index():
                 faculty_tasks[disease.name] = faculty_task_list
         
         if is_admin:
+            # Get user's lab unit IDs within the session context
+            user_lab_unit_ids = []
+            if hasattr(current_user, 'id'):
+                # Load user with lab_units relationship within the current session
+                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
+                if user_with_lab_units and user_with_lab_units.lab_units:
+                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
+            
             # Get tasks that need arbitration
             arbitration_query = db.query(GradingTask).options(
                 selectinload(GradingTask.disease),
@@ -251,6 +283,14 @@ def index():
                 selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
                 selectinload(GradingTask.lab_unit)  # Include lab_unit information
             ).filter(GradingTask.state == 'arbitration')
+            
+            # Filter by user's lab units if available
+            if user_lab_unit_ids:
+                arbitration_query = arbitration_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+            
+            # Filter by user's lab units if available
+            if user_lab_unit_ids:
+                arbitration_query = arbitration_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
             
             arbitration_total = arbitration_query.count()
             arbitration_total_pages_global = max(1, (arbitration_total + dual_per_page - 1) // dual_per_page) if arbitration_total else 1

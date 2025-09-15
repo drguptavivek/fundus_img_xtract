@@ -11,7 +11,7 @@ from utils.dualGradingUtils import get_all_pending_resident, get_all_pending_fac
 from utils.userGradingsDone import get_user_gradings_with_details
 
 
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "resident", "ophthalmologist")
 def index():
     if request.method == "POST":
         img_uuid = (request.form.get("image_uuid") or "").strip()
@@ -156,7 +156,7 @@ def index():
         
         # Get user role to determine which tasks to show
         is_admin = current_user.has_role('admin')
-        is_resident = current_user.has_role('optometrist')  # resident role is optometrist
+        is_resident = current_user.has_role('resident')
         is_faculty = current_user.has_role('ophthalmologist')
         
         # Initialize task dictionaries and counts

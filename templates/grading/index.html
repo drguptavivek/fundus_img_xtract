@@ -212,17 +212,7 @@
           <div class="btn-group btn-group-sm" role="group">
             {% for f in gfor_opts %}
               <a class="btn btn-outline-secondary text-uppercase {% if gfor==f %}active{% endif %}"
-                 href="{{ url_for('grading.index', gfor=f, task_type=task_type, p=1) }}">{{ f }}</a>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-          <span class="small text-muted">Task Type:</span>
-          {% set task_type_opts = ['all','dual','single'] %}
-          <div class="btn-group btn-group-sm" role="group">
-            {% for t in task_type_opts %}
-              <a class="btn btn-outline-secondary text-uppercase {% if task_type==t %}active{% endif %}"
-                 href="{{ url_for('grading.index', gfor=gfor, task_type=t, p=1) }}">{{ t }}</a>
+                 href="{{ url_for('grading.index', gfor=f, p=1) }}">{{ f }}</a>
             {% endfor %}
           </div>
         </div>

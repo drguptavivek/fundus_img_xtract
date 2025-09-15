@@ -118,9 +118,8 @@ def index():
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
         per_page = 20
-        # Filter my gradings by grading type and task type if provided
+        # Filter my gradings by grading type only (task type filter removed as only dual grading tasks are created)
         gfor = (request.args.get('gfor') or 'all').strip().lower()
-        task_type = (request.args.get('task_type') or 'all').strip().lower()
         my_q = (
             db.query(ImageGrading)
               .options(
@@ -128,18 +127,11 @@ def index():
                   joinedload(ImageGrading.direct_image)
               )
               .filter(ImageGrading.grader_user_id == getattr(current_user, 'id', None))
+              .filter(ImageGrading.task_id.isnot(None))  # Only show dual grading tasks
               .order_by(ImageGrading.updated_at.desc())
         )
         if gfor and gfor != 'all':
             my_q = my_q.filter(ImageGrading.graded_for == gfor)
-        if task_type and task_type != 'all':
-            # Filter by task type (dual grading tasks vs direct gradings)
-            if task_type == 'dual':
-                # Only show gradings that are part of a dual grading task
-                my_q = my_q.filter(ImageGrading.task_id.isnot(None))
-            elif task_type == 'single':
-                # Only show gradings that are NOT part of a dual grading task
-                my_q = my_q.filter(ImageGrading.task_id.is_(None))
         total_mine = my_q.count()
         items_mine = (
             my_q
@@ -148,8 +140,8 @@ def index():
             .all()
         )
         total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
-        mine_prev_url = url_for('grading.index', p=page-1, gfor=gfor, task_type=task_type) if page > 1 else None
-        mine_next_url = url_for('grading.index', p=page+1, gfor=gfor, task_type=task_type) if page < total_pages_mine else None
+        mine_prev_url = url_for('grading.index', p=page-1, gfor=gfor) if page > 1 else None
+        mine_next_url = url_for('grading.index', p=page+1, gfor=gfor) if page < total_pages_mine else None
         
         # Get dual grading tasks for the current user, separated by disease
         # and role (resident vs faculty) and arbitration tasks
@@ -310,7 +302,6 @@ def index():
         my_prev_url=mine_prev_url,
         my_next_url=mine_next_url,
         gfor=gfor,
-        task_type=task_type,
         resident_tasks=resident_tasks,
         faculty_tasks=faculty_tasks,
         arbitration_tasks=arbitration_tasks,

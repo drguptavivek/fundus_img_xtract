@@ -31,7 +31,6 @@ Example (Python shell):
   - `resident_user` with role `resident`.
   - `faculty_user` with role `ophthalmologist`.
   - `arb_user` with role `ophthalmologist` (can act as arbitrator).
-- Ensure `user_disease_specializations` include target diseases for these users.
 - Create `user_disease_unit_role` rows:
   - For disease DR and lab unit L1: set resident flag for `resident_user`, faculty+arbitrate flags for `faculty_user` and `arb_user`.
 - Verify via API or direct query that the matrix rows exist and are active.

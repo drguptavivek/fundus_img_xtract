@@ -84,7 +84,7 @@ def get_hospital_disease_specialists(hospital_id, disease_id):
             select(User)
             .join(User.lab_units)
             .join(LabUnit.hospital)
-            .join(User.disease_specializations)
+            # Removed join with User.disease_specializations as part of cleanup
             .where(Hospital.id == hospital_id)
             .where(Disease.id == disease_id)
             .order_by(User.username)

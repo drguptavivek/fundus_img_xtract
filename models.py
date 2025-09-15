@@ -35,12 +35,6 @@ user_lab_units = Table(
     Column('lab_unit_id', Integer, ForeignKey('lab_units.id', ondelete="CASCADE"), primary_key=True)
 )
 
-user_disease_specializations = Table(
-    'user_disease_specializations', Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id', ondelete="CASCADE"), primary_key=True),
-    Column('disease_id', Integer, ForeignKey('diseases.id', ondelete="CASCADE"), primary_key=True)
-)
-
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -60,7 +54,6 @@ class User(Base):
     file_upload_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
-    disease_specializations: Mapped[List["Disease"]] = relationship("Disease", secondary=user_disease_specializations, back_populates="specialists")
 
     @property
     def is_authenticated(self) -> bool: return True
@@ -73,12 +66,6 @@ class User(Base):
     def has_all_roles(self, *names: str) -> bool:
         user_roles = {r.name.lower() for r in (self.roles or [])}
         return all(n.lower() in user_roles for n in names)
-    def can_grade_disease(self, disease_id: int) -> bool:
-        """Check if this user can grade the specified disease."""
-        return disease_id in [d.id for d in self.disease_specializations]
-    def can_grade_disease_name(self, disease_name: str) -> bool:
-        """Check if this user can grade the specified disease by name."""
-        return disease_name.lower() in [d.name.lower() for d in self.disease_specializations]
 
 class Role(Base):
     __tablename__ = "roles"
@@ -116,7 +103,6 @@ class Disease(Base):
     __tablename__ = 'diseases'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    specialists: Mapped[List["User"]] = relationship("User", secondary=user_disease_specializations, back_populates="disease_specializations")
     disease_gradings: Mapped[List["DiseaseGrading"]] = relationship("DiseaseGrading", back_populates="disease")
 
 class Area(Base):

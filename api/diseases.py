@@ -77,7 +77,7 @@ def get_disease_specialists(disease_id):
         
         specialists = db.execute(
             select(User)
-            .join(User.disease_specializations)
+            # Removed join with User.disease_specializations as part of cleanup
             .where(Disease.id == disease_id)
             .order_by(User.username)
         ).scalars().all()

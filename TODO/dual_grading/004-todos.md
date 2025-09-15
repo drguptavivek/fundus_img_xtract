@@ -3,7 +3,7 @@
 Foundations
 - [ ] Add models: `grading_task`, `grade`, `consensus`, `user_disease_unit_role`, `ai_grade` (optional) in `models.py` (PEP 8/484, check constraints, indexes).
 - [ ] Add migrations in `scripts/` and update `scripts/setup_db.py` and `scripts/migrations.md`.
-- [ ] Seed eligibility from `user_roles` + `user_disease_specializations` × selected grading lab units (no designation usage).
+- [ ] Seed eligibility from `user_roles` × selected grading lab units (no designation usage).
 
 Eligibility + Admin
 - [ ] API: CRUD endpoints for `user_disease_unit_role`.

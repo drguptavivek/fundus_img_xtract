@@ -76,13 +76,7 @@
    - Handles fetching a single disease grading by ID
    - Restricted to admin users only
 
-  b. api/disease_specializations.py
-   - Contains two endpoints:
-     - get_user_disease_specializations_api (GET) - Get disease specializations for a user
-     - set_user_disease_specializations_api (POST) - Set disease specializations for a user
-   - Both endpoints restricted to admin users only
-
-  c. api/direct_uploads.py
+  b. api/direct_uploads.py
    - Contains three endpoints:
      - get_lab_units - Get lab units for a user
      - get_hospital - Get hospital for a lab unit
@@ -247,7 +241,20 @@ refactor the uploads blueprint to use the path /remedio_zip_uploads. Let me crea
 
   
 
-## 7 Sept 2025: 1900 IST
+## 15 Sept 2025: Disease Specializations Functionality Removed
 
-  The current implementation provides 
+- Removed all `user_disease_specializations` functionality as it was not used in core workflows
+- Deleted files:
+  - `admin/disease_specializations.py`
+  - `api/disease_specializations.py`
+  - `utils/disease_specialzation_utils.py`
+- Removed templates:
+  - `templates/admin/disease_specializations/` directory
+  - `templates/disease_specializations/macros.html`
+- Updated models.py to remove `user_disease_specializations` table and relationships
+- Removed admin routes and API endpoints for disease specializations
+- Removed "Disease Specializations" navigation link from base template
+- Updated documentation references in TODO files
+
+The more granular `user_disease_unit_role` system is used for access control in the dual grading workflow. 
 

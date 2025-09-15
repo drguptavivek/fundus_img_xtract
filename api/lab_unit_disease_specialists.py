@@ -43,11 +43,12 @@ def get_lab_unit_disease_ophthalmologists(lab_unit_id, disease_id):
         ).scalars().all()
         
         # Filter users who are specialized in this disease and are ophthalmologists
+        # (disease_specializations removed as part of cleanup)
         ophthalmologist_ids = []
         for user in lab_unit_users:
-            if disease in user.disease_specializations:
-                role_names = [role.name for role in user.roles]
-                if "ophthalmologist" in role_names:
+            # Removed disease specialization check
+            role_names = [role.name for role in user.roles]
+            if "ophthalmologist" in role_names:
                     ophthalmologist_ids.append(user.id)
         
         return jsonify(ophthalmologist_ids)
@@ -82,11 +83,12 @@ def get_lab_unit_disease_residents(lab_unit_id, disease_id):
         ).scalars().all()
         
         # Filter users who are specialized in this disease and are residents
+        # (disease_specializations removed as part of cleanup)
         resident_ids = []
         for user in lab_unit_users:
-            if disease in user.disease_specializations:
-                role_names = [role.name for role in user.roles]
-                if "resident" in role_names:
+            # Removed disease specialization check
+            role_names = [role.name for role in user.roles]
+            if "resident" in role_names:
                     resident_ids.append(user.id)
         
         return jsonify(resident_ids)
@@ -121,7 +123,9 @@ def get_lab_unit_disease_specialists(lab_unit_id, disease_id):
         ).scalars().all()
         
         # Filter users who are specialized in this disease
-        specialists = [user for user in lab_unit_users if disease in user.disease_specializations]
+        # (disease_specializations removed as part of cleanup)
+        specialists = []  # Empty list as disease_specializations removed
+        # Removed filtering by disease specialization
         
         # Separate ophthalmologists and residents
         ophthalmologists = []
@@ -189,7 +193,9 @@ def get_lab_unit_specialists_summary(lab_unit_id):
         
         for disease in diseases:
             # Filter users who are specialized in this disease
-            specialists = [user for user in lab_unit_users if disease in user.disease_specializations]
+            # (disease_specializations removed as part of cleanup)
+            specialists = []  # Empty list as disease_specializations removed
+            # Removed filtering by disease specialization
             
             # Separate ophthalmologists and residents
             ophthalmologists = []

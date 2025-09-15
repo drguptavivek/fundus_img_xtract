@@ -40,7 +40,7 @@ def get_user_comprehensive(user_id):
         ).scalars().all()
         
         # Get user's disease specializations
-        specializations = user.disease_specializations
+        # Disease specializations (removed as part of cleanup)
         
         return jsonify({
             "user": {

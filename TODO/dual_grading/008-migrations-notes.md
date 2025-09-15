@@ -5,7 +5,7 @@ This outlines the migration steps to introduce grading tasks, grades, consensus,
 General Guidance
 - SQLite friendly: avoid advanced partial indexes. Use CHECK constraints and separate UNIQUE constraints as shown.
 - Idempotent: use `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` where issuing raw SQL.
-- Do not drop legacy tables (`image_gradings`) during initial rollout.
+- Do not drop tables during initial rollout.
 
 Tables to Create
 - `grading_tasks`
@@ -145,6 +145,6 @@ Testing the Migration
 - After running the migration flag, confirm tables exist: 
 
 Notes
-- Keep legacy `image_gradings` table for history during transition; do not delete or mutate it yet.
+- Keep table for history during transition; do not delete or mutate it yet.
 - Ensure all foreign keys use `ondelete='CASCADE'` where appropriate to avoid orphaned rows in dev (exercise caution in production).
 

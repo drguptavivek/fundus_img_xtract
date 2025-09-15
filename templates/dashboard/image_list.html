@@ -124,11 +124,7 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if image_gradings[image.id] and image_gradings[image.id]['ai'] %}
-                    {% for grading in image_gradings[image.id]['ai'] %}
-                      <span class="badge bg-info">{{ grading.impression }}</span>
-                    {% endfor %}
-                  {% elif image_type == 'encounter' and image_vcdr_values[image.id] %}
+                  {% if image_type == 'encounter' and image_vcdr_values[image.id] %}
                     {% if image.eye_side == 'right' and (image_vcdr_values[image.id].vcdr_right is not none) %}
                       <span class="badge bg-info">VCDR Right: {{ "%.2f"|format(image_vcdr_values[image.id].vcdr_right) }}</span>
                     {% elif image.eye_side == 'left' and (image_vcdr_values[image.id].vcdr_left is not none) %}
@@ -141,22 +137,10 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if image_gradings[image.id] and image_gradings[image.id]['ophthalmologist'] %}
-                    {% for grading in image_gradings[image.id]['ophthalmologist'] %}
-                      <span class="badge bg-success">{{ grading.impression }}</span>
-                    {% endfor %}
-                  {% else %}
-                    <span class="text-muted">-</span>
-                  {% endif %}
+                  <span class="text-muted">-</span>
                 </td>
                 <td>
-                  {% if image_gradings[image.id] and image_gradings[image.id]['resident'] %}
-                    {% for grading in image_gradings[image.id]['resident'] %}
-                      <span class="badge bg-warning">{{ grading.impression }}</span>
-                    {% endfor %}
-                  {% else %}
-                    <span class="text-muted">-</span>
-                  {% endif %}
+                  <span class="text-muted">-</span>
                 </td>
                 <td>
                   {% if image.is_arbitration %}

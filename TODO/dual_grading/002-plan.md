@@ -43,7 +43,7 @@ Phases and Deliverables
  - Tests for global uniqueness and gold standard: cross‑lab `ensure_task` returns existing task if not final; returns 409 with a clear message if final.
 
 9) Rollout
-- Feature-flag the new flow; keep legacy `ImageGrading` writes for audit during transition.
+- Feature-flag the new flow.
 - Admin training for eligibility UI.
 
 Milestone Checklist

@@ -10,7 +10,7 @@ Existing Endpoints
   - Returns safe metadata (type: direct_upload|encounter_file, lab_unit, disease where available, timestamps, etc.).
   - Use to determine image type, lab unit, and to build UI context.
 - `GET /api/gradings/by-image-uuid/<uuid>` (api/gradings.py)
-  - Returns existing `ImageGrading` history for the image. Keep for legacy audit; new flow will store in normalized `grades` but you can show legacy too during transition (admin/auditor only).
+  - Returns existing history for the image. New flow will store in normalized `grades`.
 
 How to Compose with Dual Grading
 - UI flow (Start with UUID):
@@ -45,6 +45,6 @@ Viewer Usage
 - Use `metadata` to show non‑PHI context (lab unit name, capture date when safe, disease name for direct uploads).
 
 Transition Notes
-- Keep legacy `ImageGrading` API (`/api/gradings/by-image-uuid/<uuid>`) available for auditors while migrating. For end‑users, hide it in masked views.
+- Keep API available for auditors while migrating. For end‑users, hide it in masked views.
 - New normalized `grades` can be exposed later via a separate admin‑only endpoint if needed.
 

@@ -27,7 +27,7 @@ def _directImgFinalByUUID(uuid_str: str):
     return directImgFinalByUUID(uuid_str)
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
-@roles_required("contributor", "data_manager", "admin", "ophthalmologist", "resident")
+@roles_required("contributor", "data_manager", "admin", "ophthalmologist", "optometrist")
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)
 

@@ -7,6 +7,8 @@ import json
 
 from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User
+from utils.dualGradingUtils import get_all_pending_resident, get_all_pending_faculty, get_all_pending_arbitration
+from utils.userGradingsDone import get_user_gradings_with_details
 
 
 @roles_required("admin", "optometrist", "ophthalmologist")
@@ -151,20 +153,10 @@ def index():
         
         # Get dual grading tasks for the current user, separated by disease
         # and role (resident vs faculty) and arbitration tasks
-        from sqlalchemy.orm import selectinload
-        
-        # Get pagination parameters for dual grading tasks - independent pagination for each type and disease
-        resident_page = request.args.get('resident_p', default=1, type=int) or 1
-        resident_page = max(1, resident_page)
-        faculty_page = request.args.get('faculty_p', default=1, type=int) or 1
-        faculty_page = max(1, faculty_page)
-        arbitration_page = request.args.get('arbitration_p', default=1, type=int) or 1
-        arbitration_page = max(1, arbitration_page)
-        dual_per_page = 3  # Changed to 3 items per page
         
         # Get user role to determine which tasks to show
         is_admin = current_user.has_role('admin')
-        is_resident = current_user.has_role('optometrist')
+        is_resident = current_user.has_role('optometrist')  # resident role is optometrist
         is_faculty = current_user.has_role('ophthalmologist')
         
         # Initialize task dictionaries and counts
@@ -178,134 +170,89 @@ def index():
         faculty_total_pages = {}
         arbitration_total_pages = {}
         
-        # Fetch tasks based on user role with pagination per disease
+        # Get user's lab unit IDs
+        user_lab_unit_ids = []
+        if hasattr(current_user, 'id'):
+            # Load user with lab_units relationship within the current session
+            user_with_lab_units = db.query(User).options(joinedload(User.lab_units)).filter(User.id == current_user.id).first()
+            if user_with_lab_units and user_with_lab_units.lab_units:
+                user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
+        
+        # Get all diseases to ensure we have entries for all diseases
+        all_diseases = db.query(Disease).all()
+        
+        # Get pending tasks for residents, grouped by disease using utility functions
         if is_admin or is_resident:
-            # Get user's lab unit IDs within the session context
-            user_lab_unit_ids = []
-            if hasattr(current_user, 'id'):
-                # Load user with lab_units relationship within the current session
-                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
-                if user_with_lab_units and user_with_lab_units.lab_units:
-                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
-            
-            # Get all diseases to ensure we have entries for all diseases
-            all_diseases = db.query(Disease).all()
-            
-            # Get pending tasks for residents, grouped by disease
             for disease in all_diseases:
-                # Create disease-specific page parameter
-                disease_resident_page = request.args.get(f'resident_{disease.name.replace(" ", "_")}_p', default=1, type=int) or 1
-                disease_resident_page = max(1, disease_resident_page)
-                
-                resident_query = db.query(GradingTask).options(
-                    selectinload(GradingTask.disease),
-                    selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
-                    selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
-                    selectinload(GradingTask.lab_unit)  # Include lab_unit information
-                ).filter(
-                    GradingTask.state == 'pending',
-                    GradingTask.disease_id == disease.id
-                )
-                
-                # Filter by user's lab units if available
-                if user_lab_unit_ids:
-                    resident_query = resident_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
-                
-                resident_totals[disease.name] = resident_query.count()
-                resident_total_pages[disease.name] = max(1, (resident_totals[disease.name] + dual_per_page - 1) // dual_per_page) if resident_totals[disease.name] else 1
-                
-                resident_task_list = (
-                    resident_query
-                    .offset((disease_resident_page - 1) * dual_per_page)
-                    .limit(dual_per_page)
-                    .all()
-                )
-                
-                resident_tasks[disease.name] = resident_task_list
+                # For each lab unit the user belongs to, get pending resident tasks
+                for lab_unit_id in user_lab_unit_ids:
+                    # Use utility function to get pending resident tasks
+                    resident_stats = get_all_pending_resident(current_user.id, lab_unit_id, disease.id)
+                    
+                    # Store the results
+                    key = f"{disease.name} - {lab_unit_id}"
+                    resident_totals[key] = resident_stats['total']
+                    # For pagination, we'll use a simple approach (1 page for now)
+                    resident_total_pages[key] = 1
+                    
+                    # Store first task info if available
+                    if resident_stats['first_task_id']:
+                        # Create a simple task object for display
+                        task_info = {
+                            'id': resident_stats['first_task_id'],
+                            'lab_unit_id': resident_stats['first_task_lab_unit_id'],
+                            'image_uuid': resident_stats['first_task_img_uuid']
+                        }
+                        resident_tasks[key] = [task_info]  # Store as list for consistency
         
+        # Get tasks where resident has completed grading (ready for faculty review), grouped by disease
         if is_admin or is_faculty:
-            # Get user's lab unit IDs within the session context
-            user_lab_unit_ids = []
-            if hasattr(current_user, 'id'):
-                # Load user with lab_units relationship within the current session
-                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
-                if user_with_lab_units and user_with_lab_units.lab_units:
-                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
-            
-            # Get all diseases to ensure we have entries for all diseases
-            all_diseases = db.query(Disease).all()
-            
-            # Get tasks where resident has completed grading (ready for faculty review), grouped by disease
             for disease in all_diseases:
-                # Create disease-specific page parameter
-                disease_faculty_page = request.args.get(f'faculty_{disease.name.replace(" ", "_")}_p', default=1, type=int) or 1
-                disease_faculty_page = max(1, disease_faculty_page)
-                
-                faculty_query = db.query(GradingTask).options(
-                    selectinload(GradingTask.disease),
-                    selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
-                    selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
-                    selectinload(GradingTask.lab_unit)  # Include lab_unit information
-                ).filter(
-                    GradingTask.state == 'resident_done',
-                    GradingTask.disease_id == disease.id
-                )
-                
-                # Filter by user's lab units if available
-                if user_lab_unit_ids:
-                    faculty_query = faculty_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
-                
-                faculty_totals[disease.name] = faculty_query.count()
-                faculty_total_pages[disease.name] = max(1, (faculty_totals[disease.name] + dual_per_page - 1) // dual_per_page) if faculty_totals[disease.name] else 1
-                
-                faculty_task_list = (
-                    faculty_query
-                    .offset((disease_faculty_page - 1) * dual_per_page)
-                    .limit(dual_per_page)
-                    .all()
-                )
-                
-                faculty_tasks[disease.name] = faculty_task_list
+                # For each lab unit the user belongs to, get pending faculty tasks
+                for lab_unit_id in user_lab_unit_ids:
+                    # Use utility function to get pending faculty tasks
+                    faculty_stats = get_all_pending_faculty(current_user.id, lab_unit_id, disease.id)
+                    
+                    # Store the results
+                    key = f"{disease.name} - {lab_unit_id}"
+                    faculty_totals[key] = faculty_stats['total']
+                    # For pagination, we'll use a simple approach (1 page for now)
+                    faculty_total_pages[key] = 1
+                    
+                    # Store first task info if available
+                    if faculty_stats['first_task_id']:
+                        # Create a simple task object for display
+                        task_info = {
+                            'id': faculty_stats['first_task_id'],
+                            'lab_unit_id': faculty_stats['first_task_lab_unit_id'],
+                            'image_uuid': faculty_stats['first_task_img_uuid']
+                        }
+                        faculty_tasks[key] = [task_info]  # Store as list for consistency
         
+        # Get tasks that need arbitration
         if is_admin:
-            # Get user's lab unit IDs within the session context
-            user_lab_unit_ids = []
-            if hasattr(current_user, 'id'):
-                # Load user with lab_units relationship within the current session
-                user_with_lab_units = db.query(User).options(selectinload(User.lab_units)).filter(User.id == current_user.id).first()
-                if user_with_lab_units and user_with_lab_units.lab_units:
-                    user_lab_unit_ids = [lu.id for lu in user_with_lab_units.lab_units]
-            
-            # Get tasks that need arbitration
-            arbitration_query = db.query(GradingTask).options(
-                selectinload(GradingTask.disease),
-                selectinload(GradingTask.encounter_file).selectinload(EncounterFile.patient_encounter),
-                selectinload(GradingTask.direct_image).selectinload(DirectImageUpload.lab_unit),
-                selectinload(GradingTask.lab_unit)  # Include lab_unit information
-            ).filter(GradingTask.state == 'arbitration')
-            
-            # Filter by user's lab units if available
-            if user_lab_unit_ids:
-                arbitration_query = arbitration_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
-            
-            # Filter by user's lab units if available
-            if user_lab_unit_ids:
-                arbitration_query = arbitration_query.filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
-            
-            arbitration_total = arbitration_query.count()
-            arbitration_total_pages_global = max(1, (arbitration_total + dual_per_page - 1) // dual_per_page) if arbitration_total else 1
-            
-            arbitration_task_list = (
-                arbitration_query
-                .offset((arbitration_page - 1) * dual_per_page)
-                .limit(dual_per_page)
-                .all()
-            )
-            
-            arbitration_tasks['all'] = arbitration_task_list
-            arbitration_totals['all'] = arbitration_total
-            arbitration_total_pages['all'] = arbitration_total_pages_global
-                
+            for disease in all_diseases:
+                # For each lab unit the user belongs to, get pending arbitration tasks
+                for lab_unit_id in user_lab_unit_ids:
+                    # Use utility function to get pending arbitration tasks
+                    arbitration_stats = get_all_pending_arbitration(current_user.id, lab_unit_id, disease.id)
+                    
+                    # Store the results
+                    key = f"{disease.name} - {lab_unit_id}"
+                    arbitration_totals[key] = arbitration_stats['total']
+                    # For pagination, we'll use a simple approach (1 page for now)
+                    arbitration_total_pages[key] = 1
+                    
+                    # Store first task info if available
+                    if arbitration_stats['first_task_id']:
+                        # Create a simple task object for display
+                        task_info = {
+                            'id': arbitration_stats['first_task_id'],
+                            'lab_unit_id': arbitration_stats['first_task_lab_unit_id'],
+                            'image_uuid': arbitration_stats['first_task_img_uuid']
+                        }
+                        arbitration_tasks[key] = [task_info]  # Store as list for consistency
+                        
         # Calculate pagination URLs for each disease and task type
         def build_pagination_urls(base_url, page, total_pages, page_param):
             prev_url = url_for(base_url, **{page_param: page-1}) if page > 1 else None
@@ -315,33 +262,41 @@ def index():
         # For resident tasks
         resident_prev_urls = {}
         resident_next_urls = {}
-        for disease_name in resident_tasks.keys():
-            # Create disease-specific page parameter
-            page_param = f'resident_{disease_name.replace(" ", "_")}_p'
-            disease_resident_page = request.args.get(page_param, default=1, type=int) or 1
-            disease_resident_page = max(1, disease_resident_page)
+        for key in resident_tasks.keys():
+            # Create key-specific page parameter
+            page_param = f'resident_{key.replace(" ", "_").replace("-", "_")}_p'
+            page = request.args.get(page_param, default=1, type=int) or 1
+            page = max(1, page)
             
-            resident_prev_urls[disease_name], resident_next_urls[disease_name] = build_pagination_urls(
-                'grading.index', disease_resident_page, resident_total_pages.get(disease_name, 1), page_param
+            resident_prev_urls[key], resident_next_urls[key] = build_pagination_urls(
+                'grading.index', page, resident_total_pages.get(key, 1), page_param
             )
         
         # For faculty tasks
         faculty_prev_urls = {}
         faculty_next_urls = {}
-        for disease_name in faculty_tasks.keys():
-            # Create disease-specific page parameter
-            page_param = f'faculty_{disease_name.replace(" ", "_")}_p'
-            disease_faculty_page = request.args.get(page_param, default=1, type=int) or 1
-            disease_faculty_page = max(1, disease_faculty_page)
+        for key in faculty_tasks.keys():
+            # Create key-specific page parameter
+            page_param = f'faculty_{key.replace(" ", "_").replace("-", "_")}_p'
+            page = request.args.get(page_param, default=1, type=int) or 1
+            page = max(1, page)
             
-            faculty_prev_urls[disease_name], faculty_next_urls[disease_name] = build_pagination_urls(
-                'grading.index', disease_faculty_page, faculty_total_pages.get(disease_name, 1), page_param
+            faculty_prev_urls[key], faculty_next_urls[key] = build_pagination_urls(
+                'grading.index', page, faculty_total_pages.get(key, 1), page_param
             )
         
         # For arbitration tasks
-        arbitration_prev_url, arbitration_next_url = build_pagination_urls(
-            'grading.index', arbitration_page, arbitration_total_pages.get('all', 1), 'arbitration_p'
-        )
+        arbitration_prev_urls = {}
+        arbitration_next_urls = {}
+        for key in arbitration_tasks.keys():
+            # Create key-specific page parameter
+            page_param = f'arbitration_{key.replace(" ", "_").replace("-", "_")}_p'
+            page = request.args.get(page_param, default=1, type=int) or 1
+            page = max(1, page)
+            
+            arbitration_prev_urls[key], arbitration_next_urls[key] = build_pagination_urls(
+                'grading.index', page, arbitration_total_pages.get(key, 1), page_param
+            )
     finally:
         db.close()
 
@@ -369,11 +324,8 @@ def index():
         resident_next_urls=resident_next_urls,
         faculty_prev_urls=faculty_prev_urls,
         faculty_next_urls=faculty_next_urls,
-        arbitration_prev_url=arbitration_prev_url,
-        arbitration_next_url=arbitration_next_url,
-        resident_page=resident_page,
-        faculty_page=faculty_page,
-        arbitration_page=arbitration_page,
+        arbitration_prev_urls=arbitration_prev_urls,
+        arbitration_next_urls=arbitration_next_urls,
         is_admin=is_admin,
         is_resident=is_resident,
         is_faculty=is_faculty

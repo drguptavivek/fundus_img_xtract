@@ -55,7 +55,7 @@
           <strong>Resident Tasks</strong>
           {% if resident_totals %}
             {% set total_pending = 0 %}
-            {% for disease_name, count in resident_totals.items() %}
+            {% for key, count in resident_totals.items() %}
               {% set total_pending = total_pending + count %}
             {% endfor %}
             <span class="badge bg-primary">{{ total_pending }} pending</span>
@@ -66,62 +66,23 @@
       </div>
       <div class="card-body">
         {% if resident_tasks %}
-          {% for disease_name, tasks in resident_tasks.items() %}
+          {% for key, tasks in resident_tasks.items() %}
             {% if tasks %}
               {% for task in tasks[:1] %} <!-- Show only one task -->
                 <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="text-decoration-none">
                   <div class="d-flex align-items-center">
-                    {% if task.encounter_file %}
-                      <div class="me-2">
-                        <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                      </div>
+                    <div class="me-2">
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.image_uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <div class="fw-bold">Task #{{ task.id }}</div>
+                      <small class="text-muted">
+                        {{ task.image_uuid[:8] }}...
+                      </small>
                       <div>
-                        <div class="fw-bold">Task #{{ task.id }}</div>
-                        <small class="text-muted">
-                          {{ task.encounter_file.uuid[:8] }}...
-                        </small>
-                        <div>
-                          <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
-                        </div>
-                        <div>
-                          <small class="text-muted">
-                            Capture Date: 
-                            {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
-                              {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
-                            {% else %}
-                              Unknown
-                            {% endif %}
-                          </small>
-                        </div>
+                        <small class="text-muted">Lab Unit ID: {{ task.lab_unit_id or 'Unknown' }}</small>
                       </div>
-                    {% elif task.direct_image %}
-                      <div class="me-2">
-                        <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                      </div>
-                      <div>
-                        <div class="fw-bold">Task #{{ task.id }}</div>
-                        <small class="text-muted">
-                          {{ task.direct_image.uuid[:8] }}...
-                        </small>
-                        <div>
-                          <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
-                        </div>
-                        <div>
-                          <small class="text-muted">
-                            Upload Date: 
-                            {% if task.direct_image.created_at %}
-                              {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
-                            {% else %}
-                              Unknown
-                            {% endif %}
-                          </small>
-                        </div>
-                      </div>
-                    {% endif %}
-                  </div>
-                  <div class="mt-2">
-                    <span class="badge bg-info">{{ task.state }}</span>
-                    <span class="badge bg-primary">{{ disease_name }}</span>
+                    </div>
                   </div>
                 </a>
               {% endfor %}
@@ -144,7 +105,7 @@
           <strong>Faculty Review</strong>
           {% if faculty_totals %}
             {% set total_pending = 0 %}
-            {% for disease_name, count in faculty_totals.items() %}
+            {% for key, count in faculty_totals.items() %}
               {% set total_pending = total_pending + count %}
             {% endfor %}
             <span class="badge bg-primary">{{ total_pending }} pending</span>
@@ -155,62 +116,23 @@
       </div>
       <div class="card-body">
         {% if faculty_tasks %}
-          {% for disease_name, tasks in faculty_tasks.items() %}
+          {% for key, tasks in faculty_tasks.items() %}
             {% if tasks %}
               {% for task in tasks[:1] %} <!-- Show only one task -->
                 <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="text-decoration-none">
                   <div class="d-flex align-items-center">
-                    {% if task.encounter_file %}
-                      <div class="me-2">
-                        <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                      </div>
+                    <div class="me-2">
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.image_uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
+                    </div>
+                    <div>
+                      <div class="fw-bold">Task #{{ task.id }}</div>
+                      <small class="text-muted">
+                        {{ task.image_uuid[:8] }}...
+                      </small>
                       <div>
-                        <div class="fw-bold">Task #{{ task.id }}</div>
-                        <small class="text-muted">
-                          {{ task.encounter_file.uuid[:8] }}...
-                        </small>
-                        <div>
-                          <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
-                        </div>
-                        <div>
-                          <small class="text-muted">
-                            Capture Date: 
-                            {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
-                              {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
-                            {% else %}
-                              Unknown
-                            {% endif %}
-                          </small>
-                        </div>
+                        <small class="text-muted">Lab Unit ID: {{ task.lab_unit_id or 'Unknown' }}</small>
                       </div>
-                    {% elif task.direct_image %}
-                      <div class="me-2">
-                        <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                      </div>
-                      <div>
-                        <div class="fw-bold">Task #{{ task.id }}</div>
-                        <small class="text-muted">
-                          {{ task.direct_image.uuid[:8] }}...
-                        </small>
-                        <div>
-                          <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
-                        </div>
-                        <div>
-                          <small class="text-muted">
-                            Upload Date: 
-                            {% if task.direct_image.created_at %}
-                              {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
-                            {% else %}
-                              Unknown
-                            {% endif %}
-                          </small>
-                        </div>
-                      </div>
-                    {% endif %}
-                  </div>
-                  <div class="mt-2">
-                    <span class="badge bg-info">{{ task.state }}</span>
-                    <span class="badge bg-primary">{{ disease_name }}</span>
+                    </div>
                   </div>
                 </a>
               {% endfor %}
@@ -232,70 +154,39 @@
         <div class="d-flex justify-content-between align-items-center">
           <strong>Arbitration Tasks</strong>
           {% if arbitration_totals %}
-            <span class="badge bg-primary">{{ arbitration_totals['all'] }} pending</span>
+            {% set total_pending = 0 %}
+            {% for key, count in arbitration_totals.items() %}
+              {% set total_pending = total_pending + count %}
+            {% endfor %}
+            <span class="badge bg-primary">{{ total_pending }} pending</span>
           {% else %}
             <span class="badge bg-primary">0 pending</span>
           {% endif %}
         </div>
       </div>
       <div class="card-body">
-        {% if arbitration_tasks and arbitration_tasks['all'] %}
-          {% for task in arbitration_tasks['all'][:1] %} <!-- Show only one task -->
-            <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="text-decoration-none">
-              <div class="d-flex align-items-center">
-                {% if task.encounter_file %}
-                  <div class="me-2">
-                    <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                  </div>
-                  <div>
-                    <div class="fw-bold">Task #{{ task.id }}</div>
-                    <small class="text-muted">
-                      {{ task.encounter_file.uuid[:8] }}...
-                    </small>
-                    <div>
-                      <small class="text-muted">Hospital: {{ task.lab_unit.name if task.lab_unit else 'Unknown' }}</small>
+        {% if arbitration_tasks %}
+          {% for key, tasks in arbitration_tasks.items() %}
+            {% if tasks %}
+              {% for task in tasks[:1] %} <!-- Show only one task -->
+                <a href="{{ url_for('grading.dual_grading_task', task_id=task.id) }}" class="text-decoration-none">
+                  <div class="d-flex align-items-center">
+                    <div class="me-2">
+                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.image_uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
                     </div>
                     <div>
+                      <div class="fw-bold">Task #{{ task.id }}</div>
                       <small class="text-muted">
-                        Capture Date: 
-                        {% if task.encounter_file.patient_encounter and task.encounter_file.patient_encounter.capture_date_dt %}
-                          {{ task.encounter_file.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') }}
-                        {% else %}
-                          Unknown
-                        {% endif %}
+                        {{ task.image_uuid[:8] }}...
                       </small>
+                      <div>
+                        <small class="text-muted">Lab Unit ID: {{ task.lab_unit_id or 'Unknown' }}</small>
+                      </div>
                     </div>
                   </div>
-                {% elif task.direct_image %}
-                  <div class="me-2">
-                    <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=task.direct_image.uuid) }}" alt="Thumbnail" class="img-thumbnail" style="width: 60px; height: 60px; object-fit: cover;">
-                  </div>
-                  <div>
-                    <div class="fw-bold">Task #{{ task.id }}</div>
-                    <small class="text-muted">
-                      {{ task.direct_image.uuid[:8] }}...
-                    </small>
-                    <div>
-                      <small class="text-muted">Hospital: {{ task.direct_image.lab_unit.name if task.direct_image.lab_unit else 'Unknown' }}</small>
-                    </div>
-                    <div>
-                      <small class="text-muted">
-                        Upload Date: 
-                        {% if task.direct_image.created_at %}
-                          {{ task.direct_image.created_at.strftime('%Y-%m-%d') }}
-                        {% else %}
-                          Unknown
-                        {% endif %}
-                      </small>
-                    </div>
-                  </div>
-                {% endif %}
-              </div>
-              <div class="mt-2">
-                <span class="badge bg-info">{{ task.state }}</span>
-                <span class="badge bg-primary">{{ task.disease.name if task.disease else 'Unknown' }}</span>
-              </div>
-            </a>
+                </a>
+              {% endfor %}
+            {% endif %}
           {% endfor %}
         {% else %}
           <p class="text-muted">No arbitration tasks available.</p>
@@ -387,7 +278,6 @@
     </div>
   </div>
 </div>
-
 
 
 {% endblock %}

@@ -19,7 +19,16 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
     - `get_user_gradings_with_details()`: Returns paginated gradings with additional details (disease name, lab unit, hospital, grade)
   - Added comprehensive tests in `utils/test_userGradingsDone.py`
   - Functions properly handle database sessions and include filtering capabilities
-  
+
+### Dual Grading Utility Functions
+  Enhanced `utils/dualGradingUtils.py` with additional utility functions:
+  - `get_all_pending_resident()`: Get all pending resident tasks for a user, lab unit, and disease
+  - `get_all_pending_faculty()`: Get all pending faculty tasks for a user, lab unit, and disease
+  - `get_all_pending_arbitration()`: Get all pending arbitration tasks for a user, lab unit, and disease
+  - `get_user_eligibility_for_task()`: Check if a user is eligible for a specific role slot for a task
+  - `get_next_eligible_task()`: Get the next eligible task for a user and role slot
+  - All functions properly handle database sessions and use selectinload for efficient querying
+
 ### NEXT STEP 
   Proceed to the next major phase of the plan: implementing the Grading Flow (Routes) which involves building the resident/faculty submit routes, arbitration routes, and consensus logic.
 

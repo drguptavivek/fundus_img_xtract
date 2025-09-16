@@ -10,10 +10,11 @@ from models import Session, PatientEncounters, EncounterFile, ImageGrading, Dire
 from utils.dualGradingUtils import get_user_kpi_pending_task_count_data
 from utils.userGradingsDone import get_user_kpi_completed_task_count_data
 from utils.userGradingsDone import get_user_gradings_with_details
+from utils.dualGradingEligibility import get_user_grading_eligibility_details
 from utils.masterUtils import get_all_diseases
 
 
-@roles_required("admin", "resident", "ophthalmologist")
+@roles_required("resident", "ophthalmologist")
 def index():
     # Stats + most recent encounter with an ungraded glaucoma image
     db = Session()
@@ -43,7 +44,6 @@ def index():
         # and role (resident vs faculty) and arbitration tasks
         
         # Get user role to determine which tasks to show
-        is_admin = current_user.has_role('admin')
         is_resident = current_user.has_role('resident')
         is_faculty = current_user.has_role('ophthalmologist')
         
@@ -66,6 +66,9 @@ def index():
         kpi_resident_completed_by_disease = {}
         kpi_faculty_completed_by_disease = {}
         kpi_arbitration_completed_by_disease = {}
+        
+        # Get user's grading eligibility details
+        user_eligibility = get_user_grading_eligibility_details(current_user.id)
         
         # Get all diseases to ensure we have entries for all diseases
         all_diseases = db.query(Disease).all()
@@ -129,7 +132,6 @@ def index():
         my_total_pages=total_pages_mine,
         my_prev_url=mine_prev_url,
         my_next_url=mine_next_url,
-        is_admin=is_admin,
         is_resident=is_resident,
         is_faculty=is_faculty,
         kpi_resident_pending=kpi_resident_pending,
@@ -143,5 +145,6 @@ def index():
         kpi_arbitration_completed=kpi_arbitration_completed,
         kpi_resident_completed_by_disease=kpi_resident_completed_by_disease,
         kpi_faculty_completed_by_disease=kpi_faculty_completed_by_disease,
-        kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease
+        kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
+        user_eligibility=user_eligibility
     )

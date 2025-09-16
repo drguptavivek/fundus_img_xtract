@@ -67,7 +67,6 @@ python app.py
 - [Direct Uploads](docs/direct_uploads.md)
 - [Audit Workflows](docs/audit.md)
 - [Grading System](docs/Grading.md)
-- [Direct Grading](docs/direct_grading.md)
 - [Security](docs/Security.md)
 - [Logging](docs/Logging.md)
 

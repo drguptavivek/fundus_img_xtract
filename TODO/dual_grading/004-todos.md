@@ -6,12 +6,12 @@ Foundations
 - [ ] Seed eligibility from `user_roles` × selected grading lab units (no designation usage).
 
 Eligibility + Admin
-- [ ] API: CRUD endpoints for `user_disease_unit_role`.
-- [ ] Admin UI: assign per user → diseases → lab units → slot flags.
-- [ ] Summary endpoints per lab unit + disease listing eligible residents/faculty/arbitrators.
+- [X] API: CRUD endpoints for `user_disease_unit_role`.
+- [X] Admin UI: assign per user → diseases → lab units → slot flags.
+- [X] Summary endpoints per lab unit + disease listing eligible residents/faculty/arbitrators.
 
 Task Creation
-- [ ] Service: `create_or_get_task(image_ref, disease_id, lab_unit_id)` with exclusivity and idempotency (global one task per image×disease; do not mutate lab_unit).
+- [] Service: `create_or_get_task(image_ref, disease_id, lab_unit_id)` with exclusivity and idempotency (global one task per image×disease; do not mutate lab_unit).
 - [ ] Service: `ensure_task(image_uuid, disease_id)` for on-demand creation.
 - [ ] Hooks: Direct verification → create native-disease tasks.
 - [ ] Hooks: DR verified encounter → create DR tasks for all images.

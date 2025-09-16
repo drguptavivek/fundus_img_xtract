@@ -4,7 +4,7 @@
 - **Database:** SQLAlchemy 
 - **Custom JS:** Flash-Toasts.js, photoswipe, edit_image.js, app.js, 
 -  **CSS:**  Bootstrap 5.3 via SCSS. Overides in app.css
-- **Reusable Partials:** -  _forms.html for CSRF, _direct_viewer_card.html and _viewer_card.html
+- **Reusable Partials:** -  _forms.html for CSRF, _viewer_card.html
 - **Environment:**  .env and .env.example
 
 ##  Common Commands

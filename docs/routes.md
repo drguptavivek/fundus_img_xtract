@@ -67,12 +67,8 @@ This document lists all the routes in the Fundus Image Manager application, orga
 | /grading/remedio/dr/image/\<uuid\> | grading.remedio_dr_image | GET | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
 | /grading/remedio/dr/grade | grading.remedio_dr_grade | POST | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
 | /grading/remedio/dr/remove | grading.remedio_dr_remove | POST | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
-| /grading/direct/glaucoma/\<uuid\> | grading.direct_image | GET | grading/glaucoma_direct.py | optometrist, ophthalmologist, admin |
-| /grading/direct/glaucoma/grade | grading.direct_glaucoma_grade | POST | grading/glaucoma_direct.py | optometrist, ophthalmologist, admin |
-| /grading/direct/glaucoma/remove | grading.direct_glaucoma_remove | POST | grading/glaucoma_direct.py | optometrist, ophthalmologist, admin |
-| /grading/direct/disease/\<uuid\>/\<int:disease_id\> | grading.direct_disease_image | GET | grading/direct_disease.py | optometrist, ophthalmologist, admin |
-| /grading/direct/disease/grade | grading.direct_disease_grade | POST | grading/direct_disease.py | optometrist, ophthalmologist, admin |
-| /grading/direct/disease/remove | grading.direct_disease_remove | POST | grading/direct_disease.py | optometrist, ophthalmologist, admin |
+| /grading/task/\<int:task_id\> | grading.dual_grading_task | GET | grading/dual_grading.py | admin, ophthalmologist, resident |
+| /grading/task/submit | grading.dual_grading_submit | POST | grading/dual_grading.py | admin, ophthalmologist, resident |
 | /direct/upload | direct_uploads.upload | GET, POST | direct_uploads/upload.py | contributor, data_manager, admin |
 | /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | direct_uploads/upload.py | contributor, data_manager, admin |
 | /direct/dashboard | direct_uploads.dashboard | GET, POST | direct_uploads/dashboard.py | contributor, data_manager, admin |

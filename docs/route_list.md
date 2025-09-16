@@ -49,21 +49,15 @@ audit.missing_capture_date                       GET        /audit/missing_captu
 
 <!-- dr.dr_results                                    GET        /dr/results (route removed) -->                                             
 
-grading.direct_disease_grade                     POST       /grading/direct/disease/grade                           
-grading.direct_disease_image                     GET        /grading/direct/disease/<uuid>/<int:disease_id>         
-grading.direct_disease_remove                    POST       /grading/direct/disease/remove                          
-grading.direct_glaucoma_grade                    POST       /grading/direct/glaucoma/grade                          
-grading.direct_glaucoma_remove                   POST       /grading/direct/glaucoma/remove                         
-grading.direct_image                             GET        /grading/direct/glaucoma/<uuid>                         
 grading.index                                    GET, POST  /grading/                                               
+grading.dual_grading_submit                      POST       /grading/task/submit                                    
+grading.dual_grading_task                        GET        /grading/task/<int:task_id>                             
 grading.remedio_dr_grade                         POST       /grading/remedio/dr/grade                               
 grading.remedio_dr_image                         GET        /grading/remedio/dr/image/<uuid>                        
 grading.remedio_dr_remove                        POST       /grading/remedio/dr/remove                              
 grading.remedio_glaucoma_grade                   POST       /grading/remedio/glaucoma/grade                         
 grading.remedio_glaucoma_image                   GET        /grading/remedio/glaucoma/image/<uuid>                  
 grading.remedio_glaucoma_remove                  POST       /grading/remedio/glaucoma/remove                        
-
-<!-- Note: The direct disease grading routes (grading.direct_disease_*) now allow 'optometrist' users in addition to 'ophthalmologist' and 'admin' users -->
 
 healthz                                          GET        /healthz                                                
 

@@ -12,10 +12,7 @@ The grading routes are organized under the `/grading` prefix:
 
 ```
 /grading/                          # Dashboard and statistics
-/grading/remedio/glaucoma/image/<uuid>  # Grade Glaucoma images from remedio camera
-/grading/remedio/dr/image/<uuid>        # Grade Diabetic Retinopathy images from remedio camera
-/grading/direct/glaucoma/<uuid>         # Grade Glaucoma images from direct uploads
-/grading/direct/disease/<uuid>/<int:disease_id>  # Grade images for specific diseases from direct uploads
+2/grading/task/<int:task_id>        # Dual grading task interface
 ```
 
 ## Access Controls
@@ -28,67 +25,47 @@ The grading system implements strict role-based access controls:
 1. **admin** - Full access to all grading features
 2. **ophthalmologist** - Can grade all types of images
 3. **optometrist** - Can grade remedio camera images only
-
-#### Role Restrictions:
-- **optometrist** users are restricted from grading direct uploaded images
-- **ophthalmologist** users can only grade direct uploaded images from their own LabUnit
-- **admin** users have unrestricted access to all grading features
+4. **resident** - Can perform initial grading tasks
 
 ### Route-Specific Access Controls
 
 #### Dashboard (`/grading/`)
 ```python
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "optometrist", "ophthalmologist", "resident")
 ```
 Accessible by all authorized medical professionals.
 
-#### Remedio Camera Grading Routes
+#### Dual Grading Task (`/grading/task/<int:task_id>`)
 ```python
-@roles_required("admin", "optometrist", "ophthalmologist")
+@roles_required("admin", "ophthalmologist", "resident")
 ```
-- `/grading/remedio/glaucoma/image/<uuid>`
-- `/grading/remedio/dr/image/<uuid>`
+Accessible by admins, ophthalmologists, and residents based on their assigned roles in the dual grading workflow.
 
-Accessible by all authorized medical professionals.
+### Task-Based Access Control
 
-#### Direct Image Grading Routes
-```python
-@roles_required("admin", "ophthalmologist")
-```
-- `/grading/direct/glaucoma/<uuid>`
-- `/grading/direct/disease/<uuid>/<int:disease_id>`
-
-Restricted to administrators and ophthalmologists only. Additionally, ophthalmologists can only grade images from their own LabUnit.
-
-### LabUnit-Based Access Control
-
-For direct image uploads, an additional layer of access control is implemented:
+The dual grading system implements additional access controls based on the specific task:
 
 ```python
-# Check access control - consultants can only grade images from their own LabUnit
-if not current_user.has_role('admin'):
-    # Get user's lab units
-    user_lab_unit_ids = [lu.id for lu in current_user.lab_units]
-    # Check if image belongs to user's lab unit
-    if diu.lab_unit_id not in user_lab_unit_ids:
-        abort(403)  # Forbidden
+# Check if user is eligible for this task based on their role
+if not is_user_eligible_for_task(current_user, task):
+    abort(403)  # Forbidden
 ```
 
-This ensures that ophthalmologists can only access and grade images that were uploaded by their own facility.
+This ensures that users can only access tasks that are assigned to their role in the dual grading workflow.
 
 ## Grading Workflow
 
 ### 1. Dashboard Access
 Users start at the grading dashboard which provides:
 - Overall statistics on grading activities
-- Quick access to ungraded images
+- Quick access to pending tasks based on user role
 - Personal grading history
-- Start grading buttons for different image types
+- Navigation to specific task types
 
-### 2. Image Selection
+### 2. Task Selection
 Users can either:
-- Click "Start Grading" to get a random ungraded image
-- Enter a specific image UUID to grade a particular image
+- View pending tasks in their dashboard
+- Access a specific task directly via its ID
 - Browse their previous gradings
 
 ### 3. Grading Interface
@@ -101,9 +78,9 @@ The grading interface provides:
 
 ### 4. Saving Grades
 Grades are saved using an "upsert" approach:
-- If the user has previously graded the same image, the existing grade is updated
+- If the user has previously graded the same task, the existing grade is updated
 - If this is a new grade, a new record is created
-- Each user can have only one grade per image per condition
+- Each user can have only one grade per task per role
 
 ## Security Features
 
@@ -127,66 +104,35 @@ Grades are saved using an "upsert" approach:
 ### 403 Forbidden
 Returned when:
 - User attempts to access a route without proper roles
-- Ophthalmologist tries to access an image from another LabUnit
+- User attempts to access a task they're not eligible for
 - User attempts to grade an image type they're not authorized for
 
 ### 404 Not Found
 Returned when:
-- Invalid image UUID is provided
-- Image no longer exists in the system
+- Invalid task ID is provided
+- Task no longer exists in the system
 
 ## API Endpoints
 
 ### GET `/grading/`
 Displays the grading dashboard with statistics and quick access options.
 
-### GET `/grading/remedio/glaucoma/image/<uuid>`
-Displays the grading interface for a specific Glaucoma image from remedio camera.
+### GET `/grading/task/<int:task_id>`
+Displays the dual grading interface for a specific task.
 
-### GET `/grading/remedio/dr/image/<uuid>`
-Displays the grading interface for a specific Diabetic Retinopathy image from remedio camera.
-
-### GET `/grading/direct/glaucoma/<uuid>`
-Displays the grading interface for a specific Glaucoma image from direct uploads (admin/ophthalmologist only).
-
-### GET `/grading/direct/disease/<uuid>/<int:disease_id>`
-Displays the grading interface for a specific disease image from direct uploads (admin/ophthalmologist only, with LabUnit restrictions).
-
-### POST `/grading/remedio/glaucoma/grade`
-Saves a Glaucoma grade for a remedio camera image.
-
-### POST `/grading/remedio/dr/grade`
-Saves a Diabetic Retinopathy grade for a remedio camera image.
-
-### POST `/grading/direct/glaucoma/grade`
-Saves a Glaucoma grade for a direct uploaded image (admin/ophthalmologist only).
-
-### POST `/grading/direct/disease/grade`
-Saves a disease grade for a direct uploaded image (admin/ophthalmologist only, with LabUnit restrictions).
-
-### POST `/grading/remedio/glaucoma/remove`
-Removes a Glaucoma grade for a remedio camera image.
-
-### POST `/grading/remedio/dr/remove`
-Removes a Diabetic Retinopathy grade for a remedio camera image.
-
-### POST `/grading/direct/glaucoma/remove`
-Removes a Glaucoma grade for a direct uploaded image (admin/ophthalmologist only).
-
-### POST `/grading/direct/disease/remove`
-Removes a disease grade for a direct uploaded image (admin/ophthalmologist only, with LabUnit restrictions).
+### POST `/grading/task/submit`
+Saves a grade for a dual grading task.
 
 ## Best Practices
 
 ### For Developers
 1. Always use the `@roles_required` decorator for grading routes
-2. Implement LabUnit-based access control for direct image routes
-3. Validate all user inputs and UUIDs
+2. Implement task-based access control for grading tasks
+3. Validate all user inputs and task IDs
 4. Use the upsert pattern for saving grades
 5. Ensure proper error handling and user feedback
 
 ### For Administrators
 1. Assign appropriate roles to users based on their responsibilities
 2. Regularly review grading activities and access logs
-3. Ensure LabUnit associations are correctly configured for ophthalmologists
-4. Monitor for unauthorized access attempts
+3. Monitor for unauthorized access attempts

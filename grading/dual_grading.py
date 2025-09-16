@@ -20,10 +20,6 @@ def is_user_eligible_for_slot(user, task, slot):
     Returns:
         bool: True if user is eligible, False otherwise
     """
-    # Admins are eligible for all slots
-    if user.has_role('admin'):
-        return True
-    
     if not task or not task.disease_id or not task.lab_unit_id:
         return False
     

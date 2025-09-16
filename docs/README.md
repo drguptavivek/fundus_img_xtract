@@ -39,7 +39,6 @@ Additional documentation files provide information about the application archite
 - [Audit Documentation](audit.html)
 - [Build Themes Documentation](BUILD_THEMES.html)
 - [Changelog](CHANGELOG.html)
-- [Direct Grading Documentation](direct_grading.html)
 - [Direct Uploads Documentation](direct_uploads.html)
 - [Grading Documentation](Grading.html)
 - [Logging Documentation](Logging.html)

@@ -38,16 +38,6 @@ def dual_grading_task(task_id: int, slot_type: str):
             flash(f"You are not eligible to grade this task as {slot_type}.", "danger")
             return redirect(url_for("grading.index"))
         
-        # Fetch existing grades for this task
-        grades = db.query(Grade).filter(Grade.task_id == task_id).all()
-        
-        # Check if user has already graded this task for this slot
-        user_grade = None
-        for grade in grades:
-            if grade.grader_user_id == current_user.id and grade.role_slot == slot_type:
-                user_grade = grade
-                break
-        
         # Additional validation: Check if the slot is actually available for this task state
         if slot_type == 'resident' and task.state != 'pending':
             flash("Resident slot is not available for this task.", "danger")
@@ -72,14 +62,19 @@ def dual_grading_task(task_id: int, slot_type: str):
         elif task.direct_image:
             image_uuid = task.direct_image.uuid
             
+        # Fetch existing grade for this user and slot (for review purposes)
+        existing_grade = db.query(Grade).filter(
+            Grade.task_id == task_id,
+            Grade.grader_user_id == current_user.id,
+            Grade.role_slot == slot_type
+        ).first()
+            
         return render_template(
             "grading/dual_grading_task.html",
             task=task,
             disease_gradings=disease_gradings,
-            grades=grades,
-            user_grade=user_grade,
-            user_roles=[slot_type],  # Only the specified slot
-            available_slots=[slot_type],  # Only the specified slot
+            current_slot=slot_type,
+            existing_grade=existing_grade,
             image_uuid=image_uuid
         )
     finally:

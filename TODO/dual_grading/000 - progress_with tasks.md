@@ -72,6 +72,15 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Added direct validation of slot availability based on task state
   - Improved security by preventing manipulation of slot type through URL parameters
 
+### Revision Functionality
+  - Implemented revise grading functionality allowing users to edit their previous gradings
+  - Added `revise_grading` route and function in `grading/dual_grading.py`
+  - Updated dashboard template to include "Revise" buttons for existing gradings
+  - Enhanced revision validation logic to be more permissive for users revising their own work
+  - Fixed issue where faculty and residents couldn't revise grades when tasks were in arbitration state
+  - Implemented proper role checking for revision without requiring current eligibility matrix validation
+  - Added comprehensive error handling and user feedback for revision attempts
+
 ### NEXT STEP 
   Continue with additional security enhancements and testing.
 

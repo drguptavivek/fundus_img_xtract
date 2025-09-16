@@ -12,6 +12,7 @@ Scope and Principles
 - Verification gating: Only anonymized/verified images are eligible for task creation and grading selection.
 - Extensible: Images can be graded for multiple diseases at different times (e.g., DR today, AMD later), each as its own task.
 - Auditable: Full history of grade attempts is retained; consensus recorded per task.
+- Revision capability: Users can revise their own gradings before task finalization, with appropriate validation.
 
 Key Entities (Normalized)
 - grading_task: Anchor for an image-per-disease. Holds lab_unit, state.
@@ -40,11 +41,13 @@ What Changes
 - Introduction of a dedicated grading workflow model (tasks, grades, consensus) with per-slot enforcement and arbitration.
 - New eligibility matrix to control who can grade which disease in which lab unit (independent of uploads mapping).
 - Grading UI/UX routes enforce verification gating and eligibility; arbitrator views prior labels with grader identities.
+- Added revision capability allowing users to edit their previous gradings before task finalization.
 
 Security & Compliance
 - Mask PHI in grading views; serve images by UUID-only endpoints.
 - CSRF on all forms; strict enum validation; ORM-bound parameters.
 - Logging via app success/error loggers for submissions and state transitions.
+- Revision functionality includes appropriate validation to prevent unauthorized access.
 
 Out of Scope (Initial)
 - Confidence scores (not required).
@@ -108,9 +111,15 @@ flowchart TD
     ARB --> GA
     GA --> CA["Consensus - method=adjudication; State=final"]
 
+    %% Revision functionality
+    GR --> REV[User can revise their grade]
+    GF --> REV
+    GA --> REV
+    REV -->|Before final state| REVSUB[Submit revised grade]
+    REVSUB --> CK
+
     classDef stop fill:#fdd,stroke:#c33,stroke-width:1px,color:#600
     classDef ok fill:#dfd,stroke:#393,stroke-width:1px,color:#060
-
 ```
 
 ## Mermaid Diagram — Admin Eligibility & Auto-Tasks
@@ -147,12 +156,20 @@ flowchart LR
 
     GT --> Q["Grading Queues <br/> (visible only if user eligible via DUR + user_roles)"]
 
+    %% Dashboard and Revision
+    Q --> DASH[Dashboard with "My Gradings"]
+    DASH --> REV[Revise Button for existing grades]
+    REV --> REVFUNC[revise_grading route]
+    REVFUNC --> REVCHECK[Validate user is original grader<br/>and task not finalized]
+    REVCHECK -->|Pass| REVFLOW[Load grading task with<br/>existing grade pre-filled]
+    REVCHECK -->|Fail| ERROR[Show error message]
+
     %% Reporting/Exports
     GT -.-> VIEW[["Denormalized View <br/> image×disease: resident, faculty, final, method"]]
     VIEW --> CSV[CSV Exports / Dashboards]
 
     classDef db fill:#eef,stroke:#66f,stroke-width:1px
     classDef svc fill:#efe,stroke:#393,stroke-width:1px
-    class DUR,GT,VIEW db
+    class DUR,GT,VIEW,REVFLOW db
     class SVC1,SVC2,SVC3 svc
 ```

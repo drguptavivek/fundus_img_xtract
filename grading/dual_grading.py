@@ -12,6 +12,102 @@ from utils.dualGradingUtils import get_user_eligibility_for_task
 
 
 @roles_required("resident", "ophthalmologist", "admin")
+def revise_grading(grade_id: int):
+    """Allow a user to revise their previous grading."""
+    db = Session()
+    try:
+        # Fetch the grade with related data
+        grade = db.query(Grade).options(
+            selectinload(Grade.task).selectinload(GradingTask.disease),
+            selectinload(Grade.task).selectinload(GradingTask.encounter_file),
+            selectinload(Grade.task).selectinload(GradingTask.direct_image),
+            selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
+            selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
+            selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.grader),
+            selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.label),
+            selectinload(Grade.label)
+        ).filter(Grade.id == grade_id).first()
+        
+        if not grade:
+            flash("Grade not found.", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # Check if the user is the original grader
+        if grade.grader_user_id != current_user.id:
+            flash("You are not authorized to revise this grade.", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # Get the task
+        task = grade.task
+        
+        # Check if the task is still in a state that allows revision
+        if task.state == "final":
+            flash("This task is finalized and cannot be revised.", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # Determine the slot type based on the existing grade
+        slot_type = grade.role_slot
+        
+        # For revision, we bypass the normal eligibility check since the user has already been eligible
+        # We just need to verify they still have the appropriate role
+        user_has_role = False
+        if slot_type == 'resident':
+            user_has_role = current_user.has_role('resident')
+        elif slot_type in ['faculty', 'arbitrator']:
+            user_has_role = current_user.has_role('ophthalmologist')
+        
+        if not user_has_role:
+            flash(f"You no longer have the required role ({slot_type}) to revise this grade.", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # For revision, we need to be more permissive with task state validation
+        # since the user is just updating their existing grade
+        # Note: We already checked for "final" state above, so we don't need to check it again here
+        slot_valid = False
+        if slot_type == 'resident':
+            # Resident can revise their grade at any point before finalization
+            slot_valid = True
+        elif slot_type == 'faculty':
+            # Faculty can revise their grade at any point before finalization
+            slot_valid = True
+        elif slot_type == 'arbitrator':
+            # Arbitrator can revise if task is in arbitration state
+            slot_valid = task.state == 'arbitration'
+        
+        if not slot_valid:
+            flash(f"{slot_type.capitalize()} slot is not available for this task (task state: {task.state}).", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # Fetch disease gradings for this disease
+        disease_gradings = db.query(DiseaseGrading).filter(
+            DiseaseGrading.disease_id == task.disease_id,
+            DiseaseGrading.is_active == True
+        ).order_by(DiseaseGrading.display_order).all()
+        
+        # Determine image URL
+        image_uuid = None
+        if task.encounter_file:
+            image_uuid = task.encounter_file.uuid
+        elif task.direct_image:
+            image_uuid = task.direct_image.uuid
+            
+        # Use the existing grade as the existing_grade parameter
+        existing_grade = grade
+            
+        return render_template(
+            "grading/dual_grading_task.html",
+            task=task,
+            disease_gradings=disease_gradings,
+            current_slot=slot_type,
+            existing_grade=existing_grade,
+            image_uuid=image_uuid,
+            grades=task.grades
+        )
+    finally:
+        db.close()
+
+
+@roles_required("resident", "ophthalmologist", "admin")
 def dual_grading_task(task_id: int, slot_type: str):
     """Display a task for dual grading."""
     db = Session()
@@ -21,7 +117,10 @@ def dual_grading_task(task_id: int, slot_type: str):
             selectinload(GradingTask.disease),
             selectinload(GradingTask.encounter_file),
             selectinload(GradingTask.direct_image),
-            selectinload(GradingTask.consensus)
+            selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
+            selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
+            selectinload(GradingTask.grades).selectinload(Grade.grader),
+            selectinload(GradingTask.grades).selectinload(Grade.label)
         ).filter(GradingTask.id == task_id).first()
         
         if not task:
@@ -68,6 +167,9 @@ def dual_grading_task(task_id: int, slot_type: str):
             Grade.grader_user_id == current_user.id,
             Grade.role_slot == slot_type
         ).first()
+        
+        # Pass grades for display in the template
+        grades = task.grades
             
         return render_template(
             "grading/dual_grading_task.html",
@@ -75,7 +177,8 @@ def dual_grading_task(task_id: int, slot_type: str):
             disease_gradings=disease_gradings,
             current_slot=slot_type,
             existing_grade=existing_grade,
-            image_uuid=image_uuid
+            image_uuid=image_uuid,
+            grades=grades
         )
     finally:
         db.close()

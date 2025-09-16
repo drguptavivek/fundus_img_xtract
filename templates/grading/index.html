@@ -295,7 +295,7 @@
           <td class="small text-muted">{{ g.comment or '' }}</td>
           <td class="text-end">
             {% if g.image_uuid %}
-            <a class="btn btn-sm btn-outline-primary" href="#">Revise</a>
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">Revise</a>
             {% endif %}
           </td>
         </tr>

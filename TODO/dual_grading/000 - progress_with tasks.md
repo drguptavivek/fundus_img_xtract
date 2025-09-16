@@ -81,13 +81,14 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Implemented proper role checking for revision without requiring current eligibility matrix validation
   - Added comprehensive error handling and user feedback for revision attempts
 
-### 2-Week Cooldown Logic
-  - Implemented 2-week cooldown period to prevent users from grading the same task multiple times
+### 2-Week Restriction Logic
+  - Implemented 2-week restriction to prevent users from grading the same task multiple times within a short period
   - Added `_has_user_graded_task_recently` function in `utils/getNextDualGradingTasks.py` to check if a user has graded a task within the last 2 weeks
-  - Updated task assignment logic to exclude tasks that the user has graded recently
+  - Updated task assignment logic to exclude tasks that the user has graded recently, regardless of slot
   - Enhanced `_get_filtered_tasks` function to filter out tasks that have been recently graded by the user
   - This prevents over-grading and ensures diverse grader participation in the dual grading workflow
-  - The 2-week cooldown applies to all role slots (resident, faculty, arbitrator) during task assignment
+  - After 2 weeks, users can grade the same image in a different slot of the same task
+  - The 2-week restriction applies to all role slots (resident, faculty, arbitrator) during task assignment
 
 ### NEXT STEP 
   Continue with additional security enhancements and testing.

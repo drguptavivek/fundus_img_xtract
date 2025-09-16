@@ -13,7 +13,8 @@ Scope and Principles
 - Extensible: Images can be graded for multiple diseases at different times (e.g., DR today, AMD later), each as its own task.
 - Auditable: Full history of grade attempts is retained; consensus recorded per task.
 - Revision capability: Users can revise their own gradings before task finalization, with appropriate validation.
-- 2-week cooldown: Users cannot be assigned the same task for grading within a 2-week period to prevent over-grading.
+- Role-based exclusivity: A user cannot grade the same task in multiple roles (e.g., as both resident and faculty).
+- 2-week restriction: Users cannot be assigned the same task for grading within a 2-week period, regardless of slot. After 2 weeks, users can grade the same image in a different slot of the same task.
 
 Key Entities (Normalized)
 - grading_task: Anchor for an image-per-disease. Holds lab_unit, state.
@@ -43,14 +44,14 @@ What Changes
 - New eligibility matrix to control who can grade which disease in which lab unit (independent of uploads mapping).
 - Grading UI/UX routes enforce verification gating and eligibility; arbitrator views prior labels with grader identities.
 - Added revision capability allowing users to edit their previous gradings before task finalization.
-- Implemented 2-week cooldown period to prevent users from grading the same task multiple times.
+- Implemented 2-week restriction to prevent users from grading the same task multiple times within a short period.
 
 Security & Compliance
 - Mask PHI in grading views; serve images by UUID-only endpoints.
 - CSRF on all forms; strict enum validation; ORM-bound parameters.
 - Logging via app success/error loggers for submissions and state transitions.
 - Revision functionality includes appropriate validation to prevent unauthorized access.
-- 2-week cooldown prevents over-grading and ensures diverse grader participation.
+- 2-week restriction prevents over-grading and ensures diverse grader participation.
 
 Out of Scope (Initial)
 - Confidence scores (not required).
@@ -121,10 +122,10 @@ flowchart TD
     REV -->|Before final state| REVSUB[Submit revised grade]
     REVSUB --> CK
 
-    %% 2-week cooldown logic
-    EC -->|Task Assignment| COOLDOWN{Recently Graded?}
-    COOLDOWN -->|Yes (within 2 weeks)| BLOCKTASK[Block Task Assignment]
-    COOLDOWN -->|No| ASSIGN[Assign Task for Grading]
+    %% 2-week restriction logic
+    EC -->|Task Assignment| TWOR{Graded within<br/>last 2 weeks?}
+    TWOR -->|Yes| BLOCK2W[Block Assignment - <br/>2-week restriction]
+    TWOR -->|No| ASSIGN[Assign Task for Grading]
 
     classDef stop fill:#fdd,stroke:#c33,stroke-width:1px,color:#600
     classDef ok fill:#dfd,stroke:#393,stroke-width:1px,color:#060
@@ -172,10 +173,10 @@ flowchart LR
     REVCHECK -->|Pass| REVFLOW["Load grading task with<br/>existing grade pre-filled"]
     REVCHECK -->|Fail| ERROR["Show error message"]
 
-    %% 2-Week Cooldown Logic
-    Q -->|Task Assignment| TWCL{_has_user_graded_task_recently?}
-    TWCL -->|Yes| BLOCK["Block Assignment - <br/>User graded this task<br/>within last 2 weeks"]
-    TWCL -->|No| ASSIGN["Assign Task for Grading"]
+    %% 2-Week Restriction Logic
+    Q -->|Task Assignment| TWOR{_has_user_graded_task_recently?}
+    TWOR -->|Yes| BLOCK["Block Assignment - <br/>User graded this task<br/>within last 2 weeks"]
+    TWOR -->|No| ASSIGN["Assign Task for Grading<br/>(After 2 weeks, user can<br/>grade in different slot)"]
 
     %% Reporting/Exports
     GT -.-> VIEW[["Denormalized View <br/> image×disease: resident, faculty, final, method"]]

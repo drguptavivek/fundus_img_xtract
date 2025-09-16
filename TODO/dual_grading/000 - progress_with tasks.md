@@ -46,8 +46,18 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Total pending Faculty Grading tasks across all diseases and lab units
   - Total pending Arbitration tasks across all diseases and lab units
   - Disease-specific breakdown for each KPI showing pending tasks by disease
+  - Added completed task KPIs to show gradings done by users
+  - Improved "My Gradings" section with pagination and additional details (slot type, lab unit, hospital)
   - All KPIs are based on logged in user's eligibility for that slot and disease
   - Admin users now properly see all tasks across all lab units
+
+### Recent Enhancements
+  - Implemented `get_user_kpi_completed_task_count_data()` function to track completed gradings by users
+  - Updated dashboard to show completed task KPIs alongside pending task KPIs
+  - Enhanced "My Gradings" section to display role slot type, lab unit name, and hospital name
+  - Fixed faculty completed KPI to correctly count all completed gradings regardless of current eligibility status
+  - Removed admin-specific logic from KPI functions to treat all users consistently
+  - Moved `get_user_kpi_completed_task_count_data` function to `utils/userGradingsDone.py` for better organization
 
 ### NEXT STEP 
   Continue with security enhancements and testing.

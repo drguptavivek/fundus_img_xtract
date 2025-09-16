@@ -36,30 +36,17 @@ def get_user_kpi_pending_task_count_data(user_id: int) -> Dict[str, Dict[str, in
         if not user:
             return {}
         
-        # Check if user is admin
-        is_admin = user.has_role('admin')
-        
         # Get all diseases
         diseases = db.query(Disease).all()
         disease_names = {disease.id: disease.name for disease in diseases}
         
-        # For admins, get all lab units; for regular users, get only eligible lab units
-        if is_admin:
-            all_lab_unit_ids = [lab_unit.id for lab_unit in db.query(LabUnit).all()]
-        
         # Get user's eligible roles
-        if is_admin:
-            # Admins can see all diseases and lab units
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.active == True
-            ).all()
-        else:
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == user_id,
-                UserDiseaseUnitRole.active == True
-            ).all()
+        eligible_roles = db.query(UserDiseaseUnitRole).filter(
+            UserDiseaseUnitRole.user_id == user_id,
+            UserDiseaseUnitRole.active == True
+        ).all()
         
-        if not eligible_roles and not is_admin:
+        if not eligible_roles:
             return {}
         
         # Group eligible lab units by disease
@@ -80,80 +67,46 @@ def get_user_kpi_pending_task_count_data(user_id: int) -> Dict[str, Dict[str, in
         # Calculate task counts for each disease
         kpi_data = {}
         
-        # For admins, include all diseases even if they have no explicit eligibility
-        if is_admin:
-            for disease_id, disease_name in disease_names.items():
-                lab_unit_ids = all_lab_unit_ids
-                
-                counts = {
-                    'resident_pending': 0,
-                    'faculty_pending': 0,
-                    'arbitration_pending': 0
-                }
-                
-                # Count resident pending tasks
+        # For all users (including admins), only include diseases where they have eligibility
+        for disease_id, info in disease_lab_units.items():
+            disease_name = disease_names.get(disease_id, f"Unknown Disease {disease_id}")
+            lab_unit_ids = list(info['lab_units'])
+            
+            counts = {
+                'resident_pending': 0,
+                'faculty_pending': 0,
+                'arbitration_pending': 0
+            }
+            
+            # Check if user has the required roles
+            has_resident_role = user.has_role('resident')
+            has_faculty_role = user.has_role('ophthalmologist')
+            
+            # Count resident pending tasks (only if user is resident and has resident eligibility)
+            if has_resident_role and info['can_grade_resident']:
                 counts['resident_pending'] = db.query(GradingTask).filter(
                     GradingTask.state == 'pending',
                     GradingTask.lab_unit_id.in_(lab_unit_ids),
                     GradingTask.disease_id == disease_id
                 ).count()
-                
-                # Count faculty pending tasks
+            
+            # Count faculty pending tasks (only if user is faculty and has faculty eligibility)
+            if has_faculty_role and info['can_grade_faculty']:
                 counts['faculty_pending'] = db.query(GradingTask).filter(
                     GradingTask.state == 'resident_done',
                     GradingTask.lab_unit_id.in_(lab_unit_ids),
                     GradingTask.disease_id == disease_id
                 ).count()
-                
-                # Count arbitration pending tasks
+            
+            # Count arbitration pending tasks (only if user is faculty and has arbitration eligibility)
+            if has_faculty_role and info['can_arbitrate']:
                 counts['arbitration_pending'] = db.query(GradingTask).filter(
                     GradingTask.state == 'arbitration',
                     GradingTask.lab_unit_id.in_(lab_unit_ids),
                     GradingTask.disease_id == disease_id
                 ).count()
-                
-                kpi_data[disease_name] = counts
-        else:
-            # For regular users, only include diseases where they have eligibility
-            for disease_id, info in disease_lab_units.items():
-                disease_name = disease_names.get(disease_id, f"Unknown Disease {disease_id}")
-                lab_unit_ids = list(info['lab_units'])
-                
-                counts = {
-                    'resident_pending': 0,
-                    'faculty_pending': 0,
-                    'arbitration_pending': 0
-                }
-                
-                # Check if user has the required roles
-                has_resident_role = user.has_role('resident')
-                has_faculty_role = user.has_role('ophthalmologist')
-                
-                # Count resident pending tasks (only if user is resident and has resident eligibility)
-                if has_resident_role and info['can_grade_resident']:
-                    counts['resident_pending'] = db.query(GradingTask).filter(
-                        GradingTask.state == 'pending',
-                        GradingTask.lab_unit_id.in_(lab_unit_ids),
-                        GradingTask.disease_id == disease_id
-                    ).count()
-                
-                # Count faculty pending tasks (only if user is faculty and has faculty eligibility)
-                if has_faculty_role and info['can_grade_faculty']:
-                    counts['faculty_pending'] = db.query(GradingTask).filter(
-                        GradingTask.state == 'resident_done',
-                        GradingTask.lab_unit_id.in_(lab_unit_ids),
-                        GradingTask.disease_id == disease_id
-                    ).count()
-                
-                # Count arbitration pending tasks (only if user is faculty and has arbitration eligibility)
-                if has_faculty_role and info['can_arbitrate']:
-                    counts['arbitration_pending'] = db.query(GradingTask).filter(
-                        GradingTask.state == 'arbitration',
-                        GradingTask.lab_unit_id.in_(lab_unit_ids),
-                        GradingTask.disease_id == disease_id
-                    ).count()
-                
-                kpi_data[disease_name] = counts
+            
+            kpi_data[disease_name] = counts
         
         return kpi_data
     finally:
@@ -173,32 +126,26 @@ def get_all_pending_resident_for_disease(user_id: int, disease_id: int) -> Dict[
     """
     db = Session()
     try:
-        # Check if user has resident role or is admin
+        # Check if user has resident role
         user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             return {'total': 0}
             
-        # Admins can see all tasks regardless of role
-        is_admin = user.has_role('admin')
-        if not is_admin and not user.has_role('resident'):
+        if not user.has_role('resident'):
             return {'total': 0}
         
-        # For admins, get all lab units for this disease
-        if is_admin:
-            lab_unit_ids = [lab_unit.id for lab_unit in db.query(LabUnit).all()]
-        else:
-            # Get all lab units where user is eligible for resident grading for this disease
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == user_id,
-                UserDiseaseUnitRole.disease_id == disease_id,
-                UserDiseaseUnitRole.active == True,
-                UserDiseaseUnitRole.can_grade_resident == True
-            ).all()
-            
-            if not eligible_roles:
-                return {'total': 0}
-            
-            lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
+        # Get all lab units where user is eligible for resident grading for this disease
+        eligible_roles = db.query(UserDiseaseUnitRole).filter(
+            UserDiseaseUnitRole.user_id == user_id,
+            UserDiseaseUnitRole.disease_id == disease_id,
+            UserDiseaseUnitRole.active == True,
+            UserDiseaseUnitRole.can_grade_resident == True
+        ).all()
+        
+        if not eligible_roles:
+            return {'total': 0}
+        
+        lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
         
         # Count pending tasks across all eligible lab units
         total = db.query(GradingTask).filter(
@@ -225,32 +172,26 @@ def get_all_pending_faculty_for_disease(user_id: int, disease_id: int) -> Dict[s
     """
     db = Session()
     try:
-        # Check if user has faculty role (ophthalmologist) or is admin
+        # Check if user has faculty role (ophthalmologist)
         user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             return {'total': 0}
             
-        # Admins can see all tasks regardless of role
-        is_admin = user.has_role('admin')
-        if not is_admin and not user.has_role('ophthalmologist'):
+        if not user.has_role('ophthalmologist'):
             return {'total': 0}
         
-        # For admins, get all lab units for this disease
-        if is_admin:
-            lab_unit_ids = [lab_unit.id for lab_unit in db.query(LabUnit).all()]
-        else:
-            # Get all lab units where user is eligible for faculty grading for this disease
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == user_id,
-                UserDiseaseUnitRole.disease_id == disease_id,
-                UserDiseaseUnitRole.active == True,
-                UserDiseaseUnitRole.can_grade_faculty == True
-            ).all()
-            
-            if not eligible_roles:
-                return {'total': 0}
-            
-            lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
+        # Get all lab units where user is eligible for faculty grading for this disease
+        eligible_roles = db.query(UserDiseaseUnitRole).filter(
+            UserDiseaseUnitRole.user_id == user_id,
+            UserDiseaseUnitRole.disease_id == disease_id,
+            UserDiseaseUnitRole.active == True,
+            UserDiseaseUnitRole.can_grade_faculty == True
+        ).all()
+        
+        if not eligible_roles:
+            return {'total': 0}
+        
+        lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
         
         # Count resident_done tasks across all eligible lab units
         total = db.query(GradingTask).filter(
@@ -277,32 +218,26 @@ def get_all_pending_arbitration_for_disease(user_id: int, disease_id: int) -> Di
     """
     db = Session()
     try:
-        # Check if user has arbitration role (ophthalmologist) or is admin
+        # Check if user has arbitration role (ophthalmologist)
         user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
         if not user:
             return {'total': 0}
             
-        # Admins can see all tasks regardless of role
-        is_admin = user.has_role('admin')
-        if not is_admin and not user.has_role('ophthalmologist'):
+        if not user.has_role('ophthalmologist'):
             return {'total': 0}
         
-        # For admins, get all lab units for this disease
-        if is_admin:
-            lab_unit_ids = [lab_unit.id for lab_unit in db.query(LabUnit).all()]
-        else:
-            # Get all lab units where user is eligible for arbitration for this disease
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == user_id,
-                UserDiseaseUnitRole.disease_id == disease_id,
-                UserDiseaseUnitRole.active == True,
-                UserDiseaseUnitRole.can_arbitrate == True
-            ).all()
-            
-            if not eligible_roles:
-                return {'total': 0}
-            
-            lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
+        # Get all lab units where user is eligible for arbitration for this disease
+        eligible_roles = db.query(UserDiseaseUnitRole).filter(
+            UserDiseaseUnitRole.user_id == user_id,
+            UserDiseaseUnitRole.disease_id == disease_id,
+            UserDiseaseUnitRole.active == True,
+            UserDiseaseUnitRole.can_arbitrate == True
+        ).all()
+        
+        if not eligible_roles:
+            return {'total': 0}
+        
+        lab_unit_ids = [role.lab_unit_id for role in eligible_roles]
         
         # Count arbitration tasks across all eligible lab units
         total = db.query(GradingTask).filter(
@@ -542,10 +477,6 @@ def get_user_eligibility_for_task(user_id: int, task_id: int, role_slot: str) ->
         if not user:
             return False
             
-        # Admins are eligible for all slots
-        if user.has_role('admin'):
-            return True
-            
         # Check role requirements
         if role_slot == 'resident' and not user.has_role('resident'):
             return False
@@ -625,165 +556,5 @@ def get_next_eligible_task(user_id: int, role_slot: str, lab_unit_id: Optional[i
         # For now, we'll just return the first available task
         
         return query.first()
-    finally:
-        db.close()
-
-
-def get_user_kpi_completed_task_count_data(user_id: int) -> Dict[str, Dict[str, int]]:
-    """
-    Get KPI data for each core disease for completed tasks across all mapped lab units for each slot of a user.
-    
-    This function provides a comprehensive view of completed tasks by disease for all eligible slots
-    (resident, faculty, arbitration) across all lab units where the user has eligibility.
-    
-    Args:
-        user_id: The ID of the user
-        
-    Returns:
-        A dictionary with disease names as keys and slot counts as values:
-        {
-            'Disease Name': {
-                'resident_completed': count,
-                'faculty_completed': count,
-                'arbitration_completed': count
-            },
-            ...
-        }
-    """
-    from models import Grade  # Import here to avoid circular imports
-    
-    db = Session()
-    try:
-        # Get user with roles
-        user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
-        if not user:
-            return {}
-        
-        # Check if user is admin
-        is_admin = user.has_role('admin')
-        
-        # Get all diseases
-        diseases = db.query(Disease).all()
-        disease_names = {disease.id: disease.name for disease in diseases}
-        
-        # For admins, get all lab units; for regular users, get only eligible lab units
-        if is_admin:
-            all_lab_unit_ids = [lab_unit.id for lab_unit in db.query(LabUnit).all()]
-        
-        # Get user's eligible roles
-        if is_admin:
-            # Admins can see all diseases and lab units
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.active == True
-            ).all()
-        else:
-            eligible_roles = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == user_id,
-                UserDiseaseUnitRole.active == True
-            ).all()
-        
-        if not eligible_roles and not is_admin:
-            return {}
-        
-        # Group eligible lab units by disease
-        disease_lab_units = {}
-        for role in eligible_roles:
-            if role.disease_id not in disease_lab_units:
-                disease_lab_units[role.disease_id] = {
-                    'lab_units': set(),
-                    'can_grade_resident': False,
-                    'can_grade_faculty': False,
-                    'can_arbitrate': False
-                }
-            disease_lab_units[role.disease_id]['lab_units'].add(role.lab_unit_id)
-            disease_lab_units[role.disease_id]['can_grade_resident'] |= role.can_grade_resident
-            disease_lab_units[role.disease_id]['can_grade_faculty'] |= role.can_grade_faculty
-            disease_lab_units[role.disease_id]['can_arbitrate'] |= role.can_arbitrate
-        
-        # Calculate task counts for each disease based on completed gradings
-        kpi_data = {}
-        
-        # For admins, include all diseases even if they have no explicit eligibility
-        if is_admin:
-            for disease_id, disease_name in disease_names.items():
-                lab_unit_ids = all_lab_unit_ids
-                
-                counts = {
-                    'resident_completed': 0,
-                    'faculty_completed': 0,
-                    'arbitration_completed': 0
-                }
-                
-                # Count resident completed tasks (resident gradings)
-                counts['resident_completed'] = db.query(Grade).filter(
-                    Grade.grader_user_id == user_id,
-                    Grade.role_slot == 'resident',
-                    Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                    Grade.task.has(disease_id == disease_id)
-                ).count()
-                
-                # Count faculty completed tasks (faculty gradings)
-                counts['faculty_completed'] = db.query(Grade).filter(
-                    Grade.grader_user_id == user_id,
-                    Grade.role_slot == 'faculty',
-                    Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                    Grade.task.has(disease_id == disease_id)
-                ).count()
-                
-                # Count arbitration completed tasks (arbitrator gradings)
-                counts['arbitration_completed'] = db.query(Grade).filter(
-                    Grade.grader_user_id == user_id,
-                    Grade.role_slot == 'arbitrator',
-                    Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                    Grade.task.has(disease_id == disease_id)
-                ).count()
-                
-                kpi_data[disease_name] = counts
-        else:
-            # For regular users, only include diseases where they have eligibility
-            for disease_id, info in disease_lab_units.items():
-                disease_name = disease_names.get(disease_id, f"Unknown Disease {disease_id}")
-                lab_unit_ids = list(info['lab_units'])
-                
-                counts = {
-                    'resident_completed': 0,
-                    'faculty_completed': 0,
-                    'arbitration_completed': 0
-                }
-                
-                # Check if user has the required roles
-                has_resident_role = user.has_role('resident')
-                has_faculty_role = user.has_role('ophthalmologist')
-                
-                # Count resident completed tasks (only if user is resident and has resident eligibility)
-                if has_resident_role and info['can_grade_resident']:
-                    counts['resident_completed'] = db.query(Grade).filter(
-                        Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'resident',
-                        Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                        Grade.task.has(disease_id == disease_id)
-                    ).count()
-                
-                # Count faculty completed tasks (only if user is faculty and has faculty eligibility)
-                if has_faculty_role and info['can_grade_faculty']:
-                    counts['faculty_completed'] = db.query(Grade).filter(
-                        Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'faculty',
-                        Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                        Grade.task.has(disease_id == disease_id)
-                    ).count()
-                
-                # Count arbitration completed tasks (only if user is faculty and has arbitration eligibility)
-                if has_faculty_role and info['can_arbitrate']:
-                    counts['arbitration_completed'] = db.query(Grade).filter(
-                        Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'arbitrator',
-                        Grade.task.has(lab_unit_id.in_(lab_unit_ids)),
-                        Grade.task.has(disease_id == disease_id)
-                    ).count()
-                
-                kpi_data[disease_name] = counts
-        
-        return kpi_data
     finally:
         db.close()

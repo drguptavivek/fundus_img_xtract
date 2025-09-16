@@ -47,12 +47,12 @@ Phases and Deliverables
 - Admin training for eligibility UI.
 
 Milestone Checklist
-- M1: Schema + setup scripts.
-- M2: Eligibility admin API + UI.
-- M3: Task services + auto-creation hooks.
-- M4: Resident/Faculty flows + consensus.
-- M5: Arbitration flows.
-- M6: Dashboard + start-grade logic.
-- M7: Denormalized view + reports.
-- M8: Test suite + docs.
+- M1: Schema + setup scripts. ✅
+- M2: Eligibility admin API + UI. ✅
+- M3: Task services + auto-creation hooks. ✅
+- M4: Resident/Faculty flows + consensus. ✅
+- M5: Arbitration flows. ✅
+- M6: Dashboard + start-grade logic. ⏳
+- M7: Denormalized view + reports. ⏳
+- M8: Test suite + docs. ⏳
 

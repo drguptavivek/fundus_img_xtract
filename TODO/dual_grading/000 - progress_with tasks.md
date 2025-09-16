@@ -29,8 +29,15 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - `get_next_eligible_task()`: Get the next eligible task for a user and role slot
   - All functions properly handle database sessions and use selectinload for efficient querying
 
+### Grading Flow (Routes)
+  The Grading Flow has been successfully implemented:
+  - Resident/Faculty submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table
+  - Arbitration routes: list/claim tasks in `arbitration` state; enforce ophthalmologist + can_arbitrate and exclude prior graders
+  - Consensus logic: when resident + faculty labels match, write `consensus(method=match)`; else escalate to arbitration
+  - Arbitration submission: enforces rules; writes `consensus(method=adjudication)` and sets state=final
+
 ### NEXT STEP 
-  Proceed to the next major phase of the plan: implementing the Grading Flow (Routes) which involves building the resident/faculty submit routes, arbitration routes, and consensus logic.
+  Proceed to the next major phase of the plan: improving the Dashboard and "Start Grading" functionality to better select verified tasks by eligibility, prioritizing cases with other-slot graded.
 
 
  

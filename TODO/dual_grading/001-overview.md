@@ -2,6 +2,8 @@
 
 Purpose: Introduce a normalized, extensible grading workflow where each image can be graded independently per disease by a Resident and Faculty; disagreements are resolved by a third Ophthalmologist (Arbitrator). Eligibility to grade/arbitrate is controlled per user, per disease, and per lab unit. Only anonymized/verified images enter the grading flow.
 
+Status: ✅ Core implementation complete, 🔄 Dashboard/UX improvements in progress
+
 Scope and Principles
 - Per-disease tasks: Exactly one grading task per image×disease globally. The optional `lab_unit_id` on a task is for grading assignment and queue scoping only (which graders see/work the task); it does not redefine image identity. Once any image×disease task reaches a final consensus (agreement or adjudication) in any lab unit, the gold standard is established and the image must not be re-tasked for the same disease in another lab unit.
 - Dual independent grading: Resident and Faculty submit independently and are masked from each other.

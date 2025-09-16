@@ -1,9 +1,9 @@
 # TODO — Dual Grading Rollout Checklist
 
 Foundations
-- [ ] Add models: `grading_task`, `grade`, `consensus`, `user_disease_unit_role`, `ai_grade` (optional) in `models.py` (PEP 8/484, check constraints, indexes).
-- [ ] Add migrations in `scripts/` and update `scripts/setup_db.py` and `scripts/migrations.md`.
-- [ ] Seed eligibility from `user_roles` × selected grading lab units (no designation usage).
+- [x] Add models: `grading_task`, `grade`, `consensus`, `user_disease_unit_role`, `ai_grade` (optional) in `models.py` (PEP 8/484, check constraints, indexes).
+- [x] Add migrations in `scripts/` and update `scripts/setup_db.py` and `scripts/migrations.md`.
+- [x] Seed eligibility from `user_roles` × selected grading lab units (no designation usage).
 
 Eligibility + Admin
 - [X] API: CRUD endpoints for `user_disease_unit_role`.
@@ -11,22 +11,22 @@ Eligibility + Admin
 - [X] Summary endpoints per lab unit + disease listing eligible residents/faculty/arbitrators.
 
 Task Creation
-- [] Service: `create_or_get_task(image_ref, disease_id, lab_unit_id)` with exclusivity and idempotency (global one task per image×disease; do not mutate lab_unit).
-- [ ] Service: `ensure_task(image_uuid, disease_id)` for on-demand creation.
-- [ ] Hooks: Direct verification → create native-disease tasks.
-- [ ] Hooks: DR verified encounter → create DR tasks for all images.
-- [ ] Hooks: Glaucoma verified encounter → create Glaucoma tasks for all images.
- - [ ] Guardrail: If an image×disease task is `final`, block cross‑lab reassignment and surface a friendly 409 message (gold standard already set).
+- [x] Service: `create_or_get_task(image_ref, disease_id, lab_unit_id)` with exclusivity and idempotency (global one task per image×disease; do not mutate lab_unit).
+- [x] Service: `ensure_task(image_uuid, disease_id)` for on-demand creation.
+- [x] Hooks: Direct verification → create native-disease tasks.
+- [x] Hooks: DR verified encounter → create DR tasks for all images.
+- [x] Hooks: Glaucoma verified encounter → create Glaucoma tasks for all images.
+ - [x] Guardrail: If an image×disease task is `final`, block cross‑lab reassignment and surface a friendly 409 message (gold standard already set).
 
 Grading Flow
-- [ ] Resident submit: eligibility + verification gating + upsert grade.
-- [ ] Faculty submit: eligibility + verification gating + upsert grade.
-- [ ] Consensus: if labels match → write consensus(method=match), state=final.
-- [ ] Escalation: mismatch → state=arbitration; arbitrator pool selection.
-- [ ] Arbitration submit: enforce rules; write consensus(method=adjudication), state=final.
+- [x] Resident submit: eligibility + verification gating + upsert grade.
+- [x] Faculty submit: eligibility + verification gating + upsert grade.
+- [x] Consensus: if labels match → write consensus(method=match), state=final.
+- [x] Escalation: mismatch → state=arbitration; arbitrator pool selection.
+- [x] Arbitration submit: enforce rules; write consensus(method=adjudication), state=final.
 
 Next-Task & Dashboard
-- [ ] “Start Grading” selects verified tasks by eligibility, prioritizing cases with other-slot graded.
+- [ ] "Start Grading" selects verified tasks by eligibility, prioritizing cases with other-slot graded.
 - [ ] Counts/charts: show verified-only; summarize per disease and lab unit.
  - [ ] Queue visibility filters by `(disease_id, lab_unit_id)` eligibility; exclude tasks already graded by the user for that slot.
 

@@ -1,7 +1,7 @@
 from flask import render_template, request, current_app, url_for, Response
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
-from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
+from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, ImageGrading, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
 from auth.roles import roles_required
 import pandas as pd
 import io
@@ -323,11 +323,37 @@ def image_list():
         unified_images = unified_images[:per_page]
         
         # Get gradings for all images
-        # image_gradings is no longer used as single grading is removed
         image_gradings = {}
         image_vcdr_values = {}  # To store VCDR values for encounter files
         direct_ids = [item['image'].id for item in unified_images if item['type'] == 'direct']
         encounter_ids = [item['image'].id for item in unified_images if item['type'] == 'encounter']
+        
+        if direct_ids or encounter_ids:
+            grading_conditions = []
+            if direct_ids:
+                grading_conditions.append(ImageGrading.direct_image_upload_id.in_(direct_ids))
+            if encounter_ids:
+                grading_conditions.append(ImageGrading.encounter_file_id.in_(encounter_ids))
+            
+            # Combine conditions with OR
+            if len(grading_conditions) == 1:
+                gradings_query = select(ImageGrading).where(grading_conditions[0])
+            else:
+                gradings_query = select(ImageGrading).where(or_(*grading_conditions))
+                
+            gradings = db.execute(gradings_query).scalars().all()
+            
+            # Group gradings by image ID and role
+            for grading in gradings:
+                img_id = grading.direct_image_upload_id or grading.encounter_file_id
+                if img_id not in image_gradings:
+                    image_gradings[img_id] = {}
+                
+                # Group by grader role
+                role = grading.grader_role or 'unknown'
+                if role not in image_gradings[img_id]:
+                    image_gradings[img_id][role] = []
+                image_gradings[img_id][role].append(grading)
         
         # Extract VCDR values for encounter files
         if encounter_ids:

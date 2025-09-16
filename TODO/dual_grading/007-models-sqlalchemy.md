@@ -203,7 +203,7 @@ class AIGrade(Base):
 
 ## Notes
 - Do not modify existing global roles. Slot permissions are enforced via `UserDiseaseUnitRole` + `user_roles` at request time.
-- New flows should write into `Grade` with normalized `disease_grading_id`.
+- Keep `ImageGrading` for legacy history if desired; new flows should write into `Grade` with normalized `disease_grading_id`.
 - Consider adding lightweight helpers for slot checks and verification gating in services.
 - Do not mutate `lab_unit_id` on an existing task; reassignment across lab units is not allowed once created. A final task (state = `final`) represents the gold standard and must not be recreated or moved for the same image×disease in any lab.
 

@@ -241,31 +241,21 @@ refactor the uploads blueprint to use the path /remedio_zip_uploads. Let me crea
 
   
 
-## 15 Sept 2025: Single Grading Routes Removed
+## 15 Sept 2025: Single Grading Routes and API Endpoints Removed
 
 - Removed single grading routes from the grading blueprint:
   - `/remedio/glaucoma/<uuid>` - Glaucoma grading for Remed.io ZIP files
   - `/remedio/dr/<uuid>` - DR grading for Remed.io ZIP files
   - `/direct/<uuid>` - Glaucoma grading for direct uploads
   - `/direct/disease/<uuid>/<int:disease_id>` - Disease grading for direct uploads
+- Removed API endpoints for single grading:
+  - `/api/gradings` - API endpoint for fetching gradings
 - Removed imports and route registrations in `grading/__init__.py`
-- API endpoints for single grading have been removed
-- ImageGrading model and dual grading system remain intact
+- Kept ImageGrading model and core functionality intact for legacy support
 
 Only dual grading routes are now available:
 - `/task/<int:task_id>` - Dual grading task
 - `/task/submit` - Dual grading submission
-
-## 15 Sept 2025: Single Grading (ImageGrading) Functionality Removed
-
-- Removed all `ImageGrading` (single grading) functionality as it's not used in core workflows
-- Deleted files:
-  - `api/gradings.py`
-- Updated models.py to remove `ImageGrading` model
-- Updated dashboard to remove ImageGrading queries and displays
-- Updated documentation references in TODO files
-
-The dual grading system (`Grade` model) is now the only grading system in use.
 
 ## 15 Sept 2025: Disease Specializations Functionality Removed
 

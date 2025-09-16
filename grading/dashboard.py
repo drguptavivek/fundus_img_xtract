@@ -127,7 +127,6 @@ def index():
                   joinedload(ImageGrading.direct_image)
               )
               .filter(ImageGrading.grader_user_id == getattr(current_user, 'id', None))
-              .filter(ImageGrading.task_id.isnot(None))  # Only show dual grading tasks
               .order_by(ImageGrading.updated_at.desc())
         )
         if gfor and gfor != 'all':

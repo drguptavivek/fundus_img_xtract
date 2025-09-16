@@ -262,6 +262,9 @@ def create_app():
     from preprocess import bp as preprocess_bp
     app.register_blueprint(preprocess_bp)
 
+    from api.gradings import bp as api_gradings_bp
+    app.register_blueprint(api_gradings_bp)
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager

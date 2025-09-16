@@ -47,6 +47,6 @@ Testing
  - [ ] Uniqueness/Gold standard: ensure cross‑lab `ensure_task` returns existing task if not final; returns 409 if final.
 
 Rollout
-- [ ] Feature-flag new flow.
+- [ ] Feature-flag new flow; keep legacy `ImageGrading` writes during transition.
 - [ ] Admin training and documentation.
 

@@ -72,6 +72,13 @@ def index():
         
         # Get all diseases to ensure we have entries for all diseases
         all_diseases = db.query(Disease).all()
+        diseases_data = [
+            {
+                'id': disease.id,
+                'name': disease.name
+            }
+            for disease in all_diseases
+        ]
         
         # Calculate pending KPIs using the utility function
         kpi_pending_data = get_user_kpi_pending_task_count_data(current_user.id)
@@ -146,5 +153,6 @@ def index():
         kpi_resident_completed_by_disease=kpi_resident_completed_by_disease,
         kpi_faculty_completed_by_disease=kpi_faculty_completed_by_disease,
         kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
-        user_eligibility=user_eligibility
+        user_eligibility=user_eligibility,
+        diseases=diseases_data
     )

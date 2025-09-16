@@ -7,53 +7,12 @@ import random
 from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
 from services.taskCreationServices import ensure_task as svc_ensure_task
-
-def is_user_eligible_for_slot(user, task, slot):
-    """
-    Check if a user is eligible for a specific slot (resident/faculty/arbitrator) for a task.
-    
-    Args:
-        user: The user to check
-        task: The grading task
-        slot: The slot to check ('resident', 'faculty', or 'arbitrator')
-    
-    Returns:
-        bool: True if user is eligible, False otherwise
-    """
-    if not task or not task.disease_id or not task.lab_unit_id:
-        return False
-    
-    # Check global role requirements
-    if slot == 'resident' and not user.has_role('resident'):
-        return False
-    elif slot in ('faculty', 'arbitrator') and not user.has_role('ophthalmologist'):
-        return False
-    
-    # Check eligibility matrix
-    with Session() as db:
-        eligibility = db.query(UserDiseaseUnitRole).filter(
-            UserDiseaseUnitRole.user_id == user.id,
-            UserDiseaseUnitRole.disease_id == task.disease_id,
-            UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
-            UserDiseaseUnitRole.active == True
-        ).first()
-        
-        if not eligibility:
-            return False
-            
-        # Check specific slot permissions
-        if slot == 'resident' and not eligibility.can_grade_resident:
-            return False
-        elif slot == 'faculty' and not eligibility.can_grade_faculty:
-            return False
-        elif slot == 'arbitrator' and not eligibility.can_arbitrate:
-            return False
-            
-        return True
+from utils.getNextDualGradingTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
+from utils.dualGradingUtils import get_user_eligibility_for_task
 
 
 @roles_required("resident", "ophthalmologist", "admin")
-def dual_grading_task(task_id: int):
+def dual_grading_task(task_id: int, slot_type: str):
     """Display a task for dual grading."""
     db = Session()
     try:
@@ -69,54 +28,37 @@ def dual_grading_task(task_id: int):
             flash("Task not found.", "danger")
             return redirect(url_for("grading.index"))
         
-        # Check if user is eligible for any slot
-        user_roles = []
-        if current_user.has_role('admin'):
-            # Admins can access all tasks
-            user_roles = ['resident', 'faculty', 'arbitrator']
-        else:
-            if is_user_eligible_for_slot(current_user, task, 'resident'):
-                user_roles.append('resident')
-            if is_user_eligible_for_slot(current_user, task, 'faculty'):
-                user_roles.append('faculty')
-            if is_user_eligible_for_slot(current_user, task, 'arbitrator'):
-                user_roles.append('arbitrator')
-            
-            if not user_roles:
-                flash("You are not eligible to grade this task.", "danger")
-                return redirect(url_for("grading.index"))
+        # Validate slot_type
+        if slot_type not in ['resident', 'faculty', 'arbitrator']:
+            flash("Invalid slot type.", "danger")
+            return redirect(url_for("grading.index"))
+        
+        # Check if user is eligible for the specified slot
+        if not get_user_eligibility_for_task(current_user.id, task_id, slot_type):
+            flash(f"You are not eligible to grade this task as {slot_type}.", "danger")
+            return redirect(url_for("grading.index"))
         
         # Fetch existing grades for this task
         grades = db.query(Grade).filter(Grade.task_id == task_id).all()
         
-        # Check if user has already graded this task
+        # Check if user has already graded this task for this slot
         user_grade = None
         for grade in grades:
-            if grade.grader_user_id == current_user.id:
+            if grade.grader_user_id == current_user.id and grade.role_slot == slot_type:
                 user_grade = grade
                 break
         
-        # Determine which slots are available
-        available_slots = []
-        resident_grade = next((g for g in grades if g.role_slot == 'resident'), None)
-        faculty_grade = next((g for g in grades if g.role_slot == 'faculty'), None)
+        # Additional validation: Check if the slot is actually available for this task state
+        if slot_type == 'resident' and task.state != 'pending':
+            flash("Resident slot is not available for this task.", "danger")
+            return redirect(url_for("grading.index"))
+        elif slot_type == 'faculty' and task.state != 'resident_done':
+            flash("Faculty slot is not available for this task.", "danger")
+            return redirect(url_for("grading.index"))
+        elif slot_type == 'arbitrator' and task.state != 'arbitration':
+            flash("Arbitrator slot is not available for this task.", "danger")
+            return redirect(url_for("grading.index"))
         
-        # Admins can access all slots regardless of existing grades or task state
-        if current_user.has_role('admin'):
-            if not resident_grade:
-                available_slots.append('resident')
-            if not faculty_grade:
-                available_slots.append('faculty')
-            if task.state == 'arbitration':
-                available_slots.append('arbitrator')
-        else:
-            if 'resident' in user_roles and not resident_grade:
-                available_slots.append('resident')
-            if 'faculty' in user_roles and not faculty_grade:
-                available_slots.append('faculty')
-            if 'arbitrator' in user_roles and task.state == 'arbitration':
-                available_slots.append('arbitrator')
-            
         # Fetch disease gradings for this disease
         disease_gradings = db.query(DiseaseGrading).filter(
             DiseaseGrading.disease_id == task.disease_id,
@@ -136,8 +78,8 @@ def dual_grading_task(task_id: int):
             disease_gradings=disease_gradings,
             grades=grades,
             user_grade=user_grade,
-            user_roles=user_roles,
-            available_slots=available_slots,
+            user_roles=[slot_type],  # Only the specified slot
+            available_slots=[slot_type],  # Only the specified slot
             image_uuid=image_uuid
         )
     finally:
@@ -168,7 +110,7 @@ def dual_grading_submit():
             return redirect(url_for("grading.dual_grading_task", task_id=task_id))
         
         # Eligibility check
-        if not current_user.has_role('admin') and not is_user_eligible_for_slot(current_user, task, slot):
+        if not get_user_eligibility_for_task(current_user.id, task_id, slot):
             flash("You are not eligible to grade this task for the selected role.", "danger")
             return redirect(url_for("grading.dual_grading_task", task_id=task_id))
         
@@ -267,11 +209,23 @@ def dual_grading_submit():
             # Close the current session first
             db.close()
             # Try to find the next eligible task with a new session
-            next_task = _get_next_eligible_task(None, slot)
-            if next_task:
-                return redirect(url_for("grading.dual_grading_task", task_id=next_task.id))
-            else:
+            next_task = None
+            if slot == "resident":
+                next_task = get_next_eligible_resident_task(current_user.id, task.disease_id)
+            elif slot == "faculty":
+                next_task = get_next_eligible_faculty_task(current_user.id, task.disease_id)
+            elif slot == "arbitrator":
+                next_task = get_next_eligible_arbitrator_task(current_user.id, task.disease_id)
+            
+            # Handle the result
+            if next_task is None:
                 flash("No more tasks available.", "info")
+            elif isinstance(next_task, str):
+                # It's a helpful message
+                flash(next_task, "info")
+            else:
+                # It's a GradingTask object
+                return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=slot))
         
         db.close()
         return redirect(url_for("grading.dual_grading_task", task_id=task_id))
@@ -281,63 +235,3 @@ def dual_grading_submit():
         flash("Failed to submit grade.", "danger")
         db.close()
         return redirect(url_for("grading.dual_grading_task", task_id=task_id))
-
-
-def _get_next_eligible_task(db, slot):
-    """
-    Get the next eligible task for the current user and slot.
-    
-    Args:
-        db: Database session (if None, a new session will be created)
-        slot: The slot to get tasks for ('resident', 'faculty', 'arbitrator')
-    
-    Returns:
-        GradingTask or None
-    """
-    # Get user's lab unit IDs
-    user_lab_unit_ids = [lu.id for lu in current_user.lab_units] if hasattr(current_user, 'lab_units') else []
-    if not user_lab_unit_ids:
-        return None
-    
-    # Create a new session if needed
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    
-    try:
-        # Build query for next task
-        query = db.query(GradingTask).filter(
-            GradingTask.lab_unit_id.in_(user_lab_unit_ids)
-        )
-        
-        # Filter by slot-specific states
-        if slot == "arbitrator":
-            # Arbitrators only see arbitration tasks
-            query = query.filter(GradingTask.state == "arbitration")
-        else:
-            # Residents and faculty see pending tasks or tasks where their slot hasn't graded yet
-            query = query.filter(GradingTask.state.in_(["pending", "resident_done", "faculty_done"]))
-        
-        # Exclude tasks already graded by this user for this slot
-        graded_task_ids = db.query(Grade.task_id).filter(
-            Grade.grader_user_id == current_user.id,
-            Grade.role_slot == slot
-        ).all()
-        graded_task_ids = [t[0] for t in graded_task_ids]
-        
-        if graded_task_ids:
-            query = query.filter(~GradingTask.id.in_(graded_task_ids))
-        
-        # Order by priority and created_at
-        # Prioritize tasks with one grade already submitted
-        query = query.order_by(
-            (GradingTask.state == "resident_done").desc(),
-            (GradingTask.state == "faculty_done").desc(),
-            GradingTask.created_at.asc()
-        )
-        
-        return query.first()
-    finally:
-        if close_db:
-            db.close()

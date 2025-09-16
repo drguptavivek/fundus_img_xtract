@@ -157,16 +157,16 @@ flowchart LR
     GT --> Q["Grading Queues <br/> (visible only if user eligible via DUR + user_roles)"]
 
     %% Dashboard and Revision
-    Q --> DASH[Dashboard with "My Gradings"]
-    DASH --> REV[Revise Button for existing grades]
-    REV --> REVFUNC[revise_grading route]
-    REVFUNC --> REVCHECK[Validate user is original grader<br/>and task not finalized]
-    REVCHECK -->|Pass| REVFLOW[Load grading task with<br/>existing grade pre-filled]
-    REVCHECK -->|Fail| ERROR[Show error message]
+    Q --> DASH["Dashboard with My Gradings"]
+    DASH --> REV["Revise Button for existing grades"]
+    REV --> REVFUNC["revise_grading route"]
+    REVFUNC --> REVCHECK["Validate user is original grader<br/>and task not finalized"]
+    REVCHECK -->|Pass| REVFLOW["Load grading task with<br/>existing grade pre-filled"]
+    REVCHECK -->|Fail| ERROR["Show error message"]
 
     %% Reporting/Exports
     GT -.-> VIEW[["Denormalized View <br/> image×disease: resident, faculty, final, method"]]
-    VIEW --> CSV[CSV Exports / Dashboards]
+    VIEW --> CSV["CSV Exports / Dashboards"]
 
     classDef db fill:#eef,stroke:#66f,stroke-width:1px
     classDef svc fill:#efe,stroke:#393,stroke-width:1px

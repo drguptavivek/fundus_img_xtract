@@ -30,29 +30,50 @@ The dual grading system has been largely implemented with core functionality com
 
 ### 5. Utility Functions
 - User gradings retrieval with pagination
-- Dual grading utility functions for pending tasks by role
+- Dual grading utility functions for pending tasks by role:
+  - Functions that work across all eligible lab units for a disease:
+    - `get_all_pending_resident_for_disease()`
+    - `get_all_pending_faculty_for_disease()`
+    - `get_all_pending_arbitration_for_disease()`
+  - Functions that work with specific lab unit and disease combinations:
+    - `get_all_pending_resident_for_labUnit_disease()`
+    - `get_all_pending_faculty_for_labUnit_disease()`
+    - `get_all_pending_arbitration_for_labUnit_disease()`
 - Eligibility checking functions
 - Next task selection logic
 
+### 6. Master Utility Functions
+- `get_all_diseases()`: Retrieve all diseases
+- `get_disease_gradings()`: Get gradings for a specific disease
+- `get_all_hospitals()`: Get all hospitals
+- `get_all_lab_units()`: Get all lab units
+- `get_hosp_lab_units()`: Get lab units for a specific hospital
+- `get_all_areas()`: Get all areas
+- `get_all_cameras()`: Get all cameras
+
+### 7. Dashboard Improvements
+- KPIs for pending tasks:
+  - Total pending Resident Grading tasks across all diseases and lab units
+  - Total pending Faculty Grading tasks across all diseases and lab units
+  - Total pending Arbitration tasks across all diseases and lab units
+- Disease-specific breakdown for each KPI showing pending tasks by disease
+- All KPIs are based on logged in user's eligibility for that slot and disease
+- Admin users now properly see all tasks across all lab units
+
 ## In Progress Components 🔄
 
-### 1. Dashboard & "Start Grading"
-- Improving next-task selection to prioritize cases with other-slot graded
-- Enhanced counts and charts showing only verified tasks
-- Better queue visibility filtering by eligibility
-
-### 2. Security & Validation
+### 1. Security & Validation
 - Adding CSRF protection to all forms
 - Implementing strict enum validation
 - Ensuring PHI masking in grading routes
 
-### 3. Testing
+### 2. Testing
 - Unit tests for eligibility enforcement
 - API tests for eligibility CRUD and task management
 - Permission validation tests
 - Gold standard enforcement tests
 
-### 4. Rollout Preparation
+### 3. Rollout Preparation
 - Feature-flag implementation for new flow
 - Admin training documentation
 - Legacy `ImageGrading` preservation during transition
@@ -81,12 +102,11 @@ The dual grading system has been largely implemented with core functionality com
 
 ## Next Steps
 
-1. Complete dashboard improvements for better task prioritization
-2. Implement comprehensive security measures (CSRF, validation, PHI masking)
-3. Develop full test suite for all components
-4. Prepare for rollout with feature flags
-5. Create admin training materials
-6. Implement denormalized view for reporting (optional)
+1. Complete security measures (CSRF, validation, PHI masking)
+2. Develop full test suite for all components
+3. Prepare for rollout with feature flags
+4. Create admin training materials
+5. Implement denormalized view for reporting (optional)
 
 ## Status Legend
 - ✅ Complete

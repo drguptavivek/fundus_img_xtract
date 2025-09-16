@@ -22,12 +22,16 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 
 ### Dual Grading Utility Functions
   Enhanced `utils/dualGradingUtils.py` with additional utility functions:
-  - `get_all_pending_resident()`: Get all pending resident tasks for a user, lab unit, and disease
-  - `get_all_pending_faculty()`: Get all pending faculty tasks for a user, lab unit, and disease
-  - `get_all_pending_arbitration()`: Get all pending arbitration tasks for a user, lab unit, and disease
+  - `get_all_pending_resident_for_disease()`: Get total pending resident tasks for a user and disease across all eligible lab units
+  - `get_all_pending_faculty_for_disease()`: Get total pending faculty tasks for a user and disease across all eligible lab units
+  - `get_all_pending_arbitration_for_disease()`: Get total pending arbitration tasks for a user and disease across all eligible lab units
+  - `get_all_pending_resident_for_labUnit_disease()`: Get all pending resident tasks for a user, specific lab unit, and disease
+  - `get_all_pending_faculty_for_labUnit_disease()`: Get all pending faculty tasks for a user, specific lab unit, and disease
+  - `get_all_pending_arbitration_for_labUnit_disease()`: Get all pending arbitration tasks for a user, specific lab unit, and disease
   - `get_user_eligibility_for_task()`: Check if a user is eligible for a specific role slot for a task
   - `get_next_eligible_task()`: Get the next eligible task for a user and role slot
   - All functions properly handle database sessions and use selectinload for efficient querying
+  - Admin users are now properly handled to see all tasks across all lab units
 
 ### Grading Flow (Routes)
   The Grading Flow has been successfully implemented:
@@ -36,8 +40,17 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Consensus logic: when resident + faculty labels match, write `consensus(method=match)`; else escalate to arbitration
   - Arbitration submission: enforces rules; writes `consensus(method=adjudication)` and sets state=final
 
+### Dashboard Improvements
+  Enhanced the dashboard with KPIs for better visibility:
+  - Total pending Resident Grading tasks across all diseases and lab units
+  - Total pending Faculty Grading tasks across all diseases and lab units
+  - Total pending Arbitration tasks across all diseases and lab units
+  - Disease-specific breakdown for each KPI showing pending tasks by disease
+  - All KPIs are based on logged in user's eligibility for that slot and disease
+  - Admin users now properly see all tasks across all lab units
+
 ### NEXT STEP 
-  Proceed to the next major phase of the plan: improving the Dashboard and "Start Grading" functionality to better select verified tasks by eligibility, prioritizing cases with other-slot graded.
+  Continue with security enhancements and testing.
 
 
  

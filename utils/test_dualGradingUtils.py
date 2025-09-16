@@ -1,44 +1,37 @@
 """
-Test for dualGradingUtils.py
+Test cases for dualGradingUtils functions
 """
 
-# This would be a test file to verify the dual grading utility functions work correctly
-# In a real scenario, you would run this with a testing framework like pytest
+import unittest
+from utils.dualGradingUtils import get_all_pending_resident_for_disease, get_all_pending_faculty_for_disease, get_all_pending_arbitration_for_disease
 
-def test_get_all_pending_resident():
-    # This is a placeholder for actual tests
-    # You would need to set up a test database with sample data
-    # Tests get_all_pending_resident function which returns:
-    # {'total': int, 'first_task_id': int, 'first_task_img_uuid': str, 'first_task_lab_unit_id': int}
-    print("Test placeholder for get_all_pending_resident")
+
+class TestDualGradingUtils(unittest.TestCase):
     
-def test_get_all_pending_faculty():
-    # This is a placeholder for actual tests
-    # You would need to set up a test database with sample data
-    # Tests get_all_pending_faculty function which returns:
-    # {'total': int, 'first_task_id': int, 'first_task_img_uuid': str, 'first_task_lab_unit_id': int}
-    print("Test placeholder for get_all_pending_faculty")
+    def test_get_all_pending_resident_for_disease(self):
+        """Test that get_all_pending_resident_for_disease returns a dictionary with total count"""
+        # Test with a non-existent user/disease combination
+        result = get_all_pending_resident_for_disease(999999, 999999)
+        self.assertIsInstance(result, dict)
+        self.assertIn('total', result)
+        self.assertEqual(result['total'], 0)
     
-def test_get_all_pending_arbitration():
-    # This is a placeholder for actual tests
-    # You would need to set up a test database with sample data
-    # Tests get_all_pending_arbitration function which returns:
-    # {'total': int, 'first_task_id': int, 'first_task_img_uuid': str, 'first_task_lab_unit_id': int}
-    print("Test placeholder for get_all_pending_arbitration")
+    def test_get_all_pending_faculty_for_disease(self):
+        """Test that get_all_pending_faculty_for_disease returns a dictionary with total count"""
+        # Test with a non-existent user/disease combination
+        result = get_all_pending_faculty_for_disease(999999, 999999)
+        self.assertIsInstance(result, dict)
+        self.assertIn('total', result)
+        self.assertEqual(result['total'], 0)
     
-def test_get_user_eligibility_for_task():
-    # This is a placeholder for actual tests
-    # You would need to set up a test database with sample data
-    print("Test placeholder for get_user_eligibility_for_task")
-    
-def test_get_next_eligible_task():
-    # This is a placeholder for actual tests
-    # You would need to set up a test database with sample data
-    print("Test placeholder for get_next_eligible_task")
-    
-if __name__ == "__main__":
-    test_get_all_pending_resident()
-    test_get_all_pending_faculty()
-    test_get_all_pending_arbitration()
-    test_get_user_eligibility_for_task()
-    test_get_next_eligible_task()
+    def test_get_all_pending_arbitration_for_disease(self):
+        """Test that get_all_pending_arbitration_for_disease returns a dictionary with total count"""
+        # Test with a non-existent user/disease combination
+        result = get_all_pending_arbitration_for_disease(999999, 999999)
+        self.assertIsInstance(result, dict)
+        self.assertIn('total', result)
+        self.assertEqual(result['total'], 0)
+
+
+if __name__ == '__main__':
+    unittest.main()

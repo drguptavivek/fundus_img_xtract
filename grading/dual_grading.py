@@ -311,14 +311,14 @@ def dual_grading_submit():
         grade_id = existing_grade.id if is_revision else "N/A"
         
         # Create log message
-        log_message = f"Grade submission - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
+        log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: {slot}] [Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
         if comment:
-            log_message += f" - [Comments - {comment}]"
+            log_message += f" [Comments - {comment}]"
             
         # If this is a revision, also log the previous grade and comment
         if is_revision and prev_grade_id is not None:
             prev_comment_display = prev_comment if prev_comment else "None"
-            log_message += f" - [Previous Grade: {prev_grade_id}] - [Previous Comment: {prev_comment_display}]"
+            log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
         
         # Log using dedicated grades logger
         grades_logger = logging.getLogger("grades")

@@ -91,6 +91,8 @@ def create_app():
     error_log_path   = os.getenv("HTTP_ERROR_LOG",   os.path.join(log_dir, "http_error.log"))
     grades_log_path  = os.getenv("GRADES_LOG",       os.path.join(log_dir, "grades.log"))
     debug_log_path   = os.getenv("DEBUG_LOG",        os.path.join(log_dir, "debug.log"))
+    auth_log_path    = os.getenv("AUTH_LOG",         os.path.join(log_dir, "auth.log"))
+    activity_log_path    = os.getenv("ACTIVITY_LOG",         os.path.join(log_dir, "activity.log"))
 
     # Only attach handlers in the reloader child (or when not using the reloader)
     is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
@@ -99,18 +101,26 @@ def create_app():
     http_error_logger   = logging.getLogger("http_error")
     grades_logger       = logging.getLogger("grades")
     debug_logger        = logging.getLogger("debug")
+    auth_logger         = logging.getLogger("auth")
+    activity_logger     = logging.getLogger("activity")
+
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
     grades_logger.setLevel(logging.INFO)
     debug_logger.setLevel(logging.DEBUG)
+    auth_logger.setLevel(logging.INFO)
+    activity_logger.setLevel(logging.INFO)
+    
     http_success_logger.propagate = False
     http_error_logger.propagate   = False
     grades_logger.propagate       = False
     debug_logger.propagate        = False
+    auth_logger.propagate         = False
+    activity_logger.propagate     = False
 
     if is_reloader_child:
         # Clean up any old handlers (debug reloader / multiple inits)
-        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger):
+        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger, auth_logger, activity_logger):
             for h in list(lg.handlers):
                 lg.removeHandler(h)
                 try: h.close()
@@ -129,6 +139,8 @@ def create_app():
             error_handler   = FileHandler(error_log_path,   encoding="utf-8", delay=True)
             grades_handler  = FileHandler(grades_log_path,  encoding="utf-8", delay=True)
             debug_handler   = FileHandler(debug_log_path,   encoding="utf-8", delay=True)
+            auth_handler     = FileHandler(auth_log_path,    encoding="utf-8", delay=True)
+            activity_logger = FileHandler(activity_log_path, encoding="utf-8", delay=True)
         else:
             success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
@@ -138,17 +150,25 @@ def create_app():
                                                   backupCount=5, encoding="utf-8", delay=True)
             debug_handler   = RotatingFileHandler(debug_log_path,   maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
+            auth_handler    = RotatingFileHandler(auth_log_path,    maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
+            activity_handler    = RotatingFileHandler(activity_log_path,    maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         success_handler.setFormatter(fmt)
         error_handler.setFormatter(fmt)
         grades_handler.setFormatter(fmt)
         debug_handler.setFormatter(fmt)
+        auth_handler.setFormatter(fmt)
+        activity_handler.setFormatter(fmt)
 
         http_success_logger.addHandler(success_handler)
         http_error_logger.addHandler(error_handler)
         grades_logger.addHandler(grades_handler)
         debug_logger.addHandler(debug_handler)
+        auth_logger.addHandler(auth_handler)
+        activity_logger.addHandler(activity_handler)
 
         # Keep app.logger free of its own handlers; route its warnings/errors to error file
         app.logger.handlers = []
@@ -165,6 +185,8 @@ def create_app():
         http_success_logger.info("HTTP success logger initialized at %s", success_log_path)
         grades_logger.info("Grades logger initialized at %s", grades_log_path)
         debug_logger.info("Debug logger initialized at %s", debug_log_path)
+        auth_logger.info("Auth logger initialized at %s", auth_log_path)
+        activity_logger.info("Activity logger initialized at %s", activity_log_path)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor
@@ -201,6 +223,14 @@ def create_app():
         now = int(_t.time())
         timeout_s = app.config.get("INACTIVITY_TIMEOUT_MINUTES", 30) * 60
         if last and (now - last) > timeout_s:
+            # Log session timeout
+            from flask_login import current_user
+            from auth.utils import get_client_ip
+            username = getattr(current_user, 'username', 'Unknown') if current_user.is_authenticated else 'Unknown'
+            ip = get_client_ip()
+            auth_logger = logging.getLogger("auth")
+            auth_logger.info(f"Session timeout - User: {username}, IP: {ip}, Last active: {last}, Timeout duration: {timeout_s // 60} minutes")
+            
             logout_user()
             session.clear()
             flash(f"Session expired after {timeout_s // 60} minutes of inactivity.", "warning")

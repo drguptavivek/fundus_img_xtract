@@ -8,6 +8,7 @@ The application creates log files in the `logs` directory with the following str
 
 ```
 logs/
+├── auth.log                     # Authentication events (logins, logouts, session timeouts)
 ├── debug.log                    # Detailed debug information (DEBUG level)
 ├── grades.log                   # Grade submissions and revisions
 ├── http_success.log             # Successful HTTP requests
@@ -15,7 +16,7 @@ logs/
 ├── http_success.log.1-.5        # Rotated success logs
 ├── malicious_uploads.log        # Security logs for malicious upload attempts
 ├── process_pdf_error_log.txt    # PDF processing errors
-├── process_pdf_success_log.txt  # Successful PDF processing
+├── process_pdf_success_log.txt # Successful PDF processing
 ├── zip_main_process_log.txt     # ZIP file processing logs
 ```
 
@@ -53,6 +54,25 @@ Example log entry:
 Example log entry:
 ```
 2023-10-15 14:32:10,456 [WARNING] 192.168.1.100 "POST https://example.com/upload" 500 UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" duration=120ms
+```
+
+## Authentication Logging (auth.log)
+
+Records all authentication-related events including:
+- User login attempts (successful and failed)
+- User logout events
+- Session timeout events
+- Account lockouts
+- IP address lockouts
+
+Example log entries:
+```
+2025-09-17 15:30:22,884 [INFO] Successful login - User: admin, IP: 127.0.0.1
+2025-09-17 15:30:22,884 [WARNING] Failed login attempt - User: admin, IP: 192.168.1.100
+2025-09-17 15:30:22,884 [INFO] User logout - User: admin, IP: 127.0.0.1
+2025-09-17 15:30:22,884 [INFO] Session timeout - User: admin, IP: 127.0.0.1, Last active: 1234567890, Timeout duration: 30 minutes
+2025-09-17 15:30:22,884 [WARNING] User locked due to repeated failures - User: admin, IP: 192.168.1.100, Until: 2025-09-17T19:30:22
+2025-09-17 15:30:22,884 [WARNING] IP locked due to repeated failures - IP: 192.168.1.100, Until: 2025-09-17T19:30:22
 ```
 
 ## Grade Submission Logging (grades.log)
@@ -270,6 +290,7 @@ Logging behavior can be customized through environment variables:
 | `HTTP_ERROR_LOG` | Path to error log file | `logs/http_error.log` |
 | `GRADES_LOG` | Path to grades log file | `logs/grades.log` |
 | `DEBUG_LOG` | Path to debug log file | `logs/debug.log` |
+| `AUTH_LOG` | Path to auth log file | `logs/auth.log` |
 | `HTTP_LOG_DISABLE_ROTATION` | Disable log rotation | Not set (rotation enabled) |
 | `ENABLE_LOG_ROTATION_ON_WINDOWS` | Enable rotation on Windows | `0` (disabled) |
 
@@ -292,6 +313,18 @@ tail -f logs/grades.log
 
 # Analyze PDF processing success rate
 wc -l logs/process_pdf_success_log.txt logs/process_pdf_error_log.txt
+
+# Monitor authentication events
+tail -f logs/auth.log
+
+# Find failed login attempts in auth log
+grep "Failed login attempt" logs/auth.log
+
+# Find session timeouts
+grep "Session timeout" logs/auth.log
+
+# Count successful logins by user
+grep "Successful login" logs/auth.log | awk -F' - User: ' '{print $2}' | awk -F',' '{print $1}' | sort | uniq -c | sort -nr
 ```
 
 ## Privacy Considerations

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import timedelta
 import time
+import logging
 from flask import render_template, request, redirect, session, url_for, flash, current_app, abort
 from flask_login import login_user, logout_user, LoginManager, login_required, current_user
 from sqlalchemy import func, select
@@ -13,6 +14,9 @@ from flask import flash
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock  # type: ignore
+
+# Get the auth logger
+auth_logger = logging.getLogger("auth")
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -124,6 +128,8 @@ def login():
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
                 login_user(user)
+                # Log successful login
+                auth_logger.info(f"Successful login - User: {username}, IP: {ip}")
                 # Start sliding inactivity window
                 session.permanent = True  # enable cookie expiration control
                 session["last_active"] = int(time.time())
@@ -134,14 +140,18 @@ def login():
 
             # Failure path
             _record_attempt(db, username, ip, success=False)
+            # Log failed login attempt
+            auth_logger.warning(f"Failed login attempt - User: {username}, IP: {ip}")
 
             # Re-check windows after this failure to possibly trigger locks
             if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME and user:
                 until = _lock_user(db, user)
+                auth_logger.warning(f"User locked due to repeated failures - User: {username}, IP: {ip}, Until: {until.isoformat()}")
                 return render_template("auth/login.html",
                                        error=f"User locked due to repeated failures until {until.isoformat()}.")
             if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
+                auth_logger.warning(f"IP locked due to repeated failures - IP: {ip}, Until: {until.isoformat()}")
                 return render_template("auth/login.html",
                                        error=f"This IP is locked due to repeated failures until {until.isoformat()}.")
 
@@ -154,8 +164,12 @@ def login():
 @auth_bp.route("/logout", methods=["POST", "GET"])
 @login_required
 def logout():
+    # Log logout event
+    username = getattr(current_user, 'username', 'Unknown')
+    ip = get_client_ip()
+    auth_logger.info(f"User logout - User: {username}, IP: {ip}")
     logout_user()
-    flash("You’ve been signed out.", "info")
+    flash("You have been signed out.", "info")
     return redirect(url_for("homepage"))
 
 

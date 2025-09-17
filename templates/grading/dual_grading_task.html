@@ -90,7 +90,9 @@
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">
               <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
+              {% if not existing_grade %}
               <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+              {% endif %}
             </div>
           </div>
           {% endif %}
@@ -113,19 +115,17 @@
         </div>
         {% endif %}
         
-        {% if grades %}
+        {% if existing_grade %}
         <div class="mt-3">
-          <h6 class="border-bottom pb-1">Previous Grades</h6>
-          {% for grade in grades %}
+          <h6 class="border-bottom pb-1">Your Previous Grade</h6>
           <div class="small mb-2 p-2 bg-light rounded">
-            <div><strong class="text-capitalize">{{ grade.role_slot }}</strong> - {{ grade.grader.full_name or grade.grader.username }}</div>
-            <div>{{ grade.label.impression }}</div>
-            {% if grade.comment %}
-            <div class="text-muted fst-italic">"{{ grade.comment }}"</div>
+            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - {{ existing_grade.grader.full_name or existing_grade.grader.username }}</div>
+            <div>{{ existing_grade.label.impression }}</div>
+            {% if existing_grade.comment %}
+            <div class="text-muted fst-italic">"{{ existing_grade.comment }}"</div>
             {% endif %}
-            <div class="text-muted">{{ grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            <div class="text-muted">{{ existing_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
           </div>
-          {% endfor %}
         </div>
         {% endif %}
       </div>

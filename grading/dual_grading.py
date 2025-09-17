@@ -252,14 +252,21 @@ def dual_grading_submit():
             Grade.role_slot == slot
         ).first()
         
+        # Capture previous values for logging (before updating)
+        prev_grade_id = None
+        prev_comment = None
+        is_revision = existing_grade is not None
+        
+        if is_revision:
+            prev_grade_id = existing_grade.disease_grading_id
+            prev_comment = existing_grade.comment
+            
         # Log grade submission (including revisions)
         log_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "grade_submit.log")
         # Store in UTC for consistency
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
         
-        # Determine if this is a revision or a new grade
-        is_revision = existing_grade is not None
         grade_type = "revision" if is_revision else "new"
         grade_id = existing_grade.id if is_revision else "N/A"
         
@@ -267,6 +274,12 @@ def dual_grading_submit():
         log_entry = f"[{timestamp}] - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
         if comment:
             log_entry += f" - [Comments - {comment}]"
+            
+        # If this is a revision, also log the previous grade and comment
+        if is_revision and prev_grade_id is not None:
+            prev_comment_display = prev_comment if prev_comment else "None"
+            log_entry += f" - [Previous Grade: {prev_grade_id}] - [Previous Comment: {prev_comment_display}]"
+            
         log_entry += "\n"
         
         try:
@@ -279,6 +292,7 @@ def dual_grading_submit():
             existing_grade.disease_grading_id = label_id
             existing_grade.comment = comment
             db.add(existing_grade)
+            db.flush()  # Ensure the ID is available
         else:
             new_grade = Grade(
                 task_id=task.id,
@@ -288,6 +302,8 @@ def dual_grading_submit():
                 comment=comment
             )
             db.add(new_grade)
+            db.flush()  # Ensure the ID is available
+            existing_grade = new_grade  # So we can use existing_grade.id below
         
         # Update task state based on grades
         # Fetch all grades for this task

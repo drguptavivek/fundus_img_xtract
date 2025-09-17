@@ -302,7 +302,7 @@ def dual_grading_submit():
             prev_grade_id = existing_grade.disease_grading_id
             prev_comment = existing_grade.comment
             
-        # Log grade submission (including revisions) using Flask's logger
+        # Log grade submission (including revisions) using dedicated grades logger
         # Store in UTC for consistency
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
@@ -311,7 +311,7 @@ def dual_grading_submit():
         grade_id = existing_grade.id if is_revision else "N/A"
         
         # Create log message
-        log_message = f"Grade submission - [TimeStamp: {timestamp}] - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
+        log_message = f"Grade submission - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
         if comment:
             log_message += f" - [Comments - {comment}]"
             
@@ -320,8 +320,9 @@ def dual_grading_submit():
             prev_comment_display = prev_comment if prev_comment else "None"
             log_message += f" - [Previous Grade: {prev_grade_id}] - [Previous Comment: {prev_comment_display}]"
         
-        # Log using Flask's logger instead of writing to a file
-        current_app.logger.info(log_message)
+        # Log using dedicated grades logger
+        grades_logger = logging.getLogger("grades")
+        grades_logger.info(log_message)
         
         if existing_grade:
             existing_grade.disease_grading_id = label_id

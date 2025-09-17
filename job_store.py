@@ -1,6 +1,6 @@
 # job_store.py
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session as DBSession
 from models import Session, Job, JobItem

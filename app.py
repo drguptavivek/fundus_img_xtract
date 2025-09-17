@@ -89,20 +89,28 @@ def create_app():
 
     success_log_path = os.getenv("HTTP_SUCCESS_LOG", os.path.join(log_dir, "http_success.log"))
     error_log_path   = os.getenv("HTTP_ERROR_LOG",   os.path.join(log_dir, "http_error.log"))
+    grades_log_path  = os.getenv("GRADES_LOG",       os.path.join(log_dir, "grades.log"))
+    debug_log_path   = os.getenv("DEBUG_LOG",        os.path.join(log_dir, "debug.log"))
 
     # Only attach handlers in the reloader child (or when not using the reloader)
     is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
 
     http_success_logger = logging.getLogger("http_success")
     http_error_logger   = logging.getLogger("http_error")
+    grades_logger       = logging.getLogger("grades")
+    debug_logger        = logging.getLogger("debug")
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
+    grades_logger.setLevel(logging.INFO)
+    debug_logger.setLevel(logging.DEBUG)
     http_success_logger.propagate = False
     http_error_logger.propagate   = False
+    grades_logger.propagate       = False
+    debug_logger.propagate        = False
 
     if is_reloader_child:
         # Clean up any old handlers (debug reloader / multiple inits)
-        for lg in (http_success_logger, http_error_logger):
+        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger):
             for h in list(lg.handlers):
                 lg.removeHandler(h)
                 try: h.close()
@@ -119,18 +127,28 @@ def create_app():
             from logging import FileHandler
             success_handler = FileHandler(success_log_path, encoding="utf-8", delay=True)
             error_handler   = FileHandler(error_log_path,   encoding="utf-8", delay=True)
+            grades_handler  = FileHandler(grades_log_path,  encoding="utf-8", delay=True)
+            debug_handler   = FileHandler(debug_log_path,   encoding="utf-8", delay=True)
         else:
             success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
             error_handler   = RotatingFileHandler(error_log_path,   maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
+            grades_handler  = RotatingFileHandler(grades_log_path,  maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
+            debug_handler   = RotatingFileHandler(debug_log_path,   maxBytes=2*1024*1024,
+                                                  backupCount=5, encoding="utf-8", delay=True)
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         success_handler.setFormatter(fmt)
         error_handler.setFormatter(fmt)
+        grades_handler.setFormatter(fmt)
+        debug_handler.setFormatter(fmt)
 
         http_success_logger.addHandler(success_handler)
         http_error_logger.addHandler(error_handler)
+        grades_logger.addHandler(grades_handler)
+        debug_logger.addHandler(debug_handler)
 
         # Keep app.logger free of its own handlers; route its warnings/errors to error file
         app.logger.handlers = []
@@ -145,6 +163,8 @@ def create_app():
 
         # Emit a one-time startup line so you can verify file opens
         http_success_logger.info("HTTP success logger initialized at %s", success_log_path)
+        grades_logger.info("Grades logger initialized at %s", grades_log_path)
+        debug_logger.info("Debug logger initialized at %s", debug_log_path)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

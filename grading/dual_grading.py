@@ -398,10 +398,7 @@ def dual_grading_submit():
         if action == "save_next":
             # Close the current session first
             db.close()
-            try:
-                # Log that we're trying to find the next task
-                current_app.logger.info(f"Looking for next task for user {current_user.id}, disease {disease_id}, slot {slot}")
-                
+            try:                
                 # Try to find the next eligible task with a new session
                 next_task = None
                 if slot == "resident":
@@ -410,9 +407,6 @@ def dual_grading_submit():
                     next_task = get_next_eligible_faculty_task(current_user.id, disease_id)
                 elif slot == "arbitrator":
                     next_task = get_next_eligible_arbitrator_task(current_user.id, disease_id)
-                
-                # Log what we found
-                current_app.logger.info(f"Next task result: {type(next_task)} - {next_task}")
                 
                 # Handle the result
                 if next_task is None:

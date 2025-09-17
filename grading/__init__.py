@@ -11,7 +11,7 @@ from .start_grading import start_grading
 bp.add_url_rule("/", view_func=index, methods=["GET"])
 
 # Dual grading routes
-bp.add_url_rule("/task/<int:task_id>", view_func=dual_grading_task, methods=["GET"])
+bp.add_url_rule("/task/<int:task_id>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])
 bp.add_url_rule("/task/submit", view_func=dual_grading_submit, methods=["POST"])
 bp.add_url_rule("/revise/<int:grade_id>", view_func=revise_grading, methods=["GET"])
 

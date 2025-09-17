@@ -59,4 +59,4 @@ def start_grading(disease_id: int, role_slot: str):
         # It's a GradingTask object
         # Call dual_grading_task directly with slot_type as a parameter
         from grading.dual_grading import dual_grading_task
-        return dual_grading_task(task.id, role_slot)
+        return dual_grading_task(task.id, slot_type=role_slot)

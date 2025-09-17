@@ -84,6 +84,9 @@ def revise_grading(grade_id: int):
             DiseaseGrading.is_active == True
         ).order_by(DiseaseGrading.display_order).all()
         
+        # Create a dictionary mapping grading IDs to their guidelines
+        grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+        
         # Determine image URL
         image_uuid = None
         if task.encounter_file:
@@ -98,6 +101,7 @@ def revise_grading(grade_id: int):
             "grading/dual_grading_task.html",
             task=task,
             disease_gradings=disease_gradings,
+            grading_guidelines=grading_guidelines,
             current_slot=slot_type,
             existing_grade=existing_grade,
             image_uuid=image_uuid,
@@ -154,6 +158,9 @@ def dual_grading_task(task_id: int, slot_type: str):
             DiseaseGrading.is_active == True
         ).order_by(DiseaseGrading.display_order).all()
         
+        # Create a dictionary mapping grading IDs to their guidelines
+        grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+        
         # Determine image URL
         image_uuid = None
         if task.encounter_file:
@@ -175,6 +182,7 @@ def dual_grading_task(task_id: int, slot_type: str):
             "grading/dual_grading_task.html",
             task=task,
             disease_gradings=disease_gradings,
+            grading_guidelines=grading_guidelines,
             current_slot=slot_type,
             existing_grade=existing_grade,
             image_uuid=image_uuid,
@@ -205,12 +213,12 @@ def dual_grading_submit():
         
         if task.state == "final":
             flash("This task is already finalized.", "danger")
-            return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+            return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Eligibility check
         if not get_user_eligibility_for_task(current_user.id, task_id, slot):
             flash("You are not eligible to grade this task for the selected role.", "danger")
-            return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+            return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Arbitrator exclusion: cannot be prior resident/faculty grader
         # Admins are exempt from this restriction
@@ -223,7 +231,7 @@ def dual_grading_submit():
             
             if existing_grade:
                 flash("You cannot arbitrate a task you've already graded as resident or faculty.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+                return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Validate label belongs to task.disease_id
         label = db.query(DiseaseGrading).filter(
@@ -232,7 +240,7 @@ def dual_grading_submit():
         ).first()
         if not label:
             flash("Invalid label.", "danger")
-            return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+            return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Upsert grade
         existing_grade = db.query(Grade).filter(
@@ -299,37 +307,57 @@ def dual_grading_submit():
             task.state = "pending"
         
         db.commit()
-        flash("Grade submitted successfully.", "success")
+        
+        # Store disease_id before closing the session
+        disease_id = task.disease_id
         
         # Check if we should go to the next task
         action = (request.form.get("action") or "").strip().lower()
         if action == "save_next":
             # Close the current session first
             db.close()
-            # Try to find the next eligible task with a new session
-            next_task = None
-            if slot == "resident":
-                next_task = get_next_eligible_resident_task(current_user.id, task.disease_id)
-            elif slot == "faculty":
-                next_task = get_next_eligible_faculty_task(current_user.id, task.disease_id)
-            elif slot == "arbitrator":
-                next_task = get_next_eligible_arbitrator_task(current_user.id, task.disease_id)
-            
-            # Handle the result
-            if next_task is None:
-                flash("No more tasks available.", "info")
-            elif isinstance(next_task, str):
-                # It's a helpful message
-                flash(next_task, "info")
-            else:
-                # It's a GradingTask object
-                return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=slot))
-        
-        db.close()
-        return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+            try:
+                # Log that we're trying to find the next task
+                current_app.logger.info(f"Looking for next task for user {current_user.id}, disease {disease_id}, slot {slot}")
+                
+                # Try to find the next eligible task with a new session
+                next_task = None
+                if slot == "resident":
+                    next_task = get_next_eligible_resident_task(current_user.id, disease_id)
+                elif slot == "faculty":
+                    next_task = get_next_eligible_faculty_task(current_user.id, disease_id)
+                elif slot == "arbitrator":
+                    next_task = get_next_eligible_arbitrator_task(current_user.id, disease_id)
+                
+                # Log what we found
+                current_app.logger.info(f"Next task result: {type(next_task)} - {next_task}")
+                
+                # Handle the result
+                if next_task is None:
+                    flash("Grade submitted successfully.", "success")
+                    flash("No more tasks available.", "info")
+                    return redirect(url_for("grading.index"))
+                elif isinstance(next_task, str):
+                    # It's a helpful message
+                    flash("Grade submitted successfully.", "success")
+                    flash(next_task, "info")
+                    return redirect(url_for("grading.index"))
+                else:
+                    # It's a GradingTask object
+                    flash("Grade submitted successfully.", "success")
+                    return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=slot))
+            except Exception as e:
+                current_app.logger.exception("Failed to find next task: %s", e)
+                flash("Grade submitted successfully, but failed to navigate to next task.", "warning")
+                return redirect(url_for("grading.index"))
+        else:
+            # For save_close or any other action, just show success and redirect to index
+            flash("Grade submitted successfully.", "success")
+            db.close()
+            return redirect(url_for("grading.index"))
     except Exception as e:
         current_app.logger.exception("Failed to submit grade: %s", e)
         db.rollback()
         flash("Failed to submit grade.", "danger")
         db.close()
-        return redirect(url_for("grading.dual_grading_task", task_id=task_id))
+        return redirect(url_for("grading.index"))

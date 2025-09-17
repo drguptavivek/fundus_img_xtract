@@ -90,6 +90,35 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - After 2 weeks, users can grade the same image in a different slot of the same task
   - The 2-week restriction applies to all role slots (resident, faculty, arbitrator) during task assignment
 
+
+  Recent Key Enhancements
+
+   8. Security Improvements
+      - Made slot_type a mandatory parameter for better security
+      - Removed slot manipulation through URL parameters
+      - Simplified validation logic with explicit slot specification
+
+   9. Revision Functionality
+      - Implemented grade revision capability
+      - Added "Revise" buttons to dashboard
+      - Enhanced validation logic for user revisions
+
+   10. 2-Week Restriction Logic
+       - Prevents users from grading the same task multiple times within 2 weeks
+       - Ensures diverse grader participation
+       - Applies to all role slots (resident, faculty, arbitrator)
+
+  Recent UI/UX Fixes
+
+   11. Browser Back Button Handling
+       - Added localStorage tracking for grade selections
+       - Implemented robust UI synchronization for radio button states
+       - Added cache prevention headers to prevent inconsistent states
+       - Ensured correct radio button highlighting even with browser navigation
+
+  These enhancements have created a comprehensive, secure, and user-friendly dual
+
+  
 ### NEXT STEP 
   Continue with additional security enhancements and testing.
 

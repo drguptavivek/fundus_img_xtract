@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, flash, jsonify, current_app
+from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
 from flask_login import current_user
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
@@ -17,6 +17,11 @@ from utils.dualGradingUtils import get_user_eligibility_for_task
 @roles_required("resident", "ophthalmologist", "admin")
 def revise_grading(grade_id: int):
     """Allow a user to revise their previous grading."""
+    # Validate input
+    if not grade_id or not isinstance(grade_id, int) or grade_id <= 0:
+        flash("Invalid grade ID.", "danger")
+        return redirect(url_for("grading.index"))
+        
     db = Session()
     try:
         # Fetch the grade with related data
@@ -100,7 +105,7 @@ def revise_grading(grade_id: int):
         # Use the existing grade as the existing_grade parameter
         existing_grade = grade
             
-        return render_template(
+        response = make_response(render_template(
             "grading/dual_grading_task.html",
             task=task,
             disease_gradings=disease_gradings,
@@ -109,7 +114,14 @@ def revise_grading(grade_id: int):
             existing_grade=existing_grade,
             image_uuid=image_uuid,
             grades=task.grades
-        )
+        ))
+        
+        # Prevent caching of this page
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
     finally:
         db.close()
 
@@ -203,8 +215,17 @@ def dual_grading_submit():
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
     
-    if not task_id or slot not in {"resident", "faculty", "arbitrator"} or not label_id:
-        flash("Invalid request.", "danger")
+    # Validate inputs
+    if not task_id or not isinstance(task_id, int) or task_id <= 0:
+        flash("Invalid task ID.", "danger")
+        return redirect(url_for("grading.index"))
+        
+    if not label_id or not isinstance(label_id, int) or label_id <= 0:
+        flash("Invalid label ID.", "danger")
+        return redirect(url_for("grading.index"))
+    
+    if slot not in {"resident", "faculty", "arbitrator"}:
+        flash("Invalid slot type.", "danger")
         return redirect(url_for("grading.index"))
     
     db = Session()
@@ -222,6 +243,26 @@ def dual_grading_submit():
         if not get_user_eligibility_for_task(current_user.id, task_id, slot):
             flash("You are not eligible to grade this task for the selected role.", "danger")
             return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+        
+        # Additional role validation for arbitrator
+        if slot == "arbitrator":
+            # Check if user has the required role for arbitration
+            if not current_user.has_role('ophthalmologist'):
+                flash("You don't have permission to grade as arbitrator.", "danger")
+                return redirect(url_for("grading.index"))
+            
+            # Check arbitration eligibility using UserDiseaseUnitRole
+            eligibility = db.query(UserDiseaseUnitRole).filter(
+                UserDiseaseUnitRole.user_id == current_user.id,
+                UserDiseaseUnitRole.disease_id == task.disease_id,
+                UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
+                UserDiseaseUnitRole.active == True,
+                UserDiseaseUnitRole.can_arbitrate == True
+            ).first()
+            
+            if not eligibility:
+                flash("You are not eligible to arbitrate for this task.", "danger")
+                return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Arbitrator exclusion: cannot be prior resident/faculty grader
         # Admins are exempt from this restriction
@@ -261,8 +302,7 @@ def dual_grading_submit():
             prev_grade_id = existing_grade.disease_grading_id
             prev_comment = existing_grade.comment
             
-        # Log grade submission (including revisions)
-        log_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "grade_submit.log")
+        # Log grade submission (including revisions) using Flask's logger
         # Store in UTC for consistency
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
@@ -270,23 +310,18 @@ def dual_grading_submit():
         grade_type = "revision" if is_revision else "new"
         grade_id = existing_grade.id if is_revision else "N/A"
         
-        # Format: [TimeStamp] - [IP: ] - [user_id: ] - [Task ID: ] - [Slot Type: ] - [Disease ID: ] - [Grade: ] - [Type: new / revision] - [Grade ID: ] - [Comments - ]
-        log_entry = f"[{timestamp}] - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
+        # Create log message
+        log_message = f"Grade submission - [TimeStamp: {timestamp}] - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
         if comment:
-            log_entry += f" - [Comments - {comment}]"
+            log_message += f" - [Comments - {comment}]"
             
         # If this is a revision, also log the previous grade and comment
         if is_revision and prev_grade_id is not None:
             prev_comment_display = prev_comment if prev_comment else "None"
-            log_entry += f" - [Previous Grade: {prev_grade_id}] - [Previous Comment: {prev_comment_display}]"
-            
-        log_entry += "\n"
+            log_message += f" - [Previous Grade: {prev_grade_id}] - [Previous Comment: {prev_comment_display}]"
         
-        try:
-            with open(log_file_path, "a") as log_file:
-                log_file.write(log_entry)
-        except Exception as log_error:
-            current_app.logger.error(f"Failed to write to grade_submit.log: {log_error}")
+        # Log using Flask's logger instead of writing to a file
+        current_app.logger.info(log_message)
         
         if existing_grade:
             existing_grade.disease_grading_id = label_id
@@ -307,6 +342,10 @@ def dual_grading_submit():
         
         # Update task state based on grades
         # Fetch all grades for this task
+        # NOTE: There is a potential race condition here. If multiple users submit grades
+        # simultaneously, they might both read the same initial state and then overwrite
+        # each other's changes. In a high-concurrency environment, this should be addressed
+        # with database-level locking or atomic operations.
         all_grades = db.query(Grade).filter(Grade.task_id == task.id).all()
         
         # Check if we have resident and faculty grades

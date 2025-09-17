@@ -89,9 +89,9 @@
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close">Save & Close</button>
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" onclick="saveSelectionOnSubmit()">Save & Close</button>
               {% if not existing_grade %}
-              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next">Save & Next</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" onclick="saveSelectionOnSubmit()">Save & Next</button>
               {% endif %}
             </div>
           </div>
@@ -143,18 +143,84 @@
     const group = document.getElementById('impression-group');
     const instructionsDiv = document.getElementById('grading-instructions');
     const instructionsContent = document.getElementById('instructions-content');
+    const taskId = {{ task.id }};
+    const imageUuid = "{{ image_uuid }}";
     
     if (group) {
       const radios = group.querySelectorAll('input[type="radio"][name="label_id"]');
       const labels = group.querySelectorAll('label');
       
+      // Generate a unique key for localStorage based on task and image
+      const storageKey = `grading_task_${taskId}_${imageUuid}`;
+      
+      // Save selection to localStorage
+      function saveSelectionToStorage(gradeId) {
+        try {
+          const selectionData = {
+            taskId: taskId,
+            imageUuid: imageUuid,
+            selectedGradeId: gradeId,
+            timestamp: Date.now()
+          };
+          localStorage.setItem(storageKey, JSON.stringify(selectionData));
+        } catch (e) {
+          // Silently fail if localStorage is unavailable
+          console.debug('Unable to save selection to localStorage');
+        }
+      }
+      
+      // Load selection from localStorage
+      function loadSelectionFromStorage() {
+        try {
+          const stored = localStorage.getItem(storageKey);
+          if (stored) {
+            const selectionData = JSON.parse(stored);
+            // Check if the stored data is recent (within 1 hour)
+            if (Date.now() - selectionData.timestamp < 3600000) {
+              return selectionData;
+            }
+          }
+        } catch (e) {
+          // Silently fail if localStorage is unavailable or corrupted
+          console.debug('Unable to load selection from localStorage');
+        }
+        return null;
+      }
+      
+      // Save selection when form is submitted
+      window.saveSelectionOnSubmit = function() {
+        const checked = group.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (checked) {
+          const gradingId = parseInt(checked.value);
+          saveSelectionToStorage(gradingId);
+        }
+      };
+      
       function syncIcons() {
-        labels.forEach(l => l.querySelector('.sel-icon')?.classList.add('d-none'));
+        // Hide all tick marks first
+        labels.forEach(l => {
+          const icon = l.querySelector('.sel-icon');
+          if (icon) {
+            icon.classList.add('d-none');
+          }
+        });
+        
+        // Find the checked radio button and show its tick mark
         const checked = group.querySelector('input[type="radio"][name="label_id"]:checked');
         if (checked) {
           const lab = group.querySelector(`label[for="${checked.id}"]`);
           const icon = lab && lab.querySelector('.sel-icon');
-          if (icon) icon.classList.remove('d-none');
+          if (icon) {
+            icon.classList.remove('d-none');
+            
+            // Scroll to the selected option to make it visible
+            try {
+              lab.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            } catch(e) {
+              // Fallback if scrollIntoView fails
+              lab.focus();
+            }
+          }
           
           // Show grading instructions for the selected option
           const gradingId = parseInt(checked.value);
@@ -166,22 +232,118 @@
           } else {
             instructionsDiv.style.display = 'none';
           }
+          
+          // Save selection to localStorage
+          saveSelectionToStorage(gradingId);
         } else {
           instructionsDiv.style.display = 'none';
         }
       }
       
+      // Set up event listeners for when radio buttons change
       radios.forEach(r => r.addEventListener('change', syncIcons));
       
+      // Clear button functionality
       document.getElementById('clear-impression')?.addEventListener('click', function(){
         radios.forEach(r => r.checked = false);
-        labels.forEach(l => l.querySelector('.sel-icon')?.classList.add('d-none'));
+        labels.forEach(l => {
+          const icon = l.querySelector('.sel-icon');
+          if (icon) {
+            icon.classList.add('d-none');
+          }
+        });
         instructionsDiv.style.display = 'none';
+        saveSelectionToStorage(null);
       });
       
-      // Initial state
-      syncIcons();
+      // Force initialization function with localStorage validation
+      function forceInit() {
+        // First, try to restore from localStorage if needed
+        const storedSelection = loadSelectionFromStorage();
+        let serverCheckedId = null;
+        
+        // Find what the server says should be checked
+        const serverChecked = group.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (serverChecked) {
+          serverCheckedId = parseInt(serverChecked.value);
+        }
+        
+        // If we have a stored selection and it's different from server state,
+        // check if we should trust the stored selection
+        if (storedSelection && storedSelection.selectedGradeId !== serverCheckedId) {
+          // Look for the radio button that should be checked based on localStorage
+          let foundStoredRadio = false;
+          radios.forEach(radio => {
+            const radioGradeId = parseInt(radio.value);
+            if (radioGradeId === storedSelection.selectedGradeId) {
+              radio.checked = true;
+              foundStoredRadio = true;
+            } else {
+              radio.checked = false;
+            }
+          });
+          
+          // If we found the radio button, use the stored selection
+          if (foundStoredRadio) {
+            console.debug('Restored selection from localStorage');
+          }
+        }
+        
+        // Re-sync all radio button states from their attributes
+        radios.forEach(radio => {
+          const label = group.querySelector(`label[for="${radio.id}"]`);
+          if (label) {
+            const icon = label.querySelector('.sel-icon');
+            if (icon) {
+              if (radio.checked) {
+                icon.classList.remove('d-none');
+              } else {
+                icon.classList.add('d-none');
+              }
+            }
+          }
+        });
+        
+        // Show instructions for currently selected option
+        const checked = group.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (checked) {
+          const gradingId = parseInt(checked.value);
+          const guidelines = window.gradingGuidelines[gradingId];
+          if (guidelines) {
+            instructionsContent.innerHTML = guidelines;
+            instructionsDiv.style.display = 'block';
+          } else {
+            instructionsDiv.style.display = 'none';
+          }
+        } else {
+          instructionsDiv.style.display = 'none';
+        }
+      }
+      
+      // Handle page initialization
+      function initPage() {
+        // Use multiple approaches to ensure proper initialization
+        setTimeout(forceInit, 0);
+      }
+      
+      // Handle various page load scenarios
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+          setTimeout(forceInit, 0);
+        });
+      } else {
+        // DOM is already ready
+        forceInit();
+      }
+      
+      // Handle back/forward navigation
+      window.addEventListener('pageshow', function(event) {
+        setTimeout(forceInit, 0);
+      });
     }
   })();
 </script>
+{% endblock %}
+{% block additional_scripts %}
+<script src="{{ url_for('static', filename='js/markdown-it.min.js') }}" async defer></script>
 {% endblock %}

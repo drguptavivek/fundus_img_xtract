@@ -61,11 +61,37 @@ class User(Base):
     def is_anonymous(self) -> bool: return False
     def get_id(self) -> str: return str(self.id)
     def has_role(self, *names: str) -> bool:
+        # Log stack trace for debugging role checks in debug mode
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            from utils.stack_trace_handler import log_current_stack
+            log_current_stack(f"Checking roles {names} for user '{self.username}'")
+        
         user_roles = {r.name.lower() for r in (self.roles or [])}
-        return any(n.lower() in user_roles for n in names)
+        result = any(n.lower() in user_roles for n in names)
+        
+        # Log the result in debug mode
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            runtime_logger.debug(f"Role check result for user '{self.username}': {result}")
+        
+        return result
     def has_all_roles(self, *names: str) -> bool:
+        # Log stack trace for debugging role checks in debug mode
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            from utils.stack_trace_handler import log_current_stack
+            log_current_stack(f"Checking all roles {names} for user '{self.username}'")
+        
         user_roles = {r.name.lower() for r in (self.roles or [])}
-        return all(n.lower() in user_roles for n in names)
+        result = all(n.lower() in user_roles for n in names)
+        
+        # Log the result in debug mode
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            runtime_logger.debug(f"All roles check result for user '{self.username}': {result}")
+        
+        return result
 
 class Role(Base):
     __tablename__ = "roles"

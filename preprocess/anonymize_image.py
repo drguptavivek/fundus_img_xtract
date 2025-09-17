@@ -18,6 +18,7 @@ from math import ceil
 from preprocess import bp
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
+from utils.stack_trace_handler import StackTraceContextManager, stack_trace_context, log_current_stack
 from models import (
     Session, User, DirectImageUpload, DirectImageVerify, Hospital, LabUnit, Camera, Disease, Area
 )
@@ -294,6 +295,7 @@ def anonymization_dashboard():
 @bp.route("/anonymize_image/<uuid:uuid>", methods=["GET", "POST"])
 @roles_required("contributor", "data_manager", "admin")
 def anonymize_image(uuid: UUID):
+    # Use stack trace context manager to capture any exceptions
     db_session = Session()
     try:
         uuid_val = _uuid_str(uuid)
@@ -628,6 +630,12 @@ def restore_original_anonymized_image(uuid: UUID):
             return jsonify({"redirect_url": url_for("preprocess.anonymize_image", uuid=uuid_val)})
         except Exception as e:
             current_app.logger.exception("Failed to update database after deleting edited file for UUID %s: %s", uuid_val, e)
+            # Log the stack trace using our stack trace handler
+            from utils.stack_trace_handler import log_stack_trace
+            log_stack_trace(
+                message=f"Database error in restore_original_anonymized_image for UUID {uuid_val}",
+                exception=e
+            )
             db_session.rollback()
             return jsonify({"error": "Failed to update database. Original not restored."}), 500
 

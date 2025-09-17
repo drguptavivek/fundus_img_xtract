@@ -92,7 +92,8 @@ def create_app():
     grades_log_path  = os.getenv("GRADES_LOG",       os.path.join(log_dir, "grades.log"))
     debug_log_path   = os.getenv("DEBUG_LOG",        os.path.join(log_dir, "debug.log"))
     auth_log_path    = os.getenv("AUTH_LOG",         os.path.join(log_dir, "auth.log"))
-    activity_log_path    = os.getenv("ACTIVITY_LOG",         os.path.join(log_dir, "activity.log"))
+    activity_log_path = os.getenv("ACTIVITY_LOG",    os.path.join(log_dir, "activity.log"))
+    runtime_error_log_path = os.getenv("RUNTIME_ERROR_LOG", os.path.join(log_dir, "runtime_error.log"))
 
     # Only attach handlers in the reloader child (or when not using the reloader)
     is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
@@ -103,6 +104,7 @@ def create_app():
     debug_logger        = logging.getLogger("debug")
     auth_logger         = logging.getLogger("auth")
     activity_logger     = logging.getLogger("activity")
+    runtime_error_logger = logging.getLogger("runtime_error")
 
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
@@ -110,6 +112,7 @@ def create_app():
     debug_logger.setLevel(logging.DEBUG)
     auth_logger.setLevel(logging.INFO)
     activity_logger.setLevel(logging.INFO)
+    runtime_error_logger.setLevel(logging.ERROR)
     
     http_success_logger.propagate = False
     http_error_logger.propagate   = False
@@ -117,10 +120,11 @@ def create_app():
     debug_logger.propagate        = False
     auth_logger.propagate         = False
     activity_logger.propagate     = False
+    runtime_error_logger.propagate = False
 
     if is_reloader_child:
         # Clean up any old handlers (debug reloader / multiple inits)
-        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger, auth_logger, activity_logger):
+        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger, auth_logger, activity_logger, runtime_error_logger):
             for h in list(lg.handlers):
                 lg.removeHandler(h)
                 try: h.close()
@@ -141,6 +145,7 @@ def create_app():
             debug_handler   = FileHandler(debug_log_path,   encoding="utf-8", delay=True)
             auth_handler     = FileHandler(auth_log_path,    encoding="utf-8", delay=True)
             activity_logger = FileHandler(activity_log_path, encoding="utf-8", delay=True)
+            runtime_error_handler = FileHandler(runtime_error_log_path, encoding="utf-8", delay=True)
         else:
             success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
@@ -154,6 +159,8 @@ def create_app():
                                                   backupCount=5, encoding="utf-8", delay=True)
             activity_handler    = RotatingFileHandler(activity_log_path,    maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
+            runtime_error_handler = RotatingFileHandler(runtime_error_log_path, maxBytes=2*1024*1024,
+                                                       backupCount=5, encoding="utf-8", delay=True)
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         success_handler.setFormatter(fmt)
@@ -162,6 +169,7 @@ def create_app():
         debug_handler.setFormatter(fmt)
         auth_handler.setFormatter(fmt)
         activity_handler.setFormatter(fmt)
+        runtime_error_handler.setFormatter(fmt)
 
         http_success_logger.addHandler(success_handler)
         http_error_logger.addHandler(error_handler)
@@ -169,6 +177,7 @@ def create_app():
         debug_logger.addHandler(debug_handler)
         auth_logger.addHandler(auth_handler)
         activity_logger.addHandler(activity_handler)
+        runtime_error_logger.addHandler(runtime_error_handler)
 
         # Keep app.logger free of its own handlers; route its warnings/errors to error file
         app.logger.handlers = []
@@ -187,6 +196,7 @@ def create_app():
         debug_logger.info("Debug logger initialized at %s", debug_log_path)
         auth_logger.info("Auth logger initialized at %s", auth_log_path)
         activity_logger.info("Activity logger initialized at %s", activity_log_path)
+        runtime_error_logger.info("Runtime error logger initialized at %s", runtime_error_log_path)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor
@@ -339,6 +349,62 @@ def create_app():
         if not current_user.is_authenticated:
             return redirect(url_for("auth.login"))
 
+    # Global stack trace handler - captures stack traces for all requests
+    @app.before_request
+    def _global_stack_trace_handler():
+        """Global handler to capture stack traces for all requests."""
+        # Store request start time for performance tracking
+        import time
+        request._start_time = time.time()
+        
+        # Log the incoming request in debug mode
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            from utils.stack_trace_handler import log_current_stack
+            log_current_stack(f"Processing request: {request.method} {request.url}")
+
+    @app.after_request
+    def _global_stack_trace_after_handler(response):
+        """Global handler to capture performance and completion info for all requests."""
+        import time
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        
+        # Calculate request duration
+        duration = None
+        if hasattr(request, '_start_time'):
+            duration = time.time() - request._start_time
+            
+        # Log completion in debug mode
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            runtime_logger.debug(
+                f"Request completed: {request.method} {request.url} "
+                f"Status: {response.status_code} Duration: {duration:.3f}s"
+            )
+            
+        return response
+
+    # Global exception handler - captures stack traces for all unhandled exceptions
+    @app.errorhandler(Exception)
+    def _global_exception_handler(e):
+        """Global handler to capture stack traces for all unhandled exceptions."""
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        
+        # Log the exception with full stack trace
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message=f"Global exception handler caught: {type(e).__name__}",
+            exception=e
+        )
+        
+        # Also log to the standard app logger
+        current_app.logger.exception("Unhandled exception in request: %s", e)
+        
+        # Re-raise the exception so it can be handled by specific error handlers
+        raise e
+
     from admin import admin_bp
     app.register_blueprint(admin_bp)
 
@@ -375,6 +441,31 @@ def create_app():
     @app.errorhandler(500)
     def handle_500(e):
         current_app.logger.exception("Unhandled exception: %s", e)
+        # Log the stack trace using our stack trace handler
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message="500 Internal Server Error",
+            exception=e
+        )
+        return render_template("errors/500.html"), 500
+
+    @app.errorhandler(Exception)
+    def handle_generic_exception(e):
+        """Handle any unhandled exceptions globally."""
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        
+        # Log the exception with full stack trace
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message=f"Unhandled exception: {type(e).__name__}",
+            exception=e
+        )
+        
+        # Also log to the standard app logger
+        current_app.logger.exception("Unhandled exception: %s", e)
+        
+        # Return a generic error response
         return render_template("errors/500.html"), 500
 
     @app.errorhandler(HTTPException)
@@ -389,6 +480,62 @@ def create_app():
             ),
             getattr(e, "code", 500),
         )
+
+    # Global stack trace handler - captures stack traces for all requests
+    @app.before_request
+    def _global_stack_trace_handler():
+        """Global handler to capture stack traces for all requests in debug mode."""
+        # Store request start time for performance tracking
+        import time
+        request._start_time = time.time()
+        
+        # Log the incoming request in debug mode
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            from utils.stack_trace_handler import log_current_stack
+            log_current_stack(f"Processing request: {request.method} {request.url}")
+
+    @app.after_request
+    def _global_stack_trace_after_handler(response):
+        """Global handler to capture performance and completion info for all requests."""
+        import time
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        
+        # Calculate request duration
+        duration = None
+        if hasattr(request, '_start_time'):
+            duration = time.time() - request._start_time
+            
+        # Log completion in debug mode
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            runtime_logger.debug(
+                f"Request completed: {request.method} {request.url} "
+                f"Status: {response.status_code} Duration: {duration:.3f}s"
+            )
+            
+        return response
+
+    # Global exception handler - captures stack traces for all unhandled exceptions
+    @app.errorhandler(Exception)
+    def _global_exception_handler(e):
+        """Global handler to capture stack traces for all unhandled exceptions."""
+        import logging
+        runtime_logger = logging.getLogger("runtime_error")
+        
+        # Log the exception with full stack trace
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message=f"Global exception handler caught: {type(e).__name__}",
+            exception=e
+        )
+        
+        # Also log to the standard app logger
+        current_app.logger.exception("Unhandled exception in request: %s", e)
+        
+        # Don't re-raise here as this is meant to be the catch-all handler
+        return render_template("errors/500.html"), 500
 
     # Serve classic /favicon.ico path for browsers that request it directly
     @app.get('/favicon.ico')

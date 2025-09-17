@@ -3,6 +3,9 @@ from flask_login import current_user
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload
 import random
+import logging
+import os
+from datetime import datetime
 
 from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
@@ -248,6 +251,29 @@ def dual_grading_submit():
             Grade.grader_user_id == current_user.id,
             Grade.role_slot == slot
         ).first()
+        
+        # Log grade submission (including revisions)
+        log_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs", "grade_submit.log")
+        # Store in UTC for consistency
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+        
+        # Determine if this is a revision or a new grade
+        is_revision = existing_grade is not None
+        grade_type = "revision" if is_revision else "new"
+        grade_id = existing_grade.id if is_revision else "N/A"
+        
+        # Format: [TimeStamp] - [IP: ] - [user_id: ] - [Task ID: ] - [Slot Type: ] - [Disease ID: ] - [Grade: ] - [Type: new / revision] - [Grade ID: ] - [Comments - ]
+        log_entry = f"[{timestamp}] - [IP: {ip_address}] - [user_id: {current_user.id}] - [Task ID: {task_id}] - [Slot Type: {slot}] - [Disease ID: {task.disease_id}] - [Grade: {label_id}] - [Type: {grade_type}] - [Grade ID: {grade_id}]"
+        if comment:
+            log_entry += f" - [Comments - {comment}]"
+        log_entry += "\n"
+        
+        try:
+            with open(log_file_path, "a") as log_file:
+                log_file.write(log_entry)
+        except Exception as log_error:
+            current_app.logger.error(f"Failed to write to grade_submit.log: {log_error}")
         
         if existing_grade:
             existing_grade.disease_grading_id = label_id

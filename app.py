@@ -283,8 +283,8 @@ def create_app():
     from reports import bp as reports_bp
     app.register_blueprint(reports_bp)
 
-    from glaucoma import bp as glaucoma_bp
-    app.register_blueprint(glaucoma_bp)
+    from verify_remedio_glaucoma import bp as verify_remedio_glaucoma_bp
+    app.register_blueprint(verify_remedio_glaucoma_bp)
 
     # DR blueprint removed as it's no longer needed
 

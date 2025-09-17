@@ -129,7 +129,7 @@
           
           {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('contributor')) %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['glaucoma', 'dr', 'preprocess'] else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] else '' }}" href="#"
               id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Pre-processing
             </a>

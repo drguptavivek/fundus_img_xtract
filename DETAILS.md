@@ -94,7 +94,7 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
      encounters in the database that are missing a valid, machine-readable capture date, allowing admins to easily find and correct
      incomplete records.
 
-   * `glaucoma.glaucoma_clean_workflow`: This is a data processing endpoint for administrators that takes the raw, text-based glaucoma
+   * `verify_remedio_glaucoma.glaucoma_clean_workflow`: This is a data processing endpoint for administrators that takes the raw, text-based glaucoma
      results from the OCR process and cleans them. It parses values like the Vertical Cup-to-Disc Ratio (VCDR) into a standardized, numeric
      format and saves them to a separate table, preparing the data for reliable analysis and visualization.
 
@@ -109,9 +109,9 @@ Patient details are NOT masked in these screens. Hence confidential payinet data
 
 ##### Manual Data Verification for Glaucoma Reports
 
-From the Navbar `Glacuoma > Verify` menu, the `glaucoma.list` endpoint provides a workflow-oriented view for data verification, listing all glaucoma reports paginated by date. It allows users to  filter for "verified" or "unverified" encounters and provides a shortcut to jump to the most recent unverified date, streamlining the process of finding and reviewing records that need attention. From here, users can navigate to the edit page to perform the verification.
+From the Navbar `Glacuoma > Verify` menu, the `verify_remedio_glaucoma.glaucoma_list` endpoint provides a workflow-oriented view for data verification, listing all glaucoma reports paginated by date. It allows users to  filter for "verified" or "unverified" encounters and provides a shortcut to jump to the most recent unverified date, streamlining the process of finding and reviewing records that need attention. From here, users can navigate to the edit page to perform the verification.
 
-The `glaucoma.glaucoma_edit` endpoint displays all the images that are associated with a single patient encounter, alongside the editable data extracted from the corresponding glaucoma report. This page serves as a critical data verification and enrichment tool. Its main functionalities include:
+The `verify_remedio_glaucoma.glaucoma_edit` endpoint displays all the images that are associated with a single patient encounter, alongside the editable data extracted from the corresponding glaucoma report. This page serves as a critical data verification and enrichment tool. Its main functionalities include:
    1. Editing Data: It allows authorized users to correct or update the OCR-extracted data, such as the VCDR values, results and qualitative results.
    2. Tagging Laterality: For each image displayed, the user must tag it as belonging to the "right" eye, "left" eye, or "cannot_tell".
    3. Verification: Once all the data is confirmed and every image has been tagged, the user can mark the entire encounter as "verified,"
@@ -135,7 +135,7 @@ This information is saved across several tables in the database to ensure data i
       tables. Additionally, for traceability, the GlaucomaResultsCleaned table keeps a copy of the original VCDR text strings alongside the
       cleaned numeric values.
 
-  The `glaucoma.results` route serves as an analytics dashboard, presenting a high-level overview of the cleaned glaucoma data. It displays aggregate  statistics, such as the total number of reports and unique patients, and shows the distribution of qualitative results. The key feature is the pair of histograms that visualize the distribution of the numeric VCDR (Vertical Cup-to-Disc Ratio) values for both right and left  eyes. It can be acessed from the Navbar `"Glacucoma > Dashboard"`
+  The `verify_remedio_glaucoma.glaucoma_results` route serves as an analytics dashboard, presenting a high-level overview of the cleaned glaucoma data. It displays aggregate  statistics, such as the total number of reports and unique patients, and shows the distribution of qualitative results. The key feature is the pair of histograms that visualize the distribution of the numeric VCDR (Vertical Cup-to-Disc Ratio) values for both right and left  eyes. It can be acessed from the Navbar `"Glacucoma > Dashboard"`
 
 
 Patient details are  masked in these screens. Hence confidential patinet data will be proetcted from the viewers. 

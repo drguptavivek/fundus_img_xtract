@@ -140,7 +140,7 @@ def glaucoma_results():
     hist_left = make_hist(nums_left, bin_size=0.05)
 
     return render_template(
-        "glaucoma/results.html",
+        "verify_remedio_glaucoma/results.html",
         total_reports=total_reports,
         total_with_pdf=total_with_pdf,
         present_on_disk=present_on_disk,
@@ -262,7 +262,7 @@ def glaucoma_list():
     has_next = page < total_pages
 
     return render_template(
-        "glaucoma/list.html",
+        "verify_remedio_glaucoma/list.html",
         items=items,
         page=page,
         per_page=len(items),
@@ -391,7 +391,7 @@ def glaucoma_clean_workflow():
         db.close()
 
     return render_template(
-        "glaucoma/clean_summary.html",
+        "verify_remedio_glaucoma/clean_summary.html",
         total=total,
         inserted=inserted,
         updated=updated,
@@ -635,7 +635,7 @@ def glaucoma_edit(clean_id: int):
     finally:
         db.close()
 
-    return render_template("glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url, back_url=back_url)
+    return render_template("verify_remedio_glaucoma/edit.html", row=row, prev_url=prev_url, next_url=next_url, back_url=back_url)
  
 
 @bp.route("/edit/<int:clean_id>/verify", methods=["POST"])

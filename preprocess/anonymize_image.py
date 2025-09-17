@@ -298,6 +298,14 @@ def anonymize_image(uuid: UUID):
     try:
         uuid_val = _uuid_str(uuid)
 
+        # Log request details for debugging
+        current_app.logger.debug(
+            "Starting anonymize_image function for UUID %s - User: %s, Method: %s",
+            uuid_val,
+            current_user.username if current_user else "Unknown",
+            request.method
+        )
+
         # Load the image by UUID
         upload = db_session.execute(
             select(DirectImageUpload).where(DirectImageUpload.uuid == uuid_val)
@@ -311,9 +319,24 @@ def anonymize_image(uuid: UUID):
         # Access control (lab_units) for non-admin/data_manager
         is_admin = current_user.has_role("admin")
         is_dm = current_user.has_role("data_manager")
+        current_app.logger.debug(
+            "Access control check - User: %s, Is admin: %s, Is data manager: %s",
+            current_user.username if current_user else "Unknown",
+            is_admin,
+            is_dm
+        )
+        
         if not (is_admin or is_dm):
             user = _user_with_lab_units(db_session)
             allowed = {lu.id for lu in (user.lab_units or [])}
+            current_app.logger.debug(
+                "User lab units - User: %s, Lab unit IDs: %s, Upload lab unit ID: %s, Allowed: %s",
+                user.username if user else "Unknown",
+                [lu.id for lu in (user.lab_units or [])],
+                upload.lab_unit_id,
+                upload.lab_unit_id in allowed
+            )
+            
             if upload.lab_unit_id not in allowed:
                 flash("You do not have permission to anonymize this image.", "danger")
                 return redirect(url_for("preprocess.anonymization_dashboard"))
@@ -337,18 +360,40 @@ def anonymize_image(uuid: UUID):
         current_verification = db_session.execute(
             select(DirectImageVerify).where(DirectImageVerify.image_upload_id == upload.id)
         ).scalar_one_or_none()
+        
+        current_app.logger.debug(
+            "Current verification status - Upload ID: %s, Has verification: %s, Status: %s",
+            upload.id,
+            current_verification is not None,
+            current_verification.verified_status if current_verification else "None"
+        )
 
         if request.method == "POST":
+            # Log request details for debugging
+            current_app.logger.debug(
+                "Processing anonymization POST request for UUID %s - User: %s, Form data: %s",
+                uuid_val, 
+                current_user.username if current_user else "Unknown",
+                dict(request.form)
+            )
+            
             # Handle the toggle switch - if checked, it will be "verified", otherwise it won't be in form data
             verified_status = request.form.get("verified_status", "unverified")
             remarks = request.form.get("remarks")
+            
+            current_app.logger.debug(
+                "Form processing - Verified status: %s, Remarks: %s, Upload ID: %s",
+                verified_status, remarks, upload.id if upload else "Unknown"
+            )
 
             if current_verification:
+                current_app.logger.debug("Updating existing verification record for upload ID: %s", upload.id)
                 current_verification.verified_status = verified_status
                 current_verification.remarks = remarks
                 current_verification.verified_by_id = current_user.id
                 current_verification.verified_at = func.now()
             else:
+                current_app.logger.debug("Creating new verification record for upload ID: %s", upload.id)
                 db_session.add(
                     DirectImageVerify(
                         image_upload_id=upload.id,
@@ -361,26 +406,26 @@ def anonymize_image(uuid: UUID):
 
             try:
                 # Handle task creation/removal based on verification status
+                current_app.logger.debug(
+                    "Processing verification status '%s' for upload ID: %s (verification record already created/updated)", 
+                    verified_status, upload.id
+                )
+                
                 if verified_status == "verified":
                     # Set the verification status
-                    if current_verification:
-                        current_verification.verified_status = verified_status
-                        current_verification.remarks = remarks
-                        current_verification.verified_by_id = current_user.id
-                        current_verification.verified_at = func.now()
-                    else:
-                        db_session.add(
-                            DirectImageVerify(
-                                image_upload_id=upload.id,
-                                verified_status=verified_status,
-                                remarks=remarks,
-                                verified_by_id=current_user.id,
-                                verified_at=func.now(),
-                            )
+                    current_app.logger.debug("Handling verified status for upload ID: %s", upload.id)
+                    # The verification record has already been created/updated above, so we don't need to do it again
+                    # Just commit the verification first
+                    current_app.logger.debug("Attempting to commit verification for upload ID: %s", upload.id)
+                    try:
+                        db_session.commit()
+                        current_app.logger.debug("Successfully committed verification for upload ID: %s", upload.id)
+                    except Exception as commit_error:
+                        current_app.logger.exception(
+                            "Failed to commit verification for upload ID: %s - Error: %s", 
+                            upload.id, commit_error
                         )
-                    
-                    # Commit the verification first
-                    db_session.commit()
+                        raise
                     
                     try:
                         # Create a grading task for the verified direct image
@@ -405,24 +450,18 @@ def anonymize_image(uuid: UUID):
                             flash("Cannot unverify image - some tasks are in progress.", "danger")
                             return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
                         
-                        # If we can unverify, proceed with unverification
-                        if current_verification:
-                            current_verification.verified_status = verified_status
-                            current_verification.remarks = remarks
-                            current_verification.verified_by_id = current_user.id
-                            current_verification.verified_at = func.now()
-                        else:
-                            db_session.add(
-                                DirectImageVerify(
-                                    image_upload_id=upload.id,
-                                    verified_status=verified_status,
-                                    remarks=remarks,
-                                    verified_by_id=current_user.id,
-                                    verified_at=func.now(),
-                                )
+                        # The verification record has already been created/updated above, so we don't need to do it again
+                        # Just commit the verification
+                        current_app.logger.debug("Attempting to commit verification for unverified status, upload ID: %s", upload.id)
+                        try:
+                            db_session.commit()
+                            current_app.logger.debug("Successfully committed verification for unverified status, upload ID: %s", upload.id)
+                        except Exception as commit_error:
+                            current_app.logger.exception(
+                                "Failed to commit verification for unverified status, upload ID: %s - Error: %s", 
+                                upload.id, commit_error
                             )
-                        
-                        db_session.commit()
+                            raise
                         
                         # Remove all pending grading tasks for this image
                         try:
@@ -449,32 +488,33 @@ def anonymize_image(uuid: UUID):
                         return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
                 
                 else:
-                    # For other cases, just set and commit the verification
-                    if current_verification:
-                        current_verification.verified_status = verified_status
-                        current_verification.remarks = remarks
-                        current_verification.verified_by_id = current_user.id
-                        current_verification.verified_at = func.now()
-                    else:
-                        db_session.add(
-                            DirectImageVerify(
-                                image_upload_id=upload.id,
-                                verified_status=verified_status,
-                                remarks=remarks,
-                                verified_by_id=current_user.id,
-                                verified_at=func.now(),
-                            )
+                    # For other cases, the verification record has already been created/updated above
+                    # Just commit the verification
+                    current_app.logger.debug("Attempting to commit verification for other status '%s', upload ID: %s", verified_status, upload.id)
+                    try:
+                        db_session.commit()
+                        current_app.logger.debug("Successfully committed verification for other status '%s', upload ID: %s", verified_status, upload.id)
+                    except Exception as commit_error:
+                        current_app.logger.exception(
+                            "Failed to commit verification for other status '%s', upload ID: %s - Error: %s", 
+                            verified_status, upload.id, commit_error
                         )
-                    
-                    db_session.commit()
+                        raise
                 
                 flash(f"Image {upload.filename} marked as {verified_status}.", "success")
 
                 # After saving, go to the next UNVERIFIED (oldest). If none, stop on dashboard.
                 next_uuid = _get_next_unverified_uuid(db_session)
+                current_app.logger.debug(
+                    "Redirect logic - Current upload ID: %s, Next UUID: %s", 
+                    upload.id, next_uuid
+                )
+                
                 if next_uuid:
+                    current_app.logger.debug("Redirecting to next unverified image: %s", next_uuid)
                     return redirect(url_for("preprocess.anonymize_image", uuid=next_uuid))
 
+                current_app.logger.debug("No more images to anonymize, redirecting to dashboard")
                 flash("No more images to anonymize.", "info")
                 return redirect(url_for("preprocess.anonymization_dashboard"))
 
@@ -482,7 +522,21 @@ def anonymize_image(uuid: UUID):
                 current_app.logger.exception(
                     "Failed to update verification status for image UUID %s: %s", uuid_val, e
                 )
+                current_app.logger.debug(
+                    "Database error details - Filename: %s, Uploaded: %s, Uploader: %s, "
+                    "Hospital: %s, Lab Unit: %s, Camera: %s, Disease: %s, Area: %s",
+                    upload.filename if upload else "Unknown",
+                    upload.created_at if upload else "Unknown",
+                    current_user.username if current_user else "Unknown",
+                    upload.hospital.name if upload and upload.hospital else "Unknown",
+                    upload.lab_unit.name if upload and upload.lab_unit else "Unknown",
+                    upload.camera.name if upload and upload.camera else "Unknown",
+                    upload.disease.name if upload and upload.disease else "Unknown",
+                    upload.area.name if upload and upload.area else "Unknown"
+                )
+                current_app.logger.debug("Rolling back database session")
                 db_session.rollback()
+                current_app.logger.debug("Database session rolled back")
                 flash("Failed to save verification status due to a database error.", "danger")
                 return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
 
@@ -494,6 +548,13 @@ def anonymize_image(uuid: UUID):
                 .scalar_one_or_none() is not None
         )
         next_unverified_uuid = _get_next_unverified_uuid(db_session)
+        
+        current_app.logger.debug(
+            "GET request processing - Upload ID: %s, Is verified: %s, Next unverified UUID: %s",
+            upload.id,
+            is_verified,
+            next_unverified_uuid
+        )
 
         return render_template(
             "preprocess/anonymize_image.html",

@@ -57,13 +57,13 @@ The `/uploads` blueprint manages the entire file ingestion workflow, allowing au
 The `/media` and `/reports` blueprints handle securely serving files. Routes allow for fetching images and original PDFs by filename or by their stable UUID. The reports blueprint is dedicated to serving the split-off, single-page PDF reports for DR and Glaucoma, which can also be accessed by their filename or UUID.
 
 ##### Automated Data Audits
-The application includes endpoints for data quality assurance. `audit.missing_capture_date` lists all patient encounters that are missing a valid capture date, allowing admins to correct them. `glaucoma.glaucoma_clean_workflow` is a tool for admins to process raw OCR text into a clean, standardized, and numeric format suitable for analysis.
+The application includes endpoints for data quality assurance. `audit.missing_capture_date` lists all patient encounters that are missing a valid capture date, allowing admins to correct them. `verify_remedio_glaucoma.glaucoma_clean_workflow` is a tool for admins to process raw OCR text into a clean, standardized, and numeric format suitable for analysis.
 
 ##### Viewing and Searching Patient Encounters
 The `/screenings` blueprint is the main interface for browsing patient data. It provides a searchable, paginated list of all encounters. From this list, users can click to see a detailed view of a single encounter, which includes a gallery of all associated images and links to reports. **Note: Patient details are NOT masked on these screens, and access should be restricted to authorized personnel.**
 
 ##### Manual Data Verification (Glaucoma)
-From the "Glaucoma > Verify" menu, users can access the glaucoma data verification workflow. The `glaucoma.list` endpoint shows a list of reports, which can be filtered by verification status. The `glaucoma.edit` page is the core of this workflow, where users can correct OCR data, tag the laterality (left/right eye) of each image, and finally mark the entire encounter as "verified" once all data is confirmed and all images are tagged.
+From the "Glaucoma > Verify" menu, users can access the glaucoma data verification workflow. The `verify_remedio_glaucoma.glaucoma_list` endpoint shows a list of reports, which can be filtered by verification status. The `verify_remedio_glaucoma.glaucoma_edit` page is the core of this workflow, where users can correct OCR data, tag the laterality (left/right eye) of each image, and finally mark the entire encounter as "verified" once all data is confirmed and all images are tagged.
 
 - **Data Storage**:
   1.  **Laterality**: Saved in the `eye_side` column of the `EncounterFile` table.

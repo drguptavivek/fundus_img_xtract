@@ -94,11 +94,11 @@ The application is built using Flask and is organized into modular blueprints, e
 
 - **File Serving (`/media`, `/reports`)**: Securely serves images and PDF reports. Files can be fetched by their filename or, for stable access, by their unique UUID.
 
-- **Data Auditing & Cleaning (`/audit`, `/glaucoma`)**: Provides tools for data quality assurance. This includes a report for encounters missing a capture date (`audit.missing_capture_date`) and a workflow for cleaning and standardizing raw OCR data into a numeric format suitable for analysis (`glaucoma.glaucoma_clean_workflow`).
+- **Data Auditing & Cleaning (`/audit`, `/verify_remedio_glaucoma`)**: Provides tools for data quality assurance. This includes a report for encounters missing a capture date (`audit.missing_capture_date`) and a workflow for cleaning and standardizing raw OCR data into a numeric format suitable for analysis (`verify_remedio_glaucoma.glaucoma_clean_workflow`).
 
 - **Patient Encounter Review (`/screenings`)**: The main interface for browsing patient data. It offers a searchable, paginated list of all encounters. The detail view displays all images and reports for an encounter. **Note: Patient-identifying information is visible on these screens, and access must be strictly controlled.**
 
-- **Manual Data Verification (`/glaucoma`)**: A workflow for clinical staff to verify the accuracy of extracted OCR data. Users can correct data, tag the laterality (left/right eye) of each image, and mark the encounter as "verified" only after all images have been tagged.
+- **Manual Data Verification (`/verify_remedio_glaucoma`)**: A workflow for clinical staff to verify the accuracy of extracted OCR data. Users can correct data, tag the laterality (left/right eye) of each image, and mark the encounter as "verified" only after all images have been tagged.
 
 - **Clinical Image Grading (`/grading`)**: This blueprint provides the interface for masked clinical grading of images for DR and Glaucoma.
     - **Dashboard**: The grading dashboard offers statistics on grading activity and a "Start Grading" button that directs the user to a random, recent, ungraded image to ensure an efficient workflow.

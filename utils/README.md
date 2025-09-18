@@ -23,12 +23,18 @@ Master utility functions for retrieving core entities:
 
 ### userGradingsDone.py
 Utility functions for retrieving paginated list of gradings done by a user:
+- `get_user_kpi_completed_task_count_data()` - Get KPI data for completed tasks by disease
+
+### gradeUtils.py
+Utility functions for working with grades and tasks:
+- `fetch_grade_with_related_data()` - Fetch a grade with all related data loaded
+- `fetch_task_with_related_data()` - Fetch a grading task with all related data loaded
+- `fetch_existing_grade_for_user()` - Fetch existing grade for this user and slot (for review purposes)
 - `get_user_gradings()` - Returns paginated gradings for a user
-- `get_user_gradings_with_details()` - Returns paginated gradings with additional details
+- `get_user_gradings_with_details()` - Returns paginated gradings with additional details (disease name, lab unit, hospital)
 
 ## Testing
 
 Each utility module has a corresponding test file:
-- `test_dualGradingKPIs.py`
-- `test_masterUtils.py`
 - `test_userGradingsDone.py`
+- `test_gradeUtils.py`

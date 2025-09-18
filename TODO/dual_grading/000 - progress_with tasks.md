@@ -14,10 +14,10 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 
 ### Utility Functions for User Gradings
   Added utility functions to retrieve paginated list of gradings done by a user:
-  - Created `utils/userGradingsDone.py` with two functions:
+  - Created `utils/gradeUtils.py` with two functions:
     - `get_user_gradings()`: Returns paginated gradings for a user
     - `get_user_gradings_with_details()`: Returns paginated gradings with additional details (disease name, lab unit, hospital, grade)
-  - Added comprehensive tests in `utils/test_userGradingsDone.py`
+  - Moved existing functions to appropriate modules for better organization
   - Functions properly handle database sessions and include filtering capabilities
 
 ### Dual Grading Utility Functions

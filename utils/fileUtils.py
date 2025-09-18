@@ -20,7 +20,6 @@ def _safe_file(base_dir: Path, filename: str) -> tuple[str, str]:
         abort(404)
     return (str(base_dir), fname)
 
-
 def _ensure_under_root(abs_path: Path, root: Path) -> None:
     """Ensure abs_path is inside root (prevents traversal / wrong volume)."""
     abs_path = abs_path.resolve()
@@ -29,7 +28,6 @@ def _ensure_under_root(abs_path: Path, root: Path) -> None:
         abs_path.relative_to(root)
     except Exception:
         abort(404)
-
 
 def _send_file_with_headers(abs_path: Path, mimetype: str | None = None) -> Response:
     """Cross-platform safe file send with sensible headers."""
@@ -53,12 +51,9 @@ def _send_file_with_headers(abs_path: Path, mimetype: str | None = None) -> Resp
     resp.headers.setdefault("Cache-Control", "private, max-age=600")
     return resp
 
-
-
 def ensure_root() -> Path:
     DIRECT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     return DIRECT_UPLOAD_DIR
-
 
 def _is_inside(child: Path, root: Path) -> bool:
     try:
@@ -106,8 +101,6 @@ def abs_from_parts(folder_rel: str, filename: str, kind: str = "orig") -> Path:
         raise ValueError(f"Resolved path escapes DIRECT_UPLOAD_DIR: {target}")
 
     return target
-
-
 
 def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path, Path, Path, str]:
     """

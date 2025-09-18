@@ -6,4 +6,3 @@ api_bp = Blueprint("fundus_api", __name__, url_prefix="/api")
 
 # Import all route handlers
 from . import routes
-from . import tasks

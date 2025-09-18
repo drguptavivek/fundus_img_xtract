@@ -11,7 +11,10 @@ from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
 from services.taskCreationServices import ensure_task as svc_ensure_task
 from utils.getNextDualGradingTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
-from utils.dualGradingUtils import get_user_eligibility_for_task
+from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
+from utils.gradeUtils import fetch_grade_with_related_data, fetch_task_with_related_data
+from utils.dualGradingEligibility import check_arbitration_eligibility
+from utils.masterUtils import fetch_active_disease_gradings
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -24,17 +27,8 @@ def revise_grading(grade_id: int):
         
     db = Session()
     try:
-        # Fetch the grade with related data
-        grade = db.query(Grade).options(
-            selectinload(Grade.task).selectinload(GradingTask.disease),
-            selectinload(Grade.task).selectinload(GradingTask.encounter_file),
-            selectinload(Grade.task).selectinload(GradingTask.direct_image),
-            selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
-            selectinload(Grade.task).selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
-            selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.grader),
-            selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.label),
-            selectinload(Grade.label)
-        ).filter(Grade.id == grade_id).first()
+        # Fetch the grade with related data using utility function
+        grade = fetch_grade_with_related_data(db, grade_id)
         
         if not grade:
             flash("Grade not found.", "danger")
@@ -86,11 +80,8 @@ def revise_grading(grade_id: int):
             flash(f"{slot_type.capitalize()} slot is not available for this task (task state: {task.state}).", "danger")
             return redirect(url_for("grading.index"))
         
-        # Fetch disease gradings for this disease
-        disease_gradings = db.query(DiseaseGrading).filter(
-            DiseaseGrading.disease_id == task.disease_id,
-            DiseaseGrading.is_active == True
-        ).order_by(DiseaseGrading.display_order).all()
+        # Fetch disease gradings for this disease using utility function
+        disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
         
         # Create a dictionary mapping grading IDs to their guidelines
         grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
@@ -133,16 +124,8 @@ def dual_grading_task(task_id: int, slot_type: str):
     
     db = Session()
     try:
-        # Fetch the task with related data
-        task = db.query(GradingTask).options(
-            selectinload(GradingTask.disease),
-            selectinload(GradingTask.encounter_file),
-            selectinload(GradingTask.direct_image),
-            selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
-            selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
-            selectinload(GradingTask.grades).selectinload(Grade.grader),
-            selectinload(GradingTask.grades).selectinload(Grade.label)
-        ).filter(GradingTask.id == task_id).first()
+        # Fetch the task with related data using utility function
+        task = fetch_task_with_related_data(db, task_id)
         
         if not task:
             flash("Task not found.", "danger")
@@ -154,7 +137,7 @@ def dual_grading_task(task_id: int, slot_type: str):
             return redirect(url_for("grading.index"))
         
         # Check if user is eligible for the specified slot
-        if not get_user_eligibility_for_task(current_user.id, task_id, slot_type):
+        if not get_user_eligibility_for_task(db, current_user.id, task_id, slot_type):
             flash(f"You are not eligible to grade this task as {slot_type}.", "danger")
             return redirect(url_for("grading.index"))
         
@@ -169,11 +152,8 @@ def dual_grading_task(task_id: int, slot_type: str):
             flash("Arbitrator slot is not available for this task.", "danger")
             return redirect(url_for("grading.index"))
         
-        # Fetch disease gradings for this disease
-        disease_gradings = db.query(DiseaseGrading).filter(
-            DiseaseGrading.disease_id == task.disease_id,
-            DiseaseGrading.is_active == True
-        ).order_by(DiseaseGrading.display_order).all()
+        # Fetch disease gradings for this disease using utility function
+        disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
         
         # Create a dictionary mapping grading IDs to their guidelines
         grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
@@ -185,12 +165,8 @@ def dual_grading_task(task_id: int, slot_type: str):
         elif task.direct_image:
             image_uuid = task.direct_image.uuid
             
-        # Fetch existing grade for this user and slot (for review purposes)
-        existing_grade = db.query(Grade).filter(
-            Grade.task_id == task_id,
-            Grade.grader_user_id == current_user.id,
-            Grade.role_slot == slot_type
-        ).first()
+        # Fetch existing grade for this user and slot (for review purposes) using utility function
+        existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
         
         # Store the start time in the session
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
@@ -248,7 +224,7 @@ def dual_grading_submit():
             return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Eligibility check
-        if not get_user_eligibility_for_task(current_user.id, task_id, slot):
+        if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):
             flash("You are not eligible to grade this task for the selected role.", "danger")
             return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
@@ -259,30 +235,18 @@ def dual_grading_submit():
                 flash("You don't have permission to grade as arbitrator.", "danger")
                 return redirect(url_for("grading.index"))
             
-            # Check arbitration eligibility using UserDiseaseUnitRole
-            eligibility = db.query(UserDiseaseUnitRole).filter(
-                UserDiseaseUnitRole.user_id == current_user.id,
-                UserDiseaseUnitRole.disease_id == task.disease_id,
-                UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
-                UserDiseaseUnitRole.active == True,
-                UserDiseaseUnitRole.can_arbitrate == True
-            ).first()
+            # Check arbitration eligibility using utility function
+            eligibility = check_arbitration_eligibility(db, current_user.id, task.disease_id, task.lab_unit_id)
             
             if not eligibility:
                 flash("You are not eligible to arbitrate for this task.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
-        # Arbitrator exclusion: cannot be prior resident/faculty grader
-        # Admins are exempt from this restriction
-        if slot == "arbitrator" and not current_user.has_role('admin'):
-            existing_grade = db.query(Grade).filter(
-                Grade.task_id == task.id,
-                Grade.grader_user_id == current_user.id,
-                Grade.role_slot.in_(["resident", "faculty"])
-            ).first()
-            
-            if existing_grade:
-                flash("You cannot arbitrate a task you've already graded as resident or faculty.", "danger")
+        # Arbitrator exclusion: cannot be prior resident/faculty grader within 2 weeks
+        if slot == "arbitrator":
+            from utils.getNextDualGradingTasks import _has_user_graded_task_recently
+            if _has_user_graded_task_recently(db, current_user.id, task.id):
+                flash("You cannot arbitrate a task you've graded as resident or faculty within the last 2 weeks.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Validate label belongs to task.disease_id

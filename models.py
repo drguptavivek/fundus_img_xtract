@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column)
+from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
@@ -461,7 +461,7 @@ class Grade(Base):
     # Normalized to master labels for the disease
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id'), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    time_taken: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Time taken in seconds
+    time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)  # Time taken in seconds
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

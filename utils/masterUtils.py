@@ -62,6 +62,23 @@ def get_disease_gradings(disease_id: int) -> List[Dict[str, Any]]:
         session.close()
 
 
+def fetch_active_disease_gradings(db, disease_id: int):
+    """
+    Fetch all active disease gradings for a disease, ordered by display order.
+    
+    Args:
+        db: Database session
+        disease_id: The ID of the disease
+        
+    Returns:
+        List of active DiseaseGrading objects ordered by display order
+    """
+    return db.query(DiseaseGrading).filter(
+        DiseaseGrading.disease_id == disease_id,
+        DiseaseGrading.is_active == True
+    ).order_by(DiseaseGrading.display_order).all()
+
+
 def get_all_hospitals() -> List[Dict[str, Any]]:
     """
     Get all hospitals in the system.

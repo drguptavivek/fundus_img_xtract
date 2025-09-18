@@ -68,7 +68,7 @@ def index():
         kpi_arbitration_completed_by_disease = {}
         
         # Get user's grading eligibility details
-        user_eligibility = get_user_grading_eligibility_details(current_user.id)
+        user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
         
         # Get all diseases to ensure we have entries for all diseases
         all_diseases = db.query(Disease).all()
@@ -81,7 +81,7 @@ def index():
         ]
         
         # Calculate pending KPIs using the utility function
-        kpi_pending_data = get_user_kpi_pending_task_count_data(current_user.id)
+        kpi_pending_data = get_user_kpi_pending_task_count_data(db, current_user.id)
         
         # Process pending KPI data from the utility function
         for disease in all_diseases:

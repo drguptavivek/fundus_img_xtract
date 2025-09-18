@@ -21,9 +21,13 @@ Master utility functions for retrieving core entities:
 - `get_all_areas()` - Get all areas
 - `get_all_cameras()` - Get all cameras
 
-### userGradingsDone.py
-Utility functions for retrieving paginated list of gradings done by a user:
+### dualGradingKPIs.py
+Utility functions for dual grading operations:
+- `get_user_kpi_pending_task_count_data()` - Get KPI data for pending tasks by disease
 - `get_user_kpi_completed_task_count_data()` - Get KPI data for completed tasks by disease
+
+### userGradingsDone.py
+Utility functions for retrieving paginated list of gradings done by a user
 
 ### gradeUtils.py
 Utility functions for working with grades and tasks:
@@ -36,5 +40,6 @@ Utility functions for working with grades and tasks:
 ## Testing
 
 Each utility module has a corresponding test file:
+- `test_dualGradingKPIs.py`
 - `test_userGradingsDone.py`
 - `test_gradeUtils.py`

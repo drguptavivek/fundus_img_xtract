@@ -8,7 +8,7 @@ import json
 from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
-from utils.userGradingsDone import get_user_kpi_completed_task_count_data
+from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.gradeUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 from utils.masterUtils import get_all_diseases

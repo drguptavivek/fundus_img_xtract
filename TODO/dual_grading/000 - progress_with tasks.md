@@ -58,7 +58,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Enhanced "My Gradings" section to display role slot type, lab unit name, and hospital name
   - Fixed faculty completed KPI to correctly count all completed gradings regardless of current eligibility status
   - Removed admin-specific logic from KPI functions to treat all users consistently
-  - Moved `get_user_kpi_completed_task_count_data` function to `utils/userGradingsDone.py` for better organization
+  - Moved `get_user_kpi_completed_task_count_data` function to `utils/dualGradingKPIs.py` for better organization
   - Added user grading eligibility details section showing hospital, lab unit, and disease-wise slot information
   - Restored Arbitration KPIs with same visibility logic as Resident and Faculty KPIs (visible to residents and ophthalmologists)
   - Restructured dashboard route to serve only residents and ophthalmologists (removed admin-specific logic)

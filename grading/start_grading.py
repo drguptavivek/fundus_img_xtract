@@ -2,7 +2,7 @@ from flask import redirect, url_for, flash
 from flask_login import current_user
 from auth.roles import roles_required
 from models import Session, Disease
-from utils.getNextDualGradingTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
+from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
 
 
 @roles_required("resident", "ophthalmologist")

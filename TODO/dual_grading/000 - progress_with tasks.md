@@ -21,7 +21,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Functions properly handle database sessions and include filtering capabilities
 
 ### Dual Grading Utility Functions
-  Enhanced `utils/dualGradingUtils.py` with additional utility functions:
+  Enhanced `utils/dualGradingKPIs.py` with additional utility functions:
   - `get_all_pending_resident_for_disease()`: Get total pending resident tasks for a user and disease across all eligible lab units
   - `get_all_pending_faculty_for_disease()`: Get total pending faculty tasks for a user and disease across all eligible lab units
   - `get_all_pending_arbitration_for_disease()`: Get total pending arbitration tasks for a user and disease across all eligible lab units
@@ -83,7 +83,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 
 ### 2-Week Restriction Logic
   - Implemented 2-week restriction to prevent users from grading the same task multiple times within a short period
-  - Added `_has_user_graded_task_recently` function in `utils/getNextDualGradingTasks.py` to check if a user has graded a task within the last 2 weeks
+  - Added `_has_user_graded_task_recently` function in `utils/dualGradingGetNextTasks.py` to check if a user has graded a task within the last 2 weeks
   - Updated task assignment logic to exclude tasks that the user has graded recently, regardless of slot
   - Enhanced `_get_filtered_tasks` function to filter out tasks that have been recently graded by the user
   - This prevents over-grading and ensures diverse grader participation in the dual grading workflow

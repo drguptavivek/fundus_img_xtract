@@ -10,7 +10,7 @@ from datetime import datetime
 from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
 from services.taskCreationServices import ensure_task as svc_ensure_task
-from utils.getNextDualGradingTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
+from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
 from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
 from utils.gradeUtils import fetch_grade_with_related_data, fetch_task_with_related_data
 from utils.dualGradingEligibility import check_arbitration_eligibility
@@ -244,7 +244,7 @@ def dual_grading_submit():
         
         # Arbitrator exclusion: cannot be prior resident/faculty grader within 2 weeks
         if slot == "arbitrator":
-            from utils.getNextDualGradingTasks import _has_user_graded_task_recently
+            from utils.dualGradingGetNextTasks import _has_user_graded_task_recently
             if _has_user_graded_task_recently(db, current_user.id, task.id):
                 flash("You cannot arbitrate a task you've graded as resident or faculty within the last 2 weeks.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))

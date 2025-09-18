@@ -4,7 +4,7 @@ This directory contains utility functions used throughout the application.
 
 ## Available Modules
 
-### dualGradingUtils.py
+### dualGradingKPIs.py
 Utility functions specifically for dual grading operations:
 - Functions for calculating pending tasks across all eligible lab units for a disease (with special handling for admin users)
 - Functions for calculating pending tasks for specific lab unit and disease combinations
@@ -29,6 +29,6 @@ Utility functions for retrieving paginated list of gradings done by a user:
 ## Testing
 
 Each utility module has a corresponding test file:
-- `test_dualGradingUtils.py`
+- `test_dualGradingKPIs.py`
 - `test_masterUtils.py`
 - `test_userGradingsDone.py`

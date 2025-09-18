@@ -104,7 +104,8 @@ def revise_grading(grade_id: int):
             current_slot=slot_type,
             existing_grade=existing_grade,
             image_uuid=image_uuid,
-            grades=task.grades
+            grades=task.grades,
+            existing_grade_in_header=True
         ))
         
         # Prevent caching of this page
@@ -183,7 +184,8 @@ def dual_grading_task(task_id: int, slot_type: str):
             current_slot=slot_type,
             existing_grade=existing_grade,
             image_uuid=image_uuid,
-            grades=grades
+            grades=grades,
+            existing_grade_in_header=True
         )
     finally:
         db.close()

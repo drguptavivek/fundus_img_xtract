@@ -25,6 +25,7 @@ def index():
         
         # Get user's gradings with details using pagination
         my_items, total_mine = get_user_gradings_with_details(
+            db,
             user_id=getattr(current_user, 'id', None),
             page=page,
             per_page=per_page
@@ -105,7 +106,7 @@ def index():
                 kpi_arbitration_pending += disease_kpi.get('arbitration_pending', 0)
         
         # Calculate completed KPIs using the utility function
-        kpi_completed_data = get_user_kpi_completed_task_count_data(current_user.id)
+        kpi_completed_data = get_user_kpi_completed_task_count_data(db, current_user.id)
         
         # Process completed KPI data from the utility function
         for disease in all_diseases:

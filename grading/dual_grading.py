@@ -12,7 +12,7 @@ from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disea
 from services.taskCreationServices import ensure_task as svc_ensure_task
 from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
 from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
-from utils.gradeUtils import fetch_grade_with_related_data, fetch_task_with_related_data
+from utils.gradeUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 

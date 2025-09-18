@@ -461,6 +461,8 @@ class Grade(Base):
     # Normalized to master labels for the disease
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id'), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_taken: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Time taken in seconds
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')

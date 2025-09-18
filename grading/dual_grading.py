@@ -129,6 +129,8 @@ def revise_grading(grade_id: int):
 @roles_required("resident", "ophthalmologist", "admin")
 def dual_grading_task(task_id: int, slot_type: str):
     """Display a task for dual grading."""
+    from flask import session as flask_session
+    
     db = Session()
     try:
         # Fetch the task with related data
@@ -190,6 +192,10 @@ def dual_grading_task(task_id: int, slot_type: str):
             Grade.role_slot == slot_type
         ).first()
         
+        # Store the start time in the session
+        start_time_key = f"grading_start_time_{task_id}_{slot_type}"
+        flask_session[start_time_key] = datetime.utcnow().isoformat()
+        
         # Pass grades for display in the template
         grades = task.grades
             
@@ -210,6 +216,8 @@ def dual_grading_task(task_id: int, slot_type: str):
 @roles_required("resident", "ophthalmologist", "admin")
 def dual_grading_submit():
     """Submit a grade for a task."""
+    from flask import session as flask_session
+    
     task_id = request.form.get("task_id", type=int)
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
@@ -324,9 +332,24 @@ def dual_grading_submit():
         grades_logger = logging.getLogger("grades")
         grades_logger.info(log_message)
         
+        # Calculate time taken
+        time_taken = None
+        start_time_key = f"grading_start_time_{task_id}_{slot}"
+        start_time_str = flask_session.get(start_time_key)
+        if start_time_str:
+            try:
+                start_time = datetime.fromisoformat(start_time_str)
+                time_taken = int((datetime.utcnow() - start_time).total_seconds())
+                # Remove the start time from session as we've used it
+                flask_session.pop(start_time_key, None)
+            except (ValueError, TypeError):
+                # If there's an error parsing the start time, just leave time_taken as None
+                pass
+        
         if existing_grade:
             existing_grade.disease_grading_id = label_id
             existing_grade.comment = comment
+            existing_grade.time_taken = time_taken
             db.add(existing_grade)
             db.flush()  # Ensure the ID is available
         else:
@@ -335,7 +358,8 @@ def dual_grading_submit():
                 grader_user_id=current_user.id,
                 role_slot=slot,
                 disease_grading_id=label_id,
-                comment=comment
+                comment=comment,
+                time_taken=time_taken
             )
             db.add(new_grade)
             db.flush()  # Ensure the ID is available

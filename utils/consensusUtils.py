@@ -1,0 +1,292 @@
+"""
+Utility functions for handling consensus in the dual grading system.
+
+This module provides functions for:
+- Creating consensus records when grading tasks reach agreement
+- Checking consensus status for tasks
+- Updating task states based on grading activity
+"""
+
+from typing import Optional, Tuple
+from sqlalchemy.orm import selectinload
+from sqlalchemy import and_, or_
+from models import Session, GradingTask, Grade, Consensus, User, DiseaseGrading
+import logging
+from datetime import datetime
+
+
+def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
+    """
+    Create or update consensus for a task based on grades.
+    
+    Args:
+        task_id: The ID of the task to create/update consensus for
+        db: Optional database session (if not provided, a new session will be created)
+        
+    Returns:
+        Consensus object if created/updated, None otherwise
+    """
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
+        
+    try:
+        task = db.query(GradingTask).options(
+            selectinload(GradingTask.grades).selectinload(Grade.grader)
+        ).filter(GradingTask.id == task_id).first()
+        
+        if not task:
+            return None
+            
+        # Get all grades for this task
+        all_grades = task.grades
+        
+        # Check for grades by role
+        resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
+        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
+        
+        # Check if consensus already exists
+        existing_consensus = db.query(Consensus).filter(Consensus.task_id == task.id).first()
+        
+        if existing_consensus:
+            # Consensus already exists, return it
+            return existing_consensus
+            
+        # Determine if consensus can be established
+        consensus = None
+        
+        if arbitrator_grade:
+            # An arbitrator has graded, so use adjudication method
+            consensus = Consensus(
+                task_id=task.id,
+                final_disease_grading_id=arbitrator_grade.disease_grading_id,
+                method="adjudication",
+                decided_by_user_id=arbitrator_grade.grader_user_id
+            )
+        elif resident_grade and faculty_grade:
+            # Both resident and faculty have graded - check for match
+            if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
+                # Labels match, create match consensus
+                consensus = Consensus(
+                    task_id=task.id,
+                    final_disease_grading_id=resident_grade.disease_grading_id,
+                    method="match",
+                    decided_by_user_id=None  # System decision
+                )
+            # If they don't match, no consensus is created yet - needs arbitration
+        
+        if consensus:
+            db.add(consensus)
+            db.commit()
+            db.refresh(consensus)
+            
+        return consensus
+    except Exception as e:
+        logging.getLogger("consensus").exception(f"Failed to create/update consensus for task {task_id}: {e}")
+        if db:
+            db.rollback()
+        return None
+    finally:
+        if close_db:
+            db.close()
+
+
+def get_task_consensus_status(task_id: int, db=None) -> dict:
+    """
+    Get the consensus status for a task.
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Optional database session (if not provided, a new session will be created)
+        
+    Returns:
+        Dictionary with consensus status information
+    """
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
+        
+    try:
+        task = db.query(GradingTask).options(
+            selectinload(GradingTask.grades).selectinload(Grade.grader),
+            selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
+            selectinload(GradingTask.consensus).selectinload(Consensus.final_label)
+        ).filter(GradingTask.id == task_id).first()
+        
+        if not task:
+            return {"error": "Task not found"}
+            
+        # Get all grades for this task
+        all_grades = task.grades
+        
+        # Check for grades by role
+        resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
+        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
+        
+        # Check for existing consensus
+        existing_consensus = task.consensus
+        
+        return {
+            "task_id": task.id,
+            "task_state": task.state,
+            "resident_grade": {
+                "id": resident_grade.id,
+                "label_id": resident_grade.disease_grading_id,
+                "label_impression": resident_grade.label.impression if resident_grade and resident_grade.label else None,
+                "grader": resident_grade.grader.username if resident_grade and resident_grade.grader else None,
+                "created_at": resident_grade.created_at if resident_grade else None
+            } if resident_grade else None,
+            "faculty_grade": {
+                "id": faculty_grade.id,
+                "label_id": faculty_grade.disease_grading_id,
+                "label_impression": faculty_grade.label.impression if faculty_grade and faculty_grade.label else None,
+                "grader": faculty_grade.grader.username if faculty_grade and faculty_grade.grader else None,
+                "created_at": faculty_grade.created_at if faculty_grade else None
+            } if faculty_grade else None,
+            "arbitrator_grade": {
+                "id": arbitrator_grade.id,
+                "label_id": arbitrator_grade.disease_grading_id,
+                "label_impression": arbitrator_grade.label.impression if arbitrator_grade and arbitrator_grade.label else None,
+                "grader": arbitrator_grade.grader.username if arbitrator_grade and arbitrator_grade.grader else None,
+                "created_at": arbitrator_grade.created_at if arbitrator_grade else None
+            } if arbitrator_grade else None,
+            "consensus": {
+                "id": existing_consensus.id,
+                "method": existing_consensus.method,
+                "final_label_id": existing_consensus.final_disease_grading_id,
+                "final_label_impression": existing_consensus.final_label.impression if existing_consensus and existing_consensus.final_label else None,
+                "decided_by_user_id": existing_consensus.decided_by_user_id,
+                "decided_by_username": existing_consensus.decided_by.username if existing_consensus and existing_consensus.decided_by else None,
+                "decided_at": existing_consensus.decided_at
+            } if existing_consensus else None,
+            "can_create_consensus": bool(
+                (resident_grade and faculty_grade and resident_grade.disease_grading_id == faculty_grade.disease_grading_id) or
+                arbitrator_grade
+            )
+        }
+    except Exception as e:
+        logging.getLogger("consensus").exception(f"Failed to get consensus status for task {task_id}: {e}")
+        return {"error": f"Failed to get consensus status: {e}"}
+    finally:
+        if close_db:
+            db.close()
+
+
+def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[GradingTask]:
+    """
+    Update the task state based on the current grades.
+    
+    Args:
+        task_id: The ID of the task to update
+        db: Optional database session (if not provided, a new session will be created)
+        
+    Returns:
+        Updated GradingTask object or None if task not found
+    """
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
+        
+    try:
+        task = db.query(GradingTask).filter(GradingTask.id == task_id).first()
+        if not task:
+            return None
+            
+        # Get all grades for this task
+        all_grades = db.query(Grade).filter(Grade.task_id == task.id).all()
+        
+        # Check for grades by role
+        resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
+        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
+        
+        # Determine new state
+        if arbitrator_grade:
+            # Arbitrator has graded - finalize task
+            task.state = "final"
+        elif resident_grade and faculty_grade:
+            # Both grades submitted, check for match
+            if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
+                # Match - finalize task
+                task.state = "final"
+            else:
+                # No match - go to arbitration
+                task.state = "arbitration"
+        elif resident_grade and not faculty_grade:
+            task.state = "resident_done"
+        elif faculty_grade and not resident_grade:
+            task.state = "faculty_done"
+        else:
+            task.state = "pending"
+        
+        db.commit()
+        db.refresh(task)
+        
+        return task
+    except Exception as e:
+        logging.getLogger("consensus").exception(f"Failed to update task state for task {task_id}: {e}")
+        if db:
+            db.rollback()
+        return None
+    finally:
+        if close_db:
+            db.close()
+
+
+def has_consensus(task_id: int, db=None) -> bool:
+    """
+    Check if a task has reached consensus.
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Optional database session (if not provided, a new session will be created)
+        
+    Returns:
+        True if the task has consensus, False otherwise
+    """
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
+        
+    try:
+        consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
+        return consensus is not None
+    except Exception as e:
+        logging.getLogger("consensus").exception(f"Failed to check consensus for task {task_id}: {e}")
+        return False
+    finally:
+        if close_db:
+            db.close()
+
+
+def get_consensus_method(task_id: int, db=None) -> Optional[str]:
+    """
+    Get the consensus method for a task (match or adjudication).
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Optional database session (if not provided, a new session will be created)
+        
+    Returns:
+        Method string ('match' or 'adjudication') or None if no consensus
+    """
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
+        
+    try:
+        consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
+        return consensus.method if consensus else None
+    except Exception as e:
+        logging.getLogger("consensus").exception(f"Failed to get consensus method for task {task_id}: {e}")
+        return None
+    finally:
+        if close_db:
+            db.close()

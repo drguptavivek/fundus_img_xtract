@@ -120,7 +120,8 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 
   
 ### NEXT STEP 
-  Continue with additional security enhancements and testing.
+  Consensus task
+  
 
 
  

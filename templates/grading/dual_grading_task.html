@@ -156,11 +156,36 @@
         </div>
         {% endif %}
         
+        {% if current_slot == 'arbitrator' and (resident_grade or faculty_grade) %}
+        <div class="mt-3">
+          <h6 class="border-bottom pb-1">Previous Grades</h6>
+          {% if resident_grade %}
+          <div class="small mb-2 p-2 bg-light rounded">
+            <div><strong class="text-capitalize">{{ resident_grade.role_slot }}</strong> - Grader ID: {{ resident_grade.grader.id }}</div>
+            <div>{{ resident_grade.label.impression }}</div>
+            {% if resident_grade.comment %}
+            <div class="text-muted fst-italic">"{{ resident_grade.comment }}"</div>
+            {% endif %}
+            <div class="text-muted">{{ resident_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+          {% endif %}
+          {% if faculty_grade %}
+          <div class="small mb-2 p-2 bg-light rounded">
+            <div><strong class="text-capitalize">{{ faculty_grade.role_slot }}</strong> - Grader ID: {{ faculty_grade.grader.id }}</div>
+            <div>{{ faculty_grade.label.impression }}</div>
+            {% if faculty_grade.comment %}
+            <div class="text-muted fst-italic">"{{ faculty_grade.comment }}"</div>
+            {% endif %}
+            <div class="text-muted">{{ faculty_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
         {% if existing_grade %}
         <div class="mt-3">
           <h6 class="border-bottom pb-1">Your Previous Grade</h6>
           <div class="small mb-2 p-2 bg-light rounded">
-            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - {{ existing_grade.grader.full_name or existing_grade.grader.username }}</div>
+            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - Grader ID: {{ existing_grade.grader.id }}</div>
             <div>{{ existing_grade.label.impression }}</div>
             {% if existing_grade.comment %}
             <div class="text-muted fst-italic">"{{ existing_grade.comment }}"</div>

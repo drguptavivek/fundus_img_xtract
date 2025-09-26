@@ -15,6 +15,7 @@ from utils.dualGradingEligibility import check_arbitration_eligibility, get_user
 from utils.gradeUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
+from utils.consensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -169,6 +170,16 @@ def dual_grading_task(task_id: int, slot_type: str):
         # Fetch existing grade for this user and slot (for review purposes) using utility function
         existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
         
+        # If this is an arbitration task, fetch resident and faculty grades to show to the arbitrator
+        resident_grade = None
+        faculty_grade = None
+        if slot_type == 'arbitrator' and task.state == 'arbitration':
+            for grade in task.grades:
+                if grade.role_slot == 'resident':
+                    resident_grade = grade
+                elif grade.role_slot == 'faculty':
+                    faculty_grade = grade
+        
         # Store the start time in the session
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
         flask_session[start_time_key] = datetime.utcnow().isoformat()
@@ -185,7 +196,9 @@ def dual_grading_task(task_id: int, slot_type: str):
             existing_grade=existing_grade,
             image_uuid=image_uuid,
             grades=grades,
-            existing_grade_in_header=True
+            existing_grade_in_header=True,
+            resident_grade=resident_grade,
+            faculty_grade=faculty_grade
         )
     finally:
         db.close()
@@ -351,7 +364,7 @@ def dual_grading_submit():
             consensus = Consensus(
                 task_id=task.id,
                 final_disease_grading_id=label_id,
-                method="arbitration",
+                method="adjudication",  # Fixed: should be 'adjudication' not 'arbitration'
                 decided_by_user_id=current_user.id
             )
             db.add(consensus)

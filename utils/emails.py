@@ -163,3 +163,31 @@ Thank you,
 The System Administrator
 """
     return send_email(to_email, subject, body, callback)
+
+
+def send_otp_email_sync(to_email: str, username: str, otp: str) -> bool:
+    """
+    Synchronously send an OTP email to the specified recipient.
+    
+    Args:
+        to_email (str): Recipient's email address
+        username (str): Username of the user
+        otp (str): One-time password to send
+        
+    Returns:
+        bool: True if email was sent successfully, False otherwise
+    """
+    subject = "Password Reset OTP"
+    body = f"""
+Hello {username},
+
+You have requested to reset your password. Here is your One Time Password (OTP):
+
+{otp}
+
+This OTP is valid for 10 minutes. If you did not request this, please ignore this email.
+
+Thank you,
+The System Administrator
+"""
+    return send_email_sync(to_email, subject, body)

@@ -208,14 +208,8 @@ def forgot_password():
     from datetime import datetime, timedelta
     import secrets
     from models import Session
-    from utils.emails import send_otp_email
+    from utils.emails import send_otp_email_sync
     from sqlalchemy import and_
-    
-    def email_callback(success):
-        if success:
-            current_app.logger.info(f"OTP email sent successfully to {session.get('password_reset_email')}")
-        else:
-            current_app.logger.error(f"Failed to send OTP email to {session.get('password_reset_email')}")
     
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -252,11 +246,16 @@ def forgot_password():
                 session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
                 session['password_reset_user_id'] = user.id  # Store user ID for verification
                 
-                # Send email with OTP asynchronously
-                send_otp_email(email, user.username, otp, callback=email_callback)
+                # Send email with OTP synchronously so we can check for server/handshake errors
+                email_sent = send_otp_email_sync(email, user.username, otp)
                 
-                # To prevent user enumeration, always show the same message regardless of whether the user exists
-                flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
+                if email_sent:
+                    # To prevent user enumeration, always show the same message when the email exists and sending succeeds
+                    flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
+                else:
+                    # Only reveal server/handshake errors for existing accounts
+                    flash("There was an issue sending the email. Please contact support if the problem persists.", "warning")
+                
                 return redirect(url_for("auth.reset_password"))
             else:
                 # To prevent user enumeration, we still show the same message

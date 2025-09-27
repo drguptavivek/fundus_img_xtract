@@ -44,7 +44,23 @@ def revise_grading(grade_id: int):
         task = grade.task
         
         # Check if the task is still in a state that allows revision
-        if task.state == "final":
+        # Allow arbitrators to revise their grades if submitted within the last 6 hours, even if task is finalized
+        from datetime import timedelta
+        from datetime import timezone
+        six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+        
+        # If this is an arbitrator's recent grade, allow revision even if task is final
+        is_arbitrator_recent_revision = False
+        if grade.role_slot == "arbitrator" and grade.created_at:
+            # The grade's created_at is stored in UTC in the database
+            # Make sure we properly handle timezone-naive datetime by assuming it's UTC
+            created_at = grade.created_at
+            if created_at.tzinfo is None:
+                # Model datetimes are likely stored as timezone-naive in UTC
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            is_arbitrator_recent_revision = created_at >= six_hours_ago
+        
+        if task.state == "final" and not is_arbitrator_recent_revision:
             flash("This task is finalized and cannot be revised.", "danger")
             return redirect(url_for("grading.index"))
         
@@ -74,8 +90,56 @@ def revise_grading(grade_id: int):
             # Faculty can revise their grade at any point before finalization
             slot_valid = True
         elif slot_type == 'arbitrator':
-            # Arbitrator can revise if task is in arbitration state
-            slot_valid = task.state == 'arbitration'
+            # Arbitrator can revise if task is in arbitration state OR if their grade was submitted in the last 6 hours
+            # Special case: admins can revise if they made the original arbitrator decision within 6 hours
+            if current_user.has_role('admin') and task.state == 'final':
+                # Check if the admin user originally made this arbitrator grade
+                if grade.grader_user_id == current_user.id:
+                    from datetime import timedelta
+                    from datetime import timezone
+                    # Use timezone-aware datetime consistently
+                    six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+                    
+                    # Check if the grade was created within the last 6 hours
+                    created_at = grade.created_at
+                    if created_at and created_at.tzinfo is None:
+                        # Make it timezone-aware by assuming UTC
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    
+                    if created_at and created_at >= six_hours_ago:
+                        slot_valid = True
+                    else:
+                        # Grade is too old to revise
+                        flash(f"Cannot revise arbitrator grade after 6 hours have passed.", "danger")
+                        return redirect(url_for("grading.index"))
+                else:
+                    # Admin is trying to revise someone else's arbitrator grade
+                    flash("You can only revise your own arbitrator grades.", "danger")
+                    return redirect(url_for("grading.index"))
+            elif task.state == 'arbitration':
+                slot_valid = True
+            else:
+                # Check if the arbitrator's grade was submitted within the last 6 hours
+                from datetime import timedelta
+                from datetime import timezone
+                # Use timezone-aware datetime consistently
+                six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+                
+                # Check if the grade was created within the last 6 hours
+                created_at = grade.created_at
+                if created_at and created_at.tzinfo is None:
+                    # Make it timezone-aware by assuming UTC
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                
+                if created_at and created_at >= six_hours_ago:
+                    slot_valid = True
+                    # For arbitrator revisions on tasks not in arbitration state, we need to set the task back to arbitration
+                    # so they can revise their grade properly (but only if we're not changing the task state to final)
+                    pass
+                else:
+                    # Grade is too old to revise
+                    flash(f"Cannot revise arbitrator grade after 6 hours have passed.", "danger")
+                    return redirect(url_for("grading.index"))
         
         if not slot_valid:
             flash(f"{slot_type.capitalize()} slot is not available for this task (task state: {task.state}).", "danger")
@@ -97,6 +161,17 @@ def revise_grading(grade_id: int):
         # Use the existing grade as the existing_grade parameter
         existing_grade = grade
             
+        # Check if this is an arbitrator revising their recent grade on a final task
+        from datetime import timedelta
+        from datetime import timezone
+        is_arbitrator_revising_recent = False
+        if slot_type == 'arbitrator' and task.state == 'final' and existing_grade:
+            six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+            created_at = existing_grade.created_at
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            is_arbitrator_revising_recent = created_at and created_at >= six_hours_ago
+
         response = make_response(render_template(
             "grading/dual_grading_task.html",
             task=task,
@@ -106,7 +181,8 @@ def revise_grading(grade_id: int):
             existing_grade=existing_grade,
             image_uuid=image_uuid,
             grades=task.grades,
-            existing_grade_in_header=True
+            existing_grade_in_header=True,
+            is_arbitrator_revising_recent=is_arbitrator_revising_recent
         ))
         
         # Prevent caching of this page
@@ -144,15 +220,56 @@ def dual_grading_task(task_id: int, slot_type: str):
             return redirect(url_for("grading.index"))
         
         # Additional validation: Check if the slot is actually available for this task state
-        if slot_type == 'resident' and task.state != 'pending':
+        # Special case: Arbitrator can revise their grade if it was submitted within the last 6 hours
+        from datetime import timedelta
+        from datetime import timezone
+        if slot_type == 'arbitrator' and task.state == 'final':
+            # Check if this user is the arbitrator who made the decision and if it was recent
+            arbitrator_grade = next((g for g in task.grades if g.role_slot == 'arbitrator' and g.grader_user_id == current_user.id), None)
+            if arbitrator_grade:
+                six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+                created_at = arbitrator_grade.created_at
+                if created_at and created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                
+                if created_at and created_at >= six_hours_ago:
+                    # Allow arbitrator to revise their recent decision
+                    pass  # Valid state, allow to continue
+                else:
+                    flash("Cannot revise arbitrator grade after 6 hours have passed.", "danger")
+                    return redirect(url_for("grading.index"))
+            else:
+                flash("Arbitrator slot is not available for this task.", "danger")
+                return redirect(url_for("grading.index"))
+        elif slot_type == 'resident' and task.state != 'pending':
             flash("Resident slot is not available for this task.", "danger")
             return redirect(url_for("grading.index"))
         elif slot_type == 'faculty' and task.state != 'resident_done':
             flash("Faculty slot is not available for this task.", "danger")
             return redirect(url_for("grading.index"))
         elif slot_type == 'arbitrator' and task.state != 'arbitration':
-            flash("Arbitrator slot is not available for this task.", "danger")
-            return redirect(url_for("grading.index"))
+            # Allow admin users to access arbitrator slot in final state for revisions
+            # Check if this is the same admin user who made the original arbitrator decision
+            if current_user.has_role('admin') and task.state == 'final':
+                arbitrator_grade = next((g for g in task.grades if g.role_slot == 'arbitrator' and g.grader_user_id == current_user.id), None)
+                if arbitrator_grade:
+                    six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+                    created_at = arbitrator_grade.created_at
+                    if created_at and created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    
+                    if created_at and created_at >= six_hours_ago:
+                        # Admin can revise their own arbitrator decision within 6 hours
+                        pass  # Valid state, allow to continue
+                    else:
+                        flash("Cannot revise arbitrator grade after 6 hours have passed.", "danger")
+                        return redirect(url_for("grading.index"))
+                else:
+                    flash("Arbitrator slot is not available for this task.", "danger")
+                    return redirect(url_for("grading.index"))
+            else:
+                flash("Arbitrator slot is not available for this task.", "danger")
+                return redirect(url_for("grading.index"))
         
         # Fetch disease gradings for this disease using utility function
         disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
@@ -180,9 +297,21 @@ def dual_grading_task(task_id: int, slot_type: str):
                 elif grade.role_slot == 'faculty':
                     faculty_grade = grade
         
+        # Check if this is an arbitrator revising their recent grade on a final task
+        from datetime import timedelta
+        from datetime import timezone
+        is_arbitrator_revising_recent = False
+        if slot_type == 'arbitrator' and task.state == 'final' and existing_grade:
+            six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+            created_at = existing_grade.created_at
+            if created_at and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            is_arbitrator_revising_recent = created_at and created_at >= six_hours_ago
+
         # Store the start time in the session
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
-        flask_session[start_time_key] = datetime.utcnow().isoformat()
+        from datetime import timezone
+        flask_session[start_time_key] = datetime.now(timezone.utc).isoformat()
         
         # Pass grades for display in the template
         grades = task.grades
@@ -198,7 +327,8 @@ def dual_grading_task(task_id: int, slot_type: str):
             grades=grades,
             existing_grade_in_header=True,
             resident_grade=resident_grade,
-            faculty_grade=faculty_grade
+            faculty_grade=faculty_grade,
+            is_arbitrator_revising_recent=is_arbitrator_revising_recent
         )
     finally:
         db.close()
@@ -234,7 +364,32 @@ def dual_grading_submit():
             flash("Task not found.", "danger")
             return redirect(url_for("grading.index"))
         
-        if task.state == "final":
+        # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks
+        is_arbitrator_revision_allowed = False
+        if slot == "arbitrator":
+            # We need to fetch the existing grade to verify if it was created within 6 hours
+            existing_grade_for_check = db.query(Grade).filter(
+                Grade.task_id == task.id,
+                Grade.grader_user_id == current_user.id,
+                Grade.role_slot == slot
+            ).first()
+            
+            if existing_grade_for_check:
+                from datetime import timedelta
+                from datetime import timezone
+                # Use timezone-aware datetime consistently
+                six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+                
+                # Make the grade's created_at timezone-aware if it's naive for proper comparison
+                created_at = existing_grade_for_check.created_at
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                is_arbitrator_revision_allowed = created_at >= six_hours_ago
+            else:
+                # If there's no existing grade for this arbitrator, it's not a revision
+                is_arbitrator_revision_allowed = False
+        
+        if task.state == "final" and not is_arbitrator_revision_allowed:
             flash("This task is already finalized.", "danger")
             return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
@@ -258,9 +413,18 @@ def dual_grading_submit():
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
         # Arbitrator exclusion: cannot be prior resident/faculty grader within 2 weeks
+        # However, if this is a revision of an existing arbitrator grade by the same user, skip this check
         if slot == "arbitrator":
             from utils.dualGradingGetNextTasks import _has_user_graded_task_recently
-            if _has_user_graded_task_recently(db, current_user.id, task.id):
+            # Check if this is a revision of an existing arbitrator grade by the same user
+            is_arbitrator_revision = (
+                existing_grade and 
+                existing_grade.role_slot == "arbitrator" and 
+                existing_grade.grader_user_id == current_user.id
+            )
+            
+            # Only apply the exclusion check if this is not an arbitrator revising their own grade
+            if not is_arbitrator_revision and _has_user_graded_task_recently(db, current_user.id, task.id):
                 flash("You cannot arbitrate a task you've graded as resident or faculty within the last 2 weeks.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
         
@@ -318,7 +482,11 @@ def dual_grading_submit():
         if start_time_str:
             try:
                 start_time = datetime.fromisoformat(start_time_str)
-                time_taken = int((datetime.utcnow() - start_time).total_seconds())
+                # Handle timezone-naive datetimes by assuming they are UTC
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+                current_time = datetime.now(timezone.utc)
+                time_taken = int((current_time - start_time).total_seconds())
                 # Remove the start time from session as we've used it
                 flask_session.pop(start_time_key, None)
             except (ValueError, TypeError):
@@ -358,16 +526,33 @@ def dual_grading_submit():
         
         # Determine new state
         if slot == "arbitrator":
-            # Arbitrator has graded - finalize task
-            task.state = "final"
-            # Create consensus
-            consensus = Consensus(
-                task_id=task.id,
-                final_disease_grading_id=label_id,
-                method="adjudication",  # Fixed: should be 'adjudication' not 'arbitration'
-                decided_by_user_id=current_user.id
-            )
-            db.add(consensus)
+            # Check if this is a new arbitrator grade or a revision of existing arbitrator grade
+            if is_revision and existing_grade and existing_grade.role_slot == "arbitrator":
+                # This is a revision of an arbitrator's grade; preserve the task state as "final"
+                task.state = "final"
+            else:
+                # This is a new arbitrator grade - finalize task
+                task.state = "final"
+            
+            # Create or update consensus for arbitrator decision
+            # Check if a consensus already exists for this task
+            existing_consensus = db.query(Consensus).filter(Consensus.task_id == task.id).first()
+            if existing_consensus:
+                # Update existing consensus
+                existing_consensus.final_disease_grading_id = label_id
+                existing_consensus.method = "adjudication"
+                existing_consensus.decided_by_user_id = current_user.id
+                existing_consensus.decided_at = datetime.now(timezone.utc)
+                db.add(existing_consensus)
+            else:
+                # Create new consensus
+                consensus = Consensus(
+                    task_id=task.id,
+                    final_disease_grading_id=label_id,
+                    method="adjudication",  # Fixed: should be 'adjudication' not 'arbitration'
+                    decided_by_user_id=current_user.id
+                )
+                db.add(consensus)
         elif resident_grade and faculty_grade:
             # Both grades submitted, check for match
             if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:

@@ -22,15 +22,28 @@ def _has_user_graded_task_recently(db, user_id: int, task_id: int) -> bool:
     Returns:
         True if user has graded the task in the past 2 weeks, False otherwise
     """
-    two_weeks_ago = datetime.now() - timedelta(weeks=2)
+    from datetime import timezone
+    # Use timezone-aware datetime for comparison
+    two_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=2)
     
-    recent_grade = db.query(Grade).filter(
+    # Get all grades by this user for this task
+    user_grades = db.query(Grade).filter(
         Grade.grader_user_id == user_id,
-        Grade.task_id == task_id,
-        Grade.created_at >= two_weeks_ago
-    ).first()
+        Grade.task_id == task_id
+    ).all()
     
-    return recent_grade is not None
+    # Check if any of the grades were created in the last 2 weeks
+    for grade in user_grades:
+        # Handle timezone-naive datetimes from the database
+        grade_created_at = grade.created_at
+        if grade_created_at.tzinfo is None:
+            # Assume naive datetime is in UTC
+            grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
+        
+        if grade_created_at >= two_weeks_ago:
+            return True
+    
+    return False
 
 
 def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot: str) -> Optional[list]:

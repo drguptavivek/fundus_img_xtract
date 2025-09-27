@@ -103,11 +103,21 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         # Count arbitration pending tasks (only if user is faculty and has arbitration eligibility)
         if has_faculty_role and info['can_arbitrate']:
-            counts['arbitration_pending'] = db.query(GradingTask).filter(
+            # Get tasks in arbitration state
+            arbitration_tasks = db.query(GradingTask).filter(
                 GradingTask.state == 'arbitration',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id
-            ).count()
+            ).all()
+            
+            # Apply same filtering as in task assignment to exclude tasks user recently graded
+            from utils.dualGradingGetNextTasks import _has_user_graded_task_recently
+            eligible_arbitration_tasks = []
+            for task in arbitration_tasks:
+                if not _has_user_graded_task_recently(db, user_id, task.id):
+                    eligible_arbitration_tasks.append(task)
+            
+            counts['arbitration_pending'] = len(eligible_arbitration_tasks)
         
         kpi_data[disease_name] = counts
     

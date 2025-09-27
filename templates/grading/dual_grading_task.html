@@ -61,10 +61,16 @@
   <div class="col-12 col-lg-3" id = "image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
-        {% if task.state == "final" %}
+        {% if task.state == "final" and not is_arbitrator_revising_recent %}
         <div class="mb-3 small text-muted">Lock Status: 
           <strong class="text-danger">
             FINALIZED - This task has been completed
+          </strong>
+        </div>
+        {% elif task.state == "final" and is_arbitrator_revising_recent %}
+        <div class="mb-3 small text-muted">Status: 
+          <strong class="text-warning">
+            REVISING ARBITRATOR GRADE - You can update your decision (6-hour window)
           </strong>
         </div>
         {% endif %}
@@ -98,7 +104,7 @@
               {% for opt in disease_gradings %}
                 {% set oid = 'imp-' ~ opt.id %}
                 {% set btn_class = 'btn-outline-primary' %}
-                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required {% if existing_grade and existing_grade.disease_grading_id == opt.id %}checked{% endif %} {% if task.state == "final" %}disabled{% endif %}>
+                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required {% if existing_grade and existing_grade.disease_grading_id == opt.id %}checked{% endif %} {% if task.state == "final" and not is_arbitrator_revising_recent %}disabled{% endif %}>
                 <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
                   <span>{{ opt.impression }}</span>
                   <span class="sel-icon d-none">✓</span>
@@ -111,10 +117,10 @@
           
           <div class="mb-2">
             <label class="form-label">Remarks (optional)</label>
-            <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if task.state == "final" %}disabled{% endif %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
+            <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if task.state == "final" and not is_arbitrator_revising_recent %}disabled{% endif %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
           </div>
           
-          {% if task.state != "final" %}
+          {% if task.state != "final" or is_arbitrator_revising_recent %}
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">

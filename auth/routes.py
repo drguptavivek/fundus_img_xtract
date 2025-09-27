@@ -183,3 +183,187 @@ def ping():
     session["last_active"] = int(time.time())
     session.modified = True
     return {"ok": True, "ts": int(time.time())}
+
+
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """
+    Route to handle forgot password functionality.
+    Generates an 8-character alphanumeric OTP and emails it to the user's email address.
+    """
+    from datetime import datetime, timedelta
+    import secrets
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from models import Session
+    
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        
+        # Validate email format
+        if not email or "@" not in email:
+            flash("Please enter a valid email address.", "error")
+            return render_template("auth/forgot_password.html")
+        
+        # Find user by email
+        db = Session()
+        try:
+            user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
+            if not user:
+                flash("No account found with that email address.", "error")
+                return render_template("auth/forgot_password.html")
+        
+            # Generate a random 8-character alphanumeric OTP
+            otp = ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
+            
+            # Store OTP and expiry time temporarily (in a real app, you'd use a cache like Redis)
+            # For now, I'll store it in the session, but this is not ideal for production
+            session['password_reset_otp'] = otp
+            session['password_reset_email'] = email
+            session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+            session['password_reset_user_id'] = user.id  # Store user ID for verification
+            
+            # Send email with OTP
+            try:
+                # Get email settings from environment variables
+                smtp_server = current_app.config.get('SMTP_SERVER', 'localhost')
+                smtp_port = current_app.config.get('SMTP_PORT', 587)
+                smtp_username = current_app.config.get('SMTP_USERNAME')
+                smtp_password = current_app.config.get('SMTP_PASSWORD')
+                from_email = current_app.config.get('FROM_EMAIL', smtp_username)
+                
+                # Verify required email settings exist
+                if not all([smtp_server, smtp_username, smtp_password, from_email]):
+                    flash("System error: email settings not configured.", "error")
+                    return render_template("auth/forgot_password.html")
+                
+                # Create message
+                msg = MIMEMultipart()
+                msg['From'] = from_email
+                msg['To'] = email
+                msg['Subject'] = "Password Reset OTP"
+                
+                body = f"""
+                Hello {user.username},
+                
+                You have requested to reset your password. Here is your One Time Password (OTP):
+                
+                {otp}
+                
+                This OTP is valid for 10 minutes. If you did not request this, please ignore this email.
+                
+                Thank you,
+                The System Administrator
+                """
+                
+                msg.attach(MIMEText(body, 'plain'))
+                
+                # Send the email
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    server.starttls()  # Enable encryption
+                    server.login(smtp_username, smtp_password)
+                    server.send_message(msg)
+                
+                flash("An OTP has been sent to your email address. Please check your inbox.", "success")
+                return redirect(url_for("auth.reset_password"))
+                
+            except Exception as e:
+                # Log error but don't expose details to user
+                current_app.logger.error(f"Failed to send password reset email: {e}")
+                flash("Failed to send email. Please contact support.", "error")
+                return render_template("auth/forgot_password.html")
+        
+        finally:
+            db.close()
+    
+    # GET request
+    return render_template("auth/forgot_password.html")
+
+
+@auth_bp.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    """
+    Route to handle password reset with OTP verification.
+    """
+    from datetime import datetime
+    from models import Session
+    
+    if request.method == "POST":
+        otp = request.form.get("otp", "").strip()
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        
+        # Validate inputs
+        if not otp or not new_password or not confirm_password:
+            flash("Please fill in all fields.", "error")
+            return render_template("auth/reset_password.html")
+        
+        if new_password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return render_template("auth/reset_password.html")
+        
+        if len(new_password) < 8:
+            flash("Password must be at least 8 characters long.", "error")
+            return render_template("auth/reset_password.html")
+        
+        # Verify OTP from session
+        session_otp = session.get('password_reset_otp')
+        session_email = session.get('password_reset_email')
+        session_expiry = session.get('password_reset_expiry')
+        session_user_id = session.get('password_reset_user_id')
+        
+        if not all([session_otp, session_email, session_expiry, session_user_id]):
+            flash("Invalid or expired OTP. Please request a new one.", "error")
+            return redirect(url_for("auth.forgot_password"))
+        
+        # Check if OTP has expired
+        expiry_time = datetime.fromisoformat(session_expiry)
+        if datetime.utcnow() > expiry_time:
+            flash("OTP has expired. Please request a new one.", "error")
+            # Clear session values
+            session.pop('password_reset_otp', None)
+            session.pop('password_reset_email', None)
+            session.pop('password_reset_expiry', None)
+            session.pop('password_reset_user_id', None)
+            return redirect(url_for("auth.forgot_password"))
+        
+        # Check if OTP matches
+        if otp != session_otp:
+            flash("Invalid OTP. Please try again.", "error")
+            return render_template("auth/reset_password.html")
+        
+        # Update user's password
+        db = Session()
+        try:
+            user = db.query(User).get(session_user_id)
+            if not user:
+                flash("User not found.", "error")
+                return redirect(url_for("auth.forgot_password"))
+            
+            # Verify the email still matches
+            if user.email.lower() != session_email.lower():
+                flash("Email verification failed. Please request a new OTP.", "error")
+                return redirect(url_for("auth.forgot_password"))
+            
+            # Update password
+            user.password_hash = hash_password(new_password)
+            db.commit()
+            
+            # Clear session values
+            session.pop('password_reset_otp', None)
+            session.pop('password_reset_email', None)
+            session.pop('password_reset_expiry', None)
+            session.pop('password_reset_user_id', None)
+            
+            # Log the password change
+            auth_logger.info(f"Password reset successful - User: {user.username}, IP: {get_client_ip()}")
+            
+            flash("Your password has been successfully reset. You can now log in.", "success")
+            return redirect(url_for("auth.login"))
+        
+        finally:
+            db.close()
+    
+    # GET request
+    return render_template("auth/reset_password.html")

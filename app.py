@@ -343,6 +343,8 @@ def create_app():
             or path.startswith("/static/")
             or path == "/favicon.ico"
             or path == "/style_guide"
+            or path== "/forgot-password"
+            or path == "/reset-password"
             or path.startswith("/docs/")
         ):
             return  # allowed without auth

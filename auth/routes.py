@@ -13,7 +13,7 @@ from .utils import utcnow, get_client_ip
 from flask import flash
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
-from models import engine, User, LoginAttempt, IpLock  # type: ignore
+from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
 
 # Get the auth logger
 auth_logger = logging.getLogger("auth")
@@ -80,6 +80,20 @@ def _recent_failed_by_ip(db, ip: str):
 
 def _record_attempt(db, username_input: str, ip: str, success: bool):
     db.add(LoginAttempt(username_input=username_input, ip_address=ip, success=success))
+    db.commit()
+
+def _recent_password_reset_attempts_by_email(db, email: str):
+    """Check how many password reset attempts were made for the email today."""
+    today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    q = select(func.count()).select_from(PasswordResetAttempt).where(
+        func.lower(PasswordResetAttempt.email) == func.lower(email),
+        PasswordResetAttempt.attempted_at >= today_start
+    )
+    return db.execute(q).scalar() or 0
+
+def _record_password_reset_attempt(db, email: str, ip: str):
+    """Record a password reset attempt."""
+    db.add(PasswordResetAttempt(email=email, ip_address=ip))
     db.commit()
 
 # ----- Routes -----
@@ -195,6 +209,7 @@ def forgot_password():
     import secrets
     from models import Session
     from utils.emails import send_otp_email
+    from sqlalchemy import and_
     
     def email_callback(success):
         if success:
@@ -204,35 +219,49 @@ def forgot_password():
     
     if request.method == "POST":
         email = request.form.get("email", "").strip()
+        ip = get_client_ip()
         
         # Validate email format
         if not email or "@" not in email:
             flash("Please enter a valid email address.", "error")
             return render_template("auth/forgot_password.html")
         
-        # Find user by email
         db = Session()
         try:
+            # Find user by email
             user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
-            if not user:
-                flash("No account found with that email address.", "error")
+            
+            # Check if there have been too many reset attempts today
+            reset_attempts_today = _recent_password_reset_attempts_by_email(db, email)
+            if reset_attempts_today >= 5:
+                flash("Too many password reset attempts. Please try again tomorrow.", "error")
                 return render_template("auth/forgot_password.html")
-        
-            # Generate a random 8-character alphanumeric OTP
-            otp = ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
             
-            # Store OTP and expiry time temporarily (in a real app, you'd use a cache like Redis)
-            # For now, I'll store it in the session, but this is not ideal for production
-            session['password_reset_otp'] = otp
-            session['password_reset_email'] = email
-            session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
-            session['password_reset_user_id'] = user.id  # Store user ID for verification
+            # Record the password reset attempt
+            _record_password_reset_attempt(db, email, ip)
             
-            # Send email with OTP asynchronously
-            send_otp_email(email, user.username, otp, callback=email_callback)
-            
-            flash("An OTP has been sent to your email address. Please check your inbox.", "success")
-            return redirect(url_for("auth.reset_password"))
+            # If user exists, proceed with OTP generation and sending
+            if user:
+                # Generate a random 8-character alphanumeric OTP
+                otp = ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
+                
+                # Store OTP and expiry time temporarily (in a real app, you'd use a cache like Redis)
+                # For now, I'll store it in the session, but this is not ideal for production
+                session['password_reset_otp'] = otp
+                session['password_reset_email'] = email
+                session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['password_reset_user_id'] = user.id  # Store user ID for verification
+                
+                # Send email with OTP asynchronously
+                send_otp_email(email, user.username, otp, callback=email_callback)
+                
+                # To prevent user enumeration, always show the same message regardless of whether the user exists
+                flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
+                return redirect(url_for("auth.reset_password"))
+            else:
+                # To prevent user enumeration, we still show the same message
+                flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
+                return redirect(url_for("auth.reset_password"))
         
         finally:
             db.close()

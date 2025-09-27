@@ -334,6 +334,17 @@ class IpLock(Base):
     __table_args__ = (UniqueConstraint("ip_address", name="uq_iplock_ip"),)
 
 
+class PasswordResetAttempt(Base):
+    __tablename__ = "password_reset_attempts"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(254), nullable=False, index=True)
+    ip_address: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    __table_args__ = (
+        Index("ix_password_reset_attempts_email_date", "email", "attempted_at"), 
+        Index("ix_password_reset_attempts_ip_date", "ip_address", "attempted_at"))
+
+
 
 
 # --- Direct Image Upload Table ---

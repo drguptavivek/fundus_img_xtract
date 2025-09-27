@@ -72,7 +72,7 @@ def create_app():
 
     # Ensure folders + schema (idempotent)
     setup_environment()
-    # Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
 
     # --- RBAC: seed core roles once ---
     from sqlalchemy.orm import sessionmaker

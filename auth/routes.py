@@ -193,10 +193,14 @@ def forgot_password():
     """
     from datetime import datetime, timedelta
     import secrets
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
     from models import Session
+    from utils.emails import send_otp_email
+    
+    def email_callback(success):
+        if success:
+            current_app.logger.info(f"OTP email sent successfully to {session.get('password_reset_email')}")
+        else:
+            current_app.logger.error(f"Failed to send OTP email to {session.get('password_reset_email')}")
     
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -224,55 +228,11 @@ def forgot_password():
             session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
             session['password_reset_user_id'] = user.id  # Store user ID for verification
             
-            # Send email with OTP
-            try:
-                # Get email settings from environment variables
-                smtp_server = current_app.config.get('SMTP_SERVER', 'localhost')
-                smtp_port = current_app.config.get('SMTP_PORT', 587)
-                smtp_username = current_app.config.get('SMTP_USERNAME')
-                smtp_password = current_app.config.get('SMTP_PASSWORD')
-                from_email = current_app.config.get('FROM_EMAIL', smtp_username)
-                
-                # Verify required email settings exist
-                if not all([smtp_server, smtp_username, smtp_password, from_email]):
-                    flash("System error: email settings not configured.", "error")
-                    return render_template("auth/forgot_password.html")
-                
-                # Create message
-                msg = MIMEMultipart()
-                msg['From'] = from_email
-                msg['To'] = email
-                msg['Subject'] = "Password Reset OTP"
-                
-                body = f"""
-                Hello {user.username},
-                
-                You have requested to reset your password. Here is your One Time Password (OTP):
-                
-                {otp}
-                
-                This OTP is valid for 10 minutes. If you did not request this, please ignore this email.
-                
-                Thank you,
-                The System Administrator
-                """
-                
-                msg.attach(MIMEText(body, 'plain'))
-                
-                # Send the email
-                with smtplib.SMTP(smtp_server, smtp_port) as server:
-                    server.starttls()  # Enable encryption
-                    server.login(smtp_username, smtp_password)
-                    server.send_message(msg)
-                
-                flash("An OTP has been sent to your email address. Please check your inbox.", "success")
-                return redirect(url_for("auth.reset_password"))
-                
-            except Exception as e:
-                # Log error but don't expose details to user
-                current_app.logger.error(f"Failed to send password reset email: {e}")
-                flash("Failed to send email. Please contact support.", "error")
-                return render_template("auth/forgot_password.html")
+            # Send email with OTP asynchronously
+            send_otp_email(email, user.username, otp, callback=email_callback)
+            
+            flash("An OTP has been sent to your email address. Please check your inbox.", "success")
+            return redirect(url_for("auth.reset_password"))
         
         finally:
             db.close()

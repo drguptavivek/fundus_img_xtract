@@ -107,7 +107,12 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
         return False
 
 
-def send_email(to_email: str, subject: str, body: str, callback: Optional[Callable[[bool], None]] = None) -> Thread:
+def send_email(
+        to_email: str, 
+        subject: str, 
+        body: str, 
+        callback: Optional[Callable[[bool], None]] = None
+        ) -> Thread:
     """
     Asynchronously send an email to the specified recipient.
     

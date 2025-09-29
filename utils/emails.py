@@ -162,7 +162,11 @@ This OTP is valid for 10 minutes. If you did not request this, please ignore thi
 Thank you,
 The System Administrator
 """
-    return send_email(to_email, subject, body, callback)
+    def otp_callback(success):
+        if callback:
+            callback(success)
+    
+    return send_email(to_email, subject, body, otp_callback)
 
 
 def send_otp_email_sync(to_email: str, username: str, otp: str) -> bool:

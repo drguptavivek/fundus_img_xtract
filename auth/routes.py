@@ -1,9 +1,9 @@
 # auth/routes.py
 from __future__ import annotations
-from datetime import timedelta
+from datetime import datetime, timedelta
 import time
 import logging
-from flask import render_template, request, redirect, session, url_for, flash, current_app, abort
+from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response
 from flask_login import login_user, logout_user, LoginManager, login_required, current_user
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
@@ -95,6 +95,23 @@ def _record_password_reset_attempt(db, email: str, ip: str):
     """Record a password reset attempt."""
     db.add(PasswordResetAttempt(email=email, ip_address=ip))
     db.commit()
+
+# Global storage for user-specific events (in production, use Redis or similar)
+# This is a simple in-memory storage for demo purposes
+from collections import defaultdict
+email_sending_results = defaultdict(list)
+
+
+def _push_email_result(user_id: str, result: dict):
+    """Push an email sending result to the user's queue."""
+    email_sending_results[user_id].append(result)
+
+
+def _get_email_results(user_id: str):
+    """Get and clear email results for a user."""
+    results = email_sending_results[user_id]
+    email_sending_results[user_id] = []  # Clear the queue
+    return results
 
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
@@ -208,8 +225,23 @@ def forgot_password():
     from datetime import datetime, timedelta
     import secrets
     from models import Session
-    from utils.emails import send_otp_email_sync
+    from utils.emails import send_otp_email
     from sqlalchemy import and_
+    
+    def email_callback(success):
+        result = {
+            'success': success,
+            'timestamp': datetime.now(),
+            'type': 'email_result'
+        }
+        if success:
+            result['message'] = "OTP sent successfully"
+        else:
+            result['message'] = "Email sending failed due to server error. Please contact support."
+        
+        # Push to user-specific queue using session ID as user identifier
+        session_id = session.get('_id', 'unknown')
+        _push_email_result(session_id, result)
     
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -246,15 +278,12 @@ def forgot_password():
                 session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
                 session['password_reset_user_id'] = user.id  # Store user ID for verification
                 
-                # Send email with OTP synchronously so we can check for server/handshake errors
-                email_sent = send_otp_email_sync(email, user.username, otp)
+                # Send email with OTP asynchronously
+                send_otp_email(email, user.username, otp, 
+                              callback=email_callback)
                 
-                if email_sent:
-                    # To prevent user enumeration, always show the same message when the email exists and sending succeeds
-                    flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
-                else:
-                    # Only reveal server/handshake errors for existing accounts
-                    flash("There was an issue sending the email. Please contact support if the problem persists.", "warning")
+                # To prevent user enumeration, always show the same initial message regardless of email sending result
+                flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
                 
                 return redirect(url_for("auth.reset_password"))
             else:
@@ -320,38 +349,35 @@ def reset_password():
         if otp != session_otp:
             flash("Invalid OTP. Please try again.", "error")
             return render_template("auth/reset_password.html")
-        
-        # Update user's password
-        db = Session()
-        try:
-            user = db.query(User).get(session_user_id)
-            if not user:
-                flash("User not found.", "error")
-                return redirect(url_for("auth.forgot_password"))
+
+
+@auth_bp.route("/email-sse")
+def email_sse():
+    """Server-sent events endpoint for email sending results."""
+    def event_stream():
+        while True:
+            # Get user-specific results
+            session_id = session.get('_id', 'unknown')
+            results = _get_email_results(session_id)
             
-            # Verify the email still matches
-            if user.email.lower() != session_email.lower():
-                flash("Email verification failed. Please request a new OTP.", "error")
-                return redirect(url_for("auth.forgot_password"))
+            for result in results:
+                yield f"data: {result}\n\n"
             
-            # Update password
-            user.password_hash = hash_password(new_password)
-            db.commit()
-            
-            # Clear session values
-            session.pop('password_reset_otp', None)
-            session.pop('password_reset_email', None)
-            session.pop('password_reset_expiry', None)
-            session.pop('password_reset_user_id', None)
-            
-            # Log the password change
-            auth_logger.info(f"Password reset successful - User: {user.username}, IP: {get_client_ip()}")
-            
-            flash("Your password has been successfully reset. You can now log in.", "success")
-            return redirect(url_for("auth.login"))
-        
-        finally:
-            db.close()
+            time.sleep(1)  # Poll every second
     
-    # GET request
-    return render_template("auth/reset_password.html")
+    return Response(event_stream(), mimetype="text/plain")
+
+
+@auth_bp.route("/check-email-status")
+def check_email_status():
+    """Check for any email sending status updates."""
+    session_id = session.get('_id', 'unknown')
+    results = _get_email_results(session_id)
+    # Convert datetime objects to strings for JSON serialization
+    serializable_results = []
+    for result in results:
+        serializable_result = result.copy()
+        if isinstance(result.get('timestamp'), datetime):
+            serializable_result['timestamp'] = result['timestamp'].isoformat()
+        serializable_results.append(serializable_result)
+    return {"results": serializable_results}

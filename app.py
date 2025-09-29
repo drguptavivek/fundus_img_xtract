@@ -353,8 +353,8 @@ def create_app():
 
     # Global stack trace handler - captures stack traces for all requests
     @app.before_request
-    def _global_stack_trace_handler():
-        """Global handler to capture stack traces for all requests."""
+    def _global_stack_trace_handler_alt():
+        """Global handler to capture stack traces for all requests in debug mode."""
         # Store request start time for performance tracking
         import time
         request._start_time = time.time()
@@ -367,7 +367,7 @@ def create_app():
             log_current_stack(f"Processing request: {request.method} {request.url}")
 
     @app.after_request
-    def _global_stack_trace_after_handler(response):
+    def _global_stack_trace_after_handler_alt(response):
         """Global handler to capture performance and completion info for all requests."""
         import time
         import logging
@@ -389,7 +389,7 @@ def create_app():
 
     # Global exception handler - captures stack traces for all unhandled exceptions
     @app.errorhandler(Exception)
-    def _global_exception_handler(e):
+    def _global_exception_handler_alt(e):
         """Global handler to capture stack traces for all unhandled exceptions."""
         import logging
         runtime_logger = logging.getLogger("runtime_error")
@@ -404,8 +404,8 @@ def create_app():
         # Also log to the standard app logger
         current_app.logger.exception("Unhandled exception in request: %s", e)
         
-        # Re-raise the exception so it can be handled by specific error handlers
-        raise e
+        # Don't re-raise here as this is meant to be the catch-all handler
+        return render_template("errors/500.html"), 500
 
     from admin import admin_bp
     app.register_blueprint(admin_bp)

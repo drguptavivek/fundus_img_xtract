@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, flash
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from models import Area, Camera, Disease, Hospital, LabUnit, Session
+from models import Area, Camera, Disease, Hospital, LabUnit, Session, DiseaseGrading
 
 
 def _get_model_by_name(name):
@@ -102,9 +102,8 @@ def edit_lookup(model_name, item_id):
         # Prevent editing of core diseases to change their names
         core_disease_names = None
         if model_name == "disease":
-            from scripts.ensure_core_diseases import is_core_disease, CORE_DISEASES
-            if is_core_disease(item_id):
-                core_disease_names = {v.lower(): k for k, v in CORE_DISEASES.items()}
+            if item_id in [1,2,3]:
+                core_disease_names = {v.lower(): k for k, v in Disease.items()}
 
         if request.method == "POST":
             name = request.form.get("name", "").strip()
@@ -155,15 +154,146 @@ def delete_lookup(model_name, item_id):
     
     # Prevent deletion of core diseases
     if model_name == "disease":
-        from scripts.ensure_core_diseases import is_core_disease
-        if is_core_disease(item_id):
+        if item_id in [1,2,3]:
             flash("Core diseases (Glaucoma, DR, AMD) cannot be deleted.", "danger")
             return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
     
     with Session() as db:
         item = db.get(Model, item_id)
-        if item:
+        if not item:
+            flash("Item not found.", "danger")
+            return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
+        try:
+            # Check if the item has related records that would prevent deletion
+            from models import (
+                DiseaseGrading, LabUnit, DirectImageUpload, 
+                GradingTask, Grade, Consensus, AIGrade,
+                UserDiseaseUnitRole
+            )
+            
+            if model_name == "disease":
+                # Check if any DiseaseGrading records reference this disease
+                related_gradings = db.execute(
+                    select(DiseaseGrading).where(DiseaseGrading.disease_id == item_id)
+                ).scalars().all()
+                
+                if related_gradings:
+                    flash(f"Cannot delete disease '{item.name}' because it has associated disease gradings. Remove all associated gradings first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any DirectImageUpload records reference this disease
+                related_direct_uploads = db.execute(
+                    select(DirectImageUpload).where(DirectImageUpload.disease_id == item_id)
+                ).scalars().all()
+                
+                if related_direct_uploads:
+                    flash(f"Cannot delete disease '{item.name}' because it is used in direct image uploads. Remove all related uploads first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any GradingTask records reference this disease
+                related_tasks = db.execute(
+                    select(GradingTask).where(GradingTask.disease_id == item_id)
+                ).scalars().all()
+                
+                if related_tasks:
+                    flash(f"Cannot delete disease '{item.name}' because it has associated grading tasks. Remove all related tasks first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any Grade records reference this disease
+                related_grades = db.execute(
+                    select(Grade).where(Grade.disease_grading_id.in_(
+                        select(DiseaseGrading.id).where(DiseaseGrading.disease_id == item_id)
+                    ))
+                ).scalars().all()
+                
+                if related_grades:
+                    flash(f"Cannot delete disease '{item.name}' because it has associated grades. Remove all related grades first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any AIGrade records reference this disease
+                related_ai_grades = db.execute(
+                    select(AIGrade).where(AIGrade.disease_id == item_id)
+                ).scalars().all()
+                
+                if related_ai_grades:
+                    flash(f"Cannot delete disease '{item.name}' because it has associated AI grades. Remove all related AI grades first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any UserDiseaseUnitRole records reference this disease
+                related_user_roles = db.execute(
+                    select(UserDiseaseUnitRole).where(UserDiseaseUnitRole.disease_id == item_id)
+                ).scalars().all()
+                
+                if related_user_roles:
+                    flash(f"Cannot delete disease '{item.name}' because it is used in user disease unit roles. Remove all related user role assignments first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+            
+            elif model_name == "hospital":
+                # Check if any LabUnit records reference this hospital
+                related_lab_units = db.execute(
+                    select(LabUnit).where(LabUnit.hospital_id == item_id)
+                ).scalars().all()
+                
+                if related_lab_units:
+                    flash(f"Cannot delete hospital '{item.name}' because it has associated lab units. Remove all associated lab units first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+            
+            elif model_name == "lab_unit":
+                # Check if any DirectImageUpload records reference this lab unit
+                related_direct_uploads = db.execute(
+                    select(DirectImageUpload).where(DirectImageUpload.lab_unit_id == item_id)
+                ).scalars().all()
+                
+                if related_direct_uploads:
+                    flash(f"Cannot delete lab unit '{item.name}' because it is used in direct image uploads. Remove all related uploads first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any GradingTask records reference this lab unit
+                related_tasks = db.execute(
+                    select(GradingTask).where(GradingTask.lab_unit_id == item_id)
+                ).scalars().all()
+                
+                if related_tasks:
+                    flash(f"Cannot delete lab unit '{item.name}' because it has associated grading tasks. Remove all related tasks first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any UserDiseaseUnitRole records reference this lab unit
+                related_user_roles = db.execute(
+                    select(UserDiseaseUnitRole).where(UserDiseaseUnitRole.lab_unit_id == item_id)
+                ).scalars().all()
+                
+                if related_user_roles:
+                    flash(f"Cannot delete lab unit '{item.name}' because it is used in user disease unit roles. Remove all related user role assignments first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any PatientEncounters records reference this lab unit
+                from models import PatientEncounters
+                related_encounters = db.execute(
+                    select(PatientEncounters).where(PatientEncounters.lab_unit_id == item_id)
+                ).scalars().all()
+                
+                if related_encounters:
+                    flash(f"Cannot delete lab unit '{item.name}' because it is used in patient encounters. Remove all related encounters first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+                
+                # Check if any EncounterFile records reference this lab unit
+                from models import EncounterFile
+                related_files = db.execute(
+                    select(EncounterFile).where(EncounterFile.lab_unit_id == item_id)
+                ).scalars().all()
+                
+                if related_files:
+                    flash(f"Cannot delete lab unit '{item.name}' because it is used in encounter files. Remove all related files first.", "danger")
+                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+            
+            # Try to delete the item
             db.delete(item)
             db.commit()
-            flash(f"{model_name.replace('_', ' ').title()} deleted.", "success")
+            flash(f"{model_name.replace('_', ' ').title()} '{item.name}' deleted successfully.", "success")
+        except Exception as e:
+            # Handle any database errors gracefully and show a user-friendly message
+            db.rollback()
+            flash(f"Error deleting {model_name.replace('_', ' ').title()}: {str(e)}", "danger")
+    
     return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))

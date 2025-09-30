@@ -57,7 +57,7 @@
                         <dt class="col-5">Capture Date</dt>
                         <dd class="col-7">
                           {% if encounter.capture_date_dt %}
-                            {{ encounter.capture_date_dt.strftime('%Y-%m-%d') }}
+                            {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
                           {% elif encounter.capture_date %}
                             {{ encounter.capture_date }}
                           {% else %}

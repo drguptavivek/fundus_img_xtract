@@ -60,7 +60,7 @@
         <div class="col-10">
             <div class="image-info-row">
                 <strong>Filename:</strong> {{ upload.filename }}
-                <strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M') }}
+                <strong>Uploaded:</strong> {{ upload.created_at|user_datetime('%Y-%m-%d %H:%M') }}
                 <strong>Uploader:</strong> {{ uploader.username }}
                 <br />
                 <strong>Hospital:</strong> {{ hospital.name }}

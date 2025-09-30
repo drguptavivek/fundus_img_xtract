@@ -18,6 +18,8 @@ from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import HTTPException
 
+from utils.datetime_filters import format_user_datetime
+
 
 csrf = CSRFProtect()
 
@@ -34,6 +36,12 @@ def create_app():
     app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
 
     app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
+
+    app.config.setdefault(
+        "DEFAULT_DISPLAY_TIMEZONE",
+        os.getenv("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
+    )
+    app.jinja_env.filters["user_datetime"] = format_user_datetime
 
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
     app.config["PER_FILE_MAX_BYTES"] = int(os.getenv("PER_FILE_MAX_BYTES", 10 * 1024 * 1024))

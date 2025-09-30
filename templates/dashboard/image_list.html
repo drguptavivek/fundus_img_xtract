@@ -118,9 +118,9 @@
                 </td>
                 <td>
                   {% if image_type == 'direct' %}
-                    {{ image.created_at.strftime('%Y-%m-%d') if image.created_at else '-' }}
+                    {{ image.created_at|user_datetime('%Y-%m-%d') if image.created_at else '-' }}
                   {% else %}
-                    {{ image.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') if image.patient_encounter and image.patient_encounter.capture_date_dt else (image.patient_encounter.capture_date if image.patient_encounter else '-') }}
+                    {{ image.patient_encounter.capture_date_dt|user_datetime('%Y-%m-%d') if image.patient_encounter and image.patient_encounter.capture_date_dt else (image.patient_encounter.capture_date if image.patient_encounter else '-') }}
                   {% endif %}
                 </td>
                 <td>

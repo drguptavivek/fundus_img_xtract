@@ -31,7 +31,7 @@
                     <h5 class="card-title">{{ upload.filename }}</h5>
                     <div class="row">
                         <div class="col-md-6">
-                            <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at.strftime('%Y-%m-%d %H:%M')
+                            <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at|user_datetime('%Y-%m-%d %H:%M')
                                 }}</p>
                             <p class="mb-1"><strong>Uploader:</strong> {{ upload.uploader.username }}</p>
                             <p class="mb-1"><strong>File Hash:</strong> {{ upload.file_hash }}</p>

@@ -204,7 +204,7 @@
                                 {% endif %}
                             </td>
                             <td>{{ verification.verified_by.username }}</td>
-                            <td>{{ verification.verified_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>{{ verification.verified_at|user_datetime('%Y-%m-%d %H:%M') }}</td>
                             <td>{{ verification.remarks or '-' }}</td>
                         </tr>
                         {% endfor %}

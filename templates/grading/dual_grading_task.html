@@ -177,7 +177,7 @@
             {% if resident_grade.comment %}
             <div class="text-muted fst-italic">"{{ resident_grade.comment }}"</div>
             {% endif %}
-            <div class="text-muted">{{ resident_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            <div class="text-muted">{{ resident_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
           {% endif %}
           {% if faculty_grade %}
@@ -187,7 +187,7 @@
             {% if faculty_grade.comment %}
             <div class="text-muted fst-italic">"{{ faculty_grade.comment }}"</div>
             {% endif %}
-            <div class="text-muted">{{ faculty_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            <div class="text-muted">{{ faculty_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
           {% endif %}
         </div>
@@ -201,7 +201,7 @@
             {% if existing_grade.comment %}
             <div class="text-muted fst-italic">"{{ existing_grade.comment }}"</div>
             {% endif %}
-            <div class="text-muted">{{ existing_grade.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+            <div class="text-muted">{{ existing_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
         </div>
         {% endif %}

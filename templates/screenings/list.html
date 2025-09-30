@@ -111,7 +111,7 @@
                   <span class="badge bg-info-subtle text-info-emphasis scr-badge-enhanced me-2">Date</span>
                   <span class="text-body">
                     {% if enc.capture_date_dt %}
-                      {{ enc.capture_date_dt.strftime('%Y-%m-%d') }}
+                      {{ enc.capture_date_dt|user_datetime('%Y-%m-%d') }}
                     {% else %}
                       {{ enc.capture_date or '—' }}
                     {% endif %}

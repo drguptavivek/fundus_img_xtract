@@ -84,7 +84,7 @@
             {% for gr in items %}
             {% set enc = gr.patient_encounter %}
             <tr>
-              <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d')
+              <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt|user_datetime('%Y-%m-%d')
                 }}{% elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
               <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
               <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>
@@ -148,8 +148,8 @@
           {% set enc = gr.patient_encounter %}
           <tr>
             <td class="text-nowrap">{% if enc and enc.glaucoma_verified_at %}{{
-              enc.glaucoma_verified_at.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
-            <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt.strftime('%Y-%m-%d') }}{%
+              enc.glaucoma_verified_at|user_datetime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</td>
+            <td class="text-nowrap">{% if enc and enc.capture_date_dt %}{{ enc.capture_date_dt|user_datetime('%Y-%m-%d') }}{%
               elif enc %}{{ enc.capture_date }}{% else %}-{% endif %}</td>
             <td class="text-nowrap">{{ enc.patient_id if enc else '-' }}</td>
             <td class="text-nowrap">{{ enc.name if enc else '-' }}</td>

@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 from flask import render_template, request, redirect, url_for, flash
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
@@ -46,8 +48,9 @@ def index():
         # Get user role to determine which tasks to show
         # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
         # Any user with role that allows them to grade (resident, ophthalmologist) can do resident grading
-        user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
-        
+        raw_user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
+        user_eligibility = raw_user_eligibility if isinstance(raw_user_eligibility, Mapping) else {}
+
         # Check if user has any resident eligibility
         has_resident_eligibility = False
         for hospital_data in user_eligibility.values():
@@ -84,9 +87,6 @@ def index():
         kpi_resident_completed_by_disease = {}
         kpi_faculty_completed_by_disease = {}
         kpi_arbitration_completed_by_disease = {}
-        
-        # Get user's grading eligibility details
-        user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
         
         # Get all diseases to ensure we have entries for all diseases
         all_diseases = db.query(Disease).all()

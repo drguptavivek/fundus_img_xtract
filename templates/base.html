@@ -27,6 +27,9 @@
         var stored = localStorage.getItem('theme');
         var defaultTheme = document.documentElement.getAttribute('data-default-theme') || 'auto';
         var theme = stored || defaultTheme;
+        if (defaultTheme === 'dark' && stored !== 'dark') {
+          theme = 'dark';
+        }
         document.documentElement.setAttribute('data-bs-theme', theme);
       } catch (e) {
         // no-op

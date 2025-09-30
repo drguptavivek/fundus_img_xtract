@@ -530,6 +530,11 @@ def dual_grading_submit():
             from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
             update_task_state_based_on_grades(task.id, db)
             
+            # Create or update consensus if applicable based on the grades
+            # This should be called after task state is updated to ensure proper consensus creation
+            from utils.dualGradingConsensusUtils import create_or_update_consensus
+            create_or_update_consensus(task.id, db)
+            
             # Clean up the task tracker record if this is not a revision
             # For revisions, no tracker was created in the first place, so no need to cleanup
             # We'll pass the db session to the cleanup function to include it in the same transaction

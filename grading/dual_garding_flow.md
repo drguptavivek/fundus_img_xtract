@@ -76,6 +76,20 @@ The `dual_grading_task(task_id, slot_type)` function:
 - If a faculty tries to access a task that is `pending`, they will not be able to proceed (only residents can do initial grading)
 - For arbitrators on final tasks, they can only revise their own grade if it was submitted within the 6-hour window
 
+## Stuck Task Handling
+
+### Task Tracker Model
+A new `TaskTracker` model has been implemented to track when users start working on tasks:
+- Records include: `task_id`, `user_id`, `role_slot` (resident|faculty|arbitrator), and `started_at` timestamp
+- When a user accesses a task for grading, a tracker record is created or updated with the current timestamp
+- This mechanism allows the system to identify tasks that have been started but not completed
+
+### Stuck Task Cleanup Mechanism
+- A background thread runs every 30 minutes to identify and reset tasks that have been in progress for more than 60 minutes without submission
+- The cleanup mechanism identifies tasks in the `TaskTracker` table where `started_at` is older than the time threshold
+- These stuck tasks are reset by deleting their tracker records, making them available for other users
+- The `reset_stuck_tasks()` function handles the cleanup process, logging the tasks that were reset
+
 ## Revision Logic
 
 ### Time-Based Restrictions

@@ -556,6 +556,27 @@ class AIGrade(Base):
     )
 
 
+class TaskTracker(Base):
+    """
+    A model to track when users start working on grading tasks.
+    This allows us to identify and reset tasks that have been 
+    started but not completed within the time limit.
+    """
+    __tablename__ = 'task_tracker'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # resident | faculty | arbitrator
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.created_at:
+            self.created_at = datetime.now(timezone.utc)
+
+
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

@@ -64,6 +64,15 @@
      have been in progress for more than 60 minutes without submission. The system resets these tasks so 
      they become available to other users. The reset_stuck_tasks function identifies grades with a start_time 
      but no time_taken (indicating the task was never completed) and resets the start_time to None.
+   - TASK TRACKER MODEL: A new TaskTracker model was introduced to store task access information including:
+     * task_id: The ID of the grading task
+     * user_id: The ID of the user who started the task
+     * role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+     * started_at: The timestamp when the user started working on the task
+     * created_at: The timestamp when the tracker record was created
+   - STUCK TASK CLEANUP THREAD: A background thread runs in app.py that periodically executes the
+     reset_stuck_tasks function every 30 minutes to detect and reset tasks that have been in progress
+     for more than 60 minutes without completion.
 
   4. Session Management Issues
    - The grading start time is stored in the Flask session, which could be problematic if the user refreshes

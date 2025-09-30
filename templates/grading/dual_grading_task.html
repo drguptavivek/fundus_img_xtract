@@ -150,7 +150,7 @@
           {% endif %}
           
           <!-- Grading Instructions Display -->
-          <div id="grading-instructions" class="mt-3 p-3 bg-light border rounded" style="display: none;">
+          <div id="grading-instructions" class="mt-3 p-3  border rounded" style="display: none;">
             <h6 class="border-bottom pb-1 mb-2">Grading Instructions</h6>
             <div id="instructions-content"></div>
           </div>
@@ -171,7 +171,7 @@
         <div class="mt-3">
           <h6 class="border-bottom pb-1">Previous Grades</h6>
           {% if resident_grade %}
-          <div class="small mb-2 p-2 bg-light rounded">
+          <div class="small mb-2 p-2  rounded">
             <div><strong class="text-capitalize">{{ resident_grade.role_slot }}</strong> - Grader ID: {{ resident_grade.grader.id }}</div>
             <div>{{ resident_grade.label.impression }}</div>
             {% if resident_grade.comment %}
@@ -181,7 +181,7 @@
           </div>
           {% endif %}
           {% if faculty_grade %}
-          <div class="small mb-2 p-2 bg-light rounded">
+          <div class="small mb-2 p-2 rounded">
             <div><strong class="text-capitalize">{{ faculty_grade.role_slot }}</strong> - Grader ID: {{ faculty_grade.grader.id }}</div>
             <div>{{ faculty_grade.label.impression }}</div>
             {% if faculty_grade.comment %}
@@ -195,7 +195,7 @@
         {% if existing_grade %}
         <div class="mt-3">
           <h6 class="border-bottom pb-1">Your Previous Grade</h6>
-          <div class="small mb-2 p-2 bg-light rounded">
+          <div class="small mb-2 p-2 rounded">
             <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - Grader ID: {{ existing_grade.grader.id }}</div>
             <div>{{ existing_grade.label.impression }}</div>
             {% if existing_grade.comment %}

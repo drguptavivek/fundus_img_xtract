@@ -6,6 +6,12 @@ from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password, check_password_strength, validate_username, validate_email, validate_phone, parse_iso_date
 from models import User, Role, Hospital, LabUnit, Session
+from utils.timezone_choices import (
+    TIMEZONE_CHOICES,
+    TIMEZONE_VALUES,
+    TIMEZONE_LABELS,
+    DEFAULT_TIMEZONE,
+)
 
 
 def users_list():
@@ -24,6 +30,7 @@ def add_user():
     pre_username = (request.form.get("username") or request.args.get("username") or "").strip()
     pre_active = bool(request.form.get("active")) if request.method == "POST" else True
     pre_roles = set(request.form.getlist("roles")) if request.method == "POST" else set()
+    pre_timezone = (request.form.get("timezone") or "").strip()
 
     # profile prefill
     pre_full_name = (request.form.get("full_name") or "").strip()
@@ -44,31 +51,37 @@ def add_user():
         username = pre_username
         password = request.form.get("new_password") or ""
         confirm = request.form.get("confirm_password") or ""
+        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
 
         ok, msg = validate_username(username)
         if not ok: return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
                                         pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                        pre_file_upload_quota, pre_lab_unit_ids)
+                                        pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = check_password_strength(password, min_len=10)
         if not ok: return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
                                         pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                        pre_file_upload_quota, pre_lab_unit_ids)
+                                        pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         if password != confirm:
             return _add_user_err("Passwords do not match.", roles, hospitals, lab_units, username, pre_active, pre_roles,
                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                 pre_file_upload_quota, pre_lab_unit_ids)
+                                 pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = validate_email(pre_email)
         if not ok: return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
                                         pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                        pre_file_upload_quota, pre_lab_unit_ids)
+                                        pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = validate_phone(pre_phone)
         if not ok: return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
                                         pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                        pre_file_upload_quota, pre_lab_unit_ids)
+                                        pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+
+        if pre_timezone and pre_timezone not in TIMEZONE_VALUES:
+            return _add_user_err("Please select a valid timezone.", roles, hospitals, lab_units, username, pre_active, pre_roles,
+                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                 pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         yj_int = None
         if pre_yj:
@@ -76,19 +89,19 @@ def add_user():
             if not pre_yj.isdigit() or not (1970 <= int(pre_yj) <= current_year + 1):
                 return _add_user_err("Year of joining must be a valid year.", roles, hospitals, lab_units, username, pre_active, pre_roles,
                                       pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                      pre_file_upload_quota, pre_lab_unit_ids)
+                                      pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
             yj_int = int(pre_yj)
 
         ok, msg, ldos_date = parse_iso_date(pre_ldos)
         if not ok:
             return _add_user_err(msg, roles, hospitals, lab_units, username, pre_active, pre_roles,
                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                 pre_file_upload_quota, pre_lab_unit_ids)
+                                 pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         if pre_file_upload_quota < 0:
             return _add_user_err("File upload quota cannot be negative.", roles, hospitals, lab_units, username, pre_active, pre_roles,
                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                 pre_file_upload_quota, pre_lab_unit_ids)
+                                 pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         with Session() as db:
             exists = db.execute(
@@ -97,7 +110,7 @@ def add_user():
             if exists:
                 return _add_user_err("Username already exists.", roles, hospitals, lab_units, username, pre_active, pre_roles,
                                      pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                     pre_file_upload_quota, pre_lab_unit_ids)
+                                     pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
             user = User(
                 username=username,
@@ -111,6 +124,7 @@ def add_user():
                 year_of_joining=yj_int,
                 last_date_of_service=ldos_date,
                 file_upload_quota=pre_file_upload_quota,
+                timezone=pre_timezone or default_tz,
             )
 
             if pre_roles:
@@ -126,22 +140,32 @@ def add_user():
         flash(f"User '{username}' created.", "success")
         return redirect(url_for("admin.users_list"))
 
+    default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
     return render_template("admin/add_user.html",
                            roles=roles, hospitals=hospitals, lab_units=lab_units,
                            username=pre_username, active=pre_active, selected_roles=pre_roles,
                            full_name=pre_full_name, phone=pre_phone, designation=pre_designation, email=pre_email,
                            year_of_joining=pre_yj, last_date_of_service=pre_ldos,
-                           file_upload_quota=pre_file_upload_quota, selected_lab_units=pre_lab_unit_ids)
+                           file_upload_quota=pre_file_upload_quota, selected_lab_units=pre_lab_unit_ids,
+                           timezone_choices=TIMEZONE_CHOICES,
+                           timezone_labels=TIMEZONE_LABELS,
+                           selected_timezone=pre_timezone or default_tz,
+                           default_timezone=default_tz)
 
 
-def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_roles, full_name, phone, designation, email, yj, ldos, file_upload_quota, selected_lab_units):
+def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_roles, full_name, phone, designation, email, yj, ldos, file_upload_quota, selected_lab_units, timezone_value):
     flash(msg, "danger")
+    default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
     return render_template("admin/add_user.html",
                            roles=roles, hospitals=hospitals, lab_units=lab_units,
                            username=username, active=active, selected_roles=selected_roles,
                            full_name=full_name, phone=phone, designation=designation, email=email,
                            year_of_joining=yj, last_date_of_service=ldos,
-                           file_upload_quota=file_upload_quota, selected_lab_units=selected_lab_units)
+                           file_upload_quota=file_upload_quota, selected_lab_units=selected_lab_units,
+                           timezone_choices=TIMEZONE_CHOICES,
+                           timezone_labels=TIMEZONE_LABELS,
+                           selected_timezone=timezone_value or default_tz,
+                           default_timezone=default_tz)
 
 
 def edit_user(user_id: int):
@@ -176,7 +200,19 @@ def edit_user(user_id: int):
                     
                     if active_admins < 1:
                         flash("There must be at least one active admin user.", "warning")
-                        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+                        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+                        return render_template(
+                            "admin/edit_user.html",
+                            user=user,
+                            roles=roles,
+                            hospitals=hospitals,
+                            lab_units=lab_units,
+                            selected_lab_units={lu.id for lu in user.lab_units},
+                            timezone_choices=TIMEZONE_CHOICES,
+                            timezone_labels=TIMEZONE_LABELS,
+                            selected_timezone=user.timezone or default_tz,
+                            default_timezone=default_tz,
+                        )
 
                 # remove roles
                 if user.roles:
@@ -198,11 +234,29 @@ def edit_user(user_id: int):
             designation = (request.form.get("designation") or "").strip()
             email = (request.form.get("email") or "").strip()
             phone = (request.form.get("phone") or "").strip()
+            timezone_pref = (request.form.get("timezone") or "").strip()
             yj = (request.form.get("year_of_joining") or "").strip()
             ldos = (request.form.get("last_date_of_service") or "").strip()
             file_upload_quota = int(request.form.get("file_upload_quota") or 0)
             is_active = bool(request.form.get("is_active"))
             selected_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units"))
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+
+            def render_profile_error(message: str | None = None):
+                if message:
+                    flash(message, "danger")
+                return render_template(
+                    "admin/edit_user.html",
+                    user=user,
+                    roles=roles,
+                    hospitals=hospitals,
+                    lab_units=lab_units,
+                    selected_lab_units={lu.id for lu in user.lab_units},
+                    timezone_choices=TIMEZONE_CHOICES,
+                    timezone_labels=TIMEZONE_LABELS,
+                    selected_timezone=timezone_pref or default_tz,
+                    default_timezone=default_tz,
+                )
 
             # Check if we're trying to deactivate an admin user
             if user.is_active and not is_active:
@@ -213,36 +267,41 @@ def edit_user(user_id: int):
                         .join(User.roles)
                         .where(Role.name == "admin", User.is_active.is_(True), User.id != user.id)
                     ).scalar_one() or 0
-                    
+
                     if active_admins < 1:
                         flash("There must be at least one active admin user.", "warning")
-                        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+                        return render_profile_error()
 
             ok, msg = validate_email(email)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok:
+                return render_profile_error(msg)
 
             ok, msg = validate_phone(phone)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok:
+                return render_profile_error(msg)
+
+            if timezone_pref and timezone_pref not in TIMEZONE_VALUES:
+                return render_profile_error("Please select a valid timezone.")
 
             yj_int = None
             if yj:
-               current_year = date.today().year
-               if not yj.isdigit() or not (1970 <= int(yj) <= current_year + 1):
-                     flash("Year of joining must be a valid year.", "danger")
-                     return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
-               yj_int = int(yj)
+                current_year = date.today().year
+                if not yj.isdigit() or not (1970 <= int(yj) <= current_year + 1):
+                    return render_profile_error("Year of joining must be a valid year.")
+                yj_int = int(yj)
 
             ok, msg, ldos_date = parse_iso_date(ldos)
-            if not ok: flash(msg, "danger"); return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+            if not ok:
+                return render_profile_error(msg)
 
             if file_upload_quota < 0:
-                flash("File upload quota cannot be negative.", "danger")
-                return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+                return render_profile_error("File upload quota cannot be negative.")
 
             user.full_name = full_name or None
             user.designation = designation or None
             user.email = email or None
             user.phone = phone or None
+            user.timezone = timezone_pref or default_tz
             user.year_of_joining = yj_int
             user.last_date_of_service = ldos_date
             user.file_upload_quota = file_upload_quota
@@ -252,14 +311,28 @@ def edit_user(user_id: int):
             user.lab_units.clear()
             if selected_lab_unit_ids:
                 lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(selected_lab_unit_ids))).scalars().all()
-                for lu in lab_unit_objs: user.lab_units.append(lu)
+                for lu in lab_unit_objs:
+                    user.lab_units.append(lu)
 
-            db.add(user); db.commit()
+            db.add(user)
+            db.commit()
             flash("Profile updated.", "success")
             return redirect(url_for("admin.users_list"))
 
         # GET
-        return render_template("admin/edit_user.html", user=user, roles=roles, hospitals=hospitals, lab_units=lab_units, selected_lab_units={lu.id for lu in user.lab_units})
+        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+        return render_template(
+            "admin/edit_user.html",
+            user=user,
+            roles=roles,
+            hospitals=hospitals,
+            lab_units=lab_units,
+            selected_lab_units={lu.id for lu in user.lab_units},
+            timezone_choices=TIMEZONE_CHOICES,
+            timezone_labels=TIMEZONE_LABELS,
+            selected_timezone=user.timezone or default_tz,
+            default_timezone=default_tz,
+        )
 
 
 def users_update(user_id: int):

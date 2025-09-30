@@ -8,7 +8,9 @@ from flask import current_app
 from flask_login import current_user
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-DEFAULT_DISPLAY_TIMEZONE = "Asia/Kolkata"
+from utils.timezone_choices import DEFAULT_TIMEZONE
+
+DEFAULT_DISPLAY_TIMEZONE = DEFAULT_TIMEZONE
 
 
 def _resolve_target_timezone() -> ZoneInfo:

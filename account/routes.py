@@ -6,6 +6,12 @@ from flask_login import login_required, current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from models import Session, User
+from utils.timezone_choices import (
+    TIMEZONE_CHOICES,
+    TIMEZONE_VALUES,
+    DEFAULT_TIMEZONE,
+    TIMEZONE_LABELS,
+)
 
 from auth.security import (
     check_password_strength,
@@ -29,6 +35,7 @@ def profile():
         designation = (request.form.get("designation") or "").strip()
         email       = (request.form.get("email") or "").strip()
         phone       = (request.form.get("phone") or "").strip()
+        timezone_pref = (request.form.get("timezone") or "").strip()
 
         ok, msg = validate_email(email)
         if not ok:
@@ -38,8 +45,14 @@ def profile():
                 roles = db.execute(
                     select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
                 ).scalar_one().roles or []
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
             return render_template("account/profile.html",
                                    full_name=full_name, designation=designation, email=email, phone=phone,
+                                   timezone=timezone_pref,
+                                   timezone_choices=TIMEZONE_CHOICES,
+                                   timezone_labels=TIMEZONE_LABELS,
+                                   selected_timezone=timezone_pref or default_tz,
+                                   default_timezone=default_tz,
                                    roles=[r.name for r in roles])
 
         ok, msg = validate_phone(phone)
@@ -49,11 +62,33 @@ def profile():
                 roles = db.execute(
                     select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
                 ).scalar_one().roles or []
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
             return render_template("account/profile.html",
                                    full_name=full_name, designation=designation, email=email, phone=phone,
+                                   timezone=timezone_pref,
+                                   timezone_choices=TIMEZONE_CHOICES,
+                                   timezone_labels=TIMEZONE_LABELS,
+                                   selected_timezone=timezone_pref or default_tz,
+                                   default_timezone=default_tz,
                                    roles=[r.name for r in roles])
 
+        if timezone_pref and timezone_pref not in TIMEZONE_VALUES:
+            flash("Please select a valid timezone.", "danger")
+            with Session() as db:
+                roles = db.execute(
+                    select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
+                ).scalar_one().roles or []
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            return render_template("account/profile.html",
+                                   full_name=full_name, designation=designation, email=email, phone=phone,
+                                   timezone=timezone_pref,
+                                   timezone_choices=TIMEZONE_CHOICES,
+                                   timezone_labels=TIMEZONE_LABELS,
+                                   selected_timezone=timezone_pref or default_tz,
+                                   default_timezone=default_tz,
+                                   roles=[r.name for r in roles])
 
+        stored_timezone = None
         with Session() as db:
             # Reload your user to update
             user = db.get(User, current_user.id)
@@ -65,8 +100,17 @@ def profile():
             user.designation = designation or None
             user.email      = email or None
             user.phone      = phone or None
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            user.timezone  = timezone_pref or default_tz
+            stored_timezone = user.timezone
 
             db.add(user); db.commit()
+
+        # Ensure the session knows about the updated preference immediately
+        try:
+            current_user.timezone = stored_timezone
+        except Exception:
+            pass
 
         flash("Profile updated.", "success")
         return redirect(url_for("account.profile"))
@@ -77,7 +121,15 @@ def profile():
             select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
         ).scalar_one()
         roles = [r.name for r in (user.roles or [])]
-    return render_template("account/profile.html", roles=roles)
+    default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+    return render_template(
+        "account/profile.html",
+        roles=roles,
+        timezone_choices=TIMEZONE_CHOICES,
+        timezone_labels=TIMEZONE_LABELS,
+        selected_timezone=user.timezone or default_tz,
+        default_timezone=default_tz,
+    )
 
 
 @account_bp.route("/change-password", methods=["GET", "POST"])

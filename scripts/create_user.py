@@ -18,6 +18,7 @@ try:
     from sqlalchemy.exc import SQLAlchemyError
     from models import engine, User
     from auth.security import hash_password
+    from utils.timezone_choices import DEFAULT_TIMEZONE
 except ModuleNotFoundError as e:
     print(f"Error importing modules: {e}", file=sys.stderr)
     print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
@@ -105,7 +106,11 @@ def create_user(username, password=None):
                 print(f"Password must be at least {MIN_LEN} characters.", file=sys.stderr)
                 sys.exit(1)
                 
-        u = User(username=username, password_hash=hash_password(password))
+        u = User(
+            username=username,
+            password_hash=hash_password(password),
+            timezone=os.getenv("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE),
+        )
         db.add(u)
         db.commit()
         print(f"User '{u.username}' created.")

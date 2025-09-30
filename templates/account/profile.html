@@ -32,6 +32,17 @@
                    value="{{ (phone if phone is defined else (current_user.phone or '')) }}"
                    pattern="[0-9+\-\s()]{7,}" maxlength="32" title="Digits, + - ( ) and spaces">
           </div>
+          <div class="col-md-6">
+            <label class="form-label" for="timezone">Preferred timezone</label>
+            <select class="form-select" id="timezone" name="timezone">
+              <option value="">Use default ({{ timezone_labels.get(default_timezone, default_timezone) }})</option>
+              {% set chosen_timezone = (timezone if timezone is defined else selected_timezone) %}
+              {% for tz_value, tz_label in timezone_choices %}
+                <option value="{{ tz_value }}" {% if chosen_timezone == tz_value %}selected{% endif %}>{{ tz_label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Application timestamps will be shown using this timezone.</div>
+          </div>
         </div>
 
           <div class="col-12">

@@ -19,6 +19,7 @@ from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import HTTPException
 
 from utils.datetime_filters import format_user_datetime
+from utils.timezone_choices import DEFAULT_TIMEZONE
 
 
 csrf = CSRFProtect()
@@ -39,7 +40,7 @@ def create_app():
 
     app.config.setdefault(
         "DEFAULT_DISPLAY_TIMEZONE",
-        os.getenv("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
+        os.getenv("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
     )
     app.jinja_env.filters["user_datetime"] = format_user_datetime
 

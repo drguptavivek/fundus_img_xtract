@@ -32,6 +32,16 @@
             <input class="form-control" id="phone" name="phone" value="{{ user.phone or '' }}"
                    pattern="[0-9+\-\s()]{7,}" maxlength="32" title="Digits, + - ( ) and spaces">
           </div>
+          <div class="col-md-6">
+            <label class="form-label" for="timezone">Preferred timezone</label>
+            <select class="form-select" id="timezone" name="timezone">
+              <option value="">Use default ({{ timezone_labels.get(default_timezone, default_timezone) }})</option>
+              {% for tz_value, tz_label in timezone_choices %}
+                <option value="{{ tz_value }}" {% if (selected_timezone or '') == tz_value %}selected{% endif %}>{{ tz_label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Timestamps shown to this user will use the selected timezone.</div>
+          </div>
           <div class="col-md-3">
             <label class="form-label" for="year_of_joining">Year of joining</label>
             <input class="form-control" id="year_of_joining" name="year_of_joining"

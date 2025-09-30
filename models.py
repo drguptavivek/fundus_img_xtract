@@ -52,6 +52,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     file_upload_quota: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     file_upload_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
 

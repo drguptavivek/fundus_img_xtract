@@ -92,7 +92,7 @@
         {% endif %}
         
         {% if current_slot %}
-        <form method="post" action="{{ url_for('grading.dual_grading_submit') }}">
+        <form method="post" action="{{ url_for('grading.dual_grading_submit') }}" data-grading-form="true">
           {{ csrf_field() }}
           <input type="hidden" name="task_id" value="{{ task.id }}">
           
@@ -217,6 +217,8 @@
   window.gradingGuidelines = {{ grading_guidelines | tojson }};
   window.taskId = {{ task.id }};
   window.imageUuid = "{{ image_uuid }}";
+  window.currentUserId = {{ current_user_id or 'null' }};
+  window.currentSlot = "{{ current_slot or '' }}";
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

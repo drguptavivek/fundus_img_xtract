@@ -124,7 +124,8 @@ def revise_grading(grade_id: int):
                 image_uuid=image_uuid,
                 grades=task.grades,
                 existing_grade_in_header=True,
-                is_arbitrator_revising_recent=is_arbitrator_revising_recent
+                is_arbitrator_revising_recent=is_arbitrator_revising_recent,
+                current_user_id=getattr(current_user, "id", None)
             ))
             
             # Prevent caching of this page
@@ -291,7 +292,8 @@ def dual_grading_task(task_id: int, slot_type: str):
                 resident_grade=resident_grade,
                 faculty_grade=faculty_grade,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
-                start_time_iso=start_time_iso  # Pass start time to template as hidden field
+                start_time_iso=start_time_iso,  # Pass start time to template as hidden field
+                current_user_id=getattr(current_user, "id", None)
             )
         except Exception as e:
             current_app.logger.exception("Failed to load grading task: %s", e)

@@ -90,7 +90,9 @@ window.addEventListener('pageshow', function() {
 const DualGradingTask = (function() {
     // Private variables
     let group, instructionsDiv, instructionsContent, taskId, imageUuid, storageKey;
+    let currentUserId, currentSlot;
     let radios, labels;
+    let navigationCleanupRegistered = false;
 
     /**
      * Initialize the module
@@ -104,7 +106,16 @@ const DualGradingTask = (function() {
         // Get global variables
         taskId = window.taskId;
         imageUuid = window.imageUuid;
-        storageKey = `${STORAGE.KEY_PREFIX}_${taskId}_${imageUuid}`;
+        currentUserId = typeof window.currentUserId === 'number' ? window.currentUserId : (
+            window.currentUserId && !Number.isNaN(Number(window.currentUserId)) ? Number(window.currentUserId) : null
+        );
+        currentSlot = typeof window.currentSlot === 'string' && window.currentSlot.length
+            ? window.currentSlot.toLowerCase()
+            : null;
+        storageKey = buildStorageKey(currentUserId, currentSlot, taskId, imageUuid);
+
+        // Clean up legacy storage key that did not include user/slot context
+        cleanupLegacyStorage(taskId, imageUuid);
         
         if (group) {
             // Get radio buttons and labels
@@ -116,6 +127,8 @@ const DualGradingTask = (function() {
             
             // Initialize display
             forceInit();
+
+            registerNavigationCleanup();
         }
     }
 
@@ -136,16 +149,82 @@ const DualGradingTask = (function() {
     }
 
     /**
+     * Remove the current selection data from storage
+     */
+    function clearSelectionFromStorage() {
+        try {
+            if (storageKey) {
+                localStorage.removeItem(storageKey);
+            }
+        } catch (e) {
+            console.debug('Unable to clear grading selection from localStorage');
+        }
+    }
+
+    /**
+     * Register handlers that ensure storage is cleared when the user leaves the grading screen
+     */
+    function registerNavigationCleanup() {
+        if (navigationCleanupRegistered) {
+            return;
+        }
+
+        try {
+            window.addEventListener('beforeunload', clearSelectionFromStorage);
+            window.addEventListener('pagehide', clearSelectionFromStorage);
+
+            const gradingForm = document.querySelector('form[data-grading-form="true"]');
+            if (gradingForm) {
+                gradingForm.addEventListener('submit', () => {
+                    clearSelectionFromStorage();
+                });
+            }
+
+            document.addEventListener('click', event => {
+                const target = event.target.closest('a');
+                if (!target) {
+                    return;
+                }
+
+                const href = target.getAttribute('href');
+                if (!href || href.startsWith('#')) {
+                    return;
+                }
+
+                // Links that navigate away from the grading screen should trigger cleanup
+                if (!target.closest('.keep-grading-storage')) {
+                    clearSelectionFromStorage();
+                }
+            });
+
+            navigationCleanupRegistered = true;
+        } catch (e) {
+            console.debug('Unable to register navigation cleanup listeners');
+        }
+    }
+
+    /**
      * Save selection to localStorage
      * @param {number|null} gradeId - The selected grade ID
      */
     function saveSelectionToStorage(gradeId) {
         try {
+            if (!storageKey) {
+                return;
+            }
+
+            if (gradeId == null) {
+                clearSelectionFromStorage();
+                return;
+            }
+
             const selectionData = {
                 taskId: taskId,
                 imageUuid: imageUuid,
                 selectedGradeId: gradeId,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                userId: currentUserId,
+                slot: currentSlot
             };
             localStorage.setItem(storageKey, JSON.stringify(selectionData));
         } catch (e) {
@@ -158,12 +237,21 @@ const DualGradingTask = (function() {
      * @returns {Object|null} Stored selection data or null
      */
     function loadSelectionFromStorage() {
+        if (!storageKey) {
+            return null;
+        }
+
         try {
             const stored = localStorage.getItem(storageKey);
             if (stored) {
                 const selectionData = JSON.parse(stored);
                 // Check if the stored data is recent
-                if (Date.now() - selectionData.timestamp < STORAGE.TIMEOUT) {
+                const isFresh = selectionData && typeof selectionData === 'object' &&
+                    Date.now() - selectionData.timestamp < STORAGE.TIMEOUT;
+                const userMatches = selectionData?.userId == null || currentUserId == null || selectionData.userId === currentUserId;
+                const slotMatches = !selectionData?.slot || !currentSlot || selectionData.slot === currentSlot;
+
+                if (isFresh && userMatches && slotMatches) {
                     return selectionData;
                 }
             }
@@ -240,7 +328,7 @@ const DualGradingTask = (function() {
             }
         });
         instructionsDiv.style.display = 'none';
-        saveSelectionToStorage(null);
+        clearSelectionFromStorage();
         
         // Hide not gradable reasons section
         const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
@@ -351,9 +439,62 @@ const DualGradingTask = (function() {
                 const gradingId = parseInt(checked.value);
                 saveSelectionToStorage(gradingId);
             }
+            clearSelectionFromStorage();
         }
     };
 })();
+
+// Expose helper for inline event handlers
+window.saveSelectionOnSubmit = function() {
+    DualGradingTask.saveSelectionOnSubmit();
+};
+
+// Helper functions defined outside the IIFE depend on internal state; keep them inside below.
+
+/**
+ * Build a scoped localStorage key for grading selections
+ * @param {number|null} userId
+ * @param {string|null} slot
+ * @param {number} taskId
+ * @param {string|null} imageUuid
+ * @returns {string|null}
+ */
+function buildStorageKey(userId, slot, taskId, imageUuid) {
+    if (typeof taskId === 'undefined' || taskId === null) {
+        return null;
+    }
+
+    const keyParts = [
+        STORAGE.KEY_PREFIX,
+        userId != null ? userId : 'anonymous',
+        slot || 'unspecified',
+        taskId,
+    ];
+
+    if (imageUuid) {
+        keyParts.push(imageUuid);
+    }
+
+    return keyParts.join('_');
+}
+
+/**
+ * Remove legacy storage entries that were saved without user/slot context
+ * @param {number} taskId
+ * @param {string|null} imageUuid
+ */
+function cleanupLegacyStorage(taskId, imageUuid) {
+    try {
+        const legacyKeyParts = [STORAGE.KEY_PREFIX, taskId];
+        if (imageUuid) {
+            legacyKeyParts.push(imageUuid);
+        }
+        const legacyKey = legacyKeyParts.join('_');
+        localStorage.removeItem(legacyKey);
+    } catch (e) {
+        console.debug('Unable to clean legacy localStorage key');
+    }
+}
 
 /**
  * Not Gradable Reasons Module

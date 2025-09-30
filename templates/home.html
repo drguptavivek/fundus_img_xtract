@@ -22,48 +22,78 @@
   </div>
 
   <!-- Quick Actions -->
-  <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-4 mb-4">
-    <div class="col">
-      <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
-        <div class="card card-forest h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Upload Files</div>
-            <div class="small opacity-75">ZIPs of fundus images</div>
+  {% if current_user.is_authenticated %}
+    <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 mb-4">
+      {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
+          <div class="card card-forest h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Upload Remedio ZIP</div>
+              <div class="small opacity-75">Bulk fundus image ingestion</div>
+            </div>
           </div>
-        </div>
-      </a>
-    </div>
-    <div class="col">
-      <a class="text-decoration-none" href="{{ url_for('uploaded_results.list_uploaded_results') }}">
-        <div class="card card-sea h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Uploaded Results</div>
-            <div class="small opacity-75">Review extracted data</div>
+        </a>
+      </div>
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload') }}">
+          <div class="card card-sea h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Direct Image Upload</div>
+              <div class="small opacity-75">Single images from clinics</div>
+            </div>
           </div>
-        </div>
-      </a>
-    </div>
-    <div class="col">
-      <a class="text-decoration-none" href="{{ url_for('jobs.list_recent_jobs') }}">
-        <div class="card card-violet h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Jobs</div>
-            <div class="small opacity-75">Track processing status</div>
+        </a>
+      </div>
+      {% endif %}
+
+      {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
+          <div class="card card-violet h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Verify Glaucoma OCR</div>
+              <div class="small opacity-75">Review Remedio glaucoma PDFs</div>
+            </div>
           </div>
-        </div>
-      </a>
-    </div>
-    <div class="col">
-      <a class="text-decoration-none" href="{{ url_for('screenings.list_screenings') }}">
-        <div class="card card-sunrise h-100">
-          <div class="card-body">
-            <div class="fw-semibold">Screenings</div>
-            <div class="small opacity-75">Browse patient encounters</div>
+        </a>
+      </div>
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
+          <div class="card card-sunrise h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Verify DR OCR</div>
+              <div class="small opacity-75">Review Remedio DR PDFs</div>
+            </div>
           </div>
-        </div>
-      </a>
+        </a>
+      </div>
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('preprocess.anonymization_dashboard') }}">
+          <div class="card card-aurora h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Anonymization Dashboard</div>
+              <div class="small opacity-75">Manage direct image verification</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endif %}
+
+      {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
+      <div class="col">
+        <a class="text-decoration-none" href="{{ url_for('grading.index') }}">
+          <div class="card card-night h-100">
+            <div class="card-body">
+              <div class="fw-semibold">Start Grading</div>
+              <div class="small opacity-75">Dual grading workflows</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endif %}
     </div>
-  </div>
+  {% endif %}
 
   <!-- KPIs -->
   <div class="row g-3 mb-4">

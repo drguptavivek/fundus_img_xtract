@@ -408,6 +408,10 @@ def dual_grading_submit():
             
             # Validate label belongs to task.disease_id using utility function
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
+            if not disease_gradings:
+                flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
+                return redirect(url_for("grading.index"))
+
             label = next((dg for dg in disease_gradings if dg.id == label_id), None)
             if not label:
                 flash("Invalid label.", "danger")

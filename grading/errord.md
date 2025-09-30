@@ -11,6 +11,6 @@
   File: `grading/dashboard.py:38`  \
   Normalized `get_user_grading_eligibility_details` responses to an empty mapping, preventing `AttributeError` when eligibility data is missing or misconfigured.
 
-- **Label validation crashes when no disease gradings are returned**  \
+- **Label validation crashes when no disease gradings are returned** *(Resolved)*  \
   File: `grading/dual_grading.py:410`  \
-  The label guard calls `fetch_active_disease_gradings` and immediately iterates it for `next(...)`. If that helper returns `None` (e.g., no active gradings configured), the `next` call raises `TypeError`. Add an explicit check for an empty/None return before attempting to search.
+  Added explicit handling when `fetch_active_disease_gradings` yields no results, flashing an error and redirecting rather than hitting a `TypeError` during `next(...)`.

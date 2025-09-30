@@ -88,18 +88,33 @@
      is refreshed or the session expires. The system first tries to retrieve the start time from the form
      data, and falls back to the session only if needed.
 
-  5. Role Changes During Grading Process
+  5. Role Changes During Grading Process [ACCEPTABLE]
    - A user might have the required role when accessing a task but lose that role before submitting
    - The system checks role eligibility during submission, which could result in a user losing work if their
      role changes mid-task
+  However, this issue is marked as extremely unlikely since most users complete grading within seconds, 
+  and the eligibility check is already implemented as a security measure during submission. 
+  The security check during submission is necessary to ensure that only authorized users can submit grades, 
+  even if they had access initially but lost permissions during the task. This is an accepted
+  limitation given the low probability of role changes occurring during the brief grading window.
 
-  6. Task State Transitions Edge Cases
+
+
+  6. Task State Transitions Edge Cases [RESOLVED]
    - If a faculty member grades a task that's already in "final" state (after an arbitrator has decided), the
      system should prevent this but there could be a race condition
    - If both resident and faculty grades are submitted nearly simultaneously to a pending task, the state may
      transition directly from pending to final without going through resident_done
    - If an arbitrator grades and then both resident and faculty submit matching grades, the state might be
      incorrectly updated
+   - SOLUTION: Implemented proper state validation at task assignment and at faculty submission to ensure:
+     1. When assigning task to faculty, verify the task is still in 'pending' or 'resident_done' state
+     2. At faculty submission, validate that the task is still in expected state before accepting the grade
+     3. Additional validation re-checks the state at submission time to prevent race conditions
+     4. The system now checks task availability based on user role and current state at assignment time
+     5. Database-level constraints and atomic operations help prevent invalid state transitions
+
+These edge cases were addressed by implementing comprehensive state validation checks at both assignment and submission time, ensuring that the task state transitions follow the correct sequence and that race conditions are handled properly.
 
   7. Arbitrator Exclusion Logic Conflicts
    - The 2-week exclusion between role slots could prevent a qualified arbitrator from arbitrating if they

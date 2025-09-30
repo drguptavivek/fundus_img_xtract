@@ -132,6 +132,27 @@ def dual_grading_task(task_id: int, slot_type: str):
             flash("Invalid slot type.", "danger")
             return redirect(url_for("grading.index"))
         
+        # Check task state validity for the requested slot at assignment time
+        state_validity = True
+        if slot_type == 'resident':
+            # Resident should only be assigned to 'pending' tasks
+            if task.state not in ['pending']:
+                flash(f"Task is no longer available for resident grading (current state: {task.state}).", "danger")
+                state_validity = False
+        elif slot_type == 'faculty':
+            # Faculty should only be assigned to 'resident_done' tasks
+            if task.state not in ['resident_done']:
+                flash(f"Task is no longer available for faculty grading (current state: {task.state}).", "danger")
+                state_validity = False
+        elif slot_type == 'arbitrator':
+            # Arbitrator should only be assigned to 'arbitration' tasks, or 'final' for recent revisions
+            if task.state not in ['arbitration', 'final']:
+                flash(f"Task is no longer available for arbitration (current state: {task.state}).", "danger")
+                state_validity = False
+        
+        if not state_validity:
+            return redirect(url_for("grading.index"))
+        
         # Check if user is eligible for the specified slot
         if not get_user_eligibility_for_task(db, current_user.id, task_id, slot_type):
             flash(f"You are not eligible to grade this task as {slot_type}.", "danger")
@@ -264,6 +285,28 @@ def dual_grading_submit():
         if task.state == "final" and not is_arbitrator_revision_allowed:
             flash("This task is already finalized.", "danger")
             return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+        
+        # Check task state validity at submission time to prevent race conditions 
+        # by revalidating the state that was expected when the task was assigned
+        state_validity = True
+        if slot == 'resident':
+            # Resident should only be grading 'pending' or 'resident_done' tasks (for revisions)
+            if task.state not in ['pending', 'resident_done']:
+                flash(f"Task state has changed and is no longer available for resident grading (current state: {task.state}).", "danger")
+                state_validity = False
+        elif slot == 'faculty':
+            # Faculty should only be grading 'resident_done', 'faculty_done', or 'arbitration' tasks (for revisions)
+            if task.state not in ['resident_done', 'faculty_done', 'arbitration']:
+                flash(f"Task state has changed and is no longer available for faculty grading (current state: {task.state}).", "danger")
+                state_validity = False
+        elif slot == 'arbitrator':
+            # Arbitrator should only be grading 'arbitration' or 'final' tasks (for eligible revisions)
+            if task.state not in ['arbitration', 'final']:
+                flash(f"Task state has changed and is no longer available for arbitration (current state: {task.state}).", "danger")
+                state_validity = False
+                
+        if not state_validity:
+            return redirect(url_for("grading.index"))
         
         # Eligibility check
         if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):

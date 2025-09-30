@@ -44,6 +44,12 @@ def create_app():
     )
     app.jinja_env.filters["user_datetime"] = format_user_datetime
 
+    @app.context_processor
+    def inject_default_theme():
+        from flask import request
+        default_theme = "dark" if request.blueprint == "grading" else "auto"
+        return {"default_theme": default_theme}
+
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
     app.config["PER_FILE_MAX_BYTES"] = int(os.getenv("PER_FILE_MAX_BYTES", 10 * 1024 * 1024))
     app.config["MAX_FILES_PER_UPLOAD"] = int(os.getenv("MAX_FILES_PER_UPLOAD", 50))

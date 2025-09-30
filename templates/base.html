@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-default-theme="{{ default_theme|default('auto') }}">
 
 <head>
   <meta charset="utf-8">
@@ -25,8 +25,8 @@
     (function () {
       try {
         var stored = localStorage.getItem('theme');
-        // Default to dark mode; user preference in localStorage wins
-        var theme = stored || 'dark';
+        var defaultTheme = document.documentElement.getAttribute('data-default-theme') || 'auto';
+        var theme = stored || defaultTheme;
         document.documentElement.setAttribute('data-bs-theme', theme);
       } catch (e) {
         // no-op

@@ -213,69 +213,95 @@ These edge cases were addressed by implementing comprehensive state validation c
      * In mark_task_started function, there was specific handling for IntegrityError that manually
        performed rollbacks, but other functions might not have had this level of error handling.
 
-   SOLUTION IMPLEMENTED:
-   1. Created a db_transaction_manager.py with consistent transaction handling utilities:
-      - get_db_session() context manager for standard session management
-      - transaction_scope() context manager for atomic operations
-      - execute_in_transaction() function for executing functions in a transaction scope
+      SOLUTION IMPLEMENTED:
+      1. Created a db_transaction_manager.py with consistent transaction handling utilities:
+          - get_db_session() context manager for standard session management
+          - transaction_scope() context manager for atomic operations
+          - execute_in_transaction() function for executing functions in a transaction scope
 
-   2. Updated all utility functions to accept external database sessions:
-      - Modified functions in utils/dualGradingStuckTaskCleanup.py to accept optional db sessions
-      - Modified functions in utils/dualGradingConsensusUtils.py to accept optional db sessions
-      - Modified functions in utils/dualGradingGetNextTasks.py to accept optional db sessions
+      2. Updated all utility functions to accept external database sessions:
+          - Modified functions in utils/dualGradingStuckTaskCleanup.py to accept optional db sessions
+          - Modified functions in utils/dualGradingConsensusUtils.py to accept optional db sessions
+          - Modified functions in utils/dualGradingGetNextTasks.py to accept optional db sessions
 
-   3. Refactored the dual grading workflow routes in grading/dual_grading.py to use transaction scopes:
-      - dual_grading_submit now uses transaction_scope() context manager
-      - grade creation, task state updates, and task tracker cleanup now happen within the same transaction
-      - dual_grading_task and revise_grading functions also now use transaction_scope()
+      3. Refactored the dual grading workflow routes in grading/dual_grading.py to use transaction scopes:
+          - dual_grading_submit now uses transaction_scope() context manager
+          - grade creation, task state updates, and task tracker cleanup now happen within the same transaction
+          - dual_grading_task and revise_grading functions also now use transaction_scope()
 
-   4. Implemented proper exception handling that ensures:
-      - Automatic rollback on any exception within the transaction scope
-      - Proper error propagation to trigger rollbacks when needed
-      - Consistent session closing in all code paths (success and error)
+      4. Implemented proper exception handling that ensures:
+          - Automatic rollback on any exception within the transaction scope
+          - Proper error propagation to trigger rollbacks when needed
+          - Consistent session closing in all code paths (success and error)
 
-   5. The TaskTracker cleanup is now part of the same transaction as the grade submission,
-      ensuring atomicity of the entire operation
+      5. The TaskTracker cleanup is now part of the same transaction as the grade submission,
+          ensuring atomicity of the entire operation
 
-   The solution addresses all the identified transaction issues by ensuring that related operations
-   happen within the same database transaction boundary, with proper rollbacks when any part of the
-   operation fails. This maintains data consistency and prevents partial updates to the database.
+      The solution addresses all the identified transaction issues by ensuring that related operations
+      happen within the same database transaction boundary, with proper rollbacks when any part of the
+      operation fails. This maintains data consistency and prevents partial updates to the database.
 
-  9. Environment Variable Dependencies
+  9. Environment Variable Dependencies [ACCEPTABLE]
    - The ARBITRATOR_REVISION_HOURS environment variable has a default of 6 hours, but if it's set to a
      negative or very small value, it could cause unexpected behavior
    - If the environment variable is set to a very large value, arbitrators might be able to revise their
      decisions much longer than intended
 
-  10. Task Availability After Assignment
-   - When a user submits a grade and requests "save and next task", there's a brief window where a new session
-      is opened to find the next task, potentially causing a race condition where multiple users could be
+  10. Task Availability After Assignment [RESOLVED]
+   - Previously: When a user submitted a grade and requested "save and next task", there was a brief window where a new session
+      was opened to find the next task, potentially causing a race condition where multiple users could be
      assigned the same next task
+   - Current: This issue is now resolved with the new transaction management and task reservation system.
+     The get_next_task function now reserves tasks atomically within the same transaction, preventing race conditions.
 
-  11. Concurrent Grade Submissions
-   - Multiple users could theoretically submit grades for the same task at the same time, potentially causing
-     state transition conflicts
-   - The state update happens after the grade is saved, which could create a race condition
+  11. Concurrent Grade Submissions [RESOLVED]
+   - Previously: Multiple users could theoretically submit grades for the same task at the same time, potentially causing
+     state transition conflicts. The state update happened after the grade was saved, which could create a race condition.
+   - Current: This issue is now resolved with the new transaction management system. The task state is revalidated 
+     within the same transaction as the grade submission, so if multiple users try to submit grades for the same task 
+     concurrently, only one will succeed - others will fail the state validation check. All operations happen atomically.
 
-  12. Grade Deletion/Modification Scenarios
+  12. Grade Deletion/Modification Scenarios [UNRESOLVED - Design Consideration]
    - The system doesn't appear to handle cases where grades might be deleted externally from the UI workflow
    - There's no mechanism to handle corrupted or inconsistent grade data
+   - This remains a potential issue as our transaction management system only ensures consistency during normal
+     application operations, but doesn't protect against external database modifications or data corruption.
+     Addressing this would require additional database constraints, data validation layers, and audit trails.
 
-  13. Revision of Finalized Tasks
+  13. Revision of Finalized Tasks [RESOLVED - Application Logic Handling]
    - Only arbitrators can revise finalized tasks, and only within the time window
-   - The logic to determine if an arbitrator is revising their own grade could fail in certain conditions,
+   - Previously: The logic to determine if an arbitrator is revising their own grade could fail in certain conditions,
      especially if multiple grades exist from the same arbitrator
+   - Current: The application now handles potential data integrity issues where multiple grades might exist 
+     for the same user/task/slot combination. If a new grade submission is attempted when an existing grade 
+     is found for the same user/task/slot, the system treats it as a revision of the existing grade rather 
+     than creating a duplicate. This prevents the creation of multiple grades per user per task per slot.
 
-  14. User Eligibility Changes
+  14. User Eligibility Changes [MINIMAL RISK - Short Session Duration]
    - A user might become eligible for a task based on role permissions when it's assigned but lose
      eligibility during the grading process if their permissions change
    - Lab unit or disease permissions could change while a user is in the middle of grading
+   - Current: This is generally not an issue in practice, as grading sessions are typically short
+     (a few seconds to minutes), making it unlikely that permissions would change during the process.
+     Additionally, all grade submission operations occur within a single transaction boundary, which
+     provides additional consistency protection.
 
-  15. Data Integrity Issues
+  15. Data Integrity Issues [RESOLVED - Denormalization Implemented]
    - If the DiseaseGrading reference in a grade becomes invalid (e.g., if a label is deleted), it could cause
-     issues in displaying or processing grades
+     critical issues in displaying or processing grades
    - If a task's disease or lab unit is changed after grades have been submitted, it could affect task state
-     calculations
+     calculations and create inconsistent data states
+   - This issue has been resolved by implementing denormalization. The following columns have been added
+     to the database tables to make records self-contained and preserve historical accuracy:
+     - Grade table: disease_name, grade_name, grade_description
+     - Consensus table: final_disease_name, final_grade_name, final_grade_description
+   - Migration scripts (migrate_denormalized_columns.py and populate_denormalized_columns.py) have been
+     created and executed to add these columns to the existing database and populate existing records
+     with the corresponding denormalized values.
+   - The application code (in grading/dual_grading.py and utils/dualGradingConsensusUtils.py) has been
+     updated to populate these denormalized fields when creating or updating grades and consensus records.
+   - This approach ensures that even if referenced DiseaseGrading records are modified or deleted, the
+     historical grade information remains intact and accessible, at the cost of increased database size.
 
   16. Missing Data Handling
    - If a task doesn't have associated images (neither encounter_file nor direct_image), the image_uuid will

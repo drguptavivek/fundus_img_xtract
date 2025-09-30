@@ -476,6 +476,12 @@ class Grade(Base):
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    
+    # Denormalized fields for data integrity and historical preservation
+    disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Copy of disease.name at time of grading
+    grade_name: Mapped[str | None] = mapped_column(String(64), nullable=True)     # Copy of disease_grading.impression at time of grading
+    grade_description: Mapped[str | None] = mapped_column(Text, nullable=True)    # Copy of disease_grading.guidelines at time of grading
+    
     task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')
     grader: Mapped['User'] = relationship('User')
     label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
@@ -497,6 +503,12 @@ class Consensus(Base):
     method: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     decided_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), nullable=True)
     decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    
+    # Denormalized fields for data integrity and historical preservation
+    final_disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Copy of disease.name at time of consensus
+    final_grade_name: Mapped[str | None] = mapped_column(String(64), nullable=True)     # Copy of disease_grading.impression at time of consensus
+    final_grade_description: Mapped[str | None] = mapped_column(Text, nullable=True)    # Copy of disease_grading.guidelines at time of consensus
+    
     task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='consensus')
     final_label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
     decided_by: Mapped['User | None'] = relationship('User')

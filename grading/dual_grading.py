@@ -364,6 +364,22 @@ def dual_grading_submit():
             prev_comment = None
             is_revision = existing_grade is not None
             
+            # If this is not a revision but an existing grade exists for this user/slot/task,
+            # this indicates a data integrity issue. We should update the existing grade instead of creating a new one.
+            if not is_revision and existing_grade:
+                # This shouldn't happen under normal circumstances, 
+                # but we handle it gracefully by updating the existing grade
+                current_app.logger.warning(
+                    f"Multiple grades detected for user {current_user.id}, "
+                    f"task {task_id}, and slot {slot}. "
+                    f"Only one grade per user per task per slot should exist. "
+                    f"Updating existing grade {existing_grade.id} instead of creating a new one."
+                )
+                # Treat this as a revision since an existing grade was found
+                is_revision = True
+                prev_grade_id = existing_grade.disease_grading_id
+                prev_comment = existing_grade.comment
+            
             if is_revision:
                 prev_grade_id = existing_grade.disease_grading_id
                 prev_comment = existing_grade.comment
@@ -416,19 +432,38 @@ def dual_grading_submit():
                     pass
             
             if existing_grade:
+                # Fetch the disease and grade information to populate denormalized fields
+                disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()
+                disease = None
+                if disease_grading:
+                    disease = db.query(Disease).filter(Disease.id == disease_grading.disease_id).first()
+                
                 existing_grade.disease_grading_id = label_id
                 existing_grade.comment = comment
                 existing_grade.time_taken = time_taken
+                # Update denormalized fields as well
+                existing_grade.disease_name = disease.name if disease else None
+                existing_grade.grade_name = disease_grading.impression if disease_grading else None
+                existing_grade.grade_description = disease_grading.guidelines if disease_grading else None
                 db.add(existing_grade)
                 db.flush()  # Ensure the ID is available
             else:
+                # Fetch the disease and grade information to populate denormalized fields
+                disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()
+                disease = None
+                if disease_grading:
+                    disease = db.query(Disease).filter(Disease.id == disease_grading.disease_id).first()
+                
                 new_grade = Grade(
                     task_id=task.id,
                     grader_user_id=current_user.id,
                     role_slot=slot,
                     disease_grading_id=label_id,
                     comment=comment,
-                    time_taken=time_taken
+                    time_taken=time_taken,
+                    disease_name=disease.name if disease else None,
+                    grade_name=disease_grading.impression if disease_grading else None,
+                    grade_description=disease_grading.guidelines if disease_grading else None
                 )
                 db.add(new_grade)
                 db.flush()  # Ensure the ID is available

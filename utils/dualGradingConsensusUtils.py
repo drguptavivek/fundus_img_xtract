@@ -10,7 +10,7 @@ This module provides functions for:
 from typing import Optional, Tuple
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_
-from models import Session, GradingTask, Grade, Consensus, User, DiseaseGrading
+from models import Session, GradingTask, Grade, Consensus, User, DiseaseGrading, Disease
 import logging
 from datetime import datetime
 
@@ -59,21 +59,39 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
         
         if arbitrator_grade:
             # An arbitrator has graded, so use adjudication method
+            # Fetch the disease and grade information to populate denormalized fields
+            final_disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == arbitrator_grade.disease_grading_id).first()
+            final_disease = None
+            if final_disease_grading:
+                final_disease = db.query(Disease).filter(Disease.id == final_disease_grading.disease_id).first()
+                
             consensus = Consensus(
                 task_id=task.id,
                 final_disease_grading_id=arbitrator_grade.disease_grading_id,
                 method="adjudication",
-                decided_by_user_id=arbitrator_grade.grader_user_id
+                decided_by_user_id=arbitrator_grade.grader_user_id,
+                final_disease_name=final_disease.name if final_disease else None,
+                final_grade_name=final_disease_grading.impression if final_disease_grading else None,
+                final_grade_description=final_disease_grading.guidelines if final_disease_grading else None
             )
         elif resident_grade and faculty_grade:
             # Both resident and faculty have graded - check for match
             if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
                 # Labels match, create match consensus
+                # Fetch the disease and grade information to populate denormalized fields
+                final_disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == resident_grade.disease_grading_id).first()
+                final_disease = None
+                if final_disease_grading:
+                    final_disease = db.query(Disease).filter(Disease.id == final_disease_grading.disease_id).first()
+                
                 consensus = Consensus(
                     task_id=task.id,
                     final_disease_grading_id=resident_grade.disease_grading_id,
                     method="match",
-                    decided_by_user_id=None  # System decision
+                    decided_by_user_id=None,  # System decision
+                    final_disease_name=final_disease.name if final_disease else None,
+                    final_grade_name=final_disease_grading.impression if final_disease_grading else None,
+                    final_grade_description=final_disease_grading.guidelines if final_disease_grading else None
                 )
             # If they don't match, no consensus is created yet - needs arbitration
         

@@ -71,14 +71,6 @@
   var rootId = 'imggr-view-{{ uuid }}';
   function run(){
     try { if (window.initImggrViewers) window.initImggrViewers(document.getElementById(rootId)); } catch(_) {}
-    // Scroll this viewer into view
-    var el = document.getElementById(rootId);
-    if (el) {
-      setTimeout(function(){
-        try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-        catch(_) { window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 16); }
-      }, 50);
-    }
   }
   if (!window.__imggrViewerLoaded) {
     var s=document.createElement('script');

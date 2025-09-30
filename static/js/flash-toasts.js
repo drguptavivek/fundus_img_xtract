@@ -8,8 +8,8 @@
 
     function setToastTopOffset() {
       var nav = document.querySelector('.navbar');
-      var h = nav ? Math.round(nav.getBoundingClientRect().height) : 56; // default navbar height
-      container.style.setProperty('--toast-top', (h + 8) + 'px'); // +8px gap
+      var h = nav ? Math.round(nav.getBoundingClientRect().height) : 40; // default navbar height
+      container.style.setProperty('--toast-top', (h + 2) + 'px'); // minimal gap
     }
 
     // Set on load + on resize

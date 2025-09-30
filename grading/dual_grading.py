@@ -415,39 +415,23 @@ def dual_grading_submit():
             
             # Fetch existing grade using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
-            
+            had_existing_grade = existing_grade is not None
+
             # Capture previous values for logging (before updating)
             prev_grade_id = None
             prev_comment = None
-            is_revision = existing_grade is not None
-            
-            # If this is not a revision but an existing grade exists for this user/slot/task,
-            # this indicates a data integrity issue. We should update the existing grade instead of creating a new one.
-            if not is_revision and existing_grade:
-                # This shouldn't happen under normal circumstances, 
-                # but we handle it gracefully by updating the existing grade
-                current_app.logger.warning(
-                    f"Multiple grades detected for user {current_user.id}, "
-                    f"task {task_id}, and slot {slot}. "
-                    f"Only one grade per user per task per slot should exist. "
-                    f"Updating existing grade {existing_grade.id} instead of creating a new one."
-                )
-                # Treat this as a revision since an existing grade was found
-                is_revision = True
+
+            if had_existing_grade:
                 prev_grade_id = existing_grade.disease_grading_id
                 prev_comment = existing_grade.comment
-            
-            if is_revision:
-                prev_grade_id = existing_grade.disease_grading_id
-                prev_comment = existing_grade.comment
-                
+
             # Log grade submission (including revisions) using dedicated grades logger
             # Store in UTC for consistency
             timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
             
-            grade_type = "revision" if is_revision else "new"
-            grade_id = existing_grade.id if is_revision else "N/A"
+            grade_type = "revision" if had_existing_grade else "new"
+            grade_id = existing_grade.id if had_existing_grade and existing_grade else "N/A"
             
             # Create log message
             log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: {slot}] [Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
@@ -455,7 +439,7 @@ def dual_grading_submit():
                 log_message += f" [Comments - {comment}]"
                 
             # If this is a revision, also log the previous grade and comment
-            if is_revision and prev_grade_id is not None:
+            if had_existing_grade and prev_grade_id is not None:
                 prev_comment_display = prev_comment if prev_comment else "None"
                 log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
             
@@ -525,7 +509,7 @@ def dual_grading_submit():
                 db.add(new_grade)
                 db.flush()  # Ensure the ID is available
                 existing_grade = new_grade  # So we can use existing_grade.id below
-            
+
             # Update task state based on grades using utility function
             # Note: We need to call update_task_state_based_on_grades with just the task_id, not the whole task object
             from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
@@ -539,9 +523,7 @@ def dual_grading_submit():
             # Clean up the task tracker record if this is not a revision
             # For revisions, no tracker was created in the first place, so no need to cleanup
             # We'll pass the db session to the cleanup function to include it in the same transaction
-            existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
-            is_revision = existing_grade_for_slot is not None
-            if not is_revision:
+            if not had_existing_grade:
                 from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
                 cleanup_task_tracker(task_id, current_user.id, slot, db)
             

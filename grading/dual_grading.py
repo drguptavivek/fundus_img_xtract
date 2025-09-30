@@ -16,7 +16,14 @@ from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fet
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
-from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision
+from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
+
+
+def register_routes(bp):
+    """Register dual grading routes with the blueprint."""
+    bp.add_url_rule("/task/<int:task_id>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])
+    bp.add_url_rule("/task/submit", view_func=dual_grading_submit, methods=["POST"])
+    bp.add_url_rule("/revise/<int:grade_id>", view_func=revise_grading, methods=["GET"])
 
 
 @roles_required("resident", "ophthalmologist", "admin")

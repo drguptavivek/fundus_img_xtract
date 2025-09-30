@@ -5,6 +5,11 @@ from models import Session, Disease
 from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
 
 
+def register_routes(bp):
+    """Register start grading routes with the blueprint."""
+    bp.add_url_rule("/grade/<int:disease_id>/<string:role_slot>", view_func=start_grading, methods=["GET"])
+
+
 @roles_required("resident", "ophthalmologist")
 def start_grading(disease_id: int, role_slot: str):
     """

@@ -12,6 +12,45 @@ from datetime import datetime, timedelta
 from utils.dualGradingEligibility import _get_user_eligible_lab_unit_ids, _has_user_graded_task_2weeks
 
 
+def _has_user_graded_task_recently(db, user_id: int, task_id: int, within_hours: int = 6) -> bool:
+    """
+    Check if a user has graded a task recently (within specified hours).
+    
+    Args:
+        db: Database session
+        user_id: The ID of the user
+        task_id: The ID of the task
+        within_hours: Number of hours to check back (default 6 hours)
+        
+    Returns:
+        True if user has graded the task recently, False otherwise
+    """
+    from datetime import datetime, timedelta, timezone
+    from models import Grade
+    
+    # Calculate the cutoff time
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    
+    # Get all grades by this user for this task
+    user_grades = db.query(Grade).filter(
+        Grade.grader_user_id == user_id,
+        Grade.task_id == task_id
+    ).all()
+    
+    # Check if any of the grades were created recently
+    for grade in user_grades:
+        # Handle timezone-naive datetimes from the database
+        grade_created_at = grade.created_at
+        if grade_created_at.tzinfo is None:
+            # Assume naive datetime is in UTC
+            grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
+        
+        if grade_created_at >= cutoff_time:
+            return True
+    
+    return False
+
+
 def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list) -> list:
     """
     Get filtered tasks based on role slot and other criteria.

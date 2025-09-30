@@ -61,17 +61,22 @@
               href="{{ url_for('homepage') }}">Home</a>
           </li>
 
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('fileUploader') or
-          current_user_has('optometrist') or current_user_has('data_manager')) %}
+          {% if current_user.is_authenticated %}
+          
+          {% if current_user_has('admin') %}
+          <li class="nav-item">
+            <a class="nav-link {{ 'active' if (request.blueprint == 'dashboard' or (request.endpoint|default('', true)).startswith('dashboard.')) else '' }}"
+              href="{{ url_for('dashboard.hospital_dashboard') }}">Dashboard</a>
+          </li>
+          {% endif %}
+
+          {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle
-                      {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs','audit']
-                                        or (request.endpoint|default('', true)).startswith('jobs.')
-                                        or (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_clean_workflow') else '' }}"
-              href="#" id="workMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Work
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
+              href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Upload
             </a>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="workMenu">
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="uploadMenu">
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'remedio_zip_uploads.upload_form' %}active{% endif %}"
                   href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload Zips</a>
@@ -80,7 +85,6 @@
                 <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
                   href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
               </li>
-
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"
                   href="{{ url_for('screenings.list_screenings') }}">Screenings Extracted</a>
@@ -88,7 +92,6 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              {% if current_user_has('contributor') or current_user_has('data_manager') or current_user_has('admin') %}
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
@@ -97,22 +100,6 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>
-              {% endif %}
-              {% endif %}
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              {% if current_user.is_authenticated %}
-              
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_clean_workflow' else '' }}"
-                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_clean_workflow') }}">Clean Glaucoma Data</a>
-              </li>
-                  
-              <li>
-                <a class="dropdown-item {{ 'active' if request.blueprint == 'audit' else '' }}"
-                  href="{{ url_for('audit.missing_capture_date') }}">Audit Dates</a>
-              </li>
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -120,20 +107,17 @@
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
                   href="{{ url_for('jobs.list_recent_jobs') }}">All Upload Jobs</a>
               </li>
-              
-              
-              {% endif %}
             </ul>
           </li>
+          {% endif %}
 
-          
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('contributor')) %}
+          {% if current_user_has('fileUploader') or current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] else '' }}" href="#"
               id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Pre-processing
+              Verify
             </a>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="glaucomaMenu">
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="verifyMenu">
               <li  class="dropdown-item " style="font-weight: 800;">Glaucoma PDFs</li>
               <li>
                 <hr class="dropdown-divider">
@@ -174,12 +158,11 @@
           </li>
           {% endif %}
 
-          {% if current_user.is_authenticated and (current_user_has('admin') or current_user_has('optometrist') or
-          current_user_has('ophthalmologist')) %}
+          {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
               id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Grading
+              Grade
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
               <li>
@@ -190,10 +173,7 @@
           </li>
           {% endif %}
 
-
-
-          {# Admin dropdown (only for admin users) #}
-          {% if current_user.is_authenticated and current_user_has('admin') %}
+          {% if current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['admin','jobs'] else '' }}" href="#"
               id="adminMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -266,9 +246,7 @@
             </ul>
           </li>
           {% endif %}
-
-
-          {% if current_user.is_authenticated %}
+          
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'account' else '' }}" href="#"
               role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -437,8 +415,6 @@
 
   <!-- HTMX -->
   <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
-
-  </script>
 
 
   <!-- {# Page-specific scripts go here #} -->

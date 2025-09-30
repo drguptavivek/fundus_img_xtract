@@ -364,11 +364,30 @@ def anonymize_image(uuid: UUID):
 
         edited_image_url = None
         if upload.edited_filename:
-            edited_image_url = url_for(
-                "media._directImgFinalByUUID",
-                uuid_str=str(upload.uuid),
-                _external=False,
-            )
+            from utils.fileUtils import abs_from_parts
+            import os
+            
+            # Get the edited file path
+            edited_file_path = abs_from_parts(upload.folder_rel, upload.edited_filename, "edited")
+            
+            # Add a timestamp parameter based on the file's modification time for cache busting
+            try:
+                mtime = int(os.path.getmtime(edited_file_path))
+                edited_image_url = url_for(
+                    "media._directImgFinalByUUID",
+                    uuid_str=str(upload.uuid),
+                    _external=False,
+                    t=str(mtime)
+                )
+            except (OSError, ValueError):
+                # If we can't get modification time, use current time as fallback
+                import time
+                edited_image_url = url_for(
+                    "media._directImgFinalByUUID",
+                    uuid_str=str(upload.uuid),
+                    _external=False,
+                    t=str(int(time.time()))
+                )
 
         # Current verification (if any)
         current_verification = db_session.execute(

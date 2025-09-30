@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
-from flask import send_file, abort, flash
+from flask import send_file, abort, flash, make_response
 from models import DirectImageVerify, Disease, Session, EncounterFile, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from sqlalchemy import  and_, select
 
@@ -24,7 +24,15 @@ def encounterImageByUUID(uuid: str):
         file_extension = Path(encounter_file.filename).suffix.lower()
         mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
         mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-        return send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}")
+        
+        response = make_response(send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}"))
+        
+        # Add cache control headers to prevent browser caching issues when images are updated
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
     finally: db.close()
 
 def encounterDrReportByUUID(uuid: str):
@@ -70,7 +78,15 @@ def directImgOrigByUUID(uuid: str):
         file_extension = Path(direct_image.filename).suffix.lower()
         mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
         mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-        return send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}")
+        
+        response = make_response(send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}"))
+        
+        # Add cache control headers to prevent browser caching issues when images are updated
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
     finally: db.close()
 
 def directImgEdByUUID(uuid: str):
@@ -87,7 +103,15 @@ def directImgEdByUUID(uuid: str):
         file_extension = Path(direct_image.edited_filename).suffix.lower()
         mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
         mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-        return send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}")
+        
+        response = make_response(send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}"))
+        
+        # Add cache control headers to prevent browser caching issues when images are updated
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
     finally: db.close()
 
 def directImgFinalByUUID(uuid: str):
@@ -109,7 +133,16 @@ def directImgFinalByUUID(uuid: str):
         file_extension = Path(filename).suffix.lower()
         mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
         mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-        return send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}")
+        
+        from flask import make_response
+        response = make_response(send_file(image_path_str, mimetype=mimetype, as_attachment=False, download_name=f"{uuid}{file_extension}"))
+        
+        # Add cache control headers to prevent browser caching issues when images are updated
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
     finally: db.close()
 
 

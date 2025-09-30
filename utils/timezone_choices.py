@@ -1,12 +1,13 @@
 """Timezone option helpers backed by Python's zoneinfo."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Iterable, List, Tuple
 
 from zoneinfo import available_timezones
 
-DEFAULT_TIMEZONE = "Asia/Kolkata"
+DEFAULT_TIMEZONE = os.getenv("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
 
 
 def _humanize_timezone(tz: str) -> str:

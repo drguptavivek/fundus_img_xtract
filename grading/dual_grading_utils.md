@@ -6,6 +6,7 @@ This document provides a summary of functions across multiple utility modules fo
 - `utils/dualGradingFetchDetailUtils.py`
 - `utils/dualGradingGetNextTasks.py`
 - `utils/dualGradingRevisionUtils.py`
+- `utils/dualGradingStuckTaskCleanup.py`
 
 ## Function Summaries
 
@@ -311,7 +312,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)
-- `disease_id` (int): The ID of the disease (required)
+- `disease_id` (int): The disease ID (required)
 - `lab_unit_id` (Optional[int]): Optional lab unit ID to filter by
 
 **Returns:**
@@ -406,6 +407,50 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Returns:**
 - A tuple of (is_eligible: bool, message: str)
+
+---
+
+### 25. `mark_task_started(task_id: int, user_id: int, role_slot: str)`
+
+**Classification:** Stuck Task Management
+
+**Description:** Marks that a user has started working on a task by creating a TaskTracker record in the database. This function is used to track when a user begins a grading task, which allows the stuck task cleanup mechanism to identify and reset tasks that have been started but not completed within the specified time limit. The function either creates a new TaskTracker entry or updates an existing entry for the same user, task, and role slot.
+
+**Parameters:**
+- `task_id` (int): The ID of the grading task being started
+- `user_id` (int): The ID of the user who started the task
+- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+
+**Returns:**
+- Boolean indicating whether the task was successfully marked as started
+
+---
+
+### 26. `reset_stuck_tasks(time_limit_minutes: int = 60)`
+
+**Classification:** Stuck Task Management
+
+**Description:** Identifies and resets tasks that have been started but not completed within the specified time limit. This function queries the TaskTracker table to find records where the `started_at` timestamp is older than the time threshold (default 60 minutes). It then deletes these tracker records so the tasks become available for other users. The function returns a count of how many stuck tasks were reset.
+
+**Parameters:**
+- `time_limit_minutes` (int): The time limit in minutes after which a task is considered stuck (default is 60)
+
+**Returns:**
+- Integer representing the number of stuck tasks that were reset
+
+---
+
+### 27. `cleanup_stuck_tasks(time_limit_minutes: int = 60)`
+
+**Classification:** Stuck Task Management
+
+**Description:** Identifies tasks that have been started but not completed within the specified time limit. Unlike `reset_stuck_tasks`, this function only identifies and logs the stuck tasks but doesn't reset them. It's primarily used for monitoring and logging purposes.
+
+**Parameters:**
+- `time_limit_minutes` (int): The time limit in minutes after which a task is considered stuck (default is 60)
+
+**Returns:**
+- Integer representing the number of stuck tasks identified
 
 ---
 

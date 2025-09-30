@@ -62,10 +62,11 @@ def revise_grading(grade_id: int):
                 return redirect(url_for("grading.index"))
             
             # For revision, we need to verify they still have the appropriate role
+            # For resident grading, allow both resident and ophthalmologist roles
             slot_type = grade.role_slot
             user_has_role = False
             if slot_type == 'resident':
-                user_has_role = current_user.has_role('resident')
+                user_has_role = current_user.has_role('resident') or current_user.has_role('ophthalmologist')
             elif slot_type in ['faculty', 'arbitrator']:
                 user_has_role = current_user.has_role('ophthalmologist')
             

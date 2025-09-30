@@ -85,20 +85,34 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         has_resident_role = user.has_role('resident')
         has_faculty_role = user.has_role('ophthalmologist')
         
-        # Count resident pending tasks (only if user is resident and has resident eligibility)
-        if has_resident_role and info['can_grade_resident']:
+        # Count resident pending tasks (user can do resident grading if they have resident role or faculty role and resident eligibility)
+        if (has_resident_role or has_faculty_role) and info['can_grade_resident']:
+            # Exclude tasks that the user has already graded as a resident
             counts['resident_pending'] = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
-                GradingTask.disease_id == disease_id
+                GradingTask.disease_id == disease_id,
+                ~GradingTask.grades.any(
+                    and_(
+                        Grade.grader_user_id == user_id,
+                        Grade.role_slot == 'resident'
+                    )
+                )
             ).count()
         
         # Count faculty pending tasks (only if user is faculty and has faculty eligibility)
         if has_faculty_role and info['can_grade_faculty']:
+            # Exclude tasks that the user has already graded as a faculty
             counts['faculty_pending'] = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
-                GradingTask.disease_id == disease_id
+                GradingTask.disease_id == disease_id,
+                ~GradingTask.grades.any(
+                    and_(
+                        Grade.grader_user_id == user_id,
+                        Grade.role_slot == 'faculty'
+                    )
+                )
             ).count()
         
         # Count arbitration pending tasks (only if user is faculty and has arbitration eligibility)
@@ -183,7 +197,8 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         }
         
         # Count resident completed tasks
-        if has_resident_role:
+        # Allow both residents and faculty to count resident completed tasks
+        if has_resident_role or has_faculty_role:
             counts['resident_completed'] = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'resident',

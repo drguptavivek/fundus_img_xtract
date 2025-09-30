@@ -103,7 +103,8 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
         return [lab_unit.id for lab_unit in lab_units]
     
     # Check role-specific permissions
-    if role_slot == "resident" and not user.has_role('resident'):
+    # Allow both residents and ophthalmologists to do resident grading based on eligibility
+    if role_slot == "resident" and not (user.has_role('resident') or user.has_role('ophthalmologist')):
         return None
     elif role_slot in ["faculty", "arbitrator"] and not user.has_role('ophthalmologist'):
         return None
@@ -181,7 +182,8 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
         return False
         
     # Check role requirements
-    if role_slot == 'resident' and not user.has_role('resident'):
+    # Allow both residents and ophthalmologists to do resident grading based on eligibility
+    if role_slot == 'resident' and not (user.has_role('resident') or user.has_role('ophthalmologist')):
         return False
     elif role_slot in ('faculty', 'arbitrator') and not user.has_role('ophthalmologist'):
         return False

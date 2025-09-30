@@ -25,7 +25,8 @@ def start_grading(disease_id: int, role_slot: str):
         return redirect(url_for("grading.index"))
     
     # Check if user has the required role for the slot
-    if role_slot == 'resident' and not current_user.has_role('resident'):
+    # Allow both residents and ophthalmologists to grade as residents
+    if role_slot == 'resident' and not (current_user.has_role('resident') or current_user.has_role('ophthalmologist')):
         flash("You don't have permission to grade as a resident.", "danger")
         return redirect(url_for("grading.index"))
     

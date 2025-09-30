@@ -44,7 +44,25 @@ def index():
         # and role (resident vs faculty) and arbitration tasks
         
         # Get user role to determine which tasks to show
-        is_resident = current_user.has_role('resident')
+        # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
+        # Any user with role that allows them to grade (resident, ophthalmologist) can do resident grading
+        user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
+        
+        # Check if user has any resident eligibility
+        has_resident_eligibility = False
+        for hospital_data in user_eligibility.values():
+            for lab_unit_data in hospital_data.values():
+                for diseases_roles in lab_unit_data.values():
+                    if 'Resident' in diseases_roles:
+                        has_resident_eligibility = True
+                        break
+                if has_resident_eligibility:
+                    break
+            if has_resident_eligibility:
+                break
+        
+        # is_resident means user has permission to do resident-level grading
+        is_resident = has_resident_eligibility and (current_user.has_role('resident') or current_user.has_role('ophthalmologist'))
         is_faculty = current_user.has_role('ophthalmologist')
         
         # Initialize KPIs

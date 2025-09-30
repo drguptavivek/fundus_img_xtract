@@ -217,34 +217,53 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
             return None
             
         # Get all grades for this task
-        all_grades = db.query(Grade).filter(Grade.task_id == task.id).all()
+        all_grades = db.query(Grade).filter(Grade.task_id == task_id).all()
         
         # Check for grades by role
         resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
         faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
+        # Log current state and grades for debugging
+        logging.getLogger("consensus").debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, faculty_grade={faculty_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
+        
         # Determine new state
         if arbitrator_grade:
             # Arbitrator has graded - finalize task
-            task.state = "final"
+            new_state = "final"
         elif resident_grade and faculty_grade:
             # Both grades submitted, check for match
             if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
                 # Match - finalize task
-                task.state = "final"
+                new_state = "final"
             else:
                 # No match - go to arbitration
-                task.state = "arbitration"
+                new_state = "arbitration"
         elif resident_grade and not faculty_grade:
-            task.state = "resident_done"
+            new_state = "resident_done"
         elif faculty_grade and not resident_grade:
-            task.state = "faculty_done"
+            new_state = "faculty_done"
         else:
-            task.state = "pending"
+            new_state = "pending"
         
+        # Only update if state actually changed
+        if task.state != new_state:
+            old_state = task.state
+            task.state = new_state
+            logging.getLogger("consensus").info(f"Task {task_id} state updated from '{old_state}' to '{new_state}'")
+            
+            # Explicitly mark the task as modified to ensure changes are persisted
+            from sqlalchemy import inspect
+            db.add(task)  # Re-add to session to ensure changes are tracked
+        
+        # Always commit if this function is managing its own session
         if close_db:
             db.commit()
+        else:
+            # If using shared session, rely on calling function to commit,
+            # but still make sure changes are flushed to be visible to following operations
+            db.flush()
+            
         db.refresh(task)
         
         return task

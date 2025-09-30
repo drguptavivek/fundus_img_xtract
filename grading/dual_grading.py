@@ -338,13 +338,14 @@ def dual_grading_submit():
                 return redirect(url_for("grading.index"))
             
             # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks
-            is_arbitrator_revision_allowed = False
+            arbitrator_revision_allowed = False
             if slot == "arbitrator":
                 # Use utility function to check if arbitrator revision is allowed
+                from utils.dualGradingRevisionUtils import is_arbitrator_revision_allowed
                 revision_check = is_arbitrator_revision_allowed(db, current_user.id, task_id, slot)
-                is_arbitrator_revision_allowed = revision_check["allowed"]
+                arbitrator_revision_allowed = revision_check["allowed"]
             
-            if task.state == "final" and not is_arbitrator_revision_allowed:
+            if task.state == "final" and not arbitrator_revision_allowed:
                 flash("This task is already finalized.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
             

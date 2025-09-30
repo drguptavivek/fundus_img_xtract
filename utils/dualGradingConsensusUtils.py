@@ -97,9 +97,15 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
         
         if consensus:
             db.add(consensus)
+            db.flush()  # Ensure the consensus gets an ID without committing transaction
             if close_db:
                 db.commit()
-            db.refresh(consensus)
+                db.refresh(consensus)  # Refresh to get fresh data when managing our own session
+            # For shared sessions, we don't refresh since the calling function will commit later
+            # The consensus object with its ID is still valid to return
+        else:
+            # If no consensus was created, still return None
+            pass
             
         return consensus
     except Exception as e:

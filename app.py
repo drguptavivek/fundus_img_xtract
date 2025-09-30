@@ -324,6 +324,9 @@ def create_app():
     from preprocess import bp as preprocess_bp
     app.register_blueprint(preprocess_bp)
 
+    from notifications import bp as notifications_bp
+    app.register_blueprint(notifications_bp)
+
     from api.gradings import bp as api_gradings_bp
     app.register_blueprint(api_gradings_bp)
 

@@ -8,7 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from auth.roles import roles_required
-from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
+from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole, User, Role
 from services.taskCreationServices import ensure_task as svc_ensure_task
 from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic, get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task, _has_user_graded_task_2weeks
 from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
@@ -18,6 +18,7 @@ from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
 from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
+from utils.notifications import send_notification_to_admins
 from db_transaction_manager import transaction_scope
 
 
@@ -78,6 +79,17 @@ def revise_grading(grade_id: int):
             # Fetch disease gradings for this disease using utility function
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
             
+            # Check if disease_gradings are missing or invalid
+            if not disease_gradings:
+                flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
+                # Send notification to admin about the missing disease gradings
+                send_notification_to_admins(
+                    title="Missing Disease Gradings in Task",
+                    message=f"Task ID {task.id} does not have associated disease gradings. Please investigate and resolve this issue.",
+                    notification_type="error"
+                )
+                return redirect(url_for("grading.index"))
+            
             # Create a dictionary mapping grading IDs to their guidelines
             grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
             
@@ -87,6 +99,16 @@ def revise_grading(grade_id: int):
                 image_uuid = task.encounter_file.uuid
             elif task.direct_image:
                 image_uuid = task.direct_image.uuid
+            
+            # Check if image_uuid is None and handle it appropriately
+            if image_uuid is None:
+                flash("Warning: No image associated with this task. Please contact the system administrator.", "warning")
+                # Send notification to admin about the missing image
+                send_notification_to_admins(
+                    title="Missing Image in Task",
+                    message=f"Task ID {task.id} does not have an associated image. Please investigate and resolve this issue.",
+                    notification_type="warning"
+                )
                 
             # Use the existing grade as the existing_grade parameter
             existing_grade = grade
@@ -127,7 +149,13 @@ def dual_grading_task(task_id: int, slot_type: str):
             task = fetch_task_with_related_data(db, task_id)
             
             if not task:
-                flash("Task not found.", "danger")
+                flash("Error: Task not found. Please contact the system administrator.", "danger")
+                # Send notification to admin about the missing task
+                send_notification_to_admins(
+                    title="Missing Task Access Attempt",
+                    message=f"User {current_user.id} attempted to access non-existent task ID {task_id}. Please investigate and resolve this issue.",
+                    notification_type="error"
+                )
                 return redirect(url_for("grading.index"))
             
             # Validate slot_type
@@ -182,6 +210,17 @@ def dual_grading_task(task_id: int, slot_type: str):
             # Fetch disease gradings for this disease using utility function
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
             
+            # Check if disease_gradings are missing or invalid
+            if not disease_gradings:
+                flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
+                # Send notification to admin about the missing disease gradings
+                send_notification_to_admins(
+                    title="Missing Disease Gradings in Task",
+                    message=f"Task ID {task_id} does not have associated disease gradings. Please investigate and resolve this issue.",
+                    notification_type="error"
+                )
+                return redirect(url_for("grading.index"))
+            
             # Create a dictionary mapping grading IDs to their guidelines
             grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
             
@@ -191,6 +230,16 @@ def dual_grading_task(task_id: int, slot_type: str):
                 image_uuid = task.encounter_file.uuid
             elif task.direct_image:
                 image_uuid = task.direct_image.uuid
+            
+            # Check if image_uuid is None and handle it appropriately
+            if image_uuid is None:
+                flash("Warning: No image associated with this task. Please contact the system administrator.", "warning")
+                # Send notification to admin about the missing image
+                send_notification_to_admins(
+                    title="Missing Image in Task",
+                    message=f"Task ID {task_id} does not have an associated image. Please investigate and resolve this issue.",
+                    notification_type="warning"
+                )
                 
             # Fetch existing grade for this user and slot (for review purposes) using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
@@ -278,7 +327,13 @@ def dual_grading_submit():
             # Use utility function to fetch the task with related data
             task = fetch_task_with_related_data(db, task_id)
             if not task:
-                flash("Task not found.", "danger")
+                flash("Error: Task not found. Please contact the system administrator.", "danger")
+                # Send notification to admin about the missing task
+                send_notification_to_admins(
+                    title="Missing Task Access Attempt",
+                    message=f"User {current_user.id} attempted to access non-existent task ID {task_id}. Please investigate and resolve this issue.",
+                    notification_type="error"
+                )
                 return redirect(url_for("grading.index"))
             
             # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks

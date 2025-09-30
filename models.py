@@ -589,6 +589,48 @@ class TaskTracker(Base):
             self.created_at = datetime.now(timezone.utc)
 
 
+from enum import Enum
+
+class NotificationType(Enum):
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    SYSTEM = "system"
+
+
+class Notification(Base):
+    """
+    Model for storing notifications for both system admins and users.
+    This model allows sending notifications about various system events,
+    including data issues, system errors, and other important messages.
+    """
+    __tablename__ = 'notifications'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    notification_type: Mapped[str] = mapped_column(String(20), default=NotificationType.INFO.value, nullable=False)
+    recipient_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=True)  # NULL for system-wide notifications
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    # Relationship to recipient user
+    recipient: Mapped['User'] = relationship('User', foreign_keys=[recipient_user_id], back_populates='notifications')
+
+    def mark_as_read(self):
+        """Mark this notification as read"""
+        self.is_read = True
+
+
+# Add notifications relationship to User model (add this to the existing User model)
+# For this to work, we need to modify the User model to add this relationship
+# Let's add the notifications relationship to the User class (it would need to be added to the User class definition)
+# Since we're appending, we'll define a separate association
+User.notifications: Mapped[List['Notification']] = relationship('Notification', foreign_keys=[Notification.recipient_user_id], back_populates='recipient')
+
+
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

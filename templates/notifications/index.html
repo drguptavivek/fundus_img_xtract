@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <h3 class="mb-0">Notifications</h3>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% if current_user.has_role('admin') %}
+                            <a href="{{ url_for('notifications.broadcast_notification') }}" class="btn btn-sm btn-outline-secondary">
+                                Broadcast to All
+                            </a>
+                            <a href="{{ url_for('notifications.system_notification') }}" class="btn btn-sm btn-outline-secondary">
+                                System Notification
+                            </a>
+                        {% endif %}
+                        {% if notifications %}
+                        <form method="POST" action="{{ url_for('notifications.mark_all_notifications_read') }}" style="display: inline;">
+                            {% from "_forms.html" import csrf_field %}
+                            {{ csrf_field() }}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                Mark All as Read
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <form method="GET" class="d-flex flex-wrap align-items-end gap-3">
+                                <div class="form-group">
+                                    <label for="type" class="form-label">Type</label>
+                                    <select name="type" id="type" class="form-select">
+                                        <option value="">All Types</option>
+                                        <option value="info" {% if request.args.get('type') == 'info' %}selected{% endif %}>Info</option>
+                                        <option value="warning" {% if request.args.get('type') == 'warning' %}selected{% endif %}>Warning</option>
+                                        <option value="error" {% if request.args.get('type') == 'error' %}selected{% endif %}>Error</option>
+                                        <option value="system" {% if request.args.get('type') == 'system' %}selected{% endif %}>System</option>
+                                    </select>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="unread" name="unread" value="1" 
+                                           {% if request.args.get('unread') %}checked{% endif %}>
+                                    <label class="form-check-label" for="unread">
+                                        Unread Only
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label for="per_page" class="form-label">Per Page</label>
+                                    <select name="per_page" id="per_page" class="form-select">
+                                        <option value="10" {% if request.args.get('per_page', 10)|int == 10 %}selected{% endif %}>10</option>
+                                        <option value="25" {% if request.args.get('per_page', 10)|int == 25 %}selected{% endif %}>25</option>
+                                        <option value="50" {% if request.args.get('per_page', 10)|int == 50 %}selected{% endif %}>50</option>
+                                        <option value="100" {% if request.args.get('per_page', 10)|int == 100 %}selected{% endif %}>100</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <button type="submit" class="btn btn-primary">Filter</button>
+                                    {% if request.args.get('type') or request.args.get('unread') %}
+                                    <a href="{{ url_for('notifications.notifications') }}" class="btn btn-secondary ms-2">Clear</a>
+                                    {% endif %}
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Notifications List -->
+                    {% if notifications %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Type</th>
+                                    <th scope="col">Title</th>
+                                    <th scope="col">Message</th>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for notification in notifications %}
+                                <tr class="{% if not notification.is_read %}table-primary{% endif %}">
+                                    <td>
+                                        <span class="badge 
+                                            {% if notification.notification_type == 'error' %}bg-danger
+                                            {% elif notification.notification_type == 'warning' %}bg-warning text-dark
+                                            {% elif notification.notification_type == 'info' %}bg-info
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ notification.notification_type|title }}
+                                        </span>
+                                    </td>
+                                    <td>{{ notification.title }}</td>
+                                    <td>{{ notification.message }}</td>
+                                    <td>{{ notification.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        {% if notification.is_read %}
+                                            <span class="badge bg-success">Read</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Unread</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not notification.is_read %}
+                                        <form method="POST" action="{{ url_for('notifications.mark_notification_read', notification_id=notification.id) }}" style="display: inline;">
+                                            {% from "_forms.html" import csrf_field %}
+                                            {{ csrf_field() }}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                Mark Read
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if pagination.pages > 1 %}
+                    <nav aria-label="Notifications pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if pagination.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('notifications.notifications', 
+                                        page=pagination.prev_num, 
+                                        type=request.args.get('type'), 
+                                        per_page=request.args.get('per_page'),
+                                        unread=request.args.get('unread')) }}">Previous</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">Previous</span>
+                                </li>
+                            {% endif %}
+
+                            {% for page_num in range(
+                                [(pagination.page - 2)|int(1), 1]|max, 
+                                [pagination.pages+1, (pagination.page + 3)|int(1)]|min) %}
+                                {% if page_num == pagination.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('notifications.notifications', 
+                                            page=page_num, 
+                                            type=request.args.get('type'), 
+                                            per_page=request.args.get('per_page'),
+                                            unread=request.args.get('unread')) }}">{{ page_num }}</a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if pagination.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('notifications.notifications', 
+                                        page=pagination.next_num, 
+                                        type=request.args.get('type'), 
+                                        per_page=request.args.get('per_page'),
+                                        unread=request.args.get('unread')) }}">Next</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">Next</span>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    <div class="text-center mt-3">
+                        <p class="text-muted">
+                            Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 }} to 
+                            {{ [pagination.page * pagination.per_page, pagination.total]|min }} 
+                            of {{ pagination.total }} notifications
+                        </p>
+                    </div>
+                    {% else %}
+                    <div class="text-center">
+                        <p class="text-muted">No notifications found.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

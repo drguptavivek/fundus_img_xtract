@@ -1,6 +1,6 @@
 # auth/routes.py
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import logging
 from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response
@@ -222,7 +222,7 @@ def forgot_password():
     Route to handle forgot password functionality.
     Generates an 8-character alphanumeric OTP and emails it to the user's email address.
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     import secrets
     from models import Session
     from utils.emails import send_otp_email
@@ -231,7 +231,7 @@ def forgot_password():
     def email_callback(success):
         result = {
             'success': success,
-            'timestamp': datetime.now(),
+            'timestamp': datetime.now(timezone.utc),
             'type': 'email_result'
         }
         if success:
@@ -275,7 +275,7 @@ def forgot_password():
                 # For now, I'll store it in the session, but this is not ideal for production
                 session['password_reset_otp'] = otp
                 session['password_reset_email'] = email
-                session['password_reset_expiry'] = (datetime.utcnow() + timedelta(minutes=10)).isoformat()
+                session['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 session['password_reset_user_id'] = user.id  # Store user ID for verification
                 
                 # Send email with OTP asynchronously
@@ -303,7 +303,7 @@ def reset_password():
     """
     Route to handle password reset with OTP verification.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     from models import Session
     
     if request.method == "POST":
@@ -336,7 +336,7 @@ def reset_password():
         
         # Check if OTP has expired
         expiry_time = datetime.fromisoformat(session_expiry)
-        if datetime.utcnow() > expiry_time:
+        if datetime.now(timezone.utc) > expiry_time:
             flash("OTP has expired. Please request a new one.", "error")
             # Clear session values
             session.pop('password_reset_otp', None)

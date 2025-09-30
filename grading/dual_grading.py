@@ -309,7 +309,7 @@ def dual_grading_submit():
             
         # Log grade submission (including revisions) using dedicated grades logger
         # Store in UTC for consistency
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
         
         grade_type = "revision" if is_revision else "new"

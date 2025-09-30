@@ -51,7 +51,7 @@ def _file_size_bytes(file_storage) -> int:
 
 def get_daily_upload_dir():
     """Get daily subdirectory for organizing uploaded ZIP files by date."""
-    today_str = datetime.now().strftime("%Y_%m_%d")
+    today_str = datetime.now(timezone.utc).strftime("%Y_%m_%d")
     upload_daily = UPLOAD_DIR / today_str
     return upload_daily
 

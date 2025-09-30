@@ -7,7 +7,7 @@ import os
 import hashlib
 from pathlib import Path
 from typing import Union, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import flash, current_app
 from werkzeug.exceptions import NotFound
 from models import Session, DIRECT_UPLOAD_DIR
@@ -81,7 +81,7 @@ def is_allowed_file_extension(filename: str, allowed_extensions: set) -> bool:
 
 
 def get_current_timestamp() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def safe_int(value: Any, default: int = 0) -> int:

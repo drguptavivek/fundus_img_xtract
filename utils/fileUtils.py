@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import mimetypes
 import os
 from pathlib import Path
@@ -110,7 +110,7 @@ def get_upload_dirs(user_id: int, when: Optional[datetime] = None) -> tuple[Path
       - dup_dir:    subfolder 'dup'
       - folder_rel: string '2025_09_01_user7' for DB storage
     """
-    when = when or datetime.now()
+    when = when or datetime.now(timezone.utc)
     date_str = when.strftime("%Y_%m_%d")
 
     # String for DB storage

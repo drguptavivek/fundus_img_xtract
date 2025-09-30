@@ -98,6 +98,11 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Description:** Creates or updates consensus for a grading task based on submitted grades. If an arbitrator has graded the task, their grade becomes the final decision via adjudication. If both resident and faculty have graded and their grades match, a match consensus is created. The function handles the session lifecycle internally unless a session is provided.
 
+**Important fixes made:**
+- Fixed SQLAlchemy session refresh issue: Removed `db.refresh(consensus)` call when using shared sessions to prevent "Instance is not persistent within this Session" errors
+- Added proper session flush for shared sessions to ensure consensus is properly saved
+- Only call `db.refresh()` when managing our own session (close_db=True) to avoid persistence errors
+
 **Parameters:**
 - `task_id` (int): The ID of the task to create/update consensus for
 - `db` (optional): Database session (if not provided, a new session will be created)

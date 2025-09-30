@@ -161,6 +161,7 @@ When accessing a task with an existing grade, the function:
    - User must have 'ophthalmologist' role
    - User must be eligible for arbitration via `check_arbitration_eligibility()`
    - Arbitrator cannot have graded the same task as resident or faculty within 2 weeks (unless revising their own arbitrator grade)
+   - Fixed variable naming collision: `is_arbitrator_revision_allowed` function was overwritten by a boolean variable with same name, causing "'bool' object is not callable" error
 5. Creates new grade or updates existing grade
 6. Updates task state via `update_task_state_based_on_grades()`
 7. Creates consensus if applicable via `create_or_update_consensus()`

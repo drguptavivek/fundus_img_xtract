@@ -268,7 +268,26 @@ These edge cases were addressed by implementing comprehensive state validation c
      application operations, but doesn't protect against external database modifications or data corruption.
      Addressing this would require additional database constraints, data validation layers, and audit trails.
 
-  13. Revision of Finalized Tasks [RESOLVED - Application Logic Handling]
+  13. Runtime Error: 'bool' object is not callable [RESOLVED]
+   - Previously: A variable naming collision occurred in `dual_grading_submit()` where the boolean variable 
+     `is_arbitrator_revision_allowed` overwrote the imported function `is_arbitrator_revision_allowed`, causing
+     "'bool' object is not callable" errors when the system tried to call the function after assigning False to it.
+   - Current: Fixed by using a different variable name (`arbitrator_revision_allowed`) to prevent the collision,
+     and explicitly re-importing the function to ensure it's available for calls.
+
+  14. SQLAlchemy Session Refresh Issues [RESOLVED]
+   - Previously: The `create_or_update_consensus` function would call `db.refresh(consensus)` after committing 
+     the transaction, causing "Instance is not persistent within this Session" errors when using shared sessions.
+   - Current: Fixed by only calling `db.refresh()` when managing our own session (`close_db` is True), and using
+     `db.flush()` for shared sessions to ensure changes are persisted without triggering refresh errors.
+
+  15. Missing Consensus Records [RESOLVED]
+   - Previously: The `create_or_update_consensus` function was imported but never called during grade submission,
+     causing tasks to reach 'final' state without creating corresponding consensus records.
+   - Current: Added the missing function call after task state updates, ensuring consensus records are created
+     when tasks reach final state. Existing data gaps were also fixed by populating missing consensus records.
+
+  16. Revision of Finalized Tasks [RESOLVED - Application Logic Handling]
    - Only arbitrators can revise finalized tasks, and only within the time window
    - Previously: The logic to determine if an arbitrator is revising their own grade could fail in certain conditions,
      especially if multiple grades exist from the same arbitrator
@@ -328,3 +347,13 @@ These edge cases were addressed by implementing comprehensive state validation c
 
   These edge cases should be considered and potentially addressed in the system design to ensure robustness
   and consistency of the dual grading workflow.
+
+  ## Summary of Recent Fixes
+
+  The following issues have been recently resolved in the dual grading system:
+
+  1. **Runtime Error Fix - Variable Name Collision**: Fixed "'bool' object is not callable" error by preventing variable name collision where `is_arbitrator_revision_allowed` was used both as a boolean variable and function name.
+
+  2. **SQLAlchemy Session Fix**: Fixed "Instance is not persistent within this Session" error by properly handling session refresh operations in the `create_or_update_consensus` function.
+
+  3. **Missing Consensus Records**: Fixed missing consensus records for final tasks by adding the missing call to `create_or_update_consensus` during grade submission workflow, and populated existing gaps in historical data.

@@ -87,81 +87,12 @@
 </div>
 {% endif %}
 
-<!-- KPIs Row -->
-<div class="row mb-4 g-3">
-  {% if is_resident %}
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--primary shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Resident</h5>
-        <h2 class="card-text">{{ kpi_resident_pending }}</h2>
-        <p class="text-muted">Pending Grading Tasks</p>
-        {% if kpi_resident_by_disease %}
-        <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in kpi_resident_by_disease.items() %}
-          {% if count > 0 %}
-          <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span>
-            <span class="badge bg-primary">{{ count }}</span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
 
-  {% if is_faculty %}
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--success shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Faculty</h5>
-        <h2 class="card-text">{{ kpi_faculty_pending }}</h2>
-        <p class="text-muted">Pending Review Tasks</p>
-        {% if kpi_faculty_by_disease %}
-        <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in kpi_faculty_by_disease.items() %}
-          {% if count > 0 %}
-          <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span>
-            <span class="badge bg-primary">{{ count }}</span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if is_resident or is_faculty %}
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--info shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Arbitration</h5>
-        <h2 class="card-text">{{ kpi_arbitration_pending }}</h2>
-        <p class="text-muted">Pending Arbitration Tasks</p> {% if kpi_arbitration_by_disease %} <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6> {% for disease_name, count in
-          kpi_arbitration_by_disease.items() %} {% if count > 0 %} <div class="d-flex justify-content-between"> <span>{{
-              disease_name }}</span> <span class="badge bg-primary">{{ count }}</span> </div> {% endif %} {% endfor %}
-        </div> {% endif %}
-      </div>
-    </div>
-  </div> {% endif %}
-</div> 
-
-
-  
 <!-- Eligibility Details --> 
-{% if user_eligibility %} <div class="row mb-4">
+<div class="row mb-4">
   <div class="col-12">
     <div class="card shadow-sm">
-      <div class="card-header"> <strong>Your Grading Eligibility</strong> </div>
+      <div class="card-header"> <strong>Grading Eligibility</strong> </div>
       <div class="card-body"> 
         {% for hospital_name, lab_units in user_eligibility.items() %} 
         <div class="mb-3 pb-2 border-bottom">
@@ -185,11 +116,82 @@
     </div>
   </div>
 </div> 
-{% endif %} 
+
+
+<!-- KPIs Row -->
+<div class="row mb-4 g-3">
+  <h3>Pending</h3>
+  <div class="col-md-4">
+    <div class="card kpi-card kpi--primary shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="card-title">Resident</h5>
+        <h2 class="card-text">{{ kpi_resident_pending }}</h2>
+        <p class="text-muted">Pending Grading Tasks</p>
+        {% if kpi_resident_by_disease %}
+        <div class="mt-3">
+          <h6 class="border-bottom pb-1">By Disease</h6>
+          {% for disease_name, count in kpi_resident_by_disease.items() %}
+          {% if count > 0 %}
+          <div class="d-flex justify-content-between">
+            <span>{{ disease_name }}</span>
+            <span class="badge bg-primary">{{ count }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+
+  
+  <div class="col-md-4">
+    <div class="card kpi-card kpi--success shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="card-title">Faculty</h5>
+        <h2 class="card-text">{{ kpi_faculty_pending }}</h2>
+        <p class="text-muted">Pending Review Tasks</p>
+        {% if kpi_faculty_by_disease %}
+        <div class="mt-3">
+          <h6 class="border-bottom pb-1">By Disease</h6>
+          {% for disease_name, count in kpi_faculty_by_disease.items() %}
+          {% if count > 0 %}
+          <div class="d-flex justify-content-between">
+            <span>{{ disease_name }}</span>
+            <span class="badge bg-primary">{{ count }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  
+
+  
+  <div class="col-md-4">
+    <div class="card kpi-card kpi--info shadow-sm h-100">
+      <div class="card-body">
+        <h5 class="card-title">Arbitration</h5>
+        <h2 class="card-text">{{ kpi_arbitration_pending }}</h2>
+        <p class="text-muted">Pending Arbitration Tasks</p> {% if kpi_arbitration_by_disease %} <div class="mt-3">
+          <h6 class="border-bottom pb-1">By Disease</h6> {% for disease_name, count in
+          kpi_arbitration_by_disease.items() %} {% if count > 0 %} <div class="d-flex justify-content-between"> <span>{{
+              disease_name }}</span> <span class="badge bg-primary">{{ count }}</span> </div> {% endif %} {% endfor %}
+        </div> {% endif %}
+      </div>
+    </div>
+  </div> 
+</div> 
+
+
+  
 
 <!-- Completed KPIs Row -->
 <div class="row g-3 mb-4"> 
-  {% if is_resident %} 
+  <h3>Completed</h3>
   <div class="col-md-4">
     <div class="card  kpi-card shadow-sm h-100">
       <div class="card-body">
@@ -210,9 +212,6 @@
       </div>
     </div>
   </div> 
-  {% endif %} 
-  
-  {% if is_faculty %} 
   <div class="col-md-4">
     <div class="card  kpi-card  shadow-sm h-100">
       <div class="card-body">
@@ -228,10 +227,7 @@
       </div>
     </div>
   </div> 
-  {% endif %} 
   
-  
-  {% if is_resident or is_faculty %} 
 <div class="col-md-4">
     <div class="card  kpi-card  shadow-sm h-100">
       <div class="card-body">
@@ -246,13 +242,13 @@
         </div> {% endif %}
       </div>
     </div>
-  </div> {% endif %} </div> 
+  </div>  </div> 
   
 
 <!-- History of My Gradings -->
 <div class="card card-aurora shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center"> 
-    <strong>My Gradings</strong> 
+    <strong>Recent Gradings</strong> 
     <span class="small text-muted">{{ my_total or 0 }} total</span> 
   </div>
   <div class="card-body">

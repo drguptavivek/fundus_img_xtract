@@ -98,6 +98,11 @@
           
           <input type="hidden" name="slot" value="{{ current_slot }}">
           
+          <!-- Add the start_time as a hidden input field to prevent session expiration issues -->
+          {% if start_time_iso %}
+          <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
+          {% endif %}
+          
           <div class="mb-2">
             <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name }}</strong></label>
             <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">

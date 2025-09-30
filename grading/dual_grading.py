@@ -191,9 +191,10 @@ def dual_grading_task(task_id: int, slot_type: str):
         existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
         is_revision = existing_grade_for_slot is not None
         
-        # Store the start time in the session
+        # Store the start time in the session for fallback
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
-        flask_session[start_time_key] = datetime.now(timezone.utc).isoformat()
+        start_time_iso = datetime.now(timezone.utc).isoformat()
+        flask_session[start_time_key] = start_time_iso
         
         # Mark that the user has started working on this task for stuck task tracking
         # but only if this is not a revision (i.e., user doesn't already have a grade for this slot)
@@ -215,7 +216,8 @@ def dual_grading_task(task_id: int, slot_type: str):
             existing_grade_in_header=True,
             resident_grade=resident_grade,
             faculty_grade=faculty_grade,
-            is_arbitrator_revising_recent=is_arbitrator_revising_recent
+            is_arbitrator_revising_recent=is_arbitrator_revising_recent,
+            start_time_iso=start_time_iso  # Pass start time to template as hidden field
         )
     finally:
         db.close()
@@ -342,7 +344,14 @@ def dual_grading_submit():
         # Calculate time taken
         time_taken = None
         start_time_key = f"grading_start_time_{task_id}_{slot}"
-        start_time_str = flask_session.get(start_time_key)
+        
+        # Try to get start time from form data first (to handle page refreshes)
+        start_time_str = request.form.get("start_time_iso")
+        
+        # If not in form, try to get from session
+        if not start_time_str:
+            start_time_str = flask_session.get(start_time_key)
+        
         if start_time_str:
             try:
                 start_time = datetime.fromisoformat(start_time_str)

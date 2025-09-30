@@ -81,10 +81,12 @@
      for more than 60 minutes without completion. This serves as a safety net for any edge cases where
      immediate cleanup might not occur.
 
-  4. Session Management Issues
-   - The grading start time is stored in the Flask session, which could be problematic if the user refreshes
-     the page or if the session expires during grading
-   - Time tracking could fail if the session key is lost, leading to incorrect time_taken calculations
+  4. Session Management Issues [RESOLVED]
+   - The grading start time was stored in the Flask session, which could be problematic if the user refreshed
+     the page or if the session expired during grading
+   - SOLVED: The start time is now passed as a hidden field in the form, so it persists even if the page
+     is refreshed or the session expires. The system first tries to retrieve the start time from the form
+     data, and falls back to the session only if needed.
 
   5. Role Changes During Grading Process
    - A user might have the required role when accessing a task but lose that role before submitting

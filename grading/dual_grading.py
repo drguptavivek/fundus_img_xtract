@@ -10,13 +10,14 @@ from datetime import datetime, timedelta, timezone
 from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole
 from services.taskCreationServices import ensure_task as svc_ensure_task
-from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task, _has_user_graded_task_2weeks
+from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic, get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task, _has_user_graded_task_2weeks
 from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
 from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
+from utils.dualGradingStuckTaskCleanup import mark_task_started
 
 
 def register_routes(bp):
@@ -189,6 +190,9 @@ def dual_grading_task(task_id: int, slot_type: str):
         # Store the start time in the session
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
         flask_session[start_time_key] = datetime.now(timezone.utc).isoformat()
+        
+        # Mark that the user has started working on this task for stuck task tracking
+        mark_task_started(task_id, current_user.id, slot_type)
         
         # Pass grades for display in the template
         grades = task.grades
@@ -385,11 +389,11 @@ def dual_grading_submit():
                 # Try to find the next eligible task with a new session
                 next_task = None
                 if slot == "resident":
-                    next_task = get_next_eligible_resident_task(current_user.id, disease_id)
+                    next_task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
                 elif slot == "faculty":
-                    next_task = get_next_eligible_faculty_task(current_user.id, disease_id)
+                    next_task = get_next_eligible_faculty_task_atomic(current_user.id, disease_id)
                 elif slot == "arbitrator":
-                    next_task = get_next_eligible_arbitrator_task(current_user.id, disease_id)
+                    next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
                 
                 # Handle the result
                 if next_task is None:

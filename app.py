@@ -11,6 +11,8 @@ from zip_processor import setup_environment
 from dotenv import load_dotenv  
 import time
 from datetime import timedelta
+import threading
+import atexit
 
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
@@ -578,7 +580,37 @@ def create_app():
 
     return app
 
+
+def run_stuck_task_cleanup():
+    """
+    Run the stuck task cleanup function periodically to identify and reset tasks
+    that have been assigned but not completed within the time limit.
+    """
+    from utils.dualGradingStuckTaskCleanup import reset_stuck_tasks
+    
+    while True:
+        try:
+            # Run the cleanup every 30 minutes
+            cleaned_count = reset_stuck_tasks(time_limit_minutes=60)
+            if cleaned_count > 0:
+                print(f"Reset {cleaned_count} stuck tasks")
+            
+            # Sleep for 30 minutes before the next run
+            time.sleep(30 * 60)
+        except Exception as e:
+            import logging
+            logging.error(f"Error in stuck task cleanup thread: {str(e)}")
+            # Even if an error occurs, keep the thread running by sleeping a bit before continuing
+            time.sleep(5 * 60)  # Wait 5 minutes before retrying
+
+
 if __name__ == "__main__":
     app = create_app()
+    
+    # Start the stuck task cleanup thread
+    import threading
+    cleanup_thread = threading.Thread(target=run_stuck_task_cleanup, daemon=True)
+    cleanup_thread.start()
+    
     # dev server; for prod use gunicorn/uwsgi
     app.run(debug=True, host="127.0.0.1", port=5000)

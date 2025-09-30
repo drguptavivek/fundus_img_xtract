@@ -3,7 +3,7 @@ Utility functions for getting the next eligible dual grading tasks.
 """
 
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from models import Session, GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
 from typing import Optional, Union
 import random
@@ -223,6 +223,166 @@ def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id
             # If we have tasks, return a random one
             if tasks:
                 return random.choice(tasks)
+        
+        # If we've tried 3 times and still don't have tasks, return a helpful message
+        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
+        
+    finally:
+        db.close()
+
+
+def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list):
+    """
+    Atomically get and lock a task for a user to prevent race conditions.
+    This function uses SELECT FOR UPDATE to ensure no other user can get the same task.
+    
+    Args:
+        db: Database session
+        user_id: The ID of the user
+        disease_id: The disease ID
+        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        eligible_lab_unit_ids: List of lab unit IDs the user is eligible for
+    
+    Returns:
+        The locked GradingTask or None if no eligible tasks are available
+    """
+    # Build the base query
+    query = db.query(GradingTask).filter(
+        GradingTask.lab_unit_id.in_(eligible_lab_unit_ids),
+        GradingTask.disease_id == disease_id
+    )
+    
+    # Filter by role-specific states
+    if role_slot == "arbitrator":
+        query = query.filter(GradingTask.state == "arbitration")
+    elif role_slot == "resident":
+        query = query.filter(GradingTask.state == "pending")
+    elif role_slot == "faculty":
+        query = query.filter(GradingTask.state == "resident_done")
+    
+    # Use SELECT FOR UPDATE to lock the rows
+    # Order randomly and limit to 1 to get just one task locked
+    task = query.with_for_update().order_by(func.random()).first()
+    
+    # If a task was found, verify that the user hasn't graded it recently
+    if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
+        return task
+    
+    return None
+
+
+def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+    """
+    Get the next eligible task for a resident user with atomic locking to prevent race conditions.
+    
+    Args:
+        user_id: The ID of the user (must be a resident or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available, 
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    db = Session()
+    try:
+        # Get user's eligible lab unit IDs for resident role and specified disease
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
+        if eligible_lab_unit_ids is None:
+            return None
+        
+        # If a specific lab unit is requested, check if user is eligible for it
+        if lab_unit_id:
+            if lab_unit_id not in eligible_lab_unit_ids:
+                return None
+            # Filter to only the specified lab unit
+            eligible_lab_unit_ids = [lab_unit_id]
+        
+        # Try up to 3 times to find a suitable task with atomic locking
+        for attempt in range(3):
+            task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
+            if task:
+                return task
+        
+        # If we've tried 3 times and still don't have tasks, return a helpful message
+        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
+        
+    finally:
+        db.close()
+
+
+def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+    """
+    Get the next eligible task for a faculty user with atomic locking to prevent race conditions.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available, 
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    db = Session()
+    try:
+        # Get user's eligible lab unit IDs for faculty role and specified disease
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "faculty")
+        if eligible_lab_unit_ids is None:
+            return None
+        
+        # If a specific lab unit is requested, check if user is eligible for it
+        if lab_unit_id:
+            if lab_unit_id not in eligible_lab_unit_ids:
+                return None
+            # Filter to only the specified lab unit
+            eligible_lab_unit_ids = [lab_unit_id]
+        
+        # Try up to 3 times to find a suitable task with atomic locking
+        for attempt in range(3):
+            task = _atomically_get_and_lock_task(db, user_id, disease_id, "faculty", eligible_lab_unit_ids)
+            if task:
+                return task
+        
+        # If we've tried 3 times and still don't have tasks, return a helpful message
+        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
+        
+    finally:
+        db.close()
+
+
+def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+    """
+    Get the next eligible task for an arbitrator user with atomic locking to prevent race conditions.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available, 
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    db = Session()
+    try:
+        # Get user's eligible lab unit IDs for arbitrator role and specified disease
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
+        if eligible_lab_unit_ids is None:
+            return None
+        
+        # If a specific lab unit is requested, check if user is eligible for it
+        if lab_unit_id:
+            if lab_unit_id not in eligible_lab_unit_ids:
+                return None
+            # Filter to only the specified lab unit
+            eligible_lab_unit_ids = [lab_unit_id]
+        
+        # Try up to 3 times to find a suitable task with atomic locking
+        for attempt in range(3):
+            task = _atomically_get_and_lock_task(db, user_id, disease_id, "arbitrator", eligible_lab_unit_ids)
+            if task:
+                return task
         
         # If we've tried 3 times and still don't have tasks, return a helpful message
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."

@@ -47,22 +47,35 @@
    - The dual grading system now consistently uses proper timezone-aware datetimes throughout the 
      application.
 
-  2. Race Condition in Task Assignment
-   - The get_next_eligible_*_task functions use random selection from available tasks, which could result in
+  2. Race Condition in Task Assignment [RESOLVED]
+   - The get_next_eligible_*_task functions previously used random selection from available tasks, which could result in
      the same task being offered to multiple users simultaneously
-   - There's no locking mechanism to prevent concurrent users from grabbing the same task
+   - There was no locking mechanism to prevent concurrent users from grabbing the same task
+   - SOLVED: Implemented atomic task assignment using SELECT FOR UPDATE to lock tasks during selection, ensuring
+     that only one user can claim a given task. New atomic functions (get_next_eligible_*_task_atomic) have been
+     implemented to prevent race conditions.
 
-  3. Session Management Issues
+  3. Stuck Task Cleanup [NEWLY IMPLEMENTED]
+   - When users access a grading task but disconnect or abandon it without submitting, the task may remain
+     unavailable to other users indefinitely
+   - This situation can occur when users close their browsers, lose network connectivity, or experience other
+     disruptions during the grading process
+   - SOLVED: Implemented a stuck task cleanup mechanism that runs every 30 minutes and identifies tasks that 
+     have been in progress for more than 60 minutes without submission. The system resets these tasks so 
+     they become available to other users. The reset_stuck_tasks function identifies grades with a start_time 
+     but no time_taken (indicating the task was never completed) and resets the start_time to None.
+
+  4. Session Management Issues
    - The grading start time is stored in the Flask session, which could be problematic if the user refreshes
      the page or if the session expires during grading
    - Time tracking could fail if the session key is lost, leading to incorrect time_taken calculations
 
-  4. Role Changes During Grading Process
+  5. Role Changes During Grading Process
    - A user might have the required role when accessing a task but lose that role before submitting
    - The system checks role eligibility during submission, which could result in a user losing work if their
      role changes mid-task
 
-  5. Task State Transitions Edge Cases
+  6. Task State Transitions Edge Cases
    - If a faculty member grades a task that's already in "final" state (after an arbitrator has decided), the
      system should prevent this but there could be a race condition
    - If both resident and faculty grades are submitted nearly simultaneously to a pending task, the state may
@@ -70,54 +83,54 @@
    - If an arbitrator grades and then both resident and faculty submit matching grades, the state might be
      incorrectly updated
 
-  6. Arbitrator Exclusion Logic Conflicts
+  7. Arbitrator Exclusion Logic Conflicts
    - The 2-week exclusion between role slots could prevent a qualified arbitrator from arbitrating if they
      recently graded as faculty or resident
    - There's complexity in the exclusion logic during submission that checks whether it's a revision of an
      existing arbitrator grade, which could have edge cases
 
-  7. Database Transaction Issues
+  8. Database Transaction Issues
    - Multiple database sessions are opened and closed in different parts of the flow, which could lead to
      consistency issues
    - Rollback behavior might not be consistent across the entire submission process
 
-  8. Environment Variable Dependencies
+  9. Environment Variable Dependencies
    - The ARBITRATOR_REVISION_HOURS environment variable has a default of 6 hours, but if it's set to a
      negative or very small value, it could cause unexpected behavior
    - If the environment variable is set to a very large value, arbitrators might be able to revise their
      decisions much longer than intended
 
-  9. Task Availability After Assignment
+  10. Task Availability After Assignment
    - When a user submits a grade and requests "save and next task", there's a brief window where a new session
       is opened to find the next task, potentially causing a race condition where multiple users could be
      assigned the same next task
 
-  10. Concurrent Grade Submissions
+  11. Concurrent Grade Submissions
    - Multiple users could theoretically submit grades for the same task at the same time, potentially causing
      state transition conflicts
    - The state update happens after the grade is saved, which could create a race condition
 
-  11. Grade Deletion/Modification Scenarios
+  12. Grade Deletion/Modification Scenarios
    - The system doesn't appear to handle cases where grades might be deleted externally from the UI workflow
    - There's no mechanism to handle corrupted or inconsistent grade data
 
-  12. Revision of Finalized Tasks
+  13. Revision of Finalized Tasks
    - Only arbitrators can revise finalized tasks, and only within the time window
    - The logic to determine if an arbitrator is revising their own grade could fail in certain conditions,
      especially if multiple grades exist from the same arbitrator
 
-  13. User Eligibility Changes
+  14. User Eligibility Changes
    - A user might become eligible for a task based on role permissions when it's assigned but lose
      eligibility during the grading process if their permissions change
    - Lab unit or disease permissions could change while a user is in the middle of grading
 
-  14. Data Integrity Issues
+  15. Data Integrity Issues
    - If the DiseaseGrading reference in a grade becomes invalid (e.g., if a label is deleted), it could cause
      issues in displaying or processing grades
    - If a task's disease or lab unit is changed after grades have been submitted, it could affect task state
      calculations
 
-  15. Missing Data Handling
+  16. Missing Data Handling
    - If a task doesn't have associated images (neither encounter_file nor direct_image), the image_uuid will
      be None, potentially breaking the UI
    - Missing or invalid disease_gradings could prevent users from accessing tasks

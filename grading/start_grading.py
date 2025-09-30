@@ -2,7 +2,7 @@ from flask import redirect, url_for, flash
 from flask_login import current_user
 from auth.roles import roles_required
 from models import Session, Disease
-from utils.dualGradingGetNextTasks import get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task
+from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic
 
 
 def register_routes(bp):
@@ -46,11 +46,11 @@ def start_grading(disease_id: int, role_slot: str):
     # Get the next eligible task based on role slot
     task = None
     if role_slot == 'resident':
-        task = get_next_eligible_resident_task(current_user.id, disease_id)
+        task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
     elif role_slot == 'faculty':
-        task = get_next_eligible_faculty_task(current_user.id, disease_id)
+        task = get_next_eligible_faculty_task_atomic(current_user.id, disease_id)
     elif role_slot == 'arbitrator':
-        task = get_next_eligible_arbitrator_task(current_user.id, disease_id)
+        task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
     
     # Handle the result
     if task is None:

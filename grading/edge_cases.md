@@ -62,17 +62,24 @@
      disruptions during the grading process
    - SOLVED: Implemented a stuck task cleanup mechanism that runs every 30 minutes and identifies tasks that 
      have been in progress for more than 60 minutes without submission. The system resets these tasks so 
-     they become available to other users. The reset_stuck_tasks function identifies grades with a start_time 
-     but no time_taken (indicating the task was never completed) and resets the start_time to None.
+     they become available to other users. The reset_stuck_tasks function identifies tasks in the TaskTracker 
+     table where started_at is older than the time threshold and deletes those tracker records.
    - TASK TRACKER MODEL: A new TaskTracker model was introduced to store task access information including:
      * task_id: The ID of the grading task
      * user_id: The ID of the user who started the task
      * role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
      * started_at: The timestamp when the user started working on the task
      * created_at: The timestamp when the tracker record was created
+   - IMMEDIATE TASK CLEANUP: When a user successfully submits a grade for a task and role slot, the corresponding
+     TaskTracker record is immediately cleaned up, eliminating the need to wait for the periodic cleanup.
+     This cleanup only occurs for new task submissions, not for revisions.
+   - TASK TRACKER FOR REVISIONS: TaskTracker records are NOT created when a user accesses a task for revision
+     (when they are revising a grade they previously submitted). This prevents unnecessary tracking of revision
+     tasks that don't need stuck task monitoring.
    - STUCK TASK CLEANUP THREAD: A background thread runs in app.py that periodically executes the
      reset_stuck_tasks function every 30 minutes to detect and reset tasks that have been in progress
-     for more than 60 minutes without completion.
+     for more than 60 minutes without completion. This serves as a safety net for any edge cases where
+     immediate cleanup might not occur.
 
   4. Session Management Issues
    - The grading start time is stored in the Flask session, which could be problematic if the user refreshes

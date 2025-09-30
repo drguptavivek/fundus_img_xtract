@@ -414,7 +414,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Stuck Task Management
 
-**Description:** Marks that a user has started working on a task by creating a TaskTracker record in the database. This function is used to track when a user begins a grading task, which allows the stuck task cleanup mechanism to identify and reset tasks that have been started but not completed within the specified time limit. The function either creates a new TaskTracker entry or updates an existing entry for the same user, task, and role slot.
+**Description:** Marks that a user has started working on a new task by creating a TaskTracker record in the database. This function is used to track when a user begins a new grading task (not for revisions), which allows the stuck task cleanup mechanism to identify and reset tasks that have been started but not completed within the specified time limit. The function either creates a new TaskTracker entry or updates an existing entry for the same user, task, and role slot. Note: This function is NOT called for revision tasks (when a user is revising a previously submitted grade).
 
 **Parameters:**
 - `task_id` (int): The ID of the grading task being started
@@ -430,7 +430,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Stuck Task Management
 
-**Description:** Identifies and resets tasks that have been started but not completed within the specified time limit. This function queries the TaskTracker table to find records where the `started_at` timestamp is older than the time threshold (default 60 minutes). It then deletes these tracker records so the tasks become available for other users. The function returns a count of how many stuck tasks were reset.
+**Description:** Identifies and resets tasks that have been started but not completed within the specified time limit. This function queries the TaskTracker table to find records where the `started_at` timestamp is older than the time threshold (default 60 minutes). It then deletes these tracker records so the tasks become available for other users. The function returns a count of how many stuck tasks were reset. This serves as a background cleanup mechanism - most TaskTracker records are cleaned up immediately when users submit grades, but this function handles any edge cases where records might not have been properly cleaned up.
 
 **Parameters:**
 - `time_limit_minutes` (int): The time limit in minutes after which a task is considered stuck (default is 60)
@@ -451,6 +451,22 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Returns:**
 - Integer representing the number of stuck tasks identified
+
+---
+
+### 28. `cleanup_task_tracker(task_id: int, user_id: int, role_slot: str)`
+
+**Classification:** Stuck Task Management
+
+**Description:** Immediately cleans up a TaskTracker record when a user successfully submits a grade for a specific task and role slot. This function removes the specific tracker record for the given task, user, and role slot combination. This is used for immediate cleanup when a user completes their work on a task rather than waiting for the periodic cleanup process. The function does not fail if no matching TaskTracker record exists. Note: This function is NOT called for revision tasks (when a user is revising a previously submitted grade).
+
+**Parameters:**
+- `task_id` (int): The ID of the grading task
+- `user_id` (int): The ID of the user who completed the task
+- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+
+**Returns:**
+- Boolean indicating whether the cleanup was successful
 
 ---
 

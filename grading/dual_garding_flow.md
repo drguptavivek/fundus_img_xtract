@@ -81,14 +81,22 @@ The `dual_grading_task(task_id, slot_type)` function:
 ### Task Tracker Model
 A new `TaskTracker` model has been implemented to track when users start working on tasks:
 - Records include: `task_id`, `user_id`, `role_slot` (resident|faculty|arbitrator), and `started_at` timestamp
-- When a user accesses a task for grading, a tracker record is created or updated with the current timestamp
+- When a user accesses a new task for grading (not a revision), a tracker record is created or updated with the current timestamp
 - This mechanism allows the system to identify tasks that have been started but not completed
+- TaskTracker records are NOT created for revision tasks (when a user is revising a grade they previously submitted)
 
 ### Stuck Task Cleanup Mechanism
 - A background thread runs every 30 minutes to identify and reset tasks that have been in progress for more than 60 minutes without submission
 - The cleanup mechanism identifies tasks in the `TaskTracker` table where `started_at` is older than the time threshold
 - These stuck tasks are reset by deleting their tracker records, making them available for other users
 - The `reset_stuck_tasks()` function handles the cleanup process, logging the tasks that were reset
+
+### TaskTracker Lifecycle
+- **Creation**: A TaskTracker record is created when a user accesses a task they have not previously graded for that specific role slot
+- **Cleanup**: The TaskTracker record is cleaned up immediately when the user successfully submits a grade for that task and role slot (primary cleanup)
+- **Background Cleanup**: The background thread still runs every 30 minutes to handle any stuck tasks that might not have been cleaned up properly (safety net)
+- **Revisions**: No TaskTracker record is created or cleaned up for revision tasks, as the user is simply updating an existing grade
+- This approach prevents unnecessary accumulation of TaskTracker records and ensures accurate tracking of tasks in progress
 
 ## Revision Logic
 

@@ -18,6 +18,7 @@ from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
 from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
+from db_transaction_manager import transaction_scope
 
 
 def register_routes(bp):
@@ -35,8 +36,8 @@ def revise_grading(grade_id: int):
         flash("Invalid grade ID.", "danger")
         return redirect(url_for("grading.index"))
         
-    db = Session()
-    try:
+    with transaction_scope() as db:
+        try:
         # Fetch the grade with related data using utility function
         grade = fetch_grade_with_related_data(db, grade_id)
         
@@ -109,8 +110,6 @@ def revise_grading(grade_id: int):
         response.headers['Expires'] = '0'
         
         return response
-    finally:
-        db.close()
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -118,8 +117,8 @@ def dual_grading_task(task_id: int, slot_type: str):
     """Display a task for dual grading."""
     from flask import session as flask_session
     
-    db = Session()
-    try:
+    with transaction_scope() as db:
+        try:
         # Fetch the task with related data using utility function
         task = fetch_task_with_related_data(db, task_id)
         
@@ -240,8 +239,6 @@ def dual_grading_task(task_id: int, slot_type: str):
             is_arbitrator_revising_recent=is_arbitrator_revising_recent,
             start_time_iso=start_time_iso  # Pass start time to template as hidden field
         )
-    finally:
-        db.close()
 
 
 @roles_required("resident", "ophthalmologist", "admin")
@@ -267,8 +264,9 @@ def dual_grading_submit():
         flash("Invalid slot type.", "danger")
         return redirect(url_for("grading.index"))
     
-    db = Session()
-    try:
+    from db_transaction_manager import transaction_scope
+    with transaction_scope() as db:
+        try:
         # Use utility function to fetch the task with related data
         task = fetch_task_with_related_data(db, task_id)
         if not task:
@@ -433,26 +431,24 @@ def dual_grading_submit():
         from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
         update_task_state_based_on_grades(task.id, db)
         
-        db.commit()
-        
-        # Check if this is a revision by checking if the user already had a grade for this task and slot
-        existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
-        is_revision = existing_grade_for_slot is not None
-        
         # Clean up the task tracker record if this is not a revision
         # For revisions, no tracker was created in the first place, so no need to cleanup
+        # We'll pass the db session to the cleanup function to include it in the same transaction
+        existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
+        is_revision = existing_grade_for_slot is not None
         if not is_revision:
             from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
-            cleanup_task_tracker(task_id, current_user.id, slot)
+            cleanup_task_tracker(task_id, current_user.id, slot, db)
         
-        # Store disease_id before closing the session
+        # Store disease_id for later use
         disease_id = task.disease_id
         
         # Check if we should go to the next task
         action = (request.form.get("action") or "").strip().lower()
         if action == "save_next":
-            # Close the current session first
-            db.close()
+            # Since we're closing the current session to get the next task,
+            # we need to commit our changes first
+            db.commit()
             try:                
                 # Try to find the next eligible task with a new session
                 next_task = None
@@ -484,11 +480,8 @@ def dual_grading_submit():
         else:
             # For save_close or any other action, just show success and redirect to index
             flash("Grade submitted successfully.", "success")
-            db.close()
             return redirect(url_for("grading.index"))
     except Exception as e:
         current_app.logger.exception("Failed to submit grade: %s", e)
-        db.rollback()
         flash("Failed to submit grade.", "danger")
-        db.close()
-        return redirect(url_for("grading.index"))
+        raise  # Re-raise the exception so the transaction is rolled back

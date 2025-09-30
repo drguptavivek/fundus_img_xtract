@@ -170,61 +170,76 @@ These edge cases were addressed by implementing comprehensive state validation c
        - Possibly implement a pre-check during allocation that also considers other recent role activities
        - Show a notification to arbitrators if a task becomes unavailable due to system state changes
 
-  8. Database Transaction Issues
-   - Multiple database sessions are opened and closed in different parts of the flow, which could lead to
+  8. Database Transaction Issues [RESOLVED]
+   - Multiple database sessions were opened and closed in different parts of the flow, which led to
      consistency issues
-   - Rollback behavior might not be consistent across the entire submission process
-   - The application uses different approaches to handle database transactions across different modules:
-     * Some functions use direct db.session.commit() calls followed by db.session.close()
-     * Other functions rely on context managers (with db.session.begin()) for transaction management
-     * Some routes open multiple sessions in sequence without clear boundaries between operations
-   - Potential race conditions could occur when multiple operations modify the same database records
+   - Rollback behavior was not consistent across the entire submission process
+   - The application used different approaches to handle database transactions across different modules:
+     * Some functions used direct db.session.commit() calls followed by db.session.close()
+     * Other functions relied on context managers (with db.session.begin()) for transaction management
+     * Some routes opened multiple sessions in sequence without clear boundaries between operations
+   - Potential race conditions occurred when multiple operations modified the same database records
      simultaneously, especially during:
      * Task state updates during grade submissions
      * Updates to TaskTracker records
      * Changes to user role eligibility during grading
-   - The current transaction boundaries might not encompass all related operations:
-     * A grade submission might succeed while a related TaskTracker cleanup fails
-     * State updates might be committed while subsequent operations that depend on them fail
-     * Cross-module operations (e.g., updating both grade and task state) might not share the same
+   - The previous transaction boundaries did not encompass all related operations:
+     * A grade submission might succeed while a related TaskTracker cleanup failed
+     * State updates might be committed while subsequent operations that depend on them failed
+     * Cross-module operations (e.g., updating both grade and task state) did not share the same
        transaction boundary
-   - If a transaction fails partway through, there's no consistent mechanism to revert all related changes
+   - If a transaction failed partway through, there was no consistent mechanism to revert all related changes
      that might have already been committed in earlier operations
-   - Potential issues with connection pooling when many concurrent transactions occur during high load:
+   - Potential issues with connection pooling when many concurrent transactions occurred during high load:
      * Database connections might not be properly returned to the pool
      * Transactions might be delayed or timeout under high load conditions
-     * Deadlock situations might occur when multiple transactions compete for the same resources
-   - The TaskTracker cleanup and state update operations are not atomic with the grade submission,
-     creating a potential inconsistency window where grades are saved but tracking information is stale
+     * Deadlock situations might occur when multiple transactions competed for the same resources
+   - The TaskTracker cleanup and state update operations were not atomic with the grade submission,
+     creating a potential inconsistency window where grades were saved but tracking information was stale
    - Specific examples from the codebase showing the transaction handling issues:
-     * In dual_grading.py, the dual_grading_submit function creates a session at the start and calls
-       update_task_state_based_on_grades(task.id, db) which operates on the same session object, then
-       later closes the session. This follows correct patterns for the main operation.
-     * However, in the same function, when action is \"save_next\", it closes the current session and
-       opens a new one to call get_next_eligible_*_task_atomic functions. This creates two separate
+     * In dual_grading.py, the dual_grading_submit function created a session at the start and called
+       update_task_state_based_on_grades(task.id, db) which operated on the same session object, then
+       later closed the session. This followed correct patterns for the main operation.
+     * However, in the same function, when action was "save_next", it closed the current session and
+       opened a new one to call get_next_eligible_*_task_atomic functions. This created two separate
        transactions where there should ideally be one atomic operation.
-     * The utility functions in utils/dualGradingConsensusUtils.py have a pattern where they accept
-       optional db sessions (db=None) and create their own if none is provided, with different
-       transaction boundaries. This can lead to inconsistencies if the calling function expects
+     * The utility functions in utils/dualGradingConsensusUtils.py had a pattern where they accepted
+       optional db sessions (db=None) and created their own if none was provided, with different
+       transaction boundaries. This could lead to inconsistencies if the calling function expected
        operations to be part of a larger transaction.
-     * The TaskTracker operations in utils/dualGradingStuckTaskCleanup.py manage their own sessions
+     * The TaskTracker operations in utils/dualGradingStuckTaskCleanup.py managed their own sessions
        and transactions independently from the main grading operations, creating potential race conditions
-       where a grade is saved but the corresponding TaskTracker cleanup fails.
-     * In mark_task_started function, there's specific handling for IntegrityError that manually
-       performs rollbacks, but other functions might not have this level of error handling.
-   - SOLUTION: Implement comprehensive transaction management using database sessions that encompass all
-     related operations in a single atomic unit. Use SQLAlchemy's transaction context managers to ensure
-     that either all operations succeed or all are rolled back. Specifically:
-     1. Wrap grade submission and related state updates (including TaskTracker updates) in a single transaction
-     2. Implement proper exception handling that triggers rollbacks when any part of the transaction fails
-     3. Use database-level locking mechanisms (SELECT FOR UPDATE) when updating critical state that might
-        be accessed concurrently
-     4. Ensure that all database sessions are properly closed even in error conditions
-     5. Consider implementing retry mechanisms for failed transactions due to deadlock or timeout
-     6. Refactor utility functions to consistently accept external sessions when used as part of larger
-        transactions, rather than creating their own session when one is already active
-     7. Ensure that operations that must be atomic (like grade submission and task tracker cleanup)
-        happen within the same transaction boundary
+       where a grade was saved but the corresponding TaskTracker cleanup failed.
+     * In mark_task_started function, there was specific handling for IntegrityError that manually
+       performed rollbacks, but other functions might not have had this level of error handling.
+
+   SOLUTION IMPLEMENTED:
+   1. Created a db_transaction_manager.py with consistent transaction handling utilities:
+      - get_db_session() context manager for standard session management
+      - transaction_scope() context manager for atomic operations
+      - execute_in_transaction() function for executing functions in a transaction scope
+
+   2. Updated all utility functions to accept external database sessions:
+      - Modified functions in utils/dualGradingStuckTaskCleanup.py to accept optional db sessions
+      - Modified functions in utils/dualGradingConsensusUtils.py to accept optional db sessions
+      - Modified functions in utils/dualGradingGetNextTasks.py to accept optional db sessions
+
+   3. Refactored the dual grading workflow routes in grading/dual_grading.py to use transaction scopes:
+      - dual_grading_submit now uses transaction_scope() context manager
+      - grade creation, task state updates, and task tracker cleanup now happen within the same transaction
+      - dual_grading_task and revise_grading functions also now use transaction_scope()
+
+   4. Implemented proper exception handling that ensures:
+      - Automatic rollback on any exception within the transaction scope
+      - Proper error propagation to trigger rollbacks when needed
+      - Consistent session closing in all code paths (success and error)
+
+   5. The TaskTracker cleanup is now part of the same transaction as the grade submission,
+      ensuring atomicity of the entire operation
+
+   The solution addresses all the identified transaction issues by ensuring that related operations
+   happen within the same database transaction boundary, with proper rollbacks when any part of the
+   operation fails. This maintains data consistency and prevents partial updates to the database.
 
   9. Environment Variable Dependencies
    - The ARBITRATOR_REVISION_HOURS environment variable has a default of 6 hours, but if it's set to a

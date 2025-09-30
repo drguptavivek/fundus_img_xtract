@@ -10,18 +10,22 @@ from sqlalchemy import and_
 import logging
 
 
-def cleanup_stuck_tasks(time_limit_minutes: int = 60) -> int:
+def cleanup_stuck_tasks(time_limit_minutes: int = 60, db=None) -> int:
     """
     Identifies and cleans up tasks that have been started but not completed within the specified time limit.
     This helps to reclaim tasks from users who may have disconnected or left tasks incomplete.
     
     Args:
         time_limit_minutes: The time limit in minutes after which a task is considered stuck
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The number of stuck tasks that were cleaned up
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Calculate the time threshold
         time_threshold = datetime.now(timezone.utc) - timedelta(minutes=time_limit_minutes)
@@ -49,12 +53,15 @@ def cleanup_stuck_tasks(time_limit_minutes: int = 60) -> int:
         
     except Exception as e:
         logging.error(f"Error during stuck task cleanup: {str(e)}")
+        if db and close_db:
+            db.rollback()
         return 0
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
+def mark_task_started(task_id: int, user_id: int, role_slot: str, db=None) -> bool:
     """
     Marks that a user has started working on a task by creating a TaskTracker record.
     This function should be called when a user accesses a task for grading.
@@ -63,11 +70,15 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
         task_id: The ID of the task being worked on
         user_id: The ID of the user starting the task
         role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         True if successfully marked, False otherwise
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         from sqlalchemy.exc import IntegrityError
         
@@ -83,7 +94,8 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
         if existing_tracker:
             # Update the existing tracker's start time
             existing_tracker.started_at = datetime.now(timezone.utc)
-            db.commit()
+            if close_db:
+                db.commit()
             return True
         else:
             # Create a new tracker record
@@ -94,12 +106,14 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
                 started_at=datetime.now(timezone.utc)
             )
             db.add(tracker)
-            db.commit()
+            if close_db:
+                db.commit()
             return True
             
     except IntegrityError:
         # Handle potential race condition where two requests try to create the same tracker
-        db.rollback()
+        if close_db:
+            db.rollback()
         # Try to update the existing record
         try:
             existing_tracker = db.query(TaskTracker).filter(
@@ -111,7 +125,8 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
             ).first()
             if existing_tracker:
                 existing_tracker.started_at = datetime.now(timezone.utc)
-                db.commit()
+                if close_db:
+                    db.commit()
                 return True
             else:
                 return False
@@ -120,13 +135,15 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
             return False
     except Exception as e:
         logging.error(f"Error marking task started: {str(e)}")
-        db.rollback()
+        if db and close_db:
+            db.rollback()
         return False
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str) -> bool:
+def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str, db=None) -> bool:
     """
     Immediately cleanup the TaskTracker record when a task for a specific slot is completed.
     
@@ -134,11 +151,15 @@ def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str) -> bool:
         task_id: The ID of the task being completed
         user_id: The ID of the user completing the task
         role_slot: The role slot ('resident', 'faculty', or 'arbitrator') being completed
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         True if successfully cleaned up, False otherwise
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Find the specific task tracker record
         tracker = db.query(TaskTracker).filter(
@@ -152,7 +173,8 @@ def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str) -> bool:
         if tracker:
             # Remove the tracker record
             db.delete(tracker)
-            db.commit()
+            if close_db:
+                db.commit()
             logging.info(f"Cleaned up task tracker - Task ID: {task_id}, "
                         f"User ID: {user_id}, "
                         f"Role: {role_slot}")
@@ -165,24 +187,30 @@ def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str) -> bool:
             
     except Exception as e:
         logging.error(f"Error during task tracker cleanup: {str(e)}")
-        db.rollback()
+        if db and close_db:
+            db.rollback()
         return False
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def reset_stuck_tasks(time_limit_minutes: int = 60) -> int:
+def reset_stuck_tasks(time_limit_minutes: int = 60, db=None) -> int:
     """
     Identifies and resets tasks that have been started but not completed within the time limit.
     This deletes the tracker records so the tasks become available for other users.
     
     Args:
         time_limit_minutes: The time limit in minutes after which a task is considered stuck
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The number of stuck tasks that were reset
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Calculate the time threshold
         time_threshold = datetime.now(timezone.utc) - timedelta(minutes=time_limit_minutes)
@@ -204,14 +232,16 @@ def reset_stuck_tasks(time_limit_minutes: int = 60) -> int:
             reset_count += 1
         
         # Commit the changes to reset the stuck tasks
-        if stuck_trackers:
+        if stuck_trackers and close_db:
             db.commit()
         
         return reset_count
         
     except Exception as e:
         logging.error(f"Error during stuck task reset: {str(e)}")
-        db.rollback()
+        if db and close_db:
+            db.rollback()
         return 0
     finally:
-        db.close()
+        if close_db:
+            db.close()

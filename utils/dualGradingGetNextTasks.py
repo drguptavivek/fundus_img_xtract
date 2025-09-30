@@ -102,7 +102,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     return filtered_tasks
 
 
-def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for a resident user.
     
@@ -110,12 +110,16 @@ def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: 
         user_id: The ID of the user (must be a resident or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for resident role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
@@ -142,10 +146,11 @@ def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: 
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for a faculty user.
     
@@ -153,12 +158,16 @@ def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: O
         user_id: The ID of the user (must be an ophthalmologist or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for faculty role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "faculty")
@@ -185,10 +194,11 @@ def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: O
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for an arbitrator user.
     
@@ -196,12 +206,16 @@ def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id
         user_id: The ID of the user (must be an ophthalmologist or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for arbitrator role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
@@ -228,7 +242,8 @@ def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
 def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list):
@@ -271,7 +286,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     return None
 
 
-def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for a resident user with atomic locking to prevent race conditions.
     
@@ -279,12 +294,16 @@ def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_un
         user_id: The ID of the user (must be a resident or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for resident role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
@@ -308,10 +327,11 @@ def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_un
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for a faculty user with atomic locking to prevent race conditions.
     
@@ -319,12 +339,16 @@ def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_uni
         user_id: The ID of the user (must be an ophthalmologist or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for faculty role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "faculty")
@@ -348,10 +372,11 @@ def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_uni
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()
 
 
-def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for an arbitrator user with atomic locking to prevent race conditions.
     
@@ -359,12 +384,16 @@ def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_
         user_id: The ID of the user (must be an ophthalmologist or admin)
         disease_id: The disease ID (required)
         lab_unit_id: Optional lab unit ID to filter by
+        db: Optional database session (if not provided, a new session will be created)
         
     Returns:
         The next eligible GradingTask, None if no tasks are available, 
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    db = Session()
+    close_db = False
+    if db is None:
+        db = Session()
+        close_db = True
     try:
         # Get user's eligible lab unit IDs for arbitrator role and specified disease
         eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
@@ -388,4 +417,5 @@ def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_
         return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
         
     finally:
-        db.close()
+        if close_db:
+            db.close()

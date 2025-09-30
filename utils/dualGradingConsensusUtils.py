@@ -79,13 +79,14 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
         
         if consensus:
             db.add(consensus)
-            db.commit()
+            if close_db:
+                db.commit()
             db.refresh(consensus)
             
         return consensus
     except Exception as e:
         logging.getLogger("consensus").exception(f"Failed to create/update consensus for task {task_id}: {e}")
-        if db:
+        if db and close_db:
             db.rollback()
         return None
     finally:
@@ -224,13 +225,14 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
         else:
             task.state = "pending"
         
-        db.commit()
+        if close_db:
+            db.commit()
         db.refresh(task)
         
         return task
     except Exception as e:
         logging.getLogger("consensus").exception(f"Failed to update task state for task {task_id}: {e}")
-        if db:
+        if db and close_db:
             db.rollback()
         return None
     finally:

@@ -116,16 +116,115 @@
 
 These edge cases were addressed by implementing comprehensive state validation checks at both assignment and submission time, ensuring that the task state transitions follow the correct sequence and that race conditions are handled properly.
 
-  7. Arbitrator Exclusion Logic Conflicts
+  7. Arbitrator Exclusion Logic Conflicts [RESOLVED]
    - The 2-week exclusion between role slots could prevent a qualified arbitrator from arbitrating if they
      recently graded as faculty or resident
    - There's complexity in the exclusion logic during submission that checks whether it's a revision of an
      existing arbitrator grade, which could have edge cases
+   - The logic should work at both allocation and submission time:
+     * At allocation time, the system uses _has_user_graded_task_2weeks() to filter out tasks the arbitrator
+       has graded in the past 2 weeks across any role slot
+     * At submission time, the system performs an additional check specifically for arbitrator exclusion:
+       - It verifies if the user has graded as resident or faculty within the last 2 weeks before allowing
+         them to arbitrate (unless they're revising their own arbitrator grade)
+       - This provides more granular control than the general 2-week exclusion
+     * However, there's a potential race condition where the state of the task or user permissions might
+       change between allocation and submission time, creating inconsistencies
+     * The current implementation handles this with checks at both phases, but there might be edge cases
+       where the allocation and submission time checks are not in sync
+     * Example scenario: An arbitrator gets allocated a task (passes 2-week check at allocation time), 
+       but before they submit their arbitration grade, they submit a grade as a faculty member on the
+       same task. The submission-time check should prevent them from arbitrating, but this creates a
+       confusing experience for the arbitrator who was initially allowed to access the task.
+       - Detailed scenario: An arbitrator with permissions for both faculty and arbitrator roles
+         gets allocated an arbitration task for Task X. At allocation time, they haven't graded this 
+         task in the past 2 weeks in any role, so allocation is allowed. However, before submitting
+         their arbitration grade, they also grade the same task X in their faculty role (perhaps on
+         a different day or as part of different workflow). When they return to submit their 
+         arbitrator grade, the submission will be blocked because they now have a faculty grade for
+         the same task within the 2-week window. This creates a confusing experience as the 
+         arbitrator was initially granted access to the task but then denied at the point of 
+         submission. 
+       - Another scenario: Multiple users with arbitrator permissions access the same task 
+         simultaneously (before race condition fixes), and one user might submit a grade in a 
+         different role between the time the task was allocated and when they attempt to submit
+         their arbitrator grade. 
+       - This scenario highlights the importance of having validation at both allocation and 
+         submission time, as it ensures the integrity of the dual grading system's rules even 
+         when external changes occur between task assignment and grade submission.
+
+  SOLUTION: The arbitrator exclusion logic has been implemented to work at both allocation and submission time:
+    1. During task allocation: The _has_user_graded_task_2weeks() function prevents arbitrators from being
+       assigned tasks they've graded in the past 2 weeks across any role slot
+    2. During grade submission: Additional specific checks ensure arbitrators haven't graded as resident or
+       faculty within the past 2 weeks unless they're revising their own arbitrator grade
+    3. This dual-layer approach ensures that even if there are race conditions between allocation and
+       submission, the system maintains the integrity of the arbitrator exclusion rule at the critical
+       moment of grade submission
+    4. The TaskTracker mechanism also helps ensure that if changes happen between access and submission,
+       tasks that are no longer eligible can be identified and handled appropriately
+    5. To improve the user experience and reduce confusion when arbitrators are blocked at submission:
+       - Consider adding a warning message when users access a task that might have potential conflicts
+       - Implement real-time eligibility checks that update if the task state changes while the user is working
+       - Provide more informative messaging during the task allocation process about potential conflicts
+       - Possibly implement a pre-check during allocation that also considers other recent role activities
+       - Show a notification to arbitrators if a task becomes unavailable due to system state changes
 
   8. Database Transaction Issues
    - Multiple database sessions are opened and closed in different parts of the flow, which could lead to
      consistency issues
    - Rollback behavior might not be consistent across the entire submission process
+   - The application uses different approaches to handle database transactions across different modules:
+     * Some functions use direct db.session.commit() calls followed by db.session.close()
+     * Other functions rely on context managers (with db.session.begin()) for transaction management
+     * Some routes open multiple sessions in sequence without clear boundaries between operations
+   - Potential race conditions could occur when multiple operations modify the same database records
+     simultaneously, especially during:
+     * Task state updates during grade submissions
+     * Updates to TaskTracker records
+     * Changes to user role eligibility during grading
+   - The current transaction boundaries might not encompass all related operations:
+     * A grade submission might succeed while a related TaskTracker cleanup fails
+     * State updates might be committed while subsequent operations that depend on them fail
+     * Cross-module operations (e.g., updating both grade and task state) might not share the same
+       transaction boundary
+   - If a transaction fails partway through, there's no consistent mechanism to revert all related changes
+     that might have already been committed in earlier operations
+   - Potential issues with connection pooling when many concurrent transactions occur during high load:
+     * Database connections might not be properly returned to the pool
+     * Transactions might be delayed or timeout under high load conditions
+     * Deadlock situations might occur when multiple transactions compete for the same resources
+   - The TaskTracker cleanup and state update operations are not atomic with the grade submission,
+     creating a potential inconsistency window where grades are saved but tracking information is stale
+   - Specific examples from the codebase showing the transaction handling issues:
+     * In dual_grading.py, the dual_grading_submit function creates a session at the start and calls
+       update_task_state_based_on_grades(task.id, db) which operates on the same session object, then
+       later closes the session. This follows correct patterns for the main operation.
+     * However, in the same function, when action is \"save_next\", it closes the current session and
+       opens a new one to call get_next_eligible_*_task_atomic functions. This creates two separate
+       transactions where there should ideally be one atomic operation.
+     * The utility functions in utils/dualGradingConsensusUtils.py have a pattern where they accept
+       optional db sessions (db=None) and create their own if none is provided, with different
+       transaction boundaries. This can lead to inconsistencies if the calling function expects
+       operations to be part of a larger transaction.
+     * The TaskTracker operations in utils/dualGradingStuckTaskCleanup.py manage their own sessions
+       and transactions independently from the main grading operations, creating potential race conditions
+       where a grade is saved but the corresponding TaskTracker cleanup fails.
+     * In mark_task_started function, there's specific handling for IntegrityError that manually
+       performs rollbacks, but other functions might not have this level of error handling.
+   - SOLUTION: Implement comprehensive transaction management using database sessions that encompass all
+     related operations in a single atomic unit. Use SQLAlchemy's transaction context managers to ensure
+     that either all operations succeed or all are rolled back. Specifically:
+     1. Wrap grade submission and related state updates (including TaskTracker updates) in a single transaction
+     2. Implement proper exception handling that triggers rollbacks when any part of the transaction fails
+     3. Use database-level locking mechanisms (SELECT FOR UPDATE) when updating critical state that might
+        be accessed concurrently
+     4. Ensure that all database sessions are properly closed even in error conditions
+     5. Consider implementing retry mechanisms for failed transactions due to deadlock or timeout
+     6. Refactor utility functions to consistently accept external sessions when used as part of larger
+        transactions, rather than creating their own session when one is already active
+     7. Ensure that operations that must be atomic (like grade submission and task tracker cleanup)
+        happen within the same transaction boundary
 
   9. Environment Variable Dependencies
    - The ARBITRATOR_REVISION_HOURS environment variable has a default of 6 hours, but if it's set to a

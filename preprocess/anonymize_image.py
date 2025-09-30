@@ -50,15 +50,17 @@ def _base_candidate_query(require_unverified: bool, db_session, restrict_to_user
     ).select_from(DirectImageUpload)
 
     if require_unverified:
-        verified_exists = exists(
-            select(1).select_from(DirectImageVerify).where(
-                and_(
-                    DirectImageVerify.image_upload_id == DirectImageUpload.id,
-                    DirectImageVerify.verified_status == 'verified',
-                )
-            )
+        # Find all image_upload_ids that are verified
+        verified_subquery = (
+            select(DirectImageVerify.image_upload_id)
+            .where(DirectImageVerify.verified_status == 'verified')
+            .distinct()
+        ).subquery()
+        
+        # Keep rows that are NOT in the verified status
+        base = base.where(
+            ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
         )
-        base = base.where(~verified_exists)  # keep rows with NO verified record
 
     # Restrict for non-admin/data_manager users by lab_units
     is_admin = current_user.has_role("admin")
@@ -80,18 +82,16 @@ def _get_next_unverified_uuid(db_session) -> str | None:
     """
     from sqlalchemy import exists, and_, select
 
-    # Base: uploads with NO 'verified' record
+    # Subquery to find all image_upload_ids that are verified
+    verified_subquery = (
+        select(DirectImageVerify.image_upload_id)
+        .where(DirectImageVerify.verified_status == 'verified')
+        .distinct()
+    ).subquery()
+
+    # Base: uploads that are NOT in the 'verified' status
     stmt = select(DirectImageUpload.uuid).where(
-        ~exists(
-            select(1)
-            .select_from(DirectImageVerify)
-            .where(
-                and_(
-                    DirectImageVerify.image_upload_id == DirectImageUpload.id,
-                    DirectImageVerify.verified_status == 'verified'
-                )
-            )
-        )
+        ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
     )
 
     # Restrict for non-admin/data_manager users by their lab_units
@@ -120,17 +120,29 @@ def anonymization_dashboard():
     """
     db_session = Session()
     try:
-        # --- KPIs (unchanged) ---
+        # --- KPIs (fixed to properly handle verified/unverified transitions) ---
+        # Count all records with verified_status = "verified"
         total_anonymized_images = db_session.execute(
             select(func.count(DirectImageVerify.id)).where(DirectImageVerify.verified_status == "verified")
         ).scalar_one()
 
+        # Count all DirectImageUpload records that do NOT have a verified status
+        # This includes images with no verification record at all, and those with non-verified statuses
+        verified_subquery = (
+            select(DirectImageVerify.image_upload_id)
+            .where(
+                DirectImageVerify.verified_status == "verified"
+            )
+            .distinct()
+        ).subquery()
+
         pending_anonymization_images = db_session.execute(
             select(func.count(DirectImageUpload.id)).where(
-                ~exists(select(1).where(DirectImageVerify.image_upload_id == DirectImageUpload.id))
+                ~DirectImageUpload.id.in_(select(verified_subquery.c.image_upload_id).scalar_subquery())
             )
         ).scalar_one()
 
+        # Count all verified records by the current user
         user_verified_images = db_session.execute(
             select(func.count(DirectImageVerify.id)).where(
                 DirectImageVerify.verified_status == "verified",

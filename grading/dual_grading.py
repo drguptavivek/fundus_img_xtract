@@ -187,12 +187,18 @@ def dual_grading_task(task_id: int, slot_type: str):
             arbitrator_eligibility = is_user_eligible_for_revision(db, current_user.id, task_id, slot_type, existing_grade)
             is_arbitrator_revising_recent = arbitrator_eligibility.get("is_recent", False)
 
+        # Check if this is a revision by checking if the user already has a grade for this task and slot
+        existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
+        is_revision = existing_grade_for_slot is not None
+        
         # Store the start time in the session
         start_time_key = f"grading_start_time_{task_id}_{slot_type}"
         flask_session[start_time_key] = datetime.now(timezone.utc).isoformat()
         
         # Mark that the user has started working on this task for stuck task tracking
-        mark_task_started(task_id, current_user.id, slot_type)
+        # but only if this is not a revision (i.e., user doesn't already have a grade for this slot)
+        if not is_revision:
+            mark_task_started(task_id, current_user.id, slot_type)
         
         # Pass grades for display in the template
         grades = task.grades
@@ -377,11 +383,15 @@ def dual_grading_submit():
         
         db.commit()
         
-        # Clean up the task tracker record since the user has now submitted a grade for this task and slot
-        # This means they're done with this specific task/slot combination
-        # We do this after the commit to ensure the grade is saved before removing the tracker
-        from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
-        cleanup_task_tracker(task_id, current_user.id, slot)
+        # Check if this is a revision by checking if the user already had a grade for this task and slot
+        existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
+        is_revision = existing_grade_for_slot is not None
+        
+        # Clean up the task tracker record if this is not a revision
+        # For revisions, no tracker was created in the first place, so no need to cleanup
+        if not is_revision:
+            from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
+            cleanup_task_tracker(task_id, current_user.id, slot)
         
         # Store disease_id before closing the session
         disease_id = task.disease_id

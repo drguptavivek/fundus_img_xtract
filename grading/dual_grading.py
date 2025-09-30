@@ -17,7 +17,7 @@ from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
-from utils.dualGradingStuckTaskCleanup import mark_task_started
+from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
 
 
 def register_routes(bp):
@@ -376,6 +376,12 @@ def dual_grading_submit():
         update_task_state_based_on_grades(task.id, db)
         
         db.commit()
+        
+        # Clean up the task tracker record since the user has now submitted a grade for this task and slot
+        # This means they're done with this specific task/slot combination
+        # We do this after the commit to ensure the grade is saved before removing the tracker
+        from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
+        cleanup_task_tracker(task_id, current_user.id, slot)
         
         # Store disease_id before closing the session
         disease_id = task.disease_id

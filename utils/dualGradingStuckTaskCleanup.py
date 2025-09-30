@@ -126,6 +126,51 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str) -> bool:
         db.close()
 
 
+def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str) -> bool:
+    """
+    Immediately cleanup the TaskTracker record when a task for a specific slot is completed.
+    
+    Args:
+        task_id: The ID of the task being completed
+        user_id: The ID of the user completing the task
+        role_slot: The role slot ('resident', 'faculty', or 'arbitrator') being completed
+        
+    Returns:
+        True if successfully cleaned up, False otherwise
+    """
+    db = Session()
+    try:
+        # Find the specific task tracker record
+        tracker = db.query(TaskTracker).filter(
+            and_(
+                TaskTracker.task_id == task_id,
+                TaskTracker.user_id == user_id,
+                TaskTracker.role_slot == role_slot
+            )
+        ).first()
+        
+        if tracker:
+            # Remove the tracker record
+            db.delete(tracker)
+            db.commit()
+            logging.info(f"Cleaned up task tracker - Task ID: {task_id}, "
+                        f"User ID: {user_id}, "
+                        f"Role: {role_slot}")
+            return True
+        else:
+            logging.info(f"No task tracker found to cleanup - Task ID: {task_id}, "
+                        f"User ID: {user_id}, "
+                        f"Role: {role_slot}")
+            return True  # Consider it successful if no record exists to cleanup
+            
+    except Exception as e:
+        logging.error(f"Error during task tracker cleanup: {str(e)}")
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+
 def reset_stuck_tasks(time_limit_minutes: int = 60) -> int:
     """
     Identifies and resets tasks that have been started but not completed within the time limit.

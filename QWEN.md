@@ -40,10 +40,7 @@
 - Organize templates in sub-folders
 - Ensure no data is lost.
 - No sweeping changes
-- Commit small, frequent changes for readable diffs
-- Give migration scipts in @scripts. 
-- Udpate @scripts/setup_db.py when models change as needed
-- Update @scripts/migrations.md with instructions
+- Commit small, frequent changes for readable diff.
 
 
 ## 1. Project Overview

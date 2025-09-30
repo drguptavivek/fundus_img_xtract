@@ -2,16 +2,15 @@ from flask import render_template, request, redirect, url_for, flash
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import and_, distinct, func
-import random
-import json
+
 
 from auth.roles import roles_required
 from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
-from utils.gradeUtils import get_user_gradings_with_details
+from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
-from utils.masterUtils import get_all_diseases
+
 
 
 @roles_required("resident", "ophthalmologist")

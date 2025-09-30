@@ -1,7 +1,7 @@
 from flask import current_app
 from sqlalchemy import and_
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading
-from utils.consensusUtils import create_or_update_consensus, update_task_state_based_on_grades
+from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
 
 
 def create_consensus_for_task(task_id, db=None):

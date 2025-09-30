@@ -6,10 +6,11 @@ The caller is responsible for managing the session lifecycle (opening and closin
 This design allows for better transaction management and session reuse.
 """
 
-from typing import Dict, Any
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from models import User, Disease, LabUnit, UserDiseaseUnitRole, Hospital, GradingTask
+from models import Grade, User, Disease, LabUnit, UserDiseaseUnitRole, Hospital, GradingTask
 
 
 def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
@@ -76,6 +77,58 @@ def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Arbitrator')
     
     return grouped
+
+
+def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot: str) -> Optional[list]:
+    """
+    Get the list of lab unit IDs that a user is eligible for a specific role and disease.
+    
+    Args:
+        db: Database session
+        user_id: The ID of the user
+        disease_id: The disease ID
+        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        
+    Returns:
+        List of eligible lab unit IDs or None if user has no eligibility
+    """
+    # Load user with roles
+    user = db.query(User).options(selectinload(User.roles)).filter(User.id == user_id).first()
+    if not user:
+        return None
+    
+    # Check if user is admin (admins have access to all lab units)
+    if user.has_role('admin'):
+        lab_units = db.query(LabUnit).all()
+        return [lab_unit.id for lab_unit in lab_units]
+    
+    # Check role-specific permissions
+    if role_slot == "resident" and not user.has_role('resident'):
+        return None
+    elif role_slot in ["faculty", "arbitrator"] and not user.has_role('ophthalmologist'):
+        return None
+    
+    # Build eligibility query based on role slot
+    eligibility_query = db.query(UserDiseaseUnitRole).filter(
+        UserDiseaseUnitRole.user_id == user_id,
+        UserDiseaseUnitRole.disease_id == disease_id,
+        UserDiseaseUnitRole.active == True
+    )
+    
+    # Add role-specific filter
+    if role_slot == "resident":
+        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_resident == True)
+    elif role_slot == "faculty":
+        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_faculty == True)
+    elif role_slot == "arbitrator":
+        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_arbitrate == True)
+    
+    # Get eligible roles
+    eligible_roles = eligibility_query.all()
+    if not eligible_roles:
+        return None
+    
+    return [role.lab_unit_id for role in eligible_roles]
 
 
 def check_arbitration_eligibility(db, user_id: int, disease_id: int, lab_unit_id: int):
@@ -155,3 +208,40 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
             return False
         
     return True
+
+
+def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
+    """
+    Check if a user has graded a task in the past 2 weeks.
+    
+    Args:
+        db: Database session
+        user_id: The ID of the user
+        task_id: The ID of the task
+        
+    Returns:
+        True if user has graded the task in the past 2 weeks, False otherwise
+    """
+    from datetime import timezone
+    # Use timezone-aware datetime for comparison
+    two_weeks_ago = datetime.now(timezone.utc) - timedelta(weeks=2)
+    
+    # Get all grades by this user for this task
+    user_grades = db.query(Grade).filter(
+        Grade.grader_user_id == user_id,
+        Grade.task_id == task_id
+    ).all()
+    
+    # Check if any of the grades were created in the last 2 weeks
+    for grade in user_grades:
+        # Handle timezone-naive datetimes from the database
+        grade_created_at = grade.created_at
+        if grade_created_at.tzinfo is None:
+            # Assume naive datetime is in UTC
+            grade_created_at = grade_created_at.replace(tzinfo=timezone.utc)
+        
+        if grade_created_at >= two_weeks_ago:
+            return True
+    
+    return False
+

@@ -2,7 +2,15 @@
 """Add timezone column to users table and backfill existing records."""
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 from sqlalchemy import inspect, text
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from models import engine
 from utils.timezone_choices import DEFAULT_TIMEZONE

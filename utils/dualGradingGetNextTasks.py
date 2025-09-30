@@ -10,26 +10,31 @@ import random
 from datetime import datetime, timedelta
 
 from utils.dualGradingEligibility import _get_user_eligible_lab_unit_ids, _has_user_graded_task_2weeks
+from datetime import datetime, timedelta, timezone
+from models import Grade
 
 
-def _has_user_graded_task_recently(db, user_id: int, task_id: int, within_hours: int = 6) -> bool:
+def _has_user_graded_task_6hr(db, user_id: int, task_id: int) -> bool:
     """
-    Check if a user has graded a task recently (within specified hours).
+    Check if a user has graded a task in the last 6 hours (or configured timeframe).
+    This is used for revision functionality to allow arbitrators to revise grades.
     
     Args:
         db: Database session
         user_id: The ID of the user
         task_id: The ID of the task
-        within_hours: Number of hours to check back (default 6 hours)
         
     Returns:
-        True if user has graded the task recently, False otherwise
+        True if user has graded the task in the last 6 hours, False otherwise
     """
     from datetime import datetime, timedelta, timezone
-    from models import Grade
+    import os
+    
+    # Get the revision timeframe from environment variable (default to 6 hours)
+    revision_hours = int(os.getenv("ARBITRATOR_REVISION_HOURS", "6"))
     
     # Calculate the cutoff time
-    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=within_hours)
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=revision_hours)
     
     # Get all grades by this user for this task
     user_grades = db.query(Grade).filter(

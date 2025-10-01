@@ -12,6 +12,7 @@ from . import bp
 from utils.utils import with_session
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 
@@ -26,6 +27,24 @@ def _to_int(v):
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def dashboard():
     with with_session() as db_session:
+        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        allowed_lab_unit_ids_list = list(allowed_lab_unit_ids)
+        is_admin_like = current_user.has_role("admin", "data_manager")
+
+        if not allowed_lab_unit_ids_list and not is_admin_like:
+            flash("You do not have access to any lab units.", "warning")
+            if request.method == "POST":
+                return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+        allowed_hospital_ids: set[int] = set()
+        if allowed_lab_unit_ids_list and not is_admin_like:
+            allowed_hospital_ids = {
+                hid for hid, in db_session.execute(
+                    select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids_list))
+                )
+                if hid is not None
+            }
+
         if request.method == "POST":
             selected_ids = request.form.getlist('selected_uploads')
             action = request.form.get('action')
@@ -54,12 +73,38 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
+                if not is_admin_like and allowed_lab_unit_ids_list:
+                    q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
 
                 # Non-admins can only edit their own uploads
-                if not current_user.has_role("admin", "data_manager"):
+                if not is_admin_like:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
                     
                 rows = db_session.execute(q).scalars().all()
+
+                if not is_admin_like and allowed_lab_unit_ids_list and not rows:
+                    flash("No uploads matched your selection and permissions.", "warning")
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+                if new_lab_unit_id and not is_admin_like:
+                    try:
+                        new_lab_unit_id_int = int(new_lab_unit_id)
+                    except (TypeError, ValueError):
+                        flash("Invalid lab unit selection.", "danger")
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+                    if allowed_lab_unit_ids_list and new_lab_unit_id_int not in allowed_lab_unit_ids_list:
+                        flash("You cannot assign uploads to that lab unit.", "danger")
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+                if new_hospital_id and not is_admin_like:
+                    try:
+                        new_hospital_id_int = int(new_hospital_id)
+                    except (TypeError, ValueError):
+                        flash("Invalid hospital selection.", "danger")
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+                    if allowed_hospital_ids and new_hospital_id_int not in allowed_hospital_ids:
+                        flash("You cannot assign uploads to that hospital.", "danger")
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 updated_count = 0
                 for upload in rows:
@@ -93,9 +138,11 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
+                if not is_admin_like and allowed_lab_unit_ids_list:
+                    q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
 
                 # Non-admins can only delete their own uploads
-                if not current_user.has_role("admin", "data_manager"):
+                if not is_admin_like:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
                     
                 rows = db_session.execute(q).scalars().all()
@@ -171,6 +218,11 @@ def dashboard():
             page = 1
 
         q = select(DirectImageUpload)
+        if not is_admin_like:
+            if allowed_lab_unit_ids_list:
+                q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
+            else:
+                q = q.where(DirectImageUpload.id == -1)
 
         # Date filters
         if f_date_from:
@@ -198,11 +250,8 @@ def dashboard():
         if f_area_id is not None:
             q = q.where(DirectImageUpload.area_id == f_area_id)
 
-        # RBAC
-        if not current_user.has_role('admin', 'data_manager'):
-            q = q.where(DirectImageUpload.uploader_id == current_user.id)
-            f_uploader_id = None
-        elif f_uploader_id is not None:
+        # RBAC: only admins/managers can filter by uploader; other roles already scoped by lab-unit
+        if is_admin_like and f_uploader_id is not None:
             q = q.where(DirectImageUpload.uploader_id == f_uploader_id)
 
         # ---- Build filtered ID subquery (no ORDER BY here) ----
@@ -256,8 +305,18 @@ def dashboard():
         users     = {u.id: u for u in db_session.execute(select(User).where(User.id.in_({u.uploader_id for u in uploads}))).scalars().all()} if uploads else {}
 
         # Full lists for filters
-        all_hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
-        all_lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
+        if is_admin_like:
+            all_lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
+            all_hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
+        else:
+            all_lab_units = db_session.execute(
+                select(LabUnit).where(LabUnit.id.in_(allowed_lab_unit_ids_list)).order_by(LabUnit.name)
+            ).scalars().all() if allowed_lab_unit_ids_list else []
+
+            allowed_hospital_ids_local = {lu.hospital_id for lu in all_lab_units if lu.hospital_id is not None}
+            all_hospitals = db_session.execute(
+                select(Hospital).where(Hospital.id.in_(allowed_hospital_ids_local)).order_by(Hospital.name)
+            ).scalars().all() if allowed_hospital_ids_local else []
         all_cameras   = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
         all_diseases  = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         all_areas     = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
@@ -291,6 +350,64 @@ def dashboard():
             ).all()
         }
 
+        # Build hierarchical KPI of counts by hospital -> lab unit -> disease
+        hospital_lab_disease_rows = db_session.execute(
+            select(
+                Hospital.id.label("hospital_id"),
+                Hospital.name.label("hospital_name"),
+                LabUnit.id.label("lab_unit_id"),
+                LabUnit.name.label("lab_unit_name"),
+                Disease.name.label("disease_name"),
+                func.count().label("image_count"),
+            )
+            .select_from(DirectImageUpload)
+            .join(filtered_ids_sq, DirectImageUpload.id == filtered_ids_sq.c.id)
+            .join(LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id)
+            .join(Hospital, LabUnit.hospital_id == Hospital.id)
+            .join(Disease, DirectImageUpload.disease_id == Disease.id)
+            .group_by(
+                Hospital.id,
+                Hospital.name,
+                LabUnit.id,
+                LabUnit.name,
+                Disease.name,
+            )
+            .order_by(Hospital.name, LabUnit.name, Disease.name)
+        ).all()
+
+        hospital_lab_unit_disease_kpis: list[dict[str, object]] = []
+        hospital_index: dict[int, dict[str, object]] = {}
+        lab_index: dict[int, dict[int, dict[str, object]]] = {}
+
+        for row in hospital_lab_disease_rows:
+            hosp_entry = hospital_index.get(row.hospital_id)
+            if hosp_entry is None:
+                hosp_entry = {
+                    "hospital_id": row.hospital_id,
+                    "hospital_name": row.hospital_name,
+                    "lab_units": [],
+                }
+                hospital_index[row.hospital_id] = hosp_entry
+                hospital_lab_unit_disease_kpis.append(hosp_entry)
+
+            lab_map = lab_index.setdefault(row.hospital_id, {})
+            lab_entry = lab_map.get(row.lab_unit_id)
+            if lab_entry is None:
+                lab_entry = {
+                    "lab_unit_id": row.lab_unit_id,
+                    "lab_unit_name": row.lab_unit_name,
+                    "diseases": [],
+                }
+                lab_map[row.lab_unit_id] = lab_entry
+                hosp_entry["lab_units"].append(lab_entry)
+
+            lab_entry["diseases"].append(
+                {
+                    "disease_name": row.disease_name,
+                    "image_count": row.image_count,
+                }
+            )
+
         current_app.logger.info(
             "Dashboard accessed by %s (%s). Page:%s Total:%s",
             current_user.username, current_user.id, page, total_count
@@ -308,6 +425,7 @@ def dashboard():
             total_count=total_count, per_page=per_page,
             kpi_total_uploads=kpi_total_uploads,
             camera_kpis=camera_kpis, disease_kpis=disease_kpis, area_kpis=area_kpis,
+            hospital_lab_unit_disease_kpis=hospital_lab_unit_disease_kpis,
             filter_date_from=f_date_from, filter_date_to=f_date_to,
             filter_lab_unit_id=f_lab_unit_id, filter_uploader_id=f_uploader_id,
             filter_hospital_id=f_hospital_id, filter_camera_id=f_camera_id,

@@ -53,8 +53,12 @@
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h4 mb-0">Direct Upload Dashboard</h1>
+         
     </div>
-
+    <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="h5 mb-0">All Direct Upload Images from your mapped Hospitals and Lab/Units</h3>
+    </div>
+    
     <!-- KPI Cards -->
     <div class="row g-3 mb-4">
         <!-- Total Uploads -->
@@ -125,6 +129,42 @@
             </div>
         </div>
     </div>
+
+    {% if hospital_lab_unit_disease_kpis %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header"><strong>Images by Hospital · Lab Unit · Disease</strong></div>
+                <div class="card-body">
+                    {% for hospital in hospital_lab_unit_disease_kpis %}
+                    <div class="mb-3 pb-2 border-bottom">
+                        <h6 class="fw-semibold mb-2 text-primary">{{ hospital.hospital_name }}</h6>
+                        {% if hospital.lab_units %}
+                        <div class="d-flex flex-wrap gap-3">
+                            {% for lab_unit in hospital.lab_units %}
+                            <div class="bg-light border border-secondary rounded-3 p-3" style="min-width: 220px;">
+                                <span class="badge rounded-pill bg-light text-dark border border-secondary mb-2">{{ lab_unit.lab_unit_name }}</span>
+                                <div class="small">
+                                    {% for disease in lab_unit.diseases %}
+                                    <div class="mb-1">
+                                        <span class="fw-bold">{{ disease.disease_name }}:</span>
+                                        <span class="badge bg-secondary-subtle text-dark border border-secondary ms-1">{{ disease.image_count }}</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-0">No lab unit data available.</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Filter Section -->
     <div class="filter-section">

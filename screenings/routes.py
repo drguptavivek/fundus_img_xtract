@@ -23,6 +23,7 @@ def list_screenings():
     per_page = max(1, per_page)
 
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+    is_admin_like = current_user.has_role("admin", "data_manager")
 
     db = Session()
     try:
@@ -42,7 +43,9 @@ def list_screenings():
             )
         )
 
-        if allowed_lab_unit_ids:
+        if is_admin_like:
+            pass
+        elif allowed_lab_unit_ids:
             base_q = base_q.filter(PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids)))
         else:
             return render_template(
@@ -131,6 +134,7 @@ def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+    is_admin_like = current_user.has_role("admin", "data_manager")
 
     db = Session()
     try:
@@ -149,7 +153,7 @@ def screening_detail(encounter_id: int):
         if not encounter:
             abort(404, description="Encounter not found")
 
-        if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+        if (not is_admin_like) and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
             abort(403)
 
         # Prev/Next (global ordering: capture_date DESC, id DESC)

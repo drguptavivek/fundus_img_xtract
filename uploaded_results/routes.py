@@ -19,18 +19,22 @@ def list_uploaded_results():
     page = 1 if page < 1 else page
 
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+    is_admin_like = current_user.has_role('admin', 'data_manager')
 
     db = Session()
     try:
-        if not allowed_lab_unit_ids:
+        if not is_admin_like and not allowed_lab_unit_ids:
             total = 0
             items = []
         else:
-            filtered_query = db.query(ZipFile).filter(
-                ZipFile.patient_encounter.has(
-                    PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids))
+            filtered_query = db.query(ZipFile)
+
+            if not is_admin_like:
+                filtered_query = filtered_query.filter(
+                    ZipFile.patient_encounter.has(
+                        PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids))
+                    )
                 )
-            )
 
             total = filtered_query.count()
 

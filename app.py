@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
+from server_side_session import DatabaseSessionInterface
 
 
 csrf = CSRFProtect()
@@ -77,6 +78,7 @@ def create_app():
     # app.config["WTF_CSRF_CHECK_DEFAULT"] = True  # default True
 
     csrf.init_app(app)
+    app.session_interface = DatabaseSessionInterface()
     
     # Initialize CORS for API endpoints
     # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
@@ -355,8 +357,19 @@ def create_app():
     # Global guard: require login for everything except login page, static, favicon
     @app.before_request
     def _require_login_everywhere():
-        from flask_login import current_user
+        from flask_login import current_user, logout_user
         path = request.path or "/"
+
+        # Detect stale client sessions (e.g., after server restart with old cookie)
+        try:
+            has_client_session = bool(session.get("_user_id"))
+        except Exception:
+            has_client_session = False
+
+        if has_client_session and not current_user.is_authenticated:
+            logout_user()
+            session.clear()
+
         if (
             path == "/" 
             or path == "/login"
@@ -369,6 +382,13 @@ def create_app():
         ):
             return  # allowed without auth
         if not current_user.is_authenticated:
+            # Clear any stale session to avoid repeated forbidden responses
+            session.clear()
+            return redirect(url_for("auth.login"))
+        if getattr(current_user, "is_active", True) is False:
+            logout_user()
+            session.clear()
+            flash("Your account is inactive. Please contact an administrator.", "warning")
             return redirect(url_for("auth.login"))
 
     # Global stack trace handler - captures stack traces for all requests
@@ -631,4 +651,4 @@ if __name__ == "__main__":
     cleanup_thread.start()
     
     # dev server; for prod use gunicorn/uwsgi
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5001)

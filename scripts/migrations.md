@@ -33,3 +33,23 @@
   ```
 - **Notes:**
   - Safe to rerun; the script exits early if the column already exists.
+
+## 2024-11-29 — Enable Server-side Sessions
+
+- **Script:** `scripts/migrations/20241129_add_flask_sessions.py`
+- **Purpose:** Creates the `flask_sessions` table used to persist session data between server restarts.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241129_add_flask_sessions.py
+  ```
+- **Notes:**
+  - Safe to run multiple times; it no-ops when the table already exists.
+
+- **Script:** `scripts/migrations/20241129_add_flask_session_user_id.py`
+- **Purpose:** Adds a nullable `user_id` column (indexed) to `flask_sessions` to track session owners.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241129_add_flask_session_user_id.py
+  ```
+- **Notes:**
+  - Safe to rerun; it exits early if the column already exists.

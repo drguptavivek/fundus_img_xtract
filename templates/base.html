@@ -25,6 +25,10 @@
     (function () {
       try {
         var stored = localStorage.getItem('theme');
+        if (!stored) {
+          localStorage.setItem('theme', 'light');
+          stored = 'light';
+        }
         var defaultTheme = document.documentElement.getAttribute('data-default-theme') || 'auto';
         var theme = stored || defaultTheme;
         if (defaultTheme === 'dark' && stored !== 'dark') {

@@ -636,6 +636,15 @@ class Notification(Base):
     recipient: Mapped['User'] = relationship('User', foreign_keys=[recipient_user_id], back_populates='notifications')
     sender: Mapped['User'] = relationship('User', foreign_keys=[sender_user_id], back_populates='sent_notifications')
 
+
+class FlaskSession(Base):
+    __tablename__ = "flask_sessions"
+    session_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    expiry: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user: Mapped["User"] = relationship("User", lazy="selectin")
+
     def mark_as_read(self):
         """Mark this notification as read"""
         self.is_read = True

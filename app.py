@@ -57,6 +57,7 @@ def create_app():
     app.config["WORKERS"] = int(os.getenv("WORKERS", "4"))
     app.config["UPLOADED_RESULTS_PAGE_SIZE"] = int(os.getenv("UPLOADED_RESULTS_PAGE_SIZE", 50))
     app.config["SCREENINGS_PAGE_SIZE"] = int(os.getenv("SCREENINGS_PAGE_SIZE", 50))
+    app.config["EMAIL_DEBUG_LOGGING"] = str(os.getenv("EMAIL_DEBUG_LOGGING", "false")).lower() in ("1", "true", "yes")
 
    # Session cookie hygiene
     app.config.update(
@@ -113,6 +114,13 @@ def create_app():
     auth_log_path    = os.getenv("AUTH_LOG",         os.path.join(log_dir, "auth.log"))
     activity_log_path = os.getenv("ACTIVITY_LOG",    os.path.join(log_dir, "activity.log"))
     runtime_error_log_path = os.getenv("RUNTIME_ERROR_LOG", os.path.join(log_dir, "runtime_error.log"))
+    email_success_log_path = os.getenv("EMAIL_SUCCESS_LOG", os.path.join(log_dir, "email_success.log"))
+    email_error_log_path = os.getenv("EMAIL_ERROR_LOG", os.path.join(log_dir, "email_error.log"))
+    email_debug_log_path = None
+    if app.config.get("EMAIL_DEBUG_LOGGING"):
+        email_debug_log_path = os.getenv("EMAIL_DEBUG_LOG", os.path.join(log_dir, "email_debug.log"))
+    email_success_log_path = os.getenv("EMAIL_SUCCESS_LOG", os.path.join(log_dir, "email_success.log"))
+    email_error_log_path = os.getenv("EMAIL_ERROR_LOG", os.path.join(log_dir, "email_error.log"))
 
     # Only attach handlers in the reloader child (or when not using the reloader)
     is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
@@ -124,6 +132,11 @@ def create_app():
     auth_logger         = logging.getLogger("auth")
     activity_logger     = logging.getLogger("activity")
     runtime_error_logger = logging.getLogger("runtime_error")
+    email_success_logger = logging.getLogger("email_success")
+    email_error_logger = logging.getLogger("email_error")
+    email_debug_logger = logging.getLogger("email_debug") if email_debug_log_path else None
+    email_success_logger = logging.getLogger("email_success")
+    email_error_logger = logging.getLogger("email_error")
 
     http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
@@ -132,6 +145,12 @@ def create_app():
     auth_logger.setLevel(logging.INFO)
     activity_logger.setLevel(logging.INFO)
     runtime_error_logger.setLevel(logging.ERROR)
+    email_success_logger.setLevel(logging.INFO)
+    email_error_logger.setLevel(logging.ERROR)
+    if email_debug_logger:
+        email_debug_logger.setLevel(logging.DEBUG)
+    email_success_logger.setLevel(logging.INFO)
+    email_error_logger.setLevel(logging.ERROR)
     
     http_success_logger.propagate = False
     http_error_logger.propagate   = False
@@ -140,10 +159,29 @@ def create_app():
     auth_logger.propagate         = False
     activity_logger.propagate     = False
     runtime_error_logger.propagate = False
+    email_success_logger.propagate = False
+    email_error_logger.propagate = False
+    if email_debug_logger:
+        email_debug_logger.propagate = False
+    email_success_logger.propagate = False
+    email_error_logger.propagate = False
 
     if is_reloader_child:
         # Clean up any old handlers (debug reloader / multiple inits)
-        for lg in (http_success_logger, http_error_logger, grades_logger, debug_logger, auth_logger, activity_logger, runtime_error_logger):
+        base_loggers = [
+            http_success_logger,
+            http_error_logger,
+            grades_logger,
+            debug_logger,
+            auth_logger,
+            activity_logger,
+            runtime_error_logger,
+            email_success_logger,
+            email_error_logger,
+        ]
+        if email_debug_logger:
+            base_loggers.append(email_debug_logger)
+        for lg in base_loggers:
             for h in list(lg.handlers):
                 lg.removeHandler(h)
                 try: h.close()
@@ -163,8 +201,11 @@ def create_app():
             grades_handler  = FileHandler(grades_log_path,  encoding="utf-8", delay=True)
             debug_handler   = FileHandler(debug_log_path,   encoding="utf-8", delay=True)
             auth_handler     = FileHandler(auth_log_path,    encoding="utf-8", delay=True)
-            activity_logger = FileHandler(activity_log_path, encoding="utf-8", delay=True)
+            activity_handler = FileHandler(activity_log_path, encoding="utf-8", delay=True)
             runtime_error_handler = FileHandler(runtime_error_log_path, encoding="utf-8", delay=True)
+            email_success_handler = FileHandler(email_success_log_path, encoding="utf-8", delay=True)
+            email_error_handler = FileHandler(email_error_log_path, encoding="utf-8", delay=True)
+            email_debug_handler = FileHandler(email_debug_log_path, encoding="utf-8", delay=True) if email_debug_log_path else None
         else:
             success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
@@ -180,6 +221,12 @@ def create_app():
                                                   backupCount=5, encoding="utf-8", delay=True)
             runtime_error_handler = RotatingFileHandler(runtime_error_log_path, maxBytes=2*1024*1024,
                                                        backupCount=5, encoding="utf-8", delay=True)
+            email_success_handler = RotatingFileHandler(email_success_log_path, maxBytes=2*1024*1024,
+                                                       backupCount=5, encoding="utf-8", delay=True)
+            email_error_handler = RotatingFileHandler(email_error_log_path, maxBytes=2*1024*1024,
+                                                     backupCount=5, encoding="utf-8", delay=True)
+            email_debug_handler = RotatingFileHandler(email_debug_log_path, maxBytes=2*1024*1024,
+                                                      backupCount=5, encoding="utf-8", delay=True) if email_debug_log_path else None
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
         success_handler.setFormatter(fmt)
@@ -189,6 +236,10 @@ def create_app():
         auth_handler.setFormatter(fmt)
         activity_handler.setFormatter(fmt)
         runtime_error_handler.setFormatter(fmt)
+        email_success_handler.setFormatter(fmt)
+        email_error_handler.setFormatter(fmt)
+        if email_debug_handler:
+            email_debug_handler.setFormatter(fmt)
 
         http_success_logger.addHandler(success_handler)
         http_error_logger.addHandler(error_handler)
@@ -197,6 +248,10 @@ def create_app():
         auth_logger.addHandler(auth_handler)
         activity_logger.addHandler(activity_handler)
         runtime_error_logger.addHandler(runtime_error_handler)
+        email_success_logger.addHandler(email_success_handler)
+        email_error_logger.addHandler(email_error_handler)
+        if email_debug_logger and email_debug_handler:
+            email_debug_logger.addHandler(email_debug_handler)
 
         # Keep app.logger free of its own handlers; route its warnings/errors to error file
         app.logger.handlers = []
@@ -216,6 +271,10 @@ def create_app():
         auth_logger.info("Auth logger initialized at %s", auth_log_path)
         activity_logger.info("Activity logger initialized at %s", activity_log_path)
         runtime_error_logger.info("Runtime error logger initialized at %s", runtime_error_log_path)
+        email_success_logger.info("Email success logger initialized at %s", email_success_log_path)
+        email_error_logger.info("Email error logger initialized at %s", email_error_log_path)
+        if email_debug_logger and email_debug_log_path:
+            email_debug_logger.info("Email debug logger initialized at %s", email_debug_log_path)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

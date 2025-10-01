@@ -9,38 +9,18 @@ from flask import current_app
 import logging
 from threading import Thread
 from typing import Callable, Optional
-import os
 
 
-def setup_email_logger():
-    """Set up email logger with file handler."""
-    # Set up email logger
-    email_logger = logging.getLogger('email')
-    email_logger.setLevel(logging.INFO)
-    
-    # Check if logs directory exists, create if not
-    logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-
-    # Create file handler for email logs
-    email_log_file = os.path.join(logs_dir, 'email.log')
-    
-    # Check if handler already exists to avoid duplicate logs
-    if not email_logger.handlers:
-        email_handler = logging.FileHandler(email_log_file)
-        email_handler.setLevel(logging.INFO)
-
-        # Create formatter for email logs
-        email_formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - Email: %(message)s'
-        )
-        email_handler.setFormatter(email_formatter)
-
-        # Add handler to logger
-        email_logger.addHandler(email_handler)
-    
-    return email_logger
+def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger | None]:
+    """Return configured success, error, and optional debug email loggers."""
+    debug_logger = None
+    if current_app and current_app.config.get("EMAIL_DEBUG_LOGGING"):
+        debug_logger = logging.getLogger("email_debug")
+    return (
+        logging.getLogger("email_success"),
+        logging.getLogger("email_error"),
+        debug_logger,
+    )
 
 
 def send_email_sync(to_email: str, subject: str, body: str) -> bool:
@@ -55,7 +35,7 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
     Returns:
         bool: True if email was sent successfully, False otherwise
     """
-    email_logger = setup_email_logger()
+    success_logger, error_logger, debug_logger = _get_email_loggers()
     
     try:
         # Get email settings from environment variables
@@ -67,11 +47,21 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
         
         # Verify required email settings exist
         if not all([smtp_server, smtp_username, smtp_password, from_email]):
-            email_logger.error(f"FAILED - Missing SMTP configuration. To: {to_email}, Subject: {subject}")
+            error_logger.error("Missing SMTP configuration", extra={
+                "to": to_email,
+                "subject": subject,
+            })
             current_app.logger.error("Email settings not configured properly")
             return False
         
-        # Create message
+        if debug_logger:
+            debug_logger.debug(
+                "Preparing email - To: %s Subject: %s From: %s",
+                to_email,
+                subject,
+                from_email,
+            )
+
         msg = MIMEMultipart()
         msg['From'] = from_email
         msg['To'] = to_email
@@ -85,23 +75,36 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
         
         # Send the email
         with smtplib.SMTP(smtp_server, smtp_port) as server:
+            if debug_logger:
+                debug_logger.debug("SMTP connect: %s:%s", smtp_server, smtp_port)
             server.starttls()  # Enable encryption
+            if debug_logger:
+                debug_logger.debug("SMTP starttls complete")
             server.login(smtp_username, smtp_password)
+            if debug_logger:
+                debug_logger.debug("SMTP authenticated as %s", smtp_username)
             server.send_message(msg)
+            if debug_logger:
+                debug_logger.debug("SMTP message sent")
         
         # Log successful email
-        email_logger.info(
-            f"SUCCESS - To: {to_email}, Subject: {subject}, "
-            f"From: {from_email}, Headers: {headers}"
+        success_logger.info(
+            "Email sent - To: %s Subject: %s From: %s Headers: %s",
+            to_email,
+            subject,
+            from_email,
+            headers,
         )
         current_app.logger.info(f"Email sent successfully to {to_email}")
         return True
-        
+
     except Exception as e:
         # Log failed email
-        email_logger.error(
-            f"FAILED - To: {to_email}, Subject: {subject}, "
-            f"Error: {str(e)}"
+        error_logger.error(
+            "Email send failed - To: %s Subject: %s Error: %s",
+            to_email,
+            subject,
+            str(e),
         )
         current_app.logger.error(f"Failed to send email to {to_email}: {e}")
         return False

@@ -21,3 +21,32 @@ document.addEventListener('DOMContentLoaded', function () {
     try { new bootstrap.Toast(el).show(); } catch (e) {}
   });
 });
+(function () {
+  const guide = document.getElementById('styleGuide');
+  if (!guide) return;
+
+  guide.addEventListener('click', function (event) {
+    const button = event.target.closest('[data-copy-classes]');
+    if (!button) return;
+
+    const classes = button.getAttribute('data-copy-classes');
+    if (!classes) return;
+
+    navigator.clipboard.writeText(classes).then(() => {
+      button.dataset.copyFeedback = 'Copied!';
+      button.blur();
+      setTimeout(() => {
+        if (button.dataset.copyFeedback) {
+          delete button.dataset.copyFeedback;
+        }
+      }, 1500);
+    }).catch(() => {
+      button.dataset.copyFeedback = 'Copy failed';
+      setTimeout(() => {
+        if (button.dataset.copyFeedback) {
+          delete button.dataset.copyFeedback;
+        }
+      }, 1500);
+    });
+  });
+})();

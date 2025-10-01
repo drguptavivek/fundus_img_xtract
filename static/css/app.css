@@ -948,3 +948,93 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 [data-bs-theme="dark"] .btn-outline-secondary:focus-visible {
   box-shadow: 0 0 0 0.2rem rgba(14, 165, 166, 0.3);
 }
+
+/* Style guide helpers */
+.style-guide-snippet {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.style-guide-snippet code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  color: inherit;
+}
+
+[data-bs-theme="dark"] .style-guide-snippet code {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.style-guide-copy {
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.style-guide-copy:hover,
+.style-guide-copy:focus {
+  background: rgba(14, 165, 166, 0.12);
+  color: #0ea5a6;
+}
+
+.style-guide-copy:focus-visible {
+  outline: 2px solid rgba(14, 165, 166, 0.3);
+  outline-offset: 1px;
+}
+
+/* Style guide helpers */
+.style-guide-snippet {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.style-guide-snippet code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  color: inherit;
+}
+
+[data-bs-theme="dark"] .style-guide-snippet code {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.style-guide-copy {
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.style-guide-copy:hover,
+.style-guide-copy:focus {
+  background: rgba(14, 165, 166, 0.12);
+  color: #0ea5a6;
+}
+
+.style-guide-copy:focus-visible {
+  outline: 2px solid rgba(14, 165, 166, 0.3);
+  outline-offset: 1px;
+}

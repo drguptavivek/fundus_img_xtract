@@ -11,7 +11,7 @@ from . import bp
 from models import Session, PatientEncounters, LabUnit, Hospital
  
 @bp.route("/", methods=["GET"])
-@roles_required("admin", "ophthalmologist")  # allow both per your ACL
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def list_screenings():
     # Query params
     page = request.args.get("page", default=1, type=int) or 1
@@ -105,7 +105,7 @@ def list_screenings():
 
 
 @bp.route("/<int:encounter_id>", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 

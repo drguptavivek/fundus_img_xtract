@@ -116,9 +116,9 @@ The DR blueprint has been removed as its functionality was moved to the verify_r
 |------------|---------|--------------|----------------|
 | /media/img/\<path:filename\> | media.serve_image | GET | admin |
 | /media/file/\<uuid\> | media.serve_file_by_uuid | GET | admin |
-| /media/direct_upload/img_orig/\<int:upload_id\> | media.serve_img_orig | GET | contributor, data_manager, admin |
-| /media/direct_upload/img_edited/\<int:upload_id\> | media.serve_img_edited | GET | contributor, data_manager, admin |
-| /media/direct_upload/img/\<uuid_str\> | media.serve_img_by_uuid_preferring_edited | GET | contributor, data_manager, admin |
+| /media/direct_upload/img_orig/\<int:upload_id\> | media.serve_img_orig | GET | fileUploader, optometrist, data_manager, admin |
+| /media/direct_upload/img_edited/\<int:upload_id\> | media.serve_img_edited | GET | fileUploader, optometrist, data_manager, admin |
+| /media/direct_upload/img/\<uuid_str\> | media.serve_img_by_uuid_preferring_edited | GET | fileUploader, optometrist, data_manager, admin |
 
 ## Data Audit (audit)
 
@@ -148,14 +148,14 @@ The DR blueprint has been removed as its functionality was moved to the verify_r
 
 | Route Path | URL For | HTTP Methods | Roles Required |
 |------------|---------|--------------|----------------|
-| /direct/upload | direct_uploads.upload | GET, POST | contributor, data_manager, admin |
-| /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | contributor, data_manager, admin |
-| /direct/dashboard | direct_uploads.dashboard | GET, POST | contributor, data_manager, admin |
+| /direct/upload | direct_uploads.upload | GET, POST | fileUploader, optometrist, data_manager, admin |
+| /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | fileUploader, optometrist, data_manager, admin |
+| /direct/dashboard | direct_uploads.dashboard | GET, POST | fileUploader, optometrist, data_manager, admin |
 
 ## Image Preprocessing (preprocess)
 
 | Route Path | URL For | HTTP Methods | Roles Required |
 |------------|---------|--------------|----------------|
-| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | contributor, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | contributor, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | contributor, data_manager, admin |
+| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | fileUploader, optometrist, data_manager, admin |
+| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | fileUploader, optometrist, data_manager, admin |
+| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | fileUploader, optometrist, data_manager, admin |

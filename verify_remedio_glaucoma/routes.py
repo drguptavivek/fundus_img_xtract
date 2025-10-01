@@ -11,6 +11,7 @@ from auth.roles import roles_required
 from . import bp
 
 from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, utcnow, LabUnit, Disease
+from utils.upload_eligibility import get_user_lab_unit_ids
 from process_pdfs import GLAUCOMA_PDF_DIR
 
 # Import task creation services
@@ -21,7 +22,7 @@ from flask import current_app
 
 
 @bp.route("/results", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_results():
     db = Session()
     try:
@@ -280,7 +281,7 @@ def glaucoma_list():
 
 
 @bp.route("/clean", methods=["POST", "GET"])
-@roles_required("admin")
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_clean_workflow():
     """Clean VCDR right/left to numeric and store in glaucoma_results_cleaned.
     Also copies original fields for traceability.
@@ -401,7 +402,7 @@ def glaucoma_clean_workflow():
 
 
 @bp.route("/detail/<int:clean_id>", methods=["GET"])
-@roles_required("admin",)
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_detail(clean_id: int):
     """Detail view aligned to Glaucoma list ordering (date desc, id desc).
     Prev/Next follow the cleaned results sequence.
@@ -534,6 +535,14 @@ def glaucoma_edit(clean_id: int):
             from flask import abort
             abort(404)
 
+        encounter = row.patient_encounter
+        lab_unit_id = getattr(encounter, "lab_unit_id", None) if encounter else None
+        if lab_unit_id is not None and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
+            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
+            if lab_unit_id not in allowed_lab_units:
+                flash("You don't have permission to access this encounter.", "danger")
+                return redirect(url_for("verify_remedio_glaucoma.glaucoma_list"))
+
         if request.method == "POST":
             def _to_float(val):
                 if val is None:
@@ -589,7 +598,7 @@ def glaucoma_edit(clean_id: int):
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=row.id))
 
         # Compute prev/next neighbors for navigation on edit page
-        enc = row.patient_encounter
+        enc = encounter
         d = enc.capture_date_dt if enc else None
         cur_id = row.id
         prev_row = None
@@ -639,7 +648,7 @@ def glaucoma_edit(clean_id: int):
  
 
 @bp.route("/edit/<int:clean_id>/verify", methods=["POST"])
-@roles_required("admin", "optometrist")
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_verify(clean_id: int):
     db = Session()
     try:
@@ -647,6 +656,12 @@ def glaucoma_verify(clean_id: int):
         if not row:
             from flask import abort
             abort(404)
+        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        if encounter and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
+            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
+            if encounter.lab_unit_id not in allowed_lab_units:
+                flash("You don't have permission to verify this encounter.", "danger")
+                return redirect(url_for('verify_remedio_glaucoma.glaucoma_list'))
         # Save incoming form data (same fields as edit save)
         def _to_float(val):
             if val is None:
@@ -662,7 +677,7 @@ def glaucoma_verify(clean_id: int):
         row.vcdr_left_num = _to_float(request.form.get("vcdr_left_num"))
         row.result = (request.form.get("result") or "").strip() or None
         row.qualitative_result = (request.form.get("qualitative_result") or "").strip() or None
-        enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
+        enc = encounter
         if enc:
             new_pid = (request.form.get("patient_id") or "").strip()
             if new_pid:
@@ -749,7 +764,7 @@ def glaucoma_verify(clean_id: int):
 
 
 @bp.route("/edit/<int:clean_id>/unverify", methods=["POST"])
-@roles_required("admin", "optometrist")
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_unverify(clean_id: int):
     db = Session()
     try:

@@ -14,6 +14,7 @@ from job_store import db_create_job
 from worker import queue_job
 from . import bp
 from auth.roles import roles_required
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 ALLOWED_EXT = {"zip"}
@@ -56,7 +57,7 @@ def get_daily_upload_dir():
     return upload_daily
 
 @bp.route("/upload_files", methods=["GET"])
-@roles_required("admin", "fileUploader")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def upload_form():
     # Get available hospitals and lab units for the current user
     db = Session()
@@ -66,10 +67,29 @@ def upload_form():
             hospitals = db.query(Hospital).order_by(Hospital.name).all()
             lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
         else:
-            # For fileUploader, get only their assigned lab units and associated hospitals
-            lab_units = current_user.lab_units
-            hospital_ids = [lu.hospital_id for lu in lab_units]
-            hospitals = db.query(Hospital).filter(Hospital.id.in_(hospital_ids)).order_by(Hospital.name).all()
+            # For non-admin users, fetch only their assigned lab units and associated hospitals
+            allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+            if allowed_lab_unit_ids:
+                lab_units = (
+                    db.query(LabUnit)
+                    .options(selectinload(LabUnit.hospital))
+                    .filter(LabUnit.id.in_(list(allowed_lab_unit_ids)))
+                    .order_by(LabUnit.name)
+                    .all()
+                )
+                hospital_ids = sorted({lu.hospital_id for lu in lab_units if lu.hospital_id is not None})
+                if hospital_ids:
+                    hospitals = (
+                        db.query(Hospital)
+                        .filter(Hospital.id.in_(hospital_ids))
+                        .order_by(Hospital.name)
+                        .all()
+                    )
+                else:
+                    hospitals = []
+            else:
+                lab_units = []
+                hospitals = []
     finally:
         db.close()
         
@@ -82,7 +102,7 @@ def upload_form():
     )
 
 @bp.route("/upload", methods=["POST"])
-@roles_required("admin", "fileUploader")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def upload_files():
     per_file_max = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
     max_files = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))
@@ -113,7 +133,7 @@ def upload_files():
             
         # Validate that the current user has access to this lab unit
         if not current_user.has_role('admin'):
-            user_lab_unit_ids = [lu.id for lu in current_user.lab_units]
+            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
             if lab_unit_id not in user_lab_unit_ids:
                 flash("You don't have access to the selected lab unit.", "danger")
                 return redirect(url_for("remedio_zip_uploads.upload_form"))

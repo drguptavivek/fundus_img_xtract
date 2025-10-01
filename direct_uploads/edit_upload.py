@@ -33,7 +33,7 @@ def _require_entity(db, model, pk: int | None, label: str):
 
 
 @bp.route("/direct/upload/edit/<int:upload_id>", methods=["GET", "POST"])
-@roles_required("contributor", "data_manager", "admin")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def edit_upload(upload_id):
     with with_session() as db:
         upload = db.get(DirectImageUpload, upload_id)
@@ -56,7 +56,7 @@ def edit_upload(upload_id):
             flash("You don't have permission to edit this upload.", "danger")
             return redirect(url_for("direct_uploads.dashboard"))
 
-        # Build allowed sets ONLY for contributors (non-admin, non-manager)
+        # Build allowed sets for users without elevated privileges
         allowed_lab_unit_ids = set()
         allowed_hospital_ids = set()
         if not can_choose_any:
@@ -82,7 +82,7 @@ def edit_upload(upload_id):
                 flash("All fields are required.", "danger")
                 return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)
 
-            # RBAC: contributors must stay within their own assignments
+            # RBAC: restricted users must stay within their own assignments
             if not can_choose_any:
                 if lid not in allowed_lab_unit_ids or hid not in allowed_hospital_ids:
                     flash("You cannot assign this hospital or lab unit.", "danger")
@@ -146,7 +146,7 @@ def edit_upload(upload_id):
             flash("Upload metadata updated successfully.", "success")
             return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-        # GET options: admins/managers see all; contributors see only their own
+        # GET options: admins/managers see all; restricted users see only their own
         if can_choose_any:
             hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all()
             lab_units = db.scalars(select(LabUnit).order_by(LabUnit.name)).all()

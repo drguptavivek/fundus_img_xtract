@@ -10,7 +10,7 @@ from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, 
 from utils.fileUtils import abs_from_parts
 
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def edit_image(upload_id: int):
     with with_session() as db:
         try:
@@ -54,7 +54,7 @@ def edit_image(upload_id: int):
             return redirect(flask_url_for("direct_uploads.dashboard"))
 
 @bp.route("/direct/upload/restore_original/<int:upload_id>", methods=["POST"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def restore_original(upload_id: int):
     with with_session() as db:
         try:
@@ -88,4 +88,3 @@ def restore_original(upload_id: int):
             current_app.logger.error("Error restoring original for upload %s:\n%s",
                                      upload_id, traceback.format_exc())
             return jsonify({"error": "An unexpected error occurred."}), 500
-

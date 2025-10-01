@@ -112,7 +112,7 @@ def _get_next_unverified_uuid(db_session) -> str | None:
 # ---------------------------
 
 @bp.route("/dashboard", methods=["GET"])
-@roles_required("contributor", "data_manager", "admin")
+@roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def anonymization_dashboard():
     """
     Totals, recents, and a 'next image' UUID for anonymization.
@@ -305,7 +305,7 @@ def anonymization_dashboard():
 # ---------------------------
 
 @bp.route("/anonymize_image/<uuid:uuid>", methods=["GET", "POST"])
-@roles_required("contributor", "data_manager", "admin")
+@roles_required("admin", "optometrist", "data_manager")
 def anonymize_image(uuid: UUID):
     # Use stack trace context manager to capture any exceptions
     db_session = Session()
@@ -608,7 +608,7 @@ def anonymize_image(uuid: UUID):
 # Restore Original
 # ---------------------------
 @bp.route("/anonymize_image/<uuid:uuid>/restore_original", methods=["POST"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required("admin", "optometrist", "data_manager")
 def restore_original_anonymized_image(uuid: UUID):
     db_session = Session()
     try:

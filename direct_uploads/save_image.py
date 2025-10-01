@@ -9,7 +9,7 @@ from models import DirectImageUpload, BASE_DIR
 from utils.fileUtils import abs_from_parts
 
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def save_edited_image(upload_id: int):
     with with_session() as db:
         try:

@@ -8,7 +8,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 ### GET `/direct/upload`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Displays the form for direct image uploads with selection options for hospital, lab unit, camera, disease, and area.
 
@@ -25,7 +25,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 ### POST `/direct/upload`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Processes direct image uploads, validates files, saves them to the filesystem, and creates database entries.
 
@@ -62,7 +62,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 ### GET `/direct/upload/processing/<int:job_id>`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Displays the processing status page for a direct upload job.
 
@@ -73,7 +73,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 ### GET `/direct/upload/results/<int:job_id>`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Displays the results of a direct upload job, showing how many files were successfully uploaded and how many failed.
 
@@ -84,7 +84,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 ### GET `/direct/dashboard`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Displays the dashboard for managing direct uploads with filtering and bulk operations capabilities.
 
@@ -99,7 +99,7 @@ The direct upload functionality allows authorized users to upload individual ima
 
 **POST `/direct/dashboard`
 
-**Access Control**: Restricted to users with `contributor`, `data_manager`, or `admin` roles.
+**Access Control**: Restricted to users with `fileUploader`, `optometrist`, `data_manager`, or `admin` roles.
 
 **Description**: Handles bulk operations on direct uploads from the dashboard.
 

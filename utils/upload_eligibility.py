@@ -1,14 +1,14 @@
 """Helpers for resolving user upload eligibility."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from sqlalchemy.orm import selectinload
 
 from models import Session, User, LabUnit
 
 
-def get_user_upload_eligibility(user_id: int) -> Dict[str, Any]:
+def get_user_uploadVerify_eligibility(user_id: int) -> Dict[str, Any]:
     """Return upload eligibility details for the given user.
 
     The payload contains the user identity and a hospital → lab unit mapping
@@ -29,15 +29,30 @@ def get_user_upload_eligibility(user_id: int) -> Dict[str, Any]:
     try:
         user = (
             db.query(User)
-            .options(selectinload(User.lab_units).selectinload(LabUnit.hospital))
+            .options(
+                selectinload(User.lab_units).selectinload(LabUnit.hospital),
+                selectinload(User.roles),
+            )
             .filter(User.id == user_id)
             .one_or_none()
         )
         if user is None:
             return {}
 
+        is_admin = any(role.name == "admin" for role in (user.roles or []))
+
         hospital_map: Dict[int, Dict[str, Any]] = {}
-        for lab_unit in user.lab_units or []:
+        if is_admin:
+            lab_units_iterable = (
+                db.query(LabUnit)
+                .options(selectinload(LabUnit.hospital))
+                .order_by(LabUnit.id)
+                .all()
+            )
+        else:
+            lab_units_iterable = list(user.lab_units or [])
+
+        for lab_unit in lab_units_iterable:
             hospital = lab_unit.hospital
             if hospital is None:
                 continue
@@ -76,4 +91,31 @@ def get_user_upload_eligibility(user_id: int) -> Dict[str, Any]:
         db.close()
 
 
-__all__ = ["get_user_upload_eligibility"]
+def get_user_lab_unit_ids(user_id: int) -> Set[int]:
+    """Return the set of lab unit IDs the user is allowed to access."""
+    db = Session()
+    try:
+        user = (
+            db.query(User)
+            .options(
+                selectinload(User.lab_units),
+                selectinload(User.roles),
+            )
+            .filter(User.id == user_id)
+            .one_or_none()
+        )
+        if not user:
+            return set()
+
+        if any(role.name == "admin" for role in (user.roles or [])):
+            all_ids = db.query(LabUnit.id).all()
+            return {row[0] for row in all_ids}
+
+        if not user.lab_units:
+            return set()
+        return {lu.id for lu in user.lab_units}
+    finally:
+        db.close()
+
+
+__all__ = ["get_user_uploadVerify_eligibility", "get_user_lab_unit_ids"]

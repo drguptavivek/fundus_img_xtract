@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 
 @bp.route("/uploaded_results", methods=["GET"])
-@roles_required("admin", "fileUploader")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def list_uploaded_results():
     # Pagination inputs
     page = request.args.get("page", default=1, type=int)

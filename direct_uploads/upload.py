@@ -19,7 +19,7 @@ from models import (
 )
 
 from utils.fileUtils import get_upload_dirs
-from utils.upload_eligibility import get_user_upload_eligibility
+from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids
 
 
 def _to_int(v):
@@ -32,7 +32,7 @@ def _to_int(v):
 @bp.route("/upload", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_index():
-    eligibility = get_user_upload_eligibility(current_user.id)
+    eligibility = get_user_uploadVerify_eligibility(current_user.id)
     return render_template("direct_uploads/index.html", eligibility=eligibility)
 
 
@@ -90,6 +90,15 @@ def upload():
             if getattr(lab_unit, "hospital_id", None) != hospital.id:
                 flash("Selected Lab Unit does not belong to the selected Hospital.", "danger")
                 return redirect(url_for("direct_uploads.upload"), code=303)
+
+            # Enforce user-level lab unit eligibility
+            is_admin = current_user.has_role("admin")
+            is_manager = current_user.has_role("data_manager")
+            if not (is_admin or is_manager):
+                allowed_lab_units = get_user_lab_unit_ids(current_user.id)
+                if lab_unit.id not in allowed_lab_units:
+                    flash("You don't have access to the selected lab unit.", "danger")
+                    return redirect(url_for("direct_uploads.upload"), code=303)
 
             # ---- job bookkeeping ----
             job_token = str(uuid.uuid4())
@@ -229,6 +238,6 @@ def upload():
 
 
 @bp.route("/direct/upload/processing/<int:job_id>", methods=["GET"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_processing(job_id):
     return render_template("direct_uploads/upload_processing.html", job_id=job_id)

@@ -56,9 +56,9 @@ This document lists all the routes in the Fundus Image Manager application, orga
 | /verify_remedio_glaucoma/edit/\<int:clean_id\>/mark_eye | verify_remedio_glaucoma.glaucoma_mark_eye | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
 | /media/img/\<path:filename\> | media.serve_image | GET | media/routes.py | admin |
 | /media/file/\<uuid\> | media.serve_file_by_uuid | GET | media/routes.py | admin |
-| /media/direct_upload/img_orig/\<int:upload_id\> | media.serve_img_orig | GET | media/routes.py | contributor, data_manager, admin |
-| /media/direct_upload/img_edited/\<int:upload_id\> | media.serve_img_edited | GET | media/routes.py | contributor, data_manager, admin |
-| /media/direct_upload/img/\<uuid_str\> | media.serve_img_by_uuid_preferring_edited | GET | media/routes.py | contributor, data_manager, admin |
+| /media/direct_upload/img_orig/\<int:upload_id\> | media.serve_img_orig | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
+| /media/direct_upload/img_edited/\<int:upload_id\> | media.serve_img_edited | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
+| /media/direct_upload/img/\<uuid_str\> | media.serve_img_by_uuid_preferring_edited | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
 | /audit/missing_capture_date | audit.missing_capture_date | GET | audit/routes.py | admin |
 | /grading/ | grading.index | GET, POST | grading/dashboard.py | - |
 | /grading/remedio/glaucoma/image/\<uuid\> | grading.remedio_glaucoma_image | GET | grading/remedio_glaucoma.py | optometrist, ophthalmologist, admin |
@@ -69,12 +69,12 @@ This document lists all the routes in the Fundus Image Manager application, orga
 | /grading/remedio/dr/remove | grading.remedio_dr_remove | POST | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
 | /grading/task/\<int:task_id\> | grading.dual_grading_task | GET | grading/dual_grading.py | admin, ophthalmologist, resident |
 | /grading/task/submit | grading.dual_grading_submit | POST | grading/dual_grading.py | admin, ophthalmologist, resident |
-| /direct/upload | direct_uploads.upload | GET, POST | direct_uploads/upload.py | contributor, data_manager, admin |
-| /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | direct_uploads/upload.py | contributor, data_manager, admin |
-| /direct/dashboard | direct_uploads.dashboard | GET, POST | direct_uploads/dashboard.py | contributor, data_manager, admin |
-| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | preprocess/anonymize_image.py | contributor, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | preprocess/anonymize_image.py | contributor, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | preprocess/anonymize_image.py | contributor, data_manager, admin |
+| /direct/upload | direct_uploads.upload | GET, POST | direct_uploads/upload.py | fileUploader, optometrist, data_manager, admin |
+| /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | direct_uploads/upload.py | fileUploader, optometrist, data_manager, admin |
+| /direct/dashboard | direct_uploads.dashboard | GET, POST | direct_uploads/dashboard.py | fileUploader, optometrist, data_manager, admin |
+| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
+| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
+| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
 
 ## Notes
 
@@ -85,7 +85,6 @@ This document lists all the routes in the Fundus Image Manager application, orga
    - `ophthalmologist`: Medical doctors
    - `optometrist`: Eye care professionals
    - `data_manager`: Users who manage data
-   - `contributor`: Users who contribute content
    - `login_required`: Any authenticated user
 3. **HTTP Methods**: All routes specify the HTTP methods they accept.
 4. **Route File**: Indicates which file contains the route implementation.

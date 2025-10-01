@@ -7,7 +7,7 @@ from auth.roles import roles_required
 from models import Job, JobItem
 
 @bp.route("/direct/upload/results/<int:job_id>", methods=["GET"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_results(job_id):
     with with_session() as db:
         job = db.get(Job, job_id)

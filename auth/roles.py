@@ -9,14 +9,13 @@ from sqlalchemy.orm import Session
 
 from models import Role
 
-DEFAULT_ROLES = ["admin", "fileUploader", "ophthalmologist", "data_manager", "contributor", "resident", "optometrist"]
+DEFAULT_ROLES = ["admin", "fileUploader", "ophthalmologist", "data_manager", "resident", "optometrist"]
 
 # Role constants for use in decorators (these can be referenced in code)
 ROLE_ADMIN = "admin"
 ROLE_FILE_UPLOADER = "fileUploader"
 ROLE_OPHTHALMOLOGIST = "ophthalmologist"
 ROLE_DATA_MANAGER = "data_manager"
-ROLE_CONTRIBUTOR = "contributor"
 ROLE_RESIDENT = "resident"
 ROLE_OPTOMETRIST = "optometrist"
 

@@ -23,7 +23,7 @@ def _to_int(v):
         return None
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def dashboard():
     with with_session() as db_session:
         if request.method == "POST":

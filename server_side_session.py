@@ -61,11 +61,25 @@ class DatabaseSessionInterface(SessionInterface):
             if not stored:
                 return self.session_class(session_id=self._generate_sid(), new=True)
 
+            updated = False
             stored.expiry = self._ensure_utc(stored.expiry)
-            if stored.expiry <= self._now():
-                db.delete(stored)
-                db.commit()
+            if stored.started_at is None:
+                stored.started_at = stored.expiry
+                updated = True
+
+            now = self._now()
+            if stored.ended_at is not None or stored.expiry <= now:
+                if stored.ended_at is None:
+                    stored.ended_at = now
+                    stored.expiry = now
+                    stored.data = "{}"
+                    updated = True
+                if updated:
+                    db.commit()
                 return self.session_class(session_id=self._generate_sid(), new=True)
+
+            if updated:
+                db.commit()
 
             data = self.serializer.loads(stored.data)
             return self.session_class(data, session_id=session_id)
@@ -75,7 +89,7 @@ class DatabaseSessionInterface(SessionInterface):
     def save_session(self, app, session, response):
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
 
-        # If the session is empty, remove from store and delete cookie
+        # If the session is empty, stamp it as ended and remove the browser cookie
         if not session:
             session_id = getattr(session, "session_id", None)
             if session_id:
@@ -83,7 +97,13 @@ class DatabaseSessionInterface(SessionInterface):
                 try:
                     stored = db.get(FlaskSession, session_id)
                     if stored:
-                        db.delete(stored)
+                        now = self._now()
+                        stored.data = "{}"
+                        stored.expiry = now
+                        if stored.started_at is None:
+                            stored.started_at = now
+                        if stored.ended_at is None:
+                            stored.ended_at = now
                         db.commit()
                 finally:
                     db.close()
@@ -118,12 +138,16 @@ class DatabaseSessionInterface(SessionInterface):
                     data=payload,
                     expiry=expires,
                     user_id=user_id_value,
+                    started_at=self._now(),
                 )
                 db.add(stored)
             else:
                 stored.data = payload
                 stored.expiry = expires
-                stored.user_id = user_id_value
+                if user_id_value is not None:
+                    stored.user_id = user_id_value
+                if stored.started_at is None:
+                    stored.started_at = self._now()
             db.commit()
         finally:
             db.close()
@@ -138,3 +162,41 @@ class DatabaseSessionInterface(SessionInterface):
             path=self.get_cookie_path(app),
             domain=self.get_cookie_domain(app),
         )
+
+
+def mark_session_ended(session_id: str, user_id: int | None = None) -> None:
+    """Record the end of a session outside the normal save lifecycle."""
+    if not session_id:
+        return
+
+    db = DbSession()
+    try:
+        stored = db.get(FlaskSession, session_id)
+        if stored is None:
+            return
+
+        authoritative_user_id = user_id
+        if authoritative_user_id is None:
+            if stored.user_id is not None:
+                authoritative_user_id = stored.user_id
+            else:
+                try:
+                    payload = DatabaseSessionInterface.serializer.loads(stored.data)
+                    raw_user_id = payload.get("_user_id")
+                    if raw_user_id is not None:
+                        authoritative_user_id = int(raw_user_id)
+                except Exception:
+                    authoritative_user_id = None
+
+        now = datetime.now(timezone.utc)
+        stored.expiry = now
+        if stored.started_at is None:
+            stored.started_at = now
+        if stored.ended_at is None or stored.ended_at < now:
+            stored.ended_at = now
+        if authoritative_user_id is not None:
+            stored.user_id = authoritative_user_id
+        stored.data = "{}"
+        db.commit()
+    finally:
+        db.close()

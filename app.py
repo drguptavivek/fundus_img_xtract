@@ -20,7 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
-from server_side_session import DatabaseSessionInterface
+from server_side_session import DatabaseSessionInterface, mark_session_ended
 
 
 csrf = CSRFProtect()
@@ -260,8 +260,16 @@ def create_app():
             auth_logger = logging.getLogger("auth")
             auth_logger.info(f"Session timeout - User: {username}, IP: {ip}, Last active: {last}, Timeout duration: {timeout_s // 60} minutes")
             
+            cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+            prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
+            try:
+                session_user_id = int(current_user.get_id())  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                session_user_id = None
             logout_user()
             session.clear()
+            session.modified = True
+            mark_session_ended(prior_session_id, session_user_id)
             flash(f"Session expired after {timeout_s // 60} minutes of inactivity.", "warning")
             return redirect(url_for("auth.login"))
         session["last_active"] = now
@@ -367,8 +375,12 @@ def create_app():
             has_client_session = False
 
         if has_client_session and not current_user.is_authenticated:
+            cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+            prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
             logout_user()
             session.clear()
+            session.modified = True
+            mark_session_ended(prior_session_id)
 
         if (
             path == "/" 
@@ -383,11 +395,22 @@ def create_app():
             return  # allowed without auth
         if not current_user.is_authenticated:
             # Clear any stale session to avoid repeated forbidden responses
+            prior_session_id = getattr(session, "session_id", None)
             session.clear()
+            session.modified = True
+            mark_session_ended(prior_session_id)
             return redirect(url_for("auth.login"))
         if getattr(current_user, "is_active", True) is False:
+            cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+            prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
+            try:
+                session_user_id = int(current_user.get_id())  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                session_user_id = None
             logout_user()
             session.clear()
+            session.modified = True
+            mark_session_ended(prior_session_id, session_user_id)
             flash("Your account is inactive. Please contact an administrator.", "warning")
             return redirect(url_for("auth.login"))
 

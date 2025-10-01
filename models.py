@@ -643,6 +643,8 @@ class FlaskSession(Base):
     data: Mapped[str] = mapped_column(Text, nullable=False)
     expiry: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user: Mapped["User"] = relationship("User", lazy="selectin")
 
     def mark_as_read(self):

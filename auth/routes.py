@@ -14,6 +14,7 @@ from flask import flash
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
+from server_side_session import mark_session_ended
 
 # Get the auth logger
 auth_logger = logging.getLogger("auth")
@@ -205,7 +206,16 @@ def logout():
     username = getattr(current_user, 'username', 'Unknown')
     ip = get_client_ip()
     auth_logger.info(f"User logout - User: {username}, IP: {ip}")
+    cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
+    prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
+    try:
+        session_user_id = int(current_user.get_id())  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        session_user_id = None
     logout_user()
+    session.clear()
+    session.modified = True
+    mark_session_ended(prior_session_id, session_user_id)
     flash("You have been signed out.", "info")
     return redirect(url_for("homepage"))
 

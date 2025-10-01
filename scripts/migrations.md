@@ -53,3 +53,14 @@
   ```
 - **Notes:**
   - Safe to rerun; it exits early if the column already exists.
+
+## 2024-11-30 — Track Session Lifetimes
+
+- **Script:** `scripts/migrations/20241130_add_flask_session_timestamps.py`
+- **Purpose:** Adds `started_at` (UTC, non-null) and `ended_at` (nullable) columns to `flask_sessions` so the app can record session lifetimes.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241130_add_flask_session_timestamps.py
+  ```
+- **Notes:**
+  - Requires the earlier `flask_sessions` migrations. Safe to rerun; it skips work if the columns already exist.

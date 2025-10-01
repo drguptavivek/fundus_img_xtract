@@ -366,6 +366,31 @@ def reset_password():
             flash("Invalid OTP. Please try again.", "error")
             return render_template("auth/reset_password.html")
 
+        with Session() as db:
+            user = db.get(User, session_user_id)
+            if user is None or (user.email or "").lower() != session_email.lower():
+                flash("Unable to reset password for this account. Please request a new OTP.", "error")
+                session.pop('password_reset_otp', None)
+                session.pop('password_reset_email', None)
+                session.pop('password_reset_expiry', None)
+                session.pop('password_reset_user_id', None)
+                return redirect(url_for("auth.forgot_password"))
+
+            user.password_hash = hash_password(new_password)
+            user.updated_at = datetime.now(timezone.utc)
+            db.add(user)
+            db.commit()
+
+        session.pop('password_reset_otp', None)
+        session.pop('password_reset_email', None)
+        session.pop('password_reset_expiry', None)
+        session.pop('password_reset_user_id', None)
+
+        flash("Password updated. You can now log in with your new password.", "success")
+        return redirect(url_for("auth.login"))
+
+    return render_template("auth/reset_password.html")
+
 
 @auth_bp.route("/email-sse")
 def email_sse():

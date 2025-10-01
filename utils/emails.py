@@ -74,12 +74,17 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
         headers = dict(msg.items())
         
         # Send the email
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
+        smtp_port = int(smtp_port)
+        use_ssl = smtp_port == 465 or current_app.config.get("SMTP_USE_SSL", False)
+        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+
+        with smtp_class(smtp_server, smtp_port) as server:
             if debug_logger:
-                debug_logger.debug("SMTP connect: %s:%s", smtp_server, smtp_port)
-            server.starttls()  # Enable encryption
-            if debug_logger:
-                debug_logger.debug("SMTP starttls complete")
+                debug_logger.debug("SMTP connect: %s:%s (SSL=%s)", smtp_server, smtp_port, use_ssl)
+            if not use_ssl:
+                server.starttls()  # Enable encryption
+                if debug_logger:
+                    debug_logger.debug("SMTP starttls complete")
             server.login(smtp_username, smtp_password)
             if debug_logger:
                 debug_logger.debug("SMTP authenticated as %s", smtp_username)
@@ -128,8 +133,22 @@ def send_email(
     Returns:
         Thread: The thread running the email sending operation
     """
+    app = None
+    try:
+        app = current_app._get_current_object()  # type: ignore[attr-defined]
+    except RuntimeError:
+        app = None
+
     def send_email_task():
-        success = send_email_sync(to_email, subject, body)
+        def _execute() -> bool:
+            return send_email_sync(to_email, subject, body)
+
+        if app is not None:
+            with app.app_context():
+                success = _execute()
+        else:
+            success = _execute()
+
         if callback:
             callback(success)
     

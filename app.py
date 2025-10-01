@@ -58,6 +58,12 @@ def create_app():
     app.config["UPLOADED_RESULTS_PAGE_SIZE"] = int(os.getenv("UPLOADED_RESULTS_PAGE_SIZE", 50))
     app.config["SCREENINGS_PAGE_SIZE"] = int(os.getenv("SCREENINGS_PAGE_SIZE", 50))
     app.config["EMAIL_DEBUG_LOGGING"] = str(os.getenv("EMAIL_DEBUG_LOGGING", "false")).lower() in ("1", "true", "yes")
+    app.config["SMTP_SERVER"] = os.getenv("SMTP_SERVER")
+    smtp_port_env = os.getenv("SMTP_PORT")
+    app.config["SMTP_PORT"] = int(smtp_port_env) if smtp_port_env and smtp_port_env.isdigit() else None
+    app.config["SMTP_USERNAME"] = os.getenv("SMTP_USERNAME")
+    app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD")
+    app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
 
    # Session cookie hygiene
     app.config.update(
@@ -449,6 +455,8 @@ def create_app():
             or path == "/style_guide"
             or path== "/forgot-password"
             or path == "/reset-password"
+            or path == "/check-email-status"
+            or path == "/email-sse"
             or path.startswith("/docs/")
         ):
             return  # allowed without auth

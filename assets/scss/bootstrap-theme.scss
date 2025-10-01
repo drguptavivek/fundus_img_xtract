@@ -431,7 +431,7 @@ $brand-colors: (
 .theme-jobs .card         { @include riot-card(var(--bs-info), var(--bs-primary), var(--bs-success), #ffffff); }
 .theme-admin .card        { @include riot-card(var(--bs-indigo), var(--bs-purple), var(--bs-pink), #ffffff); }
 .theme-uploads .card      { @include riot-card(var(--bs-warning), var(--bs-orange), var(--bs-danger), #0b1314); }
-.theme-uploaded_results .card { @include riot-card(var(--bs-success), var(--bs-teal), var(--bs-primary), #0b1314); }
+.theme-uploaded_zips .card { @include riot-card(var(--bs-success), var(--bs-teal), var(--bs-primary), #0b1314); }
 .theme-screenings .card   { @include riot-card(var(--bs-success), var(--bs-primary), var(--bs-info), #0b1314); }
 .theme-grading .card      { @include riot-card(var(--bs-purple), var(--bs-indigo), var(--bs-cyan), #ffffff); }
 .theme-glaucoma .card     { @include riot-card(var(--bs-info), var(--bs-primary), var(--bs-success), #ffffff); }
@@ -531,7 +531,7 @@ $brand-colors: (
   .card-sunrise,
   .theme-audit .card,
   .theme-screenings .card,
-  .theme-uploaded_results .card,
+  .theme-uploaded_zips .card,
   .theme-uploads .card {
     color: #ffffff;
   }

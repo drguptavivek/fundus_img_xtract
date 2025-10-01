@@ -79,48 +79,39 @@
 
     </div>
 
-  <!-- Upload KPIs -->
-  <div class="row g-3 mb-4">
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--primary h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
-          <div class="display-6 fw-bold">{{ images_count or 0 }}</div>
-          <div class="small opacity-75">From ZIP uploads</div>
-        </div>
-      </div>
+  {% if eligibility.hospitals %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <strong>Upload / Verify Eligibility</strong>
     </div>
-
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--info h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Screenings</div>
-          <div class="display-6 fw-bold">{{ screenings_count or 0 }}</div>
-          <div class="small opacity-75">Patient encounters</div>
+    <div class="card-body">
+      <p class="text-muted small mb-3">You can Upload / Verify images for the following hospitals and lab units:</p>
+      <div class="row g-3">
+        {% for hospital in eligibility.hospitals %}
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="border rounded p-3 h-100">
+            <h6 class="fw-semibold mb-2">{{ hospital.hospital_name }}</h6>
+            {% if hospital.lab_units %}
+            <ul class="list-unstyled mb-0">
+              {% for unit in hospital.lab_units %}
+              <li class="d-flex align-items-center gap-2 small">
+                <span class="badge bg-secondary-subtle text-secondary-emphasis">ID {{ unit.lab_unit_id }}</span>
+                <span>{{ unit.lab_unit_name }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-muted small mb-0">No lab units assigned.</p>
+            {% endif %}
+          </div>
         </div>
-      </div>
-    </div>
-    
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--success h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Directly Uploaded Images</div>
-          <div class="display-6 fw-bold">{{ direct_images_count or 0 }}</div>
-          <div class="small opacity-75">Direct uploads</div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="col-12 col-md-3">
-      <div class="card kpi-card kpi--warning h-100">
-        <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Verified Images</div>
-          <div class="display-6 fw-bold">{{ verified_direct_images_count or 0 }}</div>
-          <div class="small opacity-75">Anonymized & verified</div>
-        </div>
+        {% endfor %}
       </div>
     </div>
   </div>
+  {% else %}
+  <div class="alert alert-warning">No upload eligibility configured for your account. Please contact an administrator.</div>
+  {% endif %}
 
 
 {% endif %}

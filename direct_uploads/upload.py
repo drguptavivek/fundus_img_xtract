@@ -19,6 +19,7 @@ from models import (
 )
 
 from utils.fileUtils import get_upload_dirs
+from utils.upload_eligibility import get_user_upload_eligibility
 
 
 def _to_int(v):
@@ -31,7 +32,8 @@ def _to_int(v):
 @bp.route("/upload", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_index():
-    return render_template("direct_uploads/index.html")
+    eligibility = get_user_upload_eligibility(current_user.id)
+    return render_template("direct_uploads/index.html", eligibility=eligibility)
 
 
 @bp.route("/direct/upload", methods=["GET", "POST"])

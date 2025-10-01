@@ -64,3 +64,14 @@
   ```
 - **Notes:**
   - Requires the earlier `flask_sessions` migrations. Safe to rerun; it skips work if the columns already exist.
+
+## 2024-10-01 — Per-user Notification Read Tracking
+
+- **Script:** `scripts/migrations/20241001_add_notification_reads.py`
+- **Purpose:** Adds `notification_reads` table to record which users have read broadcast notifications.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241001_add_notification_reads.py
+  ```
+- **Notes:**
+  - Creates indices and a uniqueness constraint. Safe to rerun; it no-ops if the table exists.

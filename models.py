@@ -622,7 +622,7 @@ class Notification(Base):
     __tablename__ = 'notifications'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     notification_type: Mapped[str] = mapped_column(String(20), default=NotificationType.INFO.value, nullable=False)
     recipient_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=True)  # NULL for system-wide notifications
@@ -635,6 +635,27 @@ class Notification(Base):
     # Relationship to recipient user
     recipient: Mapped['User'] = relationship('User', foreign_keys=[recipient_user_id], back_populates='notifications')
     sender: Mapped['User'] = relationship('User', foreign_keys=[sender_user_id], back_populates='sent_notifications')
+    reads: Mapped[list['NotificationRead']] = relationship('NotificationRead', back_populates='notification', cascade="all, delete-orphan")
+
+    def mark_as_read(self) -> None:
+        self.is_read = True
+        self.updated_at = utcnow()
+
+
+class NotificationRead(Base):
+    __tablename__ = 'notification_reads'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    notification_id: Mapped[int] = mapped_column(ForeignKey('notifications.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    notification: Mapped['Notification'] = relationship('Notification', back_populates='reads')
+    user: Mapped['User'] = relationship('User', lazy='joined')
+
+    __table_args__ = (
+        UniqueConstraint('notification_id', 'user_id', name='uq_notification_reads_notification_user'),
+    )
 
 
 class FlaskSession(Base):
@@ -646,11 +667,6 @@ class FlaskSession(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user: Mapped["User"] = relationship("User", lazy="selectin")
-
-    def mark_as_read(self):
-        """Mark this notification as read"""
-        self.is_read = True
-
 
 # --- Engine and Session Creation ---
 # --- Engine and Session Creation ---

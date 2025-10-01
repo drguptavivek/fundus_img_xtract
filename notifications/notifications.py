@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, current_app
 from flask_login import current_user, login_required
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import selectinload
 import logging
 from datetime import datetime
@@ -8,14 +8,17 @@ from datetime import datetime
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.notifications import (
+    MAX_MESSAGE_LENGTH,
+    MAX_TITLE_LENGTH,
     get_user_notifications,
-    mark_notification_as_read,
     mark_all_user_notifications_as_read,
-    send_system_notification,
+    mark_notification_as_read,
+    prepare_notification_payload,
     send_notification_to_admins,
     send_notification_to_user,
+    send_system_notification,
 )
-from models import LabUnit, Notification, NotificationType, User
+from models import LabUnit, Notification, NotificationRead, NotificationType, User
 
 
 def register_routes(bp):
@@ -109,6 +112,18 @@ def notifications():
             # Calculate pagination details
             pages = (total + per_page - 1) // per_page  # Ceiling division
             
+            system_notification_ids = [n.id for n in notifications_list if n.recipient_user_id is None]
+            system_read_ids: set[int] = set()
+            if system_notification_ids:
+                system_read_ids = set(
+                    db.execute(
+                        select(NotificationRead.notification_id).where(
+                            NotificationRead.user_id == current_user.id,
+                            NotificationRead.notification_id.in_(system_notification_ids),
+                        )
+                    ).scalars()
+                )
+
             pagination = {
                 'page': page,
                 'pages': pages,
@@ -124,7 +139,8 @@ def notifications():
                 "notifications/index.html",
                 notifications=notifications_list,
                 pagination=pagination,
-                current_filters={'type': notification_type, 'unread_only': unread_only}
+                current_filters={'type': notification_type, 'unread_only': unread_only},
+                system_read_ids=system_read_ids,
             )
     except Exception as e:
         current_app.logger.exception("Failed to load notifications: %s", e)
@@ -136,8 +152,10 @@ def notifications():
 def mark_notification_read(notification_id):
     """Mark a specific notification as read."""
     try:
-        mark_notification_as_read(notification_id)
-        flash("Notification marked as read.", "success")
+        if mark_notification_as_read(notification_id, current_user.id):
+            flash("Notification marked as read.", "success")
+        else:
+            flash("Unable to mark this notification as read.", "warning")
         return redirect(url_for("notifications.notifications"))
     except Exception as e:
         current_app.logger.exception("Failed to mark notification as read: %s", e)
@@ -220,22 +238,23 @@ def compose_notification():
         current_app.logger.exception("Failed to send notification: %s", exc)
         flash("Failed to send notification.", "danger")
 
-    return render_template("notifications/compose.html", peer_options=peer_options)
+    return render_template(
+        "notifications/compose.html",
+        peer_options=peer_options,
+        max_title_length=MAX_TITLE_LENGTH,
+        max_message_length=MAX_MESSAGE_LENGTH,
+    )
 
 
 @roles_required('admin')
 def broadcast_notification():
     """Display form to send broadcast notifications to all users."""
     if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        message = request.form.get('message', '').strip()
+        title = request.form.get('title', '')
+        message = request.form.get('message', '')
         notification_type = request.form.get('notification_type', 'info')
-        
-        if not title or not message:
-            flash("Title and message are required.", "danger")
-            return render_template("notifications/broadcast.html")
-        
         try:
+            cleaned_title, cleaned_message = prepare_notification_payload(title, message)
             notif_type_value = (
                 notification_type
                 if notification_type in {t.value for t in NotificationType}
@@ -247,8 +266,8 @@ def broadcast_notification():
                 for user in users:
                     db.add(
                         Notification(
-                            title=title,
-                            message=message,
+                            title=cleaned_title,
+                            message=cleaned_message,
                             notification_type=notif_type_value,
                             recipient_user_id=user.id,
                             sender_user_id=current_user.id,
@@ -258,37 +277,45 @@ def broadcast_notification():
                 db.commit()
                 flash(f"Broadcast notification sent to {len(users)} users.", "success")
                 return redirect(url_for("notifications.broadcast_notification"))
+        except ValueError as ve:
+            flash(str(ve), "danger")
         except Exception as e:
             current_app.logger.exception("Failed to send broadcast notification: %s", e)
             flash("Failed to send broadcast notification.", "danger")
-    
-    return render_template("notifications/broadcast.html")
+
+    return render_template(
+        "notifications/broadcast.html",
+        max_title_length=MAX_TITLE_LENGTH,
+        max_message_length=MAX_MESSAGE_LENGTH,
+    )
 
 
 @roles_required('admin')
 def system_notification():
     """Display form to send system-wide notifications."""
     if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        message = request.form.get('message', '').strip()
+        title = request.form.get('title', '')
+        message = request.form.get('message', '')
         notification_type = request.form.get('notification_type', 'info')
-        
-        if not title or not message:
-            flash("Title and message are required.", "danger")
-            return render_template("notifications/system.html")
-        
         try:
+            cleaned_title, cleaned_message = prepare_notification_payload(title, message)
             notif_enum = NotificationType(notification_type) if notification_type in {t.value for t in NotificationType} else NotificationType.INFO
             send_system_notification(
-                title,
-                message,
+                cleaned_title,
+                cleaned_message,
                 notif_enum,
                 sender_user_id=current_user.id,
             )
             flash("System notification sent successfully.", "success")
             return redirect(url_for("notifications.system_notification"))
+        except ValueError as ve:
+            flash(str(ve), "danger")
         except Exception as e:
             current_app.logger.exception("Failed to send system notification: %s", e)
             flash("Failed to send system notification.", "danger")
-    
-    return render_template("notifications/system.html")
+
+    return render_template(
+        "notifications/system.html",
+        max_title_length=MAX_TITLE_LENGTH,
+        max_message_length=MAX_MESSAGE_LENGTH,
+    )

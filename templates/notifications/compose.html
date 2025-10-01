@@ -47,12 +47,14 @@
 
             <div class="mb-3">
               <label for="title" class="form-label">Title</label>
-              <input type="text" name="title" id="title" class="form-control" maxlength="255" required>
+              <input type="text" name="title" id="title" class="form-control" maxlength="{{ max_title_length|default(200) }}" required>
+              <div class="form-text">Maximum {{ max_title_length|default(200) }} characters.</div>
             </div>
 
             <div class="mb-3">
               <label for="message" class="form-label">Message</label>
-              <textarea name="message" id="message" class="form-control" rows="5" required></textarea>
+              <textarea name="message" id="message" class="form-control" rows="5" maxlength="{{ max_message_length|default(2000) }}" required></textarea>
+              <div class="form-text">Maximum {{ max_message_length|default(2000) }} characters.</div>
             </div>
 
             <div class="d-flex justify-content-end gap-2">

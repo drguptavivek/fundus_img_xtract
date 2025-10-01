@@ -84,17 +84,32 @@
                                 {% for notification in notifications %}
                                 {% set is_recipient = notification.recipient_user_id == current_user.id %}
                                 {% set is_sender = notification.sender_user_id == current_user.id %}
-                                {% set is_unread = is_recipient and not notification.is_read %}
-                                <tr class="{% if is_unread %}table-primary{% endif %}">
+                                {% set is_system = notification.recipient_user_id is none %}
+                                {% set is_read = (notification.is_read if not is_system else notification.id in system_read_ids) %}
+                                {% set is_unread = (not is_read) and (is_recipient or is_system) %}
+                                {% set can_mark = (is_recipient or is_system) and not is_read %}
+                                {% set sender_label = 'System' if notification.sender_user_id is none else ('You' if is_sender else (notification.sender.full_name or notification.sender.username) if notification.sender else 'Former user') %}
+                                {% set recipient_label = 'Everyone' if is_system else ('You' if is_recipient else (notification.recipient.full_name or notification.recipient.username) if notification.recipient else 'Former user') %}
+                                {% set notification_payload = {
+                                    'title': notification.title,
+                                    'message': notification.message,
+                                    'type': notification.notification_type|title,
+                                    'sender': sender_label,
+                                    'recipient': recipient_label,
+                                    'timestamp': notification.created_at|user_datetime('%Y-%m-%d %H:%M')
+                                } %}
+                                <tr class="notification-row {% if is_unread %}table-primary{% endif %}"
+                                    role="button" tabindex="0"
+                                    data-notification='{{ notification_payload|tojson }}'>
                                     <td>
                                         <span class="badge {% if notification.notification_type == 'error' %}bg-danger{% elif notification.notification_type == 'warning' %}bg-warning text-dark{% elif notification.notification_type == 'info' %}bg-info{% else %}bg-secondary{% endif %}">
                                             {{ notification.notification_type|title }}
                                         </span>
                                     </td>
                                     <td>{{ notification.title }}</td>
-                                    <td class="small">{{ notification.message }}</td>
+                                    <td class="small text-truncate" style="max-width: 320px;">{{ notification.message|truncate(120, True, '…') }}</td>
                                     <td>
-                                        {% if notification.sender_user_id is none %}
+                                        {% if is_system %}
                                             <span class="text-muted">System</span>
                                         {% elif is_sender %}
                                             <span class="fw-semibold">You</span>
@@ -103,7 +118,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if notification.recipient_user_id is none %}
+                                        {% if is_system %}
                                             <span class="text-muted">Everyone</span>
                                         {% elif is_recipient %}
                                             <span class="fw-semibold">You</span>
@@ -114,19 +129,15 @@
                                     <td>{{ notification.created_at|user_datetime('%Y-%m-%d %H:%M') }}</td>
                                     <td>
                                         {% if is_recipient %}
-                                            {% if notification.is_read %}
-                                                <span class="badge bg-success">Read</span>
-                                            {% else %}
-                                                <span class="badge bg-warning text-dark">Unread</span>
-                                            {% endif %}
+                                            <span class="badge {{ 'bg-success' if is_read else 'bg-warning text-dark' }}">{{ 'Read' if is_read else 'Unread' }}</span>
                                         {% elif is_sender %}
                                             <span class="badge bg-secondary">Sent</span>
                                         {% else %}
-                                            <span class="badge bg-info">System</span>
+                                            <span class="badge {{ 'bg-success' if is_read else 'bg-warning text-dark' }}">{{ 'Read' if is_read else 'Unread' }}</span>
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if is_unread %}
+                                        {% if can_mark %}
                                         <form method="POST" action="{{ url_for('notifications.mark_notification_read', notification_id=notification.id) }}" style="display: inline;">
                                             {% from "_forms.html" import csrf_field %}
                                             {{ csrf_field() }}
@@ -178,7 +189,7 @@
                             Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 }} to {{ [pagination.page * pagination.per_page, pagination.total]|min }} of {{ pagination.total }} notifications
                         </p>
                     </div>
-                    {% else %}
+{% else %}
                     <div class="text-center">
                         <p class="text-muted">No notifications found.</p>
                     </div>
@@ -188,4 +199,83 @@
         </div>
     </div>
 </div>
+
+<!-- Notification detail modal -->
+<div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="notificationModalLabel">Notification Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2 text-muted small" id="notificationModalMeta"></div>
+                <div id="notificationModalBody" class="fw-normal" style="white-space: pre-wrap;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var modalElement = document.getElementById('notificationModal');
+    if (!modalElement || typeof window.bootstrap === 'undefined') {
+      return;
+    }
+
+    var modalInstance = new window.bootstrap.Modal(modalElement);
+    var titleEl = document.getElementById('notificationModalLabel');
+    var metaEl = document.getElementById('notificationModalMeta');
+    var bodyEl = document.getElementById('notificationModalBody');
+
+    function openModalFromRow(row) {
+      var payloadRaw = row.getAttribute('data-notification');
+      if (!payloadRaw) {
+        return;
+      }
+      try {
+        var payload = JSON.parse(payloadRaw);
+        if (titleEl) {
+          titleEl.textContent = payload.title || 'Notification Details';
+        }
+        if (metaEl) {
+          var parts = [];
+          if (payload.type) { parts.push(payload.type); }
+          if (payload.sender) { parts.push('From ' + payload.sender); }
+          if (payload.recipient) { parts.push('To ' + payload.recipient); }
+          if (payload.timestamp) { parts.push(payload.timestamp); }
+          metaEl.textContent = parts.join(' • ');
+        }
+        if (bodyEl) {
+          bodyEl.textContent = payload.message || '';
+        }
+        modalInstance.show();
+      } catch (err) {
+        console.error('Failed to parse notification payload', err);
+      }
+    }
+
+    document.querySelectorAll('.notification-row').forEach(function (row) {
+      row.classList.add('cursor-pointer');
+      row.addEventListener('click', function (event) {
+        if (event.target.closest('button, a, form, input, textarea, select')) {
+          return;
+        }
+        openModalFromRow(row);
+      });
+      row.addEventListener('keypress', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openModalFromRow(row);
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

@@ -80,6 +80,13 @@
               Upload
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="uploadMenu">
+                <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload_index' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.upload_index') }}">Dashboard</a>
+              </li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'remedio_zip_uploads.upload_form' %}active{% endif %}"
                   href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload Zips</a>

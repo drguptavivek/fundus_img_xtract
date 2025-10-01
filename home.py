@@ -1,9 +1,10 @@
 from flask import render_template
 from sqlalchemy import select, func, or_, distinct, case, and_
 from models import (
-    Session, EncounterFile, PatientEncounters, ImageGrading, 
+    Session, EncounterFile, PatientEncounters, ImageGrading,
     GlaucomaReport, GlaucomaResultsCleaned, DiabeticRetinopathyReport,
-    DirectImageUpload, DirectImageVerify, LabUnit, Disease
+    DirectImageUpload, DirectImageVerify, LabUnit, Disease,
+    Grade, DiseaseGrading
 )
 
 def homepage():
@@ -31,17 +32,29 @@ def homepage():
         ).scalar_one()
         
         # Grading counts
-        total_gradings_count = db.execute(
-            select(func.count(ImageGrading.id))
-        ).scalar_one()
-        
-        glaucoma_gradings_count = db.execute(
-            select(func.count(ImageGrading.id)).where(ImageGrading.graded_for == "glaucoma")
-        ).scalar_one()
-        
-        dr_gradings_count = db.execute(
-            select(func.count(ImageGrading.id)).where(ImageGrading.graded_for == "dr")
-        ).scalar_one()
+        disease_map = {
+            (d.name or "").strip().lower(): d.id for d in db.execute(select(Disease)).scalars()
+        }
+        glaucoma_id = disease_map.get("glaucoma")
+        dr_id = disease_map.get("dr")
+
+        total_gradings_count = db.execute(select(func.count(Grade.id))).scalar_one()
+
+        glaucoma_gradings_count = 0
+        if glaucoma_id is not None:
+            glaucoma_gradings_count = db.execute(
+                select(func.count(Grade.id))
+                .join(DiseaseGrading, Grade.disease_grading_id == DiseaseGrading.id)
+                .where(DiseaseGrading.disease_id == glaucoma_id)
+            ).scalar_one()
+
+        dr_gradings_count = 0
+        if dr_id is not None:
+            dr_gradings_count = db.execute(
+                select(func.count(Grade.id))
+                .join(DiseaseGrading, Grade.disease_grading_id == DiseaseGrading.id)
+                .where(DiseaseGrading.disease_id == dr_id)
+            ).scalar_one()
         
         # VCDR data counts
         vcdr_data_count = db.execute(

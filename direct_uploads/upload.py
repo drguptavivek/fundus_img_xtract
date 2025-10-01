@@ -28,8 +28,14 @@ def _to_int(v):
         return None
 
 
+@bp.route("/upload", methods=["GET"])
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+def upload_index():
+    return render_template("direct_uploads/index.html")
+
+
 @bp.route("/direct/upload", methods=["GET", "POST"])
-@roles_required('contributor', 'data_manager', 'admin')
+@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload():
     with with_session() as db_session:
         if request.method == "POST":

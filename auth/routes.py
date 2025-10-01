@@ -166,6 +166,12 @@ def login():
                 session["last_active"] = int(time.time())
                 session.modified = True
 
+                # Role-based landing pages
+                if user.has_role('ophthalmologist'):
+                    return redirect(url_for("grading.index"))
+                if user.has_role('fileUploader') or user.has_role('optometrist'):
+                    return redirect(url_for("direct_uploads.upload_index"))
+
                 # Optional: rotate session / set remember as needed
                 return redirect(url_for("homepage"))
 

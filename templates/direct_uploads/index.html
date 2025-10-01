@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Image Uploads{% endblock %}
+
+
+{% block content %}
+<div class="container py-4">
+
+  <!-- Hero / Welcome -->
+  <div class="card card-aurora mb-4">
+    <div class="card-body d-flex flex-column flex-md-row align-items-md-center">
+      <div class="flex-fill">
+        <h1 class="h4 mb-2">Welcome to Fundus Image Extractor</h1>
+        <h2 class="h4 mb-2">Dashboard for Optometrists and Image Uploaders</h2>
+        <p class="mb-0 opacity-75">
+          Upload ZIPs of fundus images, extract reports, and review screenings — all in one place.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  {% if current_user.is_authenticated %}
+    <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3 mb-4">
+          {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('remedio_zip_uploads.upload_form') }}">
+                <div class="card card-forest h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Upload Remedio ZIP</div>
+                    <div class="small opacity-75">Bulk fundus image ingestion</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('direct_uploads.upload') }}">
+                <div class="card card-sea h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Direct Image Upload</div>
+                    <div class="small opacity-75">Single images from clinics</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+          {% endif %}
+
+          {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">
+                <div class="card card-violet h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Verify Glaucoma OCR</div>
+                    <div class="small opacity-75">Review Remedio glaucoma PDFs</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">
+                <div class="card card-sunrise h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Verify DR OCR</div>
+                    <div class="small opacity-75">Review Remedio DR PDFs</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+            <div class="col">
+              <a class="text-decoration-none" href="{{ url_for('preprocess.anonymization_dashboard') }}">
+                <div class="card card-aurora h-100">
+                  <div class="card-body">
+                    <div class="fw-semibold">Anonymization Dashboard</div>
+                    <div class="small opacity-75">Manage direct image verification</div>
+                  </div>
+                </div>
+              </a>
+            </div>
+          {% endif %}
+
+    </div>
+
+  <!-- Upload KPIs -->
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--primary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
+          <div class="display-6 fw-bold">{{ images_count or 0 }}</div>
+          <div class="small opacity-75">From ZIP uploads</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Screenings</div>
+          <div class="display-6 fw-bold">{{ screenings_count or 0 }}</div>
+          <div class="small opacity-75">Patient encounters</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--success h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Directly Uploaded Images</div>
+          <div class="display-6 fw-bold">{{ direct_images_count or 0 }}</div>
+          <div class="small opacity-75">Direct uploads</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-12 col-md-3">
+      <div class="card kpi-card kpi--warning h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Verified Images</div>
+          <div class="display-6 fw-bold">{{ verified_direct_images_count or 0 }}</div>
+          <div class="small opacity-75">Anonymized & verified</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+{% endif %}
+
+</div>
+{% endblock %}

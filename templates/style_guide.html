@@ -334,6 +334,17 @@
               <code>card kpi-card kpi--primary h-100</code>
               <button type="button" class="style-guide-copy" data-copy-classes="card kpi-card kpi--primary h-100">Copy</button>
             </div>
+            <details class="mt-2">
+              <summary class="small text-body-secondary">Full markup</summary>
+              <pre class="mt-2 mb-0 small"><code>&lt;div class="card kpi-card kpi--primary h-100"&gt;
+  &lt;div class="card-body"&gt;
+    &lt;div class="text-uppercase small fw-semibold opacity-75"&gt;Screenings&lt;/div&gt;
+    &lt;div class="display-6 fw-bold"&gt;1,248&lt;/div&gt;
+    &lt;div class="small opacity-75"&gt;+8.5% vs last week&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div class="card-footer small text-body-secondary"&gt;Meta text&lt;/div&gt;
+&lt;/div&gt;</code></pre>
+            </details>
           </div>
         </div>
       </div>
@@ -450,6 +461,17 @@
                 <code>card h-100</code>
                 <button type="button" class="style-guide-copy" data-copy-classes="card h-100">Copy card</button>
               </div>
+              <details class="mt-2">
+                <summary class="small text-body-secondary">Full markup</summary>
+                <pre class="mt-2 mb-0 small"><code>&lt;div class="p-2 theme-jobs h-100"&gt;
+  &lt;div class="card h-100"&gt;
+    &lt;div class="card-body"&gt;
+      &lt;div class="fw-semibold"&gt;Jobs Theme&lt;/div&gt;
+      &lt;div class="small opacity-75"&gt;Tinted via wrapper&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+              </details>
             </div>
           </div>
         </div>
@@ -607,7 +629,21 @@
             <div class="fw-semibold">Sunrise</div>
             <div class="small opacity-75">Warm gradient</div>
           </div>
-          <div class="card-footer small text-body-secondary"><code>.card-sunrise</code></div>
+          <div class="card-footer small text-body-secondary">
+            <div class="style-guide-snippet">
+              <code>card card-sunrise h-100</code>
+              <button type="button" class="style-guide-copy" data-copy-classes="card card-sunrise h-100">Copy</button>
+            </div>
+            <details class="mt-2">
+              <summary class="small text-body-secondary">Full markup</summary>
+              <pre class="mt-2 mb-0 small"><code>&lt;div class="card card-sunrise h-100"&gt;
+  &lt;div class="card-body"&gt;
+    &lt;div class="fw-semibold"&gt;Sunrise&lt;/div&gt;
+    &lt;div class="small opacity-75"&gt;Warm gradient&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+            </details>
+          </div>
         </div>
       </div>
       <div class="col">
@@ -688,7 +724,23 @@
             <div class="fw-semibold text-capitalize">{{ name }} soft</div>
             <div class="small opacity-75">Tinted background, subtle border</div>
           </div>
-          <div class="card-footer small text-body-secondary"><code>.card-soft-{{ name }}</code></div>
+          <div class="card-footer small text-body-secondary">
+            <div class="style-guide-snippet">
+              <code>card card-soft-{{ name }} h-100</code>
+              <button type="button" class="style-guide-copy" data-copy-classes="card card-soft-{{ name }} h-100">Copy</button>
+            </div>
+            {% if loop.first %}
+            <details class="mt-2">
+              <summary class="small text-body-secondary">Full markup (example)</summary>
+              <pre class="mt-2 mb-0 small"><code>&lt;div class="card card-soft-primary h-100"&gt;
+  &lt;div class="card-body"&gt;
+    &lt;div class="fw-semibold"&gt;Primary soft&lt;/div&gt;
+    &lt;div class="small opacity-75"&gt;Tinted background, subtle border&lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+            </details>
+            {% endif %}
+          </div>
         </div>
       </div>
       {% endfor %}
@@ -716,7 +768,27 @@
               <div class="fw-semibold">Neutralized</div>
               <div class="small opacity-75">Contrast wrapper applied</div>
             </div>
-            <div class="card-footer small text-body-secondary"><code>.theme-contrast .card-rainbow</code></div>
+            <div class="card-footer small text-body-secondary">
+              <div class="style-guide-snippet">
+                <code>theme-contrast p-2 h-100</code>
+                <button type="button" class="style-guide-copy" data-copy-classes="theme-contrast p-2 h-100">Copy wrapper</button>
+              </div>
+              <div class="style-guide-snippet">
+                <code>card card-rainbow h-100</code>
+                <button type="button" class="style-guide-copy" data-copy-classes="card card-rainbow h-100">Copy card</button>
+              </div>
+              <details class="mt-2">
+                <summary class="small text-body-secondary">Full markup</summary>
+                <pre class="mt-2 mb-0 small"><code>&lt;div class="theme-contrast p-2 h-100"&gt;
+  &lt;div class="card card-rainbow h-100"&gt;
+    &lt;div class="card-body"&gt;
+      &lt;div class="fw-semibold"&gt;Neutralized&lt;/div&gt;
+      &lt;div class="small opacity-75"&gt;Contrast wrapper applied&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</code></pre>
+              </details>
+            </div>
           </div>
         </div>
       </div>

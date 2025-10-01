@@ -61,6 +61,12 @@ class User(Base):
         back_populates="recipient",
         lazy="selectin",
     )
+    sent_notifications: Mapped[List["Notification"]] = relationship(
+        "Notification",
+        foreign_keys="Notification.sender_user_id",
+        back_populates="sender",
+        lazy="selectin",
+    )
 
     @property
     def is_authenticated(self) -> bool: return True
@@ -620,6 +626,7 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     notification_type: Mapped[str] = mapped_column(String(20), default=NotificationType.INFO.value, nullable=False)
     recipient_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=True)  # NULL for system-wide notifications
+    sender_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -627,6 +634,7 @@ class Notification(Base):
 
     # Relationship to recipient user
     recipient: Mapped['User'] = relationship('User', foreign_keys=[recipient_user_id], back_populates='notifications')
+    sender: Mapped['User'] = relationship('User', foreign_keys=[sender_user_id], back_populates='sent_notifications')
 
     def mark_as_read(self):
         """Mark this notification as read"""

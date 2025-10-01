@@ -1,11 +1,26 @@
 from db_transaction_manager import get_db_session
 from models import Notification, NotificationType, User, Role
 from sqlalchemy import select
-from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
-def send_notification_to_user(user_id: int, title: str, message: str, notification_type: NotificationType = NotificationType.INFO):
+def _normalize_type(notification_type: Union[NotificationType, str]) -> NotificationType:
+    if isinstance(notification_type, NotificationType):
+        return notification_type
+    try:
+        return NotificationType(notification_type)
+    except ValueError:
+        return NotificationType.INFO
+
+
+def send_notification_to_user(
+    user_id: int,
+    title: str,
+    message: str,
+    notification_type: Union[NotificationType, str] = NotificationType.INFO,
+    *,
+    sender_user_id: Optional[int] = None,
+):
     """
     Send a notification to a specific user
     
@@ -20,11 +35,13 @@ def send_notification_to_user(user_id: int, title: str, message: str, notificati
     """
     with get_db_session() as db:
         # Create new notification
+        notif_type = _normalize_type(notification_type)
         notification = Notification(
             title=title,
             message=message,
-            notification_type=notification_type.value,
-            recipient_user_id=user_id
+            notification_type=notif_type.value,
+            recipient_user_id=user_id,
+            sender_user_id=sender_user_id,
         )
         
         # Add to session and commit
@@ -34,7 +51,13 @@ def send_notification_to_user(user_id: int, title: str, message: str, notificati
         return notification
 
 
-def send_notification_to_admins(title: str, message: str, notification_type: NotificationType = NotificationType.INFO):
+def send_notification_to_admins(
+    title: str,
+    message: str,
+    notification_type: Union[NotificationType, str] = NotificationType.INFO,
+    *,
+    sender_user_id: Optional[int] = None,
+):
     """
     Send a notification to all admin users
     
@@ -62,12 +85,15 @@ def send_notification_to_admins(title: str, message: str, notification_type: Not
         ).scalars().all()
         
         notifications = []
+        notif_type = _normalize_type(notification_type)
+
         for admin_user in admin_users:
             notification = Notification(
                 title=title,
                 message=message,
-                notification_type=notification_type.value,
-                recipient_user_id=admin_user.id
+                notification_type=notif_type.value,
+                recipient_user_id=admin_user.id,
+                sender_user_id=sender_user_id,
             )
             
             db.add(notification)
@@ -78,7 +104,13 @@ def send_notification_to_admins(title: str, message: str, notification_type: Not
         return notifications
 
 
-def send_system_notification(title: str, message: str, notification_type: NotificationType = NotificationType.INFO):
+def send_system_notification(
+    title: str,
+    message: str,
+    notification_type: Union[NotificationType, str] = NotificationType.INFO,
+    *,
+    sender_user_id: Optional[int] = None,
+):
     """
     Send a system-wide notification (not directed to a specific user)
     
@@ -91,11 +123,13 @@ def send_system_notification(title: str, message: str, notification_type: Notifi
         Notification: The created notification object
     """
     with get_db_session() as db:
+        notif_type = _normalize_type(notification_type)
         notification = Notification(
             title=title,
             message=message,
-            notification_type=notification_type.value,
-            recipient_user_id=None  # System-wide notification
+            notification_type=notif_type.value,
+            recipient_user_id=None,
+            sender_user_id=sender_user_id,
         )
         
         db.add(notification)

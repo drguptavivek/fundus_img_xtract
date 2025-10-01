@@ -1,13 +1,21 @@
 from flask import render_template, request, redirect, url_for, flash, current_app
 from flask_login import current_user, login_required
 from sqlalchemy import and_, or_
+from sqlalchemy.orm import selectinload
 import logging
 from datetime import datetime
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from utils.notifications import get_user_notifications, mark_notification_as_read, mark_all_user_notifications_as_read, send_system_notification, send_notification_to_admins
-from models import Notification, User
+from utils.notifications import (
+    get_user_notifications,
+    mark_notification_as_read,
+    mark_all_user_notifications_as_read,
+    send_system_notification,
+    send_notification_to_admins,
+    send_notification_to_user,
+)
+from models import LabUnit, Notification, NotificationType, User
 
 
 def register_routes(bp):
@@ -15,8 +23,39 @@ def register_routes(bp):
     bp.add_url_rule("/", view_func=notifications, methods=["GET"])
     bp.add_url_rule("/<int:notification_id>/mark_read", view_func=mark_notification_read, methods=["POST"])
     bp.add_url_rule("/mark_all_read", view_func=mark_all_notifications_read, methods=["POST"])
+    bp.add_url_rule("/compose", view_func=compose_notification, methods=["GET", "POST"])
     bp.add_url_rule("/broadcast", view_func=broadcast_notification, methods=["GET", "POST"])
     bp.add_url_rule("/system", view_func=system_notification, methods=["GET", "POST"])
+
+
+def _get_peer_users(db, user_id: int) -> list[User]:
+    """Return active users sharing at least one lab unit with the given user."""
+    current_user_obj = (
+        db.query(User)
+        .options(selectinload(User.lab_units))
+        .filter(User.id == user_id)
+        .one_or_none()
+    )
+    if current_user_obj is None:
+        return []
+
+    lab_unit_ids = {lu.id for lu in current_user_obj.lab_units or []}
+    if not lab_unit_ids:
+        return []
+
+    peers = (
+        db.query(User)
+        .join(User.lab_units)
+        .filter(
+            User.is_active.is_(True),
+            User.id != user_id,
+            LabUnit.id.in_(lab_unit_ids),
+        )
+        .distinct()
+        .order_by(User.full_name, User.username)
+        .all()
+    )
+    return peers
 
 
 @login_required
@@ -34,11 +73,19 @@ def notifications():
         
         with get_db_session() as db:
             # Start building the query
-            query = db.query(Notification).filter(
-                or_(
-                    Notification.recipient_user_id == current_user.id,
-                    Notification.recipient_user_id.is_(None)  # System-wide notifications
+            query = (
+                db.query(Notification)
+                .options(
+                    selectinload(Notification.sender),
+                    selectinload(Notification.recipient),
                 )
+                .filter(
+            or_(
+                Notification.recipient_user_id == current_user.id,
+                Notification.sender_user_id == current_user.id,
+                Notification.recipient_user_id.is_(None),
+                )
+            )
             )
             
             # Apply filters
@@ -46,7 +93,10 @@ def notifications():
                 query = query.filter(Notification.notification_type == notification_type)
             
             if unread_only:
-                query = query.filter(Notification.is_read == False)
+                query = query.filter(
+                    Notification.recipient_user_id == current_user.id,
+                    Notification.is_read.is_(False)
+                )
             
             # Order by creation date (newest first)
             query = query.order_by(Notification.created_at.desc())
@@ -108,6 +158,71 @@ def mark_all_notifications_read():
         return redirect(url_for("notifications.notifications"))
 
 
+@login_required
+def compose_notification():
+    """Allow the current user to send a notification to admins or lab peers."""
+    peer_options: list[dict[str, str | int]] = []
+    try:
+        with get_db_session() as db:
+            peers = _get_peer_users(db, current_user.id)
+            peer_options = [
+                {
+                    "id": peer.id,
+                    "label": peer.full_name or peer.username,
+                    "username": peer.username,
+                }
+                for peer in peers
+            ]
+
+        if request.method == "POST":
+            recipient_type = (request.form.get("recipient_type") or "").strip()
+            title = (request.form.get("title") or "").strip()
+            message = (request.form.get("message") or "").strip()
+            peer_id_raw = request.form.get("peer_user_id")
+
+            if not title or not message:
+                raise ValueError("Title and message are required.")
+
+            if recipient_type == "admins":
+                send_notification_to_admins(
+                    title,
+                    message,
+                    NotificationType.INFO,
+                    sender_user_id=current_user.id,
+                )
+                flash("Notification sent to admins.", "success")
+                return redirect(url_for("notifications.notifications"))
+
+            if recipient_type == "user":
+                try:
+                    peer_user_id = int(peer_id_raw or "0")
+                except ValueError as exc:  # pragma: no cover - defensive
+                    raise ValueError("Invalid recipient selected.") from exc
+
+                allowed_peer_ids = {option["id"] for option in peer_options}
+                if peer_user_id not in allowed_peer_ids:
+                    raise ValueError("You can only message users mapped to your lab units.")
+
+                send_notification_to_user(
+                    peer_user_id,
+                    title,
+                    message,
+                    NotificationType.INFO,
+                    sender_user_id=current_user.id,
+                )
+                flash("Notification sent successfully.", "success")
+                return redirect(url_for("notifications.notifications"))
+
+            raise ValueError("Select a valid recipient option.")
+    except ValueError as validation_error:
+        flash(str(validation_error), "danger")
+    except Exception as exc:  # pragma: no cover - unexpected
+        current_app.logger.exception("Failed to send notification: %s", exc)
+        flash("Failed to send notification.", "danger")
+
+    return render_template("notifications/compose.html", peer_options=peer_options)
+
+
 @roles_required('admin')
 def broadcast_notification():
     """Display form to send broadcast notifications to all users."""
@@ -121,20 +236,25 @@ def broadcast_notification():
             return render_template("notifications/broadcast.html")
         
         try:
+            notif_type_value = (
+                notification_type
+                if notification_type in {t.value for t in NotificationType}
+                else NotificationType.INFO.value
+            )
             with get_db_session() as db:
-                # Get all active users
-                users = db.query(User).filter(User.is_active == True).all()
-                
-                # Send notification to each user
+                users = db.query(User).filter(User.is_active.is_(True)).all()
+
                 for user in users:
-                    notification = Notification(
-                        title=title,
-                        message=message,
-                        notification_type=notification_type,
-                        recipient_user_id=user.id
+                    db.add(
+                        Notification(
+                            title=title,
+                            message=message,
+                            notification_type=notif_type_value,
+                            recipient_user_id=user.id,
+                            sender_user_id=current_user.id,
+                        )
                     )
-                    db.add(notification)
-                
+
                 db.commit()
                 flash(f"Broadcast notification sent to {len(users)} users.", "success")
                 return redirect(url_for("notifications.broadcast_notification"))
@@ -158,8 +278,13 @@ def system_notification():
             return render_template("notifications/system.html")
         
         try:
-            # Send system notification (no recipient user)
-            send_system_notification(title, message, notification_type)
+            notif_enum = NotificationType(notification_type) if notification_type in {t.value for t in NotificationType} else NotificationType.INFO
+            send_system_notification(
+                title,
+                message,
+                notif_enum,
+                sender_user_id=current_user.id,
+            )
             flash("System notification sent successfully.", "success")
             return redirect(url_for("notifications.system_notification"))
         except Exception as e:

@@ -22,3 +22,14 @@
   ```
 - **Notes:**
   - Safe to run repeatedly; the script will no-op if the column already exists.
+
+## 2024-11-29 — Add Notification Sender Tracking
+
+- **Script:** `scripts/migrations/20241129_add_notification_sender.py`
+- **Purpose:** Adds a `sender_user_id` column (with index) to the `notifications` table so “sent” messages retain author attribution.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241129_add_notification_sender.py
+  ```
+- **Notes:**
+  - Safe to rerun; the script exits early if the column already exists.

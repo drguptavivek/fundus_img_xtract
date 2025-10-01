@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Compose Notification{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Send Notification</h5>
+          <a href="{{ url_for('notifications.notifications') }}" class="btn btn-sm btn-outline-secondary">Back to Notifications</a>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% from "_forms.html" import csrf_field %}
+            {{ csrf_field() }}
+
+            <div class="mb-3">
+              <label class="form-label">Recipient</label>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="recipient_type" id="recipient_admins" value="admins" checked>
+                <label class="form-check-label" for="recipient_admins">
+                  Send to Admin Team
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="recipient_type" id="recipient_user" value="user" {% if not peer_options %}disabled{% endif %}>
+                <label class="form-check-label" for="recipient_user">
+                  Send to a colleague in my lab unit
+                  {% if not peer_options %}
+                    <span class="text-muted">(No colleagues available)</span>
+                  {% endif %}
+                </label>
+              </div>
+            </div>
+
+            <div class="mb-3" id="peer-selector" hidden>
+              <label for="peer_user_id" class="form-label">Select User</label>
+              <select name="peer_user_id" id="peer_user_id" class="form-select" {% if not peer_options %}disabled{% endif %}>
+                <option value="">Choose…</option>
+                {% for peer in peer_options %}
+                  <option value="{{ peer.id }}">{{ peer.label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Only users assigned to at least one of your lab units are listed.</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="title" class="form-label">Title</label>
+              <input type="text" name="title" id="title" class="form-control" maxlength="255" required>
+            </div>
+
+            <div class="mb-3">
+              <label for="message" class="form-label">Message</label>
+              <textarea name="message" id="message" class="form-control" rows="5" required></textarea>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+              <button type="submit" class="btn btn-primary">Send Notification</button>
+              <a href="{{ url_for('notifications.notifications') }}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const adminRadio = document.getElementById('recipient_admins');
+    const userRadio = document.getElementById('recipient_user');
+    const peerSelector = document.getElementById('peer-selector');
+    const peerSelectInput = document.getElementById('peer_user_id');
+
+    function togglePeerSelector() {
+      const showPeers = userRadio.checked && !userRadio.disabled;
+      peerSelector.hidden = !showPeers;
+      peerSelectInput.disabled = !showPeers || peerSelectInput.options.length <= 1;
+      if (!showPeers) {
+        peerSelectInput.value = '';
+      }
+    }
+
+    adminRadio.addEventListener('change', togglePeerSelector);
+    userRadio.addEventListener('change', togglePeerSelector);
+    togglePeerSelector();
+  });
+</script>
+{% endblock %}

@@ -59,40 +59,35 @@ def get_daily_upload_dir():
 @bp.route("/upload_files", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def upload_form():
-    # Get available hospitals and lab units for the current user
+    # Get available hospitals and lab units for the current user via shared eligibility helper
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+
     db = Session()
     try:
-        # If user is admin, get all hospitals and lab units
-        if current_user.has_role('admin'):
-            hospitals = db.query(Hospital).order_by(Hospital.name).all()
-            lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
-        else:
-            # For non-admin users, fetch only their assigned lab units and associated hospitals
-            allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            if allowed_lab_unit_ids:
-                lab_units = (
-                    db.query(LabUnit)
-                    .options(selectinload(LabUnit.hospital))
-                    .filter(LabUnit.id.in_(list(allowed_lab_unit_ids)))
-                    .order_by(LabUnit.name)
+        if allowed_lab_unit_ids:
+            lab_units = (
+                db.query(LabUnit)
+                .options(selectinload(LabUnit.hospital))
+                .filter(LabUnit.id.in_(list(allowed_lab_unit_ids)))
+                .order_by(LabUnit.name)
+                .all()
+            )
+            hospital_ids = sorted({lu.hospital_id for lu in lab_units if lu.hospital_id is not None})
+            if hospital_ids:
+                hospitals = (
+                    db.query(Hospital)
+                    .filter(Hospital.id.in_(hospital_ids))
+                    .order_by(Hospital.name)
                     .all()
                 )
-                hospital_ids = sorted({lu.hospital_id for lu in lab_units if lu.hospital_id is not None})
-                if hospital_ids:
-                    hospitals = (
-                        db.query(Hospital)
-                        .filter(Hospital.id.in_(hospital_ids))
-                        .order_by(Hospital.name)
-                        .all()
-                    )
-                else:
-                    hospitals = []
             else:
-                lab_units = []
                 hospitals = []
+        else:
+            lab_units = []
+            hospitals = []
     finally:
         db.close()
-        
+
     return render_template(
         "upload/upload_multi.html",
         per_file_mb=int(current_app.config["PER_FILE_MAX_BYTES"] / (1024 * 1024)),
@@ -119,6 +114,8 @@ def upload_files():
         flash("Please select both a hospital and a lab unit.", "danger")
         return redirect(url_for("remedio_zip_uploads.upload_form"))
 
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+
     # Validate that the selected lab unit belongs to the selected hospital
     db = Session()
     try:
@@ -132,11 +129,12 @@ def upload_files():
             return redirect(url_for("remedio_zip_uploads.upload_form"))
             
         # Validate that the current user has access to this lab unit
-        if not current_user.has_role('admin'):
-            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            if lab_unit_id not in user_lab_unit_ids:
-                flash("You don't have access to the selected lab unit.", "danger")
-                return redirect(url_for("remedio_zip_uploads.upload_form"))
+        if allowed_lab_unit_ids and lab_unit_id not in allowed_lab_unit_ids:
+            flash("You don't have access to the selected lab unit.", "danger")
+            return redirect(url_for("remedio_zip_uploads.upload_form"))
+        if not allowed_lab_unit_ids and not current_user.has_role('admin'):
+            flash("You don't have access to any lab units. Contact an administrator.", "danger")
+            return redirect(url_for("remedio_zip_uploads.upload_form"))
     finally:
         db.close()
 

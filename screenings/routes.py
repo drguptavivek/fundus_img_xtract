@@ -3,12 +3,14 @@ from math import ceil
 import re
 from datetime import datetime
 from flask import abort, render_template, request, current_app, url_for
+from flask_login import current_user
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
 
 from auth.roles import roles_required
 from . import bp
 from models import Session, PatientEncounters, LabUnit, Hospital
+from utils.upload_eligibility import get_user_lab_unit_ids
  
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
@@ -19,6 +21,8 @@ def list_screenings():
     per_page = int(current_app.config.get("SCREENINGS_PAGE_SIZE", 50)) or 50
     page = max(1, page)
     per_page = max(1, per_page)
+
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
 
     db = Session()
     try:
@@ -37,6 +41,23 @@ def list_screenings():
                 PatientEncounters.id.desc(),
             )
         )
+
+        if allowed_lab_unit_ids:
+            base_q = base_q.filter(PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids)))
+        else:
+            return render_template(
+                "screenings/list.html",
+                items=[],
+                page=page,
+                per_page=per_page,
+                total=0,
+                total_pages=1,
+                has_prev=False,
+                has_next=False,
+                prev_url=None,
+                next_url=None,
+                q=q,
+            )
 
         # --- Search by patient_id or name ---
         # PatientEncounters has columns 'patient_id' and 'name'  :contentReference[oaicite:0]{index=0}
@@ -109,6 +130,8 @@ def list_screenings():
 def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+
     db = Session()
     try:
         encounter = (
@@ -125,6 +148,9 @@ def screening_detail(encounter_id: int):
         )
         if not encounter:
             abort(404, description="Encounter not found")
+
+        if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+            abort(403)
 
         # Prev/Next (global ordering: capture_date DESC, id DESC)
         prev_enc = (
@@ -186,4 +212,3 @@ def screening_detail(encounter_id: int):
         next_url=next_url,
         gallery_id=gallery_id,     
     )
-

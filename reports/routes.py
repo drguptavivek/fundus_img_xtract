@@ -12,19 +12,19 @@ from utils.utilsImgServe import encounterDrReportByUUID, encounterGlaucomaReport
 
 # --- Serve split report PDFs by report UUIDs ---
 @bp.route("/dr/by-uuid/<uuid>", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def serve_dr_pdf_by_uuid(uuid: str):
     return encounterDrReportByUUID(uuid)
 
 
 @bp.route("/glaucoma/by-uuid/<uuid>", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def serve_glaucoma_pdf_by_uuid(uuid: str):
     return encounterGlaucomaReportByUUID(uuid)
 
 
 @bp.route("/glaucoma_results", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def glaucoma_results_redirect():
     # Redirect old path to new blueprint path
     return redirect(url_for("verify_remedio_glaucoma.glaucoma_results"), code=302)

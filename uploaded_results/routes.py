@@ -1,11 +1,13 @@
 # uploaded_results/routes.py
 from math import ceil
 from flask import render_template, request, current_app, url_for
+from flask_login import current_user
 
 from auth.roles import roles_required
 from . import bp
 from models import Session, ZipFile, PatientEncounters, LabUnit, Hospital
 from sqlalchemy.orm import selectinload  
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 @bp.route("/uploaded_results", methods=["GET"])
@@ -16,27 +18,37 @@ def list_uploaded_results():
     per_page = int(current_app.config.get("UPLOADED_RESULTS_PAGE_SIZE", 50))
     page = 1 if page < 1 else page
 
+    allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+
     db = Session()
     try:
-        # Create a separate query for counting (without expensive joins)
-        total = db.query(ZipFile).count()
-        
-        # ✅ Eager-load the one-to-one relationship to avoid DetachedInstanceError
-        # Also load lab_unit and hospital information
-        items = (
-            db.query(ZipFile)
-              .options(selectinload(ZipFile.patient_encounter)
-                       .selectinload(PatientEncounters.lab_unit)
-                       .selectinload(LabUnit.hospital))
-              .order_by(ZipFile.id.desc())
-              .offset((page - 1) * per_page)
-              .limit(per_page)
-              .all()
-        )
-        # Now `z.patient_encounter` and its relationships are already loaded on each item
+        if not allowed_lab_unit_ids:
+            total = 0
+            items = []
+        else:
+            filtered_query = db.query(ZipFile).filter(
+                ZipFile.patient_encounter.has(
+                    PatientEncounters.lab_unit_id.in_(list(allowed_lab_unit_ids))
+                )
+            )
+
+            total = filtered_query.count()
+
+            items = (
+                filtered_query
+                .options(
+                    selectinload(ZipFile.patient_encounter)
+                    .selectinload(PatientEncounters.lab_unit)
+                    .selectinload(LabUnit.hospital)
+                )
+                .order_by(ZipFile.id.desc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+                .all()
+            )
     finally:
         db.close()
-        
+
     total_pages = max(1, ceil(total / per_page)) if total else 1
     has_prev = page > 1
     has_next = page < total_pages

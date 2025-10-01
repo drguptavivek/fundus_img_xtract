@@ -301,8 +301,8 @@ def create_app():
     from jobs import jobs_bp
     app.register_blueprint(jobs_bp)
     
-    from uploaded_results import bp as uploaded_results_bp
-    app.register_blueprint(uploaded_results_bp)
+    from uploaded_zips import bp as uploaded_zips_bp
+    app.register_blueprint(uploaded_zips_bp)
 
     from screenings import bp as screenings_bp
     app.register_blueprint(screenings_bp)

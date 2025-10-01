@@ -1,4 +1,4 @@
-# uploaded_results/routes.py
+# uploaded_zips/routes.py
 from math import ceil
 from flask import render_template, request, current_app, url_for
 from flask_login import current_user
@@ -12,7 +12,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 
 @bp.route("/uploaded_zips", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
-def list_uploaded_results():
+def list_uploaded_zips():
     # Pagination inputs
     page = request.args.get("page", default=1, type=int)
     per_page = int(current_app.config.get("UPLOADED_RESULTS_PAGE_SIZE", 50))
@@ -66,6 +66,6 @@ def list_uploaded_results():
         total_pages=total_pages,
         has_prev=has_prev,
         has_next=has_next,
-        prev_url=url_for("uploaded_results.list_uploaded_results", page=page - 1) if has_prev else None,
-        next_url=url_for("uploaded_results.list_uploaded_results", page=page + 1) if has_next else None,
+        prev_url=url_for("uploaded_zips.list_uploaded_zips", page=page - 1) if has_prev else None,
+        next_url=url_for("uploaded_zips.list_uploaded_zips", page=page + 1) if has_next else None,
     )

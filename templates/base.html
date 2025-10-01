@@ -75,7 +75,7 @@
 
           {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_results','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Upload
             </a>
@@ -92,8 +92,8 @@
                   href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload Zips</a>
               </li>
               <li>
-                <a class="dropdown-item {% if request.endpoint == 'uploaded_results.list_uploaded_results' %}active{% endif %}"
-                  href="{{ url_for('uploaded_results.list_uploaded_results') }}">Uploaded ZIPs</a>
+                <a class="dropdown-item {% if request.endpoint == 'uploaded_zips.list_uploaded_zips' %}active{% endif %}"
+                  href="{{ url_for('uploaded_zips.list_uploaded_zips') }}">Uploaded ZIPs</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'screenings' or (request.endpoint|default('', true)).startswith('screenings.')) else '' }}"

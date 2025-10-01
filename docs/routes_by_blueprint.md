@@ -51,11 +51,11 @@ This document organizes all application routes by their respective blueprints fo
 | /upload_files | uploads.upload_form | GET | admin, fileUploader |
 | /upload | uploads.upload_files | POST | admin, fileUploader |
 
-## Uploaded Results (uploaded_results)
+## Uploaded Zips (uploaded_zips)
 
 | Route Path | URL For | HTTP Methods | Roles Required |
 |------------|---------|--------------|----------------|
-| /uploaded_zips | uploaded_results.list_uploaded_results | GET | admin, fileUploader |
+| /uploaded_zips | uploaded_zips.list_uploaded_zips | GET | admin, fileUploader |
 
 ## Job Processing (jobs)
 

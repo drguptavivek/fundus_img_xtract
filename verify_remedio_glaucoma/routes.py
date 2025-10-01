@@ -156,7 +156,7 @@ def glaucoma_results():
 
 
 @bp.route("/list", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "optometrist", "data_manager")
 def glaucoma_list():
     """Date-wise pagination: each page shows all reports for one capture_date_dt."""
     page = request.args.get("page", default=1, type=int) or 1

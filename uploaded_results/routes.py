@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from utils.upload_eligibility import get_user_lab_unit_ids
 
 
-@bp.route("/uploaded_results", methods=["GET"])
+@bp.route("/uploaded_zips", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def list_uploaded_results():
     # Pagination inputs

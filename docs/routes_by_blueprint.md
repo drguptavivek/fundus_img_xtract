@@ -55,7 +55,7 @@ This document organizes all application routes by their respective blueprints fo
 
 | Route Path | URL For | HTTP Methods | Roles Required |
 |------------|---------|--------------|----------------|
-| /uploaded_results | uploaded_results.list_uploaded_results | GET | admin, fileUploader |
+| /uploaded_zips | uploaded_results.list_uploaded_results | GET | admin, fileUploader |
 
 ## Job Processing (jobs)
 

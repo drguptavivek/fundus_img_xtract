@@ -29,7 +29,7 @@ admin.users_update                               POST       /admin/users/<int:us
 
 uploads.upload_files                             POST       /upload                                                 
 uploads.upload_form                              GET        /upload_files                                           
-uploaded_results.list_uploaded_results           GET        /uploaded_results                                       
+uploaded_results.list_uploaded_results           GET        /uploaded_zips                                           
 
 direct_uploads.upload                            GET, POST  /direct/upload                                          
 direct_uploads.upload_processing                 GET        /direct/upload/processing/<int:job_id>                  

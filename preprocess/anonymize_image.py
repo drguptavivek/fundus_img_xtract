@@ -112,7 +112,7 @@ def _get_next_unverified_uuid(db_session) -> str | None:
 # ---------------------------
 
 @bp.route("/dashboard", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+@roles_required("admin", "optometrist", "data_manager")
 def anonymization_dashboard():
     """
     Totals, recents, and a 'next image' UUID for anonymization.

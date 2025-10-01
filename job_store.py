@@ -2,8 +2,8 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy.orm import Session as DBSession
-from models import Session, Job, JobItem
+from sqlalchemy.orm import Session as DBSession, selectinload
+from models import Session, Job, JobItem, LabUnit
 
 def db_create_job(
     filenames: List[str],
@@ -12,6 +12,7 @@ def db_create_job(
     uploader_user_id: Optional[int] = None,
     uploader_username: Optional[str] = None,
     uploader_ip: Optional[str] = None,
+    lab_unit_id: Optional[int] = None,
 ) -> str:
     db: DBSession = Session()
     try:
@@ -22,6 +23,7 @@ def db_create_job(
             uploader_user_id=uploader_user_id,
             uploader_username=uploader_username,
             uploader_ip=uploader_ip,
+            lab_unit_id=lab_unit_id,
         )
         db.add(job)
         db.flush()
@@ -45,7 +47,12 @@ def db_create_job(
 def db_set_job_status(job_token: str, status: str, error: str | None = None) -> None:
     db = Session()
     try:
-        job = db.query(Job).filter_by(token=job_token).first()
+        job = (
+            db.query(Job)
+            .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
+            .filter_by(token=job_token)
+            .first()
+        )
         if not job:
             return
         job.status = status
@@ -103,6 +110,9 @@ def db_get_job_payload(job_token: str) -> dict | None:
             "uploader_user_id": job.uploader_user_id,
             "uploader_username": job.uploader_username,
             "uploader_ip": job.uploader_ip,
+            "lab_unit_id": job.lab_unit_id,
+            "lab_unit_name": job.lab_unit.name if getattr(job, "lab_unit", None) else None,
+            "lab_unit_hospital_name": job.lab_unit.hospital.name if getattr(job, "lab_unit", None) and getattr(job.lab_unit, "hospital", None) else None,
             "created_at": job.created_at.isoformat() + "Z" if job.created_at else None,
             "updated_at": job.updated_at.isoformat() + "Z" if job.updated_at else None,
             "items": [

@@ -25,6 +25,8 @@
           <dd class="col-sm-9"><span id="uploader_username">-</span></dd>
           <dt class="col-sm-3">Uploader IP</dt>
           <dd class="col-sm-9"><span id="uploader_ip">-</span></dd>
+          <dt class="col-sm-3">Lab Unit</dt>
+          <dd class="col-sm-9"><span id="lab_unit">-</span></dd>
           <dt class="col-sm-3">Errored Items</dt>
           <dd class="col-sm-9"><span id="error_count">0</span></dd>
         </dl>
@@ -66,7 +68,7 @@
   async function poll() {
     const jobId = "{{ job_id }}";
     try {
-      const res = await fetch(`/api/upload-jobs/${jobId}`, { cache: 'no-store' });
+      const res = await fetch(`/jobs/${jobId}`, { cache: 'no-store' });
       const data = await res.json();
 
       const statusEl = document.getElementById('status');
@@ -76,6 +78,7 @@
       const rejEl = document.getElementById('rejected');
       const upUserEl = document.getElementById('uploader_username');
       const upIpEl = document.getElementById('uploader_ip');
+      const labUnitEl = document.getElementById('lab_unit');
 
       // header status
       statusEl.className = `badge bg-${badgeClassForState(data.status)}`;
@@ -86,6 +89,14 @@
       errorEl.textContent = String(errorCount);
       upUserEl.textContent = data.uploader_username || '-';
       upIpEl.textContent = data.uploader_ip || '-';
+      if (data.lab_unit_name) {
+        const hospital = data.lab_unit_hospital_name ? ` • ${data.lab_unit_hospital_name}` : '';
+        labUnitEl.textContent = `${data.lab_unit_name}${hospital}${data.lab_unit_id ? ` (ID ${data.lab_unit_id})` : ''}`;
+      } else if (data.lab_unit_id) {
+        labUnitEl.textContent = `ID ${data.lab_unit_id}`;
+      } else {
+        labUnitEl.textContent = '-';
+      }
 
       // files list
       listEl.innerHTML = '';

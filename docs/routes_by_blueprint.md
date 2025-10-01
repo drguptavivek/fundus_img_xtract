@@ -62,8 +62,8 @@ This document organizes all application routes by their respective blueprints fo
 | Route Path | URL For | HTTP Methods | Roles Required |
 |------------|---------|--------------|----------------|
 | /jobs/ | jobs.list_recent_jobs | GET | admin |
-| /jobs/\<job_token\> | jobs.job_status_json | GET | admin |
-| /jobs/\<job_token\>/view | jobs.job_status_page | GET | admin |
+| /jobs/\<job_token\> | jobs.job_status_json | GET | admin, fileUploader, optometrist, data_manager |
+| /jobs/\<job_token\>/view | jobs.job_status_page | GET | admin, fileUploader, optometrist, data_manager |
 
 ## Patient Screenings (screenings)
 

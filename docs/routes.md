@@ -30,8 +30,8 @@ This document lists all the routes in the Fundus Image Manager application, orga
 | /upload | uploads.upload_files | POST | uploads/routes.py | admin, fileUploader |
 | /uploaded_results | uploaded_results.list_uploaded_results | GET | uploaded_results/routes.py | admin, fileUploader |
 | /jobs/ | jobs.list_recent_jobs | GET | jobs/routes.py | admin |
-| /jobs/\<job_token\> | jobs.job_status_json | GET | jobs/routes.py | admin |
-| /jobs/\<job_token\>/view | jobs.job_status_page | GET | jobs/routes.py | admin |
+| /jobs/\<job_token\> | jobs.job_status_json | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
+| /jobs/\<job_token\>/view | jobs.job_status_page | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
 | /screenings/ | screenings.list_screenings | GET | screenings/routes.py | admin, ophthalmologist |
 | /screenings/\<int:encounter_id\> | screenings.screening_detail | GET | screenings/routes.py | admin |
 | /reports/dr/\<path:filename\> | reports.serve_dr_pdf | GET | reports/routes.py | admin |

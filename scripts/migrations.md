@@ -11,3 +11,14 @@
 - **Notes:**
   - Safe to run multiple times; the script exits early if the column already exists.
   - Update the `.env` variable `DEFAULT_DISPLAY_TIMEZONE` if you need a different default before running.
+
+## 2024-11-29 — Track Lab Unit on Jobs
+
+- **Script:** `scripts/migrations/20241129_add_job_lab_unit_id.py`
+- **Purpose:** Adds a nullable `lab_unit_id` column (indexed) to the `jobs` table so uploads can be tied back to a specific lab unit.
+- **Run:**
+  ```bash
+  uv run scripts/migrations/20241129_add_job_lab_unit_id.py
+  ```
+- **Notes:**
+  - Safe to run repeatedly; the script will no-op if the column already exists.

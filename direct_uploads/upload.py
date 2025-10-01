@@ -107,7 +107,8 @@ def upload():
                 status="processing",
                 uploader_user_id=current_user.id,
                 uploader_username=current_user.username,
-                uploader_ip=request.remote_addr
+                uploader_ip=request.remote_addr,
+                lab_unit_id=lab_unit.id,
             )
             db_session.add(new_job)
             db_session.flush()

@@ -18,6 +18,7 @@
           <th style="width: 160px;">Created (UTC)</th>
           <th>Token</th>
           <th>Uploaded By</th>
+          <th>Lab Unit</th>
           <th>Uploader IP</th>
           <th style="width: 160px;">Status</th>
           <th>Error</th>
@@ -31,6 +32,14 @@
           <td>{{ j.created_at|user_datetime('%Y-%m-%d %H:%M:%S') if j.created_at else '-' }}</td>
           <td><code>{{ j.token }}</code></td>
           <td>{{ j.uploader_username or '-' }}</td>
+          <td>
+            {% if j.lab_unit %}
+              <div class="small fw-semibold">{{ j.lab_unit.name }}</div>
+              <div class="text-muted small">Hospital: {{ j.lab_unit.hospital.name if j.lab_unit.hospital else '-' }}</div>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
           <td><code>{{ j.uploader_ip or '-' }}</code></td>
           <td>
             {% set c = 'secondary' %}
@@ -60,7 +69,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-center text-muted p-4">No jobs yet.</td></tr>
+        <tr><td colspan="9" class="text-center text-muted p-4">No jobs yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

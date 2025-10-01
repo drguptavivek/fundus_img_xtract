@@ -220,6 +220,7 @@ def upload_files():
         uploader_user_id=uploader_user_id,
         uploader_username=uploader_username,
         uploader_ip=ip,
+        lab_unit_id=lab_unit_id,
     )
     queue_job(current_app, job_token, saved_paths)
 

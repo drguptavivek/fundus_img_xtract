@@ -767,7 +767,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /upload-jobs/{job_token}:
+  /jobs/{job_token}:
     get:
       summary: Get upload job status by token
       description: Get job status as JSON

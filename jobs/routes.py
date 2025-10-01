@@ -1,10 +1,9 @@
 # jobs/routes.py
 from flask import jsonify, render_template
-from flask import current_app
-from flask import request
 from auth.roles import roles_required
 from job_store import db_get_job_payload
-from models import Session, Job, JobItem  # <-- add this import
+from sqlalchemy.orm import selectinload
+from models import Session, Job, JobItem, LabUnit
 
 
 from . import jobs_bp
@@ -15,6 +14,7 @@ def list_recent_jobs():
     try:
         jobs = (
             db.query(Job)
+            .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
             .order_by(Job.created_at.desc())
             .limit(100)
             .all()
@@ -48,4 +48,3 @@ def job_status_json(job_token: str):
 def job_status_page(job_token: str):
     # simple HTML page that polls <token> JSON
     return render_template("jobs/job_status.html", job_id=job_token)
-

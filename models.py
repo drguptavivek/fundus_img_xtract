@@ -298,7 +298,9 @@ class Job(Base):
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     uploader_username: Mapped[str | None] = mapped_column(String(150), nullable=True, index=True)
     uploader_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey("lab_units.id"), nullable=True, index=True)
     items: Mapped[List["JobItem"]] = relationship(back_populates="job", cascade="all, delete-orphan")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
 
 class JobItem(Base):
     __tablename__ = "job_items"

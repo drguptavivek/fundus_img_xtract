@@ -55,6 +55,12 @@ class User(Base):
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
+    notifications: Mapped[List["Notification"]] = relationship(
+        "Notification",
+        foreign_keys="Notification.recipient_user_id",
+        back_populates="recipient",
+        lazy="selectin",
+    )
 
     @property
     def is_authenticated(self) -> bool: return True
@@ -627,13 +633,7 @@ class Notification(Base):
         self.is_read = True
 
 
-# Add notifications relationship to User model (add this to the existing User model)
-# For this to work, we need to modify the User model to add this relationship
-# Let's add the notifications relationship to the User class (it would need to be added to the User class definition)
-# Since we're appending, we'll define a separate association
-User.notifications: Mapped[List['Notification']] = relationship('Notification', foreign_keys=[Notification.recipient_user_id], back_populates='recipient')
-
- 
+# --- Engine and Session Creation ---
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

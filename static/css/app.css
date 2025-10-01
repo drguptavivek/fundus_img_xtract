@@ -878,3 +878,73 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
         border-radius: 4px;        /* Optional: adds rounded corners to the track */
     }
 }
+/* Accessible outline buttons */
+[data-bs-theme="light"] .btn-outline-primary {
+  color: #075b5d;
+  border-color: #0ea5a6;
+  background-color: rgba(14, 165, 166, 0.12);
+}
+
+[data-bs-theme="light"] .btn-outline-primary:hover,
+[data-bs-theme="light"] .btn-outline-primary:focus,
+[data-bs-theme="light"] .btn-outline-primary:active,
+[data-bs-theme="light"] .btn-outline-primary.active {
+  color: #ffffff;
+  background-color: #0ea5a6;
+  border-color: #0ea5a6;
+}
+
+[data-bs-theme="light"] .btn-outline-secondary {
+  color: #374151;
+  border-color: #5b6073;
+  background-color: rgba(91, 96, 115, 0.14);
+}
+
+[data-bs-theme="light"] .btn-outline-secondary:hover,
+[data-bs-theme="light"] .btn-outline-secondary:focus,
+[data-bs-theme="light"] .btn-outline-secondary:active,
+[data-bs-theme="light"] .btn-outline-secondary.active {
+  color: #ffffff;
+  background-color: #5b6073;
+  border-color: #5b6073;
+}
+
+[data-bs-theme="light"] .btn-outline-primary:focus-visible,
+[data-bs-theme="light"] .btn-outline-secondary:focus-visible {
+  box-shadow: 0 0 0 0.2rem rgba(14, 165, 166, 0.25);
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+  color: rgba(183, 244, 245, 0.9);
+  border-color: rgba(14, 165, 166, 0.6);
+  background-color: rgba(14, 165, 166, 0.16);
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover,
+[data-bs-theme="dark"] .btn-outline-primary:focus,
+[data-bs-theme="dark"] .btn-outline-primary:active,
+[data-bs-theme="dark"] .btn-outline-primary.active {
+  color: #003637;
+  background-color: rgba(14, 165, 166, 0.9);
+  border-color: rgba(14, 165, 166, 0.9);
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary {
+  color: rgba(233, 236, 239, 0.85);
+  border-color: rgba(233, 236, 239, 0.5);
+  background-color: rgba(233, 236, 239, 0.1);
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover,
+[data-bs-theme="dark"] .btn-outline-secondary:focus,
+[data-bs-theme="dark"] .btn-outline-secondary:active,
+[data-bs-theme="dark"] .btn-outline-secondary.active {
+  color: #1f2933;
+  background-color: rgba(233, 236, 239, 0.9);
+  border-color: rgba(233, 236, 239, 0.9);
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:focus-visible,
+[data-bs-theme="dark"] .btn-outline-secondary:focus-visible {
+  box-shadow: 0 0 0 0.2rem rgba(14, 165, 166, 0.3);
+}

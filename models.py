@@ -631,7 +631,7 @@ class Notification(Base):
 # Since we're appending, we'll define a separate association
 User.notifications: Mapped[List['Notification']] = relationship('Notification', foreign_keys=[Notification.recipient_user_id], back_populates='recipient')
 
-
+ 
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

@@ -99,7 +99,7 @@ def upload():
                 if lab_unit.id not in allowed_lab_units:
                     flash("You don't have access to the selected lab unit.", "danger")
                     return redirect(url_for("direct_uploads.upload"), code=303)
-
+ 
             # ---- job bookkeeping ----
             job_token = str(uuid.uuid4())
             new_job = Job(

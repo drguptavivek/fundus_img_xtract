@@ -36,7 +36,7 @@ def list_recent_jobs():
 
 
 @jobs_bp.route("/<job_token>", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def job_status_json(job_token: str):
     payload = db_get_job_payload(job_token)
     if not payload:
@@ -44,7 +44,7 @@ def job_status_json(job_token: str):
     return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
-@roles_required("admin")
+@roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def job_status_page(job_token: str):
     # simple HTML page that polls <token> JSON
     return render_template("jobs/job_status.html", job_id=job_token)

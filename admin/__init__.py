@@ -7,6 +7,7 @@ from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
 from .disease_gradings import list_disease_gradings, get_disease_grading_json, delete_disease_grading
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
+from .logs import log_viewer
 
 
 # Register routes with the blueprint
@@ -42,3 +43,6 @@ admin_bp.add_url_rule("/grading-eligibility/<int:user_id>", view_func=edit_eligi
 
 # Uploads routes
 admin_bp.add_url_rule("/malicious-uploads", view_func=malicious_uploads, methods=["GET"])
+
+# Log viewer
+admin_bp.add_url_rule("/logs", view_func=log_viewer, methods=["GET"])

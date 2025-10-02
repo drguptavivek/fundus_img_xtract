@@ -118,7 +118,6 @@ def create_app():
     grades_log_path  = os.getenv("GRADES_LOG",       os.path.join(log_dir, "grades.log"))
     debug_log_path   = os.getenv("DEBUG_LOG",        os.path.join(log_dir, "debug.log"))
     auth_log_path    = os.getenv("AUTH_LOG",         os.path.join(log_dir, "auth.log"))
-    activity_log_path = os.getenv("ACTIVITY_LOG",    os.path.join(log_dir, "activity.log"))
     runtime_error_log_path = os.getenv("RUNTIME_ERROR_LOG", os.path.join(log_dir, "runtime_error.log"))
     email_success_log_path = os.getenv("EMAIL_SUCCESS_LOG", os.path.join(log_dir, "email_success.log"))
     email_error_log_path = os.getenv("EMAIL_ERROR_LOG", os.path.join(log_dir, "email_error.log"))
@@ -131,12 +130,10 @@ def create_app():
     # Only attach handlers in the reloader child (or when not using the reloader)
     is_reloader_child = (not app.debug) or (os.environ.get("WERKZEUG_RUN_MAIN") == "true")
 
-    http_success_logger = logging.getLogger("http_success")
     http_error_logger   = logging.getLogger("http_error")
     grades_logger       = logging.getLogger("grades")
     debug_logger        = logging.getLogger("debug")
     auth_logger         = logging.getLogger("auth")
-    activity_logger     = logging.getLogger("activity")
     runtime_error_logger = logging.getLogger("runtime_error")
     email_success_logger = logging.getLogger("email_success")
     email_error_logger = logging.getLogger("email_error")
@@ -144,12 +141,10 @@ def create_app():
     email_success_logger = logging.getLogger("email_success")
     email_error_logger = logging.getLogger("email_error")
 
-    http_success_logger.setLevel(logging.INFO)
     http_error_logger.setLevel(logging.WARNING)
     grades_logger.setLevel(logging.INFO)
     debug_logger.setLevel(logging.DEBUG)
     auth_logger.setLevel(logging.INFO)
-    activity_logger.setLevel(logging.INFO)
     runtime_error_logger.setLevel(logging.ERROR)
     email_success_logger.setLevel(logging.INFO)
     email_error_logger.setLevel(logging.ERROR)
@@ -158,12 +153,10 @@ def create_app():
     email_success_logger.setLevel(logging.INFO)
     email_error_logger.setLevel(logging.ERROR)
     
-    http_success_logger.propagate = False
     http_error_logger.propagate   = False
     grades_logger.propagate       = False
     debug_logger.propagate        = False
     auth_logger.propagate         = False
-    activity_logger.propagate     = False
     runtime_error_logger.propagate = False
     email_success_logger.propagate = False
     email_error_logger.propagate = False
@@ -175,12 +168,10 @@ def create_app():
     if is_reloader_child:
         # Clean up any old handlers (debug reloader / multiple inits)
         base_loggers = [
-            http_success_logger,
             http_error_logger,
             grades_logger,
             debug_logger,
             auth_logger,
-            activity_logger,
             runtime_error_logger,
             email_success_logger,
             email_error_logger,
@@ -200,21 +191,28 @@ def create_app():
         elif os.name == "nt":
             disable_rotation = str(os.getenv("ENABLE_LOG_ROTATION_ON_WINDOWS","0")).lower() not in ("1","true","yes")
 
+        class RequestContextFilter(logging.Filter):
+            def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+                record.url = "-"
+                record.method = "-"
+                try:
+                    record.url = request.url  # type: ignore[attr-defined]
+                    record.method = request.method  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                return True
+
         if disable_rotation:
             from logging import FileHandler
-            success_handler = FileHandler(success_log_path, encoding="utf-8", delay=True)
             error_handler   = FileHandler(error_log_path,   encoding="utf-8", delay=True)
             grades_handler  = FileHandler(grades_log_path,  encoding="utf-8", delay=True)
             debug_handler   = FileHandler(debug_log_path,   encoding="utf-8", delay=True)
             auth_handler     = FileHandler(auth_log_path,    encoding="utf-8", delay=True)
-            activity_handler = FileHandler(activity_log_path, encoding="utf-8", delay=True)
             runtime_error_handler = FileHandler(runtime_error_log_path, encoding="utf-8", delay=True)
             email_success_handler = FileHandler(email_success_log_path, encoding="utf-8", delay=True)
             email_error_handler = FileHandler(email_error_log_path, encoding="utf-8", delay=True)
             email_debug_handler = FileHandler(email_debug_log_path, encoding="utf-8", delay=True) if email_debug_log_path else None
         else:
-            success_handler = RotatingFileHandler(success_log_path, maxBytes=2*1024*1024,
-                                                  backupCount=5, encoding="utf-8", delay=True)
             error_handler   = RotatingFileHandler(error_log_path,   maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
             grades_handler  = RotatingFileHandler(grades_log_path,  maxBytes=2*1024*1024,
@@ -222,8 +220,6 @@ def create_app():
             debug_handler   = RotatingFileHandler(debug_log_path,   maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
             auth_handler    = RotatingFileHandler(auth_log_path,    maxBytes=2*1024*1024,
-                                                  backupCount=5, encoding="utf-8", delay=True)
-            activity_handler    = RotatingFileHandler(activity_log_path,    maxBytes=2*1024*1024,
                                                   backupCount=5, encoding="utf-8", delay=True)
             runtime_error_handler = RotatingFileHandler(runtime_error_log_path, maxBytes=2*1024*1024,
                                                        backupCount=5, encoding="utf-8", delay=True)
@@ -235,47 +231,40 @@ def create_app():
                                                       backupCount=5, encoding="utf-8", delay=True) if email_debug_log_path else None
 
         fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-        success_handler.setFormatter(fmt)
-        error_handler.setFormatter(fmt)
+        error_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d url=%(url)s %(message)s")
+        error_handler.addFilter(RequestContextFilter())
+
+        error_handler.setFormatter(error_fmt)
         grades_handler.setFormatter(fmt)
         debug_handler.setFormatter(fmt)
         auth_handler.setFormatter(fmt)
-        activity_handler.setFormatter(fmt)
         runtime_error_handler.setFormatter(fmt)
         email_success_handler.setFormatter(fmt)
         email_error_handler.setFormatter(fmt)
         if email_debug_handler:
             email_debug_handler.setFormatter(fmt)
 
-        http_success_logger.addHandler(success_handler)
         http_error_logger.addHandler(error_handler)
         grades_logger.addHandler(grades_handler)
         debug_logger.addHandler(debug_handler)
         auth_logger.addHandler(auth_handler)
-        activity_logger.addHandler(activity_handler)
         runtime_error_logger.addHandler(runtime_error_handler)
         email_success_logger.addHandler(email_success_handler)
         email_error_logger.addHandler(email_error_handler)
         if email_debug_logger and email_debug_handler:
             email_debug_logger.addHandler(email_debug_handler)
 
-        # Keep app.logger free of its own handlers; route its warnings/errors to error file
+        # Keep app.logger free of its own handlers; route general app logs to the debug handler
         app.logger.handlers = []
         app.logger.setLevel(logging.INFO)
-        app.logger.addHandler(error_handler)
+        app.logger.addHandler(debug_handler)
+        app.logger.propagate = False
 
         # Also send Werkzeug access lines to success file (nice to have)
-        wz = logging.getLogger("werkzeug")
-        wz.setLevel(logging.INFO)
-        wz.propagate = False
-        wz.handlers = [success_handler]
-
         # Emit a one-time startup line so you can verify file opens
-        http_success_logger.info("HTTP success logger initialized at %s", success_log_path)
         grades_logger.info("Grades logger initialized at %s", grades_log_path)
         debug_logger.info("Debug logger initialized at %s", debug_log_path)
         auth_logger.info("Auth logger initialized at %s", auth_log_path)
-        activity_logger.info("Activity logger initialized at %s", activity_log_path)
         runtime_error_logger.info("Runtime error logger initialized at %s", runtime_error_log_path)
         email_success_logger.info("Email success logger initialized at %s", email_success_log_path)
         email_error_logger.info("Email error logger initialized at %s", email_error_log_path)
@@ -365,9 +354,7 @@ def create_app():
             f"duration={duration_ms if duration_ms is not None else '-'}ms"
         )
 
-        if response.status_code < 400:
-            http_success_logger.info(line)
-        else:
+        if response.status_code >= 400:
             http_error_logger.warning(line)
 
         return response

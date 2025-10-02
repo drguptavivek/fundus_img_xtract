@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Log Viewer{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Log Viewer</h1>
+    <span class="small text-muted">Root: {{ log_root }}</span>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-header">
+          <strong>Log Files</strong>
+        </div>
+        <div class="list-group list-group-flush">
+          {% if log_files %}
+            {% for log in log_files %}
+              <a class="list-group-item list-group-item-action {% if selected_file == log.name %}active{% endif %}"
+                 href="{{ url_for('admin.log_viewer', file=log.name) }}">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-truncate">{{ log.name }}</span>
+                  {% if log.size_bytes is not none %}
+                    <span class="badge bg-secondary text-white">{{ log.size_bytes }} B</span>
+                  {% endif %}
+                </div>
+                {% if log.modified_at %}
+                  <div class="small opacity-75">{{ log.modified_at|user_datetime('%Y-%m-%d %H:%M:%S') }}</div>
+                {% endif %}
+              </a>
+            {% endfor %}
+          {% else %}
+            <div class="list-group-item text-muted">No log files found.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-9">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ selected_file or 'Select a log file' }}</strong>
+            {% if selected_meta %}
+              <div class="small text-muted">
+                Size: {{ selected_meta.size_bytes }} B · Updated {{ selected_meta.modified_at|user_datetime('%Y-%m-%d %H:%M:%S') }}
+              </div>
+            {% endif %}
+          </div>
+          {% if content_truncated %}
+          <span class="badge bg-warning text-dark">Showing last {{ config.get('LOG_VIEWER_MAX_BYTES', 500000) }} bytes</span>
+          {% endif %}
+        </div>
+        <div class="card-body" style="max-height: 70vh; overflow:auto;">
+          {% if selected_file %}
+            <pre class="mb-0 small" style="white-space: pre-wrap;">{{ log_content }}</pre>
+          {% else %}
+            <p class="text-muted mb-0">Choose a log file from the list to view its contents.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

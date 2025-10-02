@@ -138,7 +138,7 @@ def revise_grading(grade_id: int):
             
             return response
         except Exception as e:
-            current_app.logger.exception("Failed to load revision task: %s", e)
+            grades_logger.exception("Failed to load revision task: %s", e)
             flash("Failed to load revision task.", "danger")
             return redirect(url_for("grading.index"))
 
@@ -299,7 +299,7 @@ def dual_grading_task(task_id: int, slot_type: str):
                 current_user_id=getattr(current_user, "id", None)
             )
         except Exception as e:
-            current_app.logger.exception("Failed to load grading task: %s", e)
+            grades_logger.exception("Failed to load grading task: %s", e)
             flash("Failed to load grading task.", "danger")
             return redirect(url_for("grading.index"))
 
@@ -570,7 +570,7 @@ def dual_grading_submit():
                         flash("Grade submitted successfully.", "success")
                         return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=slot))
                 except Exception as e:
-                    current_app.logger.exception("Failed to find next task: %s", e)
+                    grades_logger.exception("Failed to find next task: %s", e)
                     flash("Grade submitted successfully, but failed to navigate to next task.", "warning")
                     return redirect(url_for("grading.index"))
             else:
@@ -578,7 +578,6 @@ def dual_grading_submit():
                 flash("Grade submitted successfully.", "success")
                 return redirect(url_for("grading.index"))
         except Exception as e:
-            current_app.logger.exception("Failed to submit grade: %s", e)
+            grades_logger.exception("Failed to submit grade: %s", e)
             flash("Failed to submit grade.", "danger")
             raise  # Re-raise the exception so the transaction is rolled back
-grades_logger = grades_logger

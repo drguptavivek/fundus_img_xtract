@@ -2,11 +2,20 @@ import base64, traceback
 from pathlib import Path
 from flask import request, jsonify, current_app
 from flask_login import current_user
+from sqlalchemy import select
 from . import bp
 from utils.utils import with_session
 from auth.roles import roles_required
-from models import DirectImageUpload, BASE_DIR
+from models import DirectImageUpload, BASE_DIR, GradingTask
 from utils.fileUtils import abs_from_parts
+
+
+def _normalize_task_state(state):
+    if state is None:
+        return ""
+    if not isinstance(state, str):
+        return str(state).strip().lower()
+    return state.strip().lower()
 
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
@@ -24,6 +33,17 @@ def save_edited_image(upload_id: int):
             if not (current_user.has_role('admin', 'data_manager') or upload.uploader_id == current_user.id):
                 current_app.logger.warning("User %s lacks permission to edit %s", current_user.id, upload_id)
                 return jsonify({"error": "You don't have permission to edit this upload."}, 403)
+
+            task_states = db.execute(
+                select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
+            ).scalars().all()
+            if any(_normalize_task_state(state) not in ("", "pending") for state in task_states):
+                current_app.logger.warning(
+                    "Save blocked for upload %s due to task states %s",
+                    upload_id,
+                    task_states,
+                )
+                return jsonify({"error": "Cannot edit image while grading tasks are in progress."}, 409)
 
             image_data = request.get_json().get('image_data') if request.is_json else request.form.get('image_data')
             if not image_data:

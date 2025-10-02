@@ -65,6 +65,19 @@ document.addEventListener('DOMContentLoaded', function() {
     img.src = canvas.dataset.imageUrl;
 
     // --- TOOL SELECTION ---
+    const editingLocked = canvas.dataset.editingLocked === 'true';
+
+    if (editingLocked) {
+        canvas.style.cursor = 'not-allowed';
+        canvas.style.pointerEvents = 'none';
+        [clearCanvasBtn, undoBtn, redoBtn, saveImageBtn, restoreBtn, applyCropBtn, brushSizeSlider, brushColorPicker].forEach(el => {
+            if (el) {
+                el.disabled = true;
+            }
+        });
+        return;
+    }
+
     document.querySelectorAll('input[name="tool"]').forEach(radio => {
         radio.addEventListener('change', function() {
             currentTool = this.value;

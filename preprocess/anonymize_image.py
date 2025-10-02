@@ -20,7 +20,16 @@ from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.stack_trace_handler import StackTraceContextManager, stack_trace_context, log_current_stack
 from models import (
-    Session, User, DirectImageUpload, DirectImageVerify, Hospital, LabUnit, Camera, Disease, Area
+    Session,
+    User,
+    DirectImageUpload,
+    DirectImageVerify,
+    Hospital,
+    LabUnit,
+    Camera,
+    Disease,
+    Area,
+    GradingTask,
 )
 
 # Import task creation services
@@ -41,6 +50,14 @@ def _user_with_lab_units(db_session) -> User:
         .options(selectinload(User.lab_units))
         .where(User.id == current_user.id)
     ).scalar_one()
+
+
+def _normalize_task_state(state) -> str:
+    if state is None:
+        return ""
+    if not isinstance(state, str):
+        return str(state).strip().lower()
+    return state.strip().lower()
 
 def _base_candidate_query(require_unverified: bool, db_session, restrict_to_user: bool):
     base = select(
@@ -330,6 +347,13 @@ def anonymize_image(uuid: UUID):
             flash("Image not found.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
 
+        task_state_rows = db_session.execute(
+            select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
+        ).scalars().all()
+        normalized_task_states = [_normalize_task_state(state) for state in task_state_rows]
+        blocking_task_states = sorted({state for state in normalized_task_states if state and state != "pending"})
+        editing_locked = bool(blocking_task_states)
+
         # Access control (lab_units) for non-admin/data_manager
         is_admin = current_user.has_role("admin")
         is_dm = current_user.has_role("data_manager")
@@ -599,6 +623,8 @@ def anonymize_image(uuid: UUID):
             has_edited_version=bool(upload.edited_filename),
             is_verified=is_verified,
             next_unverified_uuid=next_unverified_uuid,
+            editing_locked=editing_locked,
+            blocking_task_states=blocking_task_states,
         )
 
     finally:
@@ -631,6 +657,12 @@ def restore_original_anonymized_image(uuid: UUID):
             allowed = {lu.id for lu in (user.lab_units or [])}
             if upload.lab_unit_id not in allowed:
                 return jsonify({"error": "You do not have permission to restore this image."}), 403
+
+        task_states = db_session.execute(
+            select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
+        ).scalars().all()
+        if any(_normalize_task_state(state) not in ("", "pending") for state in task_states):
+            return jsonify({"error": "Cannot restore image while grading tasks are in progress."}), 409
 
         # Must have an edited file recorded
         if not (upload.edited_filename and upload.edited_filename.strip()):

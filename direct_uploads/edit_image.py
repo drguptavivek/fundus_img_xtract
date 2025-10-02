@@ -1,13 +1,83 @@
 import traceback
 from pathlib import Path
+from datetime import datetime, timezone
 from flask import render_template, redirect, url_for, flash, current_app, url_for as flask_url_for, jsonify
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
 from . import bp
 from utils.utils import with_session, require_owner_or_roles
 from auth.roles import roles_required
-from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User
+from sqlalchemy import select
+from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
 from utils.fileUtils import abs_from_parts
+
+def _normalize_task_state(state: str | None) -> str:
+    """Return a canonical lowercase task state for comparisons."""
+    if state is None:
+        return ""
+    if not isinstance(state, str):
+        return str(state).strip().lower()
+    return state.strip().lower()
+
+
+def _safe_text(value: object) -> str:
+    """Convert a value into a safe string for logging."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None:
+    """Record that an edit session was permitted for the given upload."""
+    log_location = current_app.config.get("DIRECT_IMAGE_EDIT_LOG", "logs/direct_image_edit.log")
+    log_path = Path(log_location)
+    if not log_path.is_absolute():
+        log_path = Path(current_app.root_path) / log_path
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        current_app.logger.error(
+            "Unable to ensure edit log directory %s exists: %s",
+            log_path.parent,
+            exc,
+        )
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    user_identifier = (
+        f"{current_user.id}:{current_user.username}"
+        if current_user.is_authenticated
+        else "anonymous"
+    )
+    raw_normalized = [_normalize_task_state(state) for state in task_states]
+    normalized_states = sorted({
+        _safe_text(state) for state in raw_normalized if state
+    })
+    states_joined = ",".join(normalized_states) if normalized_states else "none"
+    line = "\t".join(
+        [
+            timestamp,
+            f"event=edit_image_allowed",
+            f"user={user_identifier}",
+            f"upload_id={upload.id}",
+            f"filename={upload.filename}",
+            f"task_states={states_joined}",
+        ]
+    ) + "\n"
+
+    try:
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(line)
+    except OSError as exc:
+        current_app.logger.error(
+            "Failed to append edit log for upload_id=%s at %s: %s",
+            upload.id,
+            log_path,
+            exc,
+        )
 
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
@@ -22,6 +92,28 @@ def edit_image(upload_id: int):
             if not require_owner_or_roles(upload, 'admin', 'data_manager'):
                 flash("You don't have permission to edit this upload.", "danger")
                 return redirect(flask_url_for("direct_uploads.dashboard"))
+
+            raw_states = db.execute(
+                select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
+            ).scalars().all()
+            normalized_states = [_normalize_task_state(state) for state in raw_states]
+            non_pending_states = sorted({state for state in normalized_states if state and state != 'pending'})
+            if non_pending_states:
+                states_list = ", ".join(non_pending_states)
+                current_app.logger.warning(
+                    "Direct image edit blocked for upload_id=%s by user_id=%s due to task states: %s",
+                    upload.id,
+                    current_user.id if current_user.is_authenticated else "anonymous",
+                    states_list,
+                )
+                flash(
+                    "Editing blocked. Grading tasks already in progress: "
+                    f"{states_list}.",
+                    "danger",
+                )
+                return redirect(flask_url_for("direct_uploads.dashboard"))
+
+            _log_allowed_edit(upload, normalized_states)
 
             has_edited_version = bool(upload.edited_filename)
             if has_edited_version:
@@ -64,6 +156,19 @@ def restore_original(upload_id: int):
 
             if not require_owner_or_roles(upload, 'admin', 'data_manager'):
                 return jsonify({"error": "Permission denied."}), 403
+
+            raw_states = db.execute(
+                select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
+            ).scalars().all()
+            normalized_states = [_normalize_task_state(state) for state in raw_states]
+            if any(state and state != 'pending' for state in normalized_states):
+                current_app.logger.warning(
+                    "Restore original blocked for upload_id=%s by user_id=%s due to task states: %s",
+                    upload.id,
+                    current_user.id if current_user.is_authenticated else "anonymous",
+                    sorted({state for state in normalized_states if state and state != 'pending'}),
+                )
+                return jsonify({"error": "Cannot modify image while associated grading tasks are in progress."}), 409
 
             if not upload.edited_filename:
                 return jsonify({"message": "No edited version to restore."}), 200

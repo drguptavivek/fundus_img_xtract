@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+from pathlib import Path
 from flask import request, render_template, redirect, url_for, flash, current_app
 from flask_login import current_user
 from sqlalchemy import select
@@ -12,7 +14,90 @@ from utils.fileUtils import abs_from_parts
 from . import bp
 from utils.utils import with_session
 from auth.roles import roles_required
-from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User
+from models import (
+    DirectImageUpload,
+    Hospital,
+    LabUnit,
+    Camera,
+    Disease,
+    Area,
+    User,
+    GradingTask,
+    utcnow,
+)
+
+
+def _normalize_task_state(state):
+    if state is None:
+        return ""
+    if not isinstance(state, str):
+        return str(state).strip().lower()
+    return state.strip().lower()
+
+
+def _safe_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _log_image_attribute_changes(upload: DirectImageUpload, changes):
+    if not changes:
+        return
+
+    log_location = current_app.config.get("DIRECT_IMAGE_EDIT_LOG", "logs/direct_image_edit.log")
+    log_path = Path(log_location)
+    if not log_path.is_absolute():
+        log_path = Path(current_app.root_path) / log_path
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        current_app.logger.error(
+            "Unable to create directory for direct image edit log at %s: %s",
+            log_path.parent,
+            exc,
+        )
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    user_identifier = (
+        f"{current_user.id}:{current_user.username}"
+        if current_user.is_authenticated
+        else "anonymous"
+    )
+
+    lines = []
+    for change in changes:
+        field_name = _safe_text(change.get("field"))
+        old_value = _safe_text(change.get("old"))
+        new_value = _safe_text(change.get("new"))
+        lines.append(
+            "\t".join(
+                [
+                    timestamp,
+                    f"user={user_identifier}",
+                    f"upload_id={upload.id}",
+                    f"filename={upload.filename}",
+                    f"field={field_name}",
+                    f"old={old_value}",
+                    f"new={new_value}",
+                ]
+            )
+            + "\n"
+        )
+
+    try:
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.writelines(lines)
+    except OSError as exc:
+        current_app.logger.error(
+            "Failed to write to direct image edit log at %s: %s",
+            log_path,
+            exc,
+        )
 
 
 def _to_int(val):
@@ -55,6 +140,28 @@ def edit_upload(upload_id):
         if not (can_choose_any or upload.uploader_id == current_user.id):
             flash("You don't have permission to edit this upload.", "danger")
             return redirect(url_for("direct_uploads.dashboard"))
+
+        task_rows = db.execute(
+            select(GradingTask).where(GradingTask.direct_image_upload_id == upload.id)
+        ).scalars().all()
+        normalized_task_states = [_normalize_task_state(task.state) for task in task_rows]
+        non_pending_states = sorted({state for state in normalized_task_states if state and state != "pending"})
+        if non_pending_states:
+            states_list = ", ".join(non_pending_states)
+            current_app.logger.warning(
+                "Edit metadata blocked for upload_id=%s by user_id=%s due to task states: %s",
+                upload.id,
+                current_user.id if current_user.is_authenticated else "anonymous",
+                states_list,
+            )
+            flash(
+                "Editing blocked. Grading tasks already in progress: "
+                f"{states_list}.",
+                "danger",
+            )
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        pending_tasks = [task for task, state in zip(task_rows, normalized_task_states) if state == "pending"]
 
         # Build allowed sets for users without elevated privileges
         allowed_lab_unit_ids = set()
@@ -118,12 +225,61 @@ def edit_upload(upload_id):
             )
 
             # Apply updates
-            upload.hospital_id = hospital.id
-            upload.lab_unit_id = lab_unit.id
-            upload.camera_id = camera.id
-            upload.disease_id = disease.id
-            upload.area_id = area.id
-            upload.is_mydriatic = is_mydriatic
+            field_changes = []
+            if upload.hospital_id != hospital.id:
+                field_changes.append(
+                    {
+                        "field": "Hospital",
+                        "old": getattr(upload.hospital, "name", str(upload.hospital_id)),
+                        "new": hospital.name,
+                    }
+                )
+                upload.hospital_id = hospital.id
+            if upload.lab_unit_id != lab_unit.id:
+                field_changes.append(
+                    {
+                        "field": "Lab Unit",
+                        "old": getattr(upload.lab_unit, "name", str(upload.lab_unit_id)),
+                        "new": lab_unit.name,
+                    }
+                )
+                upload.lab_unit_id = lab_unit.id
+            if upload.camera_id != camera.id:
+                field_changes.append(
+                    {
+                        "field": "Camera",
+                        "old": getattr(upload.camera, "name", str(upload.camera_id)),
+                        "new": camera.name,
+                    }
+                )
+                upload.camera_id = camera.id
+            if upload.disease_id != disease.id:
+                field_changes.append(
+                    {
+                        "field": "Disease",
+                        "old": getattr(upload.disease, "name", str(upload.disease_id)),
+                        "new": disease.name,
+                    }
+                )
+                upload.disease_id = disease.id
+            if upload.area_id != area.id:
+                field_changes.append(
+                    {
+                        "field": "Area",
+                        "old": getattr(upload.area, "name", str(upload.area_id)),
+                        "new": area.name,
+                    }
+                )
+                upload.area_id = area.id
+            if upload.is_mydriatic != is_mydriatic:
+                field_changes.append(
+                    {
+                        "field": "Mydriatic",
+                        "old": "Yes" if upload.is_mydriatic else "No",
+                        "new": "Yes" if is_mydriatic else "No",
+                    }
+                )
+                upload.is_mydriatic = is_mydriatic
 
             after = dict(
                 hospital_id=upload.hospital_id,
@@ -134,7 +290,23 @@ def edit_upload(upload_id):
                 is_mydriatic=upload.is_mydriatic,
             )
 
+            updated_task_ids = []
+            for task in pending_tasks:
+                task_changed = False
+                if task.lab_unit_id != upload.lab_unit_id:
+                    task.lab_unit_id = upload.lab_unit_id
+                    task_changed = True
+                if task.disease_id != upload.disease_id:
+                    task.disease_id = upload.disease_id
+                    task_changed = True
+                if task_changed:
+                    task.updated_at = utcnow()
+                    updated_task_ids.append(task.id)
+
             db.commit()
+
+            _log_image_attribute_changes(upload, field_changes)
+
             current_app.logger.info(
                 "Upload %s metadata edited by %s (%s) from %s to %s",
                 upload.id,
@@ -143,7 +315,18 @@ def edit_upload(upload_id):
                 before,
                 after,
             )
-            flash("Upload metadata updated successfully.", "success")
+            if updated_task_ids:
+                current_app.logger.info(
+                    "Updated pending grading tasks %s after edit of upload %s",
+                    updated_task_ids,
+                    upload.id,
+                )
+
+            flash(
+                "Upload metadata updated successfully." if not updated_task_ids else
+                f"Upload metadata updated successfully. Pending tasks updated: {len(updated_task_ids)}.",
+                "success",
+            )
             return redirect(url_for("direct_uploads.dashboard"), code=303)
 
         # GET options: admins/managers see all; restricted users see only their own

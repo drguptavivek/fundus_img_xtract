@@ -102,8 +102,9 @@
                   {% endif %}
                   {% if current_user_has('admin') or current_user_has('optometrist') or current_user_has('data_manager')
                   %}
+                  {% set verify_label = 'Edit' if enc and enc.dr_verified_status == 'verified' else 'Verify' %}
                   <a class="btn btn-outline-primary"
-                    href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=dr.id) }}">Verify</a>
+                    href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=dr.id) }}">{{ verify_label }}</a>
                   {% endif %}
                 </div>
               </td>

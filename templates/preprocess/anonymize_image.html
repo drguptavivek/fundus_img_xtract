@@ -27,8 +27,14 @@
              href="{{ url_for('preprocess.anonymize_image', uuid=next_unverified_uuid) }}">
             Next unverified
           </a>
-        {% endif %}
+  {% endif %}
       </span>
+    </div>
+  {% endif %}
+
+  {% if editing_locked %}
+    <div class="alert alert-danger py-2">
+      Editing tools are disabled because grading tasks are in progress{% if blocking_task_states %} ({{ blocking_task_states | join(', ') }}){% endif %}.
     </div>
   {% endif %}
 
@@ -72,7 +78,7 @@
             <div class="tool-group col">
               <div class="tool-label">Actions</div>
               <div class="action-buttons">
-                <button id="clear-canvas" class="btn btn-warning btn-sm">
+                <button id="clear-canvas" class="btn btn-warning btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}>
                   <i class="bi bi-trash"></i> Clear
                 </button>
                 <button id="undo" class="btn btn-secondary btn-sm" disabled>
@@ -81,15 +87,15 @@
                 <button id="redo" class="btn btn-secondary btn-sm" disabled>
                   <i class="bi bi-arrow-clockwise"></i> Redo
                 </button>
-                <button id="apply-crop" class="btn btn-primary btn-sm" style="display: none;">
+                <button id="apply-crop" class="btn btn-primary btn-sm" style="display: none;" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}>
                   <i class="bi bi-check-lg"></i> Apply Crop
                 </button>
-                <button id="save-image" class="btn btn-success btn-sm"
+                <button id="save-image" class="btn btn-success btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}
                         data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
                   <i class="bi bi-save"></i> Save
                 </button>
                 {% if has_edited_version %}
-                  <button id="restore-original" class="btn btn-danger btn-sm"
+                  <button id="restore-original" class="btn btn-danger btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}
                           data-restore-url="{{ url_for('preprocess.restore_original_anonymized_image', uuid=uuid) }}">
                     <i class="bi bi-arrow-repeat"></i> Restore Original
                   </button>
@@ -103,17 +109,17 @@
             <!-- Tool Selection -->
             <div class="tool-group col-5">
               <div class="tool-label">Tools</div>
-              <input type="radio" class="btn-check" name="tool" id="brush-tool" value="brush" autocomplete="off" checked>
+              <input type="radio" class="btn-check" name="tool" id="brush-tool" value="brush" autocomplete="off" checked {% if editing_locked %}disabled{% endif %}>
               <label class="btn btn-outline-primary tool-btn" for="brush-tool">
                 <i class="bi bi-brush"></i> Brush
               </label>
 
-              <input type="radio" class="btn-check" name="tool" id="eraser-tool" value="eraser" autocomplete="off">
+              <input type="radio" class="btn-check" name="tool" id="eraser-tool" value="eraser" autocomplete="off" {% if editing_locked %}disabled{% endif %}>
               <label class="btn btn-outline-primary tool-btn" for="eraser-tool">
                 <i class="bi bi-eraser"></i> Eraser
               </label>
 
-              <input type="radio" class="btn-check" name="tool" id="crop-tool" value="crop" autocomplete="off">
+              <input type="radio" class="btn-check" name="tool" id="crop-tool" value="crop" autocomplete="off" {% if editing_locked %}disabled{% endif %}>
               <label class="btn btn-outline-primary tool-btn" for="crop-tool">
                 <i class="bi bi-crop"></i> Crop
               </label>
@@ -124,7 +130,7 @@
               <div class="tool-label">Size</div>
               <div class="slider-container">
                 <label id="brush-size-value">10px</label>
-                <input type="range" class="form-range" id="brush-size" min="1" max="50" value="10">
+                <input type="range" class="form-range" id="brush-size" min="1" max="50" value="10" {% if editing_locked %}disabled{% endif %}>
               </div>
             </div>
 
@@ -132,7 +138,7 @@
             <div class="tool-group col-2">
               <div class="tool-label">Color</div>
               <div class="color-picker-container">
-                <input type="color" class="form-control form-control-color" id="brush-color"
+                <input type="color" class="form-control form-control-color" id="brush-color" {% if editing_locked %}disabled{% endif %}
                        value="#000000" title="Choose brush color"
                        style="border-width: 2px; border-color: rgb(195, 190, 190);">
               </div>
@@ -176,7 +182,7 @@
 
       <!-- Canvas Container (90% width) -->
       <div class="canvas-container">
-        <canvas id="imageCanvas" data-image-url="{{ image_url }}"></canvas>
+        <canvas id="imageCanvas" data-image-url="{{ image_url }}" data-editing-locked="{{ 'true' if editing_locked else 'false' }}"></canvas>
       </div>
     </div>
   </div><!-- Image Editor Wrapper -->

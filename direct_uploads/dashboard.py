@@ -4,6 +4,7 @@ from flask import request, render_template, redirect, url_for, flash, current_ap
 from flask_login import current_user
 from sqlalchemy import select, func
 from datetime import datetime, timezone
+from pathlib import Path
 from models import (
     User,
     LabUnit,
@@ -31,6 +32,73 @@ def _to_int(v):
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+def _safe_text(value: object) -> str:
+    """Convert a value into a safe string for logging."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[str, object]]) -> None:
+    """Append attribute change details to the direct image edit log."""
+    if not changes:
+        return
+
+    log_location = current_app.config.get("DIRECT_IMAGE_EDIT_LOG", "logs/direct_image_edit.log")
+    log_path = Path(log_location)
+    if not log_path.is_absolute():
+        log_path = Path(current_app.root_path) / log_path
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        current_app.logger.error(
+            "Unable to create directory for direct image edit log at %s: %s",
+            log_path.parent,
+            exc,
+        )
+        return
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    user_identifier = (
+        f"{current_user.id}:{current_user.username}"
+        if current_user.is_authenticated
+        else "anonymous"
+    )
+
+    lines: list[str] = []
+    for change in changes:
+        field_name = _safe_text(change.get("field"))
+        old_value = _safe_text(change.get("old"))
+        new_value = _safe_text(change.get("new"))
+        lines.append(
+            "\t".join(
+                [
+                    timestamp,
+                    f"user={user_identifier}",
+                    f"upload_id={upload.id}",
+                    f"filename={upload.filename}",
+                    f"field={field_name}",
+                    f"old={old_value}",
+                    f"new={new_value}",
+                ]
+            )
+            + "\n"
+        )
+
+    try:
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.writelines(lines)
+    except OSError as exc:
+        current_app.logger.error(
+            "Failed to write to direct image edit log at %s: %s",
+            log_path,
+            exc,
+        )
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
@@ -267,6 +335,9 @@ def dashboard():
                             task.updated_at = utcnow()
                             updated_tasks += 1
                             changed_task_ids.append(task.id)
+
+                    if field_changes:
+                        _log_image_attribute_changes(upload, field_changes)
 
                     updated_count += 1
                     updated_payload.append(

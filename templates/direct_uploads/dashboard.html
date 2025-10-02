@@ -359,7 +359,14 @@
                             onclick="hideBulkEdit()">Cancel</button>
                     </div>
                 </div>
-
+                <!-- Select All Checkboxes -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="select-all-top">
+                        <label class="form-check-label" for="select-all-top">Select all visible uploads</label>
+                    </div>
+                </div>
+                
                 <!-- Pagination Top -->
                 {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}
 
@@ -525,13 +532,7 @@
                     {% endfor %}
                 </div>
 
-                <!-- Select All Checkboxes -->
-                <div class="mb-3">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="select-all-top">
-                        <label class="form-check-label" for="select-all-top">Select all visible uploads</label>
-                    </div>
-                </div>
+
 
                 <!-- Pagination Bottom -->
                 {{ render_pagination(current_page, total_pages, 'direct_uploads.dashboard') }}

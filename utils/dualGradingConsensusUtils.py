@@ -15,6 +15,9 @@ import logging
 from datetime import datetime
 
 
+consensus_logger = logging.getLogger("consensus")
+
+
 def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
     """
     Create or update consensus for a task based on grades.
@@ -109,7 +112,7 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
             
         return consensus
     except Exception as e:
-        logging.getLogger("consensus").exception(f"Failed to create/update consensus for task {task_id}: {e}")
+        consensus_logger.exception(f"Failed to create/update consensus for task {task_id}: {e}")
         if db and close_db:
             db.rollback()
         return None
@@ -194,7 +197,7 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
             )
         }
     except Exception as e:
-        logging.getLogger("consensus").exception(f"Failed to get consensus status for task {task_id}: {e}")
+        consensus_logger.exception(f"Failed to get consensus status for task {task_id}: {e}")
         return {"error": f"Failed to get consensus status: {e}"}
     finally:
         if close_db:
@@ -231,7 +234,7 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
         # Log current state and grades for debugging
-        logging.getLogger("consensus").debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, faculty_grade={faculty_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
+        consensus_logger.debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, faculty_grade={faculty_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
         
         # Determine new state
         if arbitrator_grade:
@@ -256,7 +259,7 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
         if task.state != new_state:
             old_state = task.state
             task.state = new_state
-            logging.getLogger("consensus").info(f"Task {task_id} state updated from '{old_state}' to '{new_state}'")
+            consensus_logger.info(f"Task {task_id} state updated from '{old_state}' to '{new_state}'")
             
             # Explicitly mark the task as modified to ensure changes are persisted
             from sqlalchemy import inspect
@@ -274,7 +277,7 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
         
         return task
     except Exception as e:
-        logging.getLogger("consensus").exception(f"Failed to update task state for task {task_id}: {e}")
+        consensus_logger.exception(f"Failed to update task state for task {task_id}: {e}")
         if db and close_db:
             db.rollback()
         return None
@@ -303,7 +306,7 @@ def has_consensus(task_id: int, db=None) -> bool:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus is not None
     except Exception as e:
-        logging.getLogger("consensus").exception(f"Failed to check consensus for task {task_id}: {e}")
+        consensus_logger.exception(f"Failed to check consensus for task {task_id}: {e}")
         return False
     finally:
         if close_db:
@@ -330,7 +333,7 @@ def get_consensus_method(task_id: int, db=None) -> Optional[str]:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus.method if consensus else None
     except Exception as e:
-        logging.getLogger("consensus").exception(f"Failed to get consensus method for task {task_id}: {e}")
+        consensus_logger.exception(f"Failed to get consensus method for task {task_id}: {e}")
         return None
     finally:
         if close_db:

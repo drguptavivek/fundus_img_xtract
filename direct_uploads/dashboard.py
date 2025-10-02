@@ -1,5 +1,6 @@
 # direct_uploads/dashboard.py
 
+import logging
 from flask import request, render_template, redirect, url_for, flash, current_app, session
 from flask_login import current_user
 from sqlalchemy import select, func
@@ -23,6 +24,9 @@ from utils.utils import with_session
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids
+
+
+editing_logger = logging.getLogger("editing")
 
 
 
@@ -56,7 +60,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Unable to create directory for direct image edit log at %s: %s",
             log_path.parent,
             exc,
@@ -94,7 +98,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
         with log_path.open("a", encoding="utf-8") as log_file:
             log_file.writelines(lines)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Failed to write to direct image edit log at %s: %s",
             log_path,
             exc,
@@ -214,6 +218,11 @@ def dashboard():
                         }
                         for upload, related_tasks in blocked_uploads
                     ]
+                    editing_logger.warning(
+                        "Bulk edit aborted; uploads blocked=%s user_id=%s",
+                        [item["upload_id"] for item in skipped_payload],
+                        current_user.id,
+                    )
                     session['bulk_edit_result'] = {
                         "updated": [],
                         "skipped": skipped_payload,
@@ -366,6 +375,18 @@ def dashboard():
                     "skipped": skipped_payload,
                     "updated_task_count": updated_tasks,
                 }
+                editing_logger.info(
+                    "Bulk edit applied to %s uploads; pending tasks updated=%s by user_id=%s",
+                    updated_count,
+                    updated_tasks,
+                    current_user.id,
+                )
+                if skipped_payload:
+                    editing_logger.warning(
+                        "Bulk edit skipped uploads=%s user_id=%s",
+                        [item["upload_id"] for item in skipped_payload],
+                        current_user.id,
+                    )
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 
             elif action == "bulk_delete" and selected_ids:
@@ -401,12 +422,12 @@ def dashboard():
                                 ep.unlink()
                                 deleted_files += 1
                             else:
-                                current_app.logger.info(
+                                editing_logger.info(
                                     "Edited file missing on disk; will still delete DB row. upload_id=%s path=%s",
                                     u.id, ep
                                 )
                         except Exception as e:
-                            current_app.logger.warning(
+                            editing_logger.warning(
                                 "Failed to delete edited file for upload_id=%s (folder_rel=%r, edited_filename=%r): %s",
                                 u.id, u.folder_rel, u.edited_filename, e
                             )
@@ -418,12 +439,12 @@ def dashboard():
                             op.unlink()
                             deleted_files += 1
                         else:
-                            current_app.logger.info(
+                            editing_logger.info(
                                 "Original file missing on disk; will still delete DB row. upload_id=%s path=%s",
                                 u.id, op
                             )
                     except Exception as e:
-                        current_app.logger.warning(
+                        editing_logger.warning(
                             "Failed to delete original file for upload_id=%s (folder_rel=%r, filename=%r): %s",
                             u.id, u.folder_rel, u.filename, e
                         )
@@ -433,6 +454,12 @@ def dashboard():
                     deleted_rows += 1
 
                 db_session.commit()
+                editing_logger.info(
+                    "Bulk delete removed %s record(s) and %s file(s) by user_id=%s",
+                    deleted_rows,
+                    deleted_files,
+                    current_user.id,
+                )
                 flash(f"Deleted {deleted_rows} record(s). Removed {deleted_files} file(s) from disk.", "success")
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 

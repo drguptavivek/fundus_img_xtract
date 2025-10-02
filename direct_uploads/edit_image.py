@@ -1,3 +1,4 @@
+import logging
 import traceback
 from pathlib import Path
 from datetime import datetime, timezone
@@ -10,6 +11,9 @@ from auth.roles import roles_required
 from sqlalchemy import select
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
 from utils.fileUtils import abs_from_parts
+
+
+editing_logger = logging.getLogger("editing")
 
 def _normalize_task_state(state: str | None) -> str:
     """Return a canonical lowercase task state for comparisons."""
@@ -39,7 +43,7 @@ def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Unable to ensure edit log directory %s exists: %s",
             log_path.parent,
             exc,
@@ -72,7 +76,7 @@ def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None
         with log_path.open("a", encoding="utf-8") as log_file:
             log_file.write(line)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Failed to append edit log for upload_id=%s at %s: %s",
             upload.id,
             log_path,
@@ -100,7 +104,7 @@ def edit_image(upload_id: int):
             non_pending_states = sorted({state for state in normalized_states if state and state != 'pending'})
             if non_pending_states:
                 states_list = ", ".join(non_pending_states)
-                current_app.logger.warning(
+                editing_logger.warning(
                     "Direct image edit blocked for upload_id=%s by user_id=%s due to task states: %s",
                     upload.id,
                     current_user.id if current_user.is_authenticated else "anonymous",
@@ -118,10 +122,10 @@ def edit_image(upload_id: int):
             has_edited_version = bool(upload.edited_filename)
             if has_edited_version:
                 image_url = flask_url_for("media._directImgEdByUUID", uuid_str=upload.uuid)
-                current_app.logger.info("Loading EDITED image %s for editing", upload_id)
+                editing_logger.info("Loading EDITED image %s for editing", upload_id)
             else:
                 image_url = flask_url_for("media._directImgOrigByUUID", uuid_str=upload.uuid)
-                current_app.logger.info("Loading ORIGINAL image %s for editing", upload_id)
+                editing_logger.info("Loading ORIGINAL image %s for editing", upload_id)
 
             hospital = db.get(Hospital, upload.hospital_id)
             lab_unit = db.get(LabUnit, upload.lab_unit_id)
@@ -136,11 +140,11 @@ def edit_image(upload_id: int):
                                    uploader=uploader, image_url=image_url,
                                    has_edited_version=has_edited_version)
         except FileNotFoundError as e:
-            current_app.logger.error("Missing file for upload_id=%s at %s", upload_id, e)
+            editing_logger.error("Missing file for upload_id=%s at %s", upload_id, e)
             flash("Image file not found on server.", "danger")
             return redirect(flask_url_for("direct_uploads.dashboard"))
         except Exception:
-            current_app.logger.error("Error loading image editor for upload %s:\n%s",
+            editing_logger.error("Error loading image editor for upload %s:\n%s",
                                      upload_id, traceback.format_exc())
             flash("An error occurred while loading the image editor.", "danger")
             return redirect(flask_url_for("direct_uploads.dashboard"))
@@ -162,7 +166,7 @@ def restore_original(upload_id: int):
             ).scalars().all()
             normalized_states = [_normalize_task_state(state) for state in raw_states]
             if any(state and state != 'pending' for state in normalized_states):
-                current_app.logger.warning(
+                editing_logger.warning(
                     "Restore original blocked for upload_id=%s by user_id=%s due to task states: %s",
                     upload.id,
                     current_user.id if current_user.is_authenticated else "anonymous",
@@ -177,9 +181,9 @@ def restore_original(upload_id: int):
             edited_path = abs_from_parts(upload.folder_rel, upload.edited_filename, kind="edited")
             try:
                 edited_path.unlink()
-                current_app.logger.info("Deleted edited file: %s", edited_path)
+                editing_logger.info("Deleted edited file: %s", edited_path)
             except FileNotFoundError:
-                current_app.logger.warning("Edited file not found at %s, but proceeding to clear from DB.", edited_path)
+                editing_logger.warning("Edited file not found at %s, but proceeding to clear from DB.", edited_path)
             
             # Update the database
             upload.edited_filename = None
@@ -190,6 +194,6 @@ def restore_original(upload_id: int):
 
         except Exception as e:
             db.rollback()
-            current_app.logger.error("Error restoring original for upload %s:\n%s",
+            editing_logger.error("Error restoring original for upload %s:\n%s",
                                      upload_id, traceback.format_exc())
             return jsonify({"error": "An unexpected error occurred."}), 500

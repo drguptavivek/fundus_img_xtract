@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from flask import request, render_template, redirect, url_for, flash, current_app
@@ -25,6 +26,8 @@ from models import (
     GradingTask,
     utcnow,
 )
+
+editing_logger = logging.getLogger("editing")
 
 
 def _normalize_task_state(state):
@@ -55,7 +58,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes):
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Unable to create directory for direct image edit log at %s: %s",
             log_path.parent,
             exc,
@@ -93,7 +96,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes):
         with log_path.open("a", encoding="utf-8") as log_file:
             log_file.writelines(lines)
     except OSError as exc:
-        current_app.logger.error(
+        editing_logger.error(
             "Failed to write to direct image edit log at %s: %s",
             log_path,
             exc,
@@ -148,7 +151,7 @@ def edit_upload(upload_id):
         non_pending_states = sorted({state for state in normalized_task_states if state and state != "pending"})
         if non_pending_states:
             states_list = ", ".join(non_pending_states)
-            current_app.logger.warning(
+            editing_logger.warning(
                 "Edit metadata blocked for upload_id=%s by user_id=%s due to task states: %s",
                 upload.id,
                 current_user.id if current_user.is_authenticated else "anonymous",
@@ -307,7 +310,7 @@ def edit_upload(upload_id):
 
             _log_image_attribute_changes(upload, field_changes)
 
-            current_app.logger.info(
+            editing_logger.info(
                 "Upload %s metadata edited by %s (%s) from %s to %s",
                 upload.id,
                 current_user.username,
@@ -316,7 +319,7 @@ def edit_upload(upload_id):
                 after,
             )
             if updated_task_ids:
-                current_app.logger.info(
+                editing_logger.info(
                     "Updated pending grading tasks %s after edit of upload %s",
                     updated_task_ids,
                     upload.id,

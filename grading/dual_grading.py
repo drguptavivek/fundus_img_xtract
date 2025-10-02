@@ -450,7 +450,7 @@ def dual_grading_submit():
                 log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
             
             # Log using dedicated grades logger
-            grades_logger = logging.getLogger("grades")
+            grades_logger = grades_logger
             grades_logger.info(log_message)
             
             # Calculate time taken
@@ -578,3 +578,4 @@ def dual_grading_submit():
             current_app.logger.exception("Failed to submit grade: %s", e)
             flash("Failed to submit grade.", "danger")
             raise  # Re-raise the exception so the transaction is rolled back
+grades_logger = grades_logger

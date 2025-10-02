@@ -347,12 +347,15 @@ def anonymize_image(uuid: UUID):
             flash("Image not found.", "danger")
             return redirect(url_for("preprocess.anonymization_dashboard"))
 
+        editing_locked = False
+        blocking_task_states: list[str] = []
         task_state_rows = db_session.execute(
             select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
         ).scalars().all()
-        normalized_task_states = [_normalize_task_state(state) for state in task_state_rows]
-        blocking_task_states = sorted({state for state in normalized_task_states if state and state != "pending"})
-        editing_locked = bool(blocking_task_states)
+        if task_state_rows:
+            normalized_task_states = [_normalize_task_state(state) for state in task_state_rows]
+            blocking_task_states = sorted({state for state in normalized_task_states if state and state != "pending"})
+            editing_locked = bool(blocking_task_states)
 
         # Access control (lab_units) for non-admin/data_manager
         is_admin = current_user.has_role("admin")

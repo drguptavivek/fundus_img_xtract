@@ -172,6 +172,23 @@
           </li>
           {% endif %}
 
+          {% if current_user_has('data_manager') or current_user_has('admin') %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['results.image_results', 'results.encounter_results'] else '' }}" href="#"
+              id="reportsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Reports
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="reportsMenu">
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'results.image_results' else '' }}" href="{{ url_for('results.image_results') }}">Image Results</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'results.encounter_results' else '' }}" href="{{ url_for('results.encounter_results') }}">Encounter Results</a>
+              </li>
+            </ul>
+          </li>
+          {% endif %}
+
           {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
@@ -196,6 +213,7 @@
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
               <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.log_viewer') }}">Logs</a></li>
               <li>
                 <hr class="dropdown-divider">
               </li>

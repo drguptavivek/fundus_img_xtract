@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+
+{% block title %}Image Grading Results{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Per-Image Grading Results</h1>
+      <p class="text-muted mb-0">Showing {{ rows|length }} of {{ total }} image records (page {{ page }} of {{ total_pages }}).</p>
+    </div>
+    <form class="row gy-2 gx-2 align-items-end" method="get">
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-disease">Disease</label>
+        <select class="form-select" id="filter-disease" name="disease_id">
+          <option value="">All</option>
+          {% for disease in diseases %}
+          <option value="{{ disease.id }}" {% if filters.disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-upload-type">Upload Type</label>
+        <select class="form-select" id="filter-upload-type" name="upload_type">
+          <option value="">All</option>
+          <option value="zip" {% if filters.upload_type == 'zip' %}selected{% endif %}>ZIP ingestion</option>
+          <option value="direct" {% if filters.upload_type == 'direct' %}selected{% endif %}>Direct upload</option>
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-task-state">Task Stage</label>
+        <select class="form-select" id="filter-task-state" name="task_state">
+          <option value="">All</option>
+          {% for state in task_state_options %}
+          <option value="{{ state }}" {% if filters.task_state == state %}selected{% endif %}>{{ state.replace('_', ' ')|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-hospital">Hospital</label>
+        <select class="form-select" id="filter-hospital" name="hospital_id">
+          <option value="">All</option>
+          {% for hospital in hospitals %}
+          <option value="{{ hospital.id }}" {% if filters.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-lab-unit">Lab Unit</label>
+        <select class="form-select" id="filter-lab-unit" name="lab_unit_id">
+          <option value="">All</option>
+          {% for lab_unit in lab_units %}
+          <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not rows %}
+    <div class="alert alert-info">No images matched the selected filters.</div>
+  {% else %}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+      {% for row in rows %}
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          {% set final_grade = row.consensus.impression if row.consensus else (row.arbitrator_grade.impression if row.arbitrator_grade else (row.faculty_grade.impression if row.faculty_grade else (row.resident_grade.impression if row.resident_grade else None))) %}
+          <div class="card-header py-2 px-3">
+            <div class="d-flex flex-column gap-1">
+              <div class="flex-grow-1">
+                <div class="d-flex justify-content-between align-items-center gap-2">
+                  <h2 class="h6 mb-0 text-truncate">{{ row.disease_name or 'Unknown Disease' }}</h2>
+                  <span class="badge bg-info text-dark text-uppercase text-nowrap">Status: {{ row.graded_state }}</span>
+                </div>
+                <div class="mt-1">
+                  <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">Final Grade: {{ final_grade or 'Pending' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card-body py-3">
+            {% if row.image_uuid %}
+              {% if row.upload_type == 'zip' %}
+                {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
+              {% elif row.upload_type == 'direct' %}
+                {% set image_href = url_for('media._directImgOrigByUUID', uuid_str=row.image_uuid) %}
+              {% else %}
+                {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
+              {% endif %}
+              {% set gallery_id = 'results-gallery-' ~ loop.index0 %}
+              <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                <a href="{{ image_href }}" data-pswp-type="image" title="{{ row.disease_name or 'Image' }}"></a>
+              </div>
+              <div class="mb-2">
+                <a class="btn btn-sm btn-outline-primary" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+              </div>
+            {% endif %}
+            <div class="mb-1">
+              <code class="small">{{ row.image_uuid or '—' }}</code>
+            </div>
+            <div class="small">
+                            <span class="text-muted">{{ row.hospital_name or '—' }},   {{ row.lab_unit_name or '—' }}</span>
+            </div>
+            <div class="d-flex flex-wrap gap-3   small">
+              <div><span class="text-muted">Upload:</span> {{ row.upload_type|capitalize if row.upload_type else '—' }}</div>
+              <div><span class="text-muted">Eye:</span> {{ row.eye_side or 'Not Recorded' }}</div>
+              <div><span class="text-muted">Image Type:</span> {{ row.image_type or '—' }}</div>
+            </div>
+
+            <div class=" small">
+              <span class="text-muted fw-semibold mb-1">Glaucoma (Remedio)</span>
+              {% if row.glaucoma_result %}
+                <span class="text-muted">{{ row.glaucoma_result }}
+                VCDR R: {{ row.glaucoma_vcdr_right if row.glaucoma_vcdr_right is not none else '—' }}, L: {{ row.glaucoma_vcdr_left if row.glaucoma_vcdr_left is not none else '—' }}
+              {% else %}
+                No record
+              {% endif %}
+              </span>
+            </div>
+            <div class="mb-2 small">
+              <span class="text-muted fw-semibold mb-1">DR (Remedio)</span>
+              {% if row.dr_result %}
+                <span class="text-muted">{{ row.dr_result }}
+                {% if row.dr_qualitative_result %}
+                  {{ row.dr_qualitative_result }}
+                {% endif %}
+              {% else %}
+                No DR report
+              {% endif %}
+              </span>
+            </div>
+            <div class="mb-2 small">
+              <div class="text-muted fw-semibold">Grades</div>
+              <ul class="list-unstyled mb-0">
+                <li>Resident: {% if row.resident_grade %}{{ row.resident_grade.impression or '—' }} <span class="text-muted">({{ row.resident_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
+                <li>Faculty: {% if row.faculty_grade %}{{ row.faculty_grade.impression or '—' }} <span class="text-muted">({{ row.faculty_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
+                <li>Arbitrator: {% if row.arbitrator_grade %}{{ row.arbitrator_grade.impression or '—' }} <span class="text-muted">({{ row.arbitrator_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
+              </ul>
+            </div>
+            <div class="mb-2 small">
+              <span class="text-muted fw-semibold mb-1">Consensus</span>
+              {% if row.consensus %}
+                <span class="text-muted">{{ row.consensus.impression or '—' }} /
+                {{ row.consensus.method|capitalize }}
+                {% if row.consensus.decided_by %}  ({{ row.consensus.decided_by }}){% endif %}</span>
+              {% else %}
+                <span class="text-muted">Pending</span>
+              {% endif %}
+            </div>
+            <div class="small">
+              <span class="text-muted fw-semibold mb-1">AI Grades</span>
+              {% if row.ai_grades %}
+                <ul class="list-unstyled mb-0">
+                  {% for ai_grade in row.ai_grades %}
+                  <li>
+                    <span class="fw-semibold">{{ ai_grade.model_name }} {{ ai_grade.model_version }}</span>
+                    {% if ai_grade.impression %}<span>→ {{ ai_grade.impression }}</span>{% endif %}
+                    {% if ai_grade.confidence is not none %}<span class="text-muted">({{ '%.2f'|format(ai_grade.confidence) }})</span>{% endif %}
+                  </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <div class="text-muted">No AI grades recorded</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="card-footer d-flex justify-content-between align-items-center small text-muted">
+            <span>Created {{ row.created_at|user_datetime }}</span>
+            <span>Updated {{ row.updated_at|user_datetime }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
+      <div class="btn-group" role="group" aria-label="Pagination">
+        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
+        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
+      </div>
+    </div>
+    <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+{% endblock %}

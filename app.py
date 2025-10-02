@@ -326,6 +326,9 @@ def create_app():
     from reports import bp as reports_bp
     app.register_blueprint(reports_bp)
 
+    from results import bp as results_bp
+    app.register_blueprint(results_bp)
+
     from verify_remedio_glaucoma import bp as verify_remedio_glaucoma_bp
     app.register_blueprint(verify_remedio_glaucoma_bp)
 

@@ -22,6 +22,9 @@ from utils.notifications import send_notification_to_admins
 from db_transaction_manager import transaction_scope
 
 
+grades_logger = logging.getLogger("grades")
+
+
 def register_routes(bp):
     """Register dual grading routes with the blueprint."""
     bp.add_url_rule("/task/<int:task_id>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])

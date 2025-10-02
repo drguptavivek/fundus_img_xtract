@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Verify Encounters (No DR Reports){% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Verify Encounters Without DR Reports</h1>
+      <p class="text-muted mb-0">Mark eyes, confirm encounters, and trigger DR grading tasks for Remedio ZIP uploads lacking reports.</p>
+    </div>
+    <form class="row gy-2 gx-2 align-items-end" method="get">
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-date">Capture Date</label>
+        <input type="date" class="form-control" id="filter-date" name="date" value="{{ selected_date or '' }}">
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-ver">Verification</label>
+        <select class="form-select" id="filter-ver" name="ver">
+          <option value="all" {% if ver == 'all' %}selected{% endif %}>All</option>
+          <option value="no" {% if ver == 'no' %}selected{% endif %}>Pending</option>
+          <option value="yes" {% if ver == 'yes' %}selected{% endif %}>Verified</option>
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="d-flex gap-2 mb-3">
+    {% if recent_unverified_url %}
+    <a class="btn btn-outline-warning btn-sm" href="{{ recent_unverified_url }}">Go to latest pending</a>
+    {% endif %}
+    {% if recent_verified_url %}
+    <a class="btn btn-outline-success btn-sm" href="{{ recent_verified_url }}">Go to latest verified</a>
+    {% endif %}
+  </div>
+
+  {% if not items %}
+    <div class="alert alert-info">No encounters matched the selected filters.</div>
+  {% else %}
+    <div class="list-group shadow-sm">
+      {% for encounter in items %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="{{ url_for('verify_remedio_nodr.nodr_edit', encounter_id=encounter.id, page=page) }}">
+        <div>
+          <div class="fw-semibold">{{ encounter.name or 'Unknown Patient' }} <span class="text-muted">• {{ encounter.patient_id or '—' }}</span></div>
+          <div class="small text-muted">Capture Date: {{ encounter.capture_date_dt or encounter.capture_date or '—' }}</div>
+          <div class="small text-muted">Images: {{ encounter.encounter_files|length }}</div>
+        </div>
+        <div class="text-end">
+          {% if encounter.encounter_verified_status == 'verified' %}
+            <span class="badge bg-success">Verified</span>
+          {% else %}
+            <span class="badge bg-secondary">Pending</span>
+          {% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
+      <div class="btn-group" role="group" aria-label="Pagination">
+        <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{{ prev_url if has_prev else '#' }}">Previous</a>
+        <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{{ next_url if has_next else '#' }}">Next</a>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if my_recent_verified %}
+  <div class="mt-4">
+    <h2 class="h6">My recently verified encounters</h2>
+    <ul class="small text-muted mb-0">
+      {% for encounter in my_recent_verified %}
+        <li>{{ encounter.name or 'Unknown' }} • {{ encounter.capture_date_dt or encounter.capture_date or '—' }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

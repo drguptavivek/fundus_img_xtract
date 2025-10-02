@@ -49,7 +49,7 @@ def _is_verified_for_disease(db, kind: str, image_id: int, disease_id: int) -> b
     if not enc:
         return False
     if name in ('diabetic retinopathy', 'dr'):
-        return (enc.dr_verified_status == 'verified')
+        return (enc.dr_verified_status == 'verified') or (enc.encounter_verified_status == 'verified')
     if name == 'glaucoma':
         return (enc.glaucoma_verified_status == 'verified')
     # Future: 'amd' or others
@@ -197,4 +197,3 @@ def ensure_task(image_uuid: str, disease_id: int) -> GradingTask:
             # Visible to callers for UX feedback; also log via app success/error loggers in real implementation
             raise PermissionError('Gold standard already set - cross-lab reassignment is disabled for finalized tasks')
         return task
-

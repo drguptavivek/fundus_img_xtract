@@ -337,6 +337,9 @@ def create_app():
     from verify_remedio_dr import bp as verify_remedio_dr_bp
     app.register_blueprint(verify_remedio_dr_bp)
 
+    from verify_remedio_nodr import bp as verify_remedio_nodr_bp
+    app.register_blueprint(verify_remedio_nodr_bp)
+
     from media import bp as media_bp
     app.register_blueprint(media_bp)
 

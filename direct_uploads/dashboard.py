@@ -5,7 +5,16 @@ from flask_login import current_user
 from sqlalchemy import select, func
 from datetime import datetime, timezone
 from models import (
-    User, LabUnit, Hospital, DirectImageUpload, Camera, Disease, Area, ImageGrading
+    User,
+    LabUnit,
+    Hospital,
+    DirectImageUpload,
+    Camera,
+    Disease,
+    Area,
+    ImageGrading,
+    GradingTask,
+    utcnow,
 )
 
 from . import bp
@@ -106,24 +115,86 @@ def dashboard():
                         flash("You cannot assign uploads to that hospital.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-                updated_count = 0
+                upload_ids = [upload.id for upload in rows]
+                tasks_by_upload: dict[int, list[GradingTask]] = {}
+                if upload_ids:
+                    task_rows = db_session.execute(
+                        select(GradingTask).where(GradingTask.direct_image_upload_id.in_(upload_ids))
+                    ).scalars().all()
+                    for task in task_rows:
+                        if task.direct_image_upload_id is None:
+                            continue
+                        tasks_by_upload.setdefault(task.direct_image_upload_id, []).append(task)
+
+                blocked_uploads: list[DirectImageUpload] = []
+                updatable_uploads: list[tuple[DirectImageUpload, list[GradingTask]]] = []
                 for upload in rows:
-                    if new_hospital_id:
-                        upload.hospital_id = int(new_hospital_id)
-                    if new_lab_unit_id:
-                        upload.lab_unit_id = int(new_lab_unit_id)
-                    if new_camera_id:
-                        upload.camera_id = int(new_camera_id)
-                    if new_disease_id:
-                        upload.disease_id = int(new_disease_id)
-                    if new_area_id:
-                        upload.area_id = int(new_area_id)
-                    if new_is_mydriatic is not None:
-                        upload.is_mydriatic = new_is_mydriatic == 'on'
+                    related_tasks = tasks_by_upload.get(upload.id, [])
+                    if any(task.state != 'pending' for task in related_tasks):
+                        blocked_uploads.append(upload)
+                        continue
+                    updatable_uploads.append((upload, related_tasks))
+
+                if not updatable_uploads:
+                    blocked_ids = ", ".join(str(upload.id) for upload in blocked_uploads)
+                    flash(
+                        "Update cancelled. Tasks already in progress for upload(s): "
+                        f"{blocked_ids}.",
+                        "danger",
+                    )
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+
+                new_hospital_id_int = int(new_hospital_id) if new_hospital_id else None
+                new_lab_unit_id_int = int(new_lab_unit_id) if new_lab_unit_id else None
+                new_camera_id_int = int(new_camera_id) if new_camera_id else None
+                new_disease_id_int = int(new_disease_id) if new_disease_id else None
+                new_area_id_int = int(new_area_id) if new_area_id else None
+                new_is_mydriatic_bool = (
+                    new_is_mydriatic == 'on' if new_is_mydriatic is not None else None
+                )
+
+                updated_count = 0
+                updated_tasks = 0
+                for upload, related_tasks in updatable_uploads:
+                    if new_hospital_id_int is not None:
+                        upload.hospital_id = new_hospital_id_int
+                    if new_lab_unit_id_int is not None:
+                        upload.lab_unit_id = new_lab_unit_id_int
+                    if new_camera_id_int is not None:
+                        upload.camera_id = new_camera_id_int
+                    if new_disease_id_int is not None:
+                        upload.disease_id = new_disease_id_int
+                    if new_area_id_int is not None:
+                        upload.area_id = new_area_id_int
+                    if new_is_mydriatic_bool is not None:
+                        upload.is_mydriatic = new_is_mydriatic_bool
+
+                    for task in related_tasks:
+                        task_changed = False
+                        if new_lab_unit_id_int is not None and task.lab_unit_id != new_lab_unit_id_int:
+                            task.lab_unit_id = new_lab_unit_id_int
+                            task_changed = True
+                        if new_disease_id_int is not None and task.disease_id != new_disease_id_int:
+                            task.disease_id = new_disease_id_int
+                            task_changed = True
+                        if task_changed:
+                            task.updated_at = utcnow()
+                            updated_tasks += 1
+
                     updated_count += 1
 
                 db_session.commit()
-                flash(f"Successfully updated {updated_count} uploads.", "success")
+                if blocked_uploads:
+                    blocked_ids = ", ".join(str(upload.id) for upload in blocked_uploads)
+                    flash(
+                        "Partially updated. Skipped upload(s) with in-progress tasks: "
+                        f"{blocked_ids}.",
+                        "warning",
+                    )
+                flash(
+                    f"Successfully updated {updated_count} uploads. Updated {updated_tasks} pending task(s).",
+                    "success",
+                )
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 
             elif action == "bulk_delete" and selected_ids:

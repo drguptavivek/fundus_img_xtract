@@ -544,11 +544,121 @@
         </div>
     </div>
 </div>
+
+{% if bulk_edit_result %}
+<div class="modal fade" id="bulkEditResultModal" tabindex="-1" aria-labelledby="bulkEditResultLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkEditResultLabel">Bulk Edit Summary</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-4 small text-muted">
+                    Updated {{ bulk_edit_result.updated|length }} upload(s);
+                    adjusted {{ bulk_edit_result.updated_task_count }} pending task(s).
+                </p>
+
+                {% if bulk_edit_result.updated %}
+                <section class="mb-4">
+                    <h6 class="fw-semibold mb-3">Updated Uploads</h6>
+                    <div class="vstack gap-3">
+                        {% for record in bulk_edit_result.updated %}
+                        <div class="border rounded-3 p-3 bg-light-subtle">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <div class="fw-semibold">{{ record.filename }}</div>
+                                    <div class="small text-muted">Upload ID: {{ record.upload_id }}</div>
+                                </div>
+                                {% if record.updated_task_ids %}
+                                <span class="badge text-bg-primary">Tasks updated: {{ record.updated_task_ids|length }}</span>
+                                {% endif %}
+                            </div>
+                            {% if record.changes %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th scope="col">Field</th>
+                                            <th scope="col">Old Value</th>
+                                            <th scope="col">New Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for change in record.changes %}
+                                        <tr>
+                                            <td>{{ change.field }}</td>
+                                            <td>{{ change.old or 'N/A' }}</td>
+                                            <td>{{ change.new or 'N/A' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="small text-muted">No attribute changes applied.</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </section>
+                {% endif %}
+
+                {% if bulk_edit_result.skipped %}
+                <section>
+                    <h6 class="fw-semibold mb-3 text-danger">Skipped Uploads</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">Filename</th>
+                                    <th scope="col">Upload ID</th>
+                                    <th scope="col">Blocking Task States</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for skipped in bulk_edit_result.skipped %}
+                                <tr>
+                                    <td>{{ skipped.filename }}</td>
+                                    <td>{{ skipped.upload_id }}</td>
+                                    <td>
+                                        {% if skipped.non_pending_states %}
+                                            {{ skipped.non_pending_states | join(', ') }}
+                                        {% else %}
+                                            Unknown
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                {% endif %}
+
+                {% if not bulk_edit_result.updated and not bulk_edit_result.skipped %}
+                <p class="mb-0">No changes were applied.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block page_scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const bulkEditResultModalEl = document.getElementById('bulkEditResultModal');
+        if (bulkEditResultModalEl) {
+            const bulkEditModal = new bootstrap.Modal(bulkEditResultModalEl);
+            bulkEditModal.show();
+        }
+
         const selectAllTopCheckbox = document.getElementById('select-all-top');
         const uploadCheckboxes = document.querySelectorAll('.upload-checkbox');
         const bulkEditBtn = document.getElementById('bulk-edit-btn');

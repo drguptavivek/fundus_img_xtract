@@ -1,6 +1,6 @@
 # direct_uploads/dashboard.py
 
-from flask import request, render_template, redirect, url_for, flash, current_app
+from flask import request, render_template, redirect, url_for, flash, current_app, session
 from flask_login import current_user
 from sqlalchemy import select, func
 from datetime import datetime, timezone
@@ -126,22 +126,32 @@ def dashboard():
                             continue
                         tasks_by_upload.setdefault(task.direct_image_upload_id, []).append(task)
 
-                blocked_uploads: list[DirectImageUpload] = []
+                blocked_uploads: list[tuple[DirectImageUpload, list[GradingTask]]] = []
                 updatable_uploads: list[tuple[DirectImageUpload, list[GradingTask]]] = []
                 for upload in rows:
                     related_tasks = tasks_by_upload.get(upload.id, [])
                     if any(task.state != 'pending' for task in related_tasks):
-                        blocked_uploads.append(upload)
+                        blocked_uploads.append((upload, related_tasks))
                         continue
                     updatable_uploads.append((upload, related_tasks))
 
                 if not updatable_uploads:
-                    blocked_ids = ", ".join(str(upload.id) for upload in blocked_uploads)
-                    flash(
-                        "Update cancelled. Tasks already in progress for upload(s): "
-                        f"{blocked_ids}.",
-                        "danger",
-                    )
+                    skipped_payload = [
+                        {
+                            "upload_id": upload.id,
+                            "filename": upload.filename,
+                            "non_pending_states": sorted(
+                                {task.state for task in related_tasks if task.state != 'pending'}
+                            ),
+                        }
+                        for upload, related_tasks in blocked_uploads
+                    ]
+                    session['bulk_edit_result'] = {
+                        "updated": [],
+                        "skipped": skipped_payload,
+                        "updated_task_count": 0,
+                    }
+                    db_session.rollback()
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 new_hospital_id_int = int(new_hospital_id) if new_hospital_id else None
@@ -153,20 +163,96 @@ def dashboard():
                     new_is_mydriatic == 'on' if new_is_mydriatic is not None else None
                 )
 
+                def _resolve_name(model_cls, entity_id: int | None) -> str | None:
+                    if entity_id is None:
+                        return None
+                    entity = db_session.get(model_cls, entity_id)
+                    return getattr(entity, "name", str(entity_id)) if entity is not None else str(entity_id)
+
+                new_value_names = {
+                    "hospital_id": _resolve_name(Hospital, new_hospital_id_int),
+                    "lab_unit_id": _resolve_name(LabUnit, new_lab_unit_id_int),
+                    "camera_id": _resolve_name(Camera, new_camera_id_int),
+                    "disease_id": _resolve_name(Disease, new_disease_id_int),
+                    "area_id": _resolve_name(Area, new_area_id_int),
+                }
+
                 updated_count = 0
                 updated_tasks = 0
+                updated_payload: list[dict[str, object]] = []
                 for upload, related_tasks in updatable_uploads:
+                    changed_task_ids: list[int] = []
+                    field_changes: list[dict[str, str | bool | None]] = []
                     if new_hospital_id_int is not None:
+                        old_id = upload.hospital_id
+                        if old_id != new_hospital_id_int:
+                            old_name = getattr(upload.hospital, "name", str(old_id))
+                            field_changes.append(
+                                {
+                                    "field": "Hospital",
+                                    "old": old_name,
+                                    "new": new_value_names["hospital_id"],
+                                }
+                            )
                         upload.hospital_id = new_hospital_id_int
                     if new_lab_unit_id_int is not None:
+                        old_id = upload.lab_unit_id
+                        if old_id != new_lab_unit_id_int:
+                            old_name = getattr(upload.lab_unit, "name", str(old_id))
+                            field_changes.append(
+                                {
+                                    "field": "Lab Unit",
+                                    "old": old_name,
+                                    "new": new_value_names["lab_unit_id"],
+                                }
+                            )
                         upload.lab_unit_id = new_lab_unit_id_int
                     if new_camera_id_int is not None:
+                        old_id = upload.camera_id
+                        if old_id != new_camera_id_int:
+                            old_name = getattr(upload.camera, "name", str(old_id))
+                            field_changes.append(
+                                {
+                                    "field": "Camera",
+                                    "old": old_name,
+                                    "new": new_value_names["camera_id"],
+                                }
+                            )
                         upload.camera_id = new_camera_id_int
                     if new_disease_id_int is not None:
+                        old_id = upload.disease_id
+                        if old_id != new_disease_id_int:
+                            old_name = getattr(upload.disease, "name", str(old_id))
+                            field_changes.append(
+                                {
+                                    "field": "Disease",
+                                    "old": old_name,
+                                    "new": new_value_names["disease_id"],
+                                }
+                            )
                         upload.disease_id = new_disease_id_int
                     if new_area_id_int is not None:
+                        old_id = upload.area_id
+                        if old_id != new_area_id_int:
+                            old_name = getattr(upload.area, "name", str(old_id))
+                            field_changes.append(
+                                {
+                                    "field": "Area",
+                                    "old": old_name,
+                                    "new": new_value_names["area_id"],
+                                }
+                            )
                         upload.area_id = new_area_id_int
                     if new_is_mydriatic_bool is not None:
+                        old_bool = upload.is_mydriatic
+                        if old_bool != new_is_mydriatic_bool:
+                            field_changes.append(
+                                {
+                                    "field": "Mydriatic",
+                                    "old": "Yes" if old_bool else "No",
+                                    "new": "Yes" if new_is_mydriatic_bool else "No",
+                                }
+                            )
                         upload.is_mydriatic = new_is_mydriatic_bool
 
                     for task in related_tasks:
@@ -180,21 +266,35 @@ def dashboard():
                         if task_changed:
                             task.updated_at = utcnow()
                             updated_tasks += 1
+                            changed_task_ids.append(task.id)
 
                     updated_count += 1
+                    updated_payload.append(
+                        {
+                            "upload_id": upload.id,
+                            "filename": upload.filename,
+                            "changes": field_changes,
+                            "updated_task_ids": changed_task_ids,
+                        }
+                    )
+
+                skipped_payload = [
+                    {
+                        "upload_id": upload.id,
+                        "filename": upload.filename,
+                        "non_pending_states": sorted(
+                            {task.state for task in related_tasks if task.state != 'pending'}
+                        ),
+                    }
+                    for upload, related_tasks in blocked_uploads
+                ]
 
                 db_session.commit()
-                if blocked_uploads:
-                    blocked_ids = ", ".join(str(upload.id) for upload in blocked_uploads)
-                    flash(
-                        "Partially updated. Skipped upload(s) with in-progress tasks: "
-                        f"{blocked_ids}.",
-                        "warning",
-                    )
-                flash(
-                    f"Successfully updated {updated_count} uploads. Updated {updated_tasks} pending task(s).",
-                    "success",
-                )
+                session['bulk_edit_result'] = {
+                    "updated": updated_payload,
+                    "skipped": skipped_payload,
+                    "updated_task_count": updated_tasks,
+                }
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 
             elif action == "bulk_delete" and selected_ids:
@@ -479,6 +579,8 @@ def dashboard():
                 }
             )
 
+        bulk_edit_result = session.pop('bulk_edit_result', None)
+
         current_app.logger.info(
             "Dashboard accessed by %s (%s). Page:%s Total:%s",
             current_user.username, current_user.id, page, total_count
@@ -500,5 +602,6 @@ def dashboard():
             filter_date_from=f_date_from, filter_date_to=f_date_to,
             filter_lab_unit_id=f_lab_unit_id, filter_uploader_id=f_uploader_id,
             filter_hospital_id=f_hospital_id, filter_camera_id=f_camera_id,
-            filter_disease_id=f_disease_id, filter_area_id=f_area_id
+            filter_disease_id=f_disease_id, filter_area_id=f_area_id,
+            bulk_edit_result=bulk_edit_result
         )

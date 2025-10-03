@@ -36,45 +36,89 @@
           </div>
           
           <div class="col-md-3">
-            <label for="residentGradeSelect" class="form-label">Resident Grade</label>
-            <select class="form-select" id="residentGradeSelect" name="resident_grade">
-              <option value="">All Grades</option>
-              {% for grade in grade_options %}
-                <option value="{{ grade.impression }}" {% if filters.resident_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">Resident Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="residentGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="residentGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="residentGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="resident_grade" {% if grade.impression in (filters.resident_grade if filters.resident_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
           </div>
           
           <div class="col-md-3">
-            <label for="facultyGradeSelect" class="form-label">Faculty Grade</label>
-            <select class="form-select" id="facultyGradeSelect" name="faculty_grade">
-              <option value="">All Grades</option>
-              {% for grade in grade_options %}
-                <option value="{{ grade.impression }}" {% if filters.faculty_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">Faculty Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="facultyGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="facultyGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="facultyGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="faculty_grade" {% if grade.impression in (filters.faculty_grade if filters.faculty_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
           </div>
         </div>
         
         <div class="row g-3 mt-2">
           <div class="col-md-3">
-            <label for="arbitratorGradeSelect" class="form-label">Arbitrator Grade</label>
-            <select class="form-select" id="arbitratorGradeSelect" name="arbitrator_grade">
-              <option value="">All Grades</option>
-              {% for grade in grade_options %}
-                <option value="{{ grade.impression }}" {% if filters.arbitrator_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">Arbitrator Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="arbitratorGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="arbitratorGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="arbitratorGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="arbitrator_grade" {% if grade.impression in (filters.arbitrator_grade if filters.arbitrator_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
           </div>
           
           <div class="col-md-3">
-            <label for="finalGradeSelect" class="form-label">Final Grade</label>
-            <select class="form-select" id="finalGradeSelect" name="final_grade">
-              <option value="">All Grades</option>
-              {% for grade in grade_options %}
-                <option value="{{ grade.impression }}" {% if filters.final_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
-              {% endfor %}
-            </select>
+            <label class="form-label">Final Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="finalGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="finalGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="final_grade" {% if grade.impression in (filters.final_grade if filters.final_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
           </div>
           
           <div class="col-md-6 d-flex align-items-end">
@@ -195,61 +239,111 @@
 
 <script>
 function clearFilters() {
-  document.getElementById('filterForm').reset();
+  // Clear disease and lab unit dropdowns
   document.getElementById('diseaseSelect').value = '';
   document.getElementById('labUnitSelect').value = '';
-  document.getElementById('residentGradeSelect').value = '';
-  document.getElementById('facultyGradeSelect').value = '';
-  document.getElementById('arbitratorGradeSelect').value = '';
-  document.getElementById('finalGradeSelect').value = '';
+  
+  // Uncheck all grade checkboxes
+  document.querySelectorAll('.grade-checkbox').forEach(checkbox => {
+    checkbox.checked = false;
+  });
+  
+  // Update dropdown text to show "All Grades"
+  document.getElementById('residentGradeText').textContent = 'All Grades';
+  document.getElementById('facultyGradeText').textContent = 'All Grades';
+  document.getElementById('arbitratorGradeText').textContent = 'All Grades';
+  document.getElementById('finalGradeText').textContent = 'All Grades';
+  
   document.getElementById('filterForm').submit();
 }
+
+// Load all diseases with their gradings on page load
+let diseasesData = null;
+
+fetch('/api/diseases-with-gradings')
+  .then(response => response.json())
+  .then(data => {
+    diseasesData = data.diseases;
+  })
+  .catch(error => console.error('Error fetching diseases with gradings:', error));
 
 // Function to update grade options when disease is selected
 document.addEventListener('DOMContentLoaded', function() {
   const diseaseSelect = document.getElementById('diseaseSelect');
-  const residentGradeSelect = document.getElementById('residentGradeSelect');
-  const facultyGradeSelect = document.getElementById('facultyGradeSelect');
-  const arbitratorGradeSelect = document.getElementById('arbitratorGradeSelect');
-  const finalGradeSelect = document.getElementById('finalGradeSelect');
+  const residentGradeList = document.getElementById('residentGradeList');
+  const facultyGradeList = document.getElementById('facultyGradeList');
+  const arbitratorGradeList = document.getElementById('arbitratorGradeList');
+  const finalGradeList = document.getElementById('finalGradeList');
   
   // Store all available grade options to restore when disease is cleared
   const allGradeOptions = {
-    resident: Array.from(residentGradeSelect.options),
-    faculty: Array.from(facultyGradeSelect.options),
-    arbitrator: Array.from(arbitratorGradeSelect.options),
-    final: Array.from(finalGradeSelect.options)
+    resident: Array.from(residentGradeList.querySelectorAll('li')),
+    faculty: Array.from(facultyGradeList.querySelectorAll('li')),
+    arbitrator: Array.from(arbitratorGradeList.querySelectorAll('li')),
+    final: Array.from(finalGradeList.querySelectorAll('li'))
   };
 
-  // Function to update grade dropdowns based on selected disease
+  // Function to update grade checkboxes based on selected disease
   function updateGradeOptions() {
-    const diseaseId = diseaseSelect.value;
+    const diseaseId = parseInt(diseaseSelect.value);
     
-    if (diseaseId) {
-      // Fetch disease-specific grades
-      fetch(`/api/disease-grades/${diseaseId}`)
-        .then(response => response.json())
-        .then(data => {
-          // Update all grade dropdowns with disease-specific options
-          updateGradeSelect(residentGradeSelect, data.grades, allGradeOptions.resident);
-          updateGradeSelect(facultyGradeSelect, data.grades, allGradeOptions.faculty);
-          updateGradeSelect(arbitratorGradeSelect, data.grades, allGradeOptions.arbitrator);
-          updateGradeSelect(finalGradeSelect, data.grades, allGradeOptions.final);
-        })
-        .catch(error => console.error('Error fetching disease grades:', error));
+    if (diseaseId && diseasesData) {
+      // Find the selected disease in the loaded data
+      const selectedDisease = diseasesData.find(d => d.id === diseaseId);
+      
+      if (selectedDisease) {
+        // Update all grade dropdowns with the disease's gradings
+        updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
+        updateGradeCheckboxes(facultyGradeList, selectedDisease.gradings, allGradeOptions.faculty);
+        updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
+        updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
+      }
     } else {
       // If no disease selected, restore all grade options
-      residentGradeSelect.innerHTML = '';
-      allGradeOptions.resident.forEach(option => residentGradeSelect.appendChild(option.cloneNode(true)));
+      residentGradeList.innerHTML = '';
+      allGradeOptions.resident.forEach(li => {
+        // Preserve checked state when restoring
+        const existingChecked = residentGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+        const isChecked = existingChecked ? existingChecked.checked : false;
+        const newLi = li.cloneNode(true);
+        if (isChecked) {
+          newLi.querySelector('input').checked = true;
+        }
+        residentGradeList.appendChild(newLi);
+      });
       
-      facultyGradeSelect.innerHTML = '';
-      allGradeOptions.faculty.forEach(option => facultyGradeSelect.appendChild(option.cloneNode(true)));
+      facultyGradeList.innerHTML = '';
+      allGradeOptions.faculty.forEach(li => {
+        const existingChecked = facultyGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+        const isChecked = existingChecked ? existingChecked.checked : false;
+        const newLi = li.cloneNode(true);
+        if (isChecked) {
+          newLi.querySelector('input').checked = true;
+        }
+        facultyGradeList.appendChild(newLi);
+      });
       
-      arbitratorGradeSelect.innerHTML = '';
-      allGradeOptions.arbitrator.forEach(option => arbitratorGradeSelect.appendChild(option.cloneNode(true)));
+      arbitratorGradeList.innerHTML = '';
+      allGradeOptions.arbitrator.forEach(li => {
+        const existingChecked = arbitratorGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+        const isChecked = existingChecked ? existingChecked.checked : false;
+        const newLi = li.cloneNode(true);
+        if (isChecked) {
+          newLi.querySelector('input').checked = true;
+        }
+        arbitratorGradeList.appendChild(newLi);
+      });
       
-      finalGradeSelect.innerHTML = '';
-      allGradeOptions.final.forEach(option => finalGradeSelect.appendChild(option.cloneNode(true)));
+      finalGradeList.innerHTML = '';
+      allGradeOptions.final.forEach(li => {
+        const existingChecked = finalGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+        const isChecked = existingChecked ? existingChecked.checked : false;
+        const newLi = li.cloneNode(true);
+        if (isChecked) {
+          newLi.querySelector('input').checked = true;
+        }
+        finalGradeList.appendChild(newLi);
+      });
     }
   }
 
@@ -258,21 +352,81 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Initialize grade options if a disease is already selected on page load
   if (diseaseSelect.value) {
-    updateGradeOptions();
+    // Wait briefly for the data to load before updating
+    setTimeout(updateGradeOptions, 100);
   }
 });
 
-function updateGradeSelect(selectElement, grades, allOptions) {
-  // Clear current options except the first "All Grades" option
-  selectElement.innerHTML = '<option value="">All Grades</option>';
+// Function to update grade checkboxes based on available grades
+function updateGradeCheckboxes(gradeList, grades, allOptions) {
+  // Get currently checked values before clearing
+  const checkedValues = Array.from(gradeList.querySelectorAll('input:checked')).map(input => input.value);
   
-  // Add disease-specific grades
-  grades.forEach(grade => {
-    const option = document.createElement('option');
-    option.value = grade.impression;
-    option.textContent = grade.impression;
-    selectElement.appendChild(option);
+  // Clear current options
+  gradeList.innerHTML = '';
+  
+  // Create a Set of grade impressions to quickly check if a grade should be shown
+  const gradeImpressions = new Set(grades.map(g => g.impression));
+  
+  // Track which grades we've already added to prevent duplicates
+  const addedGrades = new Set();
+  
+  // Filter allOptions to only include grades that are in the disease-specific list, avoiding duplicates
+  allOptions.forEach(li => {
+    const gradeValue = li.querySelector('input').value;
+    
+    // Only add if it's in the disease-specific grades and we haven't added it yet
+    if (gradeImpressions.has(gradeValue) && !addedGrades.has(gradeValue)) {
+      // Preserve checked state if this grade was previously checked
+      const newLi = li.cloneNode(true);
+      if (checkedValues.includes(gradeValue)) {
+        newLi.querySelector('input').checked = true;
+      }
+      gradeList.appendChild(newLi);
+      
+      // Mark this grade as added to prevent duplicates
+      addedGrades.add(gradeValue);
+    }
   });
+  
+  // Update dropdown text to reflect current selections
+  updateDropdownText(gradeList);
 }
+
+// Function to update dropdown text based on selected checkboxes
+function updateDropdownText(gradeList) {
+  const dropdownId = gradeList.id.replace('List', 'Text');
+  const selectedCount = gradeList.querySelectorAll('.grade-checkbox:checked').length;
+  const dropdownText = document.getElementById(dropdownId);
+  
+  if (selectedCount === 0) {
+    dropdownText.textContent = 'All Grades';
+  } else if (selectedCount === 1) {
+    const checkedBox = gradeList.querySelector('.grade-checkbox:checked');
+    dropdownText.textContent = checkedBox.value;
+  } else {
+    dropdownText.textContent = `${selectedCount} grades selected`;
+  }
+}
+
+// Update text when checkboxes are selected
+document.querySelectorAll('.dropdown-menu').forEach(menu => {
+  menu.addEventListener('change', function(e) {
+    if (e.target.classList.contains('grade-checkbox')) {
+      const dropdownId = menu.id.replace('List', 'Text');
+      const selectedCount = menu.querySelectorAll('.grade-checkbox:checked').length;
+      const dropdownText = document.getElementById(dropdownId);
+      
+      if (selectedCount === 0) {
+        dropdownText.textContent = 'All Grades';
+      } else if (selectedCount === 1) {
+        const checkedBox = menu.querySelector('.grade-checkbox:checked');
+        dropdownText.textContent = checkedBox.value;
+      } else {
+        dropdownText.textContent = `${selectedCount} grades selected`;
+      }
+    }
+  });
+});
 </script>
 {% endblock %}

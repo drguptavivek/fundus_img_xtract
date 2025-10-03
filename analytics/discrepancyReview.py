@@ -52,8 +52,13 @@ def discrepancy_review():
         if lab_unit_id:
             query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
         
-        # Apply role grade filters using subqueries to avoid duplication
+        # Get grade filter values (as lists to support multi-select)
         resident_grades = request.args.getlist("resident_grade")
+        faculty_grades = request.args.getlist("faculty_grade")
+        arbitrator_grades = request.args.getlist("arbitrator_grade")
+        final_grades = request.args.getlist("final_grade")
+        
+        # Apply role grade filters using subqueries to avoid duplication
         if resident_grades:
             # Filter out empty strings
             resident_grades = [g for g in resident_grades if g]
@@ -66,7 +71,6 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
-        faculty_grades = request.args.getlist("faculty_grade")
         if faculty_grades:
             # Filter out empty strings
             faculty_grades = [g for g in faculty_grades if g]
@@ -79,7 +83,6 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
-        arbitrator_grades = request.args.getlist("arbitrator_grade")
         if arbitrator_grades:
             # Filter out empty strings
             arbitrator_grades = [g for g in arbitrator_grades if g]
@@ -92,7 +95,6 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
-        final_grades = request.args.getlist("final_grade")
         if final_grades:
             # Filter out empty strings
             final_grades = [g for g in final_grades if g]
@@ -155,10 +157,10 @@ def discrepancy_review():
             filters={
                 'disease_id': disease_id,
                 'lab_unit_id': lab_unit_id,
-                'resident_grade': resident_grade,
-                'faculty_grade': faculty_grade,
-                'arbitrator_grade': arbitrator_grade,
-                'final_grade': final_grade
+                'resident_grade': resident_grades,
+                'faculty_grade': faculty_grades,
+                'arbitrator_grade': arbitrator_grades,
+                'final_grade': final_grades
             }
         )
     

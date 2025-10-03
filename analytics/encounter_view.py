@@ -84,22 +84,19 @@ def view_encounter(encounter_id: int):
         gl_reports = encounter.glaucoma_reports or []
         gl_cleaned = encounter.glaucoma_results_cleaned or []
 
-        image_ids = [img.id for img in images]
-        tasks_map: dict[int, list[GradingTask]] = defaultdict(list)
-        if image_ids:
-            tasks = (
-                db.query(GradingTask)
-                .filter(GradingTask.encounter_file_id.in_(image_ids))
-                .options(
-                    selectinload(GradingTask.disease),
-                    selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
-                    selectinload(GradingTask.grades).selectinload(Grade.label),
-                )
-                .all()
-            )
-            for task in tasks:
-                if task.encounter_file_id is not None:
-                    tasks_map[task.encounter_file_id].append(task)
+        # Use utility function to get comprehensive task data
+        summary = get_encounter_summary(encounter_id)
+        if not summary:
+            abort(404, description="Encounter not found")
+
+        # Create tasks map from the summary data and make it compatible with the template
+        tasks_map: dict[int, list] = defaultdict(list)
+        for img_with_task in summary['images_with_tasks']:
+            for task in img_with_task['tasks']:
+                # Get the full task details from the summary tasks
+                full_task = next((t for t in summary['tasks'] if t['id'] == task['id']), None)
+                if full_task:
+                    tasks_map[img_with_task['id']].append(full_task)
 
     finally:
         db.close()

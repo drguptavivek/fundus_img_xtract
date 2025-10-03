@@ -59,6 +59,45 @@
         <dt class="col-sm-3">Area</dt>
         <dd class="col-sm-9">{{ upload.area.name if upload.area else '—' }}</dd>
       </dl>
+      
+      <!-- Display tasks and gradings -->
+      {% if tasks %}
+        <div class="card shadow-sm mt-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Tasks & Grading</h5>
+          </div>
+          <div class="card-body">
+            {% for task in tasks %}
+              <div class="border-start border-2 ps-2 my-2 small">
+                <div class="fw-bold">ID:{{ task.id }} ({{ task.disease }} - {{ task.status }})</div>
+                {% if task.grades %}
+                  {% for grade in task.grades %}
+                    <div>
+                      <span class="text-muted">{{ grade.role_slot|title }}:</span> 
+                      {{ grade.impression if grade.impression else '-' }}
+                      {% if grade.comment %}<small class="text-info"> - {{ grade.comment }}</small>{% endif %}
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="text-muted">No grades yet</div>
+                {% endif %}
+                
+                {% if task.consensus %}
+                  <div class="fw-bold text-success">
+                    Consensus: {{ task.consensus.final_impression if task.consensus.final_impression else '-' }}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="card shadow-sm mt-4">
+          <div class="card-body">
+            <p class="text-muted mb-0">No tasks associated with this image.</p>
+          </div>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>

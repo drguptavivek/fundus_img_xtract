@@ -1,0 +1,81 @@
+from sqlalchemy.orm import joinedload, selectinload
+
+from models import (
+    Consensus,
+    Grade,
+    GradingTask,
+    Session
+)
+
+
+def get_task_summary(task_id: int):
+    """
+    Fetches a summary for a specific grading task, including:
+    - Task status
+    - Disease
+    - All grades for the task
+    - Consensus information if it exists
+    
+    Args:
+        task_id (int): The ID of the grading task
+    
+    Returns:
+        dict: A dictionary containing task status, disease, grades, and consensus
+    """
+    db = Session()
+    try:
+        # Fetch the task with its relationships
+        task = (
+            db.query(GradingTask)
+            .options(
+                joinedload(GradingTask.disease),
+                selectinload(GradingTask.grades).selectinload(Grade.label),
+                joinedload(GradingTask.consensus).joinedload(Consensus.final_label),
+            )
+            .filter(GradingTask.id == task_id)
+            .first()
+        )
+        
+        if not task:
+            return None
+        
+        # Format the response
+        task_summary = {
+            'id': task.id,
+            'status': task.state,
+            'disease': task.disease.name if task.disease else None,
+            'disease_id': task.disease_id,
+            'lab_unit_id': task.lab_unit_id,
+            'created_at': task.created_at,
+            'updated_at': task.updated_at,
+            'grades': [],
+            'consensus': None
+        }
+        
+        # Add grades for the task
+        for grade in task.grades or []:
+            grade_data = {
+                'id': grade.id,
+                'role_slot': grade.role_slot,
+                'impression': grade.label.impression if grade.label else grade.grade_name,
+                'comment': grade.comment,
+                'created_at': grade.created_at,
+                'updated_at': grade.updated_at,
+                'grader_username': grade.grader.username if grade.grader else None
+            }
+            task_summary['grades'].append(grade_data)
+        
+        # Add consensus for the task if it exists
+        if task.consensus:
+            task_summary['consensus'] = {
+                'id': task.consensus.id,
+                'method': task.consensus.method,
+                'final_impression': task.consensus.final_label.impression if task.consensus.final_label else task.consensus.final_grade_name,
+                'decided_at': task.consensus.decided_at,
+                'decided_by_username': task.consensus.decided_by.username if task.consensus.decided_by else None
+            }
+        
+        return task_summary
+    
+    finally:
+        db.close()

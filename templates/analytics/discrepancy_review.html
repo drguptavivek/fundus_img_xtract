@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}Discrepancy Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h3>Discrepancy Review</h3>
+  </div>
+
+  <!-- Filter Section -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filters</h5>
+    </div>
+    <div class="card-body">
+      <form method="GET" id="filterForm">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label for="diseaseSelect" class="form-label">Disease</label>
+            <select class="form-select" id="diseaseSelect" name="disease_id">
+              <option value="">All Diseases</option>
+              {% for disease in diseases %}
+                <option value="{{ disease.id }}" {% if filters.disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="col-md-3">
+            <label for="labUnitSelect" class="form-label">Lab Unit</label>
+            <select class="form-select" id="labUnitSelect" name="lab_unit_id">
+              <option value="">All Lab Units</option>
+              {% for lab_unit in lab_units %}
+                <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="col-md-3">
+            <label for="residentGradeSelect" class="form-label">Resident Grade</label>
+            <select class="form-select" id="residentGradeSelect" name="resident_grade">
+              <option value="">All Grades</option>
+              {% for grade in grade_options %}
+                <option value="{{ grade.impression }}" {% if filters.resident_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="col-md-3">
+            <label for="facultyGradeSelect" class="form-label">Faculty Grade</label>
+            <select class="form-select" id="facultyGradeSelect" name="faculty_grade">
+              <option value="">All Grades</option>
+              {% for grade in grade_options %}
+                <option value="{{ grade.impression }}" {% if filters.faculty_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        
+        <div class="row g-3 mt-2">
+          <div class="col-md-3">
+            <label for="arbitratorGradeSelect" class="form-label">Arbitrator Grade</label>
+            <select class="form-select" id="arbitratorGradeSelect" name="arbitrator_grade">
+              <option value="">All Grades</option>
+              {% for grade in grade_options %}
+                <option value="{{ grade.impression }}" {% if filters.arbitrator_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="col-md-3">
+            <label for="finalGradeSelect" class="form-label">Final Grade</label>
+            <select class="form-select" id="finalGradeSelect" name="final_grade">
+              <option value="">All Grades</option>
+              {% for grade in grade_options %}
+                <option value="{{ grade.impression }}" {% if filters.final_grade == grade.impression %}selected{% endif %}>{{ grade.impression }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          
+          <div class="col-md-6 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results Section -->
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Tasks for Review</h5>
+      <span class="text-muted">{{ tasks|length }} tasks found</span>
+    </div>
+    <div class="card-body">
+      {% if tasks %}
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead>
+              <tr>
+                <th>Task ID</th>
+                <th>Image UUID</th>
+                <th>Disease</th>
+                <th>Lab Unit</th>
+                <th>Resident Grade</th>
+                <th>Faculty Grade</th>
+                <th>Arbitrator Grade</th>
+                <th>Final Grade</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for task in tasks %}
+              <tr>
+                <td>{{ task.id }}</td>
+                <td>
+                  {% if task.encounter_file_uuid %}
+                    <code>{{ task.encounter_file_uuid[:8] }}...</code>
+                  {% else %}
+                    -
+                  {% endif %}
+                </td>
+                <td>{{ task.disease_name or '-' }}</td>
+                <td>{{ task.lab_unit_name or '-' }}</td>
+                <td>
+                  {% set grade = task.grades.get('resident') %}
+                  {% if grade %}
+                    <span class="badge bg-secondary">{{ grade.impression or '-' }}</span>
+                    {% if grade.comment %}<small class="text-muted d-block">Note: {{ grade.comment[:30] }}{% if grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No grade</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% set grade = task.grades.get('faculty') %}
+                  {% if grade %}
+                    <span class="badge bg-info text-dark">{{ grade.impression or '-' }}</span>
+                    {% if grade.comment %}<small class="text-muted d-block">Note: {{ grade.comment[:30] }}{% if grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No grade</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% set grade = task.grades.get('arbitrator') %}
+                  {% if grade %}
+                    <span class="badge bg-warning text-dark">{{ grade.impression or '-' }}</span>
+                    {% if grade.comment %}<small class="text-muted d-block">Note: {{ grade.comment[:30] }}{% if grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No grade</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if task.consensus %}
+                    <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
+                    <small class="text-muted d-block">{{ task.consensus.method or '' }}</small>
+                  {% else %}
+                    <span class="text-muted">No consensus</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge 
+                    {% if task.state == 'resident_done' %}bg-warning text-dark
+                    {% elif task.state == 'faculty_done' %}bg-info
+                    {% elif task.state == 'arbitration' %}bg-danger
+                    {% elif task.state == 'final' %}bg-success
+                    {% else %}bg-secondary{% endif %}">
+                    {{ task.state }}
+                  </span>
+                </td>
+                <td>
+                  {% if task.encounter_file_uuid %}
+                  <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file_uuid) }}" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
+                  {% endif %}
+                  <a href="{{ url_for('grading.task_detail', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-5">
+          <i class="bi bi-search fs-1 text-muted"></i>
+          <p class="text-muted mt-3">No tasks found matching the selected filters.</p>
+          {% if filters %}
+            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+function clearFilters() {
+  document.getElementById('filterForm').reset();
+  document.getElementById('diseaseSelect').value = '';
+  document.getElementById('labUnitSelect').value = '';
+  document.getElementById('residentGradeSelect').value = '';
+  document.getElementById('facultyGradeSelect').value = '';
+  document.getElementById('arbitratorGradeSelect').value = '';
+  document.getElementById('finalGradeSelect').value = '';
+  document.getElementById('filterForm').submit();
+}
+</script>
+{% endblock %}

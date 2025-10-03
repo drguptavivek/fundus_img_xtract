@@ -3,6 +3,8 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from models import (
+    DirectImageUpload,
+    LabUnit,
     PatientEncounters,
     EncounterFile,
     EncounterFilePDF,
@@ -17,7 +19,7 @@ from models import (
 )
 
 
-def get_encounter_summary(encounter_id: int):
+def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False):
     """
     Fetches a comprehensive summary for a given encounter, including:
     - Image UUIDs
@@ -31,6 +33,7 @@ def get_encounter_summary(encounter_id: int):
     
     Args:
         encounter_id (int): The ID of the encounter to fetch summary for
+        with_encounter_object (bool): Whether to include the full encounter object (may cause DetachedInstanceError if session closes)
     
     Returns:
         dict: A dictionary containing all the requested data for the encounter
@@ -46,6 +49,7 @@ def get_encounter_summary(encounter_id: int):
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
+                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
             .filter(PatientEncounters.id == encounter_id)
             .first()
@@ -85,10 +89,6 @@ def get_encounter_summary(encounter_id: int):
                 .all()
             )
         
-        # Identify images with no associated tasks
-        task_image_ids = {task.encounter_file_id for task in tasks}
-        images_without_tasks = [ef for ef in encounter.encounter_files or [] if ef.id not in task_image_ids]
-        
         # Create a mapping of image IDs to their tasks
         image_tasks_map = {}
         for img in encounter.encounter_files or []:
@@ -111,7 +111,16 @@ def get_encounter_summary(encounter_id: int):
         
         # Format the response
         encounter_summary = {
-            'encounter': encounter,
+            'encounter_id': encounter.id,
+            'encounter_patient_id': encounter.patient_id,
+            'encounter_capture_date': encounter.capture_date,
+            'encounter_name': encounter.name,
+            'encounter_verified_status': encounter.encounter_verified_status,
+            'encounter_verified_by': encounter.encounter_verified_by,
+            'encounter_verified_at': encounter.encounter_verified_at,
+            'lab_unit_id': encounter.lab_unit_id,
+            'lab_unit_name': encounter.lab_unit.name if encounter.lab_unit else None,
+            'hospital_name': encounter.lab_unit.hospital.name if (encounter.lab_unit and encounter.lab_unit.hospital) else None,
             'image_uuids': image_uuids,
             'report_pdf_uuids': report_pdf_uuids,
             'glaucoma_results_cleaned': [],
@@ -119,6 +128,10 @@ def get_encounter_summary(encounter_id: int):
             'images_with_tasks': list(image_tasks_map.values()),
             'tasks': []  # Keep the original task structure as well
         }
+        
+        # If requested, include the full encounter object (but user needs to manage session)
+        if with_encounter_object:
+            encounter_summary['encounter'] = encounter
         
         # Add detailed info for glaucoma results cleaned
         for grc in glaucoma_results_cleaned:
@@ -293,5 +306,99 @@ def get_encounters_with_non_pending_tasks():
         
         return result
     
+    finally:
+        db.close()
+
+
+def get_direct_image_summary(uuid_str: str):
+    """
+    Fetches a comprehensive summary for a direct image upload, including:
+    - All tasks associated with the image
+    - Task status and disease
+    - All gradings for each task
+    - Consensus for each task
+    
+    Args:
+        uuid_str (str): The UUID of the direct image upload
+    
+    Returns:
+        dict: A dictionary containing all the requested data for the direct image
+    """
+    db = Session()
+    try:
+        # First get the direct image upload
+        from models import DirectImageUpload
+        direct_image = (
+            db.query(DirectImageUpload)
+            .filter(DirectImageUpload.uuid == uuid_str)
+            .first()
+        )
+        
+        if not direct_image:
+            return None
+        
+        # Fetch all tasks associated with this direct image
+        tasks = (
+            db.query(GradingTask)
+            .filter(GradingTask.direct_image_upload_id == direct_image.id)
+            .options(
+                joinedload(GradingTask.disease),
+                selectinload(GradingTask.grades).selectinload(Grade.label),
+                joinedload(GradingTask.consensus).joinedload(Consensus.final_label),
+            )
+            .all()
+        )
+        
+        # Format the response
+        image_summary = {
+            'direct_image': {
+                'id': direct_image.id,
+                'uuid': direct_image.uuid,
+                'filename': direct_image.filename,
+                'hospital_name': direct_image.hospital.name if direct_image.hospital else None,
+                'lab_unit_name': direct_image.lab_unit.name if direct_image.lab_unit else None,
+                'camera_name': direct_image.camera.name if direct_image.camera else None,
+                'disease_name': direct_image.disease.name if direct_image.disease else None,
+                'area_name': direct_image.area.name if direct_image.area else None,
+                'is_mydriatic': direct_image.is_mydriatic,
+                'created_at': direct_image.created_at
+            },
+            'tasks': []
+        }
+        
+        # Process tasks with their related data
+        for task in tasks:
+            task_data = {
+                'id': task.id,
+                'status': task.state,
+                'disease': task.disease.name if task.disease else None,
+                'grades': [],
+                'consensus': None
+            }
+            
+            # Add grades for the task
+            for grade in task.grades or []:
+                grade_data = {
+                    'id': grade.id,
+                    'role_slot': grade.role_slot,
+                    'impression': grade.label.impression if grade.label else grade.grade_name,
+                    'comment': grade.comment,
+                    'created_at': grade.created_at
+                }
+                task_data['grades'].append(grade_data)
+            
+            # Add consensus for the task if it exists
+            if task.consensus:
+                task_data['consensus'] = {
+                    'id': task.consensus.id,
+                    'method': task.consensus.method,
+                    'final_impression': task.consensus.final_label.impression if task.consensus.final_label else task.consensus.final_grade_name,
+                    'decided_at': task.consensus.decided_at
+                }
+            
+            image_summary['tasks'].append(task_data)
+        
+        return image_summary
+        
     finally:
         db.close()

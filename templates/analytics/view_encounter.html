@@ -135,12 +135,12 @@
                   <strong>Tasks & Grades:</strong>
                   {% for task in image_tasks %}
                     <div class="border-start border-2 ps-2 my-2 small">
-                      <div class="fw-bold">ID:{{ task.id }} ({{ task.disease.name }} - {{ task.state }})</div>
+                      <div class="fw-bold">ID:{{ task.id }} ({{ task.disease }} - {{ task.status }})</div>
                       {% if task.grades %}
                         {% for grade in task.grades %}
                           <div>
                             <span class="text-muted">{{ grade.role_slot|title }}:</span> 
-                            {{ grade.label.impression if grade.label else (grade.grade_name if grade.grade_name else '-') }}
+                            {{ grade.impression if grade.impression else '-' }}
                             {% if grade.comment %}<small class="text-info"> - {{ grade.comment }}</small>{% endif %}
                           </div>
                         {% endfor %}
@@ -150,7 +150,7 @@
                       
                       {% if task.consensus %}
                         <div class="fw-bold text-success">
-                          Consensus: {{ task.consensus.final_label.impression if task.consensus.final_label else (task.consensus.final_grade_name if task.consensus.final_grade_name else '-') }}
+                          Consensus: {{ task.consensus.final_impression if task.consensus.final_impression else '-' }}
                         </div>
                       {% endif %}
                     </div>

@@ -1,6 +1,41 @@
 {% extends "base.html" %}
 {% block title %}Discrepancy Review{% endblock %}
 
+{% block styles %}
+{{ super() }}
+<style>
+/* Fix for checkboxes in dropdowns */
+.dropdown-menu .form-check {
+  display: block;
+  padding: 0.25rem 1rem;
+  clear: both;
+  font-weight: 400;
+  color: var(--bs-dropdown-color);
+  text-decoration: none;
+  text-align: inherit;
+  white-space: nowrap;
+  background-color: transparent;
+  border: 0;
+  margin-left: 1rem;
+}
+
+.dropdown-menu .form-check .form-check-input {
+  float: none;
+  margin-left: 0;
+  margin-right: 0.5rem;
+  position: relative;
+  top: 0.125rem; /* Adjust to align with text */
+}
+
+.dropdown-menu .form-check-label {
+  display: inline;
+  margin-bottom: 0;
+  width: calc(100% - 2rem); /* Account for checkbox width */
+  cursor: pointer;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
@@ -44,7 +79,7 @@
               <ul class="dropdown-menu w-100" id="residentGradeList">
                 {% for grade in grade_options %}
                 <li>
-                  <div class="form-check px-3 py-1">
+                  <div class="form-check ms-4  px-3 py-1">
                     <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="resident_grade" {% if grade.impression in (filters.resident_grade if filters.resident_grade else []) %}checked{% endif %}>
                     <label class="form-check-label" for="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
                       {{ grade.impression }}
@@ -65,7 +100,7 @@
               <ul class="dropdown-menu w-100" id="facultyGradeList">
                 {% for grade in grade_options %}
                 <li>
-                  <div class="form-check px-3 py-1">
+                  <div class="form-check ms-4  px-3 py-1">
                     <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="faculty_grade" {% if grade.impression in (filters.faculty_grade if filters.faculty_grade else []) %}checked{% endif %}>
                     <label class="form-check-label" for="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
                       {{ grade.impression }}
@@ -109,7 +144,7 @@
               <ul class="dropdown-menu w-100" id="finalGradeList">
                 {% for grade in grade_options %}
                 <li>
-                  <div class="form-check px-3 py-1">
+                  <div class="form-check ms-4 px-3 py-1">
                     <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="final_grade" {% if grade.impression in (filters.final_grade if filters.final_grade else []) %}checked{% endif %}>
                     <label class="form-check-label" for="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
                       {{ grade.impression }}
@@ -132,9 +167,124 @@
 
   <!-- Results Section -->
   <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="card-title mb-0">Tasks for Review</h5>
-      <span class="text-muted">{{ tasks|length }} tasks found</span>
+    <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+      <div>
+        <h5 class="card-title mb-0">Tasks for Review</h5>
+        <div class="text-muted">
+          Showing {{ ((page - 1) * 50 + 1) if tasks else 0 }} to 
+          {{ (page * 50) if has_next else ((page - 1) * 50 + tasks|length) }} 
+          of {{ total_count }} tasks
+        </div>
+      </div>
+      <div class="mt-2 mt-md-0">
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+          <nav aria-label="Tasks pagination">
+            <ul class="pagination pagination-sm mb-0">
+              <li class="page-item {% if not has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  disease_id=filters.disease_id,
+                  lab_unit_id=filters.lab_unit_id,
+                  resident_grade=filters.resident_grade or [],
+                  faculty_grade=filters.faculty_grade or [],
+                  arbitrator_grade=filters.arbitrator_grade or [],
+                  final_grade=filters.final_grade or [],
+                  page=page-1) if has_prev else '#' }}">
+                  Previous
+                </a>
+              </li>
+              
+              <!-- Show first page, current page(s), and last page -->
+              {% if total_pages <= 7 %}
+                <!-- If total pages <= 7, show all pages -->
+                {% for p in range(1, total_pages + 1) %}
+                  <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                      disease_id=filters.disease_id,
+                      lab_unit_id=filters.lab_unit_id,
+                      resident_grade=filters.resident_grade or [],
+                      faculty_grade=filters.faculty_grade or [],
+                      arbitrator_grade=filters.arbitrator_grade or [],
+                      final_grade=filters.final_grade or [],
+                      page=p) }}">
+                      {{ p }}
+                    </a>
+                  </li>
+                {% endfor %}
+              {% else %}
+                <!-- More than 7 pages, show first, current, and last -->
+                <li class="page-item {% if 1 == page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                    disease_id=filters.disease_id,
+                    lab_unit_id=filters.lab_unit_id,
+                    resident_grade=filters.resident_grade or [],
+                    faculty_grade=filters.faculty_grade or [],
+                    arbitrator_grade=filters.arbitrator_grade or [],
+                    final_grade=filters.final_grade or [],
+                    page=1) }}">
+                    1
+                  </a>
+                </li>
+                
+                {% if page > 3 %}
+                  <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                  </li>
+                {% endif %}
+                
+                {% for p in range([page - 1, 2]|sort|first, [page + 2, total_pages]|sort|last) %}
+                  {% if p > 1 and p < total_pages %}
+                    <li class="page-item {% if p == page %}active{% endif %}">
+                      <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                        disease_id=filters.disease_id,
+                        lab_unit_id=filters.lab_unit_id,
+                        resident_grade=filters.resident_grade or [],
+                        faculty_grade=filters.faculty_grade or [],
+                        arbitrator_grade=filters.arbitrator_grade or [],
+                        final_grade=filters.final_grade or [],
+                        page=p) }}">
+                        {{ p }}
+                      </a>
+                    </li>
+                  {% endif %}
+                {% endfor %}
+                
+                {% if page < total_pages - 2 %}
+                  <li class="page-item disabled">
+                    <span class="page-link">...</span>
+                  </li>
+                {% endif %}
+                
+                <li class="page-item {% if total_pages == page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                    disease_id=filters.disease_id,
+                    lab_unit_id=filters.lab_unit_id,
+                    resident_grade=filters.resident_grade or [],
+                    faculty_grade=filters.faculty_grade or [],
+                    arbitrator_grade=filters.arbitrator_grade or [],
+                    final_grade=filters.final_grade or [],
+                    page=total_pages) }}">
+                    {{ total_pages }}
+                  </a>
+                </li>
+              {% endif %}
+              
+              <li class="page-item {% if not has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  disease_id=filters.disease_id,
+                  lab_unit_id=filters.lab_unit_id,
+                  resident_grade=filters.resident_grade or [],
+                  faculty_grade=filters.faculty_grade or [],
+                  arbitrator_grade=filters.arbitrator_grade or [],
+                  final_grade=filters.final_grade or [],
+                  page=page+1) if has_next else '#' }}">
+                  Next
+                </a>
+              </li>
+            </ul>
+          </nav>
+        {% endif %}
+      </div>
     </div>
     <div class="card-body">
       {% if tasks %}
@@ -161,12 +311,14 @@
                 <td>
                   {% if task.encounter_file_uuid %}
                     <code>{{ task.encounter_file_uuid[:8] }}...</code>
+                  {% elif task.direct_image_uuid %}
+                    <code>{{ task.direct_image_uuid[:8] }}...</code>
                   {% else %}
                     -
                   {% endif %}
                 </td>
                 <td>{{ task.disease_name or '-' }}</td>
-                <td>{{ task.lab_unit_name or '-' }}</td>
+                <td>{{ task.lab_unit_name or '-' }}<br><small class="text-muted">{{ task.hospital_name or '' }}</small></td>
                 <td>
                   {% set grade = task.grades.get('resident') %}
                   {% if grade %}
@@ -213,8 +365,13 @@
                   </span>
                 </td>
                 <td>
-                  {% if task.encounter_file_uuid %}
-                  <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file_uuid) }}" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
+                  {% if task.encounter_file_uuid or task.direct_image_uuid %}
+                  {% set image_uuid = task.encounter_file_uuid or task.direct_image_uuid %}
+                  {% set gallery_id = 'discrepancy-gallery-' ~ task.id %}
+                  <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid) }}" data-pswp-type="image" title="{{ task.disease_name or 'Image' }}"></a>
+                  </div>
+                  <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                   {% endif %}
                   <a href="{{ url_for('analytics.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
                 </td>
@@ -224,6 +381,40 @@
             </tbody>
           </table>
         </div>
+        
+        <!-- Mobile Pagination -->
+        {% if total_pages > 1 %}
+          <div class="d-md-none mt-3">
+            <nav aria-label="Tasks pagination (mobile)">
+              <ul class="pagination pagination-sm justify-content-center">
+                <li class="page-item {% if not has_prev %}disabled{% endif %}">
+                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                    disease_id=filters.disease_id,
+                    lab_unit_id=filters.lab_unit_id,
+                    resident_grade=filters.resident_grade or [],
+                    faculty_grade=filters.faculty_grade or [],
+                    arbitrator_grade=filters.arbitrator_grade or [],
+                    final_grade=filters.final_grade or [],
+                    page=page-1) if has_prev else '#' }}">
+                    Previous
+                  </a>
+                </li>
+                <li class="page-item {% if not has_next %}disabled{% endif %}">
+                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                    disease_id=filters.disease_id,
+                    lab_unit_id=filters.lab_unit_id,
+                    resident_grade=filters.resident_grade or [],
+                    faculty_grade=filters.faculty_grade or [],
+                    arbitrator_grade=filters.arbitrator_grade or [],
+                    final_grade=filters.final_grade or [],
+                    page=page+1) if has_next else '#' }}">
+                    Next
+                  </a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        {% endif %}
       {% else %}
         <div class="text-center py-5">
           <i class="bi bi-search fs-1 text-muted"></i>
@@ -254,7 +445,13 @@ function clearFilters() {
   document.getElementById('arbitratorGradeText').textContent = 'All Grades';
   document.getElementById('finalGradeText').textContent = 'All Grades';
   
-  document.getElementById('filterForm').submit();
+  // Remove page parameter from URL so it defaults to page 1
+  const form = document.getElementById('filterForm');
+  const currentAction = form.getAttribute('action');
+  const newAction = currentAction.split('?')[0]; // Remove query parameters
+  form.setAttribute('action', newAction);
+  
+  form.submit();
 }
 
 // Load all diseases with their gradings on page load
@@ -429,4 +626,8 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
   });
 });
 </script>
+
+<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
+<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
 {% endblock %}

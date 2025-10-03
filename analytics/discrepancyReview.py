@@ -107,14 +107,28 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
-        # Load tasks with grades and consensus
+        # Get total count for pagination
+        total_count = query.count()
+        
+        # Pagination setup
+        page = request.args.get('page', 1, type=int)
+        per_page = 50  # 50 items per page as requested
+        offset = (page - 1) * per_page
+        
+        # Load paginated tasks with grades, consensus, and direct upload information
         tasks = query.options(
             joinedload(GradingTask.disease),
             joinedload(GradingTask.lab_unit),
             joinedload(GradingTask.encounter_file),
+            joinedload(GradingTask.direct_image),  # Add direct upload information
             selectinload(GradingTask.grades).selectinload(Grade.label),
             joinedload(GradingTask.consensus).joinedload(Consensus.final_label),
-        ).all()
+        ).offset(offset).limit(per_page).all()
+        
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+        has_prev = page > 1
+        has_next = page < total_pages
         
         # Process tasks to make them easier to work with in the template
         processed_tasks = []
@@ -124,7 +138,9 @@ def discrepancy_review():
                 'state': task.state,
                 'disease_name': task.disease.name if task.disease else None,
                 'lab_unit_name': task.lab_unit.name if task.lab_unit else None,
+                'hospital_name': task.lab_unit.hospital.name if task.lab_unit and task.lab_unit.hospital else None,
                 'encounter_file_uuid': task.encounter_file.uuid if task.encounter_file else None,
+                'direct_image_uuid': task.direct_image.uuid if task.direct_image else None,
                 'grades': {},
                 'consensus': None
             }
@@ -154,6 +170,11 @@ def discrepancy_review():
             lab_units=lab_units,
             grade_options=grade_options,
             tasks=processed_tasks,
+            total_count=total_count,
+            page=page,
+            total_pages=total_pages,
+            has_prev=has_prev,
+            has_next=has_next,
             filters={
                 'disease_id': disease_id,
                 'lab_unit_id': lab_unit_id,

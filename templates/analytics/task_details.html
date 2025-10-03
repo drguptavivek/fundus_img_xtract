@@ -42,17 +42,15 @@
       </div>
 
       <!-- Image Preview -->
-      {% if image_url %}
+      {% if image_object %}
       <div class="card shadow-sm mb-4">
         <div class="card-header">
           <h5 class="card-title mb-0">Image Preview</h5>
         </div>
-        <div class="card-body text-center">
-          <img src="{{ image_url }}" 
-               class="img-fluid rounded border" 
-               alt="Task Image"
-               style="max-height: 400px; object-fit: contain;">
-          <p class="mt-2 text-muted">Image UUID: {{ original_task.encounter_file.uuid if original_task.encounter_file else 'N/A' }}</p>
+        <div class="card-body">
+          {% set image = image_object %}
+          {% include 'partials/_viewer_card.html' %}
+          <p class="mt-2 text-muted text-center">Image UUID: {{ image_object.uuid }}</p>
         </div>
       </div>
       {% endif %}
@@ -124,8 +122,14 @@
           <h5 class="card-title mb-0">Actions</h5>
         </div>
         <div class="card-body">
-          {% if original_task.encounter_file.uuid %}
+          {% if original_task.encounter_file and original_task.encounter_file.uuid %}
           <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=original_task.encounter_file.uuid) }}" 
+             target="_blank" 
+             class="btn btn-primary w-100 mb-2">
+             <i class="bi bi-eye"></i> Open Image in New Tab
+          </a>
+          {% elif original_task.direct_image and original_task.direct_image.uuid %}
+          <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=original_task.direct_image.uuid) }}" 
              target="_blank" 
              class="btn btn-primary w-100 mb-2">
              <i class="bi bi-eye"></i> Open Image in New Tab

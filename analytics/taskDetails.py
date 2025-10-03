@@ -27,7 +27,8 @@ def view_task_details(task_id: int):
             .options(
                 joinedload(GradingTask.disease),
                 joinedload(GradingTask.lab_unit),
-                joinedload(GradingTask.encounter_file)
+                joinedload(GradingTask.encounter_file),
+                joinedload(GradingTask.direct_image)  # Add direct image information
             )
             .first()
         )
@@ -43,17 +44,14 @@ def view_task_details(task_id: int):
             from flask import abort
             abort(404, description="Task not found")
         
-        # Get the image URL if available
-        image_url = None
-        if task.encounter_file and task.encounter_file.uuid:
-            from flask import url_for
-            image_url = url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file.uuid)
-        
+        # Determine which image object to use for the viewer
+        image_object = task.encounter_file if task.encounter_file else task.direct_image
+
         return render_template(
             "analytics/task_details.html",
             task=task_details,
             original_task=task,  # For additional properties not in summary
-            image_url=image_url
+            image_object=image_object
         )
     
     finally:

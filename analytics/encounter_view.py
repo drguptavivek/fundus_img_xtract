@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from auth.roles import roles_required
 from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters, Session
 from utils.upload_eligibility import get_user_lab_unit_ids
+from .encounterUtils import get_encounter_summary
 
 from . import bp
 
@@ -21,6 +22,7 @@ def view_encounter(encounter_id: int):
 
     db = Session()
     try:
+        # Get the encounter with all necessary relationships loaded for the template
         encounter = (
             db.query(PatientEncounters)
             .options(

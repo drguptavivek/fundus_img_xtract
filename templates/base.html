@@ -214,6 +214,9 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results' else '' }}" href="{{ url_for('analytics.encounter_results') }}">Encounter Results</a>
               </li>
               <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}" href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
+              </li>
+              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.search_images' else '' }}" href="{{ url_for('analytics.search_images') }}">Search Images</a>
               </li>
             </ul>

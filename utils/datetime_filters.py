@@ -1,7 +1,7 @@
 """Jinja filters for timezone-aware datetime rendering."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Optional
 
 from flask import current_app
@@ -41,7 +41,7 @@ def _ensure_aware(value: datetime) -> datetime:
     return value
 
 
-def format_user_datetime(value: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M") -> str:
+def format_user_datetime(value: Optional[datetime | date], fmt: str = "%Y-%m-%d %H:%M") -> str:
     """Format a UTC datetime for display in the user's timezone.
 
     Args:
@@ -55,6 +55,12 @@ def format_user_datetime(value: Optional[datetime], fmt: str = "%Y-%m-%d %H:%M")
         return ""
 
     try:
+        if isinstance(value, date) and not isinstance(value, datetime):
+            value = datetime.combine(value, time.min, tzinfo=timezone.utc)
+
+        if not isinstance(value, datetime):
+            raise TypeError(f"Unsupported value type: {type(value)!r}")
+
         aware_value = _ensure_aware(value)
         target_tz = _resolve_target_timezone()
         localized = aware_value.astimezone(target_tz)

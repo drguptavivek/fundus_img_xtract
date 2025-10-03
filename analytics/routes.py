@@ -337,7 +337,7 @@ def images_without_tasks() -> str:
                         "lab_unit_name": lab_unit.name if lab_unit else None,
                         "hospital_name": lab_unit.hospital.name if lab_unit and lab_unit.hospital else None,
                         "record_date": upload.created_at,
-                        "date_display": upload.created_at,
+                        "date_display": upload.created_at.date() if upload.created_at else None,
                         "encounter_id": None,
                         "view_url": url_for("preprocess.anonymize_image", uuid=upload.uuid),
                     }

@@ -55,10 +55,10 @@
             <td>{{ row.hospital_name or '—' }}</td>
             <td>{{ row.lab_unit_name or '—' }}</td>
             <td>
-              {% if row.date_display %}
+              {% if row.record_date %}
+                {{ row.record_date|user_datetime('%Y-%m-%d %H:%M') }}
+              {% elif row.date_display %}
                 {{ row.date_display }}
-              {% elif row.record_date %}
-                {{ row.record_date|user_datetime }}
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}

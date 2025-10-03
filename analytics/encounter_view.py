@@ -8,7 +8,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
-from models import Grade, GradingTask, LabUnit, PatientEncounters, Session
+from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters, Session
 from utils.upload_eligibility import get_user_lab_unit_ids
 
 from . import bp
@@ -90,7 +90,7 @@ def view_encounter(encounter_id: int):
                 .filter(GradingTask.encounter_file_id.in_(image_ids))
                 .options(
                     selectinload(GradingTask.disease),
-                    selectinload(GradingTask.consensus).selectinload('final_label'),
+                    selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
                     selectinload(GradingTask.grades).selectinload(Grade.label),
                 )
                 .all()

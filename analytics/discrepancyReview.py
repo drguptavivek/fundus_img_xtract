@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from flask import render_template, request
+from flask import jsonify, render_template, request
 from flask_login import current_user
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
@@ -9,8 +9,10 @@ from auth.roles import roles_required
 from models import (
     Consensus,
     Disease,
+    DiseaseGrading,
     Grade,
     GradingTask,
+    Hospital,
     LabUnit,
     Session,
     User
@@ -32,10 +34,9 @@ def discrepancy_review():
         
         # Get filter options
         diseases = db.query(Disease).order_by(Disease.name).all()
-        lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(user_lab_unit_ids))).order_by(LabUnit.name).all()
+        lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(user_lab_unit_ids))).options(joinedload(LabUnit.hospital)).order_by(LabUnit.hospital_id, LabUnit.name).all()
         
         # Get grade options from DiseaseGrading
-        from models import DiseaseGrading
         grade_options = db.query(DiseaseGrading).distinct(DiseaseGrading.impression).all()
         
         # Apply filters
@@ -147,6 +148,9 @@ def discrepancy_review():
     
     finally:
         db.close()
+
+
+
 
 
 def get_disease_grading_id_by_impression(db: Session, impression: str) -> int | None:

@@ -84,13 +84,7 @@
           </div>
           <div class="card-body py-3">
             {% if row.image_uuid %}
-              {% if row.upload_type == 'zip' %}
-                {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
-              {% elif row.upload_type == 'direct' %}
-                {% set image_href = url_for('media._directImgOrigByUUID', uuid_str=row.image_uuid) %}
-              {% else %}
-                {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
-              {% endif %}
+              {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
               {% set gallery_id = 'results-gallery-' ~ loop.index0 %}
               <div id="{{ gallery_id }}" class="d-none pswp-gallery">
                 <a href="{{ image_href }}" data-pswp-type="image" title="{{ row.disease_name or 'Image' }}"></a>

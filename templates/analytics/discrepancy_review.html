@@ -30,7 +30,7 @@
             <select class="form-select" id="labUnitSelect" name="lab_unit_id">
               <option value="">All Lab Units</option>
               {% for lab_unit in lab_units %}
-                <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}</option>
+                <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.hospital.name }} - {{ lab_unit.name }}</option>
               {% endfor %}
             </select>
           </div>
@@ -203,6 +203,76 @@ function clearFilters() {
   document.getElementById('arbitratorGradeSelect').value = '';
   document.getElementById('finalGradeSelect').value = '';
   document.getElementById('filterForm').submit();
+}
+
+// Function to update grade options when disease is selected
+document.addEventListener('DOMContentLoaded', function() {
+  const diseaseSelect = document.getElementById('diseaseSelect');
+  const residentGradeSelect = document.getElementById('residentGradeSelect');
+  const facultyGradeSelect = document.getElementById('facultyGradeSelect');
+  const arbitratorGradeSelect = document.getElementById('arbitratorGradeSelect');
+  const finalGradeSelect = document.getElementById('finalGradeSelect');
+  
+  // Store all available grade options to restore when disease is cleared
+  const allGradeOptions = {
+    resident: Array.from(residentGradeSelect.options),
+    faculty: Array.from(facultyGradeSelect.options),
+    arbitrator: Array.from(arbitratorGradeSelect.options),
+    final: Array.from(finalGradeSelect.options)
+  };
+
+  // Function to update grade dropdowns based on selected disease
+  function updateGradeOptions() {
+    const diseaseId = diseaseSelect.value;
+    
+    if (diseaseId) {
+      // Fetch disease-specific grades
+      fetch(`/api/disease-grades/${diseaseId}`)
+        .then(response => response.json())
+        .then(data => {
+          // Update all grade dropdowns with disease-specific options
+          updateGradeSelect(residentGradeSelect, data.grades, allGradeOptions.resident);
+          updateGradeSelect(facultyGradeSelect, data.grades, allGradeOptions.faculty);
+          updateGradeSelect(arbitratorGradeSelect, data.grades, allGradeOptions.arbitrator);
+          updateGradeSelect(finalGradeSelect, data.grades, allGradeOptions.final);
+        })
+        .catch(error => console.error('Error fetching disease grades:', error));
+    } else {
+      // If no disease selected, restore all grade options
+      residentGradeSelect.innerHTML = '';
+      allGradeOptions.resident.forEach(option => residentGradeSelect.appendChild(option.cloneNode(true)));
+      
+      facultyGradeSelect.innerHTML = '';
+      allGradeOptions.faculty.forEach(option => facultyGradeSelect.appendChild(option.cloneNode(true)));
+      
+      arbitratorGradeSelect.innerHTML = '';
+      allGradeOptions.arbitrator.forEach(option => arbitratorGradeSelect.appendChild(option.cloneNode(true)));
+      
+      finalGradeSelect.innerHTML = '';
+      allGradeOptions.final.forEach(option => finalGradeSelect.appendChild(option.cloneNode(true)));
+    }
+  }
+
+  // Update grade options when disease selection changes
+  diseaseSelect.addEventListener('change', updateGradeOptions);
+  
+  // Initialize grade options if a disease is already selected on page load
+  if (diseaseSelect.value) {
+    updateGradeOptions();
+  }
+});
+
+function updateGradeSelect(selectElement, grades, allOptions) {
+  // Clear current options except the first "All Grades" option
+  selectElement.innerHTML = '<option value="">All Grades</option>';
+  
+  // Add disease-specific grades
+  grades.forEach(grade => {
+    const option = document.createElement('option');
+    option.value = grade.impression;
+    option.textContent = grade.impression;
+    selectElement.appendChild(option);
+  });
 }
 </script>
 {% endblock %}

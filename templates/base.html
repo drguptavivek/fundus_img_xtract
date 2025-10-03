@@ -200,18 +200,21 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}" href="#"
-              id="reportsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'analytics.search_images'] else '' }}" href="#"
+              id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Analytics
             </a>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="reportsMenu">
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="analyticsMenu">
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.image_results' else '' }}" href="{{ url_for('analytics.image_results') }}">Image Results</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results' else '' }}" href="{{ url_for('analytics.encounter_results') }}">Encounter Results</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.search_images' else '' }}" href="{{ url_for('analytics.search_images') }}">Search Images</a>
               </li>
             </ul>
           </li>

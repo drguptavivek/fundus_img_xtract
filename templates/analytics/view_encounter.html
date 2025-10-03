@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Encounter #{{ encounter.id }}{% endblock %}
+
+{% block content %}
+<div class="py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-secondary btn-subtle"
+         href="{{ back_url }}" aria-label="Back" title="Back">
+        &larr; {{ back_label or 'Encounters' }}
+      </a>
+    </div>
+
+    <div class="d-flex align-items-center gap-2">
+      {% if prev_url %}
+        <a class="btn btn-sm btn-outline-secondary btn-subtle"
+           href="{{ prev_url }}" aria-label="Previous encounter" title="Previous encounter">
+          &larr; Prev
+        </a>
+      {% else %}
+        <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous encounter">
+          &larr; Prev
+        </button>
+      {% endif %}
+
+      {% if next_url %}
+        <a class="btn btn-sm btn-outline-secondary btn-subtle"
+           href="{{ next_url }}" aria-label="Next encounter" title="Next encounter">
+          Next &rarr;
+        </a>
+      {% else %}
+        <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next encounter">
+          Next &rarr;
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 align-items-start">
+    <div class="col-12 col-md-5 col-lg-5 col-xl-4">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Patient & Encounter</strong></div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5">Capture Date</dt>
+            <dd class="col-7">
+              {% if encounter.capture_date_dt %}
+                {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
+              {% elif encounter.capture_date %}
+                {{ encounter.capture_date }}
+              {% else %}-{% endif %}
+            </dd>
+            {% if encounter.lab_unit %}
+            <dt class="col-5">Hospital</dt>
+            <dd class="col-7">{{ encounter.lab_unit.hospital.name if encounter.lab_unit.hospital else '-' }}</dd>
+            <dt class="col-5">Lab Unit</dt>
+            <dd class="col-7">{{ encounter.lab_unit.name or '-' }}</dd>
+            {% endif %}
+          </dl>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Diabetic Retinopathy (DR) Reports</strong></div>
+        <div class="card-body">
+          {% if dr_reports %}
+          <ul class="list-group list-group-flush">
+            {% for dr in dr_reports %}
+            <li class="list-group-item">
+              <div><strong>Result:</strong> {{ dr.result or '-' }}</div>
+              {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}</div>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<em class="text-muted">No DR reports linked.</em>{% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>Glaucoma Reports</strong></div>
+        <div class="card-body">
+          {% if gl_cleaned %}
+          <ul class="list-group list-group-flush">
+            {% for gr in gl_cleaned %}
+            <li class="list-group-item">
+              <div class="mb-1"><strong>Result:</strong> {{ gr.result or '-' }}</div>
+              {% if gr.qualitative_result %}<div class="mb-1"><strong>Qualitative:</strong> {{ gr.qualitative_result }}</div>{% endif %}
+              <div class="mb-1"><strong>VCDR Right:</strong> {{ gr.vcdr_right_num if gr.vcdr_right_num is not none else '-' }}</div>
+              <div class="mb-1"><strong>VCDR Left:</strong> {{ gr.vcdr_left_num if gr.vcdr_left_num is not none else '-' }}</div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<em class="text-muted">No glaucoma results available.</em>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-7 col-lg-7 col-xl-8">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <strong>Encounter Images</strong>
+          <span class="small text-muted">Click thumbnails to open gallery</span>
+        </div>
+        <div class="card-body">
+          {% if images %}
+          <div class="row g-3">
+            {% for image in images %}
+            <div class="col-12 col-md-6 col-xl-4">
+              <div class="border rounded p-2 h-100">
+                <div class="mb-2 ratio ratio-4x3 bg-light">
+                  <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}"
+                       alt="Encounter Image {{ loop.index }}"
+                       class="img-fluid object-fit-contain rounded">
+                </div>
+                <dl class="row small mb-0">
+                  <dt class="col-5">UUID</dt>
+                  <dd class="col-7"><code>{{ image.uuid }}</code></dd>
+                  <dt class="col-5">Eye</dt>
+                  <dd class="col-7">{{ image.eye_side or '-' }}</dd>
+                </dl>
+
+                {% set image_tasks = tasks_map.get(image.id) or [] %}
+                {% set dr_task = None %}
+                {% set glaucoma_task = None %}
+                {% for task in image_tasks %}
+                  {% if task.disease and (task.disease.name|lower in ['diabetic retinopathy', 'dr']) %}
+                    {% set dr_task = task %}
+                  {% elif task.disease and task.disease.name|lower == 'glaucoma' %}
+                    {% set glaucoma_task = task %}
+                  {% endif %}
+                {% endfor %}
+
+                <div class="mt-3">
+                  <strong>DR Grading</strong>
+                  {% set dr_consensus = dr_task.consensus if dr_task else None %}
+                  {% set dr_resident = None %}
+                  {% set dr_faculty = None %}
+                  {% set dr_arbitrator = None %}
+                  {% if dr_task %}
+                    {% for grade in dr_task.grades %}
+                      {% if grade.role_slot == 'resident' %}
+                        {% set dr_resident = grade %}
+                      {% elif grade.role_slot == 'faculty' %}
+                        {% set dr_faculty = grade %}
+                      {% elif grade.role_slot == 'arbitrator' %}
+                        {% set dr_arbitrator = grade %}
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                  <ul class="list-unstyled small mb-0">
+                    <li>Consensus: {{ dr_consensus.final_label.impression if dr_consensus and dr_consensus.final_label else (dr_consensus.final_grade_name if dr_consensus else '-') }}</li>
+                    <li>Resident: {{ dr_resident.label.impression if dr_resident and dr_resident.label else (dr_resident.impression if dr_resident else '-') }}</li>
+                    <li>Faculty: {{ dr_faculty.label.impression if dr_faculty and dr_faculty.label else (dr_faculty.impression if dr_faculty else '-') }}</li>
+                    <li>Arbitrator: {{ dr_arbitrator.label.impression if dr_arbitrator and dr_arbitrator.label else (dr_arbitrator.impression if dr_arbitrator else '-') }}</li>
+                  </ul>
+                </div>
+
+                <div class="mt-3">
+                  <strong>Glaucoma Grading</strong>
+                  {% set gl_consensus = glaucoma_task.consensus if glaucoma_task else None %}
+                  {% set gl_resident = None %}
+                  {% set gl_faculty = None %}
+                  {% set gl_arbitrator = None %}
+                  {% if glaucoma_task %}
+                    {% for grade in glaucoma_task.grades %}
+                      {% if grade.role_slot == 'resident' %}
+                        {% set gl_resident = grade %}
+                      {% elif grade.role_slot == 'faculty' %}
+                        {% set gl_faculty = grade %}
+                      {% elif grade.role_slot == 'arbitrator' %}
+                        {% set gl_arbitrator = grade %}
+                      {% endif %}
+                    {% endfor %}
+                  {% endif %}
+                  <ul class="list-unstyled small mb-0">
+                    <li>Consensus: {{ gl_consensus.final_label.impression if gl_consensus and gl_consensus.final_label else (gl_consensus.final_grade_name if gl_consensus else '-') }}</li>
+                    <li>Resident: {{ gl_resident.label.impression if gl_resident and gl_resident.label else (gl_resident.impression if gl_resident else '-') }}</li>
+                    <li>Faculty: {{ gl_faculty.label.impression if gl_faculty and gl_faculty.label else (gl_faculty.impression if gl_faculty else '-') }}</li>
+                    <li>Arbitrator: {{ gl_arbitrator.label.impression if gl_arbitrator and gl_arbitrator.label else (gl_arbitrator.impression if gl_arbitrator else '-') }}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <em class="text-muted">No images available for this encounter.</em>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

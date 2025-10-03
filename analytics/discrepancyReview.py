@@ -53,41 +53,57 @@ def discrepancy_review():
             query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
         
         # Apply role grade filters using subqueries to avoid duplication
-        resident_grade = request.args.get("resident_grade")
-        if resident_grade:
-            resident_grade_id = get_disease_grading_id_by_impression(db, resident_grade)
-            if resident_grade_id:
-                subq = db.query(Grade.task_id).filter(
-                    and_(Grade.role_slot == 'resident', Grade.disease_grading_id == resident_grade_id)
-                ).subquery()
-                query = query.filter(GradingTask.id.in_(subq))
+        resident_grades = request.args.getlist("resident_grade")
+        if resident_grades:
+            # Filter out empty strings
+            resident_grades = [g for g in resident_grades if g]
+            if resident_grades:
+                resident_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in resident_grades]
+                resident_grade_ids = [gid for gid in resident_grade_ids if gid is not None]  # Filter out None values
+                if resident_grade_ids:
+                    subq = db.query(Grade.task_id).filter(
+                        and_(Grade.role_slot == 'resident', Grade.disease_grading_id.in_(resident_grade_ids))
+                    ).subquery()
+                    query = query.filter(GradingTask.id.in_(subq))
         
-        faculty_grade = request.args.get("faculty_grade")
-        if faculty_grade:
-            faculty_grade_id = get_disease_grading_id_by_impression(db, faculty_grade)
-            if faculty_grade_id:
-                subq = db.query(Grade.task_id).filter(
-                    and_(Grade.role_slot == 'faculty', Grade.disease_grading_id == faculty_grade_id)
-                ).subquery()
-                query = query.filter(GradingTask.id.in_(subq))
+        faculty_grades = request.args.getlist("faculty_grade")
+        if faculty_grades:
+            # Filter out empty strings
+            faculty_grades = [g for g in faculty_grades if g]
+            if faculty_grades:
+                faculty_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in faculty_grades]
+                faculty_grade_ids = [gid for gid in faculty_grade_ids if gid is not None]  # Filter out None values
+                if faculty_grade_ids:
+                    subq = db.query(Grade.task_id).filter(
+                        and_(Grade.role_slot == 'faculty', Grade.disease_grading_id.in_(faculty_grade_ids))
+                    ).subquery()
+                    query = query.filter(GradingTask.id.in_(subq))
         
-        arbitrator_grade = request.args.get("arbitrator_grade")
-        if arbitrator_grade:
-            arbitrator_grade_id = get_disease_grading_id_by_impression(db, arbitrator_grade)
-            if arbitrator_grade_id:
-                subq = db.query(Grade.task_id).filter(
-                    and_(Grade.role_slot == 'arbitrator', Grade.disease_grading_id == arbitrator_grade_id)
-                ).subquery()
-                query = query.filter(GradingTask.id.in_(subq))
+        arbitrator_grades = request.args.getlist("arbitrator_grade")
+        if arbitrator_grades:
+            # Filter out empty strings
+            arbitrator_grades = [g for g in arbitrator_grades if g]
+            if arbitrator_grades:
+                arbitrator_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in arbitrator_grades]
+                arbitrator_grade_ids = [gid for gid in arbitrator_grade_ids if gid is not None]  # Filter out None values
+                if arbitrator_grade_ids:
+                    subq = db.query(Grade.task_id).filter(
+                        and_(Grade.role_slot == 'arbitrator', Grade.disease_grading_id.in_(arbitrator_grade_ids))
+                    ).subquery()
+                    query = query.filter(GradingTask.id.in_(subq))
         
-        final_grade = request.args.get("final_grade")
-        if final_grade:
-            final_grade_id = get_disease_grading_id_by_impression(db, final_grade)
-            if final_grade_id:
-                subq = db.query(Consensus.task_id).filter(
-                    Consensus.final_disease_grading_id == final_grade_id
-                ).subquery()
-                query = query.filter(GradingTask.id.in_(subq))
+        final_grades = request.args.getlist("final_grade")
+        if final_grades:
+            # Filter out empty strings
+            final_grades = [g for g in final_grades if g]
+            if final_grades:
+                final_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in final_grades]
+                final_grade_ids = [gid for gid in final_grade_ids if gid is not None]  # Filter out None values
+                if final_grade_ids:
+                    subq = db.query(Consensus.task_id).filter(
+                        Consensus.final_disease_grading_id.in_(final_grade_ids)
+                    ).subquery()
+                    query = query.filter(GradingTask.id.in_(subq))
         
         # Load tasks with grades and consensus
         tasks = query.options(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import render_template, request
+from flask_login import current_user
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -24,7 +25,7 @@ def discrepancy_review():
     """Main page for discrepancy review process."""
     db = Session()
     try:
-        current_user = request.current_user
+        # current_user is available through Flask-Login
         
         # Get user's eligible lab units
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)

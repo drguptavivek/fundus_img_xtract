@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Task Details - {{ task.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h3>Task Details</h3>
+    <a href="{{ url_for('analytics.discrepancy_review') }}" class="btn btn-sm btn-outline-secondary">Back to Discrepancy Review</a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-md-8">
+      <!-- Task Information -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Task Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-sm-6">
+              <p><strong>Task ID:</strong> {{ task.id }}</p>
+              <p><strong>Disease:</strong> {{ task.disease or 'N/A' }}</p>
+              <p><strong>Status:</strong> 
+                <span class="badge 
+                  {% if task.status == 'resident_done' %}bg-warning text-dark
+                  {% elif task.status == 'faculty_done' %}bg-info
+                  {% elif task.status == 'arbitration' %}bg-danger
+                  {% elif task.status == 'final' %}bg-success
+                  {% else %}bg-secondary{% endif %}">
+                  {{ task.status }}
+                </span>
+              </p>
+              <p><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'N/A' }}</p>
+            </div>
+            <div class="col-sm-6">
+              <p><strong>Lab Unit:</strong> {{ original_task.lab_unit.name if original_task.lab_unit else 'N/A' }}</p>
+              <p><strong>Lab Unit ID:</strong> {{ task.lab_unit_id or 'N/A' }}</p>
+              <p><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else 'N/A' }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Image Preview -->
+      {% if image_url %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Image Preview</h5>
+        </div>
+        <div class="card-body text-center">
+          <img src="{{ image_url }}" 
+               class="img-fluid rounded border" 
+               alt="Task Image"
+               style="max-height: 400px; object-fit: contain;">
+          <p class="mt-2 text-muted">Image UUID: {{ original_task.encounter_file.uuid if original_task.encounter_file else 'N/A' }}</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Consensus Information -->
+      {% if task.consensus %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Consensus Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-sm-6">
+              <p><strong>Method:</strong> {{ task.consensus.method }}</p>
+            </div>
+            <div class="col-sm-6">
+              <p><strong>Decided At:</strong> {{ task.consensus.decided_at.strftime('%Y-%m-%d %H:%M') if task.consensus.decided_at else 'N/A' }}</p>
+            </div>
+          </div>
+          <p><strong>Final Impression:</strong> {{ task.consensus.final_impression or 'N/A' }}</p>
+          {% if task.consensus.decided_by_username %}
+            <p><strong>Decided By:</strong> {{ task.consensus.decided_by_username }}</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Grading Information -->
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Grading Information</h5>
+        </div>
+        <div class="card-body">
+          {% if task.grades %}
+            {% for grade in task.grades %}
+            <div class="border-start border-2 ps-3 mb-3 {% if grade.role_slot == 'arbitrator' %}border-warning{% elif grade.role_slot == 'faculty' %}border-info{% else %}border-secondary{% endif %}">
+              <div class="d-flex justify-content-between align-items-start">
+                <h6 class="mb-1">
+                  <span class="badge 
+                    {% if grade.role_slot == 'resident' %}bg-secondary
+                    {% elif grade.role_slot == 'faculty' %}bg-info
+                    {% elif grade.role_slot == 'arbitrator' %}bg-warning text-dark
+                    {% else %}bg-light text-dark{% endif %}">
+                    {{ grade.role_slot|title }}
+                  </span>
+                </h6>
+                <small class="text-muted">{{ grade.created_at.strftime('%Y-%m-%d %H:%M') if grade.created_at else '' }}</small>
+              </div>
+              <p class="mb-1"><strong>Impression:</strong> {{ grade.impression or 'N/A' }}</p>
+              {% if grade.comment %}
+                <p class="mb-0"><strong>Comment:</strong> {{ grade.comment }}</p>
+              {% endif %}
+              {% if grade.grader_username %}
+                <p class="mb-0"><strong>Grader:</strong> {{ grade.grader_username }}</p>
+              {% endif %}
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted">No grades recorded for this task yet.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <!-- Quick Actions -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Actions</h5>
+        </div>
+        <div class="card-body">
+          {% if original_task.encounter_file.uuid %}
+          <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=original_task.encounter_file.uuid) }}" 
+             target="_blank" 
+             class="btn btn-primary w-100 mb-2">
+             <i class="bi bi-eye"></i> Open Image in New Tab
+          </a>
+          {% endif %}
+          <a href="#" 
+             class="btn btn-success w-100">
+             <i class="bi bi-pencil"></i> Review Task
+          </a>
+        </div>
+      </div>
+
+      <!-- Task Summary -->
+      <div class="card shadow-sm">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Task Summary</h5>
+        </div>
+        <div class="card-body">
+          <p><strong>Grades Available:</strong> {{ task.grades|length }}</p>
+          <p><strong>Has Consensus:</strong> 
+            {% if task.consensus %}
+              <span class="text-success"><i class="bi bi-check-circle"></i> Yes</span>
+            {% else %}
+              <span class="text-danger"><i class="bi bi-x-circle"></i> No</span>
+            {% endif %}
+          </p>
+          <p><strong>Task Status:</strong> 
+            <span class="badge 
+              {% if task.status == 'resident_done' %}bg-warning text-dark
+              {% elif task.status == 'faculty_done' %}bg-info
+              {% elif task.status == 'arbitration' %}bg-danger
+              {% elif task.status == 'final' %}bg-success
+              {% else %}bg-secondary{% endif %}">
+              {{ task.status }}
+            </span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

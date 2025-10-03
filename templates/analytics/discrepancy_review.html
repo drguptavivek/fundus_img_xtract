@@ -172,7 +172,8 @@
                   {% if task.encounter_file_uuid %}
                   <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=task.encounter_file_uuid) }}" target="_blank" class="btn btn-sm btn-outline-primary">View Image</a>
                   {% endif %}
-                  <a href="{{ url_for('grading.task_detail', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                  <a href="{{ url_for('analytics.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                </td>
                 </td>
               </tr>
               {% endfor %}

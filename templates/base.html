@@ -208,6 +208,9 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="analyticsMenu">
               <li>
+              <a class="dropdown-item" href = "{{ url_for('analytics.discrepancy_review') }}"> Discrepancy Review</a>
+              </li>
+              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.image_results' else '' }}" href="{{ url_for('analytics.image_results') }}">Image Results</a>
               </li>
               <li>
@@ -219,6 +222,7 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.search_images' else '' }}" href="{{ url_for('analytics.search_images') }}">Search Images</a>
               </li>
+
             </ul>
           </li>
           {% endif %}

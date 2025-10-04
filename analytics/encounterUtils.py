@@ -258,9 +258,13 @@ def get_encounters_summary_list(filters=None):
         db.close()
 
 
-def get_encounters_with_non_pending_tasks():
+def get_encounters_with_non_pending_tasks(user_lab_unit_ids=None, is_admin_like=False):
     """
     Fetches encounters that have images with associated non-pending tasks.
+    
+    Args:
+        user_lab_unit_ids (set): Set of lab unit IDs the user has access to
+        is_admin_like (bool): Whether the user has admin-like permissions
     
     Returns:
         list: A list of dictionaries with encounter ID and associated task IDs,
@@ -268,8 +272,8 @@ def get_encounters_with_non_pending_tasks():
     """
     db = Session()
     try:
-        # Get all non-pending tasks with their associated encounter and image information
-        non_pending_tasks = (
+        # Start with the query for all non-pending tasks with their associated encounter and image information
+        query = (
             db.query(GradingTask)
             .join(EncounterFile)
             .join(PatientEncounters)
@@ -277,8 +281,13 @@ def get_encounters_with_non_pending_tasks():
             .options(
                 joinedload(GradingTask.disease),
             )
-            .all()
         )
+        
+        # Apply lab unit access control if not admin-like user
+        if not is_admin_like and user_lab_unit_ids:
+            query = query.filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
+        
+        non_pending_tasks = query.all()
         
         # Group tasks by encounter
         encounter_tasks_map = {}

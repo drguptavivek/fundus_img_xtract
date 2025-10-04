@@ -7,40 +7,92 @@
     <h3>Task Details</h3>
     <button onclick="window.history.back();" class="btn btn-sm btn-outline-secondary">Back</button>
   </div>
-      <!-- Task Information -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header">
+
+  <div class="row g-3">
+    <!-- Task Information - Left Column -->
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-1 h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">Task Information</h5>
+          <span class="badge bg-primary">ID: {{ task.id }}</span>
         </div>
         <div class="card-body">
           <div class="row">
-            <div class="col-sm-6">
-              <p><strong>Task ID:</strong> {{ task.id }}</p>
+            <div class="col-sm-12">
               <p><strong>Disease:</strong> {{ task.disease or 'N/A' }}</p>
-              <p><strong>Status:</strong> 
-                <span class="badge 
-                  {% if task.status == 'resident_done' %}bg-warning text-dark
-                  {% elif task.status == 'faculty_done' %}bg-info
-                  {% elif task.status == 'arbitration' %}bg-danger
-                  {% elif task.status == 'final' %}bg-success
-                  {% else %}bg-secondary{% endif %}">
-                  {{ task.status }}
-                </span>
-              </p>
-              <p><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'N/A' }}</p>
-            </div>
-            <div class="col-sm-6">
               <p><strong>Lab Unit:</strong> {{ original_task.lab_unit.name if original_task.lab_unit else 'N/A' }}</p>
-              <p><strong>Lab Unit ID:</strong> {{ task.lab_unit_id or 'N/A' }}</p>
-              <p><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else 'N/A' }}</p>
+              <div class="row">
+                <div class="col-sm-6">
+                  <small><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'N/A' }}</small>
+                </div>
+                <div class="col-sm-6">
+                  <small><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else 'N/A' }}</small>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Image Preview -->
+    <!-- Task Summary - Middle Column -->
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-1 h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Disease: {{ task.disease or 'N/A' }}</h5>
+          <span class="badge 
+            {% if task.status == "resident_done" %}bg-warning text-dark
+            {% elif task.status == "faculty_done" %}bg-info
+            {% elif task.status == "arbitration" %}bg-danger
+            {% elif task.status == "final" %}bg-success
+            {% else %}bg-secondary{% endif %}">
+            {{ task.status }}
+          </span>
+        </div>
+        <div class="card-body">
+          {% if task.grades %}
+          <div class="mb-2">
+            <strong>Available Grades:</strong>
+            {% for grade in task.grades %}
+            <span class="fw-semibold">
+              <span class="badge 
+                {% if grade.role_slot == "resident" %}bg-secondary
+                {% elif grade.role_slot == "faculty" %}bg-info
+                {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
+                {% else %}bg-light text-dark{% endif %}">
+                {{ grade.role_slot|title }}
+              </span>
+              <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
+              {% if not loop.last %} | {% endif %}
+            </span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <p>
+            <strong>Has Consensus:</strong> 
+            {% if task.consensus_info and task.consensus_info.has_consensus %}
+              <i class="bi bi-check-circle"></i> Yes
+            {% else %}
+              <i class="bi bi-x-circle"></i> No
+            {% endif %}
+            {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
+            | <strong>Consensus Impression:</strong> 
+            {{ task.consensus_info.consensus_grading and task.consensus_info.consensus_grading.impression or 'N/A' }}
+            {% endif %}
+          </p>
+
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <!-- Image Preview - Full Width Row -->
+  <div class="row mt-1">
+    <div class="col-12">
       {% if image_object %}
-      <div class="card shadow-sm mb-4">
+      <div class="card shadow-sm mb-1">
         <div class="card-header">
           <h5 class="card-title mb-0">Image Preview</h5>
         </div>
@@ -51,10 +103,14 @@
         </div>
       </div>
       {% endif %}
+    </div>
+  </div>
 
-      <!-- Consensus Information -->
-      {% if task.consensus %}
-      <div class="card shadow-sm mb-4">
+  <!-- Consensus Information -->
+  {% if task.consensus %}
+  <div class="row mt-1">
+    <div class="col-12">
+      <div class="card shadow-sm mb-1">
         <div class="card-header">
           <h5 class="card-title mb-0">Consensus Information</h5>
         </div>
@@ -73,123 +129,10 @@
           {% endif %}
         </div>
       </div>
-      {% endif %}
-
-      <!-- Grading Information -->
-      <div class="card shadow-sm">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Grading Information</h5>
-        </div>
-        <div class="card-body">
-          {% if task.grades %}
-            {% for grade in task.grades %}
-            <div class="border-start border-2 ps-3 mb-3 {% if grade.role_slot == 'arbitrator' %}border-warning{% elif grade.role_slot == 'faculty' %}border-info{% else %}border-secondary{% endif %}">
-              <div class="d-flex justify-content-between align-items-start">
-                <h6 class="mb-1">
-                  <span class="badge 
-                    {% if grade.role_slot == 'resident' %}bg-secondary
-                    {% elif grade.role_slot == 'faculty' %}bg-info
-                    {% elif grade.role_slot == 'arbitrator' %}bg-warning text-dark
-                    {% else %}bg-light text-dark{% endif %}">
-                    {{ grade.role_slot|title }}
-                  </span>
-                </h6>
-                <small class="text-muted">{{ grade.created_at.strftime('%Y-%m-%d %H:%M') if grade.created_at else '' }}</small>
-              </div>
-              <p class="mb-1"><strong>Impression:</strong> {{ grade.impression or 'N/A' }}</p>
-              {% if grade.comment %}
-                <p class="mb-0"><strong>Comment:</strong> {{ grade.comment }}</p>
-              {% endif %}
-              {% if grade.grader_username %}
-                <p class="mb-0"><strong>Grader:</strong> {{ grade.grader_username }}</p>
-              {% endif %}
-            </div>
-            {% endfor %}
-          {% else %}
-            <p class="text-muted">No grades recorded for this task yet.</p>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-4">
-      <!-- Quick Actions -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Actions</h5>
-        </div>
-        <div class="card-body">
-          {% if original_task.encounter_file and original_task.encounter_file.uuid %}
-          <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=original_task.encounter_file.uuid) }}" 
-             target="_blank" 
-             class="btn btn-primary w-100 mb-2">
-             <i class="bi bi-eye"></i> Open Image in New Tab
-          </a>
-          {% elif original_task.direct_image and original_task.direct_image.uuid %}
-          <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=original_task.direct_image.uuid) }}" 
-             target="_blank" 
-             class="btn btn-primary w-100 mb-2">
-             <i class="bi bi-eye"></i> Open Image in New Tab
-          </a>
-          {% endif %}
-          <a href="#" 
-             class="btn btn-success w-100">
-             <i class="bi bi-pencil"></i> Review Task
-          </a>
-        </div>
-      </div>
-
-      <!-- Task Summary -->
-      <div class="card shadow-sm">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Task Summary</h5>
-        </div>
-        <div class="card-body">
-          <p><strong>Grades Available:</strong> {{ task.grades|length }}</p>
-          {% if task.grades %}
-          <div class="mb-2">
-            <strong>Available Grades:</strong>
-            <ul class="list-unstyled mb-0 mt-1">
-              {% for grade in task.grades %}
-              <li class="small">
-                <span class="badge 
-                  {% if grade.role_slot == "resident" %}bg-secondary
-                  {% elif grade.role_slot == "faculty" %}bg-info
-                  {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
-                  {% else %}bg-light text-dark{% endif %}">
-                  {{ grade.role_slot|title }}
-                </span>
-                <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
-              </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endif %}
-          <p><strong>Has Consensus:</strong> 
-            {% if task.consensus_info and task.consensus_info.has_consensus %}
-              <span class="text-success"><i class="bi bi-check-circle"></i> Yes</span>
-            {% else %}
-              <span class="text-danger"><i class="bi bi-x-circle"></i> No</span>
-            {% endif %}
-          </p>
-          {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
-          <p><strong>Consensus Impression:</strong> 
-            <span class="text-info">{{ task.consensus_info.consensus_grading and task.consensus_info.consensus_grading.impression or 'N/A' }}</span>
-          </p>
-          {% endif %}
-          <p><strong>Task Status:</strong> 
-            <span class="badge 
-              {% if task.status == "resident_done" %}bg-warning text-dark
-              {% elif task.status == "faculty_done" %}bg-info
-              {% elif task.status == "arbitration" %}bg-danger
-              {% elif task.status == "final" %}bg-success
-              {% else %}bg-secondary{% endif %}">
-              {{ task.status }}
-            </span>
-          </p>
-        </div>
-      </div>
     </div>
   </div>
+  {% endif %}
+
+
 </div>
 {% endblock %}

@@ -6,6 +6,7 @@ from datetime import datetime, date as _date, time, timezone
 from typing import Any
 
 from flask import current_app, render_template, request, url_for
+from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +26,7 @@ from models import (
     Session,
 )
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 def _parse_bool_param(value: str | None) -> bool | None:
@@ -90,6 +92,10 @@ def search_images() -> str:
 
     db = Session()
     try:
+        # Check user permissions for lab unit access
+        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
+        
         records: list[dict[str, Any]] = []
 
         upload_start_dt = datetime.combine(upload_start, time.min, timezone.utc) if upload_start else None
@@ -114,10 +120,18 @@ def search_images() -> str:
                     .selectinload(LabUnit.hospital),
                 )
             )
+            
+            # Apply lab unit access control for zip images
+            if not is_admin_like and user_lab_unit_ids:
+                encounter_query = encounter_query.filter(PatientEncounters.lab_unit_id.in_(list(user_lab_unit_ids)))
 
             if hospital_id:
                 encounter_query = encounter_query.filter(Hospital.id == hospital_id)
+            # Only allow filtering by lab_unit_id if the user has access to that lab unit
             if lab_unit_id:
+                if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                    from flask import abort
+                    abort(403, description="Access denied to this lab unit")
                 encounter_query = encounter_query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
             if capture_start:
                 encounter_query = encounter_query.filter(PatientEncounters.capture_date_dt >= capture_start)
@@ -196,10 +210,18 @@ def search_images() -> str:
                     selectinload(DirectImageUpload.area),
                 )
             )
+            
+            # Apply lab unit access control for direct uploads
+            if not is_admin_like and user_lab_unit_ids:
+                direct_query = direct_query.filter(DirectImageUpload.lab_unit_id.in_(list(user_lab_unit_ids)))
 
             if hospital_id:
                 direct_query = direct_query.filter(DirectImageUpload.hospital_id == hospital_id)
+            # Only allow filtering by lab_unit_id if the user has access to that lab unit
             if lab_unit_id:
+                if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                    from flask import abort
+                    abort(403, description="Access denied to this lab unit")
                 direct_query = direct_query.filter(DirectImageUpload.lab_unit_id == lab_unit_id)
             if camera_id:
                 direct_query = direct_query.filter(DirectImageUpload.camera_id == camera_id)
@@ -258,11 +280,32 @@ def search_images() -> str:
         end = start + per_page
         page_records = records[start:end]
 
-        hospitals = db.query(Hospital).order_by(Hospital.name).all()
-        lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
-        cameras = db.query(Camera).order_by(Camera.name).all()
-        diseases_all = db.query(Disease).order_by(Disease.name).all()
-        areas = db.query(Area).order_by(Area.name).all()
+        # Filter hospitals, lab units, etc. to only show those the user has access to
+        if is_admin_like:
+            hospitals = db.query(Hospital).order_by(Hospital.name).all()
+            lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
+            cameras = db.query(Camera).order_by(Camera.name).all()
+            diseases_all = db.query(Disease).order_by(Disease.name).all()
+            areas = db.query(Area).order_by(Area.name).all()
+        else:
+            lab_units = (
+                db.query(LabUnit)
+                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+                .order_by(LabUnit.name)
+                .all()
+            )
+            # Get hospitals for the allowed lab units
+            hospital_ids = [lu.hospital_id for lu in lab_units]
+            hospitals = (
+                db.query(Hospital)
+                .filter(Hospital.id.in_(hospital_ids))
+                .order_by(Hospital.name)
+                .all()
+            )
+            # For other filters, we'll still fetch them all but only show data from allowed lab units
+            cameras = db.query(Camera).order_by(Camera.name).all()
+            diseases_all = db.query(Disease).order_by(Disease.name).all()
+            areas = db.query(Area).order_by(Area.name).all()
 
     finally:
         db.close()

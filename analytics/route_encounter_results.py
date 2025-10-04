@@ -7,6 +7,7 @@ from datetime import datetime, date as _date, time, timezone
 from typing import Any
 
 from flask import current_app, render_template, request, url_for
+from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
 
@@ -26,6 +27,7 @@ from models import (
     Session,
 )
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -69,6 +71,10 @@ def encounter_results() -> str:
 
     db = Session()
     try:
+        # Check user permissions for lab unit access
+        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager")
+        
         query = (
             db.query(PatientEncounters)
             .outerjoin(LabUnit, PatientEncounters.lab_unit)
@@ -83,10 +89,18 @@ def encounter_results() -> str:
             )
         )
 
+        # Apply lab unit access control
+        if not is_admin_like and user_lab_unit_ids:
+            query = query.filter(PatientEncounters.lab_unit_id.in_(list(user_lab_unit_ids)))
+
         if hospital_id:
             query = query.filter(LabUnit.hospital_id == hospital_id)
 
+        # Only allow filtering by lab_unit_id if the user has access to that lab unit
         if lab_unit_id:
+            if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                from flask import abort
+                abort(403, description="Access denied to this lab unit")
             query = query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
 
         if capture_date:
@@ -101,6 +115,7 @@ def encounter_results() -> str:
             .all()
         )
 
+        # Only fetch tasks for encounters in allowed lab units
         encounter_file_ids: list[int] = []
         for encounter in encounters:
             for encounter_file in encounter.encounter_files:
@@ -108,10 +123,14 @@ def encounter_results() -> str:
 
         task_details: list[dict[str, Any]] = []
         if encounter_file_ids:
+            # Apply lab unit access control to task query as well
+            task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(encounter_file_ids))
+            
+            if not is_admin_like and user_lab_unit_ids:
+                task_query = task_query.filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
+            
             tasks = (
-                db.query(GradingTask)
-                .filter(GradingTask.encounter_file_id.in_(encounter_file_ids))
-                .options(
+                task_query.options(
                     selectinload(GradingTask.disease),
                     selectinload(GradingTask.lab_unit).selectinload(LabUnit.hospital),
                     selectinload(GradingTask.encounter_file),
@@ -123,8 +142,26 @@ def encounter_results() -> str:
 
         encounter_rows = build_encounter_result_payload(encounters, task_details)
 
-        hospitals = db.query(Hospital).order_by(Hospital.name).all()
-        lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
+        # Filter hospitals and lab units to only those the user has access to
+        if is_admin_like:
+            hospitals = db.query(Hospital).order_by(Hospital.name).all()
+            lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
+        else:
+            lab_units = (
+                db.query(LabUnit)
+                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+                .options(selectinload(LabUnit.hospital))
+                .order_by(LabUnit.name)
+                .all()
+            )
+            # Get hospitals for the allowed lab units
+            hospital_ids = [lu.hospital_id for lu in lab_units]
+            hospitals = (
+                db.query(Hospital)
+                .filter(Hospital.id.in_(hospital_ids))
+                .order_by(Hospital.name)
+                .all()
+            )
 
     finally:
         db.close()

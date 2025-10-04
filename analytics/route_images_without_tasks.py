@@ -6,6 +6,7 @@ from datetime import datetime, time, timezone
 from typing import Any
 
 from flask import current_app, render_template, request, url_for
+from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
 
@@ -25,6 +26,7 @@ from models import (
     Session,
 )
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 @bp.route("/images/no-tasks", methods=["GET"])
@@ -49,10 +51,14 @@ def images_without_tasks() -> str:
     diseases_all: list[Disease] = []
     areas: list[Area] = []
     try:
+        # Check user permissions for lab unit access
+        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
+        
         records: list[dict[str, Any]] = []
 
         if image_type in {"all", "zip"}:
-            encounter_rows = (
+            encounter_query = (
                 db.query(EncounterFile)
                 .outerjoin(GradingTask, GradingTask.encounter_file_id == EncounterFile.id)
                 .filter(EncounterFile.file_type == 'image')
@@ -63,13 +69,27 @@ def images_without_tasks() -> str:
                     .selectinload(PatientEncounters.lab_unit)
                     .selectinload(LabUnit.hospital),
                 )
-                .all()
             )
+            
+            # Apply lab unit access control for zip images
+            if not is_admin_like and user_lab_unit_ids:
+                # Filter by encounter's lab_unit or file's lab_unit if user doesn't have admin-like access
+                encounter_query = encounter_query.filter(
+                    (PatientEncounters.lab_unit_id.in_(list(user_lab_unit_ids))) |
+                    ((PatientEncounters.lab_unit_id.is_(None)) & (EncounterFile.lab_unit_id.in_(list(user_lab_unit_ids))))
+                )
+            
+            encounter_rows = encounter_query.all()
 
             for ef in encounter_rows:
                 lab_unit = ef.lab_unit or (ef.patient_encounter.lab_unit if ef.patient_encounter else None)
-                if lab_unit_id and (not lab_unit or lab_unit.id != lab_unit_id):
-                    continue
+                
+                # Additional check for the specific lab_unit filter
+                if lab_unit_id:
+                    if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                        continue  # Skip if user doesn't have access to the filtered lab unit
+                    if not lab_unit or lab_unit.id != lab_unit_id:
+                        continue  # Skip if the lab unit doesn't match the filter
 
                 capture_dt: datetime | None = None
                 if ef.patient_encounter and ef.patient_encounter.capture_date_dt:
@@ -94,18 +114,28 @@ def images_without_tasks() -> str:
                 )
 
         if image_type in {"all", "direct"}:
-            direct_rows = (
+            direct_query = (
                 db.query(DirectImageUpload)
                 .outerjoin(GradingTask, GradingTask.direct_image_upload_id == DirectImageUpload.id)
                 .filter(GradingTask.id.is_(None))
                 .options(selectinload(DirectImageUpload.lab_unit).selectinload(LabUnit.hospital))
-                .all()
             )
+            
+            # Apply lab unit access control for direct uploads
+            if not is_admin_like and user_lab_unit_ids:
+                direct_query = direct_query.filter(DirectImageUpload.lab_unit_id.in_(list(user_lab_unit_ids)))
+                
+            direct_rows = direct_query.all()
 
             for upload in direct_rows:
                 lab_unit = upload.lab_unit
-                if lab_unit_id and (not lab_unit or lab_unit.id != lab_unit_id):
-                    continue
+                
+                # Additional check for the specific lab_unit filter
+                if lab_unit_id:
+                    if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                        continue  # Skip if user doesn't have access to the filtered lab unit
+                    if not lab_unit or lab_unit.id != lab_unit_id:
+                        continue  # Skip if the lab unit doesn't match the filter
 
                 records.append(
                     {
@@ -126,8 +156,25 @@ def images_without_tasks() -> str:
         end = start + per_page
         page_records = records[start:end]
 
-        hospitals = db.query(Hospital).order_by(Hospital.name).all()
-        lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
+        # Filter hospitals and lab units to only those the user has access to
+        if is_admin_like:
+            hospitals = db.query(Hospital).order_by(Hospital.name).all()
+            lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
+        else:
+            lab_units = (
+                db.query(LabUnit)
+                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+                .order_by(LabUnit.name)
+                .all()
+            )
+            # Get hospitals for the allowed lab units
+            hospital_ids = [lu.hospital_id for lu in lab_units]
+            hospitals = (
+                db.query(Hospital)
+                .filter(Hospital.id.in_(hospital_ids))
+                .order_by(Hospital.name)
+                .all()
+            )
 
     finally:
         db.close()

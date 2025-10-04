@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from flask import current_app, render_template, request, url_for
+from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
 
@@ -26,6 +27,7 @@ from models import (
     Session,
 )
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
+from utils.upload_eligibility import get_user_lab_unit_ids
 
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
@@ -56,7 +58,15 @@ def image_results() -> str:
 
     db = Session()
     try:
+        # Check user permissions for lab unit access
+        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager")
+        
         query = db.query(GradingTask).join(LabUnit, GradingTask.lab_unit).join(Hospital, LabUnit.hospital)
+
+        # Apply lab unit access control
+        if not is_admin_like and user_lab_unit_ids:
+            query = query.filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
 
         if disease_id:
             query = query.filter(GradingTask.disease_id == disease_id)
@@ -70,7 +80,11 @@ def image_results() -> str:
         if hospital_id:
             query = query.filter(LabUnit.hospital_id == hospital_id)
 
+        # Only allow filtering by lab_unit_id if the user has access to that lab unit
         if lab_unit_id:
+            if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+                from flask import abort
+                abort(403, description="Access denied to this lab unit")
             query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
 
         if task_state and task_state in TASK_STATE_OPTIONS:
@@ -92,11 +106,21 @@ def image_results() -> str:
             .all()
         )
 
-        rows = fetch_image_task_details(db, tasks)
+        # Filter lab units to only those the user has access to
+        if is_admin_like:
+            lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
+        else:
+            lab_units = (
+                db.query(LabUnit)
+                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+                .options(selectinload(LabUnit.hospital))
+                .order_by(LabUnit.name)
+                .all()
+            )
 
         diseases = db.query(Disease).order_by(Disease.name).all()
         hospitals = db.query(Hospital).order_by(Hospital.name).all()
-        lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
+        rows = fetch_image_task_details(db, tasks)
 
     finally:
         db.close()

@@ -145,20 +145,20 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
             return None
     
     # Collect grading information from the task
-    gradings = []
+    grades = []
     for grade in task.grades:
-        grading_dict = {
+        grade_dict = {
             'id': grade.id,
             'disease': task.disease.name if task.disease else 'Unknown',
-            'grading_value': grade.grade_name,  # Using denormalized field
-            'grading_severity': grade.grade_description,  # Using denormalized field
+            'impression': grade.grade_name or 'No impression',  # Using denormalized field directly
+            'role_slot': grade.role_slot,
+            'comment': grade.comment,
             'graded_by': grade.grader.username if grade.grader else 'System',
             'graded_at': grade.created_at,
             'grading_method': grade.role_slot,
-            'consensus_grade': grade.grade_name if grade.grade_name else None,
-            'consensus_confirmed': None  # This is a GradingTask, not the original task model
+            'grader_username': grade.grader.username if grade.grader else None
         }
-        gradings.append(grading_dict)
+        grades.append(grade_dict)
     
     # Get consensus information
     consensus_info = {
@@ -221,7 +221,7 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
         'due_date': None,  # GradingTask doesn't have a due_date
         'priority': None,  # GradingTask doesn't have a priority
         'notes': None,  # GradingTask doesn't have notes
-        'gradings': gradings,
+        'grades': grades,
         'consensus_info': consensus_info,
         'camera_type': task.direct_image.camera.name if task.direct_image and task.direct_image.camera else 'Unknown'
     }

@@ -48,7 +48,7 @@ def view_task_details(task_id: int):
         image_object = task.encounter_file if task.encounter_file else task.direct_image
 
         return render_template(
-            "analytics/task_details.html",
+            "tasks/task_details.html",
             task=task_details,
             original_task=task,  # For additional properties not in summary
             image_object=image_object

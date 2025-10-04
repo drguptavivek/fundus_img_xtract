@@ -9,7 +9,6 @@ from . import (
     route_encounter_view,
     route_routes_simple,
     route_discrepancy_review,
-    route_task_details,
     route_image_results,
     route_encounter_results,
     route_images_without_tasks,

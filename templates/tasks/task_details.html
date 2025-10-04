@@ -169,12 +169,17 @@
           </div>
           {% endif %}
           <p><strong>Has Consensus:</strong> 
-            {% if task.consensus %}
+            {% if task.consensus_info and task.consensus_info.has_consensus %}
               <span class="text-success"><i class="bi bi-check-circle"></i> Yes</span>
             {% else %}
               <span class="text-danger"><i class="bi bi-x-circle"></i> No</span>
             {% endif %}
           </p>
+          {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
+          <p><strong>Consensus Impression:</strong> 
+            <span class="text-info">{{ task.consensus_info.consensus_grading and task.consensus_info.consensus_grading.impression or 'N/A' }}</span>
+          </p>
+          {% endif %}
           <p><strong>Task Status:</strong> 
             <span class="badge 
               {% if task.status == "resident_done" %}bg-warning text-dark

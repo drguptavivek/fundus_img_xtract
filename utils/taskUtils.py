@@ -132,8 +132,11 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     Returns:
         Dictionary with task details or None if task not found
     """
-    # Query for the task with all related data
-    task = db_session.query(Task).filter(Task.id == task_id).first()
+    from sqlalchemy.orm import joinedload
+    task = db_session.query(Task).filter(Task.id == task_id).options(
+        joinedload(Task.consensus),  # Load consensus information
+        joinedload(Task.grades)
+    ).first()
     
     if not task:
         return None
@@ -161,8 +164,11 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
         grades.append(grade_dict)
     
     # Get consensus information
+    # Only consider consensus as existing if there's an actual consensus record
+    has_consensus = task.consensus is not None
+    
     consensus_info = {
-        'has_consensus': task.consensus is not None,
+        'has_consensus': has_consensus,
         'consensus_grading': None,
         'arbitrator_note': None  # Not available in the current models
     }
@@ -170,6 +176,7 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     if task.consensus:
         consensus_info['consensus_grading'] = {
             'disease': task.disease.name if task.disease else 'Unknown',
+            'impression': task.consensus.final_grade_name or 'No impression',  # Using only the denormalized field from consensus table
             'grading_value': task.consensus.final_grade_name,
             'grading_severity': task.consensus.final_grade_description,
             'confirmed_by': task.consensus.decided_by.username if task.consensus.decided_by else 'Unknown',

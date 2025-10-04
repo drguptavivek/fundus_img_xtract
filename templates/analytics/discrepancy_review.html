@@ -373,7 +373,7 @@
                   </div>
                   <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                   {% endif %}
-                  <a href="{{ url_for('analytics.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                  <a href="{{ url_for('tasks.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
                 </td>
                 </td>
               </tr>

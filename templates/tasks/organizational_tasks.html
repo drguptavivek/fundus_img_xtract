@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Organizational Tasks{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <h2 class="mb-4">Organizational Tasks</h2>
+      
+      <!-- Filters -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <form method="GET" action="{{ url_for('tasks.organizational_tasks') }}">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label for="statusFilter" class="form-label">Status</label>
+                <select name="status" id="statusFilter" class="form-select">
+                  <option value="">All Statuses</option>
+                  <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                  <option value="resident_done" {% if status_filter == 'resident_done' %}selected{% endif %}>Resident Done</option>
+                  <option value="faculty_done" {% if status_filter == 'faculty_done' %}selected{% endif %}>Faculty Done</option>
+                  <option value="arbitration" {% if status_filter == 'arbitration' %}selected{% endif %}>Arbitration</option>
+                  <option value="final" {% if status_filter == 'final' %}selected{% endif %}>Final</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="diseaseFilter" class="form-label">Disease</label>
+                <select name="disease" id="diseaseFilter" class="form-select">
+                  <option value="">All Diseases</option>
+                  <!-- Add disease options here as needed -->
+                  <!-- For now, showing as a placeholder until we have dynamic disease options -->
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="searchQuery" class="form-label">Search</label>
+                <input type="text" name="search" id="searchQuery" class="form-control" 
+                       placeholder="Search by image UUID, patient name, etc." 
+                       value="{{ search_query or '' }}">
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Pagination at the top -->
+      {% if total_pages > 1 %}
+      <nav aria-label="Task list pagination" class="mb-4">
+        <ul class="pagination justify-content-center">
+          <!-- Previous page link -->
+          {% if current_page > 1 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Previous</span>
+          </li>
+          {% endif %}
+          
+          <!-- First page -->
+          {% if current_page > 3 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
+          </li>
+          {% if current_page > 4 %}
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+          {% endif %}
+          {% endif %}
+          
+          <!-- Pages around current page -->
+          {% for page_num in range(max(1, current_page-2), min(total_pages+1, current_page+3)) %}
+          {% if page_num == current_page %}
+          <li class="page-item active">
+            <span class="page-link">{{ page_num }}</span>
+          </li>
+          {% else %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
+          </li>
+          {% endif %}
+          {% endfor %}
+          
+          <!-- Last page -->
+          {% if current_page < total_pages - 3 %}
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+          {% endif %}
+          {% if current_page < total_pages - 2 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
+          </li>
+          {% endif %}
+          
+          <!-- Next page link -->
+          {% if current_page < total_pages %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Next</span>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+      
+      <!-- Task count summary -->
+      <div class="mb-3">
+        <p class="text-muted">
+          Showing {{ (current_page - 1) * per_page + 1 }} to 
+          {{ [current_page * per_page, total_count] | min }} of {{ total_count }} tasks
+        </p>
+      </div>
+      
+      <!-- Task Cards -->
+      <div class="row">
+        {% if tasks %}
+          {% for task in tasks %}
+          <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card h-100 task-card">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <h5 class="card-title">Task #{{ task.id }}</h5>
+                  <span class="badge 
+                    {% if task.status == 'pending' %}bg-secondary
+                    {% elif task.status == 'resident_done' %}bg-info
+                    {% elif task.status == 'faculty_done' %}bg-warning
+                    {% elif task.status == 'arbitration' %}bg-primary
+                    {% elif task.status == 'final' %}bg-success
+                    {% else %}bg-light text-dark
+                    {% endif %}">
+                    {{ task.status.replace('_', ' ').title() }}
+                  </span>
+                </div>
+                
+                <p class="card-text">
+                  <strong>Disease:</strong> {{ task.disease }}<br>
+                  <strong>Lab Unit:</strong> {{ task.lab_unit }}<br>
+                  <strong>Image UUID:</strong> {{ task.image_uuid[:12] if task.image_uuid != 'Unknown' else 'N/A' }}...<br>
+                  <strong>Created:</strong> {{ task.created_at | format_user_datetime }}
+                </p>
+              </div>
+              <div class="card-footer bg-transparent">
+                <a href="{{ url_for('tasks.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-primary">View Details</a>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="col-12">
+            <div class="alert alert-info">
+              <p class="mb-0">No tasks found matching your criteria.</p>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+      
+      <!-- Pagination at the bottom -->
+      {% if total_pages > 1 %}
+      <nav aria-label="Task list pagination" class="mt-4">
+        <ul class="pagination justify-content-center">
+          <!-- Previous page link -->
+          {% if current_page > 1 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Previous</span>
+          </li>
+          {% endif %}
+          
+          <!-- First page -->
+          {% if current_page > 3 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
+          </li>
+          {% if current_page > 4 %}
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+          {% endif %}
+          {% endif %}
+          
+          <!-- Pages around current page -->
+          {% for page_num in range(max(1, current_page-2), min(total_pages+1, current_page+3)) %}
+          {% if page_num == current_page %}
+          <li class="page-item active">
+            <span class="page-link">{{ page_num }}</span>
+          </li>
+          {% else %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
+          </li>
+          {% endif %}
+          {% endfor %}
+          
+          <!-- Last page -->
+          {% if current_page < total_pages - 3 %}
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+          {% endif %}
+          {% if current_page < total_pages - 2 %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
+          </li>
+          {% endif %}
+          
+          <!-- Next page link -->
+          {% if current_page < total_pages %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Next</span>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

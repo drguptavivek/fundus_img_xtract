@@ -1,5 +1,7 @@
 ## UV
-Uses Python Virtual environment. Use "uv run app.py" or ""uv run -c" etc for running the app
+Uses Python Virtual environment: Example
+    - uv run app.py
+    - uv run python -c "from utils.taskUtils import get_task_detail; print('Function import successful')"       
 
 ## DATE TIME
 Date Time:
@@ -10,8 +12,11 @@ Date Time:
         - User's profile timezone setting (if user is logged in)
         - Application's DEFAULT_DISPLAY_TIMEZONE configuration
         - Fallback to DEFAULT_TIMEZONE if not configured
-   - Use format_user_datetime for display: {{ some_datetime_value | format_user_datetime }} or  {{ some_datetime_value | format_user_datetime("%B %d, %Y at %I:%M %p") }}
+   - In app.py, the filter is registered as user_datetime, not format_user_datetime. 
+   - Use user_datetime for display: {{ some_datetime_value | user_datetime }} or  {{ some_datetime_value | user_datetime("%B %d, %Y at %I:%M %p") }}
 
+ 
+ 
 ## JINJA
 
 Templates in /templates with route specific subfolders and /templates/partials for resusalble Jinja code

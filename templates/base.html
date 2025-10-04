@@ -209,16 +209,10 @@
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.index' else '' }}"
-                  href="{{ url_for('tasks.index') }}">All Tasks</a>
+                  href="#">All Tasks</a>
               </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.my_tasks' else '' }}"
-                  href="{{ url_for('tasks.my_tasks') }}">My Tasks</a>
-              </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.pending' else '' }}"
-                  href="{{ url_for('tasks.pending') }}">Pending Tasks</a>
-              </li>
+ 
+
             </ul>
           </li>
           {% endif %}

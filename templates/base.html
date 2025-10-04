@@ -200,6 +200,29 @@
           </li>
           {% endif %}
 
+          {% if current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'tasks' else '' }}" href="#"
+              id="tasksMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Tasks
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.index' else '' }}"
+                  href="{{ url_for('tasks.index') }}">All Tasks</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.my_tasks' else '' }}"
+                  href="{{ url_for('tasks.my_tasks') }}">My Tasks</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.pending' else '' }}"
+                  href="{{ url_for('tasks.pending') }}">Pending Tasks</a>
+              </li>
+            </ul>
+          </li>
+          {% endif %}
+
           {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'analytics.search_images'] else '' }}" href="#"

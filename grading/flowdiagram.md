@@ -220,6 +220,21 @@ classDiagram
 - `_get_filtered_tasks()`
 - `_has_user_graded_task_2weeks()`
 
+## Task Allocation Prioritization
+
+### Prioritization Algorithm:
+When multiple eligible tasks are available, the system applies the following prioritization rules:
+
+1. **Arbitration tasks first**: Tasks in "arbitration" state are prioritized over other states to resolve disagreements quickly
+2. **Time-based prioritization**: Tasks that have been in a pending state longer are prioritized
+3. **Random selection with retry**: From the prioritized set, a random task is selected with up to 3 retry attempts to handle concurrent access
+4. **Atomic assignment**: Uses SELECT FOR UPDATE to prevent race conditions during task allocation
+
+### Prioritization by Role:
+- **Residents**: Get "pending" tasks prioritized
+- **Faculty**: Get "resident_done" tasks prioritized
+- **Arbitrators**: Get "arbitration" tasks prioritized to resolve disagreements quickly
+
 ### Eligibility Utilities
 - `get_user_eligibility_for_task()`
 - `check_arbitration_eligibility()`
@@ -257,6 +272,19 @@ classDiagram
 | Admin | ✅ Can grade | ✅ Can grade | ✅ Can grade |
 
 *Arbitrator permission also requires specific eligibility via UserDiseaseUnitRole table
+
+## Cooldown Rules
+
+### General Cooldown Rule:
+- A user cannot be assigned the same task for grading in any role slot if they have already graded it in the last 2 weeks
+- This applies across all role slots (resident, faculty, arbitrator)
+
+### Specific Cooldown Rules:
+- **After resident grading**: The same user cannot be assigned the task as faculty or arbitrator for 2 weeks
+- **After faculty grading**: The same user cannot be assigned the task as resident or arbitrator for 2 weeks
+- **After arbitrator grading**: The same user cannot be assigned the task as resident or faculty for 2 weeks
+- **Arbitrator self-revision**: An arbitrator can revise their own grade within 6 hours of submission (configurable via ARBITRATOR_REVISION_HOURS environment variable)
+- **Arbitrator exclusion**: An arbitrator cannot arbitrate a task they previously graded as resident or faculty within the last 2 weeks, unless they're revising their own arbitrator grade
 
 ## Task State Rules
 

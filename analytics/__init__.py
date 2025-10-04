@@ -4,4 +4,14 @@ from flask import Blueprint
 
 bp = Blueprint("analytics", __name__, url_prefix="/analytics")
 
-from . import routes, direct_view, encounter_view, routes_simple, discrepancyReview, taskDetails  # noqa: E402,F401
+from . import (
+    route_direct_view,
+    route_encounter_view,
+    route_routes_simple,
+    route_discrepancy_review,
+    route_task_details,
+    route_image_results,
+    route_encounter_results,
+    route_images_without_tasks,
+    route_search_images
+)  # noqa: E402,F401

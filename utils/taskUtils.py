@@ -82,8 +82,7 @@ def get_task_summary(
         query = query.filter(
             or_(
                 Image.uuid.contains(search_query),
-                Image.patient_name.contains(search_query),
-                Image.patient_id.contains(search_query),
+                Image.patient_encounter.has(Encounter.patient_id.contains(search_query)),
                 DirectImageUpload.uuid.contains(search_query)
             )
         )

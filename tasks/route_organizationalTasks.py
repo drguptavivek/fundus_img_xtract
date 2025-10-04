@@ -9,6 +9,7 @@ from flask_login import current_user
 
 from db_transaction_manager import get_db_session
 from utils.taskUtils import get_task_summary
+from utils.masterUtils import get_all_diseases
 from . import bp
 
 
@@ -46,6 +47,9 @@ def organizational_tasks() -> str:
         # Calculate pagination info
         total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
         
+        # Get all diseases for the disease filter dropdown
+        diseases = get_all_diseases()
+        
         # Prepare context for template
         context = {
             'tasks': tasks,
@@ -56,6 +60,7 @@ def organizational_tasks() -> str:
             'status_filter': status_filter,
             'disease_filter': disease_filter,
             'search_query': search_query,
+            'diseases': diseases,
             'user_lab_unit_ids': user_lab_unit_ids
         }
         

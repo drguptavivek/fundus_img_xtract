@@ -28,8 +28,9 @@
                 <label for="diseaseFilter" class="form-label">Disease</label>
                 <select name="disease" id="diseaseFilter" class="form-select">
                   <option value="">All Diseases</option>
-                  <!-- Add disease options here as needed -->
-                  <!-- For now, showing as a placeholder until we have dynamic disease options -->
+                  {% for disease in diseases %}
+                  <option value="{{ disease.id }}" {% if disease_filter == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+                  {% endfor %}
                 </select>
               </div>
               <div class="col-md-4">

@@ -74,7 +74,7 @@
           {% endif %}
           
           <!-- Pages around current page -->
-          {% for page_num in range(max(1, current_page-2), min(total_pages+1, current_page+3)) %}
+          {% for page_num in range([1, current_page-2]|max, [total_pages+1, current_page+3]|min) %}
           {% if page_num == current_page %}
           <li class="page-item active">
             <span class="page-link">{{ page_num }}</span>
@@ -144,8 +144,16 @@
                 <p class="card-text">
                   <strong>Disease:</strong> {{ task.disease }}<br>
                   <strong>Lab Unit:</strong> {{ task.lab_unit }}<br>
-                  <strong>Image UUID:</strong> {{ task.image_uuid[:12] if task.image_uuid != 'Unknown' else 'N/A' }}...<br>
-                  <strong>Created:</strong> {{ task.created_at | format_user_datetime }}
+                  <strong>Image UUID:</strong> {{ task.image_uuid if task.image_uuid != 'Unknown' else 'N/A' }}<br>
+                  <strong>Source:</strong> 
+                  {% if task.image_type == 'direct' %}
+                    <span class="badge bg-primary">Direct Upload</span>
+                  {% elif task.image_type == 'zip' %}
+                    <span class="badge bg-secondary">ZIP Upload</span>
+                  {% else %}
+                    <span class="badge bg-light text-dark">Unknown</span>
+                  {% endif %}<br>
+                  <strong>Created:</strong> {{ task.created_at | user_datetime }}
                 </p>
               </div>
               <div class="card-footer bg-transparent">
@@ -191,7 +199,7 @@
           {% endif %}
           
           <!-- Pages around current page -->
-          {% for page_num in range(max(1, current_page-2), min(total_pages+1, current_page+3)) %}
+          {% for page_num in range([1, current_page-2]|max, [total_pages+1, current_page+3]|min) %}
           {% if page_num == current_page %}
           <li class="page-item active">
             <span class="page-link">{{ page_num }}</span>

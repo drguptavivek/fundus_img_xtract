@@ -208,8 +208,8 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.index' else '' }}"
-                  href="#">All Tasks</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.organizational_tasks' else '' }}"
+                  href="{{ url_for('tasks.organizational_tasks') }}">Organizational Tasks</a>
               </li>
  
 

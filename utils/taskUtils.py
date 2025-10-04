@@ -113,6 +113,7 @@ def get_task_summary(
             'disease': task.disease.name if task.disease else 'Unknown',
             'lab_unit': task.lab_unit.name if task.lab_unit else 'Unknown',
             'image_uuid': image_uuid,
+            'image_type': 'direct' if task.direct_image else 'zip' if task.encounter_file else 'Unknown',
             'created_at': task.created_at,
             'updated_at': task.updated_at,
             # GradingTask doesn't have due_date or assigned_to fields like a regular Task would have
@@ -223,7 +224,7 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
         'notes': None,  # GradingTask doesn't have notes
         'gradings': gradings,
         'consensus_info': consensus_info,
-        'camera_type': task.direct_image.camera.camera_type if task.direct_image and task.direct_image.camera else 'Unknown'
+        'camera_type': task.direct_image.camera.name if task.direct_image and task.direct_image.camera else 'Unknown'
     }
     
     return task_detail

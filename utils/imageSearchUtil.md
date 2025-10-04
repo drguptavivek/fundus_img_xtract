@@ -1,5 +1,7 @@
 # Image Search Utilities Documentation
 
+Calling functions should  use db_context_manager 
+
 This module provides centralized functions for searching images across both direct uploads and ZIP uploads with various filters and task status information. It supports both direct image uploads and images from ZIP uploads with proper scoping based on user's lab units and role-based access controls.
 
 ## Functions
@@ -9,6 +11,7 @@ This module provides centralized functions for searching images across both dire
 Search images across both direct uploads and ZIP uploads with specified filters.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `page` (int): Page number for pagination (1-indexed), default is 1
 - `per_page` (int): Number of items per page, default is 50
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to filter by
@@ -50,6 +53,7 @@ Each image dictionary contains:
 Search direct image uploads with specified filters.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `page` (int): Page number for pagination (1-indexed), default is 1
 - `per_page` (int): Number of items per page, default is 50
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to filter by
@@ -77,6 +81,7 @@ Each image dictionary contains the same fields as in `search_images`, specifical
 Search images from ZIP uploads with specified filters.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `page` (int): Page number for pagination (1-indexed), default is 1
 - `per_page` (int): Number of items per page, default is 50
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to filter by
@@ -98,6 +103,7 @@ Each image dictionary contains the same fields as in `search_images`, specifical
 Get task status for all diseases for a specific image.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `image_id` (int): ID of the image
 - `image_type` (str): Type of image ('direct' or 'zip')
 
@@ -115,6 +121,7 @@ Dictionary mapping disease names to whether a task exists for that disease
 Create grading tasks for specified images and diseases.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `image_ids` (List[int]): List of image IDs to create tasks for
 - `image_type` (str): Type of image ('direct' or 'zip')
 - `disease_ids` (List[int]): List of disease IDs to create tasks for

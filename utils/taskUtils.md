@@ -1,5 +1,7 @@
 # Task Utilities Documentation
 
+Calling functions should  use db_context_manager correctly.
+
 This module provides centralized functions for retrieving and managing task information with proper scoping based on user's lab units and role-based access controls.
 
 ## Functions
@@ -9,6 +11,7 @@ This module provides centralized functions for retrieving and managing task info
 Retrieves a paginated list of tasks with key information for display purposes.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `page` (int): Page number for pagination (1-indexed), default is 1
 - `per_page` (int): Number of items per page, default is 50
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to scope the query to
@@ -40,6 +43,7 @@ Each task dictionary contains:
 Retrieves detailed information about a specific task including grades and consensus.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `task_id` (int): ID of the task to retrieve details for
 
 #### Returns:
@@ -63,6 +67,7 @@ The dictionary includes:
 Retrieves tasks filtered by a specific status with pagination support.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `status` (str): Status to filter by (e.g., 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final')
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to scope the query to
 - `page` (int): Page number for pagination (1-indexed), default is 1
@@ -92,6 +97,7 @@ Each task dictionary contains:
 Retrieves task statistics for specified lab units.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `lab_unit_ids` (Optional[List[int]]): List of lab unit IDs to get stats for
 
 #### Returns:
@@ -115,6 +121,7 @@ Retrieves tasks eligible for a specific user based on their LabUnit-Disease-slot
 In this system, tasks are not assigned but users get tasks based on their LabUnit-Disease-slot eligibility mapping.
 
 #### Parameters:
+- `db_session`: Database session to use for queries
 - `user_id` (int): ID of the user to get eligible tasks for
 - `page` (int): Page number for pagination (1-indexed), default is 1
 - `per_page` (int): Number of items per page, default is 50

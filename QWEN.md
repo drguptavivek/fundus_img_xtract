@@ -41,6 +41,7 @@
 - Ensure no data is lost.
 - No sweeping changes
 - Commit small, frequent changes for readable diff.
+- Use database context managers properly (see examples in grading/dual_grading.py, notifications/notifications.py, and utils/notifications.py)
 
 
 ## 1. Project Overview

@@ -22,6 +22,7 @@ from utils.notifications import send_notification_to_admins
 from db_transaction_manager import transaction_scope
 
 
+
 grades_logger = logging.getLogger("grades")
 
 
@@ -453,7 +454,6 @@ def dual_grading_submit():
                 log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
             
             # Log using dedicated grades logger
-            grades_logger = grades_logger
             grades_logger.info(log_message)
             
             # Calculate time taken

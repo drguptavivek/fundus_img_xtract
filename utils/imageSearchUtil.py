@@ -63,48 +63,150 @@ def search_images(
     Returns:
         Tuple of (list of image dictionaries, total count)
     """
+    from sqlalchemy import union_all, text
+    from sqlalchemy.sql import select
+    
     # Get user's lab units if not explicitly provided and not admin
     if not (current_user.has_role('admin') if current_user.is_authenticated else False):
         if lab_unit_ids is None:
             lab_unit_ids = get_user_lab_unit_ids(current_user.id)
     
-    # Handle search separately for direct and ZIP uploads, then combine
-    all_images = []
-    total_count = 0
+    offset = (page - 1) * per_page
     
+    # Subquery for direct uploads
     if image_type in [None, 'direct']:
-        direct_images, direct_count = search_direct_images(
-            db_session,
-            page=page,
-            per_page=per_page,
-            lab_unit_ids=lab_unit_ids,
-            disease_ids=disease_ids,
-            camera_ids=camera_ids,
-            area_ids=area_ids,
-            is_mydriatic=is_mydriatic,
-            has_task_for_diseases=has_task_for_diseases,
-            exclude_task_for_diseases=exclude_task_for_diseases,
-            search_query=search_query
-        )
-        all_images.extend(direct_images)
-        total_count += direct_count
+        direct_subq = select(
+            DirectImageUpload.id,
+            DirectImageUpload.uuid,
+            DirectImageUpload.filename,
+            (DirectImageUpload.folder_rel + '/' + DirectImageUpload.filename).label('file_path'),
+            LabUnit.name.label('lab_unit_name'),
+            Hospital.name.label('hospital_name'),
+            Camera.name.label('camera_name'),
+            Disease.name.label('disease_name'),
+            Area.name.label('area_name'),
+            DirectImageUpload.is_mydriatic,
+            DirectImageUpload.created_at,
+            text("'direct'").label('image_type')
+        ).select_from(
+            DirectImageUpload.__table__
+            .join(LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id)
+            .join(Hospital, DirectImageUpload.hospital_id == Hospital.id)
+            .join(Camera, DirectImageUpload.camera_id == Camera.id)
+            .join(Disease, DirectImageUpload.disease_id == Disease.id)
+            .join(Area, DirectImageUpload.area_id == Area.id)
+        ).where(DirectImageUpload.id > 0)
+        
+        # Apply filters for direct uploads
+        if lab_unit_ids:
+            direct_subq = direct_subq.where(DirectImageUpload.lab_unit_id.in_(lab_unit_ids))
+        if disease_ids:
+            direct_subq = direct_subq.where(DirectImageUpload.disease_id.in_(disease_ids))
+        if camera_ids:
+            direct_subq = direct_subq.where(DirectImageUpload.camera_id.in_(camera_ids))
+        if area_ids:
+            direct_subq = direct_subq.where(DirectImageUpload.area_id.in_(area_ids))
+        if is_mydriatic is not None:
+            direct_subq = direct_subq.where(DirectImageUpload.is_mydriatic == is_mydriatic)
+        if search_query:
+            direct_subq = direct_subq.where(
+                or_(
+                    DirectImageUpload.filename.contains(search_query),
+                    DirectImageUpload.uuid.contains(search_query),
+                    DirectImageUpload.folder_rel.contains(search_query)
+                )
+            )
+    else:
+        direct_subq = None
     
+    # Subquery for ZIP uploads (EncounterFile)
     if image_type in [None, 'zip']:
-        zip_images, zip_count = search_zip_images(
-            db_session,
-            page=page,
-            per_page=per_page,
-            lab_unit_ids=lab_unit_ids,
-            search_query=search_query
-        )
-        # For ZIP images, we don't have the same filtering as direct uploads
-        # So we'll just return them as is
-        all_images.extend(zip_images)
-        total_count += zip_count
+        zip_subq = select(
+            EncounterFile.id,
+            EncounterFile.uuid,
+            EncounterFile.filename,
+            EncounterFile.filename.label('file_path'),  # ZIP files don't have folder_rel
+            LabUnit.name.label('lab_unit_name'),
+            text("NULL").label('hospital_name'),  # ZIP files don't have the same structure
+            text("NULL").label('camera_name'),
+            text("NULL").label('disease_name'),
+            text("NULL").label('area_name'),
+            text("NULL").label('is_mydriatic'),  # ZIP files don't have this field in the same way
+            EncounterFile.created_at,
+            text("'zip'").label('image_type')
+        ).select_from(
+            EncounterFile.__table__
+            .join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
+            .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+        ).where(EncounterFile.id > 0)
+        
+        # Apply filters for ZIP uploads
+        if lab_unit_ids:
+            zip_subq = zip_subq.where(EncounterFile.lab_unit_id.in_(lab_unit_ids))
+        if search_query:
+            zip_subq = zip_subq.where(
+                or_(
+                    EncounterFile.filename.contains(search_query),
+                    EncounterFile.uuid.contains(search_query),
+                    PatientEncounters.patient_id.contains(search_query),
+                    PatientEncounters.name.contains(search_query)
+                )
+            )
+    else:
+        zip_subq = None
     
-    # For a complete solution, we'd need to properly merge and paginate across both sources
-    # This is a simplified approach for now
-    return all_images, total_count
+    # Create the union query
+    if direct_subq is not None and zip_subq is not None:
+        combined_query = union_all(direct_subq, zip_subq).alias('combined_results')
+    elif direct_subq is not None:
+        combined_query = direct_subq.alias('combined_results')
+    elif zip_subq is not None:
+        combined_query = zip_subq.alias('combined_results')
+    else:
+        return [], 0
+
+    # Count total records
+    count_query = select(combined_query.c.id).select_from(combined_query)
+    total_count = db_session.execute(count_query).fetchall()
+    total_count = len(total_count)
+    
+    # Main query with pagination
+    paginated_query = select(combined_query).select_from(combined_query).order_by(
+        combined_query.c.created_at.desc()
+    ).offset(offset).limit(per_page)
+    
+    paginated_results = db_session.execute(paginated_query).fetchall()
+    
+    # Format the results
+    images = []
+    for result in paginated_results:
+        image_dict = {
+            'id': result.id,
+            'uuid': result.uuid,
+            'filename': result.filename,
+            'file_path': result.file_path,
+            'lab_unit': result.lab_unit_name,
+            'created_at': result.created_at,
+            'type': result.image_type
+        }
+        
+        # Add type-specific fields
+        if result.image_type == 'direct':
+            image_dict['hospital'] = result.hospital_name
+            image_dict['camera'] = result.camera_name
+            image_dict['disease'] = result.disease_name
+            image_dict['area'] = result.area_name
+            image_dict['is_mydriatic'] = result.is_mydriatic
+        elif result.image_type == 'zip':
+            # Add patient info for ZIP files
+            pass
+        
+        # Check task status for this image
+        image_dict['has_tasks'] = get_image_task_status(db_session, result.id, result.image_type)
+        
+        images.append(image_dict)
+    
+    return images, total_count
 
 
 def search_direct_images(

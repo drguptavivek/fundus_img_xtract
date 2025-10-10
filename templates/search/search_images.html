@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Search Images{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Search Images</h1>
+      <p class="text-muted mb-0">Filter images by source, lab, camera, disease, verification status, and date ranges.</p>
+    </div>
+    <form class="row gy-2 gx-2 align-items-end" method="get">
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-source">Source</label>
+        <select class="form-select" id="filter-source" name="source">
+          <option value="all" {% if filters.source == 'all' %}selected{% endif %}>All</option>
+          <option value="zip" {% if filters.source == 'zip' %}selected{% endif %}>ZIP Images</option>
+          <option value="direct" {% if filters.source == 'direct' %}selected{% endif %}>Direct Uploads</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-hospital">Hospital</label>
+        <select class="form-select" id="filter-hospital" name="hospital_id">
+          <option value="">All</option>
+          {% for hospital in hospitals %}
+          <option value="{{ hospital.id }}" {% if filters.hospital_id|int == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
+        <select class="form-select" id="filter-lab" name="lab_unit_id">
+          <option value="">All</option>
+          {% for lab in lab_units %}
+          <option value="{{ lab.id }}" {% if filters.lab_unit_id|int == lab.id %}selected{% endif %}>{{ lab.name }}{% if lab.hospital %} — {{ lab.hospital.name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-camera">Camera</label>
+        <select class="form-select" id="filter-camera" name="camera_id">
+          <option value="">All</option>
+          {% for camera in cameras %}
+          <option value="{{ camera.id }}" {% if filters.camera_id|int == camera.id %}selected{% endif %}>{{ camera.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-disease">Disease</label>
+        <select class="form-select" id="filter-disease" name="disease_id">
+          <option value="">All</option>
+          {% for disease in diseases %}
+          <option value="{{ disease.id }}" {% if filters.disease_id|int == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-area">Area</label>
+        <select class="form-select" id="filter-area" name="area_id">
+          <option value="">All</option>
+          {% for area in areas %}
+          <option value="{{ area.id }}" {% if filters.area_id|int == area.id %}selected{% endif %}>{{ area.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-mydriatic">Mydriatic</label>
+        <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
+          <option value="" {% if not filters.is_mydriatic %}selected{% endif %}>All</option>
+          <option value="true" {% if filters.is_mydriatic == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if filters.is_mydriatic == 'false' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-has-enc">Has Encounter</label>
+        <select class="form-select" id="filter-has-enc" name="has_encounter">
+          <option value="" {% if not filters.has_encounter %}selected{% endif %}>All</option>
+          <option value="true" {% if filters.has_encounter == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if filters.has_encounter == 'false' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-has-dr">Has DR Report</label>
+        <select class="form-select" id="filter-has-dr" name="has_dr_report">
+          <option value="" {% if not filters.has_dr_report %}selected{% endif %}>All</option>
+          <option value="true" {% if filters.has_dr_report == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if filters.has_dr_report == 'false' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Result</label>
+        <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
+          <option value="" {% if not filters.has_glaucoma_report %}selected{% endif %}>All</option>
+          <option value="true" {% if filters.has_glaucoma_report == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if filters.has_glaucoma_report == 'false' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-upload-start">Uploaded After</label>
+        <input type="date" class="form-control" id="filter-upload-start" name="upload_start" value="{{ filters.upload_start }}">
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-upload-end">Uploaded Before</label>
+        <input type="date" class="form-control" id="filter-upload-end" name="upload_end" value="{{ filters.upload_end }}">
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-capture-start">Capture Date From</label>
+        <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label mb-1" for="filter-capture-end">Capture Date To</label>
+        <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
+      </div>
+      <div class="col-12 col-md-3">
+        <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+      </div>
+    </form>
+  </div>
+
+  {% if not rows %}
+    <div class="alert alert-info">No images matched the selected filters.</div>
+  {% else %}
+    <div class="table-responsive shadow-sm rounded">
+      <table class="table table-striped table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">UUID</th>
+            <th scope="col">Source</th>
+            <th scope="col">Hospital</th>
+            <th scope="col">Lab Unit</th>
+            <th scope="col">Camera</th>
+            <th scope="col">Disease</th>
+            <th scope="col">Area</th>
+            <th scope="col">Mydriatic</th>
+            <th scope="col">Uploaded</th>
+            <th scope="col">Capture Date</th>
+            <th scope="col">Encounter</th>
+            <th scope="col">DR Result</th>
+            <th scope="col">Glaucoma Result</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td><code>{{ row.uuid or '—' }}</code></td>
+            <td class="text-capitalize">{{ row.source }}</td>
+            <td>{{ row.hospital_name or '—' }}</td>
+            <td>{{ row.lab_unit_name or '—' }}</td>
+            <td>{{ row.camera_name or '—' }}</td>
+            <td>{{ row.disease_name or '—' }}</td>
+            <td>{{ row.area_name or '—' }}</td>
+            <td>
+              {% if row.is_mydriatic is none %}
+                <span class="text-muted">—</span>
+              {% elif row.is_mydriatic %}
+                <span class="badge bg-success">Yes</span>
+              {% else %}
+                <span class="badge bg-secondary">No</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.created_at %}
+                {{ row.created_at|user_datetime('%Y-%m-%d %H:%M') }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.capture_date %}
+                {{ row.capture_date }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.encounter_id %}
+                {{ row.encounter_id }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>{% if row.has_dr %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+            <td>{% if row.has_glaucoma %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+            <td>
+              {% if row.view_url %}
+              <a class="btn btn-sm btn-outline-primary" href="{{ row.view_url }}">Open</a>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <div class="text-muted small">Page {{ page }} of {{ total_pages }} ({{ total }} images)</div>
+      <div class="btn-group" role="group" aria-label="Pagination">
+        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
+        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

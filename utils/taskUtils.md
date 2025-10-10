@@ -2,7 +2,8 @@
 
 Calling functions should  use db_context_manager correctly.
 
-This module provides centralized functions for retrieving and managing task information with proper scoping based on user's lab units and role-based access controls.
+This module provides centralized functions for retrieving and managing task information with proper scoping based on user's lab units and role-based access controls via 
+```from utils.upload_eligibility import get_user_lab_unit_ids ; def get_user_lab_unit_ids(user_id: int) -> Set[int]:    """Return the set of lab unit IDs the user is allowed to access."""```
 
 ## Functions
 

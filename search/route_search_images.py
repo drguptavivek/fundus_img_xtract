@@ -16,10 +16,10 @@ from models import (
     Disease,
     Hospital,
     LabUnit,
-    Session as DBSession,
 )
 from utils.imageSearchUtil import search_images
 from utils.upload_eligibility import get_user_lab_unit_ids
+from db_transaction_manager import get_db_session
 
 
 def _parse_bool_param(value: str | None) -> bool | None:
@@ -74,8 +74,7 @@ def search_images_route() -> str:
     per_page = current_app.config.get("ANALYTICS_SEARCH_IMAGES_PAGE_SIZE", 50)
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
-    db = DBSession()
-    try:
+    with get_db_session() as db:
         # Check user permissions for lab unit access
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
@@ -171,9 +170,6 @@ def search_images_route() -> str:
             cameras = db.query(Camera).order_by(Camera.name).all()
             diseases_all = db.query(Disease).order_by(Disease.name).all()
             areas = db.query(Area).order_by(Area.name).all()
-
-    finally:
-        db.close()
 
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
 

@@ -117,6 +117,17 @@ def _get_email_results(user_id: str):
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    from flask_login import current_user
+    # If user is already logged in, redirect to homepage
+    if current_user.is_authenticated:
+        flash("You are already Logged In.", "info")
+        # Role-based landing pages for already logged in users
+        if current_user.has_role('ophthalmologist'):
+            return redirect(url_for("grading.index"))
+        if current_user.has_role('fileUploader') or current_user.has_role('optometrist'):
+            return redirect(url_for("direct_uploads.upload_index"))
+        return redirect(url_for("homepage"))
+    
     ip = get_client_ip()
     with SessionLocal() as db:
         # Block if IP locked
@@ -422,3 +433,14 @@ def check_email_status():
             serializable_result['timestamp'] = result['timestamp'].isoformat()
         serializable_results.append(serializable_result)
     return {"results": serializable_results}
+
+
+@auth_bp.route("/check-session")
+def check_session():
+    """Check if session cookie is valid and redirect to homepage if it is."""
+    from flask_login import current_user
+    if current_user.is_authenticated:
+        return redirect(url_for("homepage"))
+    else:
+        # If not authenticated, redirect to login
+        return redirect(url_for("auth.login"))

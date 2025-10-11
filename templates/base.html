@@ -219,7 +219,7 @@
 
           {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'analytics.search_images'] else '' }}" href="#"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results', 'search.search_images_route'] else '' }}" href="#"
               id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Analytics
             </a>
@@ -237,7 +237,7 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}" href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.search_images' else '' }}" href="{{ url_for('analytics.search_images') }}">Search Images</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">Search Images</a>
               </li>
 
             </ul>

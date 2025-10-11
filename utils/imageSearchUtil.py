@@ -63,7 +63,7 @@ def search_images(
     Returns:
         Tuple of (list of image dictionaries, total count)
     """
-    from sqlalchemy import union_all, text
+    from sqlalchemy import union_all, text, literal
     from sqlalchemy.sql import select
     
     # Get user's lab units if not explicitly provided and not admin
@@ -87,7 +87,7 @@ def search_images(
             Area.name.label('area_name'),
             DirectImageUpload.is_mydriatic,
             DirectImageUpload.created_at,
-            text("'direct'").label('image_type')
+            literal('direct').label('image_type')
         ).select_from(
             DirectImageUpload.__table__
             .join(LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id)
@@ -127,13 +127,13 @@ def search_images(
             EncounterFile.filename,
             EncounterFile.filename.label('file_path'),  # ZIP files don't have folder_rel
             LabUnit.name.label('lab_unit_name'),
-            text("NULL").label('hospital_name'),  # ZIP files don't have the same structure
-            text("NULL").label('camera_name'),
-            text("NULL").label('disease_name'),
-            text("NULL").label('area_name'),
-            text("NULL").label('is_mydriatic'),  # ZIP files don't have this field in the same way
-            EncounterFile.created_at,
-            text("'zip'").label('image_type')
+            literal(None).label('hospital_name'),  # ZIP files don't have the same structure
+            literal(None).label('camera_name'),
+            literal(None).label('disease_name'),
+            literal(None).label('area_name'),
+            literal(None).label('is_mydriatic'),  # ZIP files don't have this field in the same way
+            PatientEncounters.capture_date_dt.label('created_at'),  # Use capture_date_dt from PatientEncounters
+            literal('zip').label('image_type')
         ).select_from(
             EncounterFile.__table__
             .join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
@@ -172,7 +172,7 @@ def search_images(
     
     # Main query with pagination
     paginated_query = select(combined_query).select_from(combined_query).order_by(
-        combined_query.c.created_at.desc()
+        combined_query.c.created_at.desc().nulls_last()
     ).offset(offset).limit(per_page)
     
     paginated_results = db_session.execute(paginated_query).fetchall()

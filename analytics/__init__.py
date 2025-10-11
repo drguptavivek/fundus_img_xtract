@@ -11,6 +11,5 @@ from . import (
     route_discrepancy_review,
     route_image_results,
     route_encounter_results,
-    route_images_without_tasks,
-    route_search_images
+    route_images_without_tasks
 )  # noqa: E402,F401

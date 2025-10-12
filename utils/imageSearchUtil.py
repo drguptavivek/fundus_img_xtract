@@ -81,7 +81,7 @@ def search_images(
             DirectImageUpload.filename,
             (DirectImageUpload.folder_rel + '/' + DirectImageUpload.filename).label('file_path'),
             LabUnit.name.label('lab_unit_name'),
-            Hospital.name.label('hospital_name'),
+            Hospital.name.label('hospital'),
             Camera.name.label('camera_name'),
             Disease.name.label('disease_name'),
             Area.name.label('area_name'),
@@ -121,13 +121,14 @@ def search_images(
     
     # Subquery for ZIP uploads (EncounterFile)
     if image_type in [None, 'zip']:
+        
         zip_subq = select(
             EncounterFile.id,
             EncounterFile.uuid,
             EncounterFile.filename,
             EncounterFile.filename.label('file_path'),  # ZIP files don't have folder_rel
             LabUnit.name.label('lab_unit_name'),
-            literal(None).label('hospital_name'),  # ZIP files don't have the same structure
+            Hospital.name.label('hospital'), # Use 'hospital' to match what the route expects
             literal(None).label('camera_name'),
             literal(None).label('disease_name'),
             literal(None).label('area_name'),
@@ -137,8 +138,10 @@ def search_images(
         ).select_from(
             EncounterFile.__table__
             .join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
+            .join(Hospital, LabUnit.hospital_id == Hospital.id)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
         ).where(EncounterFile.id > 0)
+        
         
         # Apply filters for ZIP uploads
         if lab_unit_ids:
@@ -192,14 +195,14 @@ def search_images(
         
         # Add type-specific fields
         if result.image_type == 'direct':
-            image_dict['hospital'] = result.hospital_name
+            image_dict['hospital'] = result.hospital
             image_dict['camera'] = result.camera_name
             image_dict['disease'] = result.disease_name
             image_dict['area'] = result.area_name
             image_dict['is_mydriatic'] = result.is_mydriatic
         elif result.image_type == 'zip':
-            # Add patient info for ZIP files
-            pass
+            # Add hospital name for ZIP files from the query result
+            image_dict['hospital'] = result.hospital
         
         # Check task status for this image
         image_dict['has_tasks'] = get_image_task_status(db_session, result.id, result.image_type)
@@ -401,6 +404,7 @@ def format_encounter_file(db_session, file):
     Returns:
         Dictionary representation of the file
     """
+    
     # Check if tasks exist for this image (encounter_file_id)
     has_tasks = {}
     all_diseases = db_session.query(Disease).all()
@@ -413,12 +417,20 @@ def format_encounter_file(db_session, file):
         
         has_tasks[disease.name] = task_exists
     
+    # Get hospital name from the lab unit relationship
+    hospital_name = None
+    if file.lab_unit and file.lab_unit.hospital:
+        hospital_name = file.lab_unit.hospital.name
+    else:
+        hospital_name = None
+    
     return {
         'id': file.id,
         'uuid': file.uuid,
         'type': 'zip',
         'filename': file.filename,
         'lab_unit': file.lab_unit.name,
+        'hospital': hospital_name,  # FIX: Include hospital name
         'patient_id': getattr(file.patient_encounter, 'patient_id', 'Unknown'),
         'patient_name': getattr(file.patient_encounter, 'name', 'Unknown'),
         'created_at': getattr(file.patient_encounter, 'capture_date_dt', None) or getattr(file.patient_encounter, 'capture_date', None),

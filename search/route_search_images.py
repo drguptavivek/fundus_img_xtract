@@ -17,6 +17,7 @@ from models import (
     Hospital,
     LabUnit,
 )
+from sqlalchemy.orm import joinedload
 from utils.imageSearchUtil import search_images
 from utils.upload_eligibility import get_user_lab_unit_ids
 from db_transaction_manager import get_db_session
@@ -145,31 +146,48 @@ def search_images_route() -> str:
             records.append(record)
 
         # Filter hospitals, lab units, etc. to only show those the user has access to
+        # Use joinedload to eagerly load relationships to prevent DetachedInstanceError
         if is_admin_like:
-            hospitals = db.query(Hospital).order_by(Hospital.name).all()
-            lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
-            cameras = db.query(Camera).order_by(Camera.name).all()
-            diseases_all = db.query(Disease).order_by(Disease.name).all()
-            areas = db.query(Area).order_by(Area.name).all()
+            hospital_objs = db.query(Hospital).options(joinedload(Hospital.lab_units)).order_by(Hospital.name).all()
+            lab_unit_objs = db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.name).all()
+            camera_objs = db.query(Camera).order_by(Camera.name).all()
+            disease_objs = db.query(Disease).order_by(Disease.name).all()
+            area_objs = db.query(Area).order_by(Area.name).all()
         else:
-            lab_units = (
+            lab_unit_objs = (
                 db.query(LabUnit)
+                .options(joinedload(LabUnit.hospital))
                 .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
                 .order_by(LabUnit.name)
                 .all()
             )
             # Get hospitals for the allowed lab units
-            hospital_ids = [lu.hospital_id for lu in lab_units]
-            hospitals = (
+            hospital_ids = [lu.hospital_id for lu in lab_unit_objs]
+            hospital_objs = (
                 db.query(Hospital)
+                .options(joinedload(Hospital.lab_units))
                 .filter(Hospital.id.in_(hospital_ids))
                 .order_by(Hospital.name)
                 .all()
             )
             # For other filters, we'll still fetch them all but only show data from allowed lab units
-            cameras = db.query(Camera).order_by(Camera.name).all()
-            diseases_all = db.query(Disease).order_by(Disease.name).all()
-            areas = db.query(Area).order_by(Area.name).all()
+            camera_objs = db.query(Camera).order_by(Camera.name).all()
+            disease_objs = db.query(Disease).order_by(Disease.name).all()
+            area_objs = db.query(Area).order_by(Area.name).all()
+        
+        # Convert SQLAlchemy objects to dictionaries to prevent DetachedInstanceError
+        hospitals = [{"id": h.id, "name": h.name} for h in hospital_objs]
+        lab_units = [{"id": lu.id, "name": lu.name, "hospital_name": lu.hospital.name if lu.hospital else None} for lu in lab_unit_objs]
+        cameras = [{"id": c.id, "name": c.name} for c in camera_objs]
+        diseases_all = [{"id": d.id, "name": d.name} for d in disease_objs]
+        areas = [{"id": a.id, "name": a.name} for a in area_objs]
+
+    # Add logging to validate the DetachedInstanceError hypothesis
+    import logging
+    runtime_logger = logging.getLogger("runtime_error")
+    runtime_logger.info(f"Database session closed, passing {len(hospitals)} hospital dictionaries to template")
+    runtime_logger.info(f"Hospital objects type: {type(hospitals[0]) if hospitals else 'No hospitals'}")
+    runtime_logger.info(f"First hospital dict: {hospitals[0] if hospitals else 'N/A'}")
 
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
 

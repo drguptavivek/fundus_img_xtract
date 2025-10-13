@@ -8,7 +8,9 @@
         "--browser=",
         "--headless=",
         "--viewport-size="
-      ]
+      ],
+      "disabled": false,
+      "alwaysAllow": []
     }
   }
 }

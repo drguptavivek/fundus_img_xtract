@@ -533,7 +533,7 @@ def format_encounter_file(db_session, file):
         'patient_id': getattr(file.patient_encounter, 'patient_id', 'Unknown'),
         'patient_name': getattr(file.patient_encounter, 'name', 'Unknown'),
         'created_at': getattr(file.patient_encounter, 'capture_date_dt', None) or getattr(file.patient_encounter, 'capture_date', None),
-        'has_reports': has_reports,
+        'has_reports': get_image_report_status(db_session, file.id, 'zip'),
         # Add more fields as needed
     }
 

@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Search Images{% endblock %}
 
+{% block head %}
+<meta name="api-lab-units-url" content="{{ api_lab_units_url.replace('/0', '') }}">
+{% endblock %}
+
 {% block content %}
 <div class="container py-4">
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
@@ -237,4 +241,7 @@
     </div>
   {% endif %}
 </div>
+
+<!-- Include JavaScript for dynamic LabUnit filtering -->
+<script src="{{ url_for('static', filename='js/search_images.js') }}"></script>
 {% endblock %}

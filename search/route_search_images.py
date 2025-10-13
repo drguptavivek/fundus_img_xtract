@@ -246,4 +246,5 @@ def search_images_route() -> str:
         cameras=cameras,
         diseases=diseases_all,
         areas=areas,
+        api_lab_units_url=url_for("fundus_api.get_lab_units_by_hospital", hospital_id="0")
     )

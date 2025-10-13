@@ -64,6 +64,12 @@ def search_images_route() -> str:
     area_id = request.args.get("area_id", type=int)
     is_mydriatic = _parse_bool_param(request.args.get("is_mydriatic"))
     search_query = request.args.get("search_query", "").strip() or None
+    has_dr_report = _parse_bool_param(request.args.get("has_dr_report"))  # Get the DR report filter
+    has_glaucoma_report = _parse_bool_param(request.args.get("has_glaucoma_report"))  # Get the Glaucoma report filter
+    
+    # If disease filter is applied, only show direct images since disease is only applicable to direct uploads
+    if disease_id:
+        source = "direct"
 
     # Parse date filters
     upload_start = _parse_date(request.args.get("upload_start"))
@@ -109,7 +115,14 @@ def search_images_route() -> str:
             area_ids=area_ids,
             is_mydriatic=is_mydriatic,
             image_type=image_type,
-            search_query=search_query
+            search_query=search_query,
+            upload_start=upload_start,
+            upload_end=upload_end,
+            capture_start=capture_start,
+            capture_end=capture_end,
+            hospital_id=hospital_id, # Add hospital filter
+            has_dr_report=has_dr_report,  # Add DR report filter
+            has_glaucoma_report=has_glaucoma_report  # Add Glaucoma report filter
         )
         
         # Convert image data to the format expected by the template
@@ -124,12 +137,13 @@ def search_images_route() -> str:
                 "camera_name": img.get("camera"),
                 "disease_name": img.get("disease"),
                 "area_name": img.get("area"),
-                "record_date": img.get("created_at"),
-                "created_at": img.get("created_at"),
-                "capture_date": None,  # Not available in the search_images function
-                "encounter_id": None,  # Not available in the search_images function
-                "has_dr": img.get("has_tasks", {}).get("Diabetic Retinopathy", False),
-                "has_glaucoma": img.get("has_tasks", {}).get("Glaucoma", False),
+                "record_date": img.get("upload_date"),  # Use new field
+                "created_at": img.get("upload_date"),   # Use new field
+                "upload_date": img.get("upload_date"),  # New field
+                "capture_date": img.get("capture_date"), # Use new field
+                "encounter_id": None, # Not available in the search_images function
+                "has_dr": img.get("has_reports", {}).get("Diabetic Retinopathy", False),
+                "has_glaucoma": img.get("has_reports", {}).get("Glaucoma", False),
                 "is_mydriatic": img.get("is_mydriatic"),
                 "view_url": None,  # Will be set below
             }
@@ -204,6 +218,8 @@ def search_images_route() -> str:
         "capture_end": request.args.get("capture_end", ""),
         "is_mydriatic": request.args.get("is_mydriatic", ""),
         "search_query": request.args.get("search_query", ""),
+        "has_dr_report": has_dr_report,
+        "has_glaucoma_report": has_glaucoma_report,
     }
 
     def _filter_kwargs(target_page: int) -> dict[str, Any]:

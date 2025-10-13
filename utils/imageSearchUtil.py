@@ -9,7 +9,7 @@ scoping based on user's lab units and role-based access controls.
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, date as _date
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from flask_login import current_user
@@ -25,7 +25,9 @@ from models import (
     Disease,
     GradingTask as Task,
     Session as DBSession,
-    Area
+    Area,
+    ZipFile,
+    ImageGrading
 )
 from utils.upload_eligibility import get_user_lab_unit_ids
 
@@ -42,7 +44,14 @@ def search_images(
     has_task_for_diseases: Optional[List[int]] = None,
     exclude_task_for_diseases: Optional[List[int]] = None,
     image_type: Optional[str] = None,  # 'direct' or 'zip'
-    search_query: Optional[str] = None
+    search_query: Optional[str] = None,
+    upload_start: Optional[_date] = None,  # Add upload date start
+    upload_end: Optional[_date] = None,    # Add upload date end
+    capture_start: Optional[_date] = None, # Add capture date start
+    capture_end: Optional[_date] = None,   # Add capture date end
+    hospital_id: Optional[int] = None,     # Add hospital filter
+    has_dr_report: Optional[bool] = None,  # Add DR report filter
+    has_glaucoma_report: Optional[bool] = None  # Add Glaucoma report filter
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Search images across both direct uploads and ZIP uploads with specified filters.
     
@@ -51,14 +60,21 @@ def search_images(
         page: Page number for pagination (1-indexed), default is 1
         per_page: Number of items per page, default is 50
         lab_unit_ids: List of lab unit IDs to filter by
-        disease_ids: List of disease IDs to filter by
-        camera_ids: List of camera IDs to filter by
-        area_ids: List of area IDs to filter by
-        is_mydriatic: Filter for mydriatic status (True for mydriatic, False for non-mydriatic)
+        disease_ids: List of disease IDs to filter by (only applies to direct images)
+        camera_ids: List of camera IDs to filter by (only applies to direct images)
+        area_ids: List of area IDs to filter by (only applies to direct images)
+        is_mydriatic: Filter for mydriatic status (True for mydriatic, False for non-mydriatic, only applies to direct images)
         has_task_for_diseases: List of disease IDs to check if tasks exist for
         exclude_task_for_diseases: List of disease IDs to exclude if tasks exist for
         image_type: Filter for image type ('direct' or 'zip'), None for both
         search_query: Search term to match against patient IDs, filenames, etc.
+        upload_start: Filter for upload date start (applies to both image types)
+        upload_end: Filter for upload date end (applies to both image types)
+        capture_start: Filter for capture date start (applies to ZIP images only)
+        capture_end: Filter for capture date end (applies to ZIP images only)
+        hospital_id: Hospital ID to filter by (applies to both image types)
+        has_dr_report: Filter for DR report status (applies to ZIP images only)
+        has_glaucoma_report: Filter for Glaucoma report status (applies to ZIP images only)
     
     Returns:
         Tuple of (list of image dictionaries, total count)
@@ -86,7 +102,8 @@ def search_images(
             Disease.name.label('disease_name'),
             Area.name.label('area_name'),
             DirectImageUpload.is_mydriatic,
-            DirectImageUpload.created_at,
+            DirectImageUpload.created_at.label('upload_date'),  # Rename for clarity
+            DirectImageUpload.created_at.label('capture_date'),  # Same as upload for direct images
             literal('direct').label('image_type')
         ).select_from(
             DirectImageUpload.__table__
@@ -96,6 +113,10 @@ def search_images(
             .join(Disease, DirectImageUpload.disease_id == Disease.id)
             .join(Area, DirectImageUpload.area_id == Area.id)
         ).where(DirectImageUpload.id > 0)
+        
+        # Apply hospital filter for direct uploads
+        if hospital_id:
+            direct_subq = direct_subq.where(DirectImageUpload.hospital_id == hospital_id)
         
         # Apply filters for direct uploads
         if lab_unit_ids:
@@ -116,11 +137,22 @@ def search_images(
                     DirectImageUpload.folder_rel.contains(search_query)
                 )
             )
+        # Apply date filters for direct uploads
+        if upload_start:
+            direct_subq = direct_subq.where(DirectImageUpload.created_at >= upload_start)
+        if upload_end:
+            direct_subq = direct_subq.where(DirectImageUpload.created_at <= upload_end)
+        # For direct images, capture date is the same as upload date
+        if capture_start:
+            direct_subq = direct_subq.where(DirectImageUpload.created_at >= capture_start)
+        if capture_end:
+            direct_subq = direct_subq.where(DirectImageUpload.created_at <= capture_end)
     else:
         direct_subq = None
     
     # Subquery for ZIP uploads (EncounterFile)
-    if image_type in [None, 'zip']:
+    # Only include ZIP images if no disease filter is applied
+    if image_type in [None, 'zip'] and not disease_ids:
         
         zip_subq = select(
             EncounterFile.id,
@@ -133,19 +165,50 @@ def search_images(
             literal(None).label('disease_name'),
             literal(None).label('area_name'),
             literal(None).label('is_mydriatic'),  # ZIP files don't have this field in the same way
-            PatientEncounters.capture_date_dt.label('created_at'),  # Use capture_date_dt from PatientEncounters
+            ZipFile.upload_date.label('upload_date'),  # Add upload date from ZipFile
+            PatientEncounters.capture_date_dt.label('capture_date'),  # Add capture date
             literal('zip').label('image_type')
         ).select_from(
             EncounterFile.__table__
             .join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
             .join(Hospital, LabUnit.hospital_id == Hospital.id)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+            .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)  # Add ZipFile join
         ).where(EncounterFile.id > 0)
         
+        # Apply hospital filter for ZIP uploads
+        if hospital_id:
+            zip_subq = zip_subq.where(Hospital.id == hospital_id)
         
-        # Apply filters for ZIP uploads
+        # Apply DR report filter for ZIP uploads
+        if has_dr_report is not None:
+            if has_dr_report:
+                zip_subq = zip_subq.where(PatientEncounters.dr_reports.any())
+            else:
+                zip_subq = zip_subq.where(~PatientEncounters.dr_reports.any())
+        
+        # Apply Glaucoma report filter for ZIP uploads
+        if has_glaucoma_report is not None:
+            if has_glaucoma_report:
+                zip_subq = zip_subq.where(PatientEncounters.glaucoma_reports.any())
+            else:
+                zip_subq = zip_subq.where(~PatientEncounters.glaucoma_reports.any())
+        
+        
+        # Apply filters for ZIP uploads (excluding disease filter)
         if lab_unit_ids:
             zip_subq = zip_subq.where(EncounterFile.lab_unit_id.in_(lab_unit_ids))
+        
+        # Apply date filters for ZIP uploads
+        if upload_start:
+            zip_subq = zip_subq.where(ZipFile.upload_date >= upload_start)
+        if upload_end:
+            zip_subq = zip_subq.where(ZipFile.upload_date <= upload_end)
+        if capture_start:
+            zip_subq = zip_subq.where(PatientEncounters.capture_date_dt >= capture_start)
+        if capture_end:
+            zip_subq = zip_subq.where(PatientEncounters.capture_date_dt <= capture_end)
+        
         if search_query:
             zip_subq = zip_subq.where(
                 or_(
@@ -175,7 +238,7 @@ def search_images(
     
     # Main query with pagination
     paginated_query = select(combined_query).select_from(combined_query).order_by(
-        combined_query.c.created_at.desc().nulls_last()
+        combined_query.c.upload_date.desc().nulls_last()
     ).offset(offset).limit(per_page)
     
     paginated_results = db_session.execute(paginated_query).fetchall()
@@ -189,7 +252,8 @@ def search_images(
             'filename': result.filename,
             'file_path': result.file_path,
             'lab_unit': result.lab_unit_name,
-            'created_at': result.created_at,
+            'upload_date': result.upload_date, # Add upload date
+            'capture_date': result.capture_date, # Add capture date
             'type': result.image_type
         }
         
@@ -204,8 +268,8 @@ def search_images(
             # Add hospital name for ZIP files from the query result
             image_dict['hospital'] = result.hospital
         
-        # Check task status for this image
-        image_dict['has_tasks'] = get_image_task_status(db_session, result.id, result.image_type)
+        # Check report status for this image
+        image_dict['has_reports'] = get_image_report_status(db_session, result.id, result.image_type)
         
         images.append(image_dict)
     
@@ -223,7 +287,11 @@ def search_direct_images(
     is_mydriatic: Optional[bool] = None,
     has_task_for_diseases: Optional[List[int]] = None,
     exclude_task_for_diseases: Optional[List[int]] = None,
-    search_query: Optional[str] = None
+    search_query: Optional[str] = None,
+    upload_start: Optional[_date] = None,
+    upload_end: Optional[_date] = None,
+    capture_start: Optional[_date] = None,
+    capture_end: Optional[_date] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Search direct image uploads with specified filters.
     
@@ -239,6 +307,10 @@ def search_direct_images(
         has_task_for_diseases: List of disease IDs to check if tasks exist for
         exclude_task_for_diseases: List of disease IDs to exclude if tasks exist for
         search_query: Search term to match against patient IDs, filenames, etc.
+        upload_start: Filter for upload date start
+        upload_end: Filter for upload date end
+        capture_start: Filter for capture date start (same as upload for direct images)
+        capture_end: Filter for capture date end (same as upload for direct images)
     
     Returns:
         Tuple of (list of image dictionaries, total count)
@@ -272,6 +344,16 @@ def search_direct_images(
                 DirectImageUpload.folder_rel.contains(search_query)
             )
         )
+    # Apply date filters
+    if upload_start:
+        query = query.filter(DirectImageUpload.created_at >= upload_start)
+    if upload_end:
+        query = query.filter(DirectImageUpload.created_at <= upload_end)
+    # For direct images, capture date is the same as upload date
+    if capture_start:
+        query = query.filter(DirectImageUpload.created_at >= capture_start)
+    if capture_end:
+        query = query.filter(DirectImageUpload.created_at <= capture_end)
     
     # Count total results
     total_count = query.count()
@@ -290,7 +372,11 @@ def search_zip_images(
     page: int = 1,
     per_page: int = 50,
     lab_unit_ids: Optional[List[int]] = None,
-    search_query: Optional[str] = None
+    search_query: Optional[str] = None,
+    upload_start: Optional[_date] = None,
+    upload_end: Optional[_date] = None,
+    capture_start: Optional[_date] = None,
+    capture_end: Optional[_date] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Search images from ZIP uploads with specified filters.
     
@@ -300,6 +386,10 @@ def search_zip_images(
         per_page: Number of items per page, default is 50
         lab_unit_ids: List of lab unit IDs to filter by
         search_query: Search term to match against patient IDs, filenames, etc.
+        upload_start: Filter for upload date start
+        upload_end: Filter for upload date end
+        capture_start: Filter for capture date start
+        capture_end: Filter for capture date end
     
     Returns:
         Tuple of (list of image dictionaries, total count)
@@ -326,6 +416,15 @@ def search_zip_images(
                 PatientEncounters.name.contains(search_query)
             )
         )
+    # Apply date filters
+    if upload_start:
+        query = query.join(ZipFile).filter(ZipFile.upload_date >= upload_start)
+    if upload_end:
+        query = query.join(ZipFile).filter(ZipFile.upload_date <= upload_end)
+    if capture_start:
+        query = query.filter(PatientEncounters.capture_date_dt >= capture_start)
+    if capture_end:
+        query = query.filter(PatientEncounters.capture_date_dt <= capture_end)
     
     # Count total results
     total_count = query.count()
@@ -389,7 +488,7 @@ def format_direct_image_upload(db_session, upload, has_task_for_diseases=None, e
         'area': upload.area.name,
         'is_mydriatic': upload.is_mydriatic,
         'created_at': upload.created_at,
-        'has_tasks': has_tasks,
+        'has_reports': get_image_report_status(db_session, upload.id, 'direct'),
         # Add more fields as needed
     }
 
@@ -434,13 +533,13 @@ def format_encounter_file(db_session, file):
         'patient_id': getattr(file.patient_encounter, 'patient_id', 'Unknown'),
         'patient_name': getattr(file.patient_encounter, 'name', 'Unknown'),
         'created_at': getattr(file.patient_encounter, 'capture_date_dt', None) or getattr(file.patient_encounter, 'capture_date', None),
-        'has_tasks': has_tasks,
+        'has_reports': has_reports,
         # Add more fields as needed
     }
 
 
-def get_image_task_status(db_session, image_id: int, image_type: str) -> Dict[str, bool]:
-    """Get task status for all diseases for a specific image.
+def get_image_report_status(db_session, image_id: int, image_type: str) -> Dict[str, bool]:
+    """Get report status for all diseases for a specific image.
     
     Args:
         db_session: Database session to use for queries
@@ -448,28 +547,45 @@ def get_image_task_status(db_session, image_id: int, image_type: str) -> Dict[st
         image_type: Type of image ('direct' or 'zip')
     
     Returns:
-        Dictionary mapping disease names to whether a task exists for that disease
+        Dictionary mapping disease names to whether a report exists for that disease
     """
-    has_tasks = {}
+    has_reports = {}
     all_diseases = db_session.query(Disease).all()
     
     for disease in all_diseases:
         if image_type == 'direct':
-            task_exists = db_session.query(Task).filter(
-                Task.direct_image_upload_id == image_id,
-                Task.disease_id == disease.id
+            # For direct uploads, there are no reports in the current model
+            # So we'll check for gradings instead
+            report_exists = db_session.query(ImageGrading).filter(
+                ImageGrading.direct_image_upload_id == image_id,
+                ImageGrading.graded_for == disease.name
             ).count() > 0
         elif image_type == 'zip':
-            task_exists = db_session.query(Task).filter(
-                Task.encounter_file_id == image_id,
-                Task.disease_id == disease.id
-            ).count() > 0
+            # For ZIP uploads, we need to join through the encounter_file to patient_encounter
+            # to check for DR and Glaucoma reports
+            encounter_file = db_session.query(EncounterFile).filter(
+                EncounterFile.id == image_id
+            ).first()
+            
+            if encounter_file and encounter_file.patient_encounter:
+                if disease.name == "Diabetic Retinopathy":
+                    report_exists = len(encounter_file.patient_encounter.dr_reports) > 0
+                elif disease.name == "Glaucoma":
+                    report_exists = len(encounter_file.patient_encounter.glaucoma_reports) > 0
+                else:
+                    # For other diseases, check if there are gradings
+                    report_exists = db_session.query(ImageGrading).filter(
+                        ImageGrading.encounter_file_id == image_id,
+                        ImageGrading.graded_for == disease.name
+                    ).count() > 0
+            else:
+                report_exists = False
         else:
-            task_exists = False
+            report_exists = False
         
-        has_tasks[disease.name] = task_exists
+        has_reports[disease.name] = report_exists
     
-    return has_tasks
+    return has_reports
 
 
 def bulk_create_tasks(

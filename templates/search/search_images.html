@@ -8,113 +8,140 @@
       <h1 class="h3 mb-1">Search Images</h1>
       <p class="text-muted mb-0">Filter images by source, lab, camera, disease, verification status, and date ranges.</p>
     </div>
-    <form class="row gy-2 gx-2 align-items-end" method="get">
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-source">Source</label>
-        <select class="form-select" id="filter-source" name="source">
-          <option value="all" {% if filters.source == 'all' %}selected{% endif %}>All</option>
-          <option value="zip" {% if filters.source == 'zip' %}selected{% endif %}>ZIP Images</option>
-          <option value="direct" {% if filters.source == 'direct' %}selected{% endif %}>Direct Uploads</option>
-        </select>
+  </div>
+  
+  <form method="get">
+    <!-- Common Filters Section -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">Common Filters</h5>
       </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-hospital">Hospital</label>
-        <select class="form-select" id="filter-hospital" name="hospital_id">
-          <option value="">All</option>
-          {% for hospital in hospitals %}
-          <option value="{{ hospital.id }}" {% if filters.hospital_id|int == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="card-body">
+        <div class="row gy-2 gx-2 align-items-end">
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-source">Source</label>
+            <select class="form-select" id="filter-source" name="source">
+              <option value="all" {% if filters.source == 'all' %}selected{% endif %}>All</option>
+              <option value="zip" {% if filters.source == 'zip' %}selected{% endif %}>ZIP Images</option>
+              <option value="direct" {% if filters.source == 'direct' %}selected{% endif %}>Direct Uploads</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-hospital">Hospital</label>
+            <select class="form-select" id="filter-hospital" name="hospital_id">
+              <option value="">All</option>
+              {% for hospital in hospitals %}
+              <option value="{{ hospital.id }}" {% if filters.hospital_id|int == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
+            <select class="form-select" id="filter-lab" name="lab_unit_id">
+              <option value="">All</option>
+              {% for lab in lab_units %}
+              <option value="{{ lab.id }}" {% if filters.lab_unit_id|int == lab.id %}selected{% endif %}>{{ lab.name }}{% if lab.hospital %} — {{ lab.hospital.name }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-upload-start">Uploaded After</label>
+            <input type="date" class="form-control" id="filter-upload-start" name="upload_start" value="{{ filters.upload_start }}">
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-upload-end">Uploaded Before</label>
+            <input type="date" class="form-control" id="filter-upload-end" name="upload_end" value="{{ filters.upload_end }}">
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-capture-start">Capture Date From</label>
+            <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-capture-end">Capture Date To</label>
+            <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
+          </div>
+        </div>
       </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
-        <select class="form-select" id="filter-lab" name="lab_unit_id">
-          <option value="">All</option>
-          {% for lab in lab_units %}
-          <option value="{{ lab.id }}" {% if filters.lab_unit_id|int == lab.id %}selected{% endif %}>{{ lab.name }}{% if lab.hospital %} — {{ lab.hospital.name }}{% endif %}</option>
-          {% endfor %}
-        </select>
+    </div>
+
+    <!-- Image-Specific Filters Section -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">Image-Specific Filters</h5>
       </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-camera">Camera</label>
-        <select class="form-select" id="filter-camera" name="camera_id">
-          <option value="">All</option>
-          {% for camera in cameras %}
-          <option value="{{ camera.id }}" {% if filters.camera_id|int == camera.id %}selected{% endif %}>{{ camera.name }}</option>
-          {% endfor %}
-        </select>
+      <div class="card-body">
+        <div class="row gy-2 gx-2 align-items-end">
+          <!-- Direct Upload Filters -->
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-camera">Camera (Direct)</label>
+            <select class="form-select" id="filter-camera" name="camera_id">
+              <option value="">All</option>
+              {% for camera in cameras %}
+              <option value="{{ camera.id }}" {% if filters.camera_id|int == camera.id %}selected{% endif %}>{{ camera.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-disease">Disease (Direct)</label>
+            <select class="form-select" id="filter-disease" name="disease_id">
+              <option value="">All</option>
+              {% for disease in diseases %}
+              <option value="{{ disease.id }}" {% if filters.disease_id|int == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-area">Area (Direct)</label>
+            <select class="form-select" id="filter-area" name="area_id">
+              <option value="">All</option>
+              {% for area in areas %}
+              <option value="{{ area.id }}" {% if filters.area_id|int == area.id %}selected{% endif %}>{{ area.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-mydriatic">Mydriatic (Direct)</label>
+            <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
+              <option value="" {% if not filters.is_mydriatic %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.is_mydriatic == 'true' %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.is_mydriatic == 'false' %}selected{% endif %}>No</option>
+            </select>
+          </div>
+          <!-- ZIP Image Filters -->
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-has-enc">Has Encounter (ZIP)</label>
+            <select class="form-select" id="filter-has-enc" name="has_encounter">
+              <option value="" {% if not filters.has_encounter %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.has_encounter == 'true' %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.has_encounter == 'false' %}selected{% endif %}>No</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-has-dr">Has DR Report (ZIP)</label>
+            <select class="form-select" id="filter-has-dr" name="has_dr_report">
+              <option value="" {% if not filters.has_dr_report %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.has_dr_report == 'true' %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.has_dr_report == 'false' %}selected{% endif %}>No</option>
+            </select>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Report (ZIP)</label>
+            <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
+              <option value="" {% if not filters.has_glaucoma_report %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.has_glaucoma_report == 'true' %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.has_glaucoma_report == 'false' %}selected{% endif %}>No</option>
+            </select>
+          </div>
+        </div>
       </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-disease">Disease</label>
-        <select class="form-select" id="filter-disease" name="disease_id">
-          <option value="">All</option>
-          {% for disease in diseases %}
-          <option value="{{ disease.id }}" {% if filters.disease_id|int == disease.id %}selected{% endif %}>{{ disease.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-area">Area</label>
-        <select class="form-select" id="filter-area" name="area_id">
-          <option value="">All</option>
-          {% for area in areas %}
-          <option value="{{ area.id }}" {% if filters.area_id|int == area.id %}selected{% endif %}>{{ area.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-mydriatic">Mydriatic</label>
-        <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
-          <option value="" {% if not filters.is_mydriatic %}selected{% endif %}>All</option>
-          <option value="true" {% if filters.is_mydriatic == 'true' %}selected{% endif %}>Yes</option>
-          <option value="false" {% if filters.is_mydriatic == 'false' %}selected{% endif %}>No</option>
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-has-enc">Has Encounter</label>
-        <select class="form-select" id="filter-has-enc" name="has_encounter">
-          <option value="" {% if not filters.has_encounter %}selected{% endif %}>All</option>
-          <option value="true" {% if filters.has_encounter == 'true' %}selected{% endif %}>Yes</option>
-          <option value="false" {% if filters.has_encounter == 'false' %}selected{% endif %}>No</option>
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-has-dr">Has DR Report</label>
-        <select class="form-select" id="filter-has-dr" name="has_dr_report">
-          <option value="" {% if not filters.has_dr_report %}selected{% endif %}>All</option>
-          <option value="true" {% if filters.has_dr_report == 'true' %}selected{% endif %}>Yes</option>
-          <option value="false" {% if filters.has_dr_report == 'false' %}selected{% endif %}>No</option>
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Result</label>
-        <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
-          <option value="" {% if not filters.has_glaucoma_report %}selected{% endif %}>All</option>
-          <option value="true" {% if filters.has_glaucoma_report == 'true' %}selected{% endif %}>Yes</option>
-          <option value="false" {% if filters.has_glaucoma_report == 'false' %}selected{% endif %}>No</option>
-        </select>
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-upload-start">Uploaded After</label>
-        <input type="date" class="form-control" id="filter-upload-start" name="upload_start" value="{{ filters.upload_start }}">
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-upload-end">Uploaded Before</label>
-        <input type="date" class="form-control" id="filter-upload-end" name="upload_end" value="{{ filters.upload_end }}">
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-capture-start">Capture Date From</label>
-        <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
-      </div>
-      <div class="col-12 col-md-3">
-        <label class="form-label mb-1" for="filter-capture-end">Capture Date To</label>
-        <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
-      </div>
+    </div>
+    
+    <div class="row gy-2 gx-2 align-items-end">
       <div class="col-12 col-md-3">
         <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
       </div>
-    </form>
-  </div>
+    </div>
+  </form>
 
   {% if not rows %}
     <div class="alert alert-info">No images matched the selected filters.</div>
@@ -127,15 +154,15 @@
             <th scope="col">Source</th>
             <th scope="col">Hospital</th>
             <th scope="col">Lab Unit</th>
-            <th scope="col">Camera</th>
-            <th scope="col">Disease</th>
-            <th scope="col">Area</th>
-            <th scope="col">Mydriatic</th>
+            <th scope="col">Camera (Direct)</th>
+            <th scope="col">Disease (Direct)</th>
+            <th scope="col">Area (Direct)</th>
+            <th scope="col">Mydriatic (Direct)</th>
             <th scope="col">Uploaded</th>
             <th scope="col">Capture Date</th>
-            <th scope="col">Encounter</th>
-            <th scope="col">DR Result</th>
-            <th scope="col">Glaucoma Result</th>
+            <th scope="col">Encounter ID</th>
+            <th scope="col">DR Report</th>
+            <th scope="col">Glaucoma Report</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -173,8 +200,10 @@
               {% endif %}
             </td>
             <td>
-              {% if row.encounter_id %}
-                {{ row.encounter_id }}
+              {% if row.source == 'zip' and row.view_url %}
+                ZIP Image
+              {% elif row.source == 'direct' %}
+                <span class="text-muted">—</span>
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}

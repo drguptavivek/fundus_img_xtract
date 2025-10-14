@@ -58,17 +58,55 @@ python app.py
 
 ## Documentation
 
+### Project Overview
+- [Project Summary](SUMMARY.md)
+- [Project Details](DETAILS.md)
+- [Agent Guidelines](AGENTS.md)
+
+### Core Documentation
 - [App Architecture](docs/app.md)
 - [Database Models](docs/models.md)
+- [API Documentation](docs/api.md)
+- [Application Routes](docs/routes.md)
+
+### Data Processing Workflows
 - [ZIP Uploads](docs/zip_uploads.md)
     - [Main Processing Pipeline](docs/main.md)
     - [PDF Processing](docs/process_pdfs.md)
     - [OCR Extraction](docs/ocr_extraction.md)
 - [Direct Uploads](docs/direct_uploads.md)
 - [Audit Workflows](docs/audit.md)
-- [Grading System](docs/Grading.md)
+
+### Grading System
+- [Grading System Overview](docs/Grading.md)
+    - [Dual Grading Workflow](docs/dual_grading.md)
+    - [Dual Grading Flow Details](grading/dual_grading_flow.md)
+    - [Task Creation Services](docs/task_creation_services.md)
+    - [Grading Edge Cases](grading/edge_cases.md)
+
+### Search & Utilities
+- [Image Search](search/route_image_search.md)
+- [Task Utilities](utils/taskUtils.md)
+- [Flash Toasts Component](static/js/flash-toasts.md)
+
+### Development & Conventions
 - [Security](docs/Security.md)
-- [Logging](docs/Logging.md)
+- [Build Themes](docs/BUILD_THEMES.md)
+- [Coding Conventions](CONVENTIONS/Templates.md)
+- [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
+- [DateTime Handling](CONVENTIONS/DateTime.md)
+- [Logging System](CONVENTIONS/Logging.md)
+- [User Management Scripts](scripts/USERS.md)
+- [Script Migrations](scripts/migrations.md)
+
+### Module-Specific Documentation
+- [Analytics Routes](analytics/routes.md)
+- [Analytics Utils](analytics/utils.md)
+- [Tasks Routes](tasks/routes.md)
+- [Services Task Creation](services/taskCreationServices.md)
+
+### Documentation Index
+- [Full Documentation Index](docs/README.md)
 
 ## GIT Workflow
 

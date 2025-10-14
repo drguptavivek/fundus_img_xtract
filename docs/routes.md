@@ -190,15 +190,11 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /grading/ | grading.index | GET, POST | grading/dashboard.py | - |
-| /grading/remedio/glaucoma/image/\<uuid\> | grading.remedio_glaucoma_image | GET | grading/remedio_glaucoma.py | optometrist, ophthalmologist, admin |
-| /grading/remedio/glaucoma/grade | grading.remedio_glaucoma_grade | POST | grading/remedio_glaucoma.py | optometrist, ophthalmologist, admin |
-| /grading/remedio/glaucoma/remove | grading.remedio_glaucoma_remove | POST | grading/remedio_glaucoma.py | optometrist, ophthalmologist, admin |
-| /grading/remedio/dr/image/\<uuid\> | grading.remedio_dr_image | GET | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
-| /grading/remedio/dr/grade | grading.remedio_dr_grade | POST | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
-| /grading/remedio/dr/remove | grading.remedio_dr_remove | POST | grading/remedio_dr.py | optometrist, ophthalmologist, admin |
-| /grading/task/\<int:task_id\> | grading.dual_grading_task | GET | grading/dual_grading.py | admin, ophthalmologist, resident |
-| /grading/task/submit | grading.dual_grading_submit | POST | grading/dual_grading.py | admin, ophthalmologist, resident |
+| /grading/ | grading.index | GET, POST | grading/dashboard.py | resident, ophthalmologist |
+| /grading/grade/\<int:disease_id\>/\<string:role_slot\> | grading.start_grading | GET | grading/start_grading.py | resident, ophthalmologist |
+| /grading/task/\<int:task_id\>/\<string:slot_type\> | grading.dual_grading_task | GET | grading/dual_grading.py | resident, ophthalmologist, admin |
+| /grading/task/submit | grading.dual_grading_submit | POST | grading/dual_grading.py | resident, ophthalmologist, admin |
+| /grading/revise/\<int:grade_id\> | grading.revise_grading | GET | grading/dual_grading.py | resident, ophthalmologist, admin |
 
 ---
 
@@ -206,11 +202,11 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /media/img/\<path:filename\> | media.serve_image | GET | media/routes.py | admin |
-| /media/file/\<uuid\> | media.serve_file_by_uuid | GET | media/routes.py | admin |
-| /media/direct_upload/img_orig/\<int:upload_id\> | media.serve_img_orig | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
-| /media/direct_upload/img_edited/\<int:upload_id\> | media.serve_img_edited | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
-| /media/direct_upload/img/\<uuid_str\> | media.serve_img_by_uuid_preferring_edited | GET | media/routes.py | fileUploader, optometrist, data_manager, admin |
+| /media/encounter/img/\<uuid_str\> | media._encounterImageByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
+| /media/direct_upload/org_img/\<uuid_str\> | media._directImgOrigByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
+| /media/direct_upload/ed_img/\<uuid_str\> | media._directImgEdByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
+| /media/direct_upload/fn_img/\<uuid_str\> | media._directImgFinalByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
+| /media/img/\<uuid_str\> | media._imgForGradingByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
 
 ---
 
@@ -218,11 +214,11 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /reports/dr/\<path:filename\> | reports.serve_dr_pdf | GET | reports/routes.py | admin |
-| /reports/glaucoma/\<path:filename\> | reports.serve_glaucoma_pdf | GET | reports/routes.py | admin |
-| /reports/dr/by-uuid/\<uuid\> | reports.serve_dr_pdf_by_uuid | GET | reports/routes.py | admin |
-| /reports/glaucoma/by-uuid/\<uuid\> | reports.serve_glaucoma_pdf_by_uuid | GET | reports/routes.py | admin |
-| /reports/glaucoma_results | reports.glaucoma_results_redirect | GET | reports/routes.py | admin |
+| /reports/dr/\<path:filename\> | reports.serve_dr_pdf | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
+| /reports/glaucoma/\<path:filename\> | reports.serve_glaucoma_pdf | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
+| /reports/dr/by-uuid/\<uuid\> | reports.serve_dr_pdf_by_uuid | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
+| /reports/glaucoma/by-uuid/\<uuid\> | reports.serve_glaucoma_pdf_by_uuid | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
+| /reports/glaucoma_results | reports.glaucoma_results_redirect | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
 
 ---
 
@@ -243,13 +239,13 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /verify_remedio_glaucoma/results | verify_remedio_glaucoma.glaucoma_results | GET | verify_remedio_glaucoma/routes.py | admin |
-| /verify_remedio_glaucoma/list | verify_remedio_glaucoma.glaucoma_list | GET | verify_remedio_glaucoma/routes.py | admin |
-| /verify_remedio_glaucoma/clean | verify_remedio_glaucoma.glaucoma_clean_workflow | GET, POST | verify_remedio_glaucoma/routes.py | admin |
-| /verify_remedio_glaucoma/detail/\<int:clean_id\> | verify_remedio_glaucoma.glaucoma_detail | GET | verify_remedio_glaucoma/routes.py | admin |
+| /verify_remedio_glaucoma/results | verify_remedio_glaucoma.glaucoma_results | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
+| /verify_remedio_glaucoma/list | verify_remedio_glaucoma.glaucoma_list | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
+| /verify_remedio_glaucoma/clean | verify_remedio_glaucoma.glaucoma_clean_workflow | GET, POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
+| /verify_remedio_glaucoma/detail/\<int:clean_id\> | verify_remedio_glaucoma.glaucoma_detail | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
 | /verify_remedio_glaucoma/edit/\<int:clean_id\> | verify_remedio_glaucoma.glaucoma_edit | GET, POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\>/verify | verify_remedio_glaucoma.glaucoma_verify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\>/unverify | verify_remedio_glaucoma.glaucoma_unverify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist |
+| /verify_remedio_glaucoma/edit/\<int:clean_id\>/verify | verify_remedio_glaucoma.glaucoma_verify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
+| /verify_remedio_glaucoma/edit/\<int:clean_id\>/unverify | verify_remedio_glaucoma.glaucoma_unverify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
 | /verify_remedio_glaucoma/edit/\<int:clean_id\>/mark_eye | verify_remedio_glaucoma.glaucoma_mark_eye | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
 
 ---
@@ -258,8 +254,8 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /screenings/ | screenings.list_screenings | GET | screenings/routes.py | admin, ophthalmologist |
-| /screenings/\<int:encounter_id\> | screenings.screening_detail | GET | screenings/routes.py | admin |
+| /screenings/ | screenings.list_screenings | GET | screenings/routes.py | admin, fileUploader, optometrist, data_manager |
+| /screenings/\<int:encounter_id\> | screenings.screening_detail | GET | screenings/routes.py | admin, fileUploader, optometrist, data_manager |
 
 ---
 
@@ -267,7 +263,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /jobs/ | jobs.list_recent_jobs | GET | jobs/routes.py | admin |
+| /jobs/ | jobs.list_recent_jobs | GET | jobs/routes.py | - |
 | /jobs/\<job_token\> | jobs.job_status_json | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
 | /jobs/\<job_token\>/view | jobs.job_status_page | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
 
@@ -285,9 +281,9 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 | Route Path | URL For | HTTP Methods | Route File | Roles Required |
 |------------|---------|--------------|------------|----------------|
-| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
-| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | preprocess/anonymize_image.py | fileUploader, optometrist, data_manager, admin |
+| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | preprocess/anonymize_image.py | admin, optometrist, data_manager |
+| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | preprocess/anonymize_image.py | admin, optometrist, data_manager |
+| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | preprocess/anonymize_image.py | admin, optometrist, data_manager |
 
 ---
 

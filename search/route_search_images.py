@@ -162,6 +162,8 @@ def search_images_route() -> str:
                 "has_glaucoma": img.get("has_glaucoma_report", img.get("has_reports", {}).get("Glaucoma", False)),
                 "is_mydriatic": img.get("is_mydriatic"),
                 "view_url": None,  # Will be set below
+                "uploader": img.get("uploader"),  # Include uploader information for direct images
+                "file_hash": img.get("file_hash"),  # Include file hash for direct images
             }
             
             # Set the appropriate view URL based on image type

@@ -189,7 +189,11 @@ def build_direct_query(
     Returns:
         SQLAlchemy query object
     """
-    query = db_session.query(DirectImageUpload).join(
+    from sqlalchemy.orm import joinedload
+    
+    query = db_session.query(DirectImageUpload).options(
+        joinedload(DirectImageUpload.uploader)
+    ).join(
         LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id
     ).join(
         Hospital, DirectImageUpload.hospital_id == Hospital.id
@@ -411,6 +415,8 @@ def format_direct_image_with_tasks(
         "area": item.area.name if item.area else None,
         "is_mydriatic": item.is_mydriatic,
         "tasks_for_diseases": task_diseases,
+        "uploader": item.uploader.username if item.uploader else None,
+        "file_hash": getattr(item, 'file_hash', None),
     }
 
 

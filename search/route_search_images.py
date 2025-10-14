@@ -18,7 +18,7 @@ from models import (
     LabUnit,
 )
 from sqlalchemy.orm import joinedload
-from utils.imageSearchUtil import search_images
+from utils.imageSearchUtil import search_images_strict, ImageSearchError
 from utils.upload_eligibility import get_user_lab_unit_ids
 from db_transaction_manager import get_db_session
 
@@ -67,10 +67,6 @@ def search_images_route() -> str:
     has_dr_report = _parse_bool_param(request.args.get("has_dr_report"))  # Get the DR report filter
     has_glaucoma_report = _parse_bool_param(request.args.get("has_glaucoma_report"))  # Get the Glaucoma report filter
     
-    # If disease filter is applied, only show direct images since disease is only applicable to direct uploads
-    if disease_id:
-        source = "direct"
-
     # Parse date filters
     upload_start = _parse_date(request.args.get("upload_start"))
     upload_end = _parse_date(request.args.get("upload_end"))
@@ -104,26 +100,36 @@ def search_images_route() -> str:
         # Convert source to image_type
         image_type = None if source == "all" else source
         
-        # Use the centralized search_images function
-        images, total = search_images(
-            db_session=db,
-            page=page,
-            per_page=per_page,
-            lab_unit_ids=lab_unit_ids,
-            disease_ids=disease_ids,
-            camera_ids=camera_ids,
-            area_ids=area_ids,
-            is_mydriatic=is_mydriatic,
-            image_type=image_type,
-            search_query=search_query,
-            upload_start=upload_start,
-            upload_end=upload_end,
-            capture_start=capture_start,
-            capture_end=capture_end,
-            hospital_id=hospital_id, # Add hospital filter
-            has_dr_report=has_dr_report,  # Add DR report filter
-            has_glaucoma_report=has_glaucoma_report  # Add Glaucoma report filter
-        )
+        # Use the new search_images_strict function with improved filter separation
+        try:
+            images, total = search_images_strict(
+                db_session=db,
+                page=page,
+                per_page=per_page,
+                hospital_id=hospital_id,
+                lab_unit_ids=lab_unit_ids,
+                upload_start=upload_start,
+                upload_end=upload_end,
+                # Direct image filters
+                camera_ids=camera_ids,
+                disease_ids=disease_ids,
+                area_ids=area_ids,
+                is_mydriatic=is_mydriatic,
+                # ZIP image filters
+                has_dr_report=has_dr_report,
+                has_glaucoma_report=has_glaucoma_report,
+                capture_start=capture_start,
+                capture_end=capture_end,
+                # Additional options
+                search_query=search_query,
+                user_id=current_user.id,  # Explicit user ID for scoping
+                image_type=image_type  # Pass the source parameter to restrict search scope
+            )
+        except ImageSearchError as e:
+            # Handle filter conflicts and other search errors gracefully
+            from flask import flash
+            flash(f"Search error: {str(e)}", "error")
+            images, total = [], 0
         
         # Convert image data to the format expected by the template
         records = []
@@ -132,9 +138,10 @@ def search_images_route() -> str:
             if len(records) < 3:
                 import logging
                 runtime_logger = logging.getLogger("runtime_debug")
-                runtime_logger.info(f"Image {img.get('id')}: has_reports = {img.get('has_reports', {})}")
-                runtime_logger.info(f"Image {img.get('id')}: has_dr = {img.get('has_reports', {}).get('DR', False)}")
-                runtime_logger.info(f"Image {img.get('id')}: has_glaucoma = {img.get('has_reports', {}).get('Glaucoma', False)}")
+                runtime_logger.info(f"Image {img.get('uuid')}: has_dr_report = {img.get('has_dr_report')}")
+                runtime_logger.info(f"Image {img.get('uuid')}: has_glaucoma_report = {img.get('has_glaucoma_report')}")
+                runtime_logger.info(f"Image {img.get('uuid')}: has_reports = {img.get('has_reports', {})}")
+                runtime_logger.info(f"Image {img.get('uuid')}: type = {img.get('type')}")
             
             # Convert the image dict to match the template format
             record = {
@@ -150,8 +157,9 @@ def search_images_route() -> str:
                 "upload_date": img.get("upload_date"),  # New field
                 "capture_date": img.get("capture_date"), # Use new field
                 "encounter_id": None, # Not available in the search_images function
-                "has_dr": img.get("has_reports", {}).get("DR", False),
-                "has_glaucoma": img.get("has_reports", {}).get("Glaucoma", False),
+                # Fix DR report mapping - use direct fields for ZIP images, fallback to has_reports for direct images
+                "has_dr": img.get("has_dr_report", img.get("has_reports", {}).get("DR", False)),
+                "has_glaucoma": img.get("has_glaucoma_report", img.get("has_reports", {}).get("Glaucoma", False)),
                 "is_mydriatic": img.get("is_mydriatic"),
                 "view_url": None,  # Will be set below
             }

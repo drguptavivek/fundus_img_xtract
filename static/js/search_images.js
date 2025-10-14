@@ -94,4 +94,50 @@ document.addEventListener('DOMContentLoaded', function() {
     if (initialHospitalId) {
         fetchLabUnitsForHospital(initialHospitalId);
     }
+    
+    // Function to toggle filter visibility based on source selection
+    function toggleFilterVisibility() {
+        const sourceValue = hospitalSelect.form.querySelector('#filter-source').value;
+        
+        // ZIP-only filters (capture dates, DR report, Glaucoma report, Has Encounter)
+        const zipOnlyFilters = document.querySelectorAll('.zip-only-filter');
+        
+        // Direct-only filters (camera, disease, area, mydriatic)
+        const directOnlyFilters = document.querySelectorAll('.direct-only-filter');
+        
+        if (sourceValue === 'zip') {
+            // Show ZIP-only filters, hide direct-only filters
+            zipOnlyFilters.forEach(filter => {
+                filter.style.display = 'block';
+            });
+            directOnlyFilters.forEach(filter => {
+                filter.style.display = 'none';
+            });
+        } else if (sourceValue === 'direct') {
+            // Show direct-only filters, hide ZIP-only filters
+            zipOnlyFilters.forEach(filter => {
+                filter.style.display = 'none';
+            });
+            directOnlyFilters.forEach(filter => {
+                filter.style.display = 'block';
+            });
+        } else {
+            // Show all filters for "all" source
+            zipOnlyFilters.forEach(filter => {
+                filter.style.display = 'block';
+            });
+            directOnlyFilters.forEach(filter => {
+                filter.style.display = 'block';
+            });
+        }
+    }
+    
+    // Add event listener for source dropdown change
+    const sourceSelect = document.getElementById('filter-source');
+    if (sourceSelect) {
+        sourceSelect.addEventListener('change', toggleFilterVisibility);
+        
+        // Initial call to set correct visibility on page load
+        toggleFilterVisibility();
+    }
 });

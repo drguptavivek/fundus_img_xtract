@@ -49,11 +49,12 @@ class ImageSearchError(Exception):
     pass
 
 
-def validate_search_filters(filters: Dict[str, Any]) -> str:
+def validate_search_filters(filters: Dict[str, Any], image_type: Optional[str] = None) -> str:
     """Validate all filters and determine search scope.
     
     Args:
         filters: Dictionary of search filters
+        image_type: Explicit image type restriction ('direct', 'zip', or None)
         
     Returns:
         Search scope: 'direct_only', 'zip_only', or 'both'
@@ -76,12 +77,27 @@ def validate_search_filters(filters: Dict[str, Any]) -> str:
         filters.get('capture_end')
     ])
     
-    # Conflict validation
+    # Enhanced conflict validation with image_type consideration
     if direct_filters_present and zip_filters_present:
         raise ImageSearchError(
             "Cannot apply both direct image filters and ZIP filters simultaneously. "
             "Direct filters: camera, disease, area, is_mydriatic. "
             "ZIP filters: has_dr_report, has_glaucoma_report, capture_date range."
+        )
+    
+    # Check for conflicts between image_type and filter types
+    if image_type == 'direct' and zip_filters_present:
+        raise ImageSearchError(
+            "Cannot apply ZIP-specific filters when searching direct images only. "
+            "ZIP filters: has_dr_report, has_glaucoma_report, capture_date range. "
+            "Direct images do not have DR or Glaucoma reports."
+        )
+    
+    if image_type == 'zip' and direct_filters_present:
+        raise ImageSearchError(
+            "Cannot apply direct-specific filters when searching ZIP images only. "
+            "Direct filters: camera, disease, area, is_mydriatic. "
+            "ZIP images do not have these attributes."
         )
     
     # Date validation
@@ -96,7 +112,11 @@ def validate_search_filters(filters: Dict[str, Any]) -> str:
         raise ImageSearchError("capture_start date must be before capture_end date")
     
     # Determine search scope
-    if direct_filters_present:
+    if image_type == 'direct':
+        return "direct_only"
+    elif image_type == 'zip':
+        return "zip_only"
+    elif direct_filters_present:
         return "direct_only"
     elif zip_filters_present:
         return "zip_only"
@@ -382,8 +402,8 @@ def format_direct_image_with_tasks(
     return {
         "uuid": item.uuid,
         "type": "direct",
-        "upload_date": item.created_at.isoformat() if item.created_at else None,
-        "capture_date": item.created_at.isoformat() if item.created_at else None,
+        "upload_date": item.created_at,
+        "capture_date": item.created_at,  # Same as upload_date for direct images
         "hospital": item.hospital.name if item.hospital else None,
         "lab_unit": item.lab_unit.name if item.lab_unit else None,
         "camera": item.camera.name if item.camera else None,
@@ -423,8 +443,8 @@ def format_zip_image_with_tasks(
     return {
         "uuid": item.uuid,
         "type": "zip",
-        "upload_date": item.patient_encounter.zip_file.upload_date.isoformat() if item.patient_encounter.zip_file.upload_date else None,
-        "capture_date": item.patient_encounter.capture_date_dt.isoformat() if item.patient_encounter.capture_date_dt else None,
+        "upload_date": item.patient_encounter.zip_file.upload_date,
+        "capture_date": item.patient_encounter.capture_date_dt,
         "hospital": item.lab_unit.hospital.name if item.lab_unit and item.lab_unit.hospital else None,
         "lab_unit": item.lab_unit.name if item.lab_unit else None,
         "has_dr_report": has_dr_report,
@@ -509,7 +529,8 @@ def search_images_strict(
     capture_end: Optional[_date] = None,
     # Additional options
     search_query: Optional[str] = None,
-    user_id: Optional[int] = None  # For scoping, defaults to current_user
+    user_id: Optional[int] = None,  # For scoping, defaults to current_user
+    image_type: Optional[str] = None  # 'direct', 'zip', or None for both
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Search images with strict filter separation and UUID-based returns.
     
@@ -578,7 +599,14 @@ def search_images_strict(
                 raise ImageSearchError("User ID required for search")
         
         # Validate filters and determine search scope
-        search_scope = validate_search_filters(filters)
+        search_scope = validate_search_filters(filters, image_type)
+        
+        # Override search scope based on explicit image_type parameter
+        if image_type == 'direct':
+            search_scope = 'direct_only'
+        elif image_type == 'zip':
+            search_scope = 'zip_only'
+        # If image_type is None or 'all', keep the determined search_scope
         
         # Get user scoping information
         user_lab_unit_ids, is_admin = get_user_search_scope(user_id, db_session)
@@ -636,7 +664,19 @@ def search_images_strict(
                 total_count += zip_count
         
         # Sort combined results by upload_date (most recent first)
-        all_results.sort(key=lambda x: x['upload_date'] or '', reverse=True)
+        # Handle both datetime and date objects safely
+        def sort_key(item):
+            upload_date = item.get('upload_date')
+            if upload_date is None:
+                return ''
+            # Convert date to datetime for consistent comparison
+            if hasattr(upload_date, 'date'):  # It's a datetime
+                return upload_date
+            else:  # It's a date, convert to datetime
+                from datetime import datetime, time
+                return datetime.combine(upload_date, time.min)
+        
+        all_results.sort(key=sort_key, reverse=True)
         
         # Apply pagination to combined results
         start_idx = offset
@@ -704,7 +744,8 @@ def search_images(
         has_glaucoma_report=has_glaucoma_report,
         capture_start=capture_start,
         capture_end=capture_end,
-        search_query=search_query
+        search_query=search_query,
+        image_type=image_type  # Pass through the image_type parameter
     )
 
 

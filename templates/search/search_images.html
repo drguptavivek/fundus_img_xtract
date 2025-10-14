@@ -58,14 +58,6 @@
             <label class="form-label mb-1" for="filter-upload-end">Uploaded Before</label>
             <input type="date" class="form-control" id="filter-upload-end" name="upload_end" value="{{ filters.upload_end }}">
           </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-capture-start">Capture Date From</label>
-            <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-capture-end">Capture Date To</label>
-            <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
-          </div>
         </div>
       </div>
     </div>
@@ -81,7 +73,7 @@
       <div class="card-body">
         <div class="row gy-2 gx-2 align-items-end">
           <!-- Direct Upload Filters -->
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-camera">Camera (Direct)</label>
             <select class="form-select" id="filter-camera" name="camera_id">
               <option value="">All</option>
@@ -90,7 +82,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-disease">Disease (Direct)</label>
             <select class="form-select" id="filter-disease" name="disease_id">
               <option value="">All</option>
@@ -99,7 +91,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-area">Area (Direct)</label>
             <select class="form-select" id="filter-area" name="area_id">
               <option value="">All</option>
@@ -108,7 +100,7 @@
               {% endfor %}
             </select>
           </div>
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-mydriatic">Mydriatic (Direct)</label>
             <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
               <option value="" {% if filters.is_mydriatic == None %}selected{% endif %}>All</option>
@@ -117,15 +109,7 @@
             </select>
           </div>
           <!-- ZIP Image Filters -->
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-has-enc">Has Encounter (ZIP)</label>
-            <select class="form-select" id="filter-has-enc" name="has_encounter">
-              <option value="" {% if not filters.has_encounter %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.has_encounter == 'true' %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.has_encounter == 'false' %}selected{% endif %}>No</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-has-dr">Has DR Report (ZIP)</label>
             <select class="form-select" id="filter-has-dr" name="has_dr_report">
               <option value="" {% if filters.has_dr_report == None %}selected{% endif %}>All</option>
@@ -133,13 +117,22 @@
               <option value="false" {% if filters.has_dr_report == False %}selected{% endif %}>No</option>
             </select>
           </div>
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
             <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Report (ZIP)</label>
             <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
               <option value="" {% if filters.has_glaucoma_report == None %}selected{% endif %}>All</option>
               <option value="true" {% if filters.has_glaucoma_report == True %}selected{% endif %}>Yes</option>
               <option value="false" {% if filters.has_glaucoma_report == False %}selected{% endif %}>No</option>
             </select>
+          </div>
+          <!-- ZIP Image Date Filters -->
+          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
+            <label class="form-label mb-1" for="filter-capture-start">Capture Date From (ZIP)</label>
+            <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
+          </div>
+          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
+            <label class="form-label mb-1" for="filter-capture-end">Capture Date To (ZIP)</label>
+            <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
           </div>
         </div>
       </div>
@@ -203,7 +196,7 @@
             </td>
             <td>
               {% if row.capture_date %}
-                {{ row.capture_date }}
+                {{ row.capture_date|user_datetime('%Y-%m-%d %H:%M') }}
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}

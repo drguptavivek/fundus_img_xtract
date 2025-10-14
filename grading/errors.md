@@ -1,18 +1,22 @@
 # Grading Module Error Notes
 
-## 2024-11-22 Review
+## 2025-10-14 Review
 
 
-- **Task tracker cleanup never runs after successful submissions**   [CRITICAL - NOT FIXED]\
+- **Task tracker cleanup never runs after successful submissions**   [LOW PRIORITY - NOT FIXED]\
   File: `grading/dual_grading.py:532`  \
-  **Impact**: High - Causes tasks to remain stuck indefinitely, preventing other users from accessing them\
-  **Description**: The `dual_grading_submit` handler determines whether to run `cleanup_task_tracker` by refetching `fetch_existing_grade_for_user` *after* the grade has been persisted. This always returns a grade, so `is_revision` stays `True` and the cleanup branch is skipped.\
+  **Impact**: Low - Tasks remain unavailable for 60 minutes after revision, but this is acceptable for medical grading workflow\
+  **Description**: The `dual_grading_submit` handler determines whether to run `cleanup_task_tracker` by checking `had_existing_grade` flag. For revisions, this prevents cleanup, causing tasks to remain "locked" until background cleanup runs.\
   **Consequences**:
-  - Resident and faculty slots remain marked "in progress" in TaskTracker table
-  - Tasks cannot be reassigned to other users
-  - Background cleanup may eventually free tasks (after 60 minutes), but this creates significant delays
-  - System throughput is reduced as tasks remain stuck\
-  **Required Fix**: Capture the revision status before updating the grade and reuse that flag instead of refetching. The fix should be implemented in the `dual_grading_submit` function around line 527-537.
+  - Tasks remain unavailable to other users for up to 60 minutes after revision completion
+  - Minor accumulation of unnecessary TaskTracker records in database
+  - Slightly increased reliance on background cleanup process\
+  **Business Impact**:
+  - Time Criticality: Low - 60-minute delay is acceptable in medical grading workflow
+  - User Experience: Minor inconvenience, doesn't block core functionality
+  - System Performance: Minimal impact on overall system performance\
+  **Required Fix**: Change condition to always call cleanup_task_tracker() regardless of revision status. The fix should be implemented in the `dual_grading_submit` function around line 535-537.\
+  **Recommended Timeline**: Can be addressed in regular maintenance cycle, no urgency.
 
 - **Dashboard view assumes eligibility payload is always a mapping** *(Resolved)*  \
   File: `grading/dashboard.py:38`  \

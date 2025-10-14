@@ -167,7 +167,7 @@ def search_images_route() -> str:
                 "created_at": img.get("upload_date"),   # Use new field
                 "upload_date": img.get("upload_date"),  # New field
                 "capture_date": img.get("capture_date"), # Use new field
-                "encounter_id": None, # Not available in the search_images function
+                "encounter_id": img.get("encounter_id"), # Include encounter ID for ZIP images
                 # Fix DR report mapping - use direct fields for ZIP images, fallback to has_reports for direct images
                 "has_dr": img.get("has_dr_report", img.get("has_reports", {}).get("DR", False)),
                 "has_glaucoma": img.get("has_glaucoma_report", img.get("has_reports", {}).get("Glaucoma", False)),
@@ -175,6 +175,7 @@ def search_images_route() -> str:
                 "view_url": None,  # Will be set below
                 "uploader": img.get("uploader"),  # Include uploader information for direct images
                 "file_hash": img.get("file_hash"),  # Include file hash for direct images
+                "tasks_for_diseases": img.get("tasks_for_diseases", []),  # Include task disease information
             }
             
             # Set the appropriate view URL based on image type

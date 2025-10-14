@@ -241,8 +241,8 @@
                   <!-- Encounter ID -->
                   <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Encounter ID</small>
-                    {% if row.source == 'zip' and row.view_url %}
-                      <span class="badge bg-info">ZIP Image</span>
+                    {% if row.source == 'zip' and row.encounter_id %}
+                      <span class="badge bg-info">{{ row.encounter_id }}</span>
                     {% elif row.source == 'direct' %}
                       <span class="text-muted">—</span>
                     {% else %}
@@ -252,7 +252,7 @@
                 </div>
               </div>
               
-              <!-- Right column with reports and actions -->
+              <!-- Right column with reports, tasks and actions -->
               <div class="col-md-4 border-start">
                 <div class="row g-3 h-100 align-items-center">
                   <!-- Reports -->
@@ -276,6 +276,22 @@
                         {% endif %}
                       </div>
                     </div>
+                  </div>
+                  
+                  <!-- Tasks -->
+                  <div class="col-12">
+                    <small class="text-muted d-block mb-2">Tasks</small>
+                    {% if row.tasks_for_diseases %}
+                      {% for task in row.tasks_for_diseases %}
+                        {% if task.disease and task.status %}
+                          <span class="badge bg-info me-1">{{ task.disease }}: {{ task.status }}</span>
+                        {% else %}
+                          <span class="badge bg-info me-1">{{ task.disease or 'Unknown' }}</span>
+                        {% endif %}
+                      {% endfor %}
+                    {% else %}
+                      <span class="text-muted">No tasks</span>
+                    {% endif %}
                   </div>
                   
                   <!-- Actions -->

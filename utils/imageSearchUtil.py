@@ -356,8 +356,8 @@ def get_tasks_for_multiple_images(
     db_session: Session,
     image_ids: List[int],
     image_type: str
-) -> Dict[int, List[str]]:
-    """Get task diseases for multiple images efficiently.
+) -> Dict[int, List[Dict[str, str]]]:
+    """Get task diseases with status for multiple images efficiently.
     
     Args:
         db_session: Database session
@@ -365,14 +365,13 @@ def get_tasks_for_multiple_images(
         image_type: Type of image ('direct' or 'zip')
         
     Returns:
-        Dictionary mapping image_id to list of disease names with tasks
+        Dictionary mapping image_id to list of dictionaries with disease name and task status
     """
     if not image_ids:
         return {}
     
-    tasks = db_session.query(Task, Disease).join(Disease).filter(
-        Task.state.in_(['pending', 'resident_done', 'faculty_done', 'arbitration', 'final'])
-    )
+    # Get all tasks regardless of state (not just active ones)
+    tasks = db_session.query(Task, Disease).join(Disease)
     
     if image_type == "direct":
         tasks = tasks.filter(Task.direct_image_upload_id.in_(image_ids))
@@ -385,7 +384,10 @@ def get_tasks_for_multiple_images(
         image_id = task.direct_image_upload_id if image_type == "direct" else task.encounter_file_id
         if image_id not in result:
             result[image_id] = []
-        result[image_id].append(disease.name)
+        result[image_id].append({
+            "disease": disease.name,
+            "status": task.state
+        })
     
     return result
 
@@ -456,6 +458,7 @@ def format_zip_image_with_tasks(
         "has_dr_report": has_dr_report,
         "has_glaucoma_report": has_glaucoma_report,
         "tasks_for_diseases": task_diseases,
+        "encounter_id": item.patient_encounter.id,  # Include encounter ID for ZIP images
     }
 
 

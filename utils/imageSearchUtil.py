@@ -631,11 +631,13 @@ def search_images_strict(
             # Build and execute direct image query
             direct_query = build_direct_query(db_session, filters, user_lab_unit_ids, is_admin)
             direct_count = direct_query.count()
+            total_count += direct_count
             
             if direct_count > 0:
+                # Get all results (no pagination yet)
                 direct_results = direct_query.order_by(
                     DirectImageUpload.created_at.desc()
-                ).offset(offset).limit(per_page).all()
+                ).all()
                 
                 # Get task information for direct images
                 direct_image_ids = [img.id for img in direct_results]
@@ -645,18 +647,18 @@ def search_images_strict(
                 for img in direct_results:
                     formatted = format_direct_image_with_tasks(img, direct_tasks.get(img.id, []))
                     all_results.append(formatted)
-                
-                total_count += direct_count
         
         if search_scope in ['zip_only', 'both']:
             # Build and execute ZIP image query
             zip_query = build_zip_query(db_session, filters, user_lab_unit_ids, is_admin)
             zip_count = zip_query.count()
+            total_count += zip_count
             
             if zip_count > 0:
+                # Get all results (no pagination yet)
                 zip_results = zip_query.order_by(
                     ZipFile.upload_date.desc().nulls_last()
-                ).offset(offset).limit(per_page).all()
+                ).all()
                 
                 # Get task information for ZIP images
                 zip_image_ids = [img.id for img in zip_results]
@@ -666,8 +668,6 @@ def search_images_strict(
                 for img in zip_results:
                     formatted = format_zip_image_with_tasks(img, zip_tasks.get(img.id, []), db_session)
                     all_results.append(formatted)
-                
-                total_count += zip_count
         
         # Sort combined results by upload_date (most recent first)
         # Handle both datetime and date objects safely

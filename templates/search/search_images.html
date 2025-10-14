@@ -22,6 +22,7 @@
           <h5 class="mb-0">Common Filters</h5>
           <a href="{{ url_for('search.search_images_route') }}" class="btn btn-outline-secondary btn-sm">Clear Filters</a>
         </div>
+      </div>  
       <div class="card-body">
         <div class="row gy-2 gx-2 align-items-end">
           <div class="col-12 col-md-3">
@@ -63,7 +64,7 @@
     </div>
 
     <!-- Image-Specific Filters Section -->
-    <div class="card mb-4">
+    <div class="card">
       <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
           <h5 class="mb-0">Image-Specific Filters</h5>
@@ -145,96 +146,174 @@
     </div>
   </form>
 
+
+
+  <!-- Results Section -->
   {% if not rows %}
     <div class="alert alert-info">No images matched the selected filters.</div>
   {% else %}
-    <div class="table-responsive shadow-sm rounded">
-      <table class="table table-striped table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th scope="col">UUID</th>
-            <th scope="col">Source</th>
-            <th scope="col">Hospital</th>
-            <th scope="col">Lab Unit</th>
-            <th scope="col">Camera (Direct)</th>
-            <th scope="col">Disease (Direct)</th>
-            <th scope="col">Area (Direct)</th>
-            <th scope="col">Mydriatic (Direct)</th>
-            <th scope="col">Uploaded</th>
-            <th scope="col">Capture Date</th>
-            <th scope="col">Encounter ID</th>
-            <th scope="col">DR Report</th>
-            <th scope="col">Glaucoma Report</th>
-            <th scope="col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-          <tr>
-            <td><code>{{ row.uuid or '—' }}</code></td>
-            <td class="text-capitalize">{{ row.source }}</td>
-            <td>{{ row.hospital_name or '—' }}</td>
-            <td>{{ row.lab_unit_name or '—' }}</td>
-            <td>{{ row.camera_name or '—' }}</td>
-            <td>{{ row.disease_name or '—' }}</td>
-            <td>{{ row.area_name or '—' }}</td>
-            <td>
-              {% if row.is_mydriatic is none %}
-                <span class="text-muted">—</span>
-              {% elif row.is_mydriatic %}
-                <span class="badge bg-success">Yes</span>
-              {% else %}
-                <span class="badge bg-secondary">No</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if row.created_at %}
-                {{ row.created_at|user_datetime('%Y-%m-%d %H:%M') }}
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if row.capture_date %}
-                {{ row.capture_date|user_datetime('%Y-%m-%d %H:%M') }}
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if row.source == 'zip' and row.view_url %}
-                ZIP Image
-              {% elif row.source == 'direct' %}
-                <span class="text-muted">—</span>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td>{% if row.has_dr %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
-            <td>{% if row.has_glaucoma %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
-            <td>
-              {% if row.view_url %}
-              <a class="btn btn-sm btn-outline-primary" href="{{ row.view_url }}">Open</a>
-              {% else %}
-              <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    <div class="card mt-2">
+      <div class="card-header">
+        <h2 class="h4 mb-1">Search Results</h2>
+        <p class="text-muted mb-0">Found {{ total }} images matching your criteria</p>
+      </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-3">
+
+    <!-- Wide Cards Layout -->
+    <div class="row g-2 p-2">
+      {% for row in rows %}
+      <div class="col-12">
+        <div class="card shadow-sm h-100">
+          <div class="card-body">
+            <div class="row align-items-center">
+              <!-- Left column with main info -->
+              <div class="col-md-8">
+                <div class="row g-3">
+                  <!-- UUID and Source -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">UUID</small>
+                    <code class="small">{{ row.uuid or '—' }}</code>
+                  </div>
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Source</small>
+                    <span class="badge bg-primary text-capitalize">{{ row.source }}</span>
+                  </div>
+                  
+                  <!-- Hospital and Lab Unit -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Hospital</small>
+                    <span>{{ row.hospital_name or '—' }}</span>
+                  </div>
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Lab Unit</small>
+                    <span>{{ row.lab_unit_name or '—' }}</span>
+                  </div>
+                  
+                  <!-- Camera and Disease -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Camera (Direct)</small>
+                    <span>{{ row.camera_name or '—' }}</span>
+                  </div>
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Disease (Direct)</small>
+                    <span>{{ row.disease_name or '—' }}</span>
+                  </div>
+                  
+                  <!-- Area and Mydriatic -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Area (Direct)</small>
+                    <span>{{ row.area_name or '—' }}</span>
+                  </div>
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Mydriatic (Direct)</small>
+                    {% if row.is_mydriatic is none %}
+                      <span class="text-muted">—</span>
+                    {% elif row.is_mydriatic %}
+                      <span class="badge bg-success">Yes</span>
+                    {% else %}
+                      <span class="badge bg-secondary">No</span>
+                    {% endif %}
+                  </div>
+                  
+                  <!-- Dates -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Uploaded</small>
+                    {% if row.created_at %}
+                      <span>{{ row.created_at|user_datetime('%Y-%m-%d %H:%M') }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </div>
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Capture Date</small>
+                    {% if row.capture_date %}
+                      <span>{{ row.capture_date|user_datetime('%Y-%m-%d %H:%M') }}</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </div>
+                  
+                  <!-- Encounter ID -->
+                  <div class="col-sm-6 col-lg-4">
+                    <small class="text-muted d-block">Encounter ID</small>
+                    {% if row.source == 'zip' and row.view_url %}
+                      <span class="badge bg-info">ZIP Image</span>
+                    {% elif row.source == 'direct' %}
+                      <span class="text-muted">—</span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Right column with reports and actions -->
+              <div class="col-md-4 border-start">
+                <div class="row g-3 h-100 align-items-center">
+                  <!-- Reports -->
+                  <div class="col-12">
+                    <small class="text-muted d-block mb-2">Reports</small>
+                    <div class="d-flex gap-2">
+                      <div>
+                        <small class="text-muted d-block">DR</small>
+                        {% if row.has_dr %}
+                          <span class="badge bg-success">Yes</span>
+                        {% else %}
+                          <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                      </div>
+                      <div>
+                        <small class="text-muted d-block">Glaucoma</small>
+                        {% if row.has_glaucoma %}
+                          <span class="badge bg-success">Yes</span>
+                        {% else %}
+                          <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Actions -->
+                  <div class="col-12">
+                    <small class="text-muted d-block mb-2">Actions</small>
+                    {% if row.uuid %}
+                      {% set gallery_id = 'search-gallery-' ~ loop.index0 %}
+                      <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=row.uuid) }}" data-pswp-type="image" title="Search Image"></a>
+                      </div>
+                      <a class="btn btn-primary" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    </div>
+    <!-- Pagination -->
+    <div class="d-flex justify-content-between align-items-center mt-4">
       <div class="text-muted small">Page {{ page }} of {{ total_pages }} ({{ total }} images)</div>
       <div class="btn-group" role="group" aria-label="Pagination">
         <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
         <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
       </div>
     </div>
+    <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
   {% endif %}
 </div>
 
 <!-- Include JavaScript for dynamic LabUnit filtering -->
 <script src="{{ url_for('static', filename='js/search_images.js') }}"></script>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
 {% endblock %}

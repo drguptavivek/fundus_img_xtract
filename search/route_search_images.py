@@ -102,6 +102,13 @@ def search_images_route() -> str:
         
         # Use the new search_images_strict function with improved filter separation
         try:
+            # Debug logging for pagination
+            import logging
+            debug_logger = logging.getLogger("pagination_debug")
+            debug_logger.info(f"Search request - Page: {page}, Per page: {per_page}")
+            debug_logger.info(f"Filters - source: {source}, hospital_id: {hospital_id}, lab_unit_id: {lab_unit_id}")
+            debug_logger.info(f"Boolean filters - is_mydriatic: {is_mydriatic}, has_dr_report: {has_dr_report}, has_glaucoma_report: {has_glaucoma_report}")
+            
             images, total = search_images_strict(
                 db_session=db,
                 page=page,
@@ -125,6 +132,10 @@ def search_images_route() -> str:
                 user_id=current_user.id,  # Explicit user ID for scoping
                 image_type=image_type  # Pass the source parameter to restrict search scope
             )
+            
+            debug_logger.info(f"Search results - Total: {total}, Images returned: {len(images)}")
+            debug_logger.info(f"Total pages calculated: {max(1, (total + per_page - 1) // per_page) if total else 1}")
+            
         except ImageSearchError as e:
             # Handle filter conflicts and other search errors gracefully
             from flask import flash
@@ -234,7 +245,7 @@ def search_images_route() -> str:
         "upload_end": request.args.get("upload_end", ""),
         "capture_start": request.args.get("capture_start", ""),
         "capture_end": request.args.get("capture_end", ""),
-        "is_mydriatic": request.args.get("is_mydriatic", ""),
+        "is_mydriatic": is_mydriatic,
         "search_query": request.args.get("search_query", ""),
         "has_dr_report": has_dr_report,
         "has_glaucoma_report": has_glaucoma_report,
@@ -242,9 +253,20 @@ def search_images_route() -> str:
 
     def _filter_kwargs(target_page: int) -> dict[str, Any]:
         params: dict[str, Any] = {"page": target_page}
+        # Include all filter parameters to maintain state in pagination
+        # This ensures filters are preserved when navigating between pages
         for key, value in filter_params.items():
-            if value:
-                params[key] = value
+            # Only include boolean parameters if they have an actual value (True or False)
+            if key in ["has_dr_report", "has_glaucoma_report", "is_mydriatic"]:
+                if value is not None:
+                    params[key] = str(value).lower()
+            # For search_query, only include if it has a value
+            elif key == "search_query":
+                if value:
+                    params[key] = value
+            # Include all other parameters as empty strings if not set
+            else:
+                params[key] = value if value is not None else ""
         return params
 
     prev_url = url_for("search.search_images_route", **_filter_kwargs(page - 1)) if page > 1 else None

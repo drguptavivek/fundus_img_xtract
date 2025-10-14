@@ -304,4 +304,23 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 ## API Routes
 
-The application also includes API endpoints that are documented separately in [docs/api.md](api.md). These endpoints provide RESTful access to application functionality for programmatic integration.
+The application includes comprehensive API endpoints that are documented separately in [docs/api.md](api.md). These endpoints provide RESTful access to application functionality for programmatic integration.
+
+### API Route Summary
+
+| Route Path | HTTP Methods | Route File | Roles Required | Purpose |
+|------------|--------------|------------|----------------|---------|
+| /api/users/\<int:user_id\>/lab-units | GET | api/direct_uploads.py | admin, data_manager, or user themselves | Get lab units for a user |
+| /api/lab-units/\<int:lab_unit_id\>/hospital | GET | api/direct_uploads.py | All authenticated users | Get hospital for a lab unit |
+| /api/upload-jobs/\<int:job_id\>/status | GET | api/direct_uploads.py | Job owner | Get upload job status |
+| /api/disease-grades/\<int:disease_id\> | GET | api/disease.py | admin, data_manager, optometrist | Get disease grading options |
+| /api/diseases-with-gradings | GET | api/disease.py | admin, data_manager, optometrist | Get all diseases with gradings |
+| /api/grading-eligibility/users/\<int:user_id\> | GET | api/grading_eligibility.py | admin | Get user grading eligibility |
+| /api/grading-eligibility/users/\<int:user_id\>/details | GET | api/grading_eligibility.py | admin | Get detailed grading eligibility |
+| /api/gradings | GET | api/gradings.py | admin, resident, ophthalmologist | Get filtered gradings data |
+| /api/hospitals | GET | api/hospitals.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all hospitals |
+| /api/hospitals/\<int:hospital_id\> | GET | api/hospitals.py | admin, data_manager, ophthalmologist, resident, optometrist | Get hospital by ID |
+| /api/hospitals/\<int:hospital_id\>/labunits | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get lab units by hospital |
+| /api/labunits | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all lab units |
+| /api/labunits/\<int:lab_unit_id\> | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get lab unit by ID |
+| /api/eligibleLabUnit | GET | api/userUtils.py | admin, data_manager, optometrist, fileUploader | Get eligible lab units |

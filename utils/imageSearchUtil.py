@@ -1,5 +1,5 @@
 """Utility functions for searching images across direct uploads and ZIP uploads.
-
+ 
 This module provides centralized functions for searching images with various filters
 and determining if they already have grading tasks for different diseases.
 It supports both direct image uploads and images from ZIP uploads with proper

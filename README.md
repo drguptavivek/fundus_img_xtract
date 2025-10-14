@@ -128,21 +128,32 @@ flowchart TD
         G --> K[Direct Image Anonymization Verification];
     end
 
-    subgraph Clinical Grading
-        J --> L[Image Ready for Grading];
+    subgraph Task Creation & Assignment
+        J --> L[Create Grading Tasks per Disease];
         K --> L;
-
-        L --> M[Grading Dashboard];
-        M --> N[Start Grading - Random Ungraded Image];
-        N --> O[Advanced Image Viewer & Impression Selection];
-        O --> P[Save Grade - Upsert Logic];
+        L --> M[Assign Tasks Based on User Roles & Lab Units];
+        M --> N[Task Queue Management];
     end
 
-    P --> Q[Image Ready for AI Model Training/Validation];
+    subgraph Dual Grading System
+        N --> O[Resident Grading];
+        O --> P[Faculty Grading];
+        P --> Q{Consensus Required?};
+        Q -->|Yes| R[Arbitrator Review];
+        Q -->|No| S[Final Grade Established];
+        R --> S;
+    end
+
+    subgraph Quality Control & AI Integration
+        S --> T[Quality Assurance Checks];
+        T --> U[AI Model Comparison];
+        U --> V[Dataset Ready for Training/Validation];
+    end
 
     style A fill:#f9f,stroke:#333,stroke-width:2px;
     style E fill:#f9f,stroke:#333,stroke-width:2px;
-    style Q fill:#bbf,stroke:#333,stroke-width:2px;
+    style V fill:#bbf,stroke:#333,stroke-width:2px;
+    style Q fill:#ff9,stroke:#333,stroke-width:2px;
 ```
 
 ## API Documentation

@@ -21,6 +21,24 @@ This diagram shows the complete process of the dual grading system, including au
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Module Structure
+
+The dual grading system is organized into several modules:
+
+### Core Modules
+- **`dual_grading.py`** - Main grading workflow with task access, submission, and revision endpoints
+- **`dashboard.py`** - User dashboard with KPIs and grading history
+- **`start_grading.py`** - Entry point for initiating grading sessions
+- **`consensus.py`** - Consensus management utilities wrapper
+
+### Documentation
+- **`flowdiagram.md`** - System architecture and process flows (this file)
+- **`dual_grading_flow.md`** - Detailed logic and revision flows
+- **`dual_grading_utils.md`** - Comprehensive function documentation
+- **`edge_cases.md`** - Edge case analysis and resolution status
+- **`errors.md`** - Recent error fixes and resolutions
+- **`module_integration_guide.md`** - Module interaction and integration guide
+
 ## Core Database Tables
 
 ### 1. GradingTask
@@ -330,3 +348,59 @@ ELIF consensus already exists:
 - Task state updates and consensus creation happen in the same transaction
 - Task tracker cleanup happens in the same transaction for non-revisions
 - Automatic rollback on any exception within the transaction scope
+
+## Module-Specific Implementation Details
+
+### Consensus Module (`consensus.py`)
+
+The consensus module provides a simplified interface to consensus management utilities:
+
+#### Key Functions:
+- **`create_consensus_for_task(task_id, db=None)`** - Creates consensus for a task based on submitted grades
+- **`get_consensus_for_task(task_id, db=None)`** - Retrieves existing consensus for a task
+- **`update_task_state_after_grading(task_id, db=None)`** - Updates task state after grade submission
+
+#### Implementation Notes:
+- Acts as a wrapper around utility functions in `utils/dualGradingConsensusUtils.py`
+- Handles database session management internally when not provided
+- Provides consistent error handling and logging
+
+### Start Grading Module (`start_grading.py`)
+
+The start grading module provides the entry point for initiating grading sessions:
+
+#### Key Functions:
+- **`start_grading(disease_id, role_slot)`** - Initiates grading for a specific disease and role
+
+#### Implementation Workflow:
+1. Validates the role slot ('resident', 'faculty', 'arbitrator')
+2. Checks user permissions for the requested role
+3. Verifies the disease exists
+4. Retrieves the next eligible task using atomic task assignment functions
+5. Redirects to the appropriate grading task interface
+
+#### Role Validation Rules:
+- **Resident grading**: Requires 'resident' or 'ophthalmologist' role
+- **Faculty grading**: Requires 'ophthalmologist' role
+- **Arbitrator grading**: Requires 'ophthalmologist' role
+
+#### Task Assignment:
+- Uses atomic task assignment functions to prevent race conditions
+- Handles different return types (task objects vs. status messages)
+- Provides user feedback when no tasks are available
+
+### Dashboard Module (`dashboard.py`)
+
+The dashboard module provides the main interface for users to view their grading status and history:
+
+#### Key Features:
+- **KPI Display**: Shows pending and completed task counts by role and disease
+- **Grading History**: Paginated list of user's previous gradings with details
+- **Eligibility Information**: Displays user's grading eligibility across different diseases and lab units
+- **Role-Based Views**: Different interfaces for residents vs. faculty
+
+#### Implementation Details:
+- Uses utility functions for KPI calculations and data fetching
+- Handles pagination for grading history
+- Normalizes eligibility data to prevent errors
+- Caches database queries for performance

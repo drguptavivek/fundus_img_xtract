@@ -1,3 +1,32 @@
+"""
+Dual Grading System Blueprint
+
+This blueprint provides the complete dual grading workflow for retinal fundus images,
+including three-tier grading (resident → faculty → arbitrator), consensus management,
+and comprehensive task tracking.
+
+Module Structure:
+- dashboard.py: Main dashboard with KPIs and grading history
+- dual_grading.py: Core grading workflow with task access, submission, and revision
+- start_grading.py: Entry point for initiating grading sessions
+- consensus.py: Consensus management utilities wrapper
+
+Documentation:
+- flowdiagram.md: System architecture and process flows
+- dual_grading_flow.md: Detailed logic and revision flows
+- dual_grading_utils.md: Comprehensive function documentation
+- edge_cases.md: Edge case analysis and resolution status
+- errors.md: Recent error fixes and resolutions
+- module_integration_guide.md: Module interaction guide
+
+Routes:
+- /: Dashboard with KPIs and grading history
+- /grade/<disease_id>/<role_slot>: Start grading for specific disease/role
+- /task/<task_id>/<slot_type>: Access/review specific grading task
+- /task/submit: Submit grade for a task
+- /revise/<grade_id>: Revise an existing grade
+"""
+
 from flask import Blueprint
 
 bp = Blueprint("grading", __name__, url_prefix="/grading")

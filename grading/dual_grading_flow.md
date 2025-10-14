@@ -165,7 +165,8 @@ When accessing a task with an existing grade, the function:
 5. Creates new grade or updates existing grade
 6. Updates task state via `update_task_state_based_on_grades()`
 7. Creates consensus if applicable via `create_or_update_consensus()`
-8. Calculates time taken for grading and logs the submission
+8. **CRITICAL BUG NOTE**: There is a known bug in task tracker cleanup (line 532) where cleanup doesn't run after successful submissions due to incorrect revision status detection. This causes tasks to remain marked "in progress" and prevents reassignment. See `errors.md` for details.
+9. Calculates time taken for grading and logs the submission
 
 ### Arbitrator Exclusion Logic During Submission
 When submitting as an arbitrator:

@@ -64,8 +64,9 @@ python app.py
 - [Agent Guidelines](AGENTS.md)
 
 ### Core Documentation
-- [App Architecture](docs/app.md) ⚠️ *May be stale - missing new blueprints and features*
-- [Database Models](docs/models.md) ⚠️ *Likely stale - missing dual grading system models*
+- [App Architecture](docs/app.md) - Updated with current implementation details
+- [Database Models](docs/models.md) - Updated with dual grading system models
+- [Database ERD](docs/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [API Documentation](docs/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 

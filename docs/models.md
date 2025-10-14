@@ -4,113 +4,250 @@ This document outlines the database schema defined in `models.py`. It is designe
 
 ## Core Entities & Purpose
 
-The database manages medical imaging data, specifically retinal fundus images, from ingestion to analysis and grading.
+The database manages medical imaging data, specifically retinal fundus images, from ingestion to analysis and grading using a three-tier dual grading system.
 
-### 1. Data Ingestion & Clinical Encounters
+### 1. User Management & Access Control
+
+- **`User`**: Standard user model with authentication and profile information.
+  - **Key Fields**: `id`, `username` (unique), `password_hash`, `is_active`, `is_locked_until`, `full_name`, `email`, `timezone`
+  - **Role Methods**: `has_role()`, `has_all_roles()` for permission checking
+  - **Quotas**: `file_upload_quota` and `file_upload_count` for upload limits
+
+- **`Role`**: Defines user roles (e.g., 'admin', 'optometrist', 'resident', 'ophthalmologist').
+  - **Key Fields**: `id`, `name` (unique)
+
+- **`UserRole`**: Many-to-many association table linking `User` and `Role`.
+
+- **`UserDiseaseUnitRole`**: Granular permissions for users to grade specific diseases in specific lab units.
+  - **Key Fields**: `user_id`, `disease_id`, `lab_unit_id`
+  - **Permission Flags**: `can_grade_resident`, `can_grade_faculty`, `can_arbitrate`
+  - **Purpose**: Enables fine-grained access control for the dual grading system
+
+### 2. Organizational Structure
+
+- **`Hospital`**: Medical facility where images are captured.
+  - **Key Fields**: `id`, `name` (unique)
+
+- **`LabUnit`**: Department or unit within a hospital.
+  - **Key Fields**: `id`, `name`, `hospital_id`
+  - **Purpose**: Used for scoping grading assignments and access control
+
+- **`user_lab_units`**: Association table linking users to their authorized lab units.
+
+### 3. Reference Data
+
+- **`Disease`**: Medical conditions that can be graded (e.g., Glaucoma, Diabetic Retinopathy).
+  - **Key Fields**: `id`, `name` (unique)
+
+- **`DiseaseGrading`**: Possible grading outcomes for each disease.
+  - **Key Fields**: `id`, `disease_id`, `impression`, `display_order`, `is_active`, `guidelines`
+  - **Purpose**: Master list of grading labels used across the system
+
+- **`Camera`**: Types of cameras used for image capture.
+  - **Key Fields**: `id`, `name` (unique)
+
+- **`Area`**: Anatomical areas being imaged (e.g., left eye, right eye).
+  - **Key Fields**: `id`, `name` (unique)
+
+### 4. Data Ingestion & Clinical Encounters
 
 These models track the raw data as it is uploaded and processed.
 
--   **`ZipFile`**: Represents an uploaded ZIP archive.
-    -   **Key Fields**: `id`, `zip_filename`, `md5_hash` (for duplicate detection).
-    -   **Purpose**: Acts as the entry point for data from Remedio FOP cameras.
+- **`ZipFile`**: Represents an uploaded ZIP archive from Remedio FOP cameras.
+  - **Key Fields**: `id`, `zip_filename` (unique), `md5_hash` (for duplicate detection), `upload_date`
+  - **Purpose**: Entry point for batch data ingestion
 
--   **`PatientEncounters`**: Represents a single clinical visit or data capture session for a patient.
-    -   **Key Fields**: `id`, `zip_file_id` (links to `ZipFile`), `patient_id`, `name`, `capture_date`, `capture_date_dt` (a proper `DATE` type for querying).
-    -   **Verification Fields**: Includes fields to track manual verification status for Glaucoma and DR (`glaucoma_verified_status`, `dr_verified_by`, etc.).
-    -   **Purpose**: Central hub for all data related to one patient visit.
+- **`PatientEncounters`**: Represents a single clinical visit or data capture session.
+  - **Key Fields**: `id`, `zip_file_id` (unique), `name`, `patient_id`, `capture_date`, `capture_date_dt` (proper DATE type)
+  - **Verification Fields**: Tracks verification status for Glaucoma, DR, and general encounter
+  - **Lab Unit**: `lab_unit_id` links to organizational structure
 
--   **`EncounterFile`**: Represents an individual file (image or PDF) extracted from a ZIP archive.
-    -   **Key Fields**: `id`, `patient_encounter_id` (links to `PatientEncounters`), `filename`, `file_type` (`pdf`, `image`), `ocr_processed` (boolean flag).
-    -   **Stable Identifier**: `uuid` (a 36-char string) provides a permanent, unique ID for each file, crucial for linking and external references.
-    -   **Annotation**: `eye_side` field for laterality ('left', 'right').
-    -   **Purpose**: Manages individual assets and their processing state.
+- **`EncounterFile`**: Individual image files extracted from ZIP archives.
+  - **Key Fields**: `id`, `patient_encounter_id`, `filename`, `file_type`, `uuid` (unique), `eye_side`
+  - **Constraint**: Only stores image files (not PDFs)
+  - **Purpose**: Individual image assets for grading
 
-### 2. Diagnostic Reports (Extracted from PDFs)
+- **`EncounterFilePDF`**: PDF files extracted from ZIP archives.
+  - **Key Fields**: `id`, `patient_encounter_id`, `filename`, `uuid` (unique)
+  - **Constraint**: Only stores PDF files
+  - **Purpose**: Reports and documents associated with encounters
 
-These models store structured data extracted via OCR from PDF reports.
+### 5. Diagnostic Reports
 
--   **`DiabeticRetinopathyReport`**:
-    -   **Key Fields**: `id`, `patient_encounter_id`, `result`, `qualitative_result`.
-    -   **Stable Identifier**: `uuid` for linking to the split PDF file.
-    -   **File Link**: `report_file_name` stores the filename of the single-page DR PDF.
+- **`DiabeticRetinopathyReport`**: Structured data from DR reports.
+  - **Key Fields**: `id`, `patient_encounter_id`, `uuid` (unique), `result`, `qualitative_result`, `report_file_name`
 
--   **`GlaucomaReport`**:
-    -   **Key Fields**: `id`, `patient_encounter_id`, `vcdr_right`, `vcdr_left`, `result`, `qualitative_result`.
-    -   **Stable Identifier**: `uuid` for linking to the split PDF file.
-    -   **File Link**: `report_file_name` stores the filename of the single-page Glaucoma PDF.
+- **`GlaucomaReport`**: Structured data from Glaucoma reports.
+  - **Key Fields**: `id`, `patient_encounter_id`, `uuid` (unique), `vcdr_right`, `vcdr_left`, `result`, `qualitative_result`
 
-### 3. Cleaned Data for Analytics
+- **`GlaucomaResultsCleaned`**: Cleaned, numeric version of glaucoma data.
+  - **Key Fields**: `id`, `glaucoma_report_id` (unique), `vcdr_right_num`, `vcdr_left_num`
+  - **Purpose**: Easier analysis with parsed numeric values
 
--   **`GlaucomaResultsCleaned`**:
-    -   **Purpose**: Stores a cleaned, numeric version of glaucoma data for easier analysis and querying.
-    -   **Key Fields**: `glaucoma_report_id` (links 1-to-1 with `GlaucomaReport`), `vcdr_right_num`, `vcdr_left_num` (parsed `FLOAT` values).
-    -   **Traceability**: Includes original string values and the report's UUID for reference.
+### 6. Direct Image Upload System
 
-### 4. Image Grading & Annotation
+- **`DirectImageUpload`**: Images uploaded directly (not from ZIP files).
+  - **Key Fields**: `id`, `uuid` (unique), `filename`, `edited_filename`, `folder_rel`, `file_hash`
+  - **Metadata**: `hospital_id`, `lab_unit_id`, `camera_id`, `disease_id`, `area_id`, `is_mydriatic`
+  - **Purpose**: Bypasses ZIP workflow for individual image uploads
 
--   **`ImageGrading`**:
-    -   **Purpose**: Records a diagnostic impression for a single image, made by a specific user in a specific role. This is the core of the manual grading process.
-    -   **Key Fields**: `encounter_file_id` (links to an image), `grader_user_id`, `grader_role`, `graded_for` (the disease, e.g., 'glaucoma'), `impression`.
-    -   **Constraint**: A composite index on `(encounter_file_id, grader_user_id, grader_role, graded_for)` suggests a unique grading per user/role/disease for an image.
+- **`DirectImageVerify`**: Verification status for direct uploads.
+  - **Key Fields**: `id`, `image_upload_id` (unique), `verified_status`, `verified_by_id`
+  - **Status Values**: 'verified', 'unverified', 'pending'
 
-### 5. User Management & Access Control
+### 7. Dual Grading System
 
--   **`User`**: Standard user model with `id`, `username`, `password_hash`, and profile information.
--   **`Role`**: Defines user roles (e.g., 'admin', 'optometrist').
--   **`UserRole`**: A many-to-many association table linking `User` and `Role`.
-    -   **Helper methods**: `user.has_role('admin')` can be used to check permissions.
+- **`GradingTask`**: Tasks created for grading specific images for specific diseases.
+  - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `disease_id`, `lab_unit_id`, `state`
+  - **State Values**: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
+  - **Uniqueness**: One task per image-disease combination globally
+  - **Purpose**: Core entity for the three-tier grading workflow
 
-### 6. Asynchronous Job Tracking
+- **`Grade`**: Individual grades submitted by users for tasks.
+  - **Key Fields**: `id`, `task_id`, `grader_user_id`, `role_slot`, `disease_grading_id`, `comment`, `time_taken`
+  - **Role Slots**: 'resident', 'faculty', 'arbitrator'
+  - **Denormalized Fields**: `disease_name`, `grade_name`, `grade_description` for historical preservation
+  - **Uniqueness**: One grade per user per role per task
 
--   **`Job`**: Represents a background job, typically for processing a batch of uploaded files.
-    -   **Key Fields**: `token` (publicly-safe unique ID), `status` ('queued', 'processing', 'done', 'error').
--   **`JobItem`**: Represents a single file within a `Job`.
-    -   **Key Fields**: `job_id`, `filename`, `state`.
+- **`Consensus`**: Final consensus decision for tasks.
+  - **Key Fields**: `id`, `task_id` (unique), `final_disease_grading_id`, `method`, `decided_by_user_id`
+  - **Method Values**: 'match' (resident and faculty agreed), 'adjudication' (arbitrator decision)
+  - **Purpose**: Stores the final grading decision
 
-### 7. Security
+- **`TaskTracker`**: Tracks when users start working on tasks.
+  - **Key Fields**: `id`, `task_id`, `user_id`, `role_slot`, `started_at`
+  - **Purpose**: Identifies and cleans up stuck tasks
 
--   **`LoginAttempt`**: Logs every login attempt to enable rate-limiting and brute-force detection.
--   **`IpLock`**: Stores IP addresses that are temporarily locked out due to excessive failed logins.
+### 8. Legacy Image Grading
 
-## Key Relationships (ERD-like)
+- **`ImageGrading`**: Legacy grading model (pre-dual grading system).
+  - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `grader_user_id`, `grader_role`, `graded_for`, `impression`
+  - **Purpose**: Maintains backward compatibility with old grading data
 
+### 9. AI Model Integration
+
+- **`AIGrade`**: AI model predictions for images.
+  - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `disease_id`, `model_name`, `model_version`
+  - **Prediction Data**: `label_disease_grading_id`, `confidence`, `probabilities_json`, `run_id`
+  - **Performance**: `inference_time_ms`
+  - **Purpose**: Stores AI model outputs for comparison and analysis
+
+### 10. Job Management
+
+- **`Job`**: Background processing jobs for batch operations.
+  - **Key Fields**: `id`, `token` (unique), `status`, `error`, `uploader_user_id`, `lab_unit_id`
+  - **Status Values**: 'queued', 'processing', 'done', 'error'
+
+- **`JobItem`**: Individual files within a job.
+  - **Key Fields**: `id`, `job_id`, `filename`, `state`, `started_at`, `finished_at`
+  - **Purpose**: Tracks processing status of each file in a batch
+
+### 11. Security & Audit
+
+- **`LoginAttempt`**: Logs all login attempts for security monitoring.
+  - **Key Fields**: `id`, `username_input`, `ip_address`, `success`, `created_at`
+
+- **`IpLock`**: IP addresses temporarily locked due to failed login attempts.
+  - **Key Fields**: `id`, `ip_address` (unique), `locked_until`
+
+- **`PasswordResetAttempt`**: Password reset requests for rate limiting.
+  - **Key Fields**: `id`, `email`, `ip_address`, `attempted_at`
+
+### 12. Notifications
+
+- **`Notification`**: System notifications for users.
+  - **Key Fields**: `id`, `title`, `message`, `notification_type`, `recipient_user_id`, `sender_user_id`
+  - **Type Values**: 'info', 'warning', 'error', 'system'
+  - **Status**: `is_read`, `is_active`
+
+- **`NotificationRead`**: Tracks when users read notifications.
+  - **Key Fields**: `id`, `notification_id`, `user_id`, `read_at`
+  - **Purpose**: Per-user read tracking
+
+### 13. Session Management
+
+- **`FlaskSession`**: Server-side session storage.
+  - **Key Fields**: `session_id` (primary key), `data`, `expiry`, `user_id`, `started_at`, `ended_at`
+  - **Purpose**: Secure session management with user tracking
+
+## Key Relationships
+
+### Core Ingestion Flow
 ```
-// 1. Core Ingestion Flow
 ZipFile (1) -- (1) PatientEncounters
-
-// 2. Encounter Composition
 PatientEncounters (1) -- (many) EncounterFile
+PatientEncounters (1) -- (many) EncounterFilePDF
 PatientEncounters (1) -- (many) DiabeticRetinopathyReport
 PatientEncounters (1) -- (many) GlaucomaReport
+```
 
-// 3. Report Cleaning
-GlaucomaReport (1) -- (1) GlaucomaResultsCleaned
+### Dual Grading Flow
+```
+GradingTask (1) -- (many) Grade
+GradingTask (1) -- (1) Consensus
+GradingTask (1) -- (many) TaskTracker
+Grade (many) -- (1) User
+Grade (many) -- (1) DiseaseGrading
+```
 
-// 4. Image Grading
-EncounterFile (1) -- (many) ImageGrading
-User (1) -- (many) ImageGrading
+### Direct Upload Flow
+```
+DirectImageUpload (1) -- (many) DirectImageVerify
+DirectImageUpload (1) -- (many) GradingTask
+DirectImageUpload (1) -- (many) ImageGrading
+```
 
-// 5. User Roles
-User (many) -- (many) Role  (via UserRole table)
-
-// 6. Job Tracking
-Job (1) -- (many) JobItem
+### Organizational Structure
+```
+Hospital (1) -- (many) LabUnit
+LabUnit (many) -- (many) User (via user_lab_units)
+User (many) -- (many) Role (via UserRole)
+User (many) -- (many) Disease (via UserDiseaseUnitRole)
 ```
 
 ## Important Constraints & Indexes
 
--   **Uniqueness**:
-    -   `ZipFile.zip_filename` and `ZipFile.md5_hash` are unique.
-    -   `EncounterFile.uuid`, `DiabeticRetinopathyReport.uuid`, `GlaucomaReport.uuid` are unique and indexed, making them excellent for stable lookups.
-    -   `GlaucomaResultsCleaned.glaucoma_report_id` is unique, enforcing a 1-to-1 relationship.
-    -   `User.username` is unique.
-    -   `Role.name` is unique.
--   **Indexes**:
-    -   Several fields are indexed for performance, including foreign keys, UUIDs, verification statuses (`glaucoma_verified_status`), and date columns (`capture_date_dt`).
-    -   The composite index on `ImageGrading` is important for preventing duplicate gradings.
--   **Cascading Deletes**:
-    -   Deleting a `ZipFile` will cascade and delete the associated `PatientEncounters` and all its related files and reports.
-    -   Deleting a `PatientEncounters` will cascade to its `EncounterFile`s, `DiabeticRetinopathyReport`s, and `GlaucomaReport`s.
--   **Data Types**:
-    -   `PatientEncounters.capture_date_dt` is a proper `Date` type, which should be preferred for date-based queries over the string-based `capture_date`.
-    -   `GlaucomaResultsCleaned` stores numeric VCDR values, which is better for statistical analysis than the raw strings in `GlaucomaReport`.
+### Uniqueness Constraints
+- `User.username`, `ZipFile.zip_filename`, `ZipFile.md5_hash`
+- All UUID fields (`EncounterFile.uuid`, `DirectImageUpload.uuid`, etc.)
+- `GradingTask`: Unique per image-disease combination
+- `Grade`: Unique per user-role-task combination
+- `Consensus`: One per task
+- `DirectImageVerify`: One per image upload
+
+### Check Constraints
+- Image references: Either `encounter_file_id` OR `direct_image_upload_id` must be set, never both
+- Task states limited to: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
+- Role slots limited to: 'resident', 'faculty', 'arbitrator'
+- Consensus methods limited to: 'match', 'adjudication'
+
+### Performance Indexes
+- Foreign keys on all relationships
+- UUID columns for fast lookups
+- Composite indexes for common query patterns:
+  - User permissions: `(user_id, disease_id, lab_unit_id)`
+  - Task assignments: `(disease_id, lab_unit_id, state)`
+  - Grading history: `(task_id, role_slot)`, `(grader_user_id, role_slot)`
+
+### Cascade Deletes
+- Deleting `ZipFile` cascades to all related encounter data
+- Deleting `GradingTask` cascades to grades and consensus
+- Deleting `User` cascades to sessions, notifications, and permission records
+
+## Data Integrity Features
+
+### Denormalization for Historical Preservation
+- `Grade` table stores copies of disease and grading information at time of grading
+- `Consensus` table stores copies of final decision details
+- Ensures data integrity even if master tables change
+
+### Audit Trails
+- All grading activities tracked with user, timestamp, and IP address
+- Login attempts and security events logged
+- Job processing history maintained
+
+### Security
+- Password hashing with secure algorithms
+- Session management with server-side storage
+- IP-based rate limiting and lockout mechanisms
+- Role-based access control with granular permissions

@@ -1,6 +1,82 @@
-# Malicious Upload Handling and Logging
+# Security Overview
 
 ## Overview
+
+The system implements a comprehensive security framework with multiple layers of protection including authentication, authorization, session management, and malicious upload handling. This document covers all security aspects of the fundus image management system.
+
+## Authentication and Authorization
+
+### Authentication System
+
+The system implements a robust authentication system with the following security features:
+
+#### Password Security
+- **Hashing Algorithm**: Uses Argon2id with configurable parameters (time_cost=2, memory_cost=102400, parallelism=8)
+- **Pepper Support**: Optional server-side secret added to passwords before hashing (configured via `AUTH_PEPPER` environment variable)
+- **Password Strength Requirements**:
+  - Minimum 10 characters
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one special character (@, #, !, &)
+  - Only allowed characters (letters, digits, and @ # ! &)
+  - No common weak patterns (123, qwerty, abcd, xyz, password, aiims)
+
+#### Login Protection
+- **Rate Limiting**:
+  - Maximum 5 failed attempts per username within 30 minutes
+  - Maximum 5 failed attempts per IP address within 10 minutes
+  - 4-hour lockout duration for both usernames and IPs
+- **Account Locking**: User accounts are automatically locked after repeated failed attempts
+- **IP Locking**: IP addresses are automatically blocked after repeated failed attempts
+- **Login Attempt Logging**: All login attempts (success and failure) are logged with username, IP, and timestamp
+
+#### Session Management
+- **Server-Side Sessions**: All session data is stored server-side in the database using FlaskSession model
+- **Session IDs**: Cryptographically secure session IDs (64-character hexadecimal) generated using secrets.token_hex()
+- **Inactivity Timeout**:
+  - Configurable timeout (default: 30 minutes) via `INACTIVITY_TIMEOUT_MINUTES` environment variable
+  - Client-side idle detection with warning modal 2 minutes before timeout
+  - Server-side enforcement with sliding window activity tracking
+  - Cross-tab synchronization using localStorage
+- **Session Tracking**: Full session lifecycle tracking including start time, end time, user association, and expiry
+- **Secure Session Cookies**: HttpOnly, Secure, and SameSite settings configurable via Flask configuration
+
+#### Password Reset
+- **OTP-Based Reset**: 8-character alphanumeric OTP sent via email
+- **Rate Limiting**: Maximum 5 password reset attempts per email per day
+- **OTP Expiration**: OTPs expire after 10 minutes
+- **User Enumeration Protection**: Same response shown regardless of whether email exists
+
+### Authorization System
+
+The system implements Role-Based Access Control (RBAC) with the following features:
+
+#### User Roles
+- **admin**: Full system access
+- **data_manager**: Administrative access to data management functions
+- **ophthalmologist**: Medical professional access for grading and review
+- **resident**: Medical trainee access for learning and grading
+- **fileUploader**: Access to upload and manage images
+- **optometrist**: Access to upload and review images
+
+#### Role-Based Route Protection
+- **Decorator-Based Protection**: Routes are protected using `@roles_required()` decorator
+- **Flexible Role Checking**: Support for requiring any of multiple roles or all specified roles
+- **Resource-Level Access**: Additional checks for resource ownership and lab unit access
+- **Hierarchical Permissions**: Admins and data managers have broader access than other roles
+
+#### Lab Unit Access Control
+- **User-Unit Association**: Users are associated with specific lab units
+- **Access Scoping**: Users can only access data from their assigned lab units
+- **Admin Override**: Admins and data managers can access all lab units
+- **Grading Eligibility**: Fine-grained control over who can grade specific diseases in specific units
+
+#### Disease-Specific Permissions
+- **Role Slots**: Different permission levels for resident, faculty, and arbitrator roles
+- **Disease-Unit-Role Matrix**: Complex permissions matrix for grading eligibility
+- **Dynamic Permission Checking**: Runtime verification of user eligibility for specific tasks
+
+## Malicious Upload Handling and Logging
 
 The system implements multiple layers of security checks to detect and prevent malicious uploads. These checks occur both during the initial upload process and during the ZIP file processing phase.
 
@@ -34,7 +110,17 @@ During ZIP file processing, the system performs several security checks:
 - Detects when a file claiming to be a PDF is actually an executable, etc.
 - Logs content mismatches with details about expected vs. detected types
 
-## Logging System
+## Security Logging
+
+### Authentication Logs
+- **Location**: `logs/auth.log` (configurable via logging configuration)
+- **Contents**:
+  - Successful login attempts with username and IP
+  - Failed login attempts with username and IP
+  - Account lockouts with duration
+  - IP lockouts with duration
+  - Session timeout events
+  - Password reset attempts
 
 ### Main Processing Log
 - Location: `logs/zip_main_process_log.txt` (configurable via `ZIP_INGEST_LOG` environment variable)
@@ -51,6 +137,10 @@ During ZIP file processing, the system performs several security checks:
 - Success requests logged to `logs/http_success.log`
 - Error requests logged to `logs/http_error.log`
 - Includes client IP, request method, URL, status code, user agent, and processing duration
+
+### Editing and Grading Logs
+- **Location**: `logs/editing.log` and `logs/grades.log`
+- **Contents**: Image editing actions, grading submissions, and permission checks
 
 ### Sidecar Metadata
 When files are uploaded via the web interface, metadata is stored in JSON files in the `upload_meta` directory:
@@ -78,11 +168,21 @@ The system distinguishes between different types of errors:
 - Processing errors (corrupted ZIPs, etc.) are moved to the error directory
 - Valid uploads are moved to the processed directory after successful extraction
 
-## Configuration
+## Security Configuration
 
 ### Environment Variables
+- `AUTH_PEPPER`: Optional server-side secret for password hashing
+- `INACTIVITY_TIMEOUT_MINUTES`: Session inactivity timeout in minutes (default: 30)
 - `ZIP_INGEST_LOG`: Path to the main processing log file (default: `logs/zip_main_process_log.txt`)
 - `MALICIOUS_UPLOAD_LOG`: Path to the malicious upload log file (default: `logs/malicious_uploads.log`)
+
+### Session Configuration
+- `SESSION_COOKIE_NAME`: Name of the session cookie (default: "session")
+- `SESSION_COOKIE_HTTPONLY`: HttpOnly flag for session cookie (default: True)
+- `SESSION_COOKIE_SECURE`: Secure flag for session cookie (default: False)
+- `SESSION_COOKIE_SAMESITE`: SameSite policy for session cookie (default: "Lax")
+- `PERMANENT_SESSION_LIFETIME`: Duration of permanent sessions
+- `WTF_CSRF_TIME_LIMIT`: CSRF token validity period (default: 1 hour)
 
 ### File Locations
 - Upload directory: `files/uploaded/`
@@ -90,3 +190,59 @@ The system distinguishes between different types of errors:
 - Processed files: `files/processed/`
 - Error files: `files/error/`
 - Duplicate files: `files/dupmd5_YYYY-MM-DD/`
+
+## Security Best Practices
+
+### Input Validation
+- All user inputs are validated before processing
+- File uploads are restricted to specific types and sizes
+- Path traversal protection prevents directory escape attacks
+- Content-type verification ensures files match their extensions
+
+### Database Security
+- SQL injection protection through parameterized queries
+- Database transactions ensure data consistency
+- Connection pooling prevents resource exhaustion
+- Sensitive data is properly hashed before storage
+
+### Cross-Site Request Forgery (CSRF) Protection
+- **Implementation**: Flask-WTF CSRFProtect with 1-hour token validity
+- **Form Protection**: CSRF tokens automatically included in all forms using `{% csrf_field()}` macro
+- **Token Validation**: Automatic validation on all state-changing requests
+- **Error Handling**: Custom CSRF error handler with user-friendly messages
+- **API Endpoints**: CORS configured for API endpoints with same-origin credentials
+
+### Error Handling
+- Generic error messages prevent information disclosure
+- Detailed errors are logged for administrators
+- User-friendly error messages are shown to users
+- Error pages don't expose system internals
+
+## Security Monitoring
+
+### Automated Monitoring
+- Failed login attempt thresholds trigger automatic IP and account lockouts
+- Unusual access patterns are logged for review
+- File upload violations are immediately flagged and deleted
+- Session anomalies are detected and logged with timeout events
+- Role-based access checks are logged in debug mode
+
+### Administrative Tools
+- Malicious upload log viewer for administrators
+- User activity tracking and reporting
+- Role usage monitoring with debug logging
+- Session management interface with full lifecycle tracking
+
+## Compliance and Auditing
+
+### Audit Trail
+- All user actions are logged with timestamps
+- Data modifications are tracked with user attribution
+- Authentication events are recorded for compliance
+- File access is logged for audit purposes
+
+### Data Protection
+- Patient data access is restricted by role and lab unit
+- Image metadata is protected from unauthorized access
+- User personal information is encrypted at rest
+- Session data is stored securely server-side

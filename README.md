@@ -89,12 +89,12 @@ python app.py
 - [Flash Toasts Component](static/js/flash-toasts.md)
 
 ### Development & Conventions
-- [Security](docs/Security.md) ⚠️ *Stale - missing current security features*
+- [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
 - [Build Themes](docs/BUILD_THEMES.md)
 - [Coding Conventions](CONVENTIONS/Templates.md)
 - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
 - [DateTime Handling](CONVENTIONS/DateTime.md)
-- [Logging System](CONVENTIONS/Logging.md) ⚠️ *Stale - logging system has been significantly updated*
+- [Logging System](CONVENTIONS/Logging.md) - Updated with current implementation details
 - [User Management Scripts](scripts/USERS.md)
 - [Script Migrations](scripts/migrations.md)
 
@@ -102,15 +102,70 @@ python app.py
 - [Analytics Utils](analytics/utils.md)
 - [Services Task Creation](services/taskCreationServices.md)
 
-### Documentation Index
-- [Full Documentation Index](docs/README.md)
+## Application Workflow Flowchart
+
+```mermaid
+flowchart TD
+    subgraph Ingestion & Initial Processing
+        A[ZIP Upload] --> B[Extract Files - Images & PDFs];
+        B --> C[Validate & MD5 Hash];
+        C --> D1[Assign UUIDs to Images];
+        C --> D2[Assign UUIDs to PDFs];
+
+        E[Direct Image Upload] --> F[Assign UUID & Metadata];
+    end
+
+    subgraph Processing & Anonymization
+        D1 --> G[Image Anonymization];
+        F --> G;
+
+        D2 --> H[Process PDFs - OCR & Data Extraction];
+        H --> I[Store OCR Data in DB & Assign UUIDs to Reports];
+    end
+
+    subgraph Verification
+        I --> J[Manual Data Verification - OCR Data & Laterality Tagging];
+        G --> K[Direct Image Anonymization Verification];
+    end
+
+    subgraph Clinical Grading
+        J --> L[Image Ready for Grading];
+        K --> L;
+
+        L --> M[Grading Dashboard];
+        M --> N[Start Grading - Random Ungraded Image];
+        N --> O[Advanced Image Viewer & Impression Selection];
+        O --> P[Save Grade - Upsert Logic];
+    end
+
+    P --> Q[Image Ready for AI Model Training/Validation];
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px;
+    style E fill:#f9f,stroke:#333,stroke-width:2px;
+    style Q fill:#bbf,stroke:#333,stroke-width:2px;
+```
+
+## API Documentation
+
+The application provides comprehensive RESTful API endpoints with detailed documentation including:
+- Endpoint URLs and HTTP methods
+- Required authentication and authorization
+- Request parameters
+- Response formats
+- Error codes
+
+The API follows OpenAPI 3.0 standards with machine-readable specifications available for:
+- Swagger UI for interactive API documentation
+- Code generation tools to create client SDKs
+- API testing tools
+- Documentation generators
 
 ### ⚠️ Documentation Status Notice
 Many documentation files appear to be stale and don't reflect the current state of the application. The app has evolved significantly with:
 - New blueprints (notifications, tasks, dashboard, api, docs)
 - Dual grading system replacing single grading
 - Updated logging system with dedicated loggers
-- Enhanced security features
+- Enhanced security features (Security.md has been updated)
 - New database models and relationships
 
 Please review individual documentation files for accuracy before relying on them.

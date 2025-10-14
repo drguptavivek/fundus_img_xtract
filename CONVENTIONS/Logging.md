@@ -2,6 +2,8 @@
 
 Fundus Image Manager centralises logging inside `create_app()` so every environment uses the same, standards-based configuration. Rotating file handlers live under `LOG_DIR` (default `./logs`) and specific modules emit to dedicated log files for auditing and troubleshooting.
 
+**Last Updated**: October 2024 - Current with app.py implementation
+
 ## Configuration at a Glance
 
 | Setting | Default | Description |
@@ -45,7 +47,14 @@ Disable the flag in production to avoid high-volume logging.
 ## HTTP Request & Stack-Trace Behaviour
 
 - The `@app.after_request` hook writes responses with status ≥400 to `http_error.log`, including method, URL, status code, user agent, and duration.
-- `utils.stack_trace_handler.log_stack_trace(...)`, the decorator/context manager, and the global exception handlers log full tracebacks to `runtime_error.log`.
+- Global stack trace handlers capture request timing and performance metrics in debug mode
+- Multiple global exception handlers log full tracebacks to `runtime_error.log`:
+  - `_global_exception_handler()` - Primary exception handler
+  - `_global_exception_handler_alt()` - Alternative exception handler
+  - `handle_generic_exception()` - Generic exception handler
+  - `handle_500()` - Specific 500 error handler
+- `utils.stack_trace_handler.log_stack_trace(...)` logs detailed stack traces
+- Request timing is tracked from `_global_stack_trace_handler()` with duration logging
 - The previous `http_success.log` has been removed; rely on proxy or access logs for successful requests.
 
 ## Module-Level Logger Usage
@@ -66,8 +75,10 @@ Recent changes wire these loggers through the codebase:
 - **Editing (`editing.log`)** – Bulk dashboard operations, single-image edits, anonymization save/restore flows, and API saves emit structured audit entries and warnings when operations are blocked.
 - **Grading (`grades.log`)** – Dual-grading routes record submissions, revisions, and any downstream navigation issues.
 - **Consensus (`consensus.log`)** – Consensus utilities track state transitions, exceptions, and diagnostic information.
-- **Authentication (`auth.log`)** – Login, logout, session timeout, and lockout events continue to log through `auth_logger`.
+- **Authentication (`auth.log`)** – Login, logout, session timeout, lockout events, and inactivity timeout events are logged with user details and IP addresses.
 - **Emails (`email_success`/`email_error`/`email_debug`)** – Email helpers record delivery status in their dedicated files.
+- **Runtime Errors (`runtime_error.log`)** – Global exception handlers and stack trace handlers capture all unhandled exceptions with full context.
+- **HTTP Errors (`http_error.log`)** – All HTTP responses with status ≥400 are logged with method, URL, status, user agent, and duration.
 - **`current_app.logger`** – Automatically targets `app.log` (and `debug.log` when active) for general informational messages.
 
 ## Adding Logging to New Code
@@ -76,6 +87,8 @@ Recent changes wire these loggers through the codebase:
 2. **Include useful context** – Log identifiers such as `upload_id`, `task_id`, `user_id`, URLs, or the operation being performed.
 3. **Capture stack traces** – Wrap risky blocks in `log_stack_trace(...)` or allow exceptions to bubble up so the global handlers write to `runtime_error.log`.
 4. **Enable debug detail when needed** – Temporarily set `ENABLE_DEBUG_LOGGING=true` to stream rich diagnostics to `debug.log` and the console during development.
+5. **Use request context** – The `RequestContextFilter` automatically adds URL and method to log records for HTTP-related logging.
+6. **Performance tracking** – Request timing is automatically captured and logged in debug mode for performance analysis.
 
 ## Example Usage
 
@@ -100,5 +113,26 @@ def some_action():
 ## Inspecting Logs
 
 Logs reside under `LOG_DIR` (default `./logs`). Each file rotates at `LOG_MAX_BYTES` with `LOG_BACKUP_COUNT` archives. Use standard tooling (`tail`, `less`, journal shippers, etc.) to ingest or view them, or configure `LOG_DIR` to point to a mounted volume or centralized logging agent.
+
+### Log Formats
+
+- **Base Format**: `%(asctime)s [%(levelname)s] %(name)s %(message)s`
+- **Detailed Format**: `%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d %(message)s`
+- **HTTP Error Format**: `%(asctime)s [%(levelname)s] %(name)s url=%(url)s %(message)s`
+
+### Current Logger Initialization
+
+The following loggers are initialized during app startup:
+- `app` - General application events
+- `debug` - Verbose debugging (when enabled)
+- `http_error` - HTTP errors (≥400)
+- `runtime_error` - Runtime errors and stack traces
+- `auth` - Authentication events
+- `grades` - Grading activities
+- `editing` - Image editing operations
+- `consensus` - Consensus state changes
+- `email_success` - Successful email deliveries
+- `email_error` - Email delivery failures
+- `email_debug` - Email debugging (when enabled)
 
 With this structure, application, audit, and diagnostic events stay separated, while stack traces and HTTP failures remain easy to correlate across the dedicated files.

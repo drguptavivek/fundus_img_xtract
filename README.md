@@ -73,6 +73,7 @@ python app.py
 - [Database ERD](docs/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [API Documentation](docs/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
+- [Email System](docs/Email.md) - Comprehensive email functionality documentation
 
 ### Data Processing Workflows
 - [ZIP Uploads](docs/zip_uploads.md)

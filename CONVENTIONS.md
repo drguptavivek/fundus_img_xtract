@@ -129,6 +129,8 @@ created_at = datetime.now(timezone.utc)
 
 ## Logging
 
+For detailed logging conventions and patterns, see [CONVENTIONS/Logging.md](CONVENTIONS/Logging.md)
+
 ### Use dedicated loggers:
 ```python
 import logging
@@ -198,6 +200,41 @@ For comprehensive security information including authentication, authorization, 
 - Validate and sanitize all user inputs
 - Use parameterized queries to prevent SQL injection
 - Secure session management with proper timeout
+
+## Email Functions
+
+For detailed email system documentation, see [docs/Email.md](docs/Email.md)
+
+### Quick Reference:
+```python
+from utils.emails import send_email, send_email_sync, send_otp_email
+
+# Asynchronous email sending (preferred)
+email_thread = send_email(
+    to_email="user@example.com",
+    subject="Subject",
+    body="Email body",
+    callback=lambda success: print(f"Email sent: {success}")
+)
+
+# Send OTP asynchronously
+otp_thread = send_otp_email(
+    to_email="user@example.com",
+    username="username",
+    otp="12345678",
+    callback=lambda success: print(f"OTP sent: {success}")
+)
+```
+
+### Email Configuration (.env):
+```bash
+SMTP_SERVER=localhost
+SMTP_PORT=587
+SMTP_USERNAME=xxxx
+SMTP_PASSWORD=yyyyy
+FROM_EMAIL=noreply@example.com
+EMAIL_DEBUG_LOGGING=false
+```
 
 ## Error Handling
 

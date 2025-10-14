@@ -2,6 +2,10 @@
 
 A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
 
+## Development Guidelines
+
+When adding features to the application, please follow the conventions outlined in [Development Conventions](CONVENTIONS.md) for consistency with the existing codebase.
+
 ## Setup
 
 ```bash
@@ -89,6 +93,7 @@ python app.py
 - [Flash Toasts Component](static/js/flash-toasts.md)
 
 ### Development & Conventions
+- [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
 - [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
 - [Build Themes](docs/BUILD_THEMES.md)
 - [Coding Conventions](CONVENTIONS/Templates.md)

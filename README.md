@@ -78,8 +78,8 @@ python app.py
 - [Audit Workflows](docs/audit.md)
 
 ### Grading System
-- [Dual Grading Workflow](docs/dual_grading.md) ⚠️ *Current system but may need updates*
-- [Dual Grading Flow Details](grading/dual_grading_flow.md)
+- [Dual Grading Workflow](docs/dual_grading.md) - Updated with current implementation details
+- [Dual Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
 - [Task Creation Services](docs/task_creation_services.md)
 - [Grading Edge Cases](grading/edge_cases.md)
 

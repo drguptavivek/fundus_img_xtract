@@ -4,15 +4,23 @@ This module provides centralized functions for searching images with various fil
 and determining if they already have grading tasks for different diseases.
 It supports both direct image uploads and images from ZIP uploads with proper
 scoping based on user's lab units and role-based access controls.
+
+Key Features:
+- Strict filter separation (direct filters exclude ZIP images and vice versa)
+- UUID-based returns (no original filenames)
+- Task disease information for grading workflow
+- Proper user lab unit scoping
+- Comprehensive error handling and logging
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Set
 from datetime import datetime, date as _date
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from flask_login import current_user
+import logging
 
 from models import (
     DirectImageUpload,
@@ -27,11 +35,632 @@ from models import (
     Session as DBSession,
     Area,
     ZipFile,
-    ImageGrading
+    DiabeticRetinopathyReport,
+    GlaucomaResultsCleaned
 )
 from utils.upload_eligibility import get_user_lab_unit_ids
 
+# Configure logging
+search_logger = logging.getLogger('image_search')
 
+
+class ImageSearchError(Exception):
+    """Custom exception for image search errors."""
+    pass
+
+
+def validate_search_filters(filters: Dict[str, Any]) -> str:
+    """Validate all filters and determine search scope.
+    
+    Args:
+        filters: Dictionary of search filters
+        
+    Returns:
+        Search scope: 'direct_only', 'zip_only', or 'both'
+        
+    Raises:
+        ImageSearchError: If filters are invalid or conflicting
+    """
+    # Check for conflicting filter types
+    direct_filters_present = any([
+        filters.get('camera_ids'),
+        filters.get('disease_ids'),
+        filters.get('area_ids'),
+        filters.get('is_mydriatic') is not None
+    ])
+    
+    zip_filters_present = any([
+        filters.get('has_dr_report') is not None,
+        filters.get('has_glaucoma_report') is not None,
+        filters.get('capture_start'),
+        filters.get('capture_end')
+    ])
+    
+    # Conflict validation
+    if direct_filters_present and zip_filters_present:
+        raise ImageSearchError(
+            "Cannot apply both direct image filters and ZIP filters simultaneously. "
+            "Direct filters: camera, disease, area, is_mydriatic. "
+            "ZIP filters: has_dr_report, has_glaucoma_report, capture_date range."
+        )
+    
+    # Date validation
+    upload_start = filters.get('upload_start')
+    upload_end = filters.get('upload_end')
+    if upload_start and upload_end and upload_start > upload_end:
+        raise ImageSearchError("upload_start date must be before upload_end date")
+    
+    capture_start = filters.get('capture_start')
+    capture_end = filters.get('capture_end')
+    if capture_start and capture_end and capture_start > capture_end:
+        raise ImageSearchError("capture_start date must be before capture_end date")
+    
+    # Determine search scope
+    if direct_filters_present:
+        return "direct_only"
+    elif zip_filters_present:
+        return "zip_only"
+    else:
+        return "both"
+
+
+def validate_pagination(page: int, per_page: int) -> Tuple[int, int]:
+    """Validate and normalize pagination parameters.
+    
+    Args:
+        page: Page number (1-indexed)
+        per_page: Items per page
+        
+    Returns:
+        Tuple of validated (page, per_page)
+        
+    Raises:
+        ImageSearchError: If pagination parameters are invalid
+    """
+    if page < 1:
+        raise ImageSearchError("Page must be >= 1")
+    
+    if per_page < 1:
+        raise ImageSearchError("Per page must be >= 1")
+    
+    if per_page > 1000:  # Reasonable limit
+        raise ImageSearchError("Per page cannot exceed 1000")
+    
+    return page, per_page
+
+
+def get_user_search_scope(
+    user_id: int,
+    db_session: Session
+) -> Tuple[Set[int], bool]:
+    """Get user's lab unit IDs and admin status for search scoping.
+    
+    Args:
+        user_id: User ID for scoping
+        db_session: Database session
+        
+    Returns:
+        Tuple of (lab_unit_ids, is_admin)
+    """
+    # Get user's lab units
+    lab_unit_ids = get_user_lab_unit_ids(user_id)
+    
+    # Check if user is admin
+    user = db_session.query(User).filter(User.id == user_id).first()
+    is_admin = user.has_role('admin') if user else False
+    
+    return lab_unit_ids, is_admin
+
+
+def build_direct_query(
+    db_session: Session,
+    filters: Dict[str, Any],
+    user_lab_unit_ids: Set[int],
+    is_admin: bool
+):
+    """Build query for direct images with all applicable filters.
+    
+    Args:
+        db_session: Database session
+        filters: Dictionary of filters to apply
+        user_lab_unit_ids: Set of lab unit IDs user can access
+        is_admin: Whether user is admin
+        
+    Returns:
+        SQLAlchemy query object
+    """
+    query = db_session.query(DirectImageUpload).join(
+        LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id
+    ).join(
+        Hospital, DirectImageUpload.hospital_id == Hospital.id
+    ).join(
+        Camera, DirectImageUpload.camera_id == Camera.id
+    ).join(
+        Disease, DirectImageUpload.disease_id == Disease.id
+    ).join(
+        Area, DirectImageUpload.area_id == Area.id
+    )
+    
+    # Apply user scoping
+    if not is_admin and user_lab_unit_ids:
+        query = query.filter(DirectImageUpload.lab_unit_id.in_(user_lab_unit_ids))
+    
+    # Apply global filters
+    if filters.get('hospital_id'):
+        query = query.filter(DirectImageUpload.hospital_id == filters['hospital_id'])
+    
+    if filters.get('lab_unit_ids'):
+        query = query.filter(DirectImageUpload.lab_unit_id.in_(filters['lab_unit_ids']))
+    
+    # Apply date filters
+    if filters.get('upload_start'):
+        query = query.filter(DirectImageUpload.created_at >= filters['upload_start'])
+    
+    if filters.get('upload_end'):
+        query = query.filter(DirectImageUpload.created_at <= filters['upload_end'])
+    
+    # Apply direct-specific filters
+    if filters.get('camera_ids'):
+        query = query.filter(DirectImageUpload.camera_id.in_(filters['camera_ids']))
+    
+    if filters.get('disease_ids'):
+        query = query.filter(DirectImageUpload.disease_id.in_(filters['disease_ids']))
+    
+    if filters.get('area_ids'):
+        query = query.filter(DirectImageUpload.area_id.in_(filters['area_ids']))
+    
+    if filters.get('is_mydriatic') is not None:
+        query = query.filter(DirectImageUpload.is_mydriatic == filters['is_mydriatic'])
+    
+    # Apply search query
+    if filters.get('search_query'):
+        search_term = f"%{filters['search_query']}%"
+        query = query.filter(
+            or_(
+                DirectImageUpload.uuid.like(search_term),
+                DirectImageUpload.filename.like(search_term)
+            )
+        )
+    
+    return query
+
+
+def build_zip_query(
+    db_session: Session,
+    filters: Dict[str, Any],
+    user_lab_unit_ids: Set[int],
+    is_admin: bool
+):
+    """Build query for ZIP images with all applicable filters.
+    
+    Args:
+        db_session: Database session
+        filters: Dictionary of filters to apply
+        user_lab_unit_ids: Set of lab unit IDs user can access
+        is_admin: Whether user is admin
+        
+    Returns:
+        SQLAlchemy query object
+    """
+    query = db_session.query(EncounterFile).join(
+        LabUnit, EncounterFile.lab_unit_id == LabUnit.id
+    ).join(
+        PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id
+    ).join(
+        ZipFile, PatientEncounters.zip_file_id == ZipFile.id
+    ).join(
+        Hospital, LabUnit.hospital_id == Hospital.id
+    )
+    
+    # Apply user scoping
+    if not is_admin and user_lab_unit_ids:
+        query = query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids))
+    
+    # Apply global filters
+    if filters.get('hospital_id'):
+        query = query.filter(Hospital.id == filters['hospital_id'])
+    
+    if filters.get('lab_unit_ids'):
+        query = query.filter(EncounterFile.lab_unit_id.in_(filters['lab_unit_ids']))
+    
+    # Apply upload date filters (from ZipFile)
+    if filters.get('upload_start'):
+        query = query.filter(ZipFile.upload_date >= filters['upload_start'])
+    
+    if filters.get('upload_end'):
+        query = query.filter(ZipFile.upload_date <= filters['upload_end'])
+    
+    # Apply ZIP-specific filters
+    if filters.get('capture_start'):
+        query = query.filter(PatientEncounters.capture_date_dt >= filters['capture_start'])
+    
+    if filters.get('capture_end'):
+        query = query.filter(PatientEncounters.capture_date_dt <= filters['capture_end'])
+    
+    # Apply DR report filter
+    if filters.get('has_dr_report') is not None:
+        if filters['has_dr_report']:
+            query = query.join(
+                DiabeticRetinopathyReport,
+                PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
+            ).filter(DiabeticRetinopathyReport.uuid.isnot(None))
+        else:
+            query = query.outerjoin(
+                DiabeticRetinopathyReport,
+                PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
+            ).filter(
+                or_(
+                    DiabeticRetinopathyReport.id.is_(None),
+                    DiabeticRetinopathyReport.uuid.is_(None)
+                )
+            )
+    
+    # Apply Glaucoma report filter
+    if filters.get('has_glaucoma_report') is not None:
+        if filters['has_glaucoma_report']:
+            query = query.join(
+                GlaucomaResultsCleaned,
+                PatientEncounters.id == GlaucomaResultsCleaned.patient_encounter_id
+            ).filter(GlaucomaResultsCleaned.report_uuid.isnot(None))
+        else:
+            query = query.outerjoin(
+                GlaucomaResultsCleaned,
+                PatientEncounters.id == GlaucomaResultsCleaned.patient_encounter_id
+            ).filter(
+                or_(
+                    GlaucomaResultsCleaned.id.is_(None),
+                    GlaucomaResultsCleaned.report_uuid.is_(None)
+                )
+            )
+    
+    # Apply search query
+    if filters.get('search_query'):
+        search_term = f"%{filters['search_query']}%"
+        query = query.filter(
+            or_(
+                EncounterFile.uuid.like(search_term),
+                EncounterFile.filename.like(search_term),
+                PatientEncounters.patient_id.like(search_term),
+                PatientEncounters.name.like(search_term)
+            )
+        )
+    
+    return query
+
+
+def get_tasks_for_multiple_images(
+    db_session: Session,
+    image_ids: List[int],
+    image_type: str
+) -> Dict[int, List[str]]:
+    """Get task diseases for multiple images efficiently.
+    
+    Args:
+        db_session: Database session
+        image_ids: List of image IDs
+        image_type: Type of image ('direct' or 'zip')
+        
+    Returns:
+        Dictionary mapping image_id to list of disease names with tasks
+    """
+    if not image_ids:
+        return {}
+    
+    tasks = db_session.query(Task, Disease).join(Disease).filter(
+        Task.state.in_(['pending', 'resident_done', 'faculty_done', 'arbitration', 'final'])
+    )
+    
+    if image_type == "direct":
+        tasks = tasks.filter(Task.direct_image_upload_id.in_(image_ids))
+    else:  # zip
+        tasks = tasks.filter(Task.encounter_file_id.in_(image_ids))
+    
+    # Group by image ID
+    result = {}
+    for task, disease in tasks.all():
+        image_id = task.direct_image_upload_id if image_type == "direct" else task.encounter_file_id
+        if image_id not in result:
+            result[image_id] = []
+        result[image_id].append(disease.name)
+    
+    return result
+
+
+def format_direct_image_with_tasks(
+    item: DirectImageUpload,
+    task_diseases: List[str]
+) -> Dict[str, Any]:
+    """Format direct image with pre-fetched task information.
+    
+    Args:
+        item: DirectImageUpload object
+        task_diseases: List of disease names with tasks for this image
+        
+    Returns:
+        Formatted image dictionary
+    """
+    return {
+        "uuid": item.uuid,
+        "type": "direct",
+        "upload_date": item.created_at.isoformat() if item.created_at else None,
+        "capture_date": item.created_at.isoformat() if item.created_at else None,
+        "hospital": item.hospital.name if item.hospital else None,
+        "lab_unit": item.lab_unit.name if item.lab_unit else None,
+        "camera": item.camera.name if item.camera else None,
+        "disease": item.disease.name if item.disease else None,
+        "area": item.area.name if item.area else None,
+        "is_mydriatic": item.is_mydriatic,
+        "tasks_for_diseases": task_diseases,
+    }
+
+
+def format_zip_image_with_tasks(
+    item: EncounterFile,
+    task_diseases: List[str],
+    db_session: Session
+) -> Dict[str, Any]:
+    """Format ZIP image with pre-fetched task information.
+    
+    Args:
+        item: EncounterFile object
+        task_diseases: List of disease names with tasks for this image
+        db_session: Database session
+        
+    Returns:
+        Formatted image dictionary
+    """
+    # Get report status (still need to query individually for this)
+    has_dr_report = db_session.query(DiabeticRetinopathyReport).filter(
+        DiabeticRetinopathyReport.patient_encounter_id == item.patient_encounter.id,
+        DiabeticRetinopathyReport.uuid.isnot(None)
+    ).first() is not None
+    
+    has_glaucoma_report = db_session.query(GlaucomaResultsCleaned).filter(
+        GlaucomaResultsCleaned.patient_encounter_id == item.patient_encounter.id,
+        GlaucomaResultsCleaned.report_uuid.isnot(None)
+    ).first() is not None
+    
+    return {
+        "uuid": item.uuid,
+        "type": "zip",
+        "upload_date": item.patient_encounter.zip_file.upload_date.isoformat() if item.patient_encounter.zip_file.upload_date else None,
+        "capture_date": item.patient_encounter.capture_date_dt.isoformat() if item.patient_encounter.capture_date_dt else None,
+        "hospital": item.lab_unit.hospital.name if item.lab_unit and item.lab_unit.hospital else None,
+        "lab_unit": item.lab_unit.name if item.lab_unit else None,
+        "has_dr_report": has_dr_report,
+        "has_glaucoma_report": has_glaucoma_report,
+        "tasks_for_diseases": task_diseases,
+    }
+
+
+def log_search_request(
+    user_id: int,
+    filters: Dict[str, Any],
+    search_scope: str,
+    page: int,
+    per_page: int
+) -> None:
+    """Log search request for debugging and audit.
+    
+    Args:
+        user_id: User ID making the request
+        filters: Applied filters
+        search_scope: Determined search scope
+        page: Page number
+        per_page: Items per page
+    """
+    search_logger.info(
+        f"Image search request - User: {user_id}, Scope: {search_scope}, "
+        f"Page: {page}, Per_page: {per_page}, Filters: {filters}"
+    )
+
+
+def log_search_results(
+    user_id: int,
+    search_scope: str,
+    total_count: int,
+    execution_time: float
+) -> None:
+    """Log search results for performance monitoring.
+    
+    Args:
+        user_id: User ID making the request
+        search_scope: Search scope used
+        total_count: Total results found
+        execution_time: Query execution time in seconds
+    """
+    search_logger.info(
+        f"Search completed - User: {user_id}, Scope: {search_scope}, "
+        f"Total: {total_count}, Time: {execution_time:.3f}s"
+    )
+
+
+def log_search_error(user_id: int, error: Exception, filters: Dict[str, Any]) -> None:
+    """Log search errors for debugging.
+    
+    Args:
+        user_id: User ID making the request
+        error: Exception that occurred
+        filters: Filters that were applied
+    """
+    search_logger.error(
+        f"Search error - User: {user_id}, Error: {str(error)}, "
+        f"Filters: {filters}", exc_info=True
+    )
+
+
+def search_images_strict(
+    db_session: Session,
+    page: int = 1,
+    per_page: int = 50,
+    hospital_id: Optional[int] = None,
+    lab_unit_ids: Optional[List[int]] = None,
+    upload_start: Optional[_date] = None,
+    upload_end: Optional[_date] = None,
+    # Direct image filters
+    camera_ids: Optional[List[int]] = None,
+    disease_ids: Optional[List[int]] = None,
+    area_ids: Optional[List[int]] = None,
+    is_mydriatic: Optional[bool] = None,
+    # ZIP image filters
+    has_dr_report: Optional[bool] = None,
+    has_glaucoma_report: Optional[bool] = None,
+    capture_start: Optional[_date] = None,
+    capture_end: Optional[_date] = None,
+    # Additional options
+    search_query: Optional[str] = None,
+    user_id: Optional[int] = None  # For scoping, defaults to current_user
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Search images with strict filter separation and UUID-based returns.
+    
+    This function implements strict filter separation:
+    - Direct filters (camera, disease, area, is_mydriatic) exclude ZIP images
+    - ZIP filters (has_dr_report, has_glaucoma_report, capture_date) exclude Direct images
+    - Global filters (hospital, lab_unit, upload dates) apply to both when no specific filters
+    
+    Args:
+        db_session: Database session to use for queries
+        page: Page number for pagination (1-indexed), default is 1
+        per_page: Number of items per page, default is 50
+        hospital_id: Hospital ID to filter by (global filter)
+        lab_unit_ids: List of lab unit IDs to filter by (global filter)
+        upload_start: Filter for upload date start (global filter)
+        upload_end: Filter for upload date end (global filter)
+        camera_ids: List of camera IDs to filter by (direct filter)
+        disease_ids: List of disease IDs to filter by (direct filter)
+        area_ids: List of area IDs to filter by (direct filter)
+        is_mydriatic: Filter for mydriatic status (direct filter)
+        has_dr_report: Filter for DR report status (ZIP filter)
+        has_glaucoma_report: Filter for Glaucoma report status (ZIP filter)
+        capture_start: Filter for capture date start (ZIP filter)
+        capture_end: Filter for capture date end (ZIP filter)
+        search_query: Search term to match against UUIDs and other fields
+        user_id: User ID for scoping (defaults to current_user)
+    
+    Returns:
+        Tuple of (list of image dictionaries, total count)
+        
+    Raises:
+        ImageSearchError: If filters are invalid or conflicting
+    """
+    start_time = datetime.now()
+    
+    # Prepare filters dictionary early for error logging
+    filters = {
+        'hospital_id': hospital_id,
+        'lab_unit_ids': lab_unit_ids,
+        'upload_start': upload_start,
+        'upload_end': upload_end,
+        'camera_ids': camera_ids,
+        'disease_ids': disease_ids,
+        'area_ids': area_ids,
+        'is_mydriatic': is_mydriatic,
+        'has_dr_report': has_dr_report,
+        'has_glaucoma_report': has_glaucoma_report,
+        'capture_start': capture_start,
+        'capture_end': capture_end,
+        'search_query': search_query
+    }
+    
+    try:
+        # Validate pagination
+        page, per_page = validate_pagination(page, per_page)
+        
+        # Get user ID for scoping
+        if user_id is None:
+            try:
+                if current_user and current_user.is_authenticated:
+                    user_id = current_user.id
+                else:
+                    raise ImageSearchError("User ID required for search")
+            except AttributeError:
+                # current_user is not available (e.g., in testing)
+                raise ImageSearchError("User ID required for search")
+        
+        # Validate filters and determine search scope
+        search_scope = validate_search_filters(filters)
+        
+        # Get user scoping information
+        user_lab_unit_ids, is_admin = get_user_search_scope(user_id, db_session)
+        
+        # Log search request
+        log_search_request(user_id, filters, search_scope, page, per_page)
+        
+        # Calculate offset
+        offset = (page - 1) * per_page
+        
+        # Execute queries based on search scope
+        all_results = []
+        total_count = 0
+        
+        if search_scope in ['direct_only', 'both']:
+            # Build and execute direct image query
+            direct_query = build_direct_query(db_session, filters, user_lab_unit_ids, is_admin)
+            direct_count = direct_query.count()
+            
+            if direct_count > 0:
+                direct_results = direct_query.order_by(
+                    DirectImageUpload.created_at.desc()
+                ).offset(offset).limit(per_page).all()
+                
+                # Get task information for direct images
+                direct_image_ids = [img.id for img in direct_results]
+                direct_tasks = get_tasks_for_multiple_images(db_session, direct_image_ids, 'direct')
+                
+                # Format results
+                for img in direct_results:
+                    formatted = format_direct_image_with_tasks(img, direct_tasks.get(img.id, []))
+                    all_results.append(formatted)
+                
+                total_count += direct_count
+        
+        if search_scope in ['zip_only', 'both']:
+            # Build and execute ZIP image query
+            zip_query = build_zip_query(db_session, filters, user_lab_unit_ids, is_admin)
+            zip_count = zip_query.count()
+            
+            if zip_count > 0:
+                zip_results = zip_query.order_by(
+                    ZipFile.upload_date.desc().nulls_last()
+                ).offset(offset).limit(per_page).all()
+                
+                # Get task information for ZIP images
+                zip_image_ids = [img.id for img in zip_results]
+                zip_tasks = get_tasks_for_multiple_images(db_session, zip_image_ids, 'zip')
+                
+                # Format results
+                for img in zip_results:
+                    formatted = format_zip_image_with_tasks(img, zip_tasks.get(img.id, []), db_session)
+                    all_results.append(formatted)
+                
+                total_count += zip_count
+        
+        # Sort combined results by upload_date (most recent first)
+        all_results.sort(key=lambda x: x['upload_date'] or '', reverse=True)
+        
+        # Apply pagination to combined results
+        start_idx = offset
+        end_idx = offset + per_page
+        paginated_results = all_results[start_idx:end_idx]
+        
+        # Log successful completion
+        execution_time = (datetime.now() - start_time).total_seconds()
+        log_search_results(user_id, search_scope, total_count, execution_time)
+        
+        return paginated_results, total_count
+        
+    except Exception as e:
+        # Log error
+        execution_time = (datetime.now() - start_time).total_seconds()
+        log_search_error(user_id or 0, e, filters)
+        
+        # Re-raise as ImageSearchError if not already
+        if not isinstance(e, ImageSearchError):
+            raise ImageSearchError(f"Search failed: {str(e)}") from e
+        raise
+
+
+# Legacy function for backward compatibility
 def search_images(
     db_session,
     page: int = 1,
@@ -53,619 +682,34 @@ def search_images(
     has_dr_report: Optional[bool] = None,  # Add DR report filter
     has_glaucoma_report: Optional[bool] = None  # Add Glaucoma report filter
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Search images across both direct uploads and ZIP uploads with specified filters.
+    """Legacy search function for backward compatibility.
     
-    Args:
-        db_session: Database session to use for queries
-        page: Page number for pagination (1-indexed), default is 1
-        per_page: Number of items per page, default is 50
-        lab_unit_ids: List of lab unit IDs to filter by
-        disease_ids: List of disease IDs to filter by (only applies to direct images)
-        camera_ids: List of camera IDs to filter by (only applies to direct images)
-        area_ids: List of area IDs to filter by (only applies to direct images)
-        is_mydriatic: Filter for mydriatic status (True for mydriatic, False for non-mydriatic, only applies to direct images)
-        has_task_for_diseases: List of disease IDs to check if tasks exist for
-        exclude_task_for_diseases: List of disease IDs to exclude if tasks exist for
-        image_type: Filter for image type ('direct' or 'zip'), None for both
-        search_query: Search term to match against patient IDs, filenames, etc.
-        upload_start: Filter for upload date start (applies to both image types)
-        upload_end: Filter for upload date end (applies to both image types)
-        capture_start: Filter for capture date start (applies to ZIP images only)
-        capture_end: Filter for capture date end (applies to ZIP images only)
-        hospital_id: Hospital ID to filter by (applies to both image types)
-        has_dr_report: Filter for DR report status (applies to ZIP images only)
-        has_glaucoma_report: Filter for Glaucoma report status (applies to ZIP images only)
-    
-    Returns:
-        Tuple of (list of image dictionaries, total count)
+    This function maps the old interface to the new search_images_strict function.
+    It's recommended to use search_images_strict directly for new code.
     """
-    from sqlalchemy import union_all, text, literal
-    from sqlalchemy.sql import select
-    
-    # Get user's lab units if not explicitly provided and not admin
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    
-    offset = (page - 1) * per_page
-    
-    # Subquery for direct uploads
-    if image_type in [None, 'direct']:
-        direct_subq = select(
-            DirectImageUpload.id,
-            DirectImageUpload.uuid,
-            DirectImageUpload.filename,
-            (DirectImageUpload.folder_rel + '/' + DirectImageUpload.filename).label('file_path'),
-            LabUnit.name.label('lab_unit_name'),
-            Hospital.name.label('hospital'),
-            Camera.name.label('camera_name'),
-            Disease.name.label('disease_name'),
-            Area.name.label('area_name'),
-            DirectImageUpload.is_mydriatic,
-            DirectImageUpload.created_at.label('upload_date'),  # Rename for clarity
-            DirectImageUpload.created_at.label('capture_date'),  # Same as upload for direct images
-            literal('direct').label('image_type')
-        ).select_from(
-            DirectImageUpload.__table__
-            .join(LabUnit, DirectImageUpload.lab_unit_id == LabUnit.id)
-            .join(Hospital, DirectImageUpload.hospital_id == Hospital.id)
-            .join(Camera, DirectImageUpload.camera_id == Camera.id)
-            .join(Disease, DirectImageUpload.disease_id == Disease.id)
-            .join(Area, DirectImageUpload.area_id == Area.id)
-        ).where(DirectImageUpload.id > 0)
-        
-        # Apply hospital filter for direct uploads
-        if hospital_id:
-            direct_subq = direct_subq.where(DirectImageUpload.hospital_id == hospital_id)
-        
-        # Apply filters for direct uploads
-        if lab_unit_ids:
-            direct_subq = direct_subq.where(DirectImageUpload.lab_unit_id.in_(lab_unit_ids))
-        if disease_ids:
-            direct_subq = direct_subq.where(DirectImageUpload.disease_id.in_(disease_ids))
-        if camera_ids:
-            direct_subq = direct_subq.where(DirectImageUpload.camera_id.in_(camera_ids))
-        if area_ids:
-            direct_subq = direct_subq.where(DirectImageUpload.area_id.in_(area_ids))
-        if is_mydriatic is not None:
-            direct_subq = direct_subq.where(DirectImageUpload.is_mydriatic == is_mydriatic)
-        if search_query:
-            direct_subq = direct_subq.where(
-                or_(
-                    DirectImageUpload.filename.contains(search_query),
-                    DirectImageUpload.uuid.contains(search_query),
-                    DirectImageUpload.folder_rel.contains(search_query)
-                )
-            )
-        # Apply date filters for direct uploads
-        if upload_start:
-            direct_subq = direct_subq.where(DirectImageUpload.created_at >= upload_start)
-        if upload_end:
-            direct_subq = direct_subq.where(DirectImageUpload.created_at <= upload_end)
-        # For direct images, capture date is the same as upload date
-        if capture_start:
-            direct_subq = direct_subq.where(DirectImageUpload.created_at >= capture_start)
-        if capture_end:
-            direct_subq = direct_subq.where(DirectImageUpload.created_at <= capture_end)
-    else:
-        direct_subq = None
-    
-    # Subquery for ZIP uploads (EncounterFile)
-    # Only include ZIP images if no disease filter is applied
-    if image_type in [None, 'zip'] and not disease_ids:
-        
-        zip_subq = select(
-            EncounterFile.id,
-            EncounterFile.uuid,
-            EncounterFile.filename,
-            EncounterFile.filename.label('file_path'),  # ZIP files don't have folder_rel
-            LabUnit.name.label('lab_unit_name'),
-            Hospital.name.label('hospital'), # Use 'hospital' to match what the route expects
-            literal(None).label('camera_name'),
-            literal(None).label('disease_name'),
-            literal(None).label('area_name'),
-            literal(None).label('is_mydriatic'),  # ZIP files don't have this field in the same way
-            ZipFile.upload_date.label('upload_date'),  # Add upload date from ZipFile
-            PatientEncounters.capture_date_dt.label('capture_date'),  # Add capture date
-            literal('zip').label('image_type')
-        ).select_from(
-            EncounterFile.__table__
-            .join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
-            .join(Hospital, LabUnit.hospital_id == Hospital.id)
-            .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
-            .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)  # Add ZipFile join
-        ).where(EncounterFile.id > 0)
-        
-        # Apply hospital filter for ZIP uploads
-        if hospital_id:
-            zip_subq = zip_subq.where(Hospital.id == hospital_id)
-        
-        # Apply DR report filter for ZIP uploads
-        if has_dr_report is not None:
-            if has_dr_report:
-                zip_subq = zip_subq.where(PatientEncounters.dr_reports.any())
-            else:
-                zip_subq = zip_subq.where(~PatientEncounters.dr_reports.any())
-        
-        # Apply Glaucoma report filter for ZIP uploads
-        if has_glaucoma_report is not None:
-            if has_glaucoma_report:
-                zip_subq = zip_subq.where(PatientEncounters.glaucoma_reports.any())
-            else:
-                zip_subq = zip_subq.where(~PatientEncounters.glaucoma_reports.any())
-        
-        
-        # Apply filters for ZIP uploads (excluding disease filter)
-        if lab_unit_ids:
-            zip_subq = zip_subq.where(EncounterFile.lab_unit_id.in_(lab_unit_ids))
-        
-        # Apply date filters for ZIP uploads
-        if upload_start:
-            zip_subq = zip_subq.where(ZipFile.upload_date >= upload_start)
-        if upload_end:
-            zip_subq = zip_subq.where(ZipFile.upload_date <= upload_end)
-        if capture_start:
-            zip_subq = zip_subq.where(PatientEncounters.capture_date_dt >= capture_start)
-        if capture_end:
-            zip_subq = zip_subq.where(PatientEncounters.capture_date_dt <= capture_end)
-        
-        if search_query:
-            zip_subq = zip_subq.where(
-                or_(
-                    EncounterFile.filename.contains(search_query),
-                    EncounterFile.uuid.contains(search_query),
-                    PatientEncounters.patient_id.contains(search_query),
-                    PatientEncounters.name.contains(search_query)
-                )
-            )
-    else:
-        zip_subq = None
-    
-    # Create the union query
-    if direct_subq is not None and zip_subq is not None:
-        combined_query = union_all(direct_subq, zip_subq).alias('combined_results')
-    elif direct_subq is not None:
-        combined_query = direct_subq.alias('combined_results')
-    elif zip_subq is not None:
-        combined_query = zip_subq.alias('combined_results')
-    else:
-        return [], 0
-
-    # Count total records
-    count_query = select(combined_query.c.id).select_from(combined_query)
-    total_count = db_session.execute(count_query).fetchall()
-    total_count = len(total_count)
-    
-    # Main query with pagination
-    paginated_query = select(combined_query).select_from(combined_query).order_by(
-        combined_query.c.upload_date.desc().nulls_last()
-    ).offset(offset).limit(per_page)
-    
-    paginated_results = db_session.execute(paginated_query).fetchall()
-    
-    # Format the results
-    images = []
-    for result in paginated_results:
-        image_dict = {
-            'id': result.id,
-            'uuid': result.uuid,
-            'filename': result.filename,
-            'file_path': result.file_path,
-            'lab_unit': result.lab_unit_name,
-            'upload_date': result.upload_date, # Add upload date
-            'capture_date': result.capture_date, # Add capture date
-            'type': result.image_type
-        }
-        
-        # Add type-specific fields
-        if result.image_type == 'direct':
-            image_dict['hospital'] = result.hospital
-            image_dict['camera'] = result.camera_name
-            image_dict['disease'] = result.disease_name
-            image_dict['area'] = result.area_name
-            image_dict['is_mydriatic'] = result.is_mydriatic
-        elif result.image_type == 'zip':
-            # Add hospital name for ZIP files from the query result
-            image_dict['hospital'] = result.hospital
-        
-        # Check report status for this image
-        image_dict['has_reports'] = get_image_report_status(db_session, result.id, result.image_type)
-        
-        images.append(image_dict)
-    
-    return images, total_count
+    # Map legacy parameters to new function
+    return search_images_strict(
+        db_session=db_session,
+        page=page,
+        per_page=per_page,
+        hospital_id=hospital_id,
+        lab_unit_ids=lab_unit_ids,
+        upload_start=upload_start,
+        upload_end=upload_end,
+        camera_ids=camera_ids,
+        disease_ids=disease_ids,
+        area_ids=area_ids,
+        is_mydriatic=is_mydriatic,
+        has_dr_report=has_dr_report,
+        has_glaucoma_report=has_glaucoma_report,
+        capture_start=capture_start,
+        capture_end=capture_end,
+        search_query=search_query
+    )
 
 
-def search_direct_images(
-    db_session,
-    page: int = 1,
-    per_page: int = 50,
-    lab_unit_ids: Optional[List[int]] = None,
-    disease_ids: Optional[List[int]] = None,
-    camera_ids: Optional[List[int]] = None,
-    area_ids: Optional[List[int]] = None,
-    is_mydriatic: Optional[bool] = None,
-    has_task_for_diseases: Optional[List[int]] = None,
-    exclude_task_for_diseases: Optional[List[int]] = None,
-    search_query: Optional[str] = None,
-    upload_start: Optional[_date] = None,
-    upload_end: Optional[_date] = None,
-    capture_start: Optional[_date] = None,
-    capture_end: Optional[_date] = None
-) -> Tuple[List[Dict[str, Any]], int]:
-    """Search direct image uploads with specified filters.
-    
-    Args:
-        db_session: Database session to use for queries
-        page: Page number for pagination (1-indexed), default is 1
-        per_page: Number of items per page, default is 50
-        lab_unit_ids: List of lab unit IDs to filter by
-        disease_ids: List of disease IDs to filter by
-        camera_ids: List of camera IDs to filter by
-        area_ids: List of area IDs to filter by
-        is_mydriatic: Filter for mydriatic status (True for mydriatic, False for non-mydriatic)
-        has_task_for_diseases: List of disease IDs to check if tasks exist for
-        exclude_task_for_diseases: List of disease IDs to exclude if tasks exist for
-        search_query: Search term to match against patient IDs, filenames, etc.
-        upload_start: Filter for upload date start
-        upload_end: Filter for upload date end
-        capture_start: Filter for capture date start (same as upload for direct images)
-        capture_end: Filter for capture date end (same as upload for direct images)
-    
-    Returns:
-        Tuple of (list of image dictionaries, total count)
-    """
-    offset = (page - 1) * per_page
-    
-    # Get user's lab units if not explicitly provided
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    
-    # Base query for direct uploads
-    query = db_session.query(DirectImageUpload).join(LabUnit).join(Hospital).join(Camera).join(Disease).join(Area)
-    
-    # Apply filters
-    if lab_unit_ids:
-        query = query.filter(DirectImageUpload.lab_unit_id.in_(lab_unit_ids))
-    if disease_ids:
-        query = query.filter(DirectImageUpload.disease_id.in_(disease_ids))
-    if camera_ids:
-        query = query.filter(DirectImageUpload.camera_id.in_(camera_ids))
-    if area_ids:
-        query = query.filter(DirectImageUpload.area_id.in_(area_ids))
-    if is_mydriatic is not None:
-        query = query.filter(DirectImageUpload.is_mydriatic == is_mydriatic)
-    if search_query:
-        query = query.filter(
-            or_(
-                DirectImageUpload.filename.contains(search_query),
-                DirectImageUpload.uuid.contains(search_query),
-                DirectImageUpload.folder_rel.contains(search_query)
-            )
-        )
-    # Apply date filters
-    if upload_start:
-        query = query.filter(DirectImageUpload.created_at >= upload_start)
-    if upload_end:
-        query = query.filter(DirectImageUpload.created_at <= upload_end)
-    # For direct images, capture date is the same as upload date
-    if capture_start:
-        query = query.filter(DirectImageUpload.created_at >= capture_start)
-    if capture_end:
-        query = query.filter(DirectImageUpload.created_at <= capture_end)
-    
-    # Count total results
-    total_count = query.count()
-    
-    # Apply ordering and pagination
-    uploads = query.order_by(DirectImageUpload.created_at.desc()).offset(offset).limit(per_page).all()
-    
-    # Format results
-    image_list = [format_direct_image_upload(db_session, upload, has_task_for_diseases, exclude_task_for_diseases) for upload in uploads]
-    
-    return image_list, total_count
-
-
-def search_zip_images(
-    db_session,
-    page: int = 1,
-    per_page: int = 50,
-    lab_unit_ids: Optional[List[int]] = None,
-    search_query: Optional[str] = None,
-    upload_start: Optional[_date] = None,
-    upload_end: Optional[_date] = None,
-    capture_start: Optional[_date] = None,
-    capture_end: Optional[_date] = None
-) -> Tuple[List[Dict[str, Any]], int]:
-    """Search images from ZIP uploads with specified filters.
-    
-    Args:
-        db_session: Database session to use for queries
-        page: Page number for pagination (1-indexed), default is 1
-        per_page: Number of items per page, default is 50
-        lab_unit_ids: List of lab unit IDs to filter by
-        search_query: Search term to match against patient IDs, filenames, etc.
-        upload_start: Filter for upload date start
-        upload_end: Filter for upload date end
-        capture_start: Filter for capture date start
-        capture_end: Filter for capture date end
-    
-    Returns:
-        Tuple of (list of image dictionaries, total count)
-    """
-    offset = (page - 1) * per_page
-    
-    # Get user's lab units if not explicitly provided
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    
-    # Base query for ZIP uploads (EncounterFile)
-    query = db_session.query(EncounterFile).join(LabUnit).join(PatientEncounters)
-    
-    # Apply filters
-    if lab_unit_ids:
-        query = query.filter(EncounterFile.lab_unit_id.in_(lab_unit_ids))
-    if search_query:
-        query = query.filter(
-            or_(
-                EncounterFile.filename.contains(search_query),
-                EncounterFile.uuid.contains(search_query),
-                PatientEncounters.patient_id.contains(search_query),
-                PatientEncounters.name.contains(search_query)
-            )
-        )
-    # Apply date filters
-    if upload_start:
-        query = query.join(ZipFile).filter(ZipFile.upload_date >= upload_start)
-    if upload_end:
-        query = query.join(ZipFile).filter(ZipFile.upload_date <= upload_end)
-    if capture_start:
-        query = query.filter(PatientEncounters.capture_date_dt >= capture_start)
-    if capture_end:
-        query = query.filter(PatientEncounters.capture_date_dt <= capture_end)
-    
-    # Count total results
-    total_count = query.count()
-    
-    # Apply ordering and pagination
-    uploads = query.order_by(EncounterFile.created_at.desc()).offset(offset).limit(per_page).all()
-    
-    # Format results
-    image_list = [format_encounter_file(db_session, upload) for upload in uploads]
-    
-    return image_list, total_count
-
-
-def format_direct_image_upload(db_session, upload, has_task_for_diseases=None, exclude_task_for_diseases=None):
-    """Format a direct image upload for return in search results.
-    
-    Args:
-        db_session: Database session to use for queries
-        upload: DirectImageUpload object to format
-        has_task_for_diseases: List of disease IDs to check if tasks exist for
-        exclude_task_for_diseases: List of disease IDs to exclude if tasks exist for
-    
-    Returns:
-        Dictionary representation of the upload or None if filtered out
-    """
-    # Check if tasks exist for specific diseases
-    has_tasks = {}
-    all_diseases = db_session.query(Disease).all()
-    
-    for disease in all_diseases:
-        task_exists = db_session.query(Task).filter(
-            Task.direct_image_upload_id == upload.id,
-            Task.disease_id == disease.id
-        ).count() > 0
-        
-        has_tasks[disease.name] = task_exists
-    
-    # Filter based on requirements
-    if has_task_for_diseases:
-        # Only include if has tasks for ALL specified diseases
-        has_all_required_tasks = all(has_tasks.get(disease.name, False) for disease in all_diseases if disease.id in has_task_for_diseases)
-        if not has_all_required_tasks:
-            return None  # Skip this image
-    
-    if exclude_task_for_diseases:
-        # Exclude if has tasks for ANY of the specified diseases
-        has_any_excluded_task = any(has_tasks.get(disease.name, False) for disease in all_diseases if disease.id in exclude_task_for_diseases)
-        if has_any_excluded_task:
-            return None  # Skip this image
-    
-    return {
-        'id': upload.id,
-        'uuid': upload.uuid,
-        'type': 'direct',
-        'filename': upload.filename,
-        'file_path': f"{upload.folder_rel}/{upload.filename}",
-        'lab_unit': upload.lab_unit.name,
-        'hospital': upload.hospital.name,
-        'camera': upload.camera.name,
-        'disease': upload.disease.name,
-        'area': upload.area.name,
-        'is_mydriatic': upload.is_mydriatic,
-        'created_at': upload.created_at,
-        'has_reports': get_image_report_status(db_session, upload.id, 'direct'),
-        # Add more fields as needed
-    }
-
-
-def format_encounter_file(db_session, file):
-    """Format an encounter file (from ZIP) for return in search results.
-    
-    Args:
-        db_session: Database session to use for queries
-        file: EncounterFile object to format
-    
-    Returns:
-        Dictionary representation of the file
-    """
-    
-    # Check if tasks exist for this image (encounter_file_id)
-    has_tasks = {}
-    all_diseases = db_session.query(Disease).all()
-    
-    for disease in all_diseases:
-        task_exists = db_session.query(Task).filter(
-            Task.encounter_file_id == file.id,
-            Task.disease_id == disease.id
-        ).count() > 0
-        
-        has_tasks[disease.name] = task_exists
-    
-    # Get hospital name from the lab unit relationship
-    hospital_name = None
-    if file.lab_unit and file.lab_unit.hospital:
-        hospital_name = file.lab_unit.hospital.name
-    else:
-        hospital_name = None
-    
-    return {
-        'id': file.id,
-        'uuid': file.uuid,
-        'type': 'zip',
-        'filename': file.filename,
-        'lab_unit': file.lab_unit.name,
-        'hospital': hospital_name,  # FIX: Include hospital name
-        'patient_id': getattr(file.patient_encounter, 'patient_id', 'Unknown'),
-        'patient_name': getattr(file.patient_encounter, 'name', 'Unknown'),
-        'created_at': getattr(file.patient_encounter, 'capture_date_dt', None) or getattr(file.patient_encounter, 'capture_date', None),
-        'has_reports': get_image_report_status(db_session, file.id, 'zip'),
-        # Add more fields as needed
-    }
-
-
-def get_image_report_status(db_session, image_id: int, image_type: str) -> Dict[str, bool]:
-    """Get report status for all diseases for a specific image.
-    
-    Args:
-        db_session: Database session to use for queries
-        image_id: ID of the image
-        image_type: Type of image ('direct' or 'zip')
-    
-    Returns:
-        Dictionary mapping disease names to whether a report exists for that disease
-    """
-    has_reports = {}
-    all_diseases = db_session.query(Disease).all()
-    
-    for disease in all_diseases:
-        if image_type == 'direct':
-            # For direct uploads, there are no reports in the current model
-            # So we'll check for gradings instead
-            report_exists = db_session.query(ImageGrading).filter(
-                ImageGrading.direct_image_upload_id == image_id,
-                ImageGrading.graded_for == disease.name
-            ).count() > 0
-        elif image_type == 'zip':
-            # For ZIP uploads, we need to join through the encounter_file to patient_encounter
-            # to check for DR and Glaucoma reports
-            encounter_file = db_session.query(EncounterFile).filter(
-                EncounterFile.id == image_id
-            ).first()
-            
-            if encounter_file and encounter_file.patient_encounter:
-                if disease.name == "Diabetic Retinopathy":
-                    report_exists = len(encounter_file.patient_encounter.dr_reports) > 0
-                elif disease.name == "Glaucoma":
-                    report_exists = len(encounter_file.patient_encounter.glaucoma_reports) > 0
-                else:
-                    # For other diseases, check if there are gradings
-                    report_exists = db_session.query(ImageGrading).filter(
-                        ImageGrading.encounter_file_id == image_id,
-                        ImageGrading.graded_for == disease.name
-                    ).count() > 0
-            else:
-                report_exists = False
-        else:
-            report_exists = False
-        
-        has_reports[disease.name] = report_exists
-    
-    return has_reports
-
-
-def bulk_create_tasks(
-    db_session,
-    image_ids: List[int],
-    image_type: str,
-    disease_ids: List[int],
-    lab_unit_id: int
-) -> Dict[str, Any]:
-    """Create grading tasks for specified images and diseases.
-    
-    Args:
-        db_session: Database session to use for queries
-        image_ids: List of image IDs to create tasks for
-        image_type: Type of image ('direct' or 'zip')
-        disease_ids: List of disease IDs to create tasks for
-        lab_unit_id: Lab unit ID to associate with the tasks
-    
-    Returns:
-        Dictionary with summary of created tasks
-    """
-    created_tasks = []
-    skipped_tasks = []  # For images that already have tasks for specified diseases
-    
-    for image_id in image_ids:
-        for disease_id in disease_ids:
-            # Check if a task already exists for this image-disease combination
-            existing_task = None
-            if image_type == 'direct':
-                existing_task = db_session.query(Task).filter(
-                    Task.direct_image_upload_id == image_id,
-                    Task.disease_id == disease_id
-                ).first()
-            elif image_type == 'zip':
-                existing_task = db_session.query(Task).filter(
-                    Task.encounter_file_id == image_id,
-                    Task.disease_id == disease_id
-                ).first()
-            
-            if existing_task:
-                # Skip if task already exists
-                skipped_tasks.append({
-                    'image_id': image_id,
-                    'disease_id': disease_id,
-                    'reason': 'task already exists'
-                })
-                continue
-            
-            # Create new task based on image type
-            if image_type == 'direct':
-                new_task = Task(
-                    direct_image_upload_id=image_id,
-                    disease_id=disease_id,
-                    lab_unit_id=lab_unit_id,
-                    state='pending',
-                    created_at=datetime.utcnow()
-                )
-            elif image_type == 'zip':
-                new_task = Task(
-                    encounter_file_id=image_id,
-                    disease_id=disease_id,
-                    lab_unit_id=lab_unit_id,
-                    state='pending',
-                    created_at=datetime.utcnow()
-                )
-            else:
-                continue  # Invalid image type
-            
-            db_session.add(new_task)
-            db_session.flush()  # Get the ID for the new task
-            
-            created_tasks.append({
-                'task_id': new_task.id,
-                'image_id': image_id,
-                'disease_id': disease_id
-            })
-    
-    return {
-        'created_tasks': created_tasks,
-        'skipped_tasks': skipped_tasks,
-        'total_created': len(created_tasks),
-        'total_skipped': len(skipped_tasks)
-    }
+__all__ = [
+    'search_images_strict',
+    'search_images',  # Legacy function
+    'ImageSearchError'
+]

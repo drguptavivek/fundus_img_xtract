@@ -128,6 +128,14 @@ def search_images_route() -> str:
         # Convert image data to the format expected by the template
         records = []
         for img in images:
+            # Debug logging for first few images
+            if len(records) < 3:
+                import logging
+                runtime_logger = logging.getLogger("runtime_debug")
+                runtime_logger.info(f"Image {img.get('id')}: has_reports = {img.get('has_reports', {})}")
+                runtime_logger.info(f"Image {img.get('id')}: has_dr = {img.get('has_reports', {}).get('DR', False)}")
+                runtime_logger.info(f"Image {img.get('id')}: has_glaucoma = {img.get('has_reports', {}).get('Glaucoma', False)}")
+            
             # Convert the image dict to match the template format
             record = {
                 "uuid": img.get("uuid"),
@@ -142,7 +150,7 @@ def search_images_route() -> str:
                 "upload_date": img.get("upload_date"),  # New field
                 "capture_date": img.get("capture_date"), # Use new field
                 "encounter_id": None, # Not available in the search_images function
-                "has_dr": img.get("has_reports", {}).get("Diabetic Retinopathy", False),
+                "has_dr": img.get("has_reports", {}).get("DR", False),
                 "has_glaucoma": img.get("has_reports", {}).get("Glaucoma", False),
                 "is_mydriatic": img.get("is_mydriatic"),
                 "view_url": None,  # Will be set below

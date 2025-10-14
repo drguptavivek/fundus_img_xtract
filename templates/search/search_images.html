@@ -111,9 +111,9 @@
           <div class="col-12 col-md-3">
             <label class="form-label mb-1" for="filter-mydriatic">Mydriatic (Direct)</label>
             <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
-              <option value="" {% if not filters.is_mydriatic %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.is_mydriatic == 'true' %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.is_mydriatic == 'false' %}selected{% endif %}>No</option>
+              <option value="" {% if filters.is_mydriatic == None %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.is_mydriatic == True %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.is_mydriatic == False %}selected{% endif %}>No</option>
             </select>
           </div>
           <!-- ZIP Image Filters -->
@@ -128,17 +128,17 @@
           <div class="col-12 col-md-3">
             <label class="form-label mb-1" for="filter-has-dr">Has DR Report (ZIP)</label>
             <select class="form-select" id="filter-has-dr" name="has_dr_report">
-              <option value="" {% if not filters.has_dr_report %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.has_dr_report == 'true' %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.has_dr_report == 'false' %}selected{% endif %}>No</option>
+              <option value="" {% if filters.has_dr_report == None %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.has_dr_report == True %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.has_dr_report == False %}selected{% endif %}>No</option>
             </select>
           </div>
           <div class="col-12 col-md-3">
             <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Report (ZIP)</label>
             <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
-              <option value="" {% if not filters.has_glaucoma_report %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.has_glaucoma_report == 'true' %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.has_glaucoma_report == 'false' %}selected{% endif %}>No</option>
+              <option value="" {% if filters.has_glaucoma_report == None %}selected{% endif %}>All</option>
+              <option value="true" {% if filters.has_glaucoma_report == True %}selected{% endif %}>Yes</option>
+              <option value="false" {% if filters.has_glaucoma_report == False %}selected{% endif %}>No</option>
             </select>
           </div>
         </div>

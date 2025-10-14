@@ -169,42 +169,47 @@
               <!-- Left column with main info -->
               <div class="col-md-8">
                 <div class="row g-3">
+                  <!-- Serial Number -->
+                  <div class="col-sm-6 col-lg-2">
+                    <small class="text-muted d-block">Sr No</small>
+                    <span class="fw-bold">{{ row.sr_no }}</span>
+                  </div>
                   <!-- UUID and Source -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">UUID</small>
                     <code class="small">{{ row.uuid or '—' }}</code>
                   </div>
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Source</small>
                     <span class="badge bg-primary text-capitalize">{{ row.source }}</span>
                   </div>
                   
                   <!-- Hospital and Lab Unit -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Hospital</small>
                     <span>{{ row.hospital_name or '—' }}</span>
                   </div>
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Lab Unit</small>
                     <span>{{ row.lab_unit_name or '—' }}</span>
                   </div>
                   
                   <!-- Camera and Disease -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Camera (Direct)</small>
                     <span>{{ row.camera_name or '—' }}</span>
                   </div>
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Disease (Direct)</small>
                     <span>{{ row.disease_name or '—' }}</span>
                   </div>
                   
                   <!-- Area and Mydriatic -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Area (Direct)</small>
                     <span>{{ row.area_name or '—' }}</span>
                   </div>
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Mydriatic (Direct)</small>
                     {% if row.is_mydriatic is none %}
                       <span class="text-muted">—</span>
@@ -216,7 +221,7 @@
                   </div>
                   
                   <!-- Dates -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Uploaded</small>
                     {% if row.created_at %}
                       <span>{{ row.created_at|user_datetime('%Y-%m-%d %H:%M') }}</span>
@@ -224,7 +229,7 @@
                       <span class="text-muted">—</span>
                     {% endif %}
                   </div>
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Capture Date</small>
                     {% if row.capture_date %}
                       <span>{{ row.capture_date|user_datetime('%Y-%m-%d %H:%M') }}</span>
@@ -234,7 +239,7 @@
                   </div>
                   
                   <!-- Encounter ID -->
-                  <div class="col-sm-6 col-lg-4">
+                  <div class="col-sm-6 col-lg-3">
                     <small class="text-muted d-block">Encounter ID</small>
                     {% if row.source == 'zip' and row.view_url %}
                       <span class="badge bg-info">ZIP Image</span>

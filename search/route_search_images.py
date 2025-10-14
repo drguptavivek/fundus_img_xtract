@@ -272,6 +272,11 @@ def search_images_route() -> str:
     prev_url = url_for("search.search_images_route", **_filter_kwargs(page - 1)) if page > 1 else None
     next_url = url_for("search.search_images_route", **_filter_kwargs(page + 1)) if page < total_pages else None
 
+    # Calculate serial numbers for each record
+    start_serial = (page - 1) * per_page + 1
+    for idx, record in enumerate(records):
+        record['sr_no'] = start_serial + idx
+
     return render_template(
         "search/search_images.html",
         rows=records,

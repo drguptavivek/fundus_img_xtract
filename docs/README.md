@@ -44,8 +44,6 @@ Additional documentation files provide information about the application archite
 - [Logging Documentation](Logging.html)
 - [OCR Extraction Documentation](ocr_extraction.html)
 - [Process PDFs Documentation](process_pdfs.html)
-- [Route List](route_list.html)
-- [Routes by Blueprint](routes_by_blueprint.html)
 - [Routes Documentation](routes.html)
 - [Security Documentation](Security.html)
 - [Template Route Links Check](template_route_links_check.html)

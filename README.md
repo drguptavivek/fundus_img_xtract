@@ -64,10 +64,10 @@ python app.py
 - [Agent Guidelines](AGENTS.md)
 
 ### Core Documentation
-- [App Architecture](docs/app.md)
-- [Database Models](docs/models.md)
+- [App Architecture](docs/app.md) ⚠️ *May be stale - missing new blueprints and features*
+- [Database Models](docs/models.md) ⚠️ *Likely stale - missing dual grading system models*
 - [API Documentation](docs/api.md)
-- [Application Routes](docs/routes.md)
+- [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 
 ### Data Processing Workflows
 - [ZIP Uploads](docs/zip_uploads.md)
@@ -78,35 +78,42 @@ python app.py
 - [Audit Workflows](docs/audit.md)
 
 ### Grading System
-- [Grading System Overview](docs/Grading.md)
-    - [Dual Grading Workflow](docs/dual_grading.md)
-    - [Dual Grading Flow Details](grading/dual_grading_flow.md)
-    - [Task Creation Services](docs/task_creation_services.md)
-    - [Grading Edge Cases](grading/edge_cases.md)
+- [Grading System Overview](docs/Grading.md) ⚠️ *Stale - references old single grading system*
+- [Dual Grading Workflow](docs/dual_grading.md) ⚠️ *Current system but may need updates*
+- [Dual Grading Flow Details](grading/dual_grading_flow.md)
+- [Task Creation Services](docs/task_creation_services.md)
+- [Grading Edge Cases](grading/edge_cases.md)
 
 ### Search & Utilities
-- [Image Search](search/route_image_search.md)
 - [Task Utilities](utils/taskUtils.md)
 - [Flash Toasts Component](static/js/flash-toasts.md)
 
 ### Development & Conventions
-- [Security](docs/Security.md)
+- [Security](docs/Security.md) ⚠️ *Stale - missing current security features*
 - [Build Themes](docs/BUILD_THEMES.md)
 - [Coding Conventions](CONVENTIONS/Templates.md)
 - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
 - [DateTime Handling](CONVENTIONS/DateTime.md)
-- [Logging System](CONVENTIONS/Logging.md)
+- [Logging System](CONVENTIONS/Logging.md) ⚠️ *Stale - logging system has been significantly updated*
 - [User Management Scripts](scripts/USERS.md)
 - [Script Migrations](scripts/migrations.md)
 
 ### Module-Specific Documentation
-- [Analytics Routes](analytics/routes.md)
 - [Analytics Utils](analytics/utils.md)
-- [Tasks Routes](tasks/routes.md)
 - [Services Task Creation](services/taskCreationServices.md)
 
 ### Documentation Index
 - [Full Documentation Index](docs/README.md)
+
+### ⚠️ Documentation Status Notice
+Many documentation files appear to be stale and don't reflect the current state of the application. The app has evolved significantly with:
+- New blueprints (notifications, tasks, dashboard, api, docs)
+- Dual grading system replacing single grading
+- Updated logging system with dedicated loggers
+- Enhanced security features
+- New database models and relationships
+
+Please review individual documentation files for accuracy before relying on them.
 
 ## GIT Workflow
 

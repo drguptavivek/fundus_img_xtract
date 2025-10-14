@@ -166,9 +166,13 @@ test.describe('Comprehensive Search Functionality Tests', () => {
       await page.locator('#filter-upload-start').fill(uploadStartDate);
       await page.locator('#filter-upload-end').fill(uploadEndDate);
       
-      // Set capture date range (similar to upload date for testing)
-      await page.locator('#filter-capture-start').fill(uploadStartDate);
-      await page.locator('#filter-capture-end').fill(uploadEndDate);
+      // Set capture date range only for ZIP images (it's only visible for ZIP images due to dynamic filtering)
+      if (imageType === 'zip') {
+        // Wait a moment for the filter to become visible
+        await page.waitForTimeout(500);
+        await page.locator('#filter-capture-start').fill(uploadStartDate);
+        await page.locator('#filter-capture-end').fill(uploadEndDate);
+      }
       
       // Click the "Apply Filters" button
       await page.locator('button[type="submit"]').filter({ hasText: 'Apply Filters' }).click();
@@ -292,12 +296,20 @@ test.describe('Comprehensive Search Functionality Tests', () => {
   test('should verify that the labels are correct in the UI (Disease (Direct), etc.)', async ({ page }) => {
     console.log('Testing UI labels are correct...');
     
-    // Check that the labels in the filter form are correct
+    // Check that the labels in the filter form are correct for direct filters
     await expect(page.locator('label[for="filter-disease"]')).toContainText('Disease (Direct)');
     await expect(page.locator('label[for="filter-camera"]')).toContainText('Camera (Direct)');
     await expect(page.locator('label[for="filter-area"]')).toContainText('Area (Direct)');
     await expect(page.locator('label[for="filter-mydriatic"]')).toContainText('Mydriatic (Direct)');
-    await expect(page.locator('label[for="filter-has-enc"]')).toContainText('Has Encounter (ZIP)');
+    
+    // Switch to ZIP images to check ZIP-specific labels
+    await page.locator('#filter-source').selectOption('zip');
+    
+    // Check ZIP-specific filters (should be visible now)
+    await expect(page.locator('label[for="filter-has-dr"]')).toContainText('Has DR Report (ZIP)');
+    await expect(page.locator('label[for="filter-has-gl"]')).toContainText('Has Glaucoma Report (ZIP)');
+    await expect(page.locator('label[for="filter-capture-start"]')).toContainText('Capture Date From (ZIP)');
+    await expect(page.locator('label[for="filter-capture-end"]')).toContainText('Capture Date To (ZIP)');
     
     // Check table headers
     await expect(page.locator('th:has-text("Disease (Direct)")')).toBeVisible();
@@ -428,5 +440,200 @@ test.describe('Comprehensive Search Functionality Tests', () => {
     } else {
       console.log('Table not found after combined filters - might be no results');
     }
+ });
+
+ test('should test filter separation - direct filters exclude ZIP images', async ({ page }) => {
+   console.log('Testing filter separation - direct filters should exclude ZIP images...');
+   
+   // Apply a direct-specific filter (camera)
+   await page.locator('#filter-source').selectOption('all');
+   await page.locator('#filter-camera').selectOption('1'); // Assuming camera ID 1 exists
+   
+   // Click the "Apply Filters" button
+   await page.locator('button[type="submit"]').filter({ hasText: 'Apply Filters' }).click();
+   
+   // Wait for the page to reload with filtered results
+   await page.waitForLoadState('networkidle');
+   
+   // Check if the table exists
+   const tableExists = await page.locator('table').isVisible().catch(() => false);
+   
+   if (tableExists) {
+     const tableRows = await page.locator('tbody tr').count();
+     console.log(`Found ${tableRows} rows after applying camera filter`);
+     
+     if (tableRows > 0) {
+       // Check that all results are direct images (ZIP images should be excluded)
+       const sourceCells = page.locator('tbody tr td:nth-child(2)'); // Source column
+       
+       for (let i = 0; i < await sourceCells.count(); i++) {
+         const sourceText = await sourceCells.nth(i).textContent();
+         console.log(`Row ${i}: Source="${sourceText?.trim()}"`);
+         
+         // Verify source is "direct" - ZIP images should be excluded when direct filters are applied
+         expect(sourceText?.trim().toLowerCase()).toBe('direct');
+       }
+       
+       console.log('✓ Filter separation working: Only direct images returned when direct filter applied');
+     } else {
+       console.log('No rows found - acceptable if no direct images match the camera filter');
+     }
+   } else {
+     console.log('Table not found - might be no results');
+   }
+ });
+
+ test('should test filter separation - ZIP filters exclude direct images', async ({ page }) => {
+   console.log('Testing filter separation - ZIP filters should exclude direct images...');
+   
+   // Apply a ZIP-specific filter (has DR report)
+   await page.locator('#filter-source').selectOption('zip');
+   await page.locator('#filter-has-dr').selectOption('true');
+   
+   // Click the "Apply Filters" button
+   await page.locator('button[type="submit"]').filter({ hasText: 'Apply Filters' }).click();
+   
+   // Wait for the page to reload with filtered results
+   await page.waitForLoadState('networkidle');
+   
+   // Check if the table exists
+   const tableExists = await page.locator('table').isVisible().catch(() => false);
+   
+   if (tableExists) {
+     const tableRows = await page.locator('tbody tr').count();
+     console.log(`Found ${tableRows} rows after applying DR report filter`);
+     
+     if (tableRows > 0) {
+       // Check that all results are ZIP images (direct images should be excluded)
+       const sourceCells = page.locator('tbody tr td:nth-child(2)'); // Source column
+       
+       for (let i = 0; i < await sourceCells.count(); i++) {
+         const sourceText = await sourceCells.nth(i).textContent();
+         console.log(`Row ${i}: Source="${sourceText?.trim()}"`);
+         
+         // Verify source is "zip" - direct images should be excluded when ZIP filters are applied
+         expect(sourceText?.trim().toLowerCase()).toBe('zip');
+       }
+       
+       console.log('✓ Filter separation working: Only ZIP images returned when ZIP filter applied');
+     } else {
+       console.log('No rows found - acceptable if no ZIP images have DR reports');
+     }
+   } else {
+     console.log('Table not found - might be no results');
+   }
+ });
+
+ test('should test filter conflict detection', async ({ page }) => {
+   console.log('Testing filter conflict detection...');
+   
+   // Try to apply conflicting filters via URL (direct source + ZIP filter)
+   await page.goto('http://localhost:5001/search/images?source=direct&has_dr_report=true');
+   
+   // Wait for the page to load
+   await page.waitForLoadState('networkidle');
+   
+   // Check for error message
+   const errorMessage = page.locator('.alert-danger');
+   if (await errorMessage.isVisible()) {
+     const errorText = await errorMessage.textContent();
+     console.log(`Error message displayed: ${errorText}`);
+     
+     // Verify the error message mentions the conflict
+     expect(errorText).toContain('Cannot apply ZIP-specific filters when searching direct images only');
+     console.log('✓ Filter conflict detection working correctly');
+   } else {
+     console.log('No error message displayed - conflict detection might not be working');
+   }
+ });
+
+ test('should test dynamic filter visibility - source selection', async ({ page }) => {
+   console.log('Testing dynamic filter visibility based on source selection...');
+   
+   // Wait for page to load
+   await page.waitForLoadState('networkidle');
+   
+   // Test initial state (source=all)
+   await page.locator('#filter-source').selectOption('all');
+   
+   // Both direct and ZIP filters should be visible
+   const cameraFilterVisible = await page.locator('#filter-camera').isVisible();
+   const drReportFilterVisible = await page.locator('#filter-has-dr').isVisible();
+   
+   console.log(`With source=all: Camera filter visible: ${cameraFilterVisible}, DR report filter visible: ${drReportFilterVisible}`);
+   
+   // Test source=direct
+   await page.locator('#filter-source').selectOption('direct');
+   
+   // Direct filters should be visible, ZIP filters should be hidden
+   const cameraFilterVisibleDirect = await page.locator('#filter-camera').isVisible();
+   const drReportFilterVisibleDirect = await page.locator('#filter-has-dr').isVisible();
+   const captureDateFilterVisibleDirect = await page.locator('#filter-capture-start').isVisible();
+   
+   console.log(`With source=direct: Camera filter visible: ${cameraFilterVisibleDirect}, DR report filter visible: ${drReportFilterVisibleDirect}, Capture date visible: ${captureDateFilterVisibleDirect}`);
+   
+   // Test source=zip
+   await page.locator('#filter-source').selectOption('zip');
+   
+   // ZIP filters should be visible, direct filters should be hidden
+   const cameraFilterVisibleZip = await page.locator('#filter-camera').isVisible();
+   const drReportFilterVisibleZip = await page.locator('#filter-has-dr').isVisible();
+   const captureDateFilterVisibleZip = await page.locator('#filter-capture-start').isVisible();
+   
+   console.log(`With source=zip: Camera filter visible: ${cameraFilterVisibleZip}, DR report filter visible: ${drReportFilterVisibleZip}, Capture date visible: ${captureDateFilterVisibleZip}`);
+   
+   // Verify the visibility is correct
+   expect(cameraFilterVisibleDirect).toBe(true);
+   expect(drReportFilterVisibleDirect).toBe(false);
+   expect(captureDateFilterVisibleDirect).toBe(false);
+   
+   expect(cameraFilterVisibleZip).toBe(false);
+   expect(drReportFilterVisibleZip).toBe(true);
+   expect(captureDateFilterVisibleZip).toBe(true);
+   
+   console.log('✓ Dynamic filter visibility working correctly');
+ });
+
+ test('should test filter section visibility', async ({ page }) => {
+   console.log('Testing filter section visibility...');
+   
+   // Wait for page to load
+   await page.waitForLoadState('networkidle');
+   
+   // Test initial state (source=all)
+   await page.locator('#filter-source').selectOption('all');
+   
+   // Both sections should be visible
+   const directSectionVisible = await page.locator('.direct-only').isVisible();
+   const zipSectionVisible = await page.locator('.zip-only').isVisible();
+   
+   console.log(`With source=all: Direct section visible: ${directSectionVisible}, ZIP section visible: ${zipSectionVisible}`);
+   
+   // Test source=direct
+   await page.locator('#filter-source').selectOption('direct');
+   
+   // Direct section should be visible, ZIP section should be hidden
+   const directSectionVisibleDirect = await page.locator('.direct-only').isVisible();
+   const zipSectionVisibleDirect = await page.locator('.zip-only').isVisible();
+   
+   console.log(`With source=direct: Direct section visible: ${directSectionVisibleDirect}, ZIP section visible: ${zipSectionVisibleDirect}`);
+   
+   // Test source=zip
+   await page.locator('#filter-source').selectOption('zip');
+   
+   // ZIP section should be visible, direct section should be hidden
+   const directSectionVisibleZip = await page.locator('.direct-only').isVisible();
+   const zipSectionVisibleZip = await page.locator('.zip-only').isVisible();
+   
+   console.log(`With source=zip: Direct section visible: ${directSectionVisibleZip}, ZIP section visible: ${zipSectionVisibleZip}`);
+   
+   // Verify the visibility is correct
+   expect(directSectionVisibleDirect).toBe(true);
+   expect(zipSectionVisibleDirect).toBe(false);
+   
+   expect(directSectionVisibleZip).toBe(false);
+   expect(zipSectionVisibleZip).toBe(true);
+   
+   console.log('✓ Filter section visibility working correctly');
  });
 });

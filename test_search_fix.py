@@ -7,7 +7,7 @@ import os
 # Add the project root to the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.imageSearchUtil import search_images
+from utils.imageSearchUtil import search_images_strict
 from db_transaction_manager import get_db_session
 from models import DirectImageUpload, EncounterFile
 
@@ -21,12 +21,12 @@ def test_search_functionality():
         with get_db_session() as db_session:
             # Test basic search without filters
             print("Running basic search...")
-            images, total_count = search_images(db_session)
+            images, total_count = search_images_strict(db_session, user_id=1)  # Use user_id=1 for testing
             print(f"✓ Basic search successful: {len(images)} images returned, total count: {total_count}")
             
             # Test search with pagination
             print("Running search with pagination...")
-            images, total_count = search_images(db_session, page=1, per_page=10)
+            images, total_count = search_images_strict(db_session, page=1, per_page=10, user_id=1)
             print(f"✓ Paginated search successful: {len(images)} images returned, total count: {total_count}")
             
             # Test search with a simple filter
@@ -38,7 +38,7 @@ def test_search_functionality():
             lab_unit_ids = [row[0] for row in lab_units_result] if lab_units_result else None
             
             if lab_unit_ids:
-                images, total_count = search_images(db_session, lab_unit_ids=lab_unit_ids)
+                images, total_count = search_images_strict(db_session, lab_unit_ids=lab_unit_ids, user_id=1)
                 print(f"✓ Filtered search successful: {len(images)} images returned, total count: {total_count}")
             else:
                 print("No lab units found, skipping lab unit filter test")

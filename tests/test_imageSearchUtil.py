@@ -18,7 +18,6 @@ from typing import List, Dict, Any
 # Import the functions to test
 from utils.imageSearchUtil import (
     search_images_strict,
-    search_images,
     validate_search_filters,
     validate_pagination,
     get_user_search_scope,
@@ -539,54 +538,6 @@ class TestSearchImagesStrict:
         mock_get_scope.assert_called_once_with(456, mock_db)
 
 
-class TestLegacySearchFunction:
-    """Test the legacy search function for backward compatibility."""
-    
-    @patch('utils.imageSearchUtil.search_images_strict')
-    def test_legacy_function_maps_parameters_correctly(self, mock_search_strict):
-        """Test that legacy function maps parameters to new function correctly."""
-        mock_search_strict.return_value = ([], 0)
-        
-        mock_db = Mock()
-        
-        search_images(
-            mock_db,
-            page=2,
-            per_page=25,
-            hospital_id=1,
-            lab_unit_ids=[1, 2],
-            upload_start=_date(2024, 1, 1),
-            upload_end=_date(2024, 12, 31),
-            camera_ids=[3],
-            disease_ids=[4],
-            area_ids=[5],
-            is_mydriatic=True,
-            has_dr_report=False,
-            has_glaucoma_report=True,
-            capture_start=_date(2024, 1, 1),
-            capture_end=_date(2024, 12, 31),
-            search_query="test"
-        )
-        
-        # Verify that the new function was called with mapped parameters
-        mock_search_strict.assert_called_once_with(
-            db_session=mock_db,
-            page=2,
-            per_page=25,
-            hospital_id=1,
-            lab_unit_ids=[1, 2],
-            upload_start=_date(2024, 1, 1),
-            upload_end=_date(2024, 12, 31),
-            camera_ids=[3],
-            disease_ids=[4],
-            area_ids=[5],
-            is_mydriatic=True,
-            has_dr_report=False,
-            has_glaucoma_report=True,
-            capture_start=_date(2024, 1, 1),
-            capture_end=_date(2024, 12, 31),
-            search_query="test"
-        )
 
 
 if __name__ == "__main__":

@@ -706,57 +706,7 @@ def search_images_strict(
         raise
 
 
-# Legacy function for backward compatibility
-def search_images(
-    db_session,
-    page: int = 1,
-    per_page: int = 50,
-    lab_unit_ids: Optional[List[int]] = None,
-    disease_ids: Optional[List[int]] = None,
-    camera_ids: Optional[List[int]] = None,
-    area_ids: Optional[List[int]] = None,
-    is_mydriatic: Optional[bool] = None,
-    has_task_for_diseases: Optional[List[int]] = None,
-    exclude_task_for_diseases: Optional[List[int]] = None,
-    image_type: Optional[str] = None,  # 'direct' or 'zip'
-    search_query: Optional[str] = None,
-    upload_start: Optional[_date] = None,  # Add upload date start
-    upload_end: Optional[_date] = None,    # Add upload date end
-    capture_start: Optional[_date] = None, # Add capture date start
-    capture_end: Optional[_date] = None,   # Add capture date end
-    hospital_id: Optional[int] = None,     # Add hospital filter
-    has_dr_report: Optional[bool] = None,  # Add DR report filter
-    has_glaucoma_report: Optional[bool] = None  # Add Glaucoma report filter
-) -> Tuple[List[Dict[str, Any]], int]:
-    """Legacy search function for backward compatibility.
-    
-    This function maps the old interface to the new search_images_strict function.
-    It's recommended to use search_images_strict directly for new code.
-    """
-    # Map legacy parameters to new function
-    return search_images_strict(
-        db_session=db_session,
-        page=page,
-        per_page=per_page,
-        hospital_id=hospital_id,
-        lab_unit_ids=lab_unit_ids,
-        upload_start=upload_start,
-        upload_end=upload_end,
-        camera_ids=camera_ids,
-        disease_ids=disease_ids,
-        area_ids=area_ids,
-        is_mydriatic=is_mydriatic,
-        has_dr_report=has_dr_report,
-        has_glaucoma_report=has_glaucoma_report,
-        capture_start=capture_start,
-        capture_end=capture_end,
-        search_query=search_query,
-        image_type=image_type  # Pass through the image_type parameter
-    )
-
-
 __all__ = [
     'search_images_strict',
-    'search_images',  # Legacy function
     'ImageSearchError'
 ]

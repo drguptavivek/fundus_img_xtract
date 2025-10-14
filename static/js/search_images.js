@@ -99,6 +99,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleFilterVisibility() {
         const sourceValue = hospitalSelect.form.querySelector('#filter-source').value;
         
+        // Find the Image-Specific Filters card
+        const imageSpecificCard = document.getElementById('image-specific-filters-card');
+        
         // ZIP-only filters (capture dates, DR report, Glaucoma report, Has Encounter)
         const zipOnlyFilters = document.querySelectorAll('.zip-only-filter');
         
@@ -106,6 +109,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const directOnlyFilters = document.querySelectorAll('.direct-only-filter');
         
         if (sourceValue === 'zip') {
+            // Show Image-Specific Filters card if it exists
+            if (imageSpecificCard) {
+                imageSpecificCard.style.display = 'block';
+            }
             // Show ZIP-only filters, hide direct-only filters
             zipOnlyFilters.forEach(filter => {
                 filter.style.display = 'block';
@@ -114,6 +121,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 filter.style.display = 'none';
             });
         } else if (sourceValue === 'direct') {
+            // Show Image-Specific Filters card if it exists
+            if (imageSpecificCard) {
+                imageSpecificCard.style.display = 'block';
+            }
             // Show direct-only filters, hide ZIP-only filters
             zipOnlyFilters.forEach(filter => {
                 filter.style.display = 'none';
@@ -122,13 +133,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 filter.style.display = 'block';
             });
         } else {
-            // Show all filters for "all" source
-            zipOnlyFilters.forEach(filter => {
-                filter.style.display = 'block';
-            });
-            directOnlyFilters.forEach(filter => {
-                filter.style.display = 'block';
-            });
+            // Hide Image-Specific Filters card for "all" source
+            if (imageSpecificCard) {
+                imageSpecificCard.style.display = 'none';
+            }
         }
     }
     

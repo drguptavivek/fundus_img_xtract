@@ -64,7 +64,7 @@
     </div>
 
     <!-- Image-Specific Filters Section -->
-    <div class="card">
+    <div class="card" id="image-specific-filters-card" style="{% if filters.source == 'all' %}display:none{% endif %}">
       <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
           <h5 class="mb-0">Image-Specific Filters</h5>
@@ -158,7 +158,14 @@
         <p class="text-muted mb-0">Found {{ total }} images matching your criteria</p>
       </div>
 
-
+    <!-- Pagination -->
+    <div class="mx-2 d-flex justify-content-between align-items-center mt-4">
+      <div class="text-muted small">Page {{ page }} of {{ total_pages }} ({{ total }} images)</div>
+      <div class="btn-group" role="group" aria-label="Pagination">
+        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
+        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
+      </div>
+    </div>
     <!-- Wide Cards Layout -->
     <div class="row g-2 p-2">
       {% for row in rows %}

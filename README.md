@@ -67,7 +67,7 @@ python app.py
 - [Project Details](DETAILS.md)
 - [Agent Guidelines](AGENTS.md)
 
-### Core Documentation
+### Core Documentation (`docs/`)
 - [App Architecture](docs/app.md) - Updated with current implementation details
 - [Database Models](docs/models.md) - Updated with dual grading system models
 - [Database ERD](docs/ERD.md) - Entity Relationship Diagram with Mermaid syntax
@@ -76,27 +76,31 @@ python app.py
 - [API Documentation](docs/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/Email.md) - Comprehensive email functionality documentation
+- [Common Utilities](docs/CommonUtils.md) - Core utility functions and reusable components
+- [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
+- [JavaScript Guidance](docs/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
+- [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Playwright Testing](docs/playwright.md) - End-to-end testing setup, configuration, and best practices
+- [Build Themes](docs/BUILD_THEMES.md)
 
-### Data Processing Workflows
+### Data Processing Workflows (`docs/`)
 - [ZIP Uploads](docs/zip_uploads.md)
     - [Main Processing Pipeline](docs/main.md)
     - [PDF Processing](docs/process_pdfs.md)
     - [OCR Extraction](docs/ocr_extraction.md)
 - [Direct Uploads](docs/direct_uploads.md)
 - [Audit Workflows](docs/audit.md)
+- [Task Creation Services](docs/task_creation_services.md)
 
-### Image Management & Processing
+### Image Management & Processing (`docs/`)
 - [Direct Image Editing](docs/direct_image_editing.md) - Image editing, batch operations, and quality assessment
 - [Anonymization](docs/anonymization.md) - Patient data anonymization and audit trails
 
-### Report Verification Workflows
+### Report Verification Workflows (`docs/`)
 - [DR Report Verification](docs/dr_report_verification.md) - Diabetic Retinopathy report verification system
 - [Glaucoma Report Verification](docs/glaucoma_report_verification.md) - Glaucoma report verification system
 
-### Task Creation
-- - [Automatic Task Creation Services](docs/task_creation_services.md)
-
-### Grading System
+### Grading System (`grading/`)
 - [Dual Grading Workflow](docs/dual_grading.md) - Updated with current implementation details
 - [Dual Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
 - [Dual Grading Utilities](grading/dual_grading_utils.md) - Comprehensive function documentation for dual grading
@@ -105,10 +109,8 @@ python app.py
 - [Grading Flow Diagram](grading/flowdiagram.md) - Visual representation of grading workflows
 - [Module Integration Guide](grading/module_integration_guide.md) - Integration patterns for grading module
 
-### Search & Utilities
-- [Common Utilities](docs/CommonUtils.md) - Core utility functions and reusable components used throughout the application
+### Utilities (`utils/`)
 - [Task Utilities](utils/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
-- [Flash Toasts Component](static/js/flash-toasts.md)
 - [Upload Eligibility](utils/upload_eligibility.py) - User upload permission checking
 - [Dual Grading Eligibility](utils/dualGradingEligibility.py) - Grading permission validation
 - [Master Data Utilities](utils/masterUtils.py) - Core entities retrieval functions
@@ -116,19 +118,17 @@ python app.py
 ### Development & Conventions
 - [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
   - [Logging Conventions](CONVENTIONS/Logging.md) - Implementation patterns and conventions
-- [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
-- [JavaScript Guidance](docs/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
-- [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
-- [Playwright Testing](docs/playwright.md) - End-to-end testing setup, configuration, and best practices
-- [Build Themes](docs/BUILD_THEMES.md)
-- [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
-- [DateTime Handling](CONVENTIONS/DateTime.md)
-- [User Management Scripts](scripts/USERS.md)
-- [Script Migrations](scripts/migrations.md)
+  - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
+  - [DateTime Handling](CONVENTIONS/DateTime.md)
+
+### Frontend Components (`static/`)
+- [Flash Toasts Component](static/js/flash-toasts.md)
 
 ### Module-Specific Documentation
 - [Analytics Utils](analytics/utils.md)
 - [Services Task Creation](services/taskCreationServices.md)
+
+### Scripts & Migrations (`scripts/`)
 - [User Management Scripts](scripts/USERS.md) - User creation and management
 - [Script Migrations](scripts/migrations.md) - Database migration scripts
 

@@ -64,62 +64,60 @@ python app.py
 
 ### Project Overview
 - [Project Summary](SUMMARY.md)
-- [Project Details](DETAILS.md)
+- [Project Details](docs/DETAILS.md)
 - [Agent Guidelines](AGENTS.md)
 
 ### Core Documentation (`docs/`)
 - [App Architecture](docs/app.md) - Updated with current implementation details
-- [Database Models](docs/models.md) - Updated with dual grading system models
-- [Database ERD](docs/ERD.md) - Entity Relationship Diagram with Mermaid syntax
-- [Master Data Management](docs/master_data.md) - Core diseases, hospitals, labs, and grading systems
-- [Scoping Mechanisms](docs/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
-- [API Documentation](docs/api.md)
+- [Database Models](docs/00-Core/models.md) - Updated with dual grading system models
+- [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
+- [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
+- [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
+- [API Documentation](docs/Utilities/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
-- [Email System](docs/Email.md) - Comprehensive email functionality documentation
-- [Common Utilities](docs/CommonUtils.md) - Core utility functions and reusable components
-- [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
-- [JavaScript Guidance](docs/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
-- [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
-- [Playwright Testing](docs/playwright.md) - End-to-end testing setup, configuration, and best practices
-- [Build Themes](docs/BUILD_THEMES.md)
+- [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
+- [Common Utilities](docs/Utilities/CommonUtils.md) - Core utility functions and reusable components
+- [Security](docs/10-DEVELOP/Security.md) - Comprehensive authentication, authorization, and security features
+- [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
+- [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Playwright Testing](docs/10-DEVELOP/playwright.md) - End-to-end testing setup, configuration, and best practices
+- [Build Themes](docs/10-DEVELOP/BUILD_THEMES.md)
 
-### Data Processing Workflows (`docs/`)
-- [ZIP Uploads](docs/zip_uploads.md)
+### Data Processing Workflows (`docs/01-Adding_Images/`)
+- [ZIP Uploads](docs/01-Adding_Images/zip_uploads.md)
     - [Main Processing Pipeline](docs/main.md)
-    - [PDF Processing](docs/process_pdfs.md)
-    - [OCR Extraction](docs/ocr_extraction.md)
-- [Direct Uploads](docs/direct_uploads.md)
-- [Audit Workflows](docs/audit.md)
-- [Task Creation Services](docs/task_creation_services.md)
+    - [PDF Processing](docs/01-Adding_Images/process_pdfs.md)
+    - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
+- [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
+- [Audit Workflows](docs/01-Adding_Images/audit.md)
+- [Task Creation Services](docs/03-Tasks/task_creation_services.md)
 
-### Image Management & Processing (`docs/`)
-- [Direct Image Editing](docs/direct_image_editing.md) - Image editing, batch operations, and quality assessment
-- [Anonymization](docs/anonymization.md) - Patient data anonymization and audit trails
+### Image Management & Processing (`docs/01-Adding_Images/`)
+- [Direct Image Editing](docs/01-Adding_Images/direct_uploads.md) - Image editing, batch operations, and quality assessment
 
-### Report Verification Workflows (`docs/`)
-- [DR Report Verification](docs/dr_report_verification.md) - Diabetic Retinopathy report verification system
-- [Glaucoma Report Verification](docs/glaucoma_report_verification.md) - Glaucoma report verification system
+### Report Verification Workflows
+- Report verification documentation is being reorganized
 
-### Grading System (`grading/`)
-- [Dual Grading Workflow](docs/dual_grading.md) - Updated with current implementation details
-- [Dual Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
-- [Dual Grading Utilities](grading/dual_grading_utils.md) - Comprehensive function documentation for dual grading
-- [Grading Edge Cases](grading/edge_cases.md) - Edge case analysis and resolution status
-- [Grading Errors](grading/errors.md) - Error handling in grading workflows
-- [Grading Flow Diagram](grading/flowdiagram.md) - Visual representation of grading workflows
-- [Module Integration Guide](grading/module_integration_guide.md) - Integration patterns for grading module
+### Grading System (`docs/04-Grade/`)
+- [Dual Grading Workflow](docs/04-Grade/dual_grading.md) - Updated with current implementation details
+- [Dual Grading Implementation Details](docs/04-Grade/dual_grading_flow.md) - Technical implementation guide
+- [Dual Grading Utilities](docs/04-Grade/dual_grading_utils.md) - Comprehensive function documentation for dual grading
+- [Grading Edge Cases](docs/04-Grade/edge_cases.md) - Edge case analysis and resolution status
+- [Grading Errors](docs/04-Grade/errors.md) - Error handling in grading workflows
+- [Grading Flow Diagram](docs/04-Grade/flowdiagram.md) - Visual representation of grading workflows
+- [Module Integration Guide](docs/04-Grade/module_integration_guide.md) - Integration patterns for grading module
 
-### Utilities (`utils/`)
-- [Task Utilities](utils/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
+### Utilities (`docs/Utilities/`)
+- [Task Utilities](docs/Utilities/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
 - [Upload Eligibility](utils/upload_eligibility.py) - User upload permission checking
 - [Dual Grading Eligibility](utils/dualGradingEligibility.py) - Grading permission validation
 - [Master Data Utilities](utils/masterUtils.py) - Core entities retrieval functions
 
 ### Development & Conventions
-- [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
-  - [Logging Conventions](CONVENTIONS/Logging.md) - Implementation patterns and conventions
-  - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
-  - [DateTime Handling](CONVENTIONS/DateTime.md)
+- [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
+  - [Logging Conventions](docs/10-DEVELOP/Logging12.md) - Implementation patterns and conventions
+  - [Database Context Manager](docs/10-DEVELOP/DB%20CONTEXT%20MANAGER.md)
+  - [DateTime Handling](docs/10-DEVELOP/DateTime.md)
 
 ### Frontend Components (`static/`)
 - [Flash Toasts Component](static/js/flash-toasts.md)

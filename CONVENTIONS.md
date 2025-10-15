@@ -1,5 +1,7 @@
 # Development Conventions
 
+This document provides comprehensive guidelines for development practices in the Fundus Image Manager application. It covers essential patterns for database operations, security, logging, and other core aspects of the application.
+
 ## Environment Variables
 
 ### Loading and Using Environment Variables:
@@ -70,7 +72,9 @@ ensure_directory(os.getenv("UPLOAD_DIR", "files/uploads"))
 
 ## Logging Configuration
 
-For detailed logging conventions and patterns, see [CONVENTIONS/Logging.md](CONVENTIONS/Logging.md)
+For detailed logging conventions and patterns, see:
+- [CONVENTIONS/Logging.md](CONVENTIONS/Logging.md) - Implementation patterns and conventions
+- [docs/logging.md](docs/logging.md) - Complete logging infrastructure with dedicated loggers
 
 ### Environment Variables for Log Paths:
 ```python
@@ -82,7 +86,10 @@ ZIP_INGEST_LOG=logs/zip_main_process_log.txt
 
 ## Database Connections
 
-For detailed database session management patterns, see [CONVENTIONS/DB CONTEXT MANAGER.md](CONVENTIONS/DB CONTEXT MANAGER.md)
+For detailed database session management patterns, see:
+- [CONVENTIONS/DB CONTEXT MANAGER.md](CONVENTIONS/DB CONTEXT MANAGER.md) - Implementation patterns
+- [docs/models.md](docs/models.md) - Database models documentation
+- [docs/ERD.md](docs/ERD.md) - Entity Relationship Diagram
 
 ### Quick Reference:
 ```python
@@ -97,7 +104,7 @@ def my_function(db):
 
 ## CSRF Protection
 
-For detailed security information, see [docs/Security.md](docs/Security.md)
+For detailed security information, see [docs/Security.md](docs/Security.md) - Comprehensive authentication, authorization, and security features
 
 ### Include CSRF token in all forms:
 ```html
@@ -129,7 +136,9 @@ created_at = datetime.now(timezone.utc)
 
 ## Logging
 
-For detailed logging conventions and patterns, see [CONVENTIONS/Logging.md](CONVENTIONS/Logging.md)
+For detailed logging conventions and patterns, see:
+- [CONVENTIONS/Logging.md](CONVENTIONS/Logging.md) - Implementation patterns and conventions
+- [docs/logging.md](docs/logging.md) - Complete logging infrastructure with dedicated loggers
 
 ### Use dedicated loggers:
 ```python
@@ -192,7 +201,9 @@ Note: `require_owner_or_roles` checks if the current user either:
 
 ## Security
 
-For comprehensive security information including authentication, authorization, and security features, see [docs/Security.md](docs/Security.md)
+For comprehensive security information including authentication, authorization, and security features, see:
+- [docs/Security.md](docs/Security.md) - Comprehensive authentication, authorization, and security features
+- [docs/routes.md](docs/routes.md) - Route protection and role-based access control
 
 ### Key Security Practices:
 - Always use CSRF tokens in forms (see CSRF Protection section)
@@ -203,7 +214,7 @@ For comprehensive security information including authentication, authorization, 
 
 ## Email Functions
 
-For detailed email system documentation, see [docs/Email.md](docs/Email.md)
+For detailed email system documentation, see [docs/Email.md](docs/Email.md) - Comprehensive email functionality documentation
 
 ### Quick Reference:
 ```python
@@ -267,6 +278,10 @@ class MyForm(FlaskForm):
 ```
 
 ## API Endpoints
+
+For detailed API documentation, see:
+- [docs/api.md](docs/api.md) - RESTful API endpoints and documentation
+- [docs/routes.md](docs/routes.md) - Comprehensive documentation for all application routes
 
 ### Use the api blueprint:
 ```python

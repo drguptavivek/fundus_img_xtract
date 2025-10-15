@@ -4,7 +4,7 @@ A comprehensive system for an eye hospital to manage eye images. It facilitates 
 
 ## Development Guidelines
 
-When adding features to the application, please follow the conventions outlined in [Development Conventions](CONVENTIONS.md) for consistency with the existing codebase.
+When adding features to the application, please follow the conventions outlined in [Development Conventions](CONVENTIONS.md) for consistency with the existing codebase. This document includes essential patterns for database operations, CSRF protection, datetime handling, logging, security practices, and more.
 
 ## Setup
 
@@ -71,6 +71,8 @@ python app.py
 - [App Architecture](docs/app.md) - Updated with current implementation details
 - [Database Models](docs/models.md) - Updated with dual grading system models
 - [Database ERD](docs/ERD.md) - Entity Relationship Diagram with Mermaid syntax
+- [Master Data Management](docs/master_data.md) - Core diseases, hospitals, labs, and grading systems
+- [Scoping Mechanisms](docs/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [API Documentation](docs/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/Email.md) - Comprehensive email functionality documentation
@@ -96,10 +98,10 @@ python app.py
 ### Development & Conventions
 - [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
 - [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
+- [JavaScript Guidance](docs/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
 - [Playwright Testing](docs/playwright.md) - End-to-end testing setup, configuration, and best practices
 - [Build Themes](docs/BUILD_THEMES.md)
-- [Coding Conventions](CONVENTIONS/Templates.md)
 - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
 - [DateTime Handling](CONVENTIONS/DateTime.md)
 - [User Management Scripts](scripts/USERS.md)

@@ -96,11 +96,12 @@ python app.py
 ### Development & Conventions
 - [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
 - [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
+- [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Playwright Testing](docs/playwright.md) - End-to-end testing setup, configuration, and best practices
 - [Build Themes](docs/BUILD_THEMES.md)
 - [Coding Conventions](CONVENTIONS/Templates.md)
 - [Database Context Manager](CONVENTIONS/DB%20CONTEXT%20MANAGER.md)
 - [DateTime Handling](CONVENTIONS/DateTime.md)
-- [Logging System](CONVENTIONS/Logging.md) - Updated with current implementation details
 - [User Management Scripts](scripts/USERS.md)
 - [Script Migrations](scripts/migrations.md)
 

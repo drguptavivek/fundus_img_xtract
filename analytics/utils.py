@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -294,7 +296,8 @@ def fetch_image_task_details(
                     model_name=obj.ai_model_name or (obj.ai_model.name if obj.ai_model else 'Unknown Model'),
                     model_version=obj.ai_model_version or (obj.ai_model.version if obj.ai_model else 'N/A'),
                     impression=obj.label.impression if obj.label else obj.grade_name,
-                    confidence=None, # Grade model doesn't have confidence
+                    # Extract probability from comment if it's in the format "AI probability: X.XX; ..." or similar
+                    confidence=float(re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "").group(1)) if re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "") else None,
                     run_id=None # Grade model doesn't have run_id
                 ))
 

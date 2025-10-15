@@ -23,8 +23,10 @@ from flask_login import current_user
 import logging
 
 from models import (
+    AIGrade,
     DirectImageUpload,
     EncounterFile,
+    Grade,
     PatientEncounters,
     User,
     LabUnit,
@@ -388,6 +390,102 @@ def get_tasks_for_multiple_images(
             "disease": disease.name,
             "status": task.state
         })
+    
+    # Now also fetch AI grades for these images
+    # AI grades can come from either AIGrade table or Grade table with role_slot='ai'
+    # AIGrade table is linked via encounter_file_id or direct_image_upload_id
+    # Grade table is linked via task_id which is linked to the image
+    
+    # First, get AI grades from AIGrade table
+    ai_grades_from_table = db_session.query(AIGrade).outerjoin(
+        AIGrade.label  # Join with DiseaseGrading to get the impression
+    ).filter(
+        or_(
+            AIGrade.encounter_file_id.in_(image_ids) if image_type == "zip" else AIGrade.encounter_file_id.isnot(None),
+            AIGrade.direct_image_upload_id.in_(image_ids) if image_type == "direct" else AIGrade.direct_image_upload_id.isnot(None)
+        )
+    ).all()
+    
+    for ai_grade in ai_grades_from_table:
+        # Map the image ID based on image_type
+        image_id = None
+        if image_type == "direct" and ai_grade.direct_image_upload_id in image_ids:
+            image_id = ai_grade.direct_image_upload_id
+        elif image_type == "zip" and ai_grade.encounter_file_id in image_ids:
+            image_id = ai_grade.encounter_file_id
+        
+        if image_id and image_id in result:
+            # Add AI grade info to the existing list for this image
+            grade_impression = ai_grade.label.impression if ai_grade.label else 'Unknown'
+            confidence_str = f" ({ai_grade.confidence:.2f})" if ai_grade.confidence is not None else ""
+            result[image_id].append({
+                "disease": "AI Grade",
+                "status": f"{grade_impression}{confidence_str}"
+            })
+        elif image_id and image_id not in result:
+            # Create a new entry for this image if it doesn't exist
+            grade_impression = ai_grade.label.impression if ai_grade.label else 'Unknown'
+            confidence_str = f" ({ai_grade.confidence:.2f})" if ai_grade.confidence is not None else ""
+            result[image_id] = [{
+                "disease": "AI Grade",
+                "status": f"{grade_impression}{confidence_str}"
+            }]
+    
+    # Second, get AI grades from Grade table with role_slot='ai'
+    # These are linked via GradingTask which is linked to the image
+    # We need to get the tasks first that are linked to these images
+    if image_type == "direct":
+        image_tasks = db_session.query(Task.id).filter(Task.direct_image_upload_id.in_(image_ids)).all()
+    else:  # zip
+        image_tasks = db_session.query(Task.id).filter(Task.encounter_file_id.in_(image_ids)).all()
+    
+    task_ids = [task.id for task in image_tasks]
+    
+    if task_ids:
+        ai_grades_from_grade_table = db_session.query(Grade).outerjoin(
+            Grade.label  # Join with DiseaseGrading to get the impression
+        ).filter(
+            Grade.task_id.in_(task_ids),
+            Grade.role_slot == 'ai'
+        ).all()
+        
+        for ai_grade in ai_grades_from_grade_table:
+            # Find the image ID via the task
+            task_for_ai = db_session.query(Task).filter(Task.id == ai_grade.task_id).first()
+            if task_for_ai:
+                image_id = task_for_ai.direct_image_upload_id if image_type == "direct" else task_for_ai.encounter_file_id
+                if image_id and image_id in result:
+                    # Add AI grade info to the existing list for this image
+                    grade_impression = ai_grade.label.impression if ai_grade.label else ai_grade.grade_name
+                    # The Grade model stores AI probability in the comment field when role_slot is 'ai'
+                    comment = ai_grade.comment or ""
+                    # Extract probability if it's in the format "AI probability: X.XX; ..." or similar
+                    import re
+                    prob_match = re.search(r'AI probability:\s*([0-9.]+)', comment)
+                    prob_str = f" ({float(prob_match.group(1)):.3f})" if prob_match else ""
+                    # Get model name and version
+                    model_name = ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'Unknown Model')
+                    model_version = ai_grade.ai_model_version or (ai_grade.ai_model.version if ai_grade.ai_model else 'N/A')
+                    result[image_id].append({
+                        "disease": "AI Grade",
+                        "status": f"{model_name} v{model_version}: {grade_impression}{prob_str}"
+                    })
+                elif image_id and image_id not in result:
+                    # Create a new entry for this image if it doesn't exist
+                    grade_impression = ai_grade.label.impression if ai_grade.label else ai_grade.grade_name
+                    # The Grade model stores AI probability in the comment field when role_slot is 'ai'
+                    comment = ai_grade.comment or ""
+                    # Extract probability if it's in the format "AI probability: X.XX; ..." or similar
+                    import re
+                    prob_match = re.search(r'AI probability:\s*([0-9.]+)', comment)
+                    prob_str = f" ({float(prob_match.group(1)):.3f})" if prob_match else ""
+                    # Get model name and version
+                    model_name = ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'Unknown Model')
+                    model_version = ai_grade.ai_model_version or (ai_grade.ai_model.version if ai_grade.ai_model else 'N/A')
+                    result[image_id] = [{
+                        "disease": "AI Grade",
+                        "status": f"{model_name} v{model_version}: {grade_impression}{prob_str}"
+                    }]
     
     return result
 

@@ -85,9 +85,6 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
         remarks = str(remarks_value).strip() if pd.notna(remarks_value) else ""
         if image_name is None:
             continue
-        if not grade_text:
-            raise ValueError(f"Row for image '{image_name}' is missing a grade value.")
-
         rows.append(
             {
                 "image_name": image_name,
@@ -126,8 +123,7 @@ def _auto_map_grade_values(
     unmapped: List[str] = []
     for text in grade_texts:
         if not text:
-            unmapped.append(text)
-            continue
+            continue  # empty grades handled downstream as errors
         key = _normalize_text(text)
         grade_id = by_impression.get(key)
         if grade_id is not None:
@@ -149,6 +145,12 @@ def _store_pending_import(token: str, pending: PendingImport) -> None:
         "auto_mapping": pending.auto_mapping,
     }
     session.modified = True
+    processing_logger.debug(
+        "Pending import stored token=%s role=%s rows=%s",
+        token,
+        pending.role,
+        len(pending.rows),
+    )
 
 
 def _pop_pending_import(token: str) -> Optional[PendingImport]:
@@ -157,7 +159,9 @@ def _pop_pending_import(token: str) -> Optional[PendingImport]:
     session["pregraded_grade_imports"] = store
     session.modified = True
     if not raw:
+        processing_logger.debug("Pending import token %s not found", token)
         return None
+    processing_logger.debug("Pending import token %s restored", token)
     return PendingImport(
         role=raw["role"],
         hospital_id=raw["hospital_id"],
@@ -178,7 +182,7 @@ def _resolve_grade_mapping(
     for row in pending.rows:
         grade_text = row["grade_text"]
         if not grade_text:
-            raise ValueError("One or more rows are missing a grade value.")
+            continue
         if grade_text not in final_mapping:
             raise ValueError(f"No mapping provided for grade value '{grade_text}'.")
         grade_id = final_mapping[grade_text]
@@ -220,6 +224,13 @@ def _find_upload(
     )
     uploads = db_session.execute(stmt).scalars().all()
     if not uploads:
+        processing_logger.debug(
+            "No upload match for filename=%s hospital=%s lab=%s disease=%s",
+            image_name,
+            hospital_id,
+            lab_unit_id,
+            disease_id,
+        )
         return None
     if len(uploads) > 1:
         current_app.logger.warning(
@@ -287,6 +298,16 @@ def _process_rows(
     failures = 0
     job_items: List[JobItem] = []
 
+    processing_logger.info(
+        "job_id=%s role=%s start rows=%s hospital=%s lab=%s disease=%s",
+        job.id,
+        pending.role,
+        len(pending.rows),
+        pending.hospital_id,
+        pending.lab_unit_id,
+        pending.disease_id,
+    )
+
     for row in pending.rows:
         filename = row["image_name"]
         grade_text = row["grade_text"]
@@ -294,7 +315,8 @@ def _process_rows(
             item_state = "error"
             detail = "Missing grade value"
             processing_logger.warning(
-                "role=%s filename=%s result=%s detail=%s",
+                "job_id=%s role=%s filename=%s result=%s detail=%s",
+                job.id,
                 pending.role,
                 filename,
                 item_state,
@@ -319,7 +341,8 @@ def _process_rows(
             item_state = "error"
             detail = f"No grade mapping for '{grade_text}'"
             processing_logger.warning(
-                "role=%s filename=%s result=%s detail=%s",
+                "job_id=%s role=%s filename=%s result=%s detail=%s",
+                job.id,
                 pending.role,
                 filename,
                 item_state,
@@ -344,6 +367,13 @@ def _process_rows(
         detail = "Grade imported successfully"
 
         try:
+            processing_logger.info(
+                "job_id=%s role=%s filename=%s mapping_grade=%s",
+                job.id,
+                pending.role,
+                filename,
+                grade_id,
+            )
             upload = _find_upload(
                 db_session,
                 image_name=filename,
@@ -363,6 +393,21 @@ def _process_rows(
                     "ensure_task failed for pre-graded import (uuid=%s): %s",
                     upload.uuid,
                     exc,
+                )
+                processing_logger.warning(
+                    "job_id=%s role=%s filename=%s ensure_task_failed=%s",
+                    job.id,
+                    pending.role,
+                    filename,
+                    exc,
+                )
+            else:
+                processing_logger.info(
+                    "job_id=%s role=%s filename=%s ensured_task_uuid=%s",
+                    job.id,
+                    pending.role,
+                    filename,
+                    upload.uuid,
                 )
 
             task = db_session.execute(
@@ -409,7 +454,8 @@ def _process_rows(
         )
 
         processing_logger.info(
-            "role=%s filename=%s result=%s detail=%s",
+            "job_id=%s role=%s filename=%s result=%s detail=%s",
+            job.id,
             pending.role,
             filename,
             item_state,
@@ -510,16 +556,23 @@ def pregraded_grades():
 
         mapping_token = request.form.get("mapping_token")
         mapping_json = request.form.get("mapping_json")
-
+        processing_logger.info(
+            "POST /direct/pregraded/grades role=%s mapping_token=%s mapping_json_len=%s",
+            form_role,
+            mapping_token or "",
+            len(mapping_json or ""),
+        )
         if mapping_token:
             pending = _pop_pending_import(mapping_token)
             if not pending:
+                processing_logger.warning("Mapping token %s missing/expired", mapping_token)
                 flash("Mapping session expired. Please upload the file again.", "warning")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
             try:
                 mapping_payload = json.loads(mapping_json or "{}")
             except json.JSONDecodeError:
+                processing_logger.error("Invalid mapping JSON for token %s", mapping_token)
                 flash("Invalid mapping payload.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -527,6 +580,7 @@ def pregraded_grades():
             try:
                 final_mapping = _resolve_grade_mapping(pending, mapping_payload, grade_options)
             except ValueError as exc:
+                processing_logger.warning("Mapping validation failed: %s", exc)
                 flash(str(exc), "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -573,37 +627,54 @@ def pregraded_grades():
             ("Grader", grader_user_id),
         ]:
             if value is None:
+                processing_logger.warning("Missing field %s for role %s", field_name, form_role)
                 flash(f"{field_name} must be selected.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
         grades_file = request.files.get("grades_file")
         if not grades_file or not grades_file.filename:
+            processing_logger.warning("No file uploaded for role %s", form_role)
             flash("Please select an Excel file to upload.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         allowed_lab_units = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin", "data_manager")
         if not is_admin_like and lab_unit_id not in allowed_lab_units:
+            processing_logger.warning(
+                "User %s attempted grade import to unauthorized lab %s",
+                current_user.id,
+                lab_unit_id,
+            )
             flash("You do not have access to the selected lab unit.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         grader = db_session.get(User, grader_user_id)
         if not grader:
+            processing_logger.warning("Grader user_id=%s not found", grader_user_id)
             flash("Selected grader not found.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         role_names = {role.name.lower() for role in grader.roles}
         if form_role == ROLE_RESIDENT and not ({"resident", "ophthalmologist"} & role_names):
+            processing_logger.warning("Grader %s lacks resident role", grader_user_id)
             flash("Selected user is not eligible for resident grading.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
         if form_role == ROLE_FACULTY and "ophthalmologist" not in role_names:
+            processing_logger.warning("Grader %s lacks faculty eligibility", grader_user_id)
             flash("Selected user is not eligible for faculty grading.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         try:
             df = _load_workbook(grades_file)
             rows = _extract_rows(df, form_role)
+            processing_logger.info(
+                "Workbook parsed for role=%s rows=%s (mapping_token=%s)",
+                form_role,
+                len(rows),
+                mapping_token or "",
+            )
         except ValueError as exc:
+            processing_logger.warning("Workbook validation failed: %s", exc)
             flash(str(exc), "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -614,6 +685,12 @@ def pregraded_grades():
 
         unique_values = sorted({row["grade_text"] for row in rows if row["grade_text"]})
         auto_mapping, unmapped_values = _auto_map_grade_values(grade_options, unique_values)
+        processing_logger.info(
+            "Auto mapping generated for role=%s mapped=%s unmapped=%s",
+            form_role,
+            list(auto_mapping.keys()),
+            unmapped_values,
+        )
 
         pending = PendingImport(
             role=form_role,
@@ -660,6 +737,12 @@ def pregraded_grades():
 
         token = str(uuid.uuid4())
         _store_pending_import(token, pending)
+        processing_logger.info(
+            "Stored pending import token=%s role=%s unmapped_count=%s",
+            token,
+            form_role,
+            len(unmapped_values),
+        )
 
         flash(
             "Some grade values could not be automatically matched. Please map them to known gradings.",

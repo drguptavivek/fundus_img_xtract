@@ -14,7 +14,8 @@ This document captures the agreed plan for supporting datasets that arrive with 
 **Progress:** 2025-02-14 — Dashboard shows pre-graded batches with filtering and disables image editing for them.
 **Progress:** 2025-02-14 — Verified pre-graded uploads appear anonymized, auto-verified, and create pending entries in `grading_tasks`.
 **Progress:** 2025-02-15 — Added resident/faculty grade import workflow with mapping modal and job-based ingestion.
-
+**Progress:** 2025-02-15 — Resident grades ingested successfully (auto-mapped); faculty import with manual grade mapping updated tasks to final/arbitration and consensus matched as expected.
+ 
 ## Data Model Updates
 - **`direct_image_uploads`**
   - `is_pregraded` (`Boolean`, default `False`).

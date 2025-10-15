@@ -14,6 +14,7 @@ This system ensures quality control through multiple independent assessments and
 ### 1. Task Creation
 - When an image is verified, grading tasks are automatically created for each disease
 - Tasks are created in `pending` state and assigned to the appropriate lab unit
+- For detailed implementation of task creation logic, see [Task Creation Services](docs/task_creation_services.md)
 
 ### 2. Resident Grading
 - Residents access tasks in `pending` state
@@ -117,6 +118,92 @@ The system checks:
 - Arbitrators can revise their decision on finalized tasks within 6 hours
 - This allows correction of errors while maintaining decision integrity
 - After 6 hours, decisions become permanent
+
+### Revision Impact on Task State
+
+#### Resident/Faculty Revisions
+- **Before Finalization**: Task remains in current state, consensus is updated if exists
+- **If consensus exists**: Previous consensus is deleted, new consensus may be created
+- **If arbitration was triggered**: Task may revert to `resident_done` or `faculty_done` based on new grade match
+
+#### Arbitrator Revisions
+- **Within 6 hours**: Consensus is updated with new decision
+- **After 6 hours**: Revision blocked, task remains finalized
+- **Audit trail**: Original decision preserved in audit logs
+
+### Revision Workflow Examples
+
+#### Example 1: Resident Revision Before Faculty Grading
+```
+Initial: Task in 'pending' state
+1. Resident submits grade A → Task state: 'resident_done'
+2. Resident revises to grade B → Task state: 'resident_done' (consensus unchanged)
+3. Faculty submits grade B → Task state: 'final' (match consensus created)
+```
+
+#### Example 2: Faculty Revision Triggering Arbitration
+```
+Initial: Task in 'resident_done' with resident grade A
+1. Faculty submits grade B → Task state: 'arbitration'
+2. Faculty revises to grade A → Task state: 'final' (match consensus created)
+```
+
+#### Example 3: Arbitrator Revision
+```
+Initial: Task in 'final' with arbitrator decision C
+1. Arbitrator revises to grade D (within 6 hours) → Task state: 'final' (consensus updated)
+2. Audit log records both decisions with timestamps
+```
+
+### Revision Validation Rules
+
+#### Before Revision
+1. Check user has appropriate role for the grade being revised
+2. Verify time constraints based on role and task state
+3. Confirm user is the original grader
+4. Check task hasn't been locked by another user
+
+#### After Revision
+1. Update grade record with new values and timestamp
+2. Recalculate consensus if needed
+3. Update task state based on new grade relationships
+4. Log revision in audit trail
+5. Notify relevant users if configured
+
+### Revision Restrictions
+
+| Role | Task State | Time Constraint | Additional Restrictions | Reason |
+|------|------------|-----------------|------------------------|--------|
+| **Resident** | `pending` | Until faculty grades | Must be original grader | Prevents changes after faculty review begins |
+| **Resident** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before faculty completion |
+| **Resident** | `arbitration` | Not allowed | - | Task under arbitrator review |
+| **Resident** | `final` | Not allowed | - | Task finalized, consensus established |
+| **Faculty** | `pending` | Not allowed | - | Faculty cannot grade before resident |
+| **Faculty** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before arbitration |
+| **Faculty** | `arbitration` | Not allowed | - | Task under arbitrator review |
+| **Faculty** | `final` | Not allowed | - | Task finalized, consensus established |
+| **Arbitrator** | `pending` | Not allowed | - | No arbitrator decision made yet |
+| **Arbitrator** | `resident_done` | Not allowed | - | No arbitrator decision made yet |
+| **Arbitrator** | `arbitration` | Until finalization | Must be original grader | Can revise during arbitration process |
+| **Arbitrator** | `final` | 6 hours from submission | Must be original grader | Limited window for error correction |
+
+### Special Revision Block Conditions
+
+| Condition | Affected Roles | Block Reason |
+|-----------|----------------|--------------|
+| Task graded by same user in last 2 weeks | All roles | Prevents bias and ensures fresh perspective |
+| Task locked by another user | All roles | Prevents concurrent modifications |
+| User account inactive/deactivated | All roles | Security restriction |
+| Disease or lab unit permissions revoked | All roles | Access control enforcement |
+| Task archived or in read-only mode | All roles | Data preservation |
+| System maintenance mode | All roles | System stability |
+
+### Revision Tracking
+- All revisions create new audit entries
+- Original grade values preserved in database history
+- Revision timestamps logged for compliance
+- Reason for revision captured when provided
+- Failed revision attempts logged for security monitoring
 
 ## Stuck Task Handling
 

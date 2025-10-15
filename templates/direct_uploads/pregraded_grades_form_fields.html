@@ -1,0 +1,41 @@
+<div class="row g-3">
+  <div class="col-md-6">
+    <label class="form-label">Hospital</label>
+    <div class="d-flex flex-wrap gap-2" data-role="{{ form_role }}">
+      {% for hospital in hospitals %}
+      <input type="radio" class="btn-check hospital-radio" name="hospital_id" id="{{ form_role }}_hospital_{{ hospital.id }}" value="{{ hospital.id }}" autocomplete="off" {% if selected_hospital and selected_hospital == hospital.id %}checked{% endif %}>
+      <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="{{ form_role }}_hospital_{{ hospital.id }}">{{ hospital.name }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Lab Unit</label>
+    <div class="d-flex flex-wrap gap-2">
+      {% for lab_unit in lab_units %}
+      <input type="radio" class="btn-check lab-unit-radio" name="lab_unit_id" id="{{ form_role }}_lab_{{ lab_unit.id }}" value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}" autocomplete="off" {% if selected_lab_unit and selected_lab_unit == lab_unit.id %}checked{% endif %}>
+      <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="{{ form_role }}_lab_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Disease</label>
+    <select class="form-select disease-select" name="disease_id" data-role="{{ form_role }}">
+      <option value="">Select Disease</option>
+      {% for disease in diseases %}
+      <option value="{{ disease.id }}" {% if selected_disease and selected_disease == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label">Area</label>
+    <select class="form-select" name="area_id">
+      <option value="">Optional Area</option>
+      {% for area in areas %}
+      <option value="{{ area.id }}">{{ area.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>

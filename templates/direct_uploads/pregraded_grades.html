@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Import Pre-Graded Grades{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h4 mb-1">Import Resident & Faculty Grades</h1>
+      <p class="text-muted mb-0">Upload Excel workbooks for pre-graded datasets. Each workbook must follow the required column template.</p>
+    </div>
+  </div>
+
+  <div class="alert alert-info d-flex align-items-start gap-2">
+    <div><i class="bi bi-info-circle-fill"></i></div>
+    <div>
+      <strong>Workbook Template:</strong> columns must include <code>image_name</code>, <code>resident_grade / faculty_grade</code> columns, and optional <code>resident_remarks / faculty_remarks</code> columns .
+      <a href="{{ url_for('direct_uploads.pregraded_upload') }}" class="alert-link">Download template</a> (coming soon).
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary-subtle">
+          <h2 class="h5 mb-0 text-primary-emphasis">Resident Grades</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data" id="resident-form">
+            {{ csrf_field() }}
+            <input type="hidden" name="form_role" value="resident">
+            <input type="hidden" name="mapping_token" value="{{ modal_token if modal_role == 'resident' else '' }}">
+            <input type="hidden" name="mapping_json" id="resident-mapping-json" value="{}">
+
+            {% set form_role = 'resident' %}
+            {% include 'direct_uploads/pregraded_grades_form_fields.html' with context %}
+
+            <div class="mb-3">
+              <label class="form-label">Grader</label>
+              <select class="form-select" name="grader_user_id" data-role="resident">
+                <option value="">Select Resident Grader</option>
+                {% for user in resident_graders %}
+                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and modal_role == 'resident' %}selected{% endif %}>
+                  {{ user.username }} (ID: {{ user.id }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Resident Grades Workbook (.xlsx)</label>
+              <input type="file" class="form-control" name="grades_file" accept=".xlsx" required>
+              <div class="form-text">Columns required: <code>image_name</code>, <code>resident_grade</code>. Remarks optional.</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Upload Resident Grades</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-success-subtle">
+          <h2 class="h5 mb-0 text-success-emphasis">Faculty Grades</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data" id="faculty-form">
+            {{ csrf_field() }}
+            <input type="hidden" name="form_role" value="faculty">
+            <input type="hidden" name="mapping_token" value="{{ modal_token if modal_role == 'faculty' else '' }}">
+            <input type="hidden" name="mapping_json" id="faculty-mapping-json" value="{}">
+
+            {% set form_role = 'faculty' %}
+            {% include 'direct_uploads/pregraded_grades_form_fields.html' with context %}
+
+            <div class="mb-3">
+              <label class="form-label">Grader</label>
+              <select class="form-select" name="grader_user_id" data-role="faculty">
+                <option value="">Select Faculty Grader</option>
+                {% for user in faculty_graders %}
+                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and modal_role == 'faculty' %}selected{% endif %}>
+                  {{ user.username }} (ID: {{ user.id }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Faculty Grades Workbook (.xlsx)</label>
+              <input type="file" class="form-control" name="grades_file" accept=".xlsx" required>
+              <div class="form-text">Columns required: <code>image_name</code>, <code>faculty_grade</code>. Remarks optional.</div>
+            </div>
+
+            <button type="submit" class="btn btn-success">Upload Faculty Grades</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if modal_values %}
+<div class="modal fade" id="gradeMappingModal" tabindex="-1" aria-labelledby="gradeMappingLabel" aria-hidden="true" data-role="{{ modal_role }}" data-disease="{{ selected_disease }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="gradeMappingLabel">Map Imported Grade Values</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">We detected grade values that do not match known labels. Map each value to an existing grading option.</p>
+        <input type="hidden" id="mapping-token" value="{{ modal_token }}">
+        <div class="vstack gap-3">
+          {% for value in modal_values %}
+          <div>
+            <label class="form-label small fw-semibold">{{ value or '— empty —' }}</label>
+            <select class="form-select form-select-sm grade-mapping-select" data-grade-value="{{ value }}">
+              <option value="">Select grading</option>
+              {% for option in modal_grade_options %}
+              <option value="{{ option.id }}" {% if available_mapping and available_mapping.get(value) == option.id %}selected{% endif %}>
+                {{ option.impression }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="grade-mapping-confirm">Save Mapping</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/pregraded_grades.js') }}"></script>
+{% if modal_values %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const modalEl = document.getElementById('gradeMappingModal');
+    if (modalEl) {
+      const modal = new bootstrap.Modal(modalEl, { backdrop: 'static' });
+      modal.show();
+    }
+  });
+</script>
+{% endif %}
+{% endblock %}

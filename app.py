@@ -163,6 +163,7 @@ def create_app():
     http_error_handler = make_handler("http_error.log", logging.WARNING, http_error_format, filters=[request_filter])
     runtime_error_handler = make_handler("runtime_error.log", logging.ERROR, detailed_format)
     grades_handler = make_handler("grades.log", logging.INFO, base_format)
+    pregraded_processing_handler = make_handler("pregraded_processing.log", logging.INFO, base_format)
     auth_handler = make_handler("auth.log", logging.INFO, base_format)
     editing_handler = make_handler("editing.log", logging.INFO, base_format)
     consensus_handler = make_handler("consensus.log", logging.INFO, base_format)
@@ -181,6 +182,7 @@ def create_app():
     http_error_logger = configure_logger("http_error", logging.WARNING, http_error_handler)
     runtime_error_logger = configure_logger("runtime_error", logging.ERROR, runtime_error_handler)
     grades_logger = configure_logger("grades", logging.INFO, grades_handler)
+    pregraded_processing_logger = configure_logger("pregraded_processing", logging.INFO, pregraded_processing_handler)
     auth_logger = configure_logger("auth", logging.INFO, auth_handler)
     editing_logger = configure_logger("editing", logging.INFO, editing_handler)
     consensus_logger = configure_logger("consensus", logging.INFO, consensus_handler)
@@ -218,6 +220,7 @@ def create_app():
     app.logger.propagate = False
 
     grades_logger.info("Grades logger initialized at %s", str(log_dir / "grades.log"))
+    pregraded_processing_logger.info("Pregraded processing logger initialized at %s", str(log_dir / "pregraded_processing.log"))
     auth_logger.info("Auth logger initialized at %s", str(log_dir / "auth.log"))
     editing_logger.info("Editing logger initialized at %s", str(log_dir / "editing.log"))
     consensus_logger.info("Consensus logger initialized at %s", str(log_dir / "consensus.log"))

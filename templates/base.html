@@ -115,6 +115,10 @@
                   href="{{ url_for('direct_uploads.pregraded_upload') }}">Pre-Graded Images</a>
               </li>
               <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.pregraded_grades' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.pregraded_grades') }}">Import Pre-Graded Grades</a>
+              </li>
+              <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>

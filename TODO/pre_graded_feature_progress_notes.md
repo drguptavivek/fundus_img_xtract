@@ -117,5 +117,61 @@ Logged completed work in TODO/pre_graded_feature.md.
 
 
 
+Before coding the resident/faculty ingestion workflow, here’s the plan I’d like to follow:
 
+Data Intake & Validation
+
+Create small helper(s) to load the spreadsheet (probably pandas.read_excel) and normalise columns. Reject files missing required headers (image_name, resident_grade, etc.) or containing unexpected values (blank image name, unknown grade impression).
+Translate grade text to DiseaseGrading.id for the target disease; surface human-readable errors if the workbook references labels we don’t know.
+Job Flow Structure
+
+Add a new route/page (under Upload or Pre-Graded submenu) that lists the two stages (“Upload Resident Grades”, “Upload Faculty Grades”) and handles file uploads. Each submission should spawn a Job entry with a clear type (e.g., pregraded_resident_grades, pregraded_faculty_grades).
+Reuse the existing Job infrastructure so users can monitor progress via the same /jobs/<token> endpoints.
+Row Processing
+
+For each row, find the exact pre-graded DirectImageUpload (matching on original_filename and scoped to selected disease/lab/hospital to avoid accidental collisions).
+Fetch the associated GradingTask. If it’s missing or already has a grade for that role:
+Resident import: create Grade with role_slot='resident', attach remarks, update denormalised name fields, and call update_task_state_based_on_grades.
+Faculty import: insert/replace role_slot='faculty', then run update_task_state_based_on_grades and create_or_update_consensus to auto-finalise matching grades.
+On errors (missing task, invalid grade, duplicate grade), record the failure in JobItem while continuing with other rows.
+State & Idempotency Safeguards
+
+Allow re-running the resident upload to correct mistakes: either overwrite the existing resident grade or skip rows that already have one (configurable). We’ll decide which behaviour makes the most sense; leaning toward overwrite with logging.
+Maintain the job_items summary (success/fail counts, details) and mark the Job status as completed or error depending on run outcome.
+UI/UX
+
+Build a new template (e.g., templates/direct_uploads/pregraded_grades.html) that:
+shows the dataset label & counts,
+provides download links to a CSV template/model label key,
+allows selecting the target disease/lab (pre-populated from pre-graded uploads),
+offers file inputs for resident and faculty uploads with instructions.
+Add the navigation link under the Upload → Pre-Graded submenu.
+Testing & Logging
+
+Introduce utility tests for the grade-import parser (valid/invalid rows, duplicate detection).
+Ensure job execution logs notable events (unknown images, grade mismatches) to current_app.logger for troubleshooting.
+If this direction aligns with your expectations, I’ll start implementing the helper utilities and resident-import route first, then layer on the faculty pass.
+
+I agree. Define a template for data ingestion. Also need to identify the user_id who graded those images when uploading exel file using a dropdown.
+
+
+Documented the Excel ingestion template and UI requirements:
+TODO/pregraded_feature_excel_import.md now spells out the workbook format (headers, allowed values), the need for a grader dropdown (resident/faculty role-filtered), validation rules, job flow, processing logic, and testing/logging notes.
+Ready to start implementing the resident-grade import when you give the go-ahead.
+
+
+In ## Data Intake & Validation, can we show the unique values in uploaded excel to teh user and ask them to map each value to availabel gradinngs ids in a MODAL
+Absolutely—we can support that. Updated the plan (TODO/pregraded_feature_excel_import.md) so the Data Intake & Validation step now includes:
+
+Parsing the workbook and extracting unique grade strings.
+If any value doesn’t auto-map to a known DiseaseGrading, we pop a modal that lists the unique values and lets the operator map each to an available grading (dropdown populated from the disease’s grading options).
+Persist the user’s mapping (so they aren’t prompted next time for the same label).
+Ready to build the UI flow with that modal when you are.
+Resident/faculty ingestion is in place:
+
+Added direct_uploads/pregraded_grades.py with the full workflow: uploads are parsed via pandas, unknown grade strings trigger a mapping modal, and completed mappings run through the Jobs pipeline (auto-creating tasks, applying grades, updating task state, and creating consensus for faculty runs). Pending imports are persisted in the session so the modal can round-trip cleanly.
+New UI (templates/direct_uploads/pregraded_grades.html plus partial) provides resident/faculty forms with grader selection, dataset selectors, and the Bootstrap modal. A companion script (static/js/pregraded_grades.js) handles hospital/lab filtering, localStorage-backed grade mappings per disease/role, and modal submission.
+Navigation now links to “Import Pre-Graded Grades”; blueprint registration updated.
+Logged the milestone in TODO/pre_graded_feature.md.
+Next: add tests/documentation polish once you’ve run through the flow in the UI.
 

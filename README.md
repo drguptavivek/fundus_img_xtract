@@ -94,9 +94,13 @@ python app.py
 ### Search & Utilities
 - [Task Utilities](utils/taskUtils.md)
 - [Flash Toasts Component](static/js/flash-toasts.md)
+- [Upload Eligibility](utils/upload_eligibility.py) - User upload permission checking
+- [Dual Grading Eligibility](utils/dualGradingEligibility.py) - Grading permission validation
+- [Master Data Utilities](utils/masterUtils.py) - Core entities retrieval functions
 
 ### Development & Conventions
 - [Development Conventions](CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
+  - [Logging Conventions](CONVENTIONS/Logging.md) - Implementation patterns and conventions
 - [Security](docs/Security.md) - Comprehensive authentication, authorization, and security features
 - [JavaScript Guidance](docs/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
@@ -110,6 +114,10 @@ python app.py
 ### Module-Specific Documentation
 - [Analytics Utils](analytics/utils.md)
 - [Services Task Creation](services/taskCreationServices.md)
+- [Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
+- [Grading Edge Cases](grading/edge_cases.md) - Edge case handling
+- [User Management Scripts](scripts/USERS.md) - User creation and management
+- [Script Migrations](scripts/migrations.md) - Database migration scripts
 
 ## Application Workflow Flowchart
 

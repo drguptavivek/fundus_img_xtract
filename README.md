@@ -90,13 +90,18 @@ python app.py
     - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)
-- [Task Creation Services](docs/03-Tasks/task_creation_services.md)
 
 ### Image Management & Processing (`docs/01-Adding_Images/`)
 - [Direct Image Editing](docs/01-Adding_Images/direct_uploads.md) - Image editing, batch operations, and quality assessment
 
 ### Report Verification Workflows
 - Report verification documentation is being reorganized
+
+### Task Creation
+- [Scoping](docs/03-Tasks/Scoping.md)
+- [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
+- [Task Utilities](docs/Utilities/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
+
 
 ### Grading System (`docs/04-Grade/`)
 - [Dual Grading Workflow](docs/04-Grade/dual_grading.md) - Updated with current implementation details
@@ -108,10 +113,12 @@ python app.py
 - [Module Integration Guide](docs/04-Grade/module_integration_guide.md) - Integration patterns for grading module
 
 ### Utilities (`docs/Utilities/`)
-- [Task Utilities](docs/Utilities/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
-- [Upload Eligibility](utils/upload_eligibility.py) - User upload permission checking
-- [Dual Grading Eligibility](utils/dualGradingEligibility.py) - Grading permission validation
-- [Master Data Utilities](utils/masterUtils.py) - Core entities retrieval functions
+- [API Documentation](docs/Utilities/api.md)
+- [Common Utilities](docs/Utilities/CommonUtils.md)
+- [Image Search Utilities](docs/Utilities/imageSearchUtils.md)
+- [Task Utilities](docs/Utilities/taskUtils.md)
+- [Utilities README](docs/Utilities/utils2.md)
+
 
 ### Development & Conventions
 - [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more

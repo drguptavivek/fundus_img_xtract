@@ -174,10 +174,12 @@ def upload():
 
                                     # create DB row (folder-based; store basenames only)
                                     db_session.add(DirectImageUpload(
+                                        original_filename=filename,
                                         filename=dest.name,                 # basename stored
                                         folder_rel=folder_rel,    
                                         edited_filename=None,               # not yet
                                         file_hash=md5_hash,
+                                        content_hash=md5_hash,
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
                                         lab_unit_id=lab_unit.id,

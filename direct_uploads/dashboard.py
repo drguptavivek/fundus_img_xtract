@@ -482,6 +482,7 @@ def dashboard():
         f_camera_id   = _to_int(request.args.get('camera_id'))
         f_disease_id  = _to_int(request.args.get('disease_id'))
         f_area_id     = _to_int(request.args.get('area_id'))
+        f_pregraded   = request.args.get('pregraded')
 
         if page < 1:
             page = 1
@@ -518,6 +519,10 @@ def dashboard():
             q = q.where(DirectImageUpload.disease_id == f_disease_id)
         if f_area_id is not None:
             q = q.where(DirectImageUpload.area_id == f_area_id)
+        if f_pregraded == "yes":
+            q = q.where(DirectImageUpload.is_pregraded.is_(True))
+        elif f_pregraded == "no":
+            q = q.where(DirectImageUpload.is_pregraded.is_(False))
 
         # RBAC: only admins/managers can filter by uploader; other roles already scoped by lab-unit
         if is_admin_like and f_uploader_id is not None:
@@ -700,6 +705,6 @@ def dashboard():
             filter_date_from=f_date_from, filter_date_to=f_date_to,
             filter_lab_unit_id=f_lab_unit_id, filter_uploader_id=f_uploader_id,
             filter_hospital_id=f_hospital_id, filter_camera_id=f_camera_id,
-            filter_disease_id=f_disease_id, filter_area_id=f_area_id,
+            filter_disease_id=f_disease_id, filter_area_id=f_area_id, filter_pregraded=f_pregraded,
             bulk_edit_result=bulk_edit_result
         )

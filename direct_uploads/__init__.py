@@ -13,4 +13,4 @@ def _on_register(state):
     DIRECT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
     
-from . import upload, dashboard, jobs, api, edit_upload, edit_image, save_image  # noqa: E402,F401
+from . import upload, dashboard, jobs, api, edit_upload, edit_image, save_image, pregraded  # noqa: E402,F401

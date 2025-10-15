@@ -255,6 +255,15 @@
                 </div>
 
                 <div class="col-md-2 col-sm-4">
+                    <label class="form-label small">Pre-Graded</label>
+                    <select class="form-select form-select-sm" name="pregraded">
+                        <option value="" {% if not filter_pregraded %}selected{% endif %}>All</option>
+                        <option value="yes" {% if filter_pregraded == 'yes' %}selected{% endif %}>Only Pre-Graded</option>
+                        <option value="no" {% if filter_pregraded == 'no' %}selected{% endif %}>Exclude Pre-Graded</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 col-sm-4">
                     <div class="d-flex gap-1">
                         <button type="submit" class="btn btn-primary btn-sm">Apply</button>
                         <a href="{{ url_for('direct_uploads.dashboard') }}"
@@ -430,6 +439,9 @@
                             {% endif %}
 
                             <div class="card-body">
+                                {% if upload.is_pregraded %}
+                                <span class="badge rounded-pill text-bg-warning text-uppercase small mb-2">Pre-Graded</span>
+                                {% endif %}
                                 <h6 class="card-title text-truncate" title="{{ upload.filename }}">{{ upload.filename }}
                                 </h6>
 
@@ -515,10 +527,17 @@
                                         class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-pencil"></i> Edit
                                     </a>
+                                    {% if not upload.is_pregraded %}
                                     <a href="{{ url_for('direct_uploads.edit_image', upload_id=upload.id) }}"
                                         class="btn btn-sm btn-outline-secondary">
                                         <i class="bi bi-image"></i> Edit Image
                                     </a>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled
+                                        title="Image editing is disabled for pre-graded uploads">
+                                        <i class="bi bi-image"></i> Edit Image
+                                    </button>
+                                    {% endif %}
                                     {% if gradings and gradings[upload.id] %}
                                     <a href="{{ url_for('grading.direct_image', uuid=upload.uuid) }}"
                                         class="btn btn-sm btn-outline-success">

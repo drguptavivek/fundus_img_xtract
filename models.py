@@ -370,10 +370,12 @@ class DirectImageUpload(Base):
     __tablename__ = "direct_image_uploads"
     id: Mapped[int] = mapped_column(primary_key=True)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False)          # original file name (basename)
     edited_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # edited basename (under <folder_rel>/edited/)
     folder_rel: Mapped[str] = mapped_column(String(512), nullable=False, index=True) # POSIX-style relative directory from BASE_DIR (e.g., "files/direct_uploads/2025_09_01_user7")
-    file_hash: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    file_hash: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
     uploader_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     hospital_id: Mapped[int] = mapped_column(ForeignKey("hospitals.id"), nullable=False)
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id"), nullable=False)
@@ -381,6 +383,7 @@ class DirectImageUpload(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False)
     area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
     is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_pregraded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
     # Relationships
     uploader: Mapped["User"] = relationship(foreign_keys=[uploader_id])
@@ -403,6 +406,8 @@ class DirectImageUpload(Base):
         # Helpful composite indexes
         Index("ix_diu_uploader_created", "uploader_id", "created_at"),
         Index("ix_diu_folder_created", "folder_rel", "created_at"),
+        Index("ix_diu_content_hash", "content_hash"),
+        Index("ix_diu_is_pregraded", "is_pregraded"),
     )
     
     verifications: Mapped[List["DirectImageVerify"]] = relationship(back_populates="image_upload", cascade="all, delete-orphan")
@@ -428,6 +433,24 @@ class DirectImageVerify(Base):
 
 
 # --- Dual Grading Models ---
+
+
+class AIModel(Base):
+    __tablename__ = "ai_models"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_ai_models_name_version"),
+    )
+
+    grades: Mapped[List["Grade"]] = relationship("Grade", back_populates="ai_model")
+
+
 class GradingTask(Base):
     __tablename__ = 'grading_tasks'
 
@@ -484,7 +507,7 @@ class Grade(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, index=True)
     grader_user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # resident | faculty | arbitrator
+    # resident | faculty | arbitrator | ai
     role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
     # Normalized to master labels for the disease
@@ -499,13 +522,15 @@ class Grade(Base):
     disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Copy of disease.name at time of grading
     grade_name: Mapped[str | None] = mapped_column(String(64), nullable=True)     # Copy of disease_grading.impression at time of grading
     grade_description: Mapped[str | None] = mapped_column(Text, nullable=True)    # Copy of disease_grading.guidelines at time of grading
+    ai_model_id: Mapped[int | None] = mapped_column(ForeignKey('ai_models.id', ondelete='SET NULL'), nullable=True, index=True)
     
     task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')
     grader: Mapped['User'] = relationship('User')
     label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
+    ai_model: Mapped[Optional["AIModel"]] = relationship("AIModel", back_populates="grades")
 
     __table_args__ = (
-        CheckConstraint("role_slot IN ('resident','faculty','arbitrator')", name='ck_grade_role_slot_valid'),
+        CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai')", name='ck_grade_role_slot_valid'),
         Index('ix_grade_task_slot', 'task_id', 'role_slot'),
         Index('ix_grade_user_slot', 'grader_user_id', 'role_slot'),
         UniqueConstraint('task_id', 'grader_user_id', 'role_slot', name='uq_grade_task_user_slot'),

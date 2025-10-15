@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Pre-Graded Image Upload{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1 class="h4 mb-1">Pre-Graded Image Upload</h1>
+      <p class="text-muted mb-0">Upload curated datasets that already include resident and faculty grades. Images will be auto-verified and queued for grading workflows immediately.</p>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('direct_uploads.pregraded_upload') }}" enctype="multipart/form-data" novalidate>
+        {{ csrf_field() }}
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Hospital <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="hospital-buttons">
+              {% for hospital in hospitals %}
+              <input type="radio" class="btn-check" name="hospital_id" id="hospital_{{ hospital.id }}" value="{{ hospital.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="hospital_{{ hospital.id }}">{{ hospital.name }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Lab Unit <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="lab-unit-buttons">
+              {% for lab_unit in lab_units %}
+              <input type="radio" class="btn-check" name="lab_unit_id" id="lab_unit_{{ lab_unit.id }}" value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="lab_unit_{{ lab_unit.id }}">{{ lab_unit.name }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Camera <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="camera-buttons">
+              {% for camera in cameras %}
+              <input type="radio" class="btn-check" name="camera_id" id="camera_{{ camera.id }}" value="{{ camera.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="camera_{{ camera.id }}">{{ camera.name }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Disease <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="disease-buttons">
+              {% for disease in diseases %}
+              <input type="radio" class="btn-check" name="disease_id" id="disease_{{ disease.id }}" value="{{ disease.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="disease_{{ disease.id }}">{{ disease.name }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Area <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-2" id="area-buttons">
+              {% for area in areas %}
+              <input type="radio" class="btn-check" name="area_id" id="area_{{ area.id }}" value="{{ area.id }}" autocomplete="off">
+              <label class="btn btn-outline-primary btn-sm rounded-pill px-3" for="area_{{ area.id }}">{{ area.name }}</label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="is_mydriatic" name="is_mydriatic">
+              <label class="form-check-label" for="is_mydriatic" id="mydriatic-label">Non Mydriatic</label>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="dataset_label">Dataset Label</label>
+            <input type="text" class="form-control" id="dataset_label" name="dataset_label" maxlength="120" placeholder="Optional name for this batch (e.g., Glaucoma Lab Set 16)">
+            <div class="form-text">Used in job history and verification remarks for traceability.</div>
+          </div>
+
+          <div class="col-12">
+            <label for="files" class="form-label">Select Images (Max {{ config['MAX_FILES_PER_UPLOAD'] }} files, {{ config['PER_FILE_MAX_BYTES'] / (1024*1024) }}MB per file) <span class="text-danger">*</span></label>
+            <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>
+          </div>
+        </div>
+
+        <div class="mt-4 d-flex justify-content-between align-items-center">
+          <div class="text-muted small">
+            Duplicate file hashes are permitted for pre-graded imports. Images are auto-verified and tasks are created immediately.
+          </div>
+          <button type="submit" class="btn btn-primary">Upload Pre-Graded Images</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const mydriaticCheckbox = document.getElementById('is_mydriatic');
+    const mydriaticLabel = document.getElementById('mydriatic-label');
+
+    mydriaticCheckbox.addEventListener('change', function () {
+      mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
+    });
+
+    const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
+    const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
+
+    hospitalButtons.forEach(button => {
+      button.addEventListener('change', function () {
+        const selectedHospitalId = this.value;
+        labUnitButtons.forEach(labButton => {
+          const label = document.querySelector(`label[for="${labButton.id}"]`);
+          if (labButton.dataset.hospitalId === selectedHospitalId) {
+            labButton.parentElement.style.display = 'inline-block';
+            label.style.display = 'inline-block';
+          } else {
+            labButton.parentElement.style.display = 'none';
+            label.style.display = 'none';
+          }
+        });
+      });
+    });
+
+    labUnitButtons.forEach(labButton => {
+      const label = document.querySelector(`label[for="${labButton.id}"]`);
+      labButton.parentElement.style.display = 'none';
+      label.style.display = 'none';
+    });
+  });
+</script>
+{% endblock %}

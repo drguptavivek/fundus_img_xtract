@@ -188,6 +188,18 @@ def fetch_image_task_details(
     for grade in grade_rows:
         grades_by_task.setdefault(grade.task_id, {})[grade.role_slot] = grade
 
+    # Fetch AI grades that are stored as Grade objects with role_slot = 'ai'
+    # These are linked to the image via the GradingTask
+    ai_grades_by_task: Dict[int, List[Grade]] = {}
+    ai_grade_rows = (
+        db.query(Grade)
+        .filter(Grade.task_id.in_(task_ids), Grade.role_slot == 'ai')
+        .options(selectinload(Grade.label), selectinload(Grade.grader), selectinload(Grade.ai_model))
+        .all()
+    )
+    for ai_grade in ai_grade_rows:
+        ai_grades_by_task.setdefault(ai_grade.task_id, []).append(ai_grade)
+
     consensus_map: Dict[int, Consensus] = {}
     consensus_rows = (
         db.query(Consensus)
@@ -262,11 +274,29 @@ def fetch_image_task_details(
         consensus_summary = _summarize_consensus(consensus_map.get(task.id))
 
         ai_key = (task.encounter_file_id, task.direct_image_upload_id)
-        ai_grades = [
-            _summarize_ai_grade(ai_grade)
-            for ai_grade in ai_grade_map.get(ai_key, [])
-            if ai_grade.disease_id == task.disease_id
+        # Get AIGrade objects for this image and disease
+        ai_grade_objects = [
+            obj for obj in ai_grade_map.get(ai_key, [])
+            if obj.disease_id == task.disease_id
         ]
+        # Get Grade objects with role_slot='ai' for this task
+        ai_grade_from_grade_table = ai_grades_by_task.get(task.id, [])
+        # Combine both types of AI grades
+        all_ai_grades = ai_grade_objects + ai_grade_from_grade_table
+        # Summarize them for the template
+        ai_grades = []
+        for obj in all_ai_grades:
+            if hasattr(obj, 'model_name') and hasattr(obj, 'model_version'):  # It's an AIGrade object
+                ai_grades.append(_summarize_ai_grade(obj))
+            else:  # It's a Grade object with role_slot='ai'
+                # Use the AI model details from the Grade object itself
+                ai_grades.append(AIGradeSummary(
+                    model_name=obj.ai_model_name or (obj.ai_model.name if obj.ai_model else 'Unknown Model'),
+                    model_version=obj.ai_model_version or (obj.ai_model.version if obj.ai_model else 'N/A'),
+                    impression=obj.label.impression if obj.label else obj.grade_name,
+                    confidence=None, # Grade model doesn't have confidence
+                    run_id=None # Grade model doesn't have run_id
+                ))
 
         details.append(
             {

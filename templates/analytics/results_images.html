@@ -56,6 +56,14 @@
         </select>
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-has-ai-grade">Has AI Grade</label>
+        <select class="form-select" id="filter-has-ai-grade" name="has_ai_grade">
+          <option value="">All</option>
+          <option value="true" {% if filters.has_ai_grade == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if filters.has_ai_grade == 'false' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
         <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
       </div>
     </form>

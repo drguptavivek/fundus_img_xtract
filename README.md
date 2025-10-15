@@ -99,10 +99,15 @@ python app.py
 ### Grading System
 - [Dual Grading Workflow](docs/dual_grading.md) - Updated with current implementation details
 - [Dual Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
-- [Grading Edge Cases](grading/edge_cases.md)
+- [Dual Grading Utilities](grading/dual_grading_utils.md) - Comprehensive function documentation for dual grading
+- [Grading Edge Cases](grading/edge_cases.md) - Edge case analysis and resolution status
+- [Grading Errors](grading/errors.md) - Error handling in grading workflows
+- [Grading Flow Diagram](grading/flowdiagram.md) - Visual representation of grading workflows
+- [Module Integration Guide](grading/module_integration_guide.md) - Integration patterns for grading module
 
 ### Search & Utilities
-- [Task Utilities](utils/taskUtils.md)
+- [Common Utilities](docs/CommonUtils.md) - Core utility functions and reusable components used throughout the application
+- [Task Utilities](utils/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
 - [Flash Toasts Component](static/js/flash-toasts.md)
 - [Upload Eligibility](utils/upload_eligibility.py) - User upload permission checking
 - [Dual Grading Eligibility](utils/dualGradingEligibility.py) - Grading permission validation
@@ -124,8 +129,6 @@ python app.py
 ### Module-Specific Documentation
 - [Analytics Utils](analytics/utils.md)
 - [Services Task Creation](services/taskCreationServices.md)
-- [Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
-- [Grading Edge Cases](grading/edge_cases.md) - Edge case handling
 - [User Management Scripts](scripts/USERS.md) - User creation and management
 - [Script Migrations](scripts/migrations.md) - Database migration scripts
 

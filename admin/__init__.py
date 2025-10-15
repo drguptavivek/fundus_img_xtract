@@ -8,6 +8,7 @@ from .disease_gradings import list_disease_gradings, get_disease_grading_json, d
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
 from .logs import log_viewer
+from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
 
 
 # Register routes with the blueprint
@@ -46,3 +47,8 @@ admin_bp.add_url_rule("/malicious-uploads", view_func=malicious_uploads, methods
 
 # Log viewer
 admin_bp.add_url_rule("/logs", view_func=log_viewer, methods=["GET"])
+
+# AI Model routes
+admin_bp.add_url_rule("/ai-models", view_func=list_and_create_ai_model, methods=["GET", "POST"])
+admin_bp.add_url_rule("/ai-models/<int:item_id>/edit", view_func=edit_ai_model, methods=["GET", "POST"])
+admin_bp.add_url_rule("/ai-models/<int:item_id>/delete", view_func=delete_ai_model, methods=["POST"])

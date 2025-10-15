@@ -24,6 +24,7 @@ from models import (
     Session as DBSession,
     User,
     Grade,
+    AIModel,
     utcnow,
 )
 from services.taskCreationServices import ensure_task
@@ -41,6 +42,7 @@ processing_logger = logging.getLogger("pregraded_processing")
 
 ROLE_RESIDENT = "resident"
 ROLE_FACULTY = "faculty"
+ROLE_AI = "ai"
 
 
 @dataclass
@@ -52,6 +54,9 @@ class PendingImport:
     grader_user_id: int
     rows: List[Dict[str, Optional[str]]]
     auto_mapping: Dict[str, int]
+    ai_model_id: Optional[int] = None
+    ai_model_name: Optional[str] = None
+    ai_model_version: Optional[str] = None
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -71,6 +76,7 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
     required = {"image_name"}
     grade_col = f"{role}_grade"
     remark_col = f"{role}_remarks"
+    probability_col = f"{role}_probability" if role == ROLE_AI else None
     required.add(grade_col)
     missing = required - set(df.columns)
     if missing:
@@ -83,6 +89,11 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
         grade_text = str(grade_value).strip() if pd.notna(grade_value) else ""
         remarks_value = row.get(remark_col, "")
         remarks = str(remarks_value).strip() if pd.notna(remarks_value) else ""
+        probability = None
+        if probability_col:
+            probability_value = row.get(probability_col, "")
+            if pd.notna(probability_value):
+                probability = str(probability_value).strip()
         if image_name is None:
             continue
         rows.append(
@@ -90,6 +101,7 @@ def _extract_rows(df: pd.DataFrame, role: str) -> List[Dict[str, Optional[str]]]
                 "image_name": image_name,
                 "grade_text": grade_text,
                 "remarks": remarks if remarks and remarks != "-" else None,
+                "probability": probability,
             }
         )
     if not rows:
@@ -143,6 +155,9 @@ def _store_pending_import(token: str, pending: PendingImport) -> None:
         "grader_user_id": pending.grader_user_id,
         "rows": pending.rows,
         "auto_mapping": pending.auto_mapping,
+        "ai_model_id": pending.ai_model_id,
+        "ai_model_name": pending.ai_model_name,
+        "ai_model_version": pending.ai_model_version,
     }
     session.modified = True
     processing_logger.debug(
@@ -170,6 +185,9 @@ def _pop_pending_import(token: str) -> Optional[PendingImport]:
         grader_user_id=raw["grader_user_id"],
         rows=raw["rows"],
         auto_mapping=raw["auto_mapping"],
+        ai_model_id=raw.get("ai_model_id"),
+        ai_model_name=raw.get("ai_model_name"),
+        ai_model_version=raw.get("ai_model_version"),
     )
 
 
@@ -252,6 +270,9 @@ def _apply_grade(
     role: str,
     remarks: Optional[str],
     grade_options: Dict[int, DiseaseGrading],
+    ai_model_id: Optional[int] = None,
+    ai_model_name: Optional[str] = None,
+    ai_model_version: Optional[str] = None,
 ) -> None:
     existing_grade = db_session.execute(
         select(Grade).where(
@@ -271,6 +292,9 @@ def _apply_grade(
         existing_grade.grade_name = grading_label.impression
         existing_grade.grade_description = grading_label.guidelines
         existing_grade.updated_at = now
+        existing_grade.ai_model_id = ai_model_id
+        existing_grade.ai_model_name = ai_model_name
+        existing_grade.ai_model_version = ai_model_version
     else:
         db_session.add(
             Grade(
@@ -282,6 +306,9 @@ def _apply_grade(
                 disease_name=grading_label.disease.name if grading_label.disease else None,
                 grade_name=grading_label.impression,
                 grade_description=grading_label.guidelines,
+                ai_model_id=ai_model_id,
+                ai_model_name=ai_model_name,
+                ai_model_version=ai_model_version,
             )
         )
 
@@ -311,6 +338,7 @@ def _process_rows(
     for row in pending.rows:
         filename = row["image_name"]
         grade_text = row["grade_text"]
+        probability = row.get("probability")
         if not grade_text:
             item_state = "error"
             detail = "Missing grade value"
@@ -363,6 +391,15 @@ def _process_rows(
             continue
 
         remarks = row["remarks"]
+        if pending.role == ROLE_AI:
+            parts = []
+            if probability:
+                parts.append(f"AI probability: {probability}")
+            if remarks:
+                parts.append(remarks)
+            final_comment = "; ".join(parts) if parts else None
+        else:
+            final_comment = remarks
         item_state = "completed"
         detail = "Grade imported successfully"
 
@@ -420,19 +457,31 @@ def _process_rows(
             if not task:
                 raise ValueError("Associated grading task not found.")
 
+            if pending.role == ROLE_AI and pending.ai_model_id:
+                ai_model = db_session.get(AIModel, pending.ai_model_id)
+                ai_name = ai_model.name if ai_model else None
+                ai_version = ai_model.version if ai_model else None
+            else:
+                ai_name = None
+                ai_version = None
+
             _apply_grade(
                 db_session,
                 task=task,
                 grade_id=grade_id,
                 grader_user_id=pending.grader_user_id,
                 role=pending.role,
-                remarks=remarks,
+                remarks=final_comment,
                 grade_options=grade_options,
+                ai_model_id=pending.ai_model_id if pending.role == ROLE_AI else None,
+                ai_model_name=ai_name if pending.role == ROLE_AI else None,
+                ai_model_version=ai_version if pending.role == ROLE_AI else None,
             )
 
-            update_task_state_based_on_grades(task.id, db=db_session)
-            if pending.role == ROLE_FACULTY:
-                create_or_update_consensus(task.id, db=db_session)
+            if pending.role in (ROLE_RESIDENT, ROLE_FACULTY):
+                update_task_state_based_on_grades(task.id, db=db_session)
+                if pending.role == ROLE_FACULTY:
+                    create_or_update_consensus(task.id, db=db_session)
 
             success += 1
         except Exception as exc:  # noqa: BLE001
@@ -462,6 +511,13 @@ def _process_rows(
             detail,
         )
 
+    processing_logger.info(
+        "job_id=%s role=%s completed success=%s failures=%s",
+        job.id,
+        pending.role,
+        success,
+        failures,
+    )
     return success, failures, job_items
 
 
@@ -470,6 +526,7 @@ def _render_page(
     *,
     resident_graders: List[User],
     faculty_graders: List[User],
+    ai_models: List[AIModel],
     context: Optional[dict] = None,
 ):
     context = context or {}
@@ -529,6 +586,7 @@ def _render_page(
             "areas": areas,
             "resident_graders": resident_graders,
             "faculty_graders": faculty_graders,
+            "ai_models": ai_models,
             "grade_options": grade_options,
         }
     )
@@ -541,16 +599,24 @@ def pregraded_grades():
     with with_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
         faculty_graders = _eligible_graders(db_session, ["ophthalmologist"])
+        ai_models = (
+            db_session.execute(
+                select(AIModel).order_by(AIModel.name, AIModel.version)
+            )
+            .scalars()
+            .all()
+        )
 
         if request.method == "GET":
             return _render_page(
                 db_session,
                 resident_graders=resident_graders,
                 faculty_graders=faculty_graders,
+                ai_models=ai_models,
             )
 
         form_role = request.form.get("form_role")
-        if form_role not in {ROLE_RESIDENT, ROLE_FACULTY}:
+        if form_role not in {ROLE_RESIDENT, ROLE_FACULTY, ROLE_AI}:
             flash("Invalid form submission.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -584,6 +650,9 @@ def pregraded_grades():
                 flash(str(exc), "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
+            summary = f"{pending.role.title()} grade import"
+            if pending.role == ROLE_AI and pending.ai_model_id:
+                summary = f"AI grade import (model {pending.ai_model_id})"
             job = Job(
                 token=str(uuid.uuid4()),
                 status="processing",
@@ -591,7 +660,7 @@ def pregraded_grades():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=pending.lab_unit_id,
-                rejected_summary=f"{pending.role.title()} grade import",
+                rejected_summary=summary,
             )
             db_session.add(job)
             db_session.flush()
@@ -620,12 +689,14 @@ def pregraded_grades():
         disease_id = request.form.get("disease_id", type=int)
         grader_user_id = request.form.get("grader_user_id", type=int)
 
-        for field_name, value in [
+        field_checks = [
             ("Hospital", hospital_id),
             ("Lab Unit", lab_unit_id),
             ("Disease", disease_id),
-            ("Grader", grader_user_id),
-        ]:
+        ]
+        if form_role != ROLE_AI:
+            field_checks.append(("Grader", grader_user_id))
+        for field_name, value in field_checks:
             if value is None:
                 processing_logger.warning("Missing field %s for role %s", field_name, form_role)
                 flash(f"{field_name} must be selected.", "danger")
@@ -648,21 +719,74 @@ def pregraded_grades():
             flash("You do not have access to the selected lab unit.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
-        grader = db_session.get(User, grader_user_id)
-        if not grader:
-            processing_logger.warning("Grader user_id=%s not found", grader_user_id)
-            flash("Selected grader not found.", "danger")
-            return redirect(url_for("direct_uploads.pregraded_grades"))
+        if form_role == ROLE_AI:
+            effective_grader_id = current_user.id
+            ai_model_id = request.form.get("ai_model_id", type=int)
+            ai_model_name = (request.form.get("ai_model_name") or "").strip()
+            ai_model_version = (request.form.get("ai_model_version") or "").strip()
+            ai_model_description = (request.form.get("ai_model_description") or "").strip()
 
-        role_names = {role.name.lower() for role in grader.roles}
-        if form_role == ROLE_RESIDENT and not ({"resident", "ophthalmologist"} & role_names):
-            processing_logger.warning("Grader %s lacks resident role", grader_user_id)
-            flash("Selected user is not eligible for resident grading.", "danger")
-            return redirect(url_for("direct_uploads.pregraded_grades"))
-        if form_role == ROLE_FACULTY and "ophthalmologist" not in role_names:
-            processing_logger.warning("Grader %s lacks faculty eligibility", grader_user_id)
-            flash("Selected user is not eligible for faculty grading.", "danger")
-            return redirect(url_for("direct_uploads.pregraded_grades"))
+            if ai_model_id:
+                model = db_session.get(AIModel, ai_model_id)
+                if not model:
+                    processing_logger.warning("Selected AI model id %s not found", ai_model_id)
+                    flash("Selected AI model not found.", "danger")
+                    return redirect(url_for("direct_uploads.pregraded_grades"))
+                ai_model_name_value = model.name
+                ai_model_version_value = model.version
+            else:
+                if not ai_model_name or not ai_model_version:
+                    processing_logger.warning("AI model creation missing name/version")
+                    flash("Provide AI model name and version or select an existing model.", "danger")
+                    return redirect(url_for("direct_uploads.pregraded_grades"))
+                existing_model = db_session.execute(
+                    select(AIModel).where(
+                        func.lower(AIModel.name) == ai_model_name.lower(),
+                        func.lower(AIModel.version) == ai_model_version.lower(),
+                    )
+                ).scalar_one_or_none()
+                if existing_model:
+                    model = existing_model
+                    ai_model_id = model.id
+                    ai_model_name_value = model.name
+                    ai_model_version_value = model.version
+                else:
+                    model = AIModel(
+                        name=ai_model_name,
+                        version=ai_model_version,
+                        description=ai_model_description or None,
+                    )
+                    db_session.add(model)
+                    db_session.commit()
+                    processing_logger.info(
+                        "Created AI model id=%s name=%s version=%s",
+                        model.id,
+                        model.name,
+                        model.version,
+                    )
+                    ai_model_id = model.id
+                    ai_model_name_value = model.name
+                    ai_model_version_value = model.version
+        else:
+            ai_model_id = None
+            ai_model_name_value = None
+            ai_model_version_value = None
+            grader = db_session.get(User, grader_user_id)
+            if not grader:
+                processing_logger.warning("Grader user_id=%s not found", grader_user_id)
+                flash("Selected grader not found.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_grades"))
+
+            role_names = {role.name.lower() for role in grader.roles}
+            if form_role == ROLE_RESIDENT and not ({"resident", "ophthalmologist"} & role_names):
+                processing_logger.warning("Grader %s lacks resident role", grader_user_id)
+                flash("Selected user is not eligible for resident grading.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_grades"))
+            if form_role == ROLE_FACULTY and "ophthalmologist" not in role_names:
+                processing_logger.warning("Grader %s lacks faculty eligibility", grader_user_id)
+                flash("Selected user is not eligible for faculty grading.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_grades"))
+            effective_grader_id = grader_user_id
 
         try:
             df = _load_workbook(grades_file)
@@ -697,12 +821,18 @@ def pregraded_grades():
             hospital_id=hospital_id,
             lab_unit_id=lab_unit_id,
             disease_id=disease_id,
-            grader_user_id=grader_user_id,
+            grader_user_id=effective_grader_id,
             rows=rows,
             auto_mapping=auto_mapping,
+            ai_model_id=ai_model_id,
+            ai_model_name=ai_model_name_value,
+            ai_model_version=ai_model_version_value,
         )
 
         if not unmapped_values:
+            summary = f"{form_role.title()} grade import"
+            if form_role == ROLE_AI and ai_model_id:
+                summary = f"AI grade import (model {ai_model_id})"
             job = Job(
                 token=str(uuid.uuid4()),
                 status="processing",
@@ -710,7 +840,7 @@ def pregraded_grades():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit_id,
-                rejected_summary=f"{form_role.title()} grade import",
+                rejected_summary=summary,
             )
             db_session.add(job)
             db_session.flush()
@@ -756,7 +886,8 @@ def pregraded_grades():
             "selected_hospital": hospital_id,
             "selected_lab_unit": lab_unit_id,
             "selected_disease": disease_id,
-            "selected_grader": grader_user_id,
+            "selected_grader": effective_grader_id,
+            "selected_ai_model_id": ai_model_id,
             "available_mapping": auto_mapping,
             "modal_grade_options": list(disease_grade_options.values()),
         }
@@ -764,5 +895,6 @@ def pregraded_grades():
             db_session,
             resident_graders=resident_graders,
             faculty_graders=faculty_graders,
+            ai_models=ai_models,
             context=context,
         )

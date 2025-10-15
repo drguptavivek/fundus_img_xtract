@@ -97,6 +97,65 @@
       </div>
     </div>
   </div>
+
+  <div class="row g-4 mt-0">
+    <div class="col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-warning-subtle">
+          <h2 class="h5 mb-0 text-warning-emphasis">AI Grades</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" enctype="multipart/form-data" id="ai-form">
+            {{ csrf_field() }}
+            <input type="hidden" name="form_role" value="ai">
+            <input type="hidden" name="mapping_token" value="{{ modal_token if modal_role == 'ai' else '' }}">
+            <input type="hidden" name="mapping_json" id="ai-mapping-json" value="{}">
+            <input type="hidden" name="grader_user_id" value="{{ current_user.id }}">
+
+            {% set form_role = 'ai' %}
+            {% include 'direct_uploads/pregraded_grades_form_fields.html' with context %}
+
+            <div class="mb-3">
+              <label class="form-label">Existing AI Model</label>
+              <select class="form-select" name="ai_model_id">
+                <option value="">Select AI model</option>
+                {% for model in ai_models %}
+                <option value="{{ model.id }}" {% if selected_ai_model_id and selected_ai_model_id == model.id %}selected{% endif %}>
+                  {{ model.name }} v{{ model.version }}
+                </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Leave blank to create a new model with the fields below.</div>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">New Model Name</label>
+                <input type="text" class="form-control" name="ai_model_name" placeholder="e.g., GlaucomaNet">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">New Model Version</label>
+                <input type="text" class="form-control" name="ai_model_version" placeholder="e.g., 1.0.3">
+              </div>
+            </div>
+
+            <div class="mb-3 mt-3">
+              <label class="form-label">Model Description (optional)</label>
+              <textarea class="form-control" name="ai_model_description" rows="2" placeholder="Brief description of the AI model"></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">AI Grades Workbook (.xlsx)</label>
+              <input type="file" class="form-control" name="grades_file" accept=".xlsx" required>
+              <div class="form-text">Columns required: <code>image_name</code>, <code>ai_grade</code>; optional: <code>ai_probability</code>, <code>ai_remarks</code>.</div>
+            </div>
+
+            <button type="submit" class="btn btn-warning">Upload AI Grades</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 {% if modal_values %}

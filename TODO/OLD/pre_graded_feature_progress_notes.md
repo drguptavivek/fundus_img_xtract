@@ -237,3 +237,15 @@ Update the documentation in @TODO please with the progress
 
 
 Documentation updated: TODO/pre_graded_feature.md now records the successful resident/faculty imports, including the mapping modal, final/arbitration state transitions, and consensus creation. Let me know if you want any other notes captured before we move on.
+
+
+
+AI grade ingestion is now in place alongside the resident/faculty flows:
+
+direct_uploads/pregraded_grades.py gained support for a third, AI-specific import path (form role ai). Operators can upload an AI workbook, map any unknown grade strings, and either pick an existing model or create a new AIModel on the fly. Grades are stored with role_slot='ai', optional probability is added to the comment, and task states/consensus remain untouched. Detailed per-row logging continues, and jobs surface errors via JobItem.
+The UI (templates/direct_uploads/pregraded_grades.html) now shows an “AI Grades” card with model selection/creation fields plus the same hospital/lab/disease filters. Existing JS and the modal workflow continue to work for the new role.
+Progress docs (TODO/pre_graded_feature.md) now record the successful resident/faculty imports and the completion of the AI ingestion feature.
+Everything else (pre-graded uploads, resident/faculty imports, arbitration, consensus) remains functional.
+
+
+

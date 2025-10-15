@@ -15,6 +15,8 @@ This document captures the agreed plan for supporting datasets that arrive with 
 **Progress:** 2025-02-14 — Verified pre-graded uploads appear anonymized, auto-verified, and create pending entries in `grading_tasks`.
 **Progress:** 2025-02-15 — Added resident/faculty grade import workflow with mapping modal and job-based ingestion.
 **Progress:** 2025-02-15 — Resident grades ingested successfully (auto-mapped); faculty import with manual grade mapping updated tasks to final/arbitration and consensus matched as expected.
+**Progress:** 2025-02-15 — Added AI grade import (model selection/creation, per-row logging, no state changes).
+**Progress:** 2025-02-15 — AI imports now denormalize `ai_model_name`/`ai_model_version` into `grades`; re-upload updates existing AI grades correctly.
  
 ## Data Model Updates
 - **`direct_image_uploads`**

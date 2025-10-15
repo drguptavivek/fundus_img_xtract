@@ -27,6 +27,26 @@ This project is a system for an eye hospital to manage retinal fundus images and
 
 ### Progress So Far
 
+#### Documentation Enhancements
+
+- **Comprehensive Documentation Structure**: Created a well-organized documentation hierarchy with cross-references between related topics
+  - [README.md](README.md): Main project documentation with links to all other documentation
+  - [CONVENTIONS.md](CONVENTIONS.md): Development guidelines and best practices
+  - [docs/master_data.md](docs/master_data.md): Documentation of core entities (hospitals, lab units, cameras, areas, diseases)
+  - [docs/Scoping.md](docs/Scoping.md): Documentation of access control mechanisms (User-LabUnit and Slot-LabUnit scoping)
+  - [docs/JavaScript_Guidance.md](docs/JavaScript_Guidance.md): JavaScript development patterns and authentication handling
+  - [docs/Security.md](docs/Security.md): Security best practices and guidelines
+  - [docs/Logging.md](docs/Logging.md): Logging configuration and usage
+  - [docs/Database.md](docs/Database.md): Database configuration and management
+  - [docs/Environment_Setup.md](docs/Environment_Setup.md): Development environment setup instructions
+  - [docs/Testing.md](docs/Testing.md): Testing guidelines and practices
+  - [docs/Deployment.md](docs/Deployment.md): Deployment instructions and considerations
+  - [docs/API_Documentation.md](docs/API_Documentation.md): API documentation and examples
+  - [docs/Troubleshooting.md](docs/Troubleshooting.md): Common issues and solutions
+  - [docs/Models.md](docs/Models.md): Database models documentation
+  - [docs/Routes.md](docs/Routes.md): Application routes documentation
+  - [docs/ERD.md](docs/ERD.md): Entity-Relationship Diagram documentation
+
 #### Standalone Scripts & Core Logic
 
 - **`main.py`**: This script is the primary data processing pipeline for extracting and analyzing medical reports from ZIP files. It handles the ingestion of multiple ZIP files, extracts their contents (PDFs and images), and performs initial validation.
@@ -71,8 +91,37 @@ From the "Glaucoma > Verify" menu, users can access the glaucoma data verificati
   3.  **Cleaned Data**: Stored in the `GlaucomaResultsCleaned` table.
   4.  **Original Data**: The raw OCR text is preserved in the `GlaucomaReport` and `DiabeticRetinopathyReport` tables for traceability.
 
-##### Manual Data Verification (Diabetic Retinopathy)
-*To Be Developed.*
+
+##### Image Management & Processing
+
+- **Direct Image Editing**: The `/direct_uploads` blueprint provides comprehensive image management capabilities:
+  - **Upload Interface**: Users can upload individual images with metadata including capture date, patient ID, and laterality.
+  - **Image Editing**: Advanced image editor allowing rotation, brightness/contrast adjustment, cropping, and annotation tools.
+  - **Batch Operations**: Support for bulk editing of multiple images with common metadata.
+  - **Quality Assessment**: Tools to assess and flag image quality issues.
+  - **Metadata Management**: Complete CRUD operations for image metadata.
+
+- **Anonymization**: The system includes robust patient data anonymization features:
+  - **Automated Anonymization**: Automatic detection and redaction of patient identifiers from images and metadata.
+  - **Manual Review**: Interface for reviewing and confirming anonymization results.
+  - **Audit Trail**: Complete logging of all anonymization activities for compliance.
+  - **Selective Anonymization**: Ability to preserve certain data elements while anonymizing others for research purposes.
+
+##### Report Verification Workflows
+
+- **DR Report Verification**: The Diabetic Retinopathy report verification system:
+  - **Verification Dashboard**: Lists all DR reports with filtering by verification status.
+  - **Data Validation**: Interface for validating OCR-extracted data against expected formats.
+  - **Laterality Assignment**: Tools to assign left/right eye designation to each image.
+  - **Quality Control**: Flagging of poor-quality images or ambiguous results.
+  - **Progress Tracking**: Visual indicators of verification progress and completion status.
+
+- **Glaucoma Report Verification**: The Glaucoma report verification system:
+  - **Comprehensive Workflow**: Complete verification process from raw OCR to clean, structured data.
+  - **Data Cleaning Tools**: Specialized interface for converting raw OCR text to standardized numeric values.
+  - **Clinical Validation**: Support for clinical validation of extracted measurements.
+  - **Audit Trail**: Complete history of all changes and verifications.
+  - **Status Management**: Tracking of verification status from "pending" to "verified".
 
 ##### Image Grading (Glaucoma & DR)
 The `/grading` blueprint provides the interface for clinical grading of images.
@@ -97,10 +146,18 @@ The `/grading` blueprint provides the interface for clinical grading of images.
 *   **JS:** Client-side vanilla JavaScript.
 *   **OCR:** Pytesseract
 *   **Dependency Management:** uv
+*   **Authentication:** Flask-Login for session management
+*   **Security:** CSRF protection, HTTPOnly cookies, secure session handling
+*   **Frontend**: HTMX for dynamic interactions, PhotoSwipe for image viewing
 
 ### Development Conventions
 
-*   **Configuration:** Uses a `.env` file.
-*   **Database:** Models are defined in `models.py`.
+*   **Configuration:** Uses a `.env` file with documented settings.
+*   **Database:** Models are defined in `models.py` with proper relationships and constraints.
 *   **Modular Design:** The application is organized into Blueprints with distinct responsibilities.
-*   **Logging:** Generates log files in the `logs/` directory.
+*   **Logging:** Structured logging with different levels and file rotation in the `logs/` directory.
+*   **Security**: Role-based access control, input validation, and protection against common vulnerabilities.
+*   **Documentation**: Comprehensive documentation maintained alongside code changes.
+*   **Testing**: E2E tests with Playwright, unit tests, and integration tests.
+*   **Error Handling**: Proper exception handling with user-friendly error pages.
+*   **Code Quality**: PEP 8 compliance, type hints, and regular code reviews.

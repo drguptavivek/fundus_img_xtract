@@ -85,10 +85,20 @@ python app.py
 - [Direct Uploads](docs/direct_uploads.md)
 - [Audit Workflows](docs/audit.md)
 
+### Image Management & Processing
+- [Direct Image Editing](docs/direct_image_editing.md) - Image editing, batch operations, and quality assessment
+- [Anonymization](docs/anonymization.md) - Patient data anonymization and audit trails
+
+### Report Verification Workflows
+- [DR Report Verification](docs/dr_report_verification.md) - Diabetic Retinopathy report verification system
+- [Glaucoma Report Verification](docs/glaucoma_report_verification.md) - Glaucoma report verification system
+
+### Task Creation
+- - [Automatic Task Creation Services](docs/task_creation_services.md)
+
 ### Grading System
 - [Dual Grading Workflow](docs/dual_grading.md) - Updated with current implementation details
 - [Dual Grading Implementation Details](grading/dual_grading_flow.md) - Technical implementation guide
-- [Task Creation Services](docs/task_creation_services.md)
 - [Grading Edge Cases](grading/edge_cases.md)
 
 ### Search & Utilities
@@ -140,14 +150,25 @@ flowchart TD
         H --> I[Store OCR Data in DB & Assign UUIDs to Reports];
     end
 
-    subgraph Verification
-        I --> J[Manual Data Verification - OCR Data & Laterality Tagging];
-        G --> K[Direct Image Anonymization Verification];
+    subgraph Image Management & Editing
+        G --> J1[Direct Image Editing];
+        J1 --> J2[Batch Operations];
+        J2 --> J3[Quality Assessment];
+        J3 --> J4[Metadata Management];
+    end
+
+    subgraph Report Verification
+        I --> K1[DR Report Verification];
+        I --> K2[Glaucoma Report Verification];
+        K1 --> K3[Data Validation & Laterality Assignment];
+        K2 --> K4[Data Cleaning & Clinical Validation];
+        J4 --> K3;
+        J4 --> K4;
     end
 
     subgraph Task Creation & Assignment
-        J --> L[Create Grading Tasks per Disease];
-        K --> L;
+        K3 --> L[Create Grading Tasks per Disease];
+        K4 --> L;
         L --> M[Assign Tasks Based on User Roles & Lab Units];
         M --> N[Task Queue Management];
     end

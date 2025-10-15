@@ -14,7 +14,7 @@ This system ensures quality control through multiple independent assessments and
 ### 1. Task Creation
 - When an image is verified, grading tasks are automatically created for each disease
 - Tasks are created in `pending` state and assigned to the appropriate lab unit
-- For detailed implementation of task creation logic, see [Task Creation Services](docs/task_creation_services.md)
+- For detailed implementation of task creation logic, see [Task Creation Services](../03-Tasks/task_creation_services.md)
 
 ### 2. Resident Grading
 - Residents access tasks in `pending` state

@@ -37,7 +37,7 @@ This is the central function that orchestrates the processing of a single ZIP fi
 5.  **Database Persistence**:
     *   A `ZipFile` record is created to log the processed archive and its MD5 hash.
     *   A `PatientEncounters` record is created using the parsed metadata.
-    *   An `EncounterFile` record is created for each extracted file, linked to the `PatientEncounters` record. A unique `uuid` is generated for each file. In ```models.py```, the uuid column in the ```EncounterFiles``` table is defined with a  default value that automatically generates a UUID. This means that even though main.py doesn't explicitly create a UUID when it  creates new EncounterFiles records, the database handles it automatically. As a result, every original image and every original report gets it own unique UUID.  [Documentation](docs/main.md). 
+    *   An `EncounterFile` record is created for each extracted file, linked to the `PatientEncounters` record. A unique `uuid` is generated for each file. In ```models.py```, the uuid column in the ```EncounterFiles``` table is defined with a  default value that automatically generates a UUID. This means that even though main.py doesn't explicitly create a UUID when it  creates new EncounterFiles records, the database handles it automatically. As a result, every original image and every original report gets it own unique UUID.  [Documentation](main.md). 
 6.  **Transaction Management**: All database operations for a single ZIP file are committed as a single transaction. If any error occurs, the transaction is rolled back.
 7.  **Archive Management**:
     *   On **success**, the original ZIP file is moved to the `files/processed/` directory.

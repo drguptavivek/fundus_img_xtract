@@ -21,7 +21,7 @@ Serves an image optimized for grading interface based on its UUID.
 - `/search/image` endpoints
 - Analytics modules
 
-**Related Documentation**: [Media Routes](docs/routes.md#media-routes)
+**Related Documentation**: [Media Routes](../routes.md#media-routes)
 
 ### User and Lab Unit Utilities
 
@@ -40,7 +40,7 @@ Retrieves all lab units associated with a user.
 - Task assignment logic
 - Data filtering in search and analytics
 
-**Related Documentation**: [Scoping Mechanisms](Scoping.md)
+**Related Documentation**: [Scoping Mechanisms](../03-Tasks/Scoping.md)
 
 ### Image and Encounter Data Retrieval
 
@@ -63,7 +63,7 @@ Retrieves comprehensive details about an image including metadata, associated en
 - Analytics modules
 - Image verification workflows
 
-**Related Documentation**: [Database Models](Models.md#encounterfile)
+**Related Documentation**: [Database Models](../00-Core/models.md#encounterfile)
 
 #### `get_image_zip_details(uuid)`
 Retrieves ZIP file information associated with an image.
@@ -103,7 +103,7 @@ Retrieves all grading tasks associated with an image.
 - Analytics modules
 - Grading dashboard
 
-**Related Documentation**: [Dual Grading Workflow](dual_grading.md)
+**Related Documentation**: [Dual Grading Workflow](../04-Grade/dual_grading.md)
 
 #### `get_encounter_details(encounter_id)`
 Retrieves comprehensive details about a patient encounter.
@@ -124,7 +124,7 @@ Retrieves comprehensive details about a patient encounter.
 - Analytics modules
 - Screening workflows
 
-**Related Documentation**: [Database Models](Models.md#patientencounters)
+**Related Documentation**: [Database Models](../00-Core/models.md#patientencounters)
 
 ## Reusable UI Components
 
@@ -184,7 +184,7 @@ lightbox.init();
 - `/static/css/photoswipe.css`
 - `/static/js/pswp-init.js`
 
-**Related Documentation**: [JavaScript Guidance](JavaScript_Guidance.md#photoswipe-integration)
+**Related Documentation**: [JavaScript Guidance](../10-DEVELOP/JavaScript_Guidance.md#photoswipe-integration)
 
 ### Advanced Image Viewer
 
@@ -217,7 +217,7 @@ A specialized image viewer component for grading with clinical tools and adjustm
 
 **JavaScript Implementation**: `/static/js/edit_image.js`
 
-**Related Documentation**: [JavaScript Guidance](JavaScript_Guidance.md#image-viewer-component)
+**Related Documentation**: [JavaScript Guidance](../10-DEVELOP/JavaScript_Guidance.md#image-viewer-component)
 
 ### Flash Toasts Component
 
@@ -318,10 +318,10 @@ def image_analytics(uuid):
 4. **Image Optimization**: Images are served in appropriate sizes and formats
 
 ## Related Documentation
+- [Database Models](../00-Core/models.md) - For data structure understanding
+- [Routes Documentation](../routes.md) - For endpoint details
+- [Security Guidelines](../10-DEVELOP/Security.md) - For security implementation
+- [JavaScript Guidance](../10-DEVELOP/JavaScript_Guidance.md) - For frontend integration
+- [Analytics Utils](../../analytics/utils.md) - For analytics-specific usage
 
-- [Database Models](Models.md) - For data structure understanding
-- [Routes Documentation](routes.md) - For endpoint details
-- [Security Guidelines](Security.md) - For security implementation
-- [JavaScript Guidance](JavaScript_Guidance.md) - For frontend integration
-- [Analytics Utils](analytics/utils.md) - For analytics-specific usage
-- [Task Utilities](../utils/taskUtils.md) - For task management and retrieval functions
+- [Task Utilities](../../utils/taskUtils.md) - For task management and retrieval functions

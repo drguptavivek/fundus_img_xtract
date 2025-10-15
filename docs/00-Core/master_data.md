@@ -155,37 +155,37 @@ Grading tasks are assigned based on:
 ## Utility Functions and APIs for Master Data
 
 ### Master Data Utilities
-Located in [`utils/masterUtils.py`](utils/masterUtils.py):
+Located in [`utils/masterUtils.py`](../../utils/masterUtils.py):
 
-- **[`get_all_diseases()`](utils/masterUtils.py:12)**: Returns all diseases in the system
-- **[`get_disease_gradings(disease_id)`](utils/masterUtils.py:33)**: Returns active gradings for a specific disease
-- **[`fetch_active_disease_gradings(db, disease_id)`](utils/masterUtils.py:65)**: Fetches active disease gradings ordered by display
-- **[`get_all_hospitals()`](utils/masterUtils.py:82)**: Returns all hospitals in the system
-- **[`get_all_lab_units()`](utils/masterUtils.py:103)**: Returns all lab units with hospital information
-- **[`get_hosp_lab_units(hospital_id)`](utils/masterUtils.py:126)**: Returns lab units for a specific hospital
-- **[`get_all_areas()`](utils/masterUtils.py:153)**: Returns all areas in the system
-- **[`get_all_cameras()`](utils/masterUtils.py:174)**: Returns all cameras in the system
+- **[`get_all_diseases()`](../../utils/masterUtils.py:12)**: Returns all diseases in the system
+- **[`get_disease_gradings(disease_id)`](../../utils/masterUtils.py:33)**: Returns active gradings for a specific disease
+- **[`fetch_active_disease_gradings(db, disease_id)`](../../utils/masterUtils.py:65)**: Fetches active disease gradings ordered by display
+- **[`get_all_hospitals()`](../../utils/masterUtils.py:82)**: Returns all hospitals in the system
+- **[`get_all_lab_units()`](../../utils/masterUtils.py:103)**: Returns all lab units with hospital information
+- **[`get_hosp_lab_units(hospital_id)`](../../utils/masterUtils.py:126)**: Returns lab units for a specific hospital
+- **[`get_all_areas()`](../../utils/masterUtils.py:153)**: Returns all areas in the system
+- **[`get_all_cameras()`](../../utils/masterUtils.py:174)**: Returns all cameras in the system
 
 ### API Endpoints for Master Data
 
 #### Hospital APIs
-Located in [`api/hospitals.py`](api/hospitals.py):
+Located in [`api/hospitals.py`](../../api/hospitals.py):
 
-- **[`GET /api/hospitals`](api/hospitals.py:19)**: Get all hospitals
-- **[`GET /api/hospitals/<hospital_id>`](api/hospitals.py:41)**: Get a specific hospital by ID
+- **[`GET /api/hospitals`](../../api/hospitals.py:19)**: Get all hospitals
+- **[`GET /api/hospitals/<hospital_id>`](../../api/hospitals.py:41)**: Get a specific hospital by ID
 
 #### Lab Unit APIs
-Located in [`api/labUnits.py`](api/labUnits.py):
+Located in [`api/labUnits.py`](../../api/labUnits.py):
 
-- **[`GET /api/hospitals/<hospital_id>/labunits`](api/labUnits.py:19)**: Get all lab units for a specific hospital
-- **[`GET /api/labunits`](api/labUnits.py:49)**: Get all lab units with hospital information
-- **[`GET /api/labunits/<lab_unit_id>`](api/labUnits.py:74)**: Get a specific lab unit by ID
+- **[`GET /api/hospitals/<hospital_id>/labunits`](../../api/labUnits.py:19)**: Get all lab units for a specific hospital
+- **[`GET /api/labunits`](../../api/labUnits.py:49)**: Get all lab units with hospital information
+- **[`GET /api/labunits/<lab_unit_id>`](../../api/labUnits.py:74)**: Get a specific lab unit by ID
 
 #### Disease APIs
-Located in [`api/disease.py`](api/disease.py):
+Located in [`api/disease.py`](../../api/disease.py):
 
-- **[`GET /api/disease-grades/<disease_id>`](api/disease.py:9)**: Get grades applicable to a specific disease
-- **[`GET /api/diseases-with-gradings`](api/disease.py:38)**: Get all diseases with their associated gradings
+- **[`GET /api/disease-grades/<disease_id>`](../../api/disease.py:9)**: Get grades applicable to a specific disease
+- **[`GET /api/diseases-with-gradings`](../../api/disease.py:38)**: Get all diseases with their associated gradings
 
 ### Implementation Examples
 

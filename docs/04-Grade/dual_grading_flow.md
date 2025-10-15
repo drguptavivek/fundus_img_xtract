@@ -1,7 +1,7 @@
 # Dual Grading Implementation Details
 
 ## Overview
-This document provides detailed implementation logic for the dual grading system. For a high-level overview, see [docs/dual_grading.md](../docs/dual_grading.md).
+This document provides detailed implementation logic for the dual grading system. For a high-level overview, see [Dual Grading System Documentation](../04-Grade/dual_grading.md).
 
 ## Core Implementation Files
 

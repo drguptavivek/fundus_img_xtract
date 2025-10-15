@@ -36,7 +36,7 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
 
 #### Models 
 
-- ```models.py```: The database manages medical imaging data, specifically retinal fundus images, from ingestion to analysis and grading.[Documentation](docs/models.md)
+- ```models.py```: The database manages medical imaging data, specifically retinal fundus images, from ingestion to analysis and grading.[Documentation](../00-Core/models.md)
 
 #### Standlone scripts
 
@@ -44,13 +44,13 @@ To develop a system for an eye hospital to manage retinal fundis images and gene
     -  During the initial processing in main.py, files are checked for disallowed extensions, path traversal, and content-type mismatches. 
     - Generate MD5 hash to check for duplicate ZIP file uploads. 
     - UUIDs are generated and assigned only during the initial processing of ZIP files in main.py. When an image or an original PDF is extracted, the system creates a corresponding EncounterFile record in the database and assigns it a unique UUID. 
-    - Further, In ```models.py```, the uuid column in the ```EncounterFiles``` table is defined with a  default value that automatically generates a UUID. This means that even though main.py doesn't explicitly create a UUID when it  creates new EncounterFiles records, the database handles it automatically. As a result, every original image and every original report gets it own unique UUID.  [Documentation](docs/main.md). 
-
-- ```process_pdfs.py``` and ```ocr_extraction.py```: Performing Optical Character Recognition (OCR) on the PDFs to extract key medical data points. The extracted information is then stored in a structured database.  The split, single-page PDFs for Diabetic Retinopathy and Glaucoma reports, which are created later by process_pdfs.py, are also assigned their own UUIDs. In ```models.py```, the uuid column in the DiabeticRetinopathyReport, and GlaucomaReport tables is defined with a  default value that automatically generates a UUID. This means that even though process_pdfs.py doesn't explicitly create a UUID when it  creates new report records, the database handles it automatically. As a result, every split PDF report gets it own unique UUID.  [Documentation process_pdfs](docs/process_pdfs.md) and [Documentation ocr_extraction](docs/ocr_extraction.md) 
+    - Further, In ```models.py```, the uuid column in the ```EncounterFiles``` table is defined with a  default value that automatically generates a UUID. This means that even though main.py doesn't explicitly create a UUID when it  creates new EncounterFiles records, the database handles it automatically. As a result, every original image and every original report gets it own unique UUID. [Documentation](../main.md).
+    
+- ```process_pdfs.py``` and ```ocr_extraction.py```: Performing Optical Character Recognition (OCR) on the PDFs to extract key medical data points. The extracted information is then stored in a structured database.  The split, single-page PDFs for Diabetic Retinopathy and Glaucoma reports, which are created later by process_pdfs.py, are also assigned their own UUIDs. In ```models.py```, the uuid column in the DiabeticRetinopathyReport, and GlaucomaReport tables is defined with a default value that automatically generates a UUID. This means that even though process_pdfs.py doesn't explicitly create a UUID when it  creates new report records, the database handles it automatically. As a result, every split PDF report gets it own unique UUID. [Documentation process_pdfs](../01-Adding_Images/process_pdfs.md) and [Documentation ocr_extraction](../01-Adding_Images/ocr_extraction.md)
 
 #### Flask Application
 
-``app.py```: Application factory and entry-point for the Flask app. Initializes configuration, environment, logging, DB schema, thread pool, and registers all blueprints. Provides the homepage route (`/`). Has features for security, and protetcion of routes. [Documentation](docs/app.md)
+``app.py```: Application factory and entry-point for the Flask app. Initializes configuration, environment, logging, DB schema, thread pool, and registers all blueprints. Provides the homepage route (`/`). Has features for security, and protetcion of routes. [Documentation](../app.md)
 
 ##### Login, Users, and Roles
    This application implements a comprehensive user and role management system distributed across three key blueprints. 

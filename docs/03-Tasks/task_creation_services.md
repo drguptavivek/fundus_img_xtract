@@ -12,7 +12,7 @@ The Task Creation Services are responsible for automatically creating `GradingTa
 
 The core functionality is implemented in `/services/taskCreationServices.py`:
 
-> **Note**: For detailed API documentation of all service functions, including parameters, return values, and implementation details, see [`services/taskCreationServices.md`](../services/taskCreationServices.md).
+> **Note**: For detailed API documentation of all service functions, including parameters, return values, and implementation details, see the source code in `/services/taskCreationServices.py`.
 
 - `_resolve_image_by_uuid(db, image_uuid)`: Resolves an image by UUID to determine if it's a direct image or encounter file
 - `_is_verified_for_disease(db, kind, image_id, disease_id)`: Checks if an image is verified for a specific disease

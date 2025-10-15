@@ -95,4 +95,4 @@ When a malicious upload is detected:
 4. A `MaliciousZipError` is raised to ensure the job processing system records the error
 5. The file is not moved to the processed or error directories (since it's deleted)
 
-For detailed information about malicious upload handling and logging, see [Security.md](Security.md).
+For detailed information about malicious upload handling and logging, see [Security.md](../10-DEVELOP/Security.md).

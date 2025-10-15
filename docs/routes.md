@@ -304,7 +304,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 
 ## API Routes
 
-The application includes comprehensive API endpoints that are documented separately in [docs/api.md](api.md). These endpoints provide RESTful access to application functionality for programmatic integration.
+The application includes comprehensive API endpoints that are documented separately in [OpenAPI Specification](openapi.yaml). These endpoints provide RESTful access to application functionality for programmatic integration.
 
 ### API Route Summary
 

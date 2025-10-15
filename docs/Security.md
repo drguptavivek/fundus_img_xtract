@@ -41,6 +41,94 @@ The system implements a robust authentication system with the following security
 - **Session Tracking**: Full session lifecycle tracking including start time, end time, user association, and expiry
 - **Secure Session Cookies**: HttpOnly, Secure, and SameSite settings configurable via Flask configuration
 
+### Server-Side Session Implementation (server_side_session.py)
+
+The application implements a custom server-side session storage system using the `DatabaseSessionInterface` class. This provides enhanced security compared to client-side session storage.
+
+#### Architecture Components
+
+**DatabaseSession Class**
+- Extends Flask's SessionMixin with database-backed storage
+- Tracks session ID, modification status, and whether it's a new session
+- Automatically flags sessions as modified when data changes
+
+**DatabaseSessionInterface Class**
+- Custom Flask session interface that stores session data in the database
+- Uses JSON serialization for session data storage
+- Implements secure session ID generation using secrets.token_hex()
+
+#### Session Lifecycle Management
+
+**Session Creation (open_session method)**
+1. Retrieves session ID from request cookie
+2. Validates session exists in database and hasn't expired
+3. Handles expired or invalid sessions by creating new ones
+4. Tracks session start time if not previously set
+5. Automatically marks sessions as ended when expired
+
+**Session Persistence (save_session method)**
+1. Saves session data to database with current expiry time
+2. Associates session with user ID when authenticated
+3. Updates session modification timestamp
+4. Sets secure cookie with appropriate security flags
+
+**Session Termination**
+- Explicit logout: Session is marked as ended in database
+- Inactivity timeout: Automatically expires after configured period
+- Session cleanup: Empty sessions are immediately marked as ended
+
+#### Security Features
+
+**Session ID Security**
+- 64-character hexadecimal tokens generated using cryptographically secure random numbers
+- Session IDs are never stored in client-side cookies (only reference)
+- New session IDs generated for expired or invalid sessions
+
+**Database Storage**
+- Session data stored as JSON in FlaskSession model
+- User association tracked for audit purposes
+- Full lifecycle tracking: creation, start, expiry, and end times
+- Automatic cleanup of expired sessions
+
+**Session Isolation**
+- Each session has independent data storage
+- No session data exposed to client
+- Server-enforced session boundaries prevent cross-session data access
+
+#### Session Tracking Model (FlaskSession)
+
+The database model tracks:
+- `session_id`: Primary key, also used as cookie value
+- `data`: JSON-serialized session data
+- `expiry`: Session expiration timestamp
+- `user_id`: Associated user ID when authenticated
+- `started_at`: When the session was first used
+- `ended_at`: When the session was terminated
+
+#### Helper Functions
+
+**mark_session_ended()**
+- Records session termination outside normal request cycle
+- Used for logout, timeout, and security event handling
+- Ensures proper audit trail for session lifecycle
+
+#### Configuration
+
+Session behavior is controlled by these Flask configuration variables:
+- `SESSION_COOKIE_NAME`: Cookie name (default: "session")
+- `SESSION_COOKIE_HTTPONLY`: Prevent JavaScript access (default: True)
+- `SESSION_COOKIE_SECURE`: HTTPS-only transmission (default: False)
+- `SESSION_COOKIE_SAMESITE`: Cross-site request protection (default: "Lax")
+- `PERMANENT_SESSION_LIFETIME`: Session duration (default: 30 minutes)
+
+#### Benefits Over Client-Side Sessions
+
+1. **Enhanced Security**: Session data never leaves the server
+2. **Audit Trail**: Complete session lifecycle tracking
+3. **Immediate Revocation**: Sessions can be invalidated instantly
+4. **Size Independence**: Larger session data doesn't affect cookies
+5. **Data Integrity**: Server-side storage prevents client tampering
+
 #### Password Reset
 - **OTP-Based Reset**: 8-character alphanumeric OTP sent via email
 - **Rate Limiting**: Maximum 5 password reset attempts per email per day

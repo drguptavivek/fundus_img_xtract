@@ -376,6 +376,9 @@ def create_app():
     from tasks import bp as tasks_bp
     app.register_blueprint(tasks_bp)
 
+    from help import bp as help_bp
+    app.register_blueprint(help_bp)
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager
@@ -404,7 +407,7 @@ def create_app():
             mark_session_ended(prior_session_id)
 
         if (
-            path == "/" 
+            path == "/"
             or path == "/login"
             or path.startswith("/static/")
             or path == "/favicon.ico"
@@ -414,6 +417,7 @@ def create_app():
             or path == "/check-email-status"
             or path == "/email-sse"
             or path.startswith("/docs/")
+            or path.startswith("/help/")
         ):
             return  # allowed without auth
         if not current_user.is_authenticated:
@@ -504,6 +508,7 @@ def create_app():
 
     from docs import docs_bp
     app.register_blueprint(docs_bp)
+
 
 
 

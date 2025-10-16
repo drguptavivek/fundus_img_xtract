@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} - Help{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/help.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Help & Documentation</h1>
+        <a href="{{ url_for('help.index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-house"></i> Help Home
+        </a>
+    </div>
+
+    {% if not is_main_page %}
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb breadcrumb-help">
+            <li class="breadcrumb-item">
+                <a href="{{ url_for('help.index') }}">User Guide</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">{{ title }}</li>
+        </ol>
+    </nav>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-3">
+            <div class="help-sidebar">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="card-title mb-0">User Guide</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <nav class="help-nav">
+                            <a href="{{ url_for('help.index') }}" class="help-nav-link {% if is_main_page %}active{% endif %}">
+                                Overview
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='getting-started') }}" class="help-nav-link">
+                                Getting Started
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='direct-uploads') }}" class="help-nav-link">
+                                Direct Uploads
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='zip-uploads') }}" class="help-nav-link">
+                                ZIP Uploads
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='pre-graded-uploads') }}" class="help-nav-link">
+                                Pre-Graded Uploads
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='verification-dr-glaucoma-zips') }}" class="help-nav-link">
+                                Verification of DR/Glaucoma
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='direct-image-anonymization') }}" class="help-nav-link">
+                                Image Editing
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='grading-images') }}" class="help-nav-link">
+                                Grading Images
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='viewing-analytics') }}" class="help-nav-link">
+                                Viewing Analytics
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='notifications') }}" class="help-nav-link">
+                                Notifications
+                            </a>
+                            <a href="{{ url_for('help.view_document', doc_path='troubleshooting') }}" class="help-nav-link">
+                                Troubleshooting
+                            </a>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-9">
+            <div class="card">
+                <div class="card-body">
+                    <div class="help-content">
+                        {{ content|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Highlight current navigation item
+    const currentPath = window.location.pathname;
+    const navLinks = document.querySelectorAll('.help-nav-link');
+    
+    navLinks.forEach(link => {
+        if (link.getAttribute('href') === currentPath.split('/').pop()) {
+            link.classList.add('active');
+        }
+    });
+});
+</script>
+{% endblock %}

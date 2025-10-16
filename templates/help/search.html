@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Search Help - Fundus Image Management System{% endblock %}
+
+{% block extra_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/help.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h2 class="h4 mb-0">Search Help Documentation</h2>
+                </div>
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('help.search') }}">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" name="q" placeholder="Search for help topics..." value="{{ query or '' }}">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="bi bi-search"></i> Search
+                            </button>
+                        </div>
+                    </form>
+                    
+                    {% if query %}
+                        <p class="text-muted">Showing {{ results|length }} results for "{{ query }}"</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if results %}
+                <div class="card">
+                    <div class="card-body">
+                        {% for result in results %}
+                            <div class="mb-4 pb-3 border-bottom">
+                                <h5>
+                                    <a href="{{ url_for('help.view_document', doc_path=result.name) }}" class="text-decoration-none">
+                                        {{ result.title }}
+                                    </a>
+                                </h5>
+                                <p class="text-muted mb-2">{{ result.summary }}</p>
+                                <p class="mb-0">
+                                    <small class="text-muted">Found in: {{ result.name }}</small>
+                                </p>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% elif query %}
+                <div class="card">
+                    <div class="card-body text-center">
+                        <i class="bi bi-search text-muted" style="font-size: 3rem;"></i>
+                        <h4 class="mt-3">No results found</h4>
+                        <p class="text-muted">No help topics found matching "{{ query }}"</p>
+                        <a href="{{ url_for('help.index') }}" class="btn btn-outline-primary mt-2">
+                            <i class="bi bi-house"></i> Browse All Help Topics
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -67,6 +67,11 @@
             <a class="nav-link {% if request.endpoint == 'homepage' %}active{% endif %}"
               href="{{ url_for('homepage') }}">Home</a>
           </li>
+          
+          <li class="nav-item">
+            <a class="nav-link {% if request.blueprint == 'help' %}active{% endif %}"
+              href="{{ url_for('help.index') }}">Help</a>
+          </li>
 
           {% if current_user.is_authenticated %}
           
@@ -364,7 +369,7 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item" href="{{ url_for('docs.api_docs_html') }}">Help</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('help.index') }}">Help</a></li>
               <li>
                 <hr class="dropdown-divider">
               </li>

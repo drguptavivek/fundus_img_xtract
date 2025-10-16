@@ -124,8 +124,8 @@ def get_user_gradings(
 
 def get_user_gradings_with_details(
     db,
-    user_id: int, 
-    page: int = 1, 
+    user_id: int,
+    page: int = 1,
     per_page: int = 20,
     role_slot: Optional[str] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
@@ -189,6 +189,17 @@ def get_user_gradings_with_details(
         elif result.direct_image_uuid:
             image_uuid = result.direct_image_uuid
         
+        # Extract AI probability from comment if this is an AI grade
+        ai_probability = None
+        if result.Grade.role_slot == 'ai':
+            import re
+            prob_match = re.search(r'AI probability:\s*([0-9.]+)', result.Grade.comment or "")
+            if prob_match:
+                try:
+                    ai_probability = float(prob_match.group(1))
+                except ValueError:
+                    pass  # If conversion fails, leave as None
+        
         grade_dict = {
             'id': result.Grade.id,
             'task_id': result.Grade.task_id,
@@ -202,7 +213,10 @@ def get_user_gradings_with_details(
             'grade_impression': result.grade_impression,
             'lab_unit_name': result.lab_unit_name,
             'hospital_name': result.hospital_name,
-            'image_uuid': image_uuid
+            'image_uuid': image_uuid,
+            'ai_probability': ai_probability,
+            'ai_model_name': result.Grade.ai_model_name,
+            'ai_model_version': result.Grade.ai_model_version
         }
         gradings_with_details.append(grade_dict)
     

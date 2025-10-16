@@ -11,7 +11,7 @@ from . import bp
 
 
 @bp.route("/direct/view/<uuid_str>", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "data_manager")
 def view_upload(uuid_str: str):
     # Use the utility function to get comprehensive summary
     summary = get_direct_image_summary(uuid_str)

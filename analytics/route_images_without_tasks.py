@@ -30,7 +30,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 
 
 @bp.route("/images/no-tasks", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "data_manager")
 def images_without_tasks() -> str:
     """Display images that have no associated grading tasks."""
 

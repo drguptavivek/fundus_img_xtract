@@ -10,6 +10,7 @@ from flask_login import current_user
 from db_transaction_manager import get_db_session
 from utils.taskUtils import get_task_summary
 from utils.masterUtils import get_all_diseases
+from models import Hospital, LabUnit
 from . import bp
 
 
@@ -27,6 +28,8 @@ def organizational_tasks() -> str:
     # Get filters from request
     status_filter = request.args.get('status', type=str)
     disease_filter = request.args.get('disease', type=int)
+    hospital_filter = request.args.get('hospital', type=int)
+    lab_unit_filter = request.args.get('lab_unit', type=int)  # Changed to use lab_unit ID
     search_query = request.args.get('search', type=str)
     
     with get_db_session() as db:
@@ -41,6 +44,8 @@ def organizational_tasks() -> str:
             lab_unit_ids=user_lab_unit_ids,
             status_filter=status_filter,
             disease_filter=disease_filter,
+            hospital_filter=hospital_filter,
+            lab_unit_filter=lab_unit_filter, # Using ID-based filter
             search_query=search_query
         )
         
@@ -49,6 +54,12 @@ def organizational_tasks() -> str:
         
         # Get all diseases for the disease filter dropdown
         diseases = get_all_diseases()
+        
+        # Get all hospitals for the hospital filter dropdown
+        hospitals = db.query(Hospital).order_by(Hospital.name).all()
+        
+        # Get all lab units for initial load (will be filtered by JS)
+        all_lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
         
         # Prepare context for template
         context = {
@@ -59,8 +70,12 @@ def organizational_tasks() -> str:
             'total_pages': total_pages,
             'status_filter': status_filter,
             'disease_filter': disease_filter,
+            'hospital_filter': hospital_filter,
+            'lab_unit_filter': lab_unit_filter,
             'search_query': search_query,
             'diseases': diseases,
+            'hospitals': hospitals,
+            'all_lab_units': all_lab_units,  # Pass all lab units to template
             'user_lab_unit_ids': user_lab_unit_ids
         }
         

@@ -13,7 +13,7 @@
         <div class="card-body">
           <form method="GET" action="{{ url_for('tasks.organizational_tasks') }}">
             <div class="row g-3">
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label for="statusFilter" class="form-label">Status</label>
                 <select name="status" id="statusFilter" class="form-select">
                   <option value="">All Statuses</option>
@@ -24,7 +24,7 @@
                   <option value="final" {% if status_filter == 'final' %}selected{% endif %}>Final</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label for="diseaseFilter" class="form-label">Disease</label>
                 <select name="disease" id="diseaseFilter" class="form-select">
                   <option value="">All Diseases</option>
@@ -33,14 +33,36 @@
                   {% endfor %}
                 </select>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-2">
+                <label for="hospitalFilter" class="form-label">Hospital</label>
+                <select name="hospital" id="hospitalFilter" class="form-select">
+                  <option value="">All Hospitals</option>
+                  {% for hospital in hospitals %}
+                  <option value="{{ hospital.id }}" {% if hospital_filter == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="labUnitFilter" class="form-label">Lab Unit</label>
+                <select name="lab_unit" id="labUnitFilter" class="form-select">
+                  <option value="">All Lab Units</option>
+                  {% for lab_unit in all_lab_units %}
+                  <option value="{{ lab_unit.id }}"
+                          data-hospital-id="{{ lab_unit.hospital_id }}"
+                          {% if lab_unit_filter == lab_unit.id %}selected{% endif %}>
+                    {{ lab_unit.name }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-3">
                 <label for="searchQuery" class="form-label">Search</label>
-                <input type="text" name="search" id="searchQuery" class="form-control" 
-                       placeholder="Search by image UUID, patient name, etc." 
+                <input type="text" name="search" id="searchQuery" class="form-control"
+                       placeholder="Search by image UUID."
                        value="{{ search_query or '' }}">
               </div>
-              <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary">Apply Filters</button>
+              <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
               </div>
             </div>
           </form>
@@ -240,4 +262,53 @@
     </div>
   </div>
 </div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const hospitalFilter = document.getElementById('hospitalFilter');
+    const labUnitFilter = document.getElementById('labUnitFilter');
+    
+    // Function to filter lab units based on selected hospital
+    function filterLabUnits() {
+      const selectedHospitalId = hospitalFilter.value;
+      
+      // Show all lab units if no hospital is selected
+      if (!selectedHospitalId) {
+        Array.from(labUnitFilter.options).forEach(option => {
+          option.style.display = 'block';
+        });
+        return;
+      }
+      
+      // Otherwise, show only lab units that belong to the selected hospital
+      Array.from(labUnitFilter.options).forEach(option => {
+        const optionHospitalId = option.getAttribute('data-hospital-id');
+        if (!optionHospitalId || optionHospitalId === selectedHospitalId) {
+          option.style.display = 'block';
+        } else {
+          option.style.display = 'none';
+        }
+      });
+      
+      // If the currently selected lab unit is not valid for the selected hospital,
+      // reset the lab unit selection
+      const selectedLabUnit = labUnitFilter.value;
+      if (selectedLabUnit) {
+        const selectedOption = labUnitFilter.querySelector(`option[value="${selectedLabUnit}"]`);
+        if (selectedOption) {
+          const optionHospitalId = selectedOption.getAttribute('data-hospital-id');
+          if (optionHospitalId && optionHospitalId !== selectedHospitalId) {
+            labUnitFilter.value = ''; // Reset to show all options
+          }
+        }
+      }
+    }
+    
+    // Initial filtering when page loads
+    filterLabUnits();
+    
+    // Add event listener to hospital filter
+    hospitalFilter.addEventListener('change', filterLabUnits);
+  });
+</script>
 {% endblock %}

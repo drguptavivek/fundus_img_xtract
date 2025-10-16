@@ -191,7 +191,7 @@
 
 <!-- Completed KPIs Row -->
 <div class="row g-3 mb-4"> 
-  <h3>Completed</h3>
+  <h3>My Gradings</h3>
   <div class="col-md-4">
     <div class="card  kpi-card shadow-sm h-100">
       <div class="card-body">
@@ -248,7 +248,7 @@
 <!-- History of My Gradings -->
 <div class="card card-aurora shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center"> 
-    <strong>Recent Gradings</strong> 
+    <strong>My Recent Gradings and AI Grade Uploads</strong> 
     <span class="small text-muted">{{ my_total or 0 }} total</span> 
   </div>
   <div class="card-body">
@@ -273,17 +273,37 @@
                 <div>
                   <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                     <span class="small text-muted">{{ g.created_at|user_datetime('%Y-%m-%d %H:%M') if g.created_at else '-' }}</span>
-                    <span class="badge bg-secondary">{{ g.role_slot|title }}</span> {{ badge_for_for(g.disease_name)|safe }} 
+                    <span class="badge bg-secondary">{{ g.role_slot|title }}</span> {{ badge_for_for(g.disease_name)|safe }}
                   </div>
                   {% if g.task_id %}
                   <div class="mb-1">
                     Task:  <code class="small text-muted"> {{ g.task_id }} &nbsp; </code>
-                    {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% if g.role_slot == 'ai' %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                      {% if g.ai_probability is not none %}
+                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
+                      {% endif %}
+                      {% if g.ai_model_name %}
+                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
+                      {% endif %}
+                    {% else %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% endif %}
                   </div>
                   {% else %}
                   <div class="mb-1">
                     {{ badge_for_for(g.disease_name)|safe }} Grade =  &nbsp;
-                    {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% if g.role_slot == 'ai' %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                      {% if g.ai_probability is not none %}
+                        <span class="badge bg-info text-dark">Prob: {{ "%.3f"|format(g.ai_probability) }}</span>
+                      {% endif %}
+                      {% if g.ai_model_name %}
+                        <span class="badge bg-secondary">{{ g.ai_model_name }} v{{ g.ai_model_version }}</span>
+                      {% endif %}
+                    {% else %}
+                      {{ badge_for_impression(g.grade_impression)|safe }}
+                    {% endif %}
                   </div>
                   {% endif %}
                   <div class="small text-muted mb-1">
@@ -292,14 +312,14 @@
                   <div class="small text-muted">
                     {{ g.lab_unit_name }} - {{ g.hospital_name }}
                   </div>
-                  {% if g.comment %}
+                  {% if g.comment and g.role_slot != 'ai' %}
                   <div class="small mt-1">
                     {{ g.comment }}
                   </div>
                   {% endif %}
                 </div>
                 <div>
-                  {% if g.image_uuid %}
+                  {% if g.image_uuid and g.role_slot != 'ai' %}
                   <a class="btn btn-sm btn-outline-primary" href="{{ url_for('grading.revise_grading', grade_id=g.id) }}">Revise</a>
                   {% endif %}
                 </div>

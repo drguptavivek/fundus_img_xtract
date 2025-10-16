@@ -10,18 +10,18 @@
                 <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <h3 class="mb-0">Notifications</h3>
                     <div class="d-flex flex-wrap gap-2">
-                        <a href="{{ url_for('notifications.compose_notification') }}" class="btn btn-sm btn-outline-primary">
+                        <a href="{{ url_for('notifications.compose_notification') }}" class="btn btn-sm  btn-light">
                             Compose
                         </a>
                         {% if current_user.has_role('admin') %}
-                            <a href="{{ url_for('notifications.broadcast_notification') }}" class="btn btn-sm btn-outline-secondary">Broadcast to All</a>
-                            <a href="{{ url_for('notifications.system_notification') }}" class="btn btn-sm btn-outline-secondary">System Notification</a>
+                            <a href="{{ url_for('notifications.broadcast_notification') }}" class="btn btn-sm btn-secondary">Broadcast to All</a>
+                            <a href="{{ url_for('notifications.system_notification') }}" class="btn btn-sm btn-secondary">System Notification</a>
                         {% endif %}
                         {% if notifications %}
                         <form method="POST" action="{{ url_for('notifications.mark_all_notifications_read') }}" style="display: inline;">
                             {% from "_forms.html" import csrf_field %}
                             {{ csrf_field() }}
-                            <button type="submit" class="btn btn-sm btn-outline-primary">Mark All as Read</button>
+                            <button type="submit" class="btn btn-sm btn-light">Mark All as Read</button>
                         </form>
                         {% endif %}
                     </div>
@@ -110,7 +110,7 @@
                                     <td class="small text-truncate" style="max-width: 320px;">{{ notification.message|truncate(120, True, '…') }}</td>
                                     <td>
                                         {% if is_system %}
-                                            <span class="text-muted">System</span>
+                                            <span class="">System</span>
                                         {% elif is_sender %}
                                             <span class="fw-semibold">You</span>
                                         {% else %}
@@ -119,7 +119,7 @@
                                     </td>
                                     <td>
                                         {% if is_system %}
-                                            <span class="text-muted">Everyone</span>
+                                            <span class="">Everyone</span>
                                         {% elif is_recipient %}
                                             <span class="fw-semibold">You</span>
                                         {% else %}
@@ -141,7 +141,7 @@
                                         <form method="POST" action="{{ url_for('notifications.mark_notification_read', notification_id=notification.id) }}" style="display: inline;">
                                             {% from "_forms.html" import csrf_field %}
                                             {{ csrf_field() }}
-                                            <button type="submit" class="btn btn-sm btn-outline-primary">Mark Read</button>
+                                            <button type="submit" class="btn btn-sm btn-light">Mark Read</button>
                                         </form>
                                         {% endif %}
                                     </td>

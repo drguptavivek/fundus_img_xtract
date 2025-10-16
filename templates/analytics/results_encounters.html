@@ -143,7 +143,7 @@
                                     AI Grades:
                                     <ul class="mb-0">
                                       {% for ai_grade in task.ai_grades %}
-                                      <li>{{ ai_grade.model_name }} {{ ai_grade.model_version }}{% if ai_grade.impression %} → {{ ai_grade.impression }}{% endif %}{% if ai_grade.confidence is not none %} ({{ '%.2f'|format(ai_grade.confidence) }}){% endif %}</li>
+                                      <li>{{ ai_grade.model_name }} {{ ai_grade.model_version }}{% if ai_grade.impression %} → {{ ai_grade.impression }}{% endif %}{% if ai_grade.confidence is not none %} ({{ '%.3f'|format(ai_grade.confidence) }}){% endif %}</li>
                                       {% endfor %}
                                     </ul>
                                   </div>

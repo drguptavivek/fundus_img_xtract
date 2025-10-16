@@ -161,7 +161,7 @@
                   <li>
                     <span class="fw-semibold">{{ ai_grade.model_name }} {{ ai_grade.model_version }}</span>
                     {% if ai_grade.impression %}<span>→ {{ ai_grade.impression }}</span>{% endif %}
-                    {% if ai_grade.confidence is not none %}<span class="text-muted">({{ '%.2f'|format(ai_grade.confidence) }})</span>{% endif %}
+                    {% if ai_grade.confidence is not none %}<span class="text-muted">({{ '%.3f'|format(ai_grade.confidence) }})</span>{% endif %}
                   </li>
                   {% endfor %}
                 </ul>

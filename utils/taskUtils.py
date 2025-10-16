@@ -38,7 +38,10 @@ def get_task_summary(
     lab_unit_ids: Optional[List[int]] = None,
     status_filter: Optional[str] = None,
     disease_filter: Optional[int] = None,
-    search_query: Optional[str] = None
+    search_query: Optional[str] = None,
+    hospital_filter: Optional[int] = None,
+    lab_unit_name_filter: Optional[str] = None,
+    lab_unit_filter: Optional[int] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Get paginated list of tasks with key information.
     
@@ -50,6 +53,9 @@ def get_task_summary(
         status_filter: Optional status to filter tasks (e.g., 'pending', 'completed', 'in_progress', 'final')
         disease_filter: Optional disease ID to filter tasks
         search_query: Optional search term to match against image UUID or patient info
+        hospital_filter: Optional hospital ID to filter tasks
+        lab_unit_name_filter: Optional lab unit name to filter tasks (deprecated - using lab_unit_filter instead)
+        lab_unit_filter: Optional lab unit ID to filter tasks
     
     Returns:
         Tuple of (list of task dictionaries, total count)
@@ -77,6 +83,15 @@ def get_task_summary(
         
     if disease_filter:
         query = query.filter(Task.disease_id == disease_filter)
+        
+    if hospital_filter:
+        query = query.filter(LabUnit.hospital_id == hospital_filter)
+        
+    if lab_unit_filter:
+        query = query.filter(Task.lab_unit_id == lab_unit_filter)
+        
+    if lab_unit_name_filter:
+        query = query.filter(LabUnit.name.ilike(f'%{lab_unit_name_filter}%'))
         
     if search_query:
         query = query.filter(
@@ -111,6 +126,7 @@ def get_task_summary(
             'status': task.state,
             'disease': task.disease.name if task.disease else 'Unknown',
             'lab_unit': task.lab_unit.name if task.lab_unit else 'Unknown',
+            'hospital': task.lab_unit.hospital.name if task.lab_unit and task.lab_unit.hospital else 'Unknown',
             'image_uuid': image_uuid,
             'image_type': 'direct' if task.direct_image else 'zip' if task.encounter_file else 'Unknown',
             'created_at': task.created_at,

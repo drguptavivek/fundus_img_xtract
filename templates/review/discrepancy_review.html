@@ -182,7 +182,7 @@
           <nav aria-label="Tasks pagination">
             <ul class="pagination pagination-sm mb-0">
               <li class="page-item {% if not has_prev %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -199,7 +199,7 @@
                 <!-- If total pages <= 7, show all pages -->
                 {% for p in range(1, total_pages + 1) %}
                   <li class="page-item {% if p == page %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                    <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                       disease_id=filters.disease_id,
                       lab_unit_id=filters.lab_unit_id,
                       resident_grade=filters.resident_grade or [],
@@ -214,7 +214,7 @@
               {% else %}
                 <!-- More than 7 pages, show first, current, and last -->
                 <li class="page-item {% if 1 == page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('analytics.review.discrepancy_reviewpancy_review', 
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -235,7 +235,7 @@
                 {% for p in range([page - 1, 2]|sort|first, [page + 2, total_pages]|sort|last) %}
                   {% if p > 1 and p < total_pages %}
                     <li class="page-item {% if p == page %}active{% endif %}">
-                      <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                      <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                         disease_id=filters.disease_id,
                         lab_unit_id=filters.lab_unit_id,
                         resident_grade=filters.resident_grade or [],
@@ -256,7 +256,7 @@
                 {% endif %}
                 
                 <li class="page-item {% if total_pages == page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -270,7 +270,7 @@
               {% endif %}
               
               <li class="page-item {% if not has_next %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -388,7 +388,7 @@
             <nav aria-label="Tasks pagination (mobile)">
               <ul class="pagination pagination-sm justify-content-center">
                 <li class="page-item {% if not has_prev %}disabled{% endif %}">
-                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -400,7 +400,7 @@
                   </a>
                 </li>
                 <li class="page-item {% if not has_next %}disabled{% endif %}">
-                  <a class="page-link" href="{{ url_for('analytics.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],

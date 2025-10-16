@@ -379,6 +379,9 @@ def create_app():
     from help import bp as help_bp
     app.register_blueprint(help_bp)
 
+    from review import bp as review_bp
+    app.register_blueprint(review_bp)
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager

@@ -165,7 +165,7 @@ def discrepancy_review():
             processed_tasks.append(task_data)
         
         return render_template(
-            "analytics/discrepancy_review.html",
+            "review/discrepancy_review.html",
             diseases=diseases,
             lab_units=lab_units,
             grade_options=grade_options,

@@ -217,11 +217,10 @@
                            <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
                              href="{{ url_for('grading.index') }}">Image Grading</a>
                          </li>
-                         {% if current_user_has('admin') or current_user_has('data_manager') %}
-                                       <li>
-                         <a class="dropdown-item" href = "{{ url_for('analytics.discrepancy_review') }}"> Discrepancy Review</a>
+                  
+                          <li>
+                            <a class="dropdown-item" href = "{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
                          </li>
-                         {% endif %}
                        </ul>
                      </li>
                      {% endif %}

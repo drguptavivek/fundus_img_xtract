@@ -587,33 +587,6 @@ class UserDiseaseUnitRole(Base):
     )
 
 
-class AIGrade(Base):
-    __tablename__ = 'ai_grades'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id'), nullable=True, index=True)
-    direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id'), nullable=True, index=True)
-    disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False, index=True)
-    model_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    model_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    label_disease_grading_id: Mapped[int | None] = mapped_column(ForeignKey('disease_gradings.id'), nullable=True)
-    confidence: Mapped[float | None] = mapped_column(nullable=True)
-    probabilities_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    inference_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-    disease: Mapped['Disease'] = relationship('Disease', foreign_keys=[disease_id])
-    label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading', foreign_keys=[label_disease_grading_id])
-    __table_args__ = (
-        CheckConstraint(
-            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL) OR "
-            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL)",
-            name='ck_ai_grade_either_encounter_or_direct'
-        ),
-        UniqueConstraint('encounter_file_id', 'disease_id', 'model_name', 'model_version', 'run_id', name='uq_ai_encounter_model_run'),
-        UniqueConstraint('direct_image_upload_id', 'disease_id', 'model_name', 'model_version', 'run_id', name='uq_ai_direct_model_run'),
-    )
-
-
 class TaskTracker(Base):
     """
     A model to track when users start working on grading tasks.

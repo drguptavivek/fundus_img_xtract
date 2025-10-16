@@ -12,7 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession, joinedload, selectinload
 
 from models import (
-    AIGrade,
+    
     Consensus,
     DiabeticRetinopathyReport,
     DirectImageUpload,
@@ -86,7 +86,7 @@ def _summarize_consensus(consensus: Consensus | None) -> Optional[ConsensusSumma
         decided_at=decided_at,
     )
 
-
+'''
 def _summarize_ai_grade(ai_grade: AIGrade) -> AIGradeSummary:
     impression = ai_grade.label.impression if ai_grade.label else None
     return AIGradeSummary(
@@ -96,7 +96,7 @@ def _summarize_ai_grade(ai_grade: AIGrade) -> AIGradeSummary:
         confidence=ai_grade.confidence,
         run_id=ai_grade.run_id,
     )
-
+'''
 
 def fetch_image_task_details(
     db: SASession,
@@ -212,23 +212,7 @@ def fetch_image_task_details(
     for consensus in consensus_rows:
         consensus_map[consensus.task_id] = consensus
 
-    ai_grade_map: Dict[Tuple[Optional[int], Optional[int]], List[AIGrade]] = {}
-    ai_conditions: List[Any] = []
-    if encounter_ids:
-        ai_conditions.append(AIGrade.encounter_file_id.in_(encounter_ids))
-    if direct_ids:
-        ai_conditions.append(AIGrade.direct_image_upload_id.in_(direct_ids))
 
-    if ai_conditions:
-        ai_query = db.query(AIGrade).options(selectinload(AIGrade.label))
-        if len(ai_conditions) == 1:
-            ai_query = ai_query.filter(ai_conditions[0])
-        else:
-            ai_query = ai_query.filter(or_(*ai_conditions))
-        ai_rows = ai_query.all()
-        for ai_grade in ai_rows:
-            key = (ai_grade.encounter_file_id, ai_grade.direct_image_upload_id)
-            ai_grade_map.setdefault(key, []).append(ai_grade)
 
     details: List[Dict[str, Any]] = []
     for task in tasks:
@@ -277,29 +261,24 @@ def fetch_image_task_details(
 
         ai_key = (task.encounter_file_id, task.direct_image_upload_id)
         # Get AIGrade objects for this image and disease
-        ai_grade_objects = [
-            obj for obj in ai_grade_map.get(ai_key, [])
-            if obj.disease_id == task.disease_id
-        ]
+
         # Get Grade objects with role_slot='ai' for this task
         ai_grade_from_grade_table = ai_grades_by_task.get(task.id, [])
         # Combine both types of AI grades
-        all_ai_grades = ai_grade_objects + ai_grade_from_grade_table
+        all_ai_grades =  ai_grade_from_grade_table
         # Summarize them for the template
         ai_grades = []
         for obj in all_ai_grades:
-            if hasattr(obj, 'model_name') and hasattr(obj, 'model_version'):  # It's an AIGrade object
-                ai_grades.append(_summarize_ai_grade(obj))
-            else:  # It's a Grade object with role_slot='ai'
+            # It's a Grade object with role_slot='ai'
                 # Use the AI model details from the Grade object itself
-                ai_grades.append(AIGradeSummary(
-                    model_name=obj.ai_model_name or (obj.ai_model.name if obj.ai_model else 'Unknown Model'),
-                    model_version=obj.ai_model_version or (obj.ai_model.version if obj.ai_model else 'N/A'),
-                    impression=obj.label.impression if obj.label else obj.grade_name,
-                    # Extract probability from comment if it's in the format "AI probability: X.XX; ..." or similar
-                    confidence=float(re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "").group(1)) if re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "") else None,
-                    run_id=None # Grade model doesn't have run_id
-                ))
+            ai_grades.append(AIGradeSummary(
+                model_name=obj.ai_model_name or (obj.ai_model.name if obj.ai_model else 'Unknown Model'),
+                model_version=obj.ai_model_version or (obj.ai_model.version if obj.ai_model else 'N/A'),
+                impression=obj.label.impression if obj.label else obj.grade_name,
+                # Extract probability from comment if it's in the format "AI probability: X.XX; ..." or similar
+                confidence=float(re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "").group(1)) if re.search(r'AI probability:\s*([0-9.]+)', obj.comment or "") else None,
+                run_id=None # Grade model doesn't have run_id
+            ))
 
         details.append(
             {

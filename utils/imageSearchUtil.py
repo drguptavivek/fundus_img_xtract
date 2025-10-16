@@ -23,7 +23,6 @@ from flask_login import current_user
 import logging
 
 from models import (
-    AIGrade,
     DirectImageUpload,
     EncounterFile,
     Grade,
@@ -391,45 +390,6 @@ def get_tasks_for_multiple_images(
             "status": task.state
         })
     
-    # Now also fetch AI grades for these images
-    # AI grades can come from either AIGrade table or Grade table with role_slot='ai'
-    # AIGrade table is linked via encounter_file_id or direct_image_upload_id
-    # Grade table is linked via task_id which is linked to the image
-    
-    # First, get AI grades from AIGrade table
-    ai_grades_from_table = db_session.query(AIGrade).outerjoin(
-        AIGrade.label  # Join with DiseaseGrading to get the impression
-    ).filter(
-        or_(
-            AIGrade.encounter_file_id.in_(image_ids) if image_type == "zip" else AIGrade.encounter_file_id.isnot(None),
-            AIGrade.direct_image_upload_id.in_(image_ids) if image_type == "direct" else AIGrade.direct_image_upload_id.isnot(None)
-        )
-    ).all()
-    
-    for ai_grade in ai_grades_from_table:
-        # Map the image ID based on image_type
-        image_id = None
-        if image_type == "direct" and ai_grade.direct_image_upload_id in image_ids:
-            image_id = ai_grade.direct_image_upload_id
-        elif image_type == "zip" and ai_grade.encounter_file_id in image_ids:
-            image_id = ai_grade.encounter_file_id
-        
-        if image_id and image_id in result:
-            # Add AI grade info to the existing list for this image
-            grade_impression = ai_grade.label.impression if ai_grade.label else 'Unknown'
-            confidence_str = f" ({ai_grade.confidence:.2f})" if ai_grade.confidence is not None else ""
-            result[image_id].append({
-                "disease": "AI Grade",
-                "status": f"{grade_impression}{confidence_str}"
-            })
-        elif image_id and image_id not in result:
-            # Create a new entry for this image if it doesn't exist
-            grade_impression = ai_grade.label.impression if ai_grade.label else 'Unknown'
-            confidence_str = f" ({ai_grade.confidence:.2f})" if ai_grade.confidence is not None else ""
-            result[image_id] = [{
-                "disease": "AI Grade",
-                "status": f"{grade_impression}{confidence_str}"
-            }]
     
     # Second, get AI grades from Grade table with role_slot='ai'
     # These are linked via GradingTask which is linked to the image

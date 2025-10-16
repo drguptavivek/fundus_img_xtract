@@ -20,7 +20,6 @@ from models import (
     DiabeticRetinopathyReport,
     EncounterFile,
     GlaucomaResultsCleaned,
-    AIGrade,
     Grade,
     GradingTask,
     Hospital,
@@ -104,13 +103,7 @@ def image_results() -> str:
         if has_ai_grade is not None:
             from sqlalchemy import exists
             # Check for AIGrade records linked to the image (via encounter_file_id or direct_image_upload_id) and disease
-            ai_grade_exists_subq = exists().where(
-                AIGrade.encounter_file_id == GradingTask.encounter_file_id,
-                AIGrade.disease_id == GradingTask.disease_id
-            ).correlate(GradingTask) | exists().where(
-                AIGrade.direct_image_upload_id == GradingTask.direct_image_upload_id,
-                AIGrade.disease_id == GradingTask.disease_id
-            ).correlate(GradingTask)
+  
             # Check for Grade records with role_slot='ai' linked to the task
             ai_grade_from_grade_exists_subq = exists().where(
                 Grade.task_id == GradingTask.id,
@@ -119,12 +112,10 @@ def image_results() -> str:
             
             if has_ai_grade: # Filter for tasks that *have* AI grades
                 query = query.filter(
-                    ai_grade_exists_subq |
                     ai_grade_from_grade_exists_subq
                 )
             else: # Filter for tasks that *do not have* AI grades
                 query = query.filter(
-                    ~ai_grade_exists_subq &
                     ~ai_grade_from_grade_exists_subq
                 )
 

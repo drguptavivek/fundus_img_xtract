@@ -99,6 +99,31 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
             # If they don't match, no consensus is created yet - needs arbitration
         
         if consensus:
+            # Log consensus creation with task details
+            consensus_logger.info(
+                f"Consensus created [Task ID: {task.id}] [Method: {consensus.method}] "
+                f"[Disease ID: {task.disease_id}] [Final Grade ID: {consensus.final_disease_grading_id}]"
+            )
+            
+            # Log grade details that contributed to consensus
+            if resident_grade:
+                consensus_logger.info(
+                    f"  Resident Grade [ID: {resident_grade.id}] [Grade ID: {resident_grade.disease_grading_id}] "
+                    f"[User ID: {resident_grade.grader_user_id}]"
+                )
+            
+            if faculty_grade:
+                consensus_logger.info(
+                    f"  Faculty Grade [ID: {faculty_grade.id}] [Grade ID: {faculty_grade.disease_grading_id}] "
+                    f"[User ID: {faculty_grade.grader_user_id}]"
+                )
+            
+            if arbitrator_grade:
+                consensus_logger.info(
+                    f"  Arbitrator Grade [ID: {arbitrator_grade.id}] [Grade ID: {arbitrator_grade.disease_grading_id}] "
+                    f"[User ID: {arbitrator_grade.grader_user_id}]"
+                )
+            
             db.add(consensus)
             db.flush()  # Ensure the consensus gets an ID without committing transaction
             if close_db:

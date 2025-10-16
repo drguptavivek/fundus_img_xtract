@@ -38,6 +38,7 @@ import logging
 
 
 processing_logger = logging.getLogger("pregraded_processing")
+grades_logger = logging.getLogger("grades")
 
 
 ROLE_RESIDENT = "resident"
@@ -283,6 +284,47 @@ def _apply_grade(
 
     grading_label = grade_options[grade_id]
     now = utcnow()
+
+    # Log AI grade submissions to the grades log
+    if role == ROLE_AI:
+        from datetime import datetime, timezone
+        
+        # Capture previous values for logging (before updating)
+        prev_grade_id = None
+        prev_comment = None
+        
+        is_revision = existing_grade is not None
+        grade_type = "revision" if is_revision else "new"
+        grade_id_str = existing_grade.id if existing_grade else "N/A"
+        
+        if is_revision:
+            prev_grade_id = existing_grade.disease_grading_id
+            prev_comment = existing_grade.comment
+        
+        # Create log message
+        # For bulk imports, we use the uploader's IP address
+        ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+        
+        log_message = f"Grade submission [IP: {ip_address}] [user_id: {grader_user_id}] [Task ID: {task.id}] [Slot Type: ai] [Disease ID: {task.disease_id}] [Grade: {grade_id}] [Type: {grade_type}] [Grade ID: {grade_id_str}]"
+        
+        # Add AI model information to the log
+        if ai_model_id:
+            log_message += f" [AI Model ID: {ai_model_id}]"
+        if ai_model_name:
+            log_message += f" [AI Model Name: {ai_model_name}]"
+        if ai_model_version:
+            log_message += f" [AI Model Version: {ai_model_version}]"
+        
+        if remarks:
+            log_message += f" [Comments - {remarks}]"
+            
+        # If this is a revision, also log the previous grade and comment
+        if is_revision and prev_grade_id is not None:
+            prev_comment_display = prev_comment if prev_comment else "None"
+            log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
+        
+        # Log using dedicated grades logger
+        grades_logger.info(log_message)
 
     if existing_grade:
         existing_grade.grader_user_id = grader_user_id

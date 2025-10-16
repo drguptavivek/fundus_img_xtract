@@ -49,7 +49,7 @@ def _parse_date(value: str | None) -> _date | None:
 
 @bp.route("/images", methods=["GET"])
 @bp.route("/images/", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "data_manager")
 def search_images_route() -> str:
     """Search images using the centralized search_images function from utils.imageSearchUtil."""
     page = request.args.get("page", default=1, type=int) or 1

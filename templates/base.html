@@ -106,9 +106,18 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
+                        {% if current_user_has('data_manager') or current_user_has('admin') %}
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+              </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
+              </li>
+
+              <li>
+                <hr class="dropdown-divider">
               </li>
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.pregraded_upload' %}active{% endif %}"
@@ -118,13 +127,12 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.pregraded_grades' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.pregraded_grades') }}">Import Pre-Graded Grades</a>
               </li>
-              <li>
-                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
-                  href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
-              </li>
+   
               <li>
                 <hr class="dropdown-divider">
               </li>
+                        {% endif %}
+
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
                   href="{{ url_for('jobs.list_recent_jobs') }}">All Upload Jobs</a>
@@ -194,44 +202,49 @@
           {% endif %}
 
           {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
-              id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              Grade
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
-              <li>
-                <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
-                  href="{{ url_for('grading.index') }}">Image Grading</a>
-              </li>
-                            <li>
-              <a class="dropdown-item" href = "{{ url_for('analytics.discrepancy_review') }}"> Discrepancy Review</a>
-              </li>
-              
-            </ul>
-          </li>
-          {% endif %}
+                     <li class="nav-item dropdown">
+                       <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
+                         id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                         Grade
+                       </a>
+                       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
+                         <li>
+                           <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
+                             href="{{ url_for('grading.index') }}">Image Grading</a>
+                         </li>
+                         {% if current_user_has('admin') or current_user_has('data_manager') %}
+                                       <li>
+                         <a class="dropdown-item" href = "{{ url_for('analytics.discrepancy_review') }}"> Discrepancy Review</a>
+                         </li>
+                         {% endif %}
+                       </ul>
+                     </li>
+                     {% endif %}
 
-          {% if current_user_has('ophthalmologist') or current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'tasks' else '' }}" href="#"
               id="tasksMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Tasks and Images
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
+              {% if current_user_has('data_manager') or current_user_has('admin') %}
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.organizational_tasks' else '' }}"
-                  href="{{ url_for('tasks.organizational_tasks') }}">Tasks</a>
+                  href="{{ url_for('tasks.organizational_tasks') }}">All Tasks</a>
               </li>
+              {% endif %}
+              {% if current_user_has('data_manager') or current_user_has('admin') %}
                <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">Images</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">All Images</a>
               </li>
+              {% endif %}
 
             </ul>
           </li>
           {% endif %}
 
-          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('optometrist') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}" href="#"
               id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -348,6 +361,10 @@
               <li><a class="dropdown-item" href="{{ url_for('notifications.notifications') }}">Notifications</a></li>
               <li><a class="dropdown-item" href="{{ url_for('account.profile') }}">My profile</a></li>
               <li><a class="dropdown-item" href="{{ url_for('account.change_password_self') }}">Change password</a></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li><a class="dropdown-item" href="{{ url_for('docs.api_docs_html') }}">Help</a></li>
               <li>
                 <hr class="dropdown-divider">
               </li>

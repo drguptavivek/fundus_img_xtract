@@ -110,10 +110,11 @@ Access to analytics routes is controlled based on user roles and lab unit associ
 - **Admins** have unrestricted access to all data
 - **Data managers** have access to analytics routes scoped to their associated lab units
 - **Ophthalmologists, Residents, and other roles** have access to routes based on their lab unit associations
-- **Optometrists** have access to specific routes, also scoped to their associated lab units
+- **Optometrists** have access to specific routes only (search, task details), also scoped to their associated lab units
 - All access is restricted based on lab unit associations, meaning users can only view data related to the lab units they are associated with
 - Filtering options are restricted so users can only filter by lab units they have access to
 - UI dropdowns only show lab units and hospitals that the user has permission to access
+- **Navbar visibility**: The "Discrepancy Review" link in the "Grade" menu is only visible to admin and data_manager roles (not visible to ophthalmologists)
 
 ### Route Summary
 
@@ -121,12 +122,12 @@ Access to analytics routes is controlled based on user roles and lab unit associ
 |------------|---------|--------------|----------------|---------|
 | /analytics/images | analytics.image_results | GET | admin, data_manager | Render per-image grading results with filtering and pagination |
 | /analytics/encounters | analytics.encounter_results | GET | admin, data_manager | Render encounter-level grading summaries |
-| /analytics/images/no-tasks | analytics.images_without_tasks | GET | admin, data_manager, optometrist | Display images that have no associated grading tasks |
+| /analytics/images/no-tasks | analytics.images_without_tasks | GET | admin, data_manager | Display images that have no associated grading tasks |
 | /analytics/images/search | analytics.search_images | GET | admin, data_manager, optometrist | Search for images with comprehensive filters |
-| /analytics/direct/view/\<uuid_str\> | analytics.direct_view | GET | admin, data_manager, optometrist | View details for a direct image upload |
+| /analytics/direct/view/\<uuid_str\> | analytics.direct_view | GET | admin, data_manager | View details for a direct image upload |
 | /analytics/encounter/view/\<int:encounter_id\> | analytics.encounter_view | GET | admin, data_manager | View details for a specific encounter |
 | /analytics/encounters-simple | analytics.encounter_results_simple | GET | admin, data_manager | Render a simplified encounter list showing only encounters with non-pending tasks |
-| /analytics/discrepancy-review | analytics.discrepancy_review | GET | admin, data_manager, optometrist | Main page for discrepancy review process |
+| /analytics/discrepancy-review | analytics.discrepancy_review | GET | admin, data_manager | Main page for discrepancy review process |
 | /analytics/viewTaskDetails/\<int:task_id\> | analytics.task_details | GET | admin, data_manager, optometrist | View details for a specific grading task |
 
 ---
@@ -141,6 +142,8 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 - **Ophthalmologists** have access to tasks based on their associated lab units
 - **Optometrists** have access to tasks assigned to their associated lab units
 - All access is restricted based on lab unit associations, meaning users can only view tasks related to the lab units they are associated with
+- **Organizational tasks route** (`/tasks/organizational-tasks`) is restricted to admin and data_manager roles only
+- **Navbar visibility**: The "Tasks and Images" dropdown menu in the navbar is only visible to admin, data_manager, and optometrist roles (not visible to ophthalmologists)
 
 ### Route Summary
 
@@ -149,6 +152,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 | /tasks/ | tasks.index | GET | admin, data_manager, ophthalmologist, optometrist | Main tasks page |
 | /tasks/my-tasks | tasks.my_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View and manage user's assigned tasks |
 | /tasks/pending | tasks.pending_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View pending tasks in user's lab units |
+| /tasks/organizational-tasks | tasks.organizational_tasks | GET | admin, data_manager | View all tasks scoped to user's lab units with filtering options |
 
 ---
 
@@ -159,7 +163,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 - **Route Path**: `/search/images/`
 - **HTTP Methods**: GET
 - **Route File**: `search/route_search_images.py`
-- **Roles Required**: admin, data_manager, optometrist
+- **Roles Required**: admin, data_manager
 - **Purpose**: Provides comprehensive search functionality for images with various filters including hospital, lab unit, camera, disease, area, and date ranges.
 
 #### Filter Parameters
@@ -301,6 +305,9 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 3. **HTTP Methods**: All routes specify the HTTP methods they accept.
 4. **Route File**: Indicates which file contains the route implementation.
 5. **Data Scoping**: For routes with data scoping, users can only access data related to their associated lab units.
+6. **Navbar Menu Items**:
+   - **Account Menu**: Contains user profile, change password, notifications, and Help items
+   - **Help Item**: Provides access to API documentation and user guides
 
 ## API Routes
 

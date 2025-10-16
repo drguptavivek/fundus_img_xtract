@@ -15,6 +15,10 @@ The Task Creation Services encapsulate all logic required to map verified fundus
 - Exactly one of `encounter_file_id` or `direct_image_upload_id` is non-null; uniqueness constraints enforce a single task per image×disease globally
 - Allowed states: `pending`, `resident_done`, `faculty_done`, `arbitration`, `final`
 - `lab_unit_id` scopes queue access but never redefines task identity
+- Grade role slots: `resident`, `faculty`, `arbitrator`, `ai`, `review`
+  - Core grading slots: `resident`, `faculty`, `arbitrator` (follow dual grading workflow)
+  - AI slot: `ai` (for AI model predictions)
+  - Review slot: `review` (for quality control by faculty/arbitrators)
 
 ## Service API
 

@@ -103,9 +103,15 @@ These models track the raw data as it is uploaded and processed.
   - **Uniqueness**: One task per image-disease combination globally
   - **Purpose**: Core entity for the three-tier grading workflow
 
-- **`Grade`**: Individual grades submitted by users for tasks.
+- **`Grade`**: Individual grades submitted by users or AI models for tasks.
   - **Key Fields**: `id`, `task_id`, `grader_user_id`, `role_slot`, `disease_grading_id`, `comment`, `time_taken`
-  - **Role Slots**: 'resident', 'faculty', 'arbitrator'
+  - **Role Slots**:
+    - 'resident': Initial grading by resident ophthalmologists
+    - 'faculty': Secondary grading by faculty ophthalmologists
+    - 'arbitrator': Final decision when resident and faculty grades disagree
+    - 'ai': Grades submitted by AI models
+    - 'review': Review grades added by faculty or arbitrators for quality control
+  - **AI Model Fields**: `ai_model_id`, `ai_model_name`, `ai_model_version` for AI grades
   - **Denormalized Fields**: `disease_name`, `grade_name`, `grade_description` for historical preservation
   - **Uniqueness**: One grade per user per role per task
 
@@ -218,7 +224,7 @@ User (many) -- (many) Disease (via UserDiseaseUnitRole)
 ### Check Constraints
 - Image references: Either `encounter_file_id` OR `direct_image_upload_id` must be set, never both
 - Task states limited to: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
-- Role slots limited to: 'resident', 'faculty', 'arbitrator'
+- Role slots limited to: 'resident', 'faculty', 'arbitrator', 'ai', 'review'
 - Consensus methods limited to: 'match', 'adjudication'
 
 ### Performance Indexes

@@ -1,6 +1,7 @@
 from flask import render_template, request, jsonify, flash, redirect, url_for
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
+import logging
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -10,6 +11,9 @@ from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from datetime import datetime, timezone
 from . import bp
+
+# Initialize grades logger for review grade submissions
+grades_logger = logging.getLogger("grades")
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -79,6 +83,37 @@ def review_task_details(task_id: int):
             if not disease_grading:
                 flash('Invalid grade selected', 'error')
                 return redirect(url_for('review.review_task_details', task_id=task_id))
+            
+            # Log review grade submission (including revisions) using dedicated grades logger
+            # Store in UTC for consistency
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+            
+            # Determine if this is a revision
+            is_revision = existing_review_grade is not None
+            grade_type = "revision" if is_revision else "new"
+            grade_id = existing_review_grade.id if existing_review_grade else "N/A"
+            
+            # Capture previous values for logging (before updating)
+            prev_grade_id = None
+            prev_comment = None
+            
+            if is_revision:
+                prev_grade_id = existing_review_grade.disease_grading_id
+                prev_comment = existing_review_grade.comment
+            
+            # Create log message
+            log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: review] [Disease ID: {task.disease_id}] [Grade: {grading_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
+            if comment:
+                log_message += f" [Comments - {comment}]"
+                
+            # If this is a revision, also log the previous grade and comment
+            if is_revision and prev_grade_id is not None:
+                prev_comment_display = prev_comment if prev_comment else "None"
+                log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
+            
+            # Log using dedicated grades logger
+            grades_logger.info(log_message)
             
             # Create or update review grade
             if existing_review_grade:

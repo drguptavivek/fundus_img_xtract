@@ -153,33 +153,25 @@
               Verify
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="verifyMenu">
-              <li  class="dropdown-item " style="font-weight: 800;">Glaucoma PDFs</li>
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_list' else '' }}"
-                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">Verify</a>
-              </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_results' else '' }}"
-                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Dashboard</a>
-              </li>
-              
-              <li>
-                <hr class="dropdown-divider">
-              </li>
-              <li  class="dropdown-item" style="font-weight: 800;">DR PDFs</li>
-              <li>
-                <hr class="dropdown-divider">
-              </li>
+
+              <li  class="dropdown-item" style="font-weight: 800;">Verify Remedio</li>
+
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_dr.verify_dr_list' else '' }}"
-                  href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">Verify</a>
+                  href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">DR PDF Reports</a>
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_nodr.nodr_list' else '' }}"
-                  href="{{ url_for('verify_remedio_nodr.nodr_list') }}">Verify (No DR Report)</a>
+                  href="{{ url_for('verify_remedio_nodr.nodr_list') }}">DR Screeings Without PDF)</a>
+              </li>
+                            <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_list' else '' }}"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">Glaucoma PDF Reports</a>
+              </li>
+
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_results' else '' }}"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Glaucoma PDF data Dashboard</a>
               </li>
       
               <!-- DR Dashboard link removed as the route no longer exists -->

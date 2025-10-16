@@ -1,319 +1,233 @@
 # Pre-Graded Image Uploads
 
-This guide explains how to upload images that have already been graded, either by AI systems or by human graders. Pre-graded uploads allow you to import existing grading data into the system for review, analysis, or training purposes.
+This guide explains how to upload images that have already been graded, either by AI systems or by human graders. The pre-graded upload process consists of two main steps: uploading the images and importing the corresponding grades.
 
-## Types of Pre-Graded Uploads
+## Overview
 
-The system supports two types of pre-graded uploads:
-
-1. **AI Pre-Graded Images**: Images graded by artificial intelligence systems
-2. **Human Pre-Graded Images**: Images graded by faculty, residents, or other medical professionals
-
-## When to Use Pre-Graded Uploads
-
-Pre-graded uploads are useful for:
+Pre-graded uploads allow you to import existing grading data into the system for review, analysis, or training purposes. This is particularly useful for:
 - Importing grades from external AI systems
 - Migrating data from legacy systems
 - Creating training datasets with known ground truth
 - Benchmarking AI performance against human graders
 - Quality assurance and review processes
-- Research and analysis projects
 
-## AI Pre-Graded Images
+## Accessing Pre-Graded Uploads
 
-### Overview
-AI pre-graded images come with automated assessments from machine learning models. These can be imported for review, validation, or comparison with human graders.
+### Required Permissions
+- **Admin**: Full access to all pre-graded upload features
+- **Data Manager**: Can upload pre-graded images for assigned lab units
+- **File Uploader**: Can upload pre-graded images
+- **Optometrist**: Limited access based on permissions
 
-### Supported AI Systems
-- **Custom AI Models**: Any AI system that can export grades in compatible format
-- **Third-Party AI Services**: External AI grading services
-- **Research Models**: Experimental or research AI systems
-- **Production AI Systems**: Deployed AI grading solutions
+### Navigation Paths
+1. **Upload Images**: Navigate to **Direct Uploads** → **Pre-Graded Upload**
+2. **Import Grades**: Navigate to **Direct Uploads** → **Pre-Graded Grades**
 
-### AI Grade Formats
-- **CSV Files**: Comma-separated values with image identifiers and grades
-- **Excel Files**: XLSX format with structured grade data
-- **JSON Files**: Structured data format for complex grading information
-- **API Integration**: Direct API connection to AI systems
+## Pre-Graded Image Upload Process
 
-### AI Grade Data Structure
-Required fields for AI grades:
-- **Image Identifier**: Unique reference to each image
-- **Disease Grade**: Assessment for specific diseases (DR, Glaucoma, AMD)
-- **Confidence Score**: AI's confidence in the assessment (optional)
-- **Timestamp**: When the AI grading was performed
-- **Model Version**: Information about the AI model used
+### Step 1: Prepare Your Images
+1. Collect the images that have been pre-graded
+2. Ensure images are in supported formats (JPG, PNG)
+3. Organize images by hospital, lab unit, and disease type
+4. Check that images meet size requirements (typically max 5MB per file)
 
-## Human Pre-Graded Images
+### Step 2: Upload Pre-Graded Images
+1. Navigate to **Direct Uploads** → **Pre-Graded Upload**
+2. Fill in the required information:
+   - **Hospital**: Select the hospital where images originated
+   - **Lab Unit**: Select the specific lab unit
+   - **Camera**: Choose the camera type used
+   - **Disease**: Select the disease type (DR, Glaucoma, AMD, etc.)
+   - **Area**: Select the anatomical area
+   - **Dataset Label**: Optional label to identify this batch
+   - **Mydriatic**: Indicate if images were taken with mydriasis
+3. Select the image files to upload
+4. Click **Upload** to process the images
 
-### Overview
-Human pre-graded images come with assessments from medical professionals. These can be imported for review, consensus building, or training purposes.
+### Step 3: Automatic Processing
+When images are uploaded:
+1. The system creates a job to track the upload process
+2. Each image is stored with a unique identifier
+3. Images are automatically marked as pre-graded
+4. A verification record is created for each image
+5. Grading tasks are created for each image
 
-### Supported Human Grader Types
-- **Faculty Grades**: Assessments from senior ophthalmologists
-- **Resident Grades**: Assessments from medical residents
-- **External Experts**: Assessments from external consultants
-- **Multiple Graders**: Grades from multiple independent graders
-
-### Human Grade Formats
-- **Excel Files**: Structured spreadsheets with grade data
-- **CSV Files**: Comma-separated grade information
-- **Database Exports**: From other grading systems
-- **Manual Entry**: Direct entry through the system interface
-
-### Human Grade Data Structure
-Required fields for human grades:
-- **Grader Identifier**: Who performed the grading
-- **Image Identifier**: Reference to each graded image
-- **Disease Assessments**: Grades for each relevant disease
-- **Grading Date**: When the assessment was performed
-- **Qualifiers**: Any additional notes or qualifiers
-
-## Accessing Pre-Graded Upload
-
-1. Log in to the system with appropriate permissions
-2. Navigate to "Upload" → "Pre-Graded Images"
-3. Choose the appropriate upload type (AI or Human graded)
-4. Follow the specific instructions for your upload type
-
-## Duplicate Handling for Pre-Graded Uploads
-
-The system handles duplicates carefully for pre-graded uploads:
-
-### Image Duplicate Detection
-- **MD5 Hash Check**: Images are checked against existing images
-- **Content Verification**: Ensures image content hasn't been previously uploaded
-- **Grade Comparison**: Compares new grades with existing grades for same images
-- **Version Tracking**: Tracks multiple grade versions for the same image
-
-### Grade Duplicate Handling
-- **Grade Override**: New grades can override existing grades
-- **Grade Addition**: Multiple grades can be stored for the same image
-- **Conflict Resolution**: System flags conflicting grades for review
-- **Audit Trail**: All grade changes are tracked with timestamps
-
-### Import Strategy Options
-1. **Skip Duplicates**: Don't import if image already exists
-2. **Update Existing**: Replace existing grades with new ones
-3. **Add Additional**: Keep existing grades and add new ones
-4. **Create Conflicts**: Flag conflicts for manual resolution
-
-## AI Pre-Graded Upload Process
-
-### Step 1: Prepare Your Data
-1. Export grades from your AI system in compatible format
-2. Ensure image identifiers match the images you'll upload
-3. Validate grade values are within expected ranges
-4. Include confidence scores if available
-5. Add model version information
-
-### Step 2: Upload Images
-1. Select "AI Pre-Graded Upload" option
-2. Upload the image files (JPG, PNG format)
-3. Upload the grade data file (CSV, Excel, or JSON)
-4. Map fields from your data to system fields
-5. Review mapping before proceeding
-
-### Step 3: Import Grades
-1. System validates image-grade associations
-2. Grades are imported and linked to images
-3. Confidence scores are stored if provided
-4. Model information is recorded
-5. Import results are displayed
-
-### Step 4: Review and Verify
-1. Review imported grades for accuracy
-2. Check for any import errors or warnings
-3. Verify image-grade associations
-4. Make any necessary corrections
-5. Approve the import
-
-## Human Pre-Graded Upload Process
+## Pre-Graded Grade Import Process
 
 ### Step 1: Prepare Grade Data
-1. Compile human grades in structured format
-2. Include grader identification information
-3. Ensure consistent grading scales
-4. Add grading dates and context
-5. Validate data completeness
+Create an Excel file with the following structure:
 
-### Step 2: Upload Images
-1. Select "Human Pre-Graded Upload" option
-2. Upload the image files
-3. Upload the grade data file
-4. Specify grader type (faculty, resident, etc.)
-5. Configure import options
+#### Required Columns
+- **image_name**: The filename of the graded image (must match uploaded files)
+- **{role}_grade**: Grade value for the specific role
+  - For resident grades: `resident_grade`
+  - For faculty grades: `faculty_grade`
+  - For AI grades: `ai_grade`
 
-### Step 3: Import and Associate
-1. System processes images and grades
-2. Grades are linked to appropriate graders
-3. Multiple grades can be associated with images
-4. Grading hierarchy is established
-5. Quality checks are performed
+#### Optional Columns
+- **{role}_remarks**: Additional notes or comments
+  - For resident grades: `resident_remarks`
+  - For faculty grades: `faculty_remarks`
+  - For AI grades: `ai_remarks`
+- **ai_probability**: Confidence score for AI grades (only for AI grades)
 
-### Step 4: Quality Assurance
-1. Review imported grades for consistency
-2. Check for grading anomalies or outliers
-3. Verify grader credentials and permissions
-4. Validate grade distributions
-5. Approve or reject imports
+### Step 2: Import Grades
+1. Navigate to **Direct Uploads** → **Pre-Graded Grades**
+2. Select the grader type:
+   - **Resident**: For resident doctor grades
+   - **Faculty**: For faculty/ophthalmologist grades
+   - **AI**: For artificial intelligence grades
+3. Fill in the required information:
+   - **Hospital**: Select the hospital (must match image upload)
+   - **Lab Unit**: Select the lab unit (must match image upload)
+   - **Disease**: Select the disease type (must match image upload)
+   - **Grader**: Select the user who performed the grading (for human grades)
+   - **AI Model**: Select or create AI model information (for AI grades)
+4. Upload the Excel file containing grade data
+5. Click **Upload** to process the grades
 
-## Grade Mapping and Validation
+### Step 3: Grade Mapping
+If the system encounters grade values it doesn't recognize:
+1. A mapping interface will appear
+2. You'll see unrecognized grade values from your file
+3. Map each value to the appropriate system grade,=. This is to be done by the user
+4. The system may auto-map some values based on text matching
+5. Complete the mapping and click **Import**
 
-### Field Mapping
-When uploading grade data, you'll need to map your fields to system fields:
-- **Image ID**: Map your image identifier to system field
-- **Grader ID**: Map grader identification
-- **Disease Grades**: Map each disease grade field
-- **Confidence**: Map confidence or certainty scores
-- **Metadata**: Map additional information fields
+### Step 4: Processing Results
+The system will:
+1. Validate all grade mappings
+2. Match grades to uploaded images by filename
+3. Create grade records for each image
+4. Update task states for human grades
+5. Create consensus grades for faculty grades
+6. Display a summary of successful and failed imports
 
-### Validation Rules
-The system validates imported grades:
-- **Grade Range Check**: Ensures grades are within valid ranges
-- **Format Validation**: Verifies data formats are correct
-- **Completeness Check**: Ensures required fields are present
-- **Consistency Check**: Validates data consistency
-- **Quality Metrics**: Calculates basic quality metrics
+## Supported Grade Types
+
+### Resident Grades
+- **Who**: Medical residents in training
+- **Requirements**: User must have "resident" or "ophthalmologist" role
+- **Process**: Grades are imported and task states are updated
+- **Use Case**: Training evaluation, quality assessment
+
+### Faculty Grades
+- **Who**: Senior ophthalmologists and faculty members
+- **Requirements**: User must have "ophthalmologist" role
+- **Process**: Grades are imported and consensus is calculated
+- **Use Case**: Gold standard grades, reference data
+
+### AI Grades
+- **What**: Grades generated by artificial intelligence systems
+- **Model Information**: Can select existing AI models
+- **Process**: Grades are imported with model metadata
+- **Use Case**: AI validation, model comparison, research
+
+## Grade Matching Process
+
+The system follows these steps to match grades to images:
+
+1. **Filename Matching**: Looks for exact filename matches (case-insensitive)
+2. **Location Filtering**: Filters by hospital, lab unit, and disease
+3. **Pre-Graded Filter**: Only matches images marked as pre-graded
+4. **Most Recent**: If multiple matches exist, uses the most recent upload
+5. **Task Creation**: Ensures grading tasks exist for matched images
+
+## Duplicate Handling
+
+### Image Duplicates
+- Pre-graded images use the same duplicate detection as regular uploads
+- MD5 hash is calculated and checked against existing images
+- Duplicate images are stored in a separate folder
+- Upload status shows "Duplicate file" for duplicates
+
+### Grade Duplicates
+- New grades can override existing grades for the same grader type
+- Multiple different grader types can be applied to the same image
+- AI grades can be imported multiple times with different models
+- The system tracks all grade changes with timestamps
+
+## Quality Assurance
+
+### Validation Checks
+- **Filename Validation**: Ensures all grade entries have matching images
+- **Grade Validation**: Verifies grade values are within allowed ranges
+- **Permission Validation**: Checks user permissions for lab units
+- **Format Validation**: Ensures Excel file has correct structure
 
 ### Error Handling
-- **Validation Errors**: Clear error messages for invalid data
-- **Mapping Errors**: Help with field mapping issues
-- **Format Errors**: Guidance on correct data formats
-- **Missing Data**: Identification of incomplete records
-- **Warning System**: Non-critical issues are flagged as warnings
+- **Missing Images**: Grades without matching images are flagged as errors
+- **Invalid Grades**: Grade values that can't be mapped are rejected
+- **Permission Issues**: Attempts to upload to unauthorized lab units are blocked
+- **Format Errors**: Invalid Excel formats are rejected with helpful messages
 
-## Managing Pre-Graded Images
+## Best Practices
 
-### Viewing Pre-Graded Images
-1. Navigate to "Upload" → "Pre-Graded Dashboard"
-2. Filter by grader type, disease, or date
-3. View images with their associated grades
-4. Compare multiple grades for the same image
-5. Access detailed grading information
-
-### Editing Pre-Graded Data
-1. Select an image from the dashboard
-2. Review existing grades and metadata
-3. Update grades if permissions allow
-4. Add notes or qualifiers
-5. Save changes with audit trail
-
-### Grade Comparison Tools
-- **Side-by-Side View**: Compare different grades for same image
-- **Discrepancy Analysis**: Identify significant grade differences
-- **Consensus Building**: Tools for resolving grade conflicts
-- **Statistics**: Grade distribution and agreement metrics
-- **Export Options**: Export grade comparisons for analysis
-
-## Quality Assurance for Pre-Graded Uploads
-
-### Automated Quality Checks
-- **Grade Distribution**: Analyzes grade patterns for anomalies
-- **Outlier Detection**: Flags unusual grading patterns
-- **Consistency Checks**: Validates grading consistency
-- **Completeness Verification**: Ensures all required data is present
-- **Format Validation**: Checks data format compliance
-
-### Manual Review Process
-1. **Review Queue**: Items needing review are flagged
-2. **Quality Dashboard**: Overview of quality metrics
-3. **Review Tools**: Interface for detailed review
-4. **Approval Workflow**: Multi-level approval if needed
-5. **Audit Trail**: Complete record of all reviews
-
-### Quality Metrics
-- **Grade Agreement**: Measures agreement between graders
-- **Consistency Scores**: Evaluates grading consistency
-- **Completion Rates**: Tracks grading completeness
-- **Error Rates**: Monitors grading error frequency
-- **Time Metrics**: Tracks grading time patterns
-
-## Best Practices for Pre-Graded Uploads
-
-### Data Preparation
-1. **Consistent Formatting**: Use consistent data formats
-2. **Complete Documentation**: Document grading criteria and scales
-3. **Quality Validation**: Validate data before upload
-4. **Backup Creation**: Keep backups of original data
-5. **Test Imports**: Test with small samples first
+### File Preparation
+1. **Consistent Naming**: Use consistent filenames for images and grade files
+2. **Complete Data**: Ensure all required fields are filled in
+3. **Valid Grades**: Use grade values that exist in the system
+4. **Test Samples**: Test with a small sample before large imports
 
 ### Upload Process
-1. **Incremental Uploads**: Upload in manageable batches
-2. **Verify Results**: Check each upload for accuracy
-3. **Monitor Progress**: Track upload and import progress
-4. **Error Resolution**: Address issues promptly
-5. **Document Issues**: Record and document any problems
+1. **Upload Images First**: Always upload images before importing grades
+2. **Verify Matching**: Check that image names match exactly
+3. **Review Results**: Review import results for any errors
+4. **Handle Errors**: Address any mapping or matching issues promptly
 
-### Post-Upload Management
-1. **Regular Reviews**: Periodically review imported data
-2. **Quality Monitoring**: Monitor data quality over time
-3. **User Training**: Train users on proper procedures
-4. **Process Improvement**: Continuously improve processes
-5. **Feedback Collection**: Gather feedback from users
+### Data Management
+1. **Organize by Batch**: Use dataset labels to organize uploads
+2. **Document Sources**: Keep track of where grades originated
+3. **Version Control**: Use AI model versioning for AI grades
+4. **Quality Review**: Periodically review imported grades
 
-## Common Issues and Solutions
+## Troubleshooting Common Issues
 
-### Data Format Issues
-- **Inconsistent Formats**: Standardize data formats before upload
-- **Missing Fields**: Ensure all required fields are present
-- **Invalid Values**: Validate data ranges and values
-- **Encoding Problems**: Use UTF-8 encoding for text data
+### Image Not Found
+- **Problem**: Grade references an image that wasn't uploaded
+- **Solution**: Ensure all images are uploaded before importing grades
+- **Check**: Verify filenames match exactly (including extensions)
 
-### Image-Grade Mismatches
-- **Missing Images**: Ensure all graded images are uploaded
-- **Orphaned Grades**: Grades without corresponding images
-- **Multiple Matches**: One grade matching multiple images
-- **No Matches**: Grades that don't match any images
+### Grade Mapping Errors
+- **Problem**: System doesn't recognize grade values
+- **Solution**: Use the mapping interface to match values to system grades
+- **Prevention**: Use standard grade terminology in your files
 
-### Import Errors
-- **Validation Failures**: Data doesn't meet validation rules
-- **Permission Issues**: User lacks required permissions
-- **System Limits**: Exceeding system capacity or limits
-- **Network Issues**: Connection problems during upload
+### Permission Denied
+- **Problem**: User can't upload to selected lab unit
+- **Solution**: Contact administrator for appropriate permissions
+- **Check**: Verify you're selecting the correct lab unit
 
-### Solutions
-1. **Pre-Validation**: Validate data before upload
-2. **Incremental Approach**: Upload in smaller batches
-3. **Error Logging**: Keep detailed error logs
-4. **Rollback Capability**: Ability to undo problematic uploads
-5. **Support Contact**: Know when to contact support
+### Import Failures
+- **Problem**: Partial or complete import failure
+- **Solution**: Review job details for specific error messages
+- **Common Causes**: Invalid formats, missing data, permission issues
+
+## Integration with Grading Workflows
+
+### Task Creation
+- Pre-graded uploads automatically create grading tasks
+- Tasks are marked with appropriate grader assignments
+- Human grades update task states automatically
+- Faculty grades trigger consensus calculations
+
+### Review Process
+- Pre-graded images appear in regular grading queues
+- Graders can see pre-assigned grades when evaluating
+- Discrepancies between graders are tracked
+- Quality metrics include pre-graded data
 
 ## Security and Privacy
 
-### Data Protection
-- **Encrypted Transfer**: All data transfers are encrypted
-- **Secure Storage**: Grades stored in secure database
-- **Access Control**: Role-based access to grading data
-- **Audit Logging**: All access and changes are logged
+- **Access Control**: Only authorized users can upload pre-graded content
+- **Audit Trail**: All uploads and imports are logged
+- **Data Integrity**: Verification ensures data consistency
+- **Privacy Compliance**: Patient data is handled according to regulations
 
-### Privacy Considerations
-- **Grader Anonymization**: Option to anonymize grader information
-- **Data Minimization**: Only collect necessary grading data
-- **Retention Policies**: Appropriate data retention periods
-- **Compliance**: HIPAA and other regulatory compliance
+## Getting Help
 
-## Getting Help with Pre-Graded Uploads
-
-### Error Messages
-Common pre-graded upload error messages:
-- "Invalid grade format": Use supported grade formats
-- "Missing image reference": Ensure all grades reference uploaded images
-- "Invalid grader information": Verify grader credentials
-- "Grade out of range": Check grade values are within valid ranges
-- "Duplicate grade detected": Handle duplicate grades appropriately
-
-### Troubleshooting Steps
-1. **Check Data Format**: Verify data meets format requirements
-2. **Validate References**: Ensure image references are correct
-3. **Review Permissions**: Confirm you have necessary permissions
-4. **Test Sample**: Try with a small sample first
-5. **Check System Status**: Verify system is operating normally
-
-### Contact Support
-If you need help with pre-graded uploads:
-1. Note the error message and context
-2. Record the upload ID and timestamp
-3. Describe your data format and structure
-4. Include information about the grading system
-5. Contact your system administrator
+For pre-graded upload issues:
+1. Check the error messages in the job details
+2. Verify your data format matches requirements
+3. Ensure you have appropriate permissions
+4. Contact your system administrator for assistance

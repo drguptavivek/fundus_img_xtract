@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Task Details - {{ task.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h3>Task Details</h3>
+    <button onclick="window.history.back();" class="btn btn-sm btn-outline-secondary">Back</button>
+  </div>
+
+  <div class="row g-3">
+    <!-- Task Information - Left Column -->
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-1 h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Task Information</h5>
+          <span class="badge bg-primary">ID: {{ task.id }}</span>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-sm-12">
+              <p><strong>Disease:</strong> {{ task.disease or 'N/A' }}</p>
+              <p><strong>Lab Unit:</strong> {{ original_task.lab_unit.name if original_task.lab_unit else 'N/A' }}</p>
+              <div class="row">
+                <div class="col-sm-6">
+                  <small><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'N/A' }}</small>
+                </div>
+                <div class="col-sm-6">
+                  <small><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else 'N/A' }}</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Summary - Middle Column -->
+    <div class="col-md-6">
+      <div class="card shadow-sm mb-1 h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Disease: {{ task.disease or 'N/A' }}</h5>
+          <span class="badge 
+            {% if task.status == "resident_done" %}bg-warning text-dark
+            {% elif task.status == "faculty_done" %}bg-info
+            {% elif task.status == "arbitration" %}bg-danger
+            {% elif task.status == "final" %}bg-success
+            {% else %}bg-secondary{% endif %}">
+            {{ task.status }}
+          </span>
+        </div>
+        <div class="card-body">
+          {% if task.grades %}
+          <div class="mb-2">
+            <strong>Available Grades:</strong>
+            {% for grade in task.grades %}
+            <span class="fw-semibold">
+              <span class="badge 
+                {% if grade.role_slot == "resident" %}bg-secondary
+                {% elif grade.role_slot == "faculty" %}bg-info
+                {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
+                {% else %}bg-light text-dark{% endif %}">
+                {{ grade.role_slot|title }}
+              </span>
+              <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
+              {% if not loop.last %} | {% endif %}
+            </span>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <p>
+            <strong>Has Consensus:</strong> 
+            {% if task.consensus_info and task.consensus_info.has_consensus %}
+              <i class="bi bi-check-circle"></i> Yes
+            {% else %}
+              <i class="bi bi-x-circle"></i> No
+            {% endif %}
+            {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
+            | <strong>Consensus Impression:</strong> 
+            {{ task.consensus_info.consensus_grading and task.consensus_info.consensus_grading.impression or 'N/A' }}
+            {% endif %}
+          </p>
+
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+
+  <!-- Image Preview - Full Width Row -->
+  <div class="row mt-1">
+    <div class="col-12">
+      {% if image_object %}
+      <div class="card shadow-sm mb-1">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Image Preview</h5>
+        </div>
+        <div class="card-body">
+          {% set image = image_object %}
+          {% include 'partials/_viewer_card.html' %}
+          <p class="mt-2 text-muted text-center">Image UUID: {{ image_object.uuid }}</p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Consensus Information -->
+  {% if task.consensus %}
+  <div class="row mt-1">
+    <div class="col-12">
+      <div class="card shadow-sm mb-1">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Consensus Information</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-sm-6">
+              <p><strong>Method:</strong> {{ task.consensus.method }}</p>
+            </div>
+            <div class="col-sm-6">
+              <p><strong>Decided At:</strong> {{ task.consensus.decided_at.strftime('%Y-%m-%d %H:%M') if task.consensus.decided_at else 'N/A' }}</p>
+            </div>
+          </div>
+          <p><strong>Final Impression:</strong> {{ task.consensus.final_impression or 'N/A' }}</p>
+          {% if task.consensus.decided_by_username %}
+            <p><strong>Decided By:</strong> {{ task.consensus.decided_by_username }}</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+
+</div>
+{% endblock %}

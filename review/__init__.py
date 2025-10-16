@@ -6,4 +6,4 @@ bp = Blueprint(
     url_prefix='/review')
 
 # Import routes to register them with the blueprint
-from . import route_discrepancy_review
+from . import route_discrepancy_review, task_review

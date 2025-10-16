@@ -1,12 +1,12 @@
 from flask import jsonify, request
 from flask_login import current_user, login_required
 from models import LabUnit, Session, User
-from auth.roles import roles_required
+from auth.roles import roles_required, login_required
 from utils.upload_eligibility import get_user_lab_unit_ids
 from . import api_bp
 
 @api_bp.route("/eligibleLabUnit", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist", "fileUploader")
+@login_required
 def get_eligible_lab_units():
     """API endpoint to get eligible lab units for the current user or a specified user ID."""
     db = Session()
@@ -16,7 +16,7 @@ def get_eligible_lab_units():
         
         # If user_id is provided and the current user is admin, use that user_id
         # Otherwise, use the current user's ID
-        if user_id_param and current_user.role == "admin":
+        if user_id_param and current_user.has_role("admin"):
             user_id = user_id_param
         else:
             user_id = current_user.id

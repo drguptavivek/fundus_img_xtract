@@ -24,12 +24,17 @@ from . import bp
 @bp.route("/discrepancy-review", methods=["GET"])
 @roles_required("admin", "data_manager")
 def discrepancy_review():
-    """Main page for discrepancy review process."""
+    """Main page for discrepancy review process.
+    
+    Note: Even though this route requires admin or data_manager roles,
+    we still scope the lab units to the logged-in user to ensure
+    data access is properly restricted. Admin users will see all
+    lab units, while data_managers will only see their assigned units.
+    """
     db = Session()
     try:
-        # current_user is available through Flask-Login
-        
-        # Get user's eligible lab units
+        # Get user's eligible lab units based on their role and assignments
+        # Admin users get all lab units, data_managers get only their assigned units
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         
         # Get filter options

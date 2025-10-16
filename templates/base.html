@@ -206,7 +206,7 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
+          {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('data_manager')%}
                      <li class="nav-item dropdown">
                        <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
                          id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">

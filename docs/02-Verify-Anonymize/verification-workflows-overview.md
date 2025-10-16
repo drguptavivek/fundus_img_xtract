@@ -193,6 +193,12 @@ This directory contains comprehensive documentation for the verification workflo
   - Quality assurance processes
   - Integration with task creation
 
+- [**Image Anonymization Workflow**](image-anonymization-workflow.md)
+  - Complete technical documentation for direct image anonymization
+  - Canvas-based image editing with anonymization tools
+  - Verification process for direct uploads
+  - Integration with task creation services
+
 - [**Proposed No-Glaucoma Workflow**](proposed-noglaucoma-workflow.md)
   - Detailed implementation plan for missing glaucoma workflow
   - Step-by-step implementation guide

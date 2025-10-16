@@ -533,7 +533,7 @@ class Grade(Base):
     ai_model: Mapped[Optional["AIModel"]] = relationship("AIModel", back_populates="grades")
 
     __table_args__ = (
-        CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai')", name='ck_grade_role_slot_valid'),
+        CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai','review')", name='ck_grade_role_slot_valid'),
         Index('ix_grade_task_slot', 'task_id', 'role_slot'),
         Index('ix_grade_user_slot', 'grader_user_id', 'role_slot'),
         UniqueConstraint('task_id', 'grader_user_id', 'role_slot', name='uq_grade_task_user_slot'),

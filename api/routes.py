@@ -3,5 +3,5 @@
 # All API routes have been moved to modular files
 
 # Import all route handlers from modular files
-from . import direct_uploads, gradings, grading_eligibility, hospitals, labUnits
+from . import direct_uploads, gradings, grading_eligibility, hospitals, labUnits, ai_models
 # The blueprint is imported from the modular files

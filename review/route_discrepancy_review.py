@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
 from models import (
+    AIModel,
     Consensus,
     Disease,
     DiseaseGrading,
@@ -44,6 +45,9 @@ def discrepancy_review():
         # Get grade options from DiseaseGrading
         grade_options = db.query(DiseaseGrading).distinct(DiseaseGrading.impression).all()
         
+        # Get AI models for the AI model filter
+        ai_models = db.query(AIModel).order_by(AIModel.name, AIModel.version).all()
+        
         # Apply filters
         query = db.query(GradingTask).filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
         
@@ -62,6 +66,12 @@ def discrepancy_review():
         faculty_grades = request.args.getlist("faculty_grade")
         arbitrator_grades = request.args.getlist("arbitrator_grade")
         final_grades = request.args.getlist("final_grade")
+        
+        # Get AI grade filter
+        has_ai_grade = request.args.get("has_ai_grade", type=str)
+        
+        # Get AI model filter
+        ai_model_ids = request.args.getlist("ai_model_id")
         
         # Apply role grade filters using subqueries to avoid duplication
         if resident_grades:
@@ -112,6 +122,28 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
+        # Apply AI grade filter
+        if has_ai_grade == 'yes':
+            # Filter for tasks that have an AI grade
+            ai_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'ai').subquery()
+            query = query.filter(GradingTask.id.in_(ai_subq))
+        elif has_ai_grade == 'no':
+            # Filter for tasks that don't have an AI grade
+            ai_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'ai').subquery()
+            query = query.filter(~GradingTask.id.in_(ai_subq))
+        
+        # Apply AI model filter
+        if ai_model_ids:
+            # Filter out empty strings
+            ai_model_ids = [model_id for model_id in ai_model_ids if model_id]
+            if ai_model_ids:
+                # Convert to integers
+                ai_model_ids = [int(model_id) for model_id in ai_model_ids]
+                ai_model_subq = db.query(Grade.task_id).filter(
+                    and_(Grade.role_slot == 'ai', Grade.ai_model_id.in_(ai_model_ids))
+                ).subquery()
+                query = query.filter(GradingTask.id.in_(ai_model_subq))
+        
         # Get total count for pagination
         total_count = query.count()
         
@@ -153,11 +185,22 @@ def discrepancy_review():
             # Process grades
             for grade in task.grades or []:
                 role = grade.role_slot
-                task_data['grades'][role] = {
+                grade_data = {
                     'id': grade.id,
                     'impression': grade.label.impression if grade.label else grade.grade_name,
                     'comment': grade.comment
                 }
+                
+                # Add AI model information for AI grades
+                if role == 'ai' and grade.ai_model:
+                    grade_data['ai_model_name'] = grade.ai_model.name
+                    grade_data['ai_model_version'] = grade.ai_model.version
+                elif role == 'ai':
+                    # Fallback to denormalized fields if ai_model relationship is not available
+                    grade_data['ai_model_name'] = grade.ai_model_name
+                    grade_data['ai_model_version'] = grade.ai_model_version
+                
+                task_data['grades'][role] = grade_data
             
             # Process consensus
             if task.consensus:
@@ -174,6 +217,7 @@ def discrepancy_review():
             diseases=diseases,
             lab_units=lab_units,
             grade_options=grade_options,
+            ai_models=ai_models,
             tasks=processed_tasks,
             total_count=total_count,
             page=page,
@@ -186,7 +230,9 @@ def discrepancy_review():
                 'resident_grade': resident_grades,
                 'faculty_grade': faculty_grades,
                 'arbitrator_grade': arbitrator_grades,
-                'final_grade': final_grades
+                'final_grade': final_grades,
+                'has_ai_grade': has_ai_grade,
+                'ai_model_id': ai_model_ids
             }
         )
     

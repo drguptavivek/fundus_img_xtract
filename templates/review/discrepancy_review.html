@@ -33,6 +33,30 @@
   width: calc(100% - 2rem); /* Account for checkbox width */
   cursor: pointer;
 }
+
+/* Improve checkbox visibility in dropdowns */
+.dropdown-menu .form-check-input {
+  border-color: var(--bs-gray-600) !important;
+  background-color: var(--bs-white) !important;
+}
+
+.dropdown-menu .form-check-input:checked {
+  background-color: var(--bs-primary) !important;
+  border-color: var(--bs-primary) !important;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .dropdown-menu .form-check-input {
+    border-color: var(--bs-gray-400) !important;
+    background-color: var(--bs-gray-800) !important;
+  }
+  
+  .dropdown-menu .form-check-input:checked {
+    background-color: var(--bs-primary) !important;
+    border-color: var(--bs-primary) !important;
+  }
+}
 </style>
 {% endblock %}
 
@@ -70,6 +94,10 @@
             </select>
           </div>
           
+        </div>
+        
+        <!-- Grade Filters Row - Initially hidden until disease is selected -->
+        <div class="row g-3 mt-2" id="gradeFiltersRow" style="{% if not filters.disease_id %}display: none;{% endif %}">
           <div class="col-md-3">
             <label class="form-label">Resident Grade</label>
             <div class="dropdown">
@@ -111,9 +139,7 @@
               </ul>
             </div>
           </div>
-        </div>
-        
-        <div class="row g-3 mt-2">
+          
           <div class="col-md-3">
             <label class="form-label">Arbitrator Grade</label>
             <div class="dropdown">
@@ -123,7 +149,7 @@
               <ul class="dropdown-menu w-100" id="arbitratorGradeList">
                 {% for grade in grade_options %}
                 <li>
-                  <div class="form-check px-3 py-1">
+                  <div class="form-check ms-4 px-3 py-1">
                     <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="arbitrator_grade" {% if grade.impression in (filters.arbitrator_grade if filters.arbitrator_grade else []) %}checked{% endif %}>
                     <label class="form-check-label" for="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
                       {{ grade.impression }}
@@ -155,11 +181,43 @@
               </ul>
             </div>
           </div>
-          
-          <div class="col-md-6 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
-            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+        </div>
+      
+      <div class="row g-3 mt-2">
+        <div class="col-md-3">
+          <label for="hasAiGradeSelect" class="form-label">Has AI Grade</label>
+          <select class="form-select" id="hasAiGradeSelect" name="has_ai_grade">
+            <option value="">All Tasks</option>
+            <option value="yes" {% if filters.has_ai_grade == 'yes' %}selected{% endif %}>Has AI Grade</option>
+            <option value="no" {% if filters.has_ai_grade == 'no' %}selected{% endif %}>No AI Grade</option>
+          </select>
+        </div>
+        
+        <div class="col-md-3">
+          <label class="form-label">AI Models</label>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiModelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+              <span id="aiModelText">All Models</span>
+            </button>
+            <ul class="dropdown-menu w-100" id="aiModelList">
+              {% for model in ai_models %}
+              <li>
+                <div class="form-check ms-4 px-3 py-1">
+                  <input class="form-check-input ai-model-checkbox" type="checkbox" value="{{ model.id }}" id="ai_model_{{ model.id }}" name="ai_model_id" {% if model.id|string in (filters.ai_model_id if filters.ai_model_id else []) %}checked{% endif %}>
+                  <label class="form-check-label" for="ai_model_{{ model.id }}">
+                    {{ model.name }} v{{ model.version }}
+                  </label>
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
           </div>
+        </div>
+          
+        <div class="col-md-6 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+          <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+        </div>
         </div>
       </form>
     </div>
@@ -189,6 +247,8 @@
                   faculty_grade=filters.faculty_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
+                  has_ai_grade=filters.has_ai_grade,
+                  ai_model_id=filters.ai_model_id or [],
                   page=page-1) if has_prev else '#' }}">
                   Previous
                 </a>
@@ -206,6 +266,8 @@
                       faculty_grade=filters.faculty_grade or [],
                       arbitrator_grade=filters.arbitrator_grade or [],
                       final_grade=filters.final_grade or [],
+                      has_ai_grade=filters.has_ai_grade,
+                      ai_model_id=filters.ai_model_id or [],
                       page=p) }}">
                       {{ p }}
                     </a>
@@ -214,13 +276,15 @@
               {% else %}
                 <!-- More than 7 pages, show first, current, and last -->
                 <li class="page-item {% if 1 == page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('analytics.review.discrepancy_reviewpancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
                     faculty_grade=filters.faculty_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
+                    has_ai_grade=filters.has_ai_grade,
+                    ai_model_id=filters.ai_model_id or [],
                     page=1) }}">
                     1
                   </a>
@@ -242,6 +306,8 @@
                         faculty_grade=filters.faculty_grade or [],
                         arbitrator_grade=filters.arbitrator_grade or [],
                         final_grade=filters.final_grade or [],
+                        has_ai_grade=filters.has_ai_grade,
+                        ai_model_id=filters.ai_model_id or [],
                         page=p) }}">
                         {{ p }}
                       </a>
@@ -263,6 +329,8 @@
                     faculty_grade=filters.faculty_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
+                    has_ai_grade=filters.has_ai_grade,
+                    ai_model_id=filters.ai_model_id or [],
                     page=total_pages) }}">
                     {{ total_pages }}
                   </a>
@@ -277,6 +345,8 @@
                   faculty_grade=filters.faculty_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
+                  has_ai_grade=filters.has_ai_grade,
+                  ai_model_id=filters.ai_model_id or [],
                   page=page+1) if has_next else '#' }}">
                   Next
                 </a>
@@ -296,6 +366,7 @@
                 <th>Image UUID</th>
                 <th>Disease</th>
                 <th>Lab Unit</th>
+                <th>AI Grade</th>
                 <th>Resident Grade</th>
                 <th>Faculty Grade</th>
                 <th>Arbitrator Grade</th>
@@ -319,6 +390,16 @@
                 </td>
                 <td>{{ task.disease_name or '-' }}</td>
                 <td>{{ task.lab_unit_name or '-' }}<br><small class="text-muted">{{ task.hospital_name or '' }}</small></td>
+                <td>
+                  {% set ai_grade = task.grades.get('ai') %}
+                  {% if ai_grade %}
+                    <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
+                    {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} v{{ ai_grade.ai_model_version or '' }}</small>{% endif %}
+                    {% if ai_grade.comment %}<small class="text-muted d-block">Note: {{ ai_grade.comment[:30] }}{% if ai_grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No AI grade</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% set grade = task.grades.get('resident') %}
                   {% if grade %}
@@ -395,6 +476,8 @@
                     faculty_grade=filters.faculty_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
+                    has_ai_grade=filters.has_ai_grade,
+                    ai_model_id=filters.ai_model_id or [],
                     page=page-1) if has_prev else '#' }}">
                     Previous
                   </a>
@@ -407,6 +490,8 @@
                     faculty_grade=filters.faculty_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
+                    has_ai_grade=filters.has_ai_grade,
+                    ai_model_id=filters.ai_model_id or [],
                     page=page+1) if has_next else '#' }}">
                     Next
                   </a>
@@ -433,9 +518,18 @@ function clearFilters() {
   // Clear disease and lab unit dropdowns
   document.getElementById('diseaseSelect').value = '';
   document.getElementById('labUnitSelect').value = '';
+  document.getElementById('hasAiGradeSelect').value = '';
+  
+  // Hide grade filters row when disease is cleared
+  document.getElementById('gradeFiltersRow').style.display = 'none';
   
   // Uncheck all grade checkboxes
   document.querySelectorAll('.grade-checkbox').forEach(checkbox => {
+    checkbox.checked = false;
+  });
+  
+  // Uncheck all AI model checkboxes
+  document.querySelectorAll('.ai-model-checkbox').forEach(checkbox => {
     checkbox.checked = false;
   });
   
@@ -444,6 +538,7 @@ function clearFilters() {
   document.getElementById('facultyGradeText').textContent = 'All Grades';
   document.getElementById('arbitratorGradeText').textContent = 'All Grades';
   document.getElementById('finalGradeText').textContent = 'All Grades';
+  document.getElementById('aiModelText').textContent = 'All Models';
   
   // Remove page parameter from URL so it defaults to page 1
   const form = document.getElementById('filterForm');
@@ -483,8 +578,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Function to update grade checkboxes based on selected disease
   function updateGradeOptions() {
     const diseaseId = parseInt(diseaseSelect.value);
+    const gradeFiltersRow = document.getElementById('gradeFiltersRow');
     
     if (diseaseId && diseasesData) {
+      // Show the grade filters row
+      gradeFiltersRow.style.display = 'flex';
+      
       // Find the selected disease in the loaded data
       const selectedDisease = diseasesData.find(d => d.id === diseaseId);
       
@@ -496,6 +595,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
       }
     } else {
+      // Hide the grade filters row
+      gradeFiltersRow.style.display = 'none';
+      
       // If no disease selected, restore all grade options
       residentGradeList.innerHTML = '';
       allGradeOptions.resident.forEach(li => {
@@ -621,6 +723,21 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
         dropdownText.textContent = checkedBox.value;
       } else {
         dropdownText.textContent = `${selectedCount} grades selected`;
+      }
+    }
+    
+    if (e.target.classList.contains('ai-model-checkbox')) {
+      const dropdownId = menu.id.replace('List', 'Text');
+      const selectedCount = menu.querySelectorAll('.ai-model-checkbox:checked').length;
+      const dropdownText = document.getElementById(dropdownId);
+      
+      if (selectedCount === 0) {
+        dropdownText.textContent = 'All Models';
+      } else if (selectedCount === 1) {
+        const checkedBox = menu.querySelector('.ai-model-checkbox:checked');
+        dropdownText.textContent = checkedBox.nextElementSibling.textContent;
+      } else {
+        dropdownText.textContent = `${selectedCount} models selected`;
       }
     }
   });

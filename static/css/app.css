@@ -1147,3 +1147,7 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
 .form-range.form-range-light::-moz-range-track {
   background: rgba(248, 250, 252, 0.65);
 }
+
+
+.form-check-input[type="checkbox"] {
+  border-color: var(--bs-secondary);}

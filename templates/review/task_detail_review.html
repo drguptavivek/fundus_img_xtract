@@ -2,6 +2,7 @@
 {% block title %}Task Details - {{ task.id }}{% endblock %}
 
 {% block content %}
+{% from "_forms.html" import csrf_field %}
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
     <h3>Task Details</h3>
@@ -106,6 +107,58 @@
     </div>
   </div>
 
+  <!-- Review Grade Section - Only shown if user can review -->
+  {% if can_review %}
+  <div class="row mt-1">
+    <div class="col-12">
+      <div class="card shadow-sm mb-1">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">Review Grade</h5>
+          {% if existing_review_grade %}
+          <span class="badge bg-success">Already Reviewed</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}">
+            {{ csrf_field() }}
+            
+            <div class="row">
+              <div class="col-md-8">
+                <div class="mb-3">
+                  <label class="form-label">Select a Grade for <strong>{{ task.disease }}</strong></label>
+                  <div class="d-flex flex-column gap-2" role="group" aria-label="Review Grade">
+                    {% for grade in available_grades %}
+                      {% set oid = 'review-grade-' ~ grade.id %}
+                      <input type="radio" class="btn-check" name="grading_id" id="{{ oid }}" value="{{ grade.id }}" autocomplete="off" required {% if existing_review_grade and existing_review_grade.disease_grading_id == grade.id %}checked{% endif %}>
+                      <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
+                        <span>{{ grade.impression }}</span>
+                        <span class="sel-icon d-none">✓</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+              
+              <div class="col-md-4">
+                <div class="mb-3">
+                  <label class="form-label">Comments (optional)</label>
+                  <textarea name="comment" class="form-control" rows="4" placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
+                </div>
+                
+                <div class="d-flex gap-2">
+                  <button type="submit" class="btn btn-primary">
+                    {% if existing_review_grade %}Update Review{% else %}Submit Review{% endif %}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Consensus Information -->
   {% if task.consensus %}
   <div class="row mt-1">
@@ -135,4 +188,38 @@
 
 
 </div>
+
+<script>
+// Handle radio button selection visual feedback
+document.addEventListener('DOMContentLoaded', function() {
+  const radioInputs = document.querySelectorAll('input[type="radio"][name="grading_id"]');
+  
+  radioInputs.forEach(input => {
+    input.addEventListener('change', function() {
+      // Hide all check icons
+      document.querySelectorAll('.sel-icon').forEach(icon => {
+        icon.classList.add('d-none');
+      });
+      
+      // Show check icon for selected option
+      if (this.checked) {
+        const label = document.querySelector(`label[for="${this.id}"]`);
+        const icon = label.querySelector('.sel-icon');
+        if (icon) {
+          icon.classList.remove('d-none');
+        }
+      }
+    });
+    
+    // Initialize check icon visibility for pre-selected option
+    if (input.checked) {
+      const label = document.querySelector(`label[for="${input.id}"]`);
+      const icon = label.querySelector('.sel-icon');
+      if (icon) {
+        icon.classList.remove('d-none');
+      }
+    }
+  });
+});
+</script>
 {% endblock %}

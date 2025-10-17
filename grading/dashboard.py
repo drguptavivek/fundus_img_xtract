@@ -82,7 +82,25 @@ def index():
         mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
         mine_next_url = url_for('grading.index', date=next_date) if next_date else None
         
-        total_pages_mine = 1  # We're not using page navigation anymore
+        # Calculate total pages for pagination within the selected date
+        total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
+        
+        # Build page navigation URLs that preserve the date filter
+        page_prev_url = None
+        page_next_url = None
+        
+        if total_pages_mine > 1:
+            if page > 1:
+                page_params = {'p': page - 1}
+                if filter_date:
+                    page_params['date'] = filter_date
+                page_prev_url = url_for('grading.index', **page_params)
+            
+            if page < total_pages_mine:
+                page_params = {'p': page + 1}
+                if filter_date:
+                    page_params['date'] = filter_date
+                page_next_url = url_for('grading.index', **page_params)
         
         # Get impression counts for display from the gradings data
         type_counts = {}
@@ -205,6 +223,8 @@ def index():
         my_total_pages=total_pages_mine,
         my_prev_url=mine_prev_url,
         my_next_url=mine_next_url,
+        page_prev_url=page_prev_url,
+        page_next_url=page_next_url,
         filter_date=filter_date,
         is_resident=is_resident,
         is_faculty=is_faculty,

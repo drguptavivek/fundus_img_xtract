@@ -11,6 +11,7 @@
           <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-sm btn-outline-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+          <a class="btn btn-sm btn-outline-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
         </div>
       </div>
       <div class="card-body">
@@ -43,6 +44,7 @@
           <button id="refreshBtn" class="btn btn-outline-primary">Refresh now</button>
           <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+          <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
         </div>
       </div>
     </div>

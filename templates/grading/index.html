@@ -353,15 +353,33 @@
     <div class="small text-muted">
       {% if filter_date %}
         Showing gradings for {{ filter_date }}
+        {% if my_total_pages > 1 %}
+          - Page {{ my_page }} of {{ my_total_pages }}
+        {% endif %}
       {% else %}
         Showing most recent gradings
+        {% if my_total_pages > 1 %}
+          - Page {{ my_page }} of {{ my_total_pages }}
+        {% endif %}
       {% endif %}
     </div>
-    <div class="btn-group btn-group-sm" role="group">
-      <a class="btn btn-outline-secondary my-prev-btn {% if not my_prev_url %}disabled{% endif %}"
-        href="{{ my_prev_url or '#' }}">Previous Date</a>
-      <a class="btn btn-outline-secondary my-next-btn {% if not my_next_url %}disabled{% endif %}"
-        href="{{ my_next_url or '#' }}">Next Date</a>
+    <div class="d-flex gap-2">
+      <!-- Date navigation -->
+      <div class="btn-group btn-group-sm" role="group">
+        <a class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
+          href="{{ my_prev_url or '#' }}">Previous Date</a>
+        <a class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
+          href="{{ my_next_url or '#' }}">Next Date</a>
+      </div>
+      <!-- Page navigation (only show if there are multiple pages) -->
+      {% if my_total_pages > 1 %}
+      <div class="btn-group btn-group-sm" role="group">
+        <a class="btn btn-outline-primary {% if not page_prev_url %}disabled{% endif %}"
+          href="{{ page_prev_url or '#' }}">Prev Page</a>
+        <a class="btn btn-outline-primary {% if not page_next_url %}disabled{% endif %}"
+          href="{{ page_next_url or '#' }}">Next Page</a>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>

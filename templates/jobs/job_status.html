@@ -9,7 +9,7 @@
         <h5 class="mb-0">Job <code>{{ job_id }}</code></h5>
         <div class="d-flex gap-2 flex-wrap">
           <a class="btn btn-sm btn-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
-          <a class="btn btn-sm btn-success" href="{{ url_for('direct_uploads.upload_results', job_token=job_id) }}">View Results</a>
+          <a class="btn btn-sm btn-success" href="{{ url_for('jobs.upload_results', job_token=job_id) }}">View Results</a>
           <a class="btn btn-sm btn-primary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-sm btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
           <a class="btn btn-sm btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
@@ -29,6 +29,8 @@
           <dd class="col-sm-9"><span id="uploader_ip">-</span></dd>
           <dt class="col-sm-3">Lab Unit</dt>
           <dd class="col-sm-9"><span id="lab_unit">-</span></dd>
+          <dt class="col-sm-3">Job Type</dt>
+          <dd class="col-sm-9"><span id="upload_type">-</span></dd>
           <dt class="col-sm-3">Errored Items</dt>
           <dd class="col-sm-9"><span id="error_count">0</span></dd>
         </dl>
@@ -43,7 +45,7 @@
 
         <div class="d-flex gap-2 mt-3 flex-wrap">
           <button id="refreshBtn" class="btn btn-outline-primary">Refresh now</button>
-          <a class="btn btn-success" href="{{ url_for('direct_uploads.upload_results', job_token=job_id) }}">View Results</a>
+          <a class="btn btn-success" href="{{ url_for('jobs.upload_results', job_token=job_id) }}">View Results</a>
           <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
           <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
           <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
@@ -83,6 +85,7 @@
       const upUserEl = document.getElementById('uploader_username');
       const upIpEl = document.getElementById('uploader_ip');
       const labUnitEl = document.getElementById('lab_unit');
+      const uploadTypeEl = document.getElementById('upload_type');
 
       // header status
       statusEl.className = `badge bg-${badgeClassForState(data.status)}`;
@@ -100,6 +103,14 @@
         labUnitEl.textContent = `ID ${data.lab_unit_id}`;
       } else {
         labUnitEl.textContent = '-';
+      }
+      
+      // Display upload type with appropriate formatting
+      if (data.upload_type) {
+        const formattedType = data.upload_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        uploadTypeEl.textContent = formattedType;
+      } else {
+        uploadTypeEl.textContent = '-';
       }
 
       // files list

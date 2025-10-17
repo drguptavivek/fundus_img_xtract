@@ -757,7 +757,7 @@ def pregraded_grades():
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
                 "success" if failures == 0 else "warning",
             )
-            return redirect(url_for("direct_uploads.upload_processing", job_id=job.token))
+            return redirect(url_for("jobs.upload_processing", job_id=job.token))
 
         hospital_id = request.form.get("hospital_id", type=int)
         lab_unit_id = request.form.get("lab_unit_id", type=int)
@@ -976,7 +976,7 @@ def pregraded_grades():
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
                 "success" if failures == 0 else "warning",
             )
-            return redirect(url_for("direct_uploads.upload_processing", job_id=job.token))
+            return redirect(url_for("jobs.upload_processing", job_id=job.token))
 
         token = str(uuid.uuid4())
         _store_pending_import(token, pending)

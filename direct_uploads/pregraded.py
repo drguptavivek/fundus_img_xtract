@@ -286,7 +286,7 @@ def pregraded_upload():
                 "info",
             )
             return redirect(
-                url_for("direct_uploads.upload_processing", job_id=new_job.token),
+                url_for("jobs.upload_processing", job_id=new_job.token),
                 code=303,
             )
 

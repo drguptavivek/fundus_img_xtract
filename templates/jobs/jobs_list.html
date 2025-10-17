@@ -11,15 +11,42 @@
   </div>
 </div>
 
+<div class="card shadow-sm mb-3">
+  <div class="card-body">
+    <form method="GET" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label for="job_type_filter" class="form-label">Filter by Job Type</label>
+        <select class="form-select" id="job_type_filter" name="job_type">
+          <option value="">All Types</option>
+          {% for job_type in job_types %}
+          <option value="{{ job_type }}" {% if job_type == selected_job_type %}selected{% endif %}>
+            {{ job_type.replace('_', ' ').title() }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-auto">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        {% if selected_job_type %}
+        <a href="{{ url_for('jobs.list_recent_jobs') }}" class="btn btn-outline-secondary">Clear</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="card shadow-sm">
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
       <thead class="table-light">
         <tr>
-          <th style="width: 160px;">Created (UTC)</th>
+          <th style="width: 160px;">Created</th>
           <th>Token</th>
           <th>Uploaded By</th>
           <th>Lab Unit</th>
+          <th>Job Type</th>
+          <th>Total</th>
+          <th>Success</th>
           <th>Uploader IP</th>
           <th style="width: 160px;">Status</th>
           <th>Error</th>
@@ -40,6 +67,19 @@
             {% else %}
               <span class="text-muted">-</span>
             {% endif %}
+          </td>
+          <td>
+            {% if j.upload_type %}
+              <span class="badge bg-info text-dark">{{ j.upload_type.replace('_', ' ').title() }}</span>
+            {% else %}
+              <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge bg-primary">{{ totals.get(j.id, 0) }}</span>
+          </td>
+          <td>
+            <span class="badge bg-success">{{ successes.get(j.id, 0) }}</span>
           </td>
           <td><code>{{ j.uploader_ip or '-' }}</code></td>
           <td>
@@ -70,7 +110,7 @@
               </a>
               {% if j.uploader_user_id == current_user.id or current_user.has_role('admin', 'data_manager') %}
               <a class="btn btn-sm btn-outline-success"
-                 href="{{ url_for('direct_uploads.upload_results', job_token=j.token) }}">
+                 href="{{ url_for('jobs.upload_results', job_token=j.token) }}">
                 Results
               </a>
               {% endif %}
@@ -78,7 +118,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="9" class="text-center text-muted p-4">No jobs yet.</td></tr>
+        <tr><td colspan="12" class="text-center text-muted p-4">No jobs yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

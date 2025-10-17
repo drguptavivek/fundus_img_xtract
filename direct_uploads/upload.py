@@ -212,7 +212,7 @@ def upload():
             current_app.logger.info("Job %s done. Success:%s Errors:%s", new_job.id, ok, err)
 
             flash("Upload process initiated. Check status for details.", "info")
-            return redirect(url_for("direct_uploads.upload_processing", job_id=new_job.token), code=303)
+            return redirect(url_for("jobs.upload_processing", job_id=new_job.token), code=303)
 
         # ---------------- GET: build form data ----------------
         current_app.logger.info("Direct upload page accessed by %s (%s)", current_user.username, current_user.id)
@@ -241,7 +241,3 @@ def upload():
                                cameras=cameras, diseases=diseases, areas=areas)
 
 
-@bp.route("/direct/upload/processing/<job_id>", methods=["GET"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
-def upload_processing(job_id):
-    return render_template("direct_uploads/upload_processing.html", job_id=job_id)

@@ -87,13 +87,24 @@ These models track the raw data as it is uploaded and processed.
 ### 6. Direct Image Upload System
 
 - **`DirectImageUpload`**: Images uploaded directly (not from ZIP files).
-  - **Key Fields**: `id`, `uuid` (unique), `filename`, `edited_filename`, `folder_rel`, `file_hash`
+  - **Key Fields**: `id`, `uuid` (unique), `original_filename`, `filename`, `edited_filename`, `folder_rel`, `file_hash`, `content_hash`, `uploader_id`
   - **Metadata**: `hospital_id`, `lab_unit_id`, `camera_id`, `disease_id`, `area_id`, `is_mydriatic`
-  - **Purpose**: Bypasses ZIP workflow for individual image uploads
+  - **Source Information**: `is_pregraded` (whether uploaded as pre-graded), `created_at` timestamp
+  - **Relationships**: May be linked to grading tasks via `GradingTask.direct_image_upload_id`, has multiple `verifications` via DirectImageVerify
+  - **Purpose**: Bypasses ZIP workflow for individual image uploads, supports both regular and pre-graded uploads
+  - **File Tracking**: `file_hash` for duplicate detection, `content_hash` for content integrity
+  - **Constraints**: Filename must not contain slashes, folder_rel must be relative POSIX path
+  - **Indexes**: `uuid`, `file_hash`, `uploader_id`, `created_at`, `content_hash` for performance
+  - **Relationships**: `uploader`, `hospital`, `lab_unit`, `camera`, `disease`, `area` (all relationships to reference tables)
 
 - **`DirectImageVerify`**: Verification status for direct uploads.
-  - **Key Fields**: `id`, `image_upload_id` (unique), `verified_status`, `verified_by_id`
+  - **Key Fields**: `id`, `image_upload_id` (unique), `verified_status`, `remarks`, `verified_by_id`, `verified_at`
   - **Status Values**: 'verified', 'unverified', 'pending'
+  - **Additional Fields**: `remarks` for verification notes, `verified_at` for timestamp
+  - **Special Handling**: For pre-graded uploads, records are automatically created with 'verified' status
+  - **Relationships**: `image_upload` (DirectImageUpload reference with cascade delete), `verified_by` (User reference)
+  - **Constraints**: Unique per image_upload_id, status must be one of the allowed values
+  - **Indexes**: `image_upload_id`, `verified_status`, `verified_by_id` for performance
 
 ### 7. Dual Grading System
 
@@ -141,12 +152,20 @@ These models track the raw data as it is uploaded and processed.
 ### 10. Job Management
 
 - **`Job`**: Background processing jobs for batch operations.
-  - **Key Fields**: `id`, `token` (unique), `status`, `error`, `uploader_user_id`, `lab_unit_id`
-  - **Status Values**: 'queued', 'processing', 'done', 'error'
+  - **Key Fields**: `id`, `token` (unique), `status`, `error`, `rejected_summary`, `excel_filename`, `upload_type`, `created_at`, `updated_at`, `uploader_user_id`, `uploader_username`, `uploader_ip`, `lab_unit_id`
+  - **Status Values**: 'queued', 'processing', 'completed', 'error'
+  - **Purpose**: Manages batch operations like ZIP file processing, pre-graded uploads, and other bulk operations
+  - **Additional Fields**: `rejected_summary` stores user-provided labels or descriptions for the job, `excel_filename` for Excel-based imports, `upload_type` for type identification
+  - **Relationships**: `items` (many JobItems), `lab_unit` (LabUnit reference)
+  - **Indexes**: `uploader_user_id`, `uploader_username`, `lab_unit_id` for performance
 
 - **`JobItem`**: Individual files within a job.
-  - **Key Fields**: `id`, `job_id`, `filename`, `state`, `started_at`, `finished_at`
-  - **Purpose**: Tracks processing status of each file in a batch
+  - **Key Fields**: `id`, `job_id`, `filename`, `state`, `detail`, `started_at`, `finished_at`, `uploader_user_id`, `uploader_username`, `uploader_ip`
+  - **State Values**: 'queued', 'pending', 'completed', 'error'
+  - **Purpose**: Tracks processing status of each file in a batch with detailed information
+  - **Additional Fields**: `detail` provides specific information about processing result
+  - **Relationships**: `job` (Job reference)
+  - **Indexes**: `job_id`, `uploader_user_id`, `uploader_username` for performance
 
 ### 11. Security & Audit
 

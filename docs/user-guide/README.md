@@ -9,7 +9,9 @@
 5. [Grading Images](grading-images.md)
 6. [Viewing Analytics](viewing-analytics.md)
 7. [Notifications System](notifications.md)
-8. [Troubleshooting](troubleshooting.md)
+8. [Verification of DR/Glaucoma ZIPs](verification-dr-glaucoma-zips.md)
+9. [Verification of No-DR ZIPs](verification-nodr-zips.md)
+10. [Troubleshooting](troubleshooting.md)
 
 ## About This System
 

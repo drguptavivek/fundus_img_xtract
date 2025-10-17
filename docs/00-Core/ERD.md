@@ -260,6 +260,8 @@ erDiagram
         string status
         text error
         text rejected_summary
+        string excel_filename
+        string upload_type
         datetime created_at
         datetime updated_at
         int uploader_user_id FK
@@ -305,10 +307,12 @@ erDiagram
     DirectImageUpload {
         int id PK
         string uuid UK
+        string original_filename
         string filename
         string edited_filename
         string folder_rel
         string file_hash UK
+        string content_hash
         int uploader_id FK
         int hospital_id FK
         int lab_unit_id FK
@@ -316,6 +320,7 @@ erDiagram
         int disease_id FK
         int area_id FK
         boolean is_mydriatic
+        boolean is_pregraded
         datetime created_at
     }
     

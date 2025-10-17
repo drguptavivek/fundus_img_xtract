@@ -127,7 +127,8 @@ def get_user_gradings_with_details(
     user_id: int,
     page: int = 1,
     per_page: int = 20,
-    role_slot: Optional[str] = None
+    role_slot: Optional[str] = None,
+    filter_date: Optional[str] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Retrieve a paginated list of gradings done by a user with related details.
@@ -138,6 +139,7 @@ def get_user_gradings_with_details(
         page (int): Page number (1-indexed)
         per_page (int): Number of items per page
         role_slot (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+        filter_date (Optional[str]): Filter by date in YYYY-MM-DD format
         
     Returns:
         Tuple[List[Dict[str, Any]], int]: A tuple containing:
@@ -168,6 +170,31 @@ def get_user_gradings_with_details(
     # Filter by role slot if provided
     if role_slot:
         query = query.filter(Grade.role_slot == role_slot)
+    
+    # Filter by date if provided
+    if filter_date:
+        from datetime import datetime
+        try:
+            # Parse the date string and create a datetime range for the entire day
+            filter_datetime = datetime.strptime(filter_date, '%Y-%m-%d')
+            from models import utcnow
+            from sqlalchemy import and_
+            
+            # Create start and end of day in UTC
+            from datetime import time, timedelta
+            start_of_day = filter_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day = start_of_day + timedelta(days=1)
+            
+            # Filter for grades created on this specific date (UTC)
+            query = query.filter(
+                and_(
+                    Grade.created_at >= start_of_day,
+                    Grade.created_at < end_of_day
+                )
+            )
+        except ValueError:
+            # If date parsing fails, ignore the filter
+            pass
     
     # Order by created_at descending (most recent first)
     query = query.order_by(desc(Grade.created_at))

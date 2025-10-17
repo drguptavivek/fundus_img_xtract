@@ -3,11 +3,11 @@ from collections.abc import Mapping
 from flask import render_template, request, redirect, url_for, flash
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
-from sqlalchemy import and_, distinct, func
+from sqlalchemy import and_, desc, distinct, func
 
 
 from auth.roles import roles_required
-from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User
+from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
@@ -22,19 +22,67 @@ def index():
     try:
         page = request.args.get('p', default=1, type=int) or 1
         page = max(1, page)
-        per_page = 20
+        per_page = 200
+        filter_date = request.args.get('date', default=None, type=str)
+        
+        # If no date filter is provided, get the most recent grading date
+        if not filter_date:
+            # Get the most recent grading date for this user
+            most_recent_date = db.query(
+                func.date(Grade.created_at)
+            ).filter(
+                Grade.grader_user_id == getattr(current_user, 'id', None)
+            ).order_by(
+                desc(Grade.created_at)
+            ).limit(1).scalar()
+            
+            if most_recent_date:
+                filter_date = most_recent_date  # func.date() already returns a string in YYYY-MM-DD format
         
         # Get user's gradings with details using pagination
         my_items, total_mine = get_user_gradings_with_details(
             db,
             user_id=getattr(current_user, 'id', None),
             page=page,
-            per_page=per_page
+            per_page=per_page,
+            filter_date=filter_date
         )
         
-        total_pages_mine = max(1, (total_mine + per_page - 1) // per_page) if total_mine else 1
-        mine_prev_url = url_for('grading.index', p=page-1) if page > 1 else None
-        mine_next_url = url_for('grading.index', p=page+1) if page < total_pages_mine else None
+        # Get all available grading dates for this user
+        available_dates = db.query(
+            func.date(Grade.created_at).label('grading_date')
+        ).filter(
+            Grade.grader_user_id == getattr(current_user, 'id', None)
+        ).group_by(
+            func.date(Grade.created_at)
+        ).order_by(
+            desc(func.date(Grade.created_at))
+        ).all()
+        
+        # Convert to list of date strings
+        date_list = [date[0] for date in available_dates]
+        
+        # Find previous and next dates
+        prev_date = None
+        next_date = None
+        
+        if filter_date and filter_date in date_list:
+            current_index = date_list.index(filter_date)
+            if current_index < len(date_list) - 1:
+                prev_date = date_list[current_index + 1]
+            if current_index > 0:
+                next_date = date_list[current_index - 1]
+        elif date_list and not filter_date:
+            # If no filter date but we have dates, the first one is the most recent
+            # and there's no next date (we're already at the most recent)
+            if len(date_list) > 1:
+                prev_date = date_list[1]
+        
+        # Build navigation URLs
+        mine_prev_url = url_for('grading.index', date=prev_date) if prev_date else None
+        mine_next_url = url_for('grading.index', date=next_date) if next_date else None
+        
+        total_pages_mine = 1  # We're not using page navigation anymore
         
         # Get impression counts for display from the gradings data
         type_counts = {}
@@ -157,6 +205,7 @@ def index():
         my_total_pages=total_pages_mine,
         my_prev_url=mine_prev_url,
         my_next_url=mine_next_url,
+        filter_date=filter_date,
         is_resident=is_resident,
         is_faculty=is_faculty,
         kpi_resident_pending=kpi_resident_pending,

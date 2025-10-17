@@ -144,6 +144,21 @@ def nodr_list():
                 items = [enc for enc in rows if enc.encounter_verified_status != "verified"]
             else:
                 items = rows
+            
+            # Check if each verified encounter can be unverified
+            items_with_unverify_status = []
+            for enc in items:
+                can_unverify = True
+                if enc.encounter_verified_status == "verified":
+                    # Check if all images have only pending tasks
+                    for ef in enc.encounter_files or []:
+                        if ef.file_type == 'image' and not can_unverify_image(db, kind="encounter", image_id=ef.id):
+                            can_unverify = False
+                            break
+                items_with_unverify_status.append({
+                    'encounter': enc,
+                    'can_unverify': can_unverify
+                })
 
         my_recent_verified: list[PatientEncounters] = []
         try:
@@ -154,7 +169,10 @@ def nodr_list():
                     .filter(PatientEncounters.encounter_verified_status == "verified")
                     .filter(PatientEncounters.encounter_verified_by == uname)
                     .order_by(PatientEncounters.encounter_verified_at.desc(), PatientEncounters.id.desc())
-                    .options(selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital))
+                    .options(
+                        selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
+                        selectinload(PatientEncounters.encounter_files),
+                    )
                     .limit(20)
                 )
                 my_recent_verified = recent_query.all()
@@ -168,7 +186,7 @@ def nodr_list():
 
     return render_template(
         "verify_remedio_nodr/list.html",
-        items=items,
+        items=items_with_unverify_status,
         page=page,
         total=len(items),
         total_pages=total_pages,
@@ -369,19 +387,23 @@ def nodr_unverify(encounter_id: int):
             from flask import abort
             abort(404)
 
+        # Check if we can unverify the encounter (all tasks must be pending)
         images = [ef for ef in encounter.encounter_files if ef.file_type == 'image']
         can_unverify = True
         for image in images:
             if not can_unverify_image(db, kind="encounter", image_id=image.id):
                 can_unverify = False
                 break
+        
         if not can_unverify:
             msg = "Cannot unverify encounter - some images have non-pending tasks."
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "tasks_in_progress", "message": msg}, 400
-            flash(msg, "danger")
-            return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
+            else:
+                flash(msg, "danger")
+                return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
 
+        # Proceed with unverification
         encounter.encounter_verified_status = None
         encounter.encounter_verified_by = None
         encounter.encounter_verified_at = None

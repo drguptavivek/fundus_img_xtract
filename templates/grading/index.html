@@ -247,9 +247,24 @@
 
 <!-- History of My Gradings -->
 <div class="card card-aurora shadow-sm">
-  <div class="card-header d-flex justify-content-between align-items-center"> 
-    <strong>My Recent Gradings and AI Grade Uploads</strong> 
-    <span class="small text-muted">{{ my_total or 0 }} total</span> 
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-3">
+      <strong>My Recent Gradings and AI Grade Uploads</strong>
+      <div class="d-flex align-items-center gap-2">
+        <label for="grading-date-filter" class="small mb-0">Filter by date:</label>
+        <input type="date" id="grading-date-filter" class="form-control form-control-sm"
+               style="width: auto;" value="{{ filter_date or '' }}">
+        <button id="clear-date-filter" class="btn btn-sm btn-outline-secondary"
+                {% if not filter_date %}style="display: none;"{% endif %}>Clear</button>
+      </div>
+      <div class="btn-group btn-group-sm" role="group">
+        <a class="btn btn-outline-secondary {% if not my_prev_url %}disabled{% endif %}"
+          href="{{ my_prev_url or '#' }}">Previous Date</a>
+        <a class="btn btn-outline-secondary {% if not my_next_url %}disabled{% endif %}"
+          href="{{ my_next_url or '#' }}">Next Date</a>
+      </div>
+    </div>
+    <span class="small text-muted">{{ my_total or 0 }} total</span>
   </div>
   <div class="card-body">
     <div class="d-flex align-items-center gap-3 flex-wrap mb-3">
@@ -335,15 +350,56 @@
     {% endif %}
   </div>
   <div class="card-footer d-flex justify-content-between align-items-center">
-    <div class="small text-muted">Page {{ my_page }} of {{ my_total_pages }}</div>
+    <div class="small text-muted">
+      {% if filter_date %}
+        Showing gradings for {{ filter_date }}
+      {% else %}
+        Showing most recent gradings
+      {% endif %}
+    </div>
     <div class="btn-group btn-group-sm" role="group">
       <a class="btn btn-outline-secondary my-prev-btn {% if not my_prev_url %}disabled{% endif %}"
-        href="{{ my_prev_url or '#' }}">Prev</a>
+        href="{{ my_prev_url or '#' }}">Previous Date</a>
       <a class="btn btn-outline-secondary my-next-btn {% if not my_next_url %}disabled{% endif %}"
-        href="{{ my_next_url or '#' }}">Next</a>
+        href="{{ my_next_url or '#' }}">Next Date</a>
     </div>
   </div>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const dateFilter = document.getElementById('grading-date-filter');
+  const clearButton = document.getElementById('clear-date-filter');
+  
+  // Handle date filter change
+  dateFilter.addEventListener('change', function() {
+    const selectedDate = this.value;
+    const url = new URL(window.location);
+    
+    if (selectedDate) {
+      url.searchParams.set('date', selectedDate);
+      // Remove page parameter since we're not using it anymore
+      url.searchParams.delete('p');
+      // Show clear button
+      clearButton.style.display = 'inline-block';
+    } else {
+      url.searchParams.delete('date');
+      // Hide clear button
+      clearButton.style.display = 'none';
+    }
+    
+    // Navigate to the new URL
+    window.location.href = url.toString();
+  });
+  
+  // Handle clear button click
+  clearButton.addEventListener('click', function() {
+    const url = new URL(window.location);
+    url.searchParams.delete('date');
+    url.searchParams.delete('p');
+    window.location.href = url.toString();
+  });
+});
+</script>
 
 {% endblock %}

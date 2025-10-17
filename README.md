@@ -75,7 +75,7 @@ python app.py
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
-- [Security](docs/10-DEVELOP/Security.md) - Comprehensive authentication, authorization, and security features
+- [Security](docs/10-DEVELOP/Security.md) -  authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
 - [Playwright Testing](docs/10-DEVELOP/playwright.md) - End-to-end testing setup, configuration, and best practices
@@ -87,6 +87,7 @@ python app.py
     - [PDF Processing](docs/01-Adding_Images/process_pdfs.md)
     - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
+- [Pre-Graded Uploads](docs/01-Adding_Images/pre_graded.md)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)
 
 ### Image Management & Processing (`docs/01-Adding_Images/`)
@@ -101,7 +102,7 @@ python app.py
   - [Proposed No-Glaucoma Workflow Solution](docs/02-Verify-Anonymize/proposed-noglaucoma-workflow.md) - Implementation plan for missing Glaucoma verification workflow
 
 ### Task Creation
-- [Scoping](docs/03-Tasks/Scoping.md)
+- [Scoping](docs/03-Tasks/Scoping.md) - ABAC - Attribute-Based Access Control & RBAC for Uplaoding and HGrading  and access to app features
 - [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
 - [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for retrieving and managing task information with proper scoping
 

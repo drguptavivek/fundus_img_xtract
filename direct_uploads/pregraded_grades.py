@@ -650,11 +650,29 @@ def pregraded_grades():
         )
 
         if request.method == "GET":
+            # Check if there's stored form data from a previous submission
+            stored_form_data = session.get("pregraded_form_submission")
+            context = {}
+            
+            if stored_form_data:
+                # Pass the stored form data to the template
+                context.update({
+                    "selected_hospital": stored_form_data.get("hospital_id"),
+                    "selected_lab_unit": stored_form_data.get("lab_unit_id"),
+                    "selected_disease": stored_form_data.get("disease_id"),
+                    "selected_area": stored_form_data.get("area_id"),
+                    "selected_grader": stored_form_data.get("grader_user_id"),
+                    "selected_ai_model_id": stored_form_data.get("ai_model_id"),
+                })
+                # Clear the stored data after retrieving it
+                del session["pregraded_form_submission"]
+                
             return _render_page(
                 db_session,
                 resident_graders=resident_graders,
                 faculty_graders=faculty_graders,
                 ai_models=ai_models,
+                context=context,
             )
 
         form_role = request.form.get("form_role")
@@ -724,12 +742,14 @@ def pregraded_grades():
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
                 "success" if failures == 0 else "warning",
             )
-            return redirect(url_for("direct_uploads.upload_processing", job_id=job.id))
+            return redirect(url_for("direct_uploads.upload_processing", job_id=job.token))
 
         hospital_id = request.form.get("hospital_id", type=int)
         lab_unit_id = request.form.get("lab_unit_id", type=int)
         disease_id = request.form.get("disease_id", type=int)
+        area_id = request.form.get("area_id", type=int)
         grader_user_id = request.form.get("grader_user_id", type=int)
+        ai_model_id = request.form.get("ai_model_id", type=int) if form_role == ROLE_AI else None
 
         field_checks = [
             ("Hospital", hospital_id),
@@ -738,6 +758,22 @@ def pregraded_grades():
         ]
         if form_role != ROLE_AI:
             field_checks.append(("Grader", grader_user_id))
+            
+        # Store form data in session for potential validation failure
+        form_data = {
+            "form_role": form_role,
+            "hospital_id": hospital_id,
+            "lab_unit_id": lab_unit_id,
+            "disease_id": disease_id,
+            "area_id": area_id,
+        }
+        if form_role != ROLE_AI:
+            form_data["grader_user_id"] = grader_user_id
+        else:
+            form_data["ai_model_id"] = ai_model_id
+            
+        session["pregraded_form_submission"] = form_data
+        
         for field_name, value in field_checks:
             if value is None:
                 processing_logger.warning("Missing field %s for role %s", field_name, form_role)
@@ -749,6 +785,10 @@ def pregraded_grades():
             processing_logger.warning("No file uploaded for role %s", form_role)
             flash("Please select an Excel file to upload.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
+            
+        # Clear form data from session after successful validation
+        if "pregraded_form_submission" in session:
+            del session["pregraded_form_submission"]
 
         allowed_lab_units = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin", "data_manager")
@@ -905,7 +945,7 @@ def pregraded_grades():
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
                 "success" if failures == 0 else "warning",
             )
-            return redirect(url_for("direct_uploads.upload_processing", job_id=job.id))
+            return redirect(url_for("direct_uploads.upload_processing", job_id=job.token))
 
         token = str(uuid.uuid4())
         _store_pending_import(token, pending)

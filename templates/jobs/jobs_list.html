@@ -70,7 +70,7 @@
               </a>
               {% if j.uploader_user_id == current_user.id or current_user.has_role('admin', 'data_manager') %}
               <a class="btn btn-sm btn-outline-success"
-                 href="{{ url_for('direct_uploads.upload_results', job_id=j.id) }}">
+                 href="{{ url_for('direct_uploads.upload_results', job_token=j.token) }}">
                 Results
               </a>
               {% endif %}

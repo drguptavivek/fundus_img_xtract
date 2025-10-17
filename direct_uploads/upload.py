@@ -152,7 +152,7 @@ def upload():
                         else:
                             md5_hash = hashlib.md5(content).hexdigest()
                             existing = db_session.execute(
-                                select(DirectImageUpload).filter_by(file_hash=md5_hash)
+                                select(DirectImageUpload).filter_by(file_hash=md5_hash).limit(1)
                             ).scalar_one_or_none()
 
                             if existing:
@@ -211,7 +211,7 @@ def upload():
             current_app.logger.info("Job %s done. Success:%s Errors:%s", new_job.id, ok, err)
 
             flash("Upload process initiated. Check status for details.", "info")
-            return redirect(url_for("direct_uploads.upload_processing", job_id=new_job.id), code=303)
+            return redirect(url_for("direct_uploads.upload_processing", job_id=new_job.token), code=303)
 
         # ---------------- GET: build form data ----------------
         current_app.logger.info("Direct upload page accessed by %s (%s)", current_user.username, current_user.id)
@@ -240,7 +240,7 @@ def upload():
                                cameras=cameras, diseases=diseases, areas=areas)
 
 
-@bp.route("/direct/upload/processing/<int:job_id>", methods=["GET"])
+@bp.route("/direct/upload/processing/<job_id>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_processing(job_id):
     return render_template("direct_uploads/upload_processing.html", job_id=job_id)

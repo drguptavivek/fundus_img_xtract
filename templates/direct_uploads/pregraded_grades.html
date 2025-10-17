@@ -44,7 +44,7 @@
               <select class="form-select" name="grader_user_id" data-role="resident">
                 <option value="">Select Resident Grader</option>
                 {% for user in resident_graders %}
-                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and modal_role == 'resident' %}selected{% endif %}>
+                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and (modal_role == 'resident' or form_role == 'resident') %}selected{% endif %}>
                   {{ user.username }} (ID: {{ user.id }})
                 </option>
                 {% endfor %}
@@ -83,7 +83,7 @@
               <select class="form-select" name="grader_user_id" data-role="faculty">
                 <option value="">Select Faculty Grader</option>
                 {% for user in faculty_graders %}
-                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and modal_role == 'faculty' %}selected{% endif %}>
+                <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and (modal_role == 'faculty' or form_role == 'faculty') %}selected{% endif %}>
                   {{ user.username }} (ID: {{ user.id }})
                 </option>
                 {% endfor %}
@@ -125,7 +125,7 @@
               <select class="form-select" name="ai_model_id">
                 <option value="">Select AI model</option>
                 {% for model in ai_models %}
-                <option value="{{ model.id }}" {% if selected_ai_model_id and selected_ai_model_id == model.id %}selected{% endif %}>
+                <option value="{{ model.id }}" {% if selected_ai_model_id and selected_ai_model_id == model.id and (modal_role == 'ai' or form_role == 'ai') %}selected{% endif %}>
                   {{ model.name }} v{{ model.version }}
                 </option>
                 {% endfor %}

@@ -1,5 +1,93 @@
 (() => {
   const storageKey = (diseaseId, role) => `pregraded_grade_map_${role}_${diseaseId}`;
+  const formDataKey = (role) => `pregraded_form_data_${role}`;
+
+  function saveFormData(form) {
+    const role = form.querySelector('input[name="form_role"]').value;
+    const formData = new FormData(form);
+    const data = {};
+    
+    // Save all form fields except the file and CSRF token
+    for (let [key, value] of formData.entries()) {
+      if (key !== 'grades_file' && key !== 'csrf_token') {
+        data[key] = value;
+      }
+    }
+    
+    try {
+      sessionStorage.setItem(formDataKey(role), JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to save form data:', e);
+    }
+  }
+
+  function loadFormData(form) {
+    const role = form.querySelector('input[name="form_role"]').value;
+    
+    try {
+      // First try to get form data from sessionStorage (JavaScript stored)
+      let data = JSON.parse(sessionStorage.getItem(formDataKey(role)) || '{}');
+      
+      // If no data in sessionStorage, check if the server has provided it
+      if (Object.keys(data).length === 0) {
+        // Get data from server-side stored values
+        const selectedHospital = form.querySelector('[name="hospital_id"]:checked');
+        const selectedLabUnit = form.querySelector('[name="lab_unit_id"]:checked');
+        const selectedDisease = form.querySelector('select[name="disease_id"]');
+        const selectedArea = form.querySelector('select[name="area_id"]');
+        const selectedGrader = form.querySelector('select[name="grader_user_id"]');
+        const selectedAiModel = form.querySelector('select[name="ai_model_id"]');
+        
+        if (selectedHospital || selectedLabUnit ||
+            (selectedDisease && selectedDisease.value) ||
+            (selectedArea && selectedArea.value) ||
+            (selectedGrader && selectedGrader.value) ||
+            (selectedAiModel && selectedAiModel.value)) {
+          data = {
+            hospital_id: selectedHospital ? selectedHospital.value : null,
+            lab_unit_id: selectedLabUnit ? selectedLabUnit.value : null,
+            disease_id: selectedDisease ? selectedDisease.value : null,
+            area_id: selectedArea ? selectedArea.value : null,
+            grader_user_id: selectedGrader ? selectedGrader.value : null,
+            ai_model_id: selectedAiModel ? selectedAiModel.value : null,
+          };
+        }
+      }
+      
+      // Restore form fields
+      Object.entries(data).forEach(([key, value]) => {
+        if (!value) return; // Skip null/undefined values
+        
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+          if (input.type === 'radio') {
+            // Handle radio buttons
+            const radio = form.querySelector(`[name="${key}"][value="${value}"]`);
+            if (radio) {
+              radio.checked = true;
+              // Trigger change events for dependent fields
+              radio.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          } else if (input.type === 'select-one') {
+            // Handle select dropdowns
+            input.value = value;
+            // Trigger change events for dependent fields
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          } else {
+            // Handle other input types
+            input.value = value;
+            // Trigger change events for dependent fields
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      });
+      
+      // Clear the stored data after loading
+      sessionStorage.removeItem(formDataKey(role));
+    } catch (e) {
+      console.warn('Failed to load form data:', e);
+    }
+  }
 
   function applyHospitalFilter(form) {
     const hospitalRadios = form.querySelectorAll('.hospital-radio');
@@ -115,10 +203,21 @@
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('form').forEach(form => {
       if (!form.querySelector('.hospital-radio')) return;
+      
+      // Load saved form data on page load
+      loadFormData(form);
+      
+      // Initialize hospital filter
       applyHospitalFilter(form);
       form.querySelectorAll('.hospital-radio').forEach(radio => {
         radio.addEventListener('change', () => applyHospitalFilter(form));
       });
+      
+      // Save form data before submission
+      form.addEventListener('submit', (e) => {
+        saveFormData(form);
+      });
+      
       preloadMapping(form);
     });
 

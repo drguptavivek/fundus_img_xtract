@@ -21,7 +21,7 @@
                 <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
             </div>
             <div id="completion-message" class="alert alert-success d-none" role="alert">
-                Upload processing complete! <a href="{{ url_for('direct_uploads.upload_results', job_id=job_id) }}" class="alert-link">View Results</a>
+                Upload processing complete! <a href="{{ url_for('direct_uploads.upload_results', job_token=job_id) }}" class="alert-link">View Results</a>
             </div>
         </div>
     </div>

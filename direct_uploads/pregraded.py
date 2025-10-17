@@ -69,8 +69,25 @@ def pregraded_upload():
             ]
 
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
+                # Store form data in session for potential validation failure
+                from flask import session
+                form_data = {
+                    "hospital_id": hospital_id,
+                    "lab_unit_id": lab_unit_id,
+                    "camera_id": camera_id,
+                    "disease_id": disease_id,
+                    "area_id": area_id,
+                    "dataset_label": dataset_label,
+                    "is_mydriatic": is_mydriatic,
+                }
+                session["pregraded_upload_form_data"] = form_data
                 flash("All fields are required.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
+            
+            # Clear form data from session after successful validation
+            from flask import session
+            if "pregraded_upload_form_data" in session:
+                del session["pregraded_upload_form_data"]
 
             hospital = db_session.get(Hospital, hospital_id)
             lab_unit = db_session.get(LabUnit, lab_unit_id)
@@ -124,6 +141,7 @@ def pregraded_upload():
                 filename = (file_storage.filename or "").strip()
                 state = "queued"
                 detail = ""
+                direct_upload = None  # Initialize direct_upload to prevent UnboundLocalError
 
                 if not filename:
                     state = "error"
@@ -145,61 +163,77 @@ def pregraded_upload():
                         else:
                             try:
                                 md5_hash = hashlib.md5(content).hexdigest()
-                                dest = uniquify(orig_dir, filename)
-                                dest.write_bytes(content)
-
-                                direct_upload = DirectImageUpload(
-                                    original_filename=filename,
-                                    filename=dest.name,
-                                    folder_rel=folder_rel,
-                                    edited_filename=None,
-                                    file_hash=md5_hash,
-                                    content_hash=md5_hash,
-                                    uploader_id=current_user.id,
-                                    hospital_id=hospital.id,
-                                    lab_unit_id=lab_unit.id,
-                                    camera_id=camera.id,
-                                    disease_id=disease.id,
-                                    area_id=area.id,
-                                    is_mydriatic=is_mydriatic,
-                                    is_pregraded=True,
-                                )
-                                db_session.add(direct_upload)
-                                db_session.flush()
-
-                                verification_remark = (
-                                    dataset_label
-                                    or f"Pre-graded upload on {datetime.utcnow():%Y-%m-%d}"
-                                )
-
-                                verification = (
-                                    db_session.execute(
-                                        select(DirectImageVerify).where(
-                                            DirectImageVerify.image_upload_id
-                                            == direct_upload.id
-                                        )
-                                    ).scalar_one_or_none()
-                                )
-                                if verification:
-                                    verification.verified_status = "verified"
-                                    verification.remarks = verification_remark
-                                    verification.verified_by_id = current_user.id
-                                    verification.verified_at = func.now()
+                                
+                                # Check for duplicate file hash
+                                existing = db_session.execute(
+                                    select(DirectImageUpload).filter_by(file_hash=md5_hash).limit(1)
+                                ).scalar_one_or_none()
+                                
+                                if existing:
+                                    # For pre-graded uploads, we allow duplicates but log them
+                                    # Save a copy to dup folder (no DB row)
+                                    _, _, dup_dir, _ = get_upload_dirs(current_user.id)
+                                    path = uniquify(dup_dir, filename)
+                                    path.write_bytes(content)
+                                    state = "error"
+                                    detail = "Duplicate file (already exists in database)"
+                                    current_app.logger.info("Duplicate pre-graded file: %s", filename)
                                 else:
-                                    db_session.add(
-                                        DirectImageVerify(
-                                            image_upload_id=direct_upload.id,
-                                            verified_status="verified",
-                                            remarks=verification_remark,
-                                            verified_by_id=current_user.id,
-                                            verified_at=func.now(),
-                                        )
+                                    dest = uniquify(orig_dir, filename)
+                                    dest.write_bytes(content)
+
+                                    direct_upload = DirectImageUpload(
+                                        original_filename=filename,
+                                        filename=dest.name,
+                                        folder_rel=folder_rel,
+                                        edited_filename=None,
+                                        file_hash=md5_hash,
+                                        content_hash=md5_hash,
+                                        uploader_id=current_user.id,
+                                        hospital_id=hospital.id,
+                                        lab_unit_id=lab_unit.id,
+                                        camera_id=camera.id,
+                                        disease_id=disease.id,
+                                        area_id=area.id,
+                                        is_mydriatic=is_mydriatic,
+                                        is_pregraded=True,
+                                    )
+                                    db_session.add(direct_upload)
+                                    db_session.flush()
+
+                                    verification_remark = (
+                                        dataset_label
+                                        or f"Pre-graded upload on {datetime.utcnow():%Y-%m-%d}"
                                     )
 
-                                state = "pending"
-                                detail = "Stored; creating grading task…"
-                                pending_tasks.append((direct_upload.uuid, None))  # placeholder for job item
-                                current_user.file_upload_count += 1
+                                    verification = (
+                                        db_session.execute(
+                                            select(DirectImageVerify).where(
+                                                DirectImageVerify.image_upload_id
+                                                == direct_upload.id
+                                            )
+                                        ).scalar_one_or_none()
+                                    )
+                                    if verification:
+                                        verification.verified_status = "verified"
+                                        verification.remarks = verification_remark
+                                        verification.verified_by_id = current_user.id
+                                        verification.verified_at = func.now()
+                                    else:
+                                        db_session.add(
+                                            DirectImageVerify(
+                                                image_upload_id=direct_upload.id,
+                                                verified_status="verified",
+                                                remarks=verification_remark,
+                                                verified_by_id=current_user.id,
+                                                verified_at=func.now(),
+                                            )
+                                        )
+
+                                    state = "pending"
+                                    detail = "Stored; creating grading task…"
+                                    pending_tasks.append((direct_upload.uuid, None))  # placeholder for job item
+                                    current_user.file_upload_count += 1
                             except Exception as processing_error:  # noqa: BLE001
                                 current_app.logger.exception(
                                     "Failed to store pre-graded image %s", filename
@@ -252,9 +286,87 @@ def pregraded_upload():
                 "info",
             )
             return redirect(
-                url_for("direct_uploads.upload_processing", job_id=new_job.id),
+                url_for("direct_uploads.upload_processing", job_id=new_job.token),
                 code=303,
             )
+
+        # Check if there's stored form data from a previous submission
+        from flask import session
+        stored_form_data = session.get("pregraded_upload_form_data")
+        context = {}
+        
+        if stored_form_data:
+            # Pass the stored form data to the template
+            context.update({
+                "selected_hospital": stored_form_data.get("hospital_id"),
+                "selected_lab_unit": stored_form_data.get("lab_unit_id"),
+                "selected_camera": stored_form_data.get("camera_id"),
+                "selected_disease": stored_form_data.get("disease_id"),
+                "selected_area": stored_form_data.get("area_id"),
+                "selected_dataset_label": stored_form_data.get("dataset_label"),
+                "selected_is_mydriatic": stored_form_data.get("is_mydriatic"),
+            })
+            # Clear the stored data after retrieving it
+            del session["pregraded_upload_form_data"]
+
+        # Get the last successful pre-graded upload job for the current user
+        # We need to check if the job contains pre-graded uploads by checking DirectImageUpload records
+        last_job = None
+        last_job_images = []
+        
+        # First get recent jobs for the current user
+        recent_jobs = (
+            db_session.execute(
+                select(Job)
+                .where(
+                    Job.uploader_user_id == current_user.id,
+                    Job.status.in_(["completed", "error"]),
+                )
+                .order_by(Job.created_at.desc())
+                .limit(5)  # Check last 5 jobs to find a pre-graded one
+            )
+            .scalars()
+            .all()
+        )
+        
+        # Find the first job that contains pre-graded uploads
+        for job in recent_jobs:
+            # Check if this job has pre-graded uploads by looking at DirectImageUpload records
+            # We need to find if any DirectImageUpload was created as part of this job
+            # Since we don't have a direct link between Job and DirectImageUpload, we'll check
+            # if the job's rejected_summary contains "pre-graded" or if the job items contain
+            # details indicating pre-graded uploads
+            job_items = (
+                db_session.execute(
+                    select(JobItem)
+                    .where(
+                        JobItem.job_id == job.id,
+                        JobItem.state == "completed",
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            
+            # Check if any job item detail indicates pre-graded upload
+            is_pregraded_job = any(
+                item.detail and ("pre-graded" in item.detail.lower() or "pregraded" in item.detail.lower())
+                for item in job_items
+            )
+            
+            # Also check the job summary
+            if job.rejected_summary and ("pre-graded" in job.rejected_summary.lower() or "pregraded" in job.rejected_summary.lower()):
+                is_pregraded_job = True
+            
+            if is_pregraded_job:
+                last_job = job
+                last_job_images = job_items
+                break
+        
+        context.update({
+            "last_job": last_job,
+            "last_job_images": last_job_images,
+        })
 
         user = db_session.get(User, current_user.id)
         user_lab_unit_ids = {lu.id for lu in user.lab_units}
@@ -290,11 +402,12 @@ def pregraded_upload():
             db_session.execute(select(Area).order_by(Area.name)).scalars().all()
         )
 
-        return render_template(
-            "direct_uploads/pregraded_upload.html",
-            hospitals=hospitals,
-            lab_units=lab_units,
-            cameras=cameras,
-            diseases=diseases,
-            areas=areas,
-        )
+        context.update({
+            "hospitals": hospitals,
+            "lab_units": lab_units,
+            "cameras": cameras,
+            "diseases": diseases,
+            "areas": areas,
+        })
+
+        return render_template("direct_uploads/pregraded_upload.html", **context)

@@ -34,8 +34,22 @@
     <select class="form-select" name="area_id">
       <option value="">Optional Area</option>
       {% for area in areas %}
-      <option value="{{ area.id }}">{{ area.name }}</option>
+      <option value="{{ area.id }}" {% if selected_area and selected_area == area.id %}selected{% endif %}>{{ area.name }}</option>
       {% endfor %}
     </select>
   </div>
 </div>
+
+<script>
+// Ensure hospital filter is applied after form restoration
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.querySelector('[data-role="{{ form_role }}"]').closest('form');
+  if (form) {
+    // Trigger change events for restored values
+    const checkedHospital = form.querySelector('.hospital-radio:checked');
+    if (checkedHospital) {
+      checkedHospital.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+});
+</script>

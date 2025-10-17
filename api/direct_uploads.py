@@ -39,15 +39,15 @@ def get_hospital(lab_unit_id):
         return jsonify({"id": lu.hospital.id, "name": lu.hospital.name})
 
 
-@api_bp.route('/upload-jobs/<int:job_id>/status', methods=['GET'])
+@api_bp.route('/upload-jobs/<job_token>/status', methods=['GET'])
 @login_required
-def get_upload_status(job_id):
+def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with Session() as db:
-        job = db.get(Job, job_id)
+        job = db.query(Job).filter_by(token=job_token).first()
         if not job or job.uploader_user_id != current_user.id:
             return jsonify({"error": "Upload job not found or unauthorized access."}), 404
 
-        items = db.execute(select(JobItem).where(JobItem.job_id == job_id).order_by(JobItem.id)).scalars().all()
+        items = db.execute(select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)).scalars().all()
         payload = [{"filename": it.filename, "state": it.state, "detail": it.detail} for it in items]
-        return jsonify({"job_id": job_id, "job_status": job.status, "items": payload})
+        return jsonify({"job_id": job.id, "job_token": job.token, "job_status": job.status, "items": payload})

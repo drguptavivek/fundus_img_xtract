@@ -16,8 +16,13 @@ def list_recent_jobs():
     
     db = Session()
     try:
-        # Get filter parameters
+        # Get filter and pagination parameters
         job_type_filter = request.args.get('job_type', '')
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        # Limit per_page to reasonable values
+        per_page = min(max(per_page, 10), 100)
         
         # Build the base query
         query = (
@@ -29,11 +34,19 @@ def list_recent_jobs():
         if job_type_filter:
             query = query.filter(Job.upload_type == job_type_filter)
         
-        # Execute query with ordering and limit
+        # Get total count for pagination
+        total_count = query.count()
+        
+        # Calculate pagination values
+        total_pages = (total_count + per_page - 1) // per_page
+        offset = (page - 1) * per_page
+        
+        # Execute query with ordering, offset and limit
         jobs = (
             query
             .order_by(Job.created_at.desc())
-            .limit(100)
+            .offset(offset)
+            .limit(per_page)
             .all()
         )
         
@@ -77,6 +90,18 @@ def list_recent_jobs():
             )
             successes[j.id] = success_cnt
             
+        # Build pagination info
+        pagination = {
+            'page': page,
+            'per_page': per_page,
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'has_prev': page > 1,
+            'has_next': page < total_pages,
+            'prev_num': page - 1 if page > 1 else None,
+            'next_num': page + 1 if page < total_pages else None,
+        }
+            
         return render_template(
             "jobs/jobs_list.html",
             jobs=jobs,
@@ -84,7 +109,8 @@ def list_recent_jobs():
             totals=totals,
             successes=successes,
             job_types=job_types,
-            selected_job_type=job_type_filter
+            selected_job_type=job_type_filter,
+            pagination=pagination
         )
     finally:
         db.close()
@@ -139,4 +165,4 @@ def upload_results(job_token):
 @jobs_bp.route("/processing/<job_id>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_processing(job_id):
-    return render_template("direct_uploads/upload_processing.html", job_id=job_id)
+    return render_template("jobs/jobs_processing.html", job_id=job_id)

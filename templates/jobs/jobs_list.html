@@ -5,105 +5,210 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Recent Jobs</h3>
   <div class="d-flex gap-2">
+    <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
     <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
     <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
     <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
   </div>
 </div>
 
-<div class="card shadow-sm mb-3">
-  <div class="card-body">
-    <form method="GET" class="row g-3 align-items-end">
-      <div class="col-md-3">
-        <label for="job_type_filter" class="form-label">Filter by Job Type</label>
-        <select class="form-select" id="job_type_filter" name="job_type">
-          <option value="">All Types</option>
-          {% for job_type in job_types %}
-          <option value="{{ job_type }}" {% if job_type == selected_job_type %}selected{% endif %}>
-            {{ job_type.replace('_', ' ').title() }}
-          </option>
-          {% endfor %}
-        </select>
+<div class="card shadow-sm">
+  <!-- Card Header with Filter and Pagination Controls -->
+  <div class="card-header">
+    <div class="page-box d-flex justify-content-between align-items-center">
+      <!-- Filter Section -->
+      <div class="d-flex gap-2 align-items-center">
+        <form method="GET" class="d-flex gap-2">
+          <select class="form-select form-select-sm" name="job_type">
+            <option value="">All Types</option>
+            {% for job_type in job_types %}
+            <option value="{{ job_type }}" {% if job_type == selected_job_type %}selected{% endif %}>
+              {{ job_type.replace('_', ' ').title() }}
+            </option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+          {% if selected_job_type %}
+          <a href="{{ url_for('jobs.list_recent_jobs') }}" class="btn btn-outline-secondary btn-sm">Clear</a>
+          {% endif %}
+        </form>
+        <span class="sep">|</span>
+        <span class="toolbar-status small">
+          {{ ((pagination.page - 1) * pagination.per_page) + 1 }}-
+          {% set end_item = pagination.page * pagination.per_page %}
+          {{ end_item if end_item < pagination.total_count else pagination.total_count }}
+          of {{ pagination.total_count }}
+        </span>
       </div>
-      <div class="col-md-auto">
-        <button type="submit" class="btn btn-primary">Filter</button>
-        {% if selected_job_type %}
-        <a href="{{ url_for('jobs.list_recent_jobs') }}" class="btn btn-outline-secondary">Clear</a>
+      
+      <!-- Pagination Section -->
+      <div class="d-flex gap-3 align-items-center">
+        <div class="page-input d-flex align-items-center">
+          <span class="small me-2">Items:</span>
+          <select class="form-select form-select-sm" style="width: 80px;" onchange="changePerPage(this.value)">
+            <option value="10" {% if pagination.per_page == 10 %}selected{% endif %}>10</option>
+            <option value="20" {% if pagination.per_page == 20 %}selected{% endif %}>20</option>
+            <option value="50" {% if pagination.per_page == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if pagination.per_page == 100 %}selected{% endif %}>100</option>
+          </select>
+        </div>
+        
+        {% if pagination.total_pages > 1 %}
+        <nav aria-label="Jobs pagination" class="d-inline-block">
+          <ul class="pagination pagination-sm mb-0">
+            {% if pagination.has_prev %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('jobs.list_recent_jobs', page=pagination.prev_num, job_type=selected_job_type, per_page=pagination.per_page) }}" tabindex="-1">Previous</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+              <span class="page-link">Previous</span>
+            </li>
+            {% endif %}
+            
+            {% set start_page = [1, pagination.page - 2]|max %}
+            {% set end_page = [pagination.total_pages, pagination.page + 2]|min %}
+            
+            {% if start_page > 1 %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('jobs.list_recent_jobs', page=1, job_type=selected_job_type, per_page=pagination.per_page) }}">1</a>
+            </li>
+            {% if start_page > 2 %}
+            <li class="page-item disabled">
+              <span class="page-link">...</span>
+            </li>
+            {% endif %}
+            {% endif %}
+            
+            {% for p in range(start_page, end_page + 1) %}
+            {% if p == pagination.page %}
+            <li class="page-item active">
+              <span class="page-link">{{ p }}</span>
+            </li>
+            {% else %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('jobs.list_recent_jobs', page=p, job_type=selected_job_type, per_page=pagination.per_page) }}">{{ p }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+            
+            {% if end_page < pagination.total_pages %}
+            {% if end_page < pagination.total_pages - 1 %}
+            <li class="page-item disabled">
+              <span class="page-link">...</span>
+            </li>
+            {% endif %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('jobs.list_recent_jobs', page=pagination.total_pages, job_type=selected_job_type, per_page=pagination.per_page) }}">{{ pagination.total_pages }}</a>
+            </li>
+            {% endif %}
+            
+            {% if pagination.has_next %}
+            <li class="page-item">
+              <a class="page-link" href="{{ url_for('jobs.list_recent_jobs', page=pagination.next_num, job_type=selected_job_type, per_page=pagination.per_page) }}">Next</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+              <span class="page-link">Next</span>
+            </li>
+            {% endif %}
+          </ul>
+        </nav>
         {% endif %}
       </div>
-    </form>
+    </div>
   </div>
-</div>
-
-<div class="card shadow-sm">
-  <div class="card-body p-0">
-    <table class="table table-hover mb-0">
-      <thead class="table-light">
-        <tr>
-          <th style="width: 160px;">Created</th>
-          <th>Token</th>
-          <th>Uploaded By</th>
-          <th>Lab Unit</th>
-          <th>Job Type</th>
-          <th>Total</th>
-          <th>Success</th>
-          <th>Uploader IP</th>
-          <th style="width: 160px;">Status</th>
-          <th>Error</th>
-          <th>Rejected</th>
-          <th style="width: 100px;">Open</th>
-        </tr>
-      </thead>
-      <tbody>
+  
+  <!-- Card Body with Job Cards -->
+  <div class="card-body p-3">
+    {% if jobs %}
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
       {% for j in jobs %}
-        <tr>
-          <td>{{ j.created_at|user_datetime('%Y-%m-%d %H:%M:%S') if j.created_at else '-' }}</td>
-          <td><code>{{ j.token }}</code></td>
-          <td>{{ j.uploader_username or '-' }}</td>
-          <td>
-            {% if j.lab_unit %}
-              <div class="small fw-semibold">{{ j.lab_unit.name }}</div>
-              <div class="text-muted small">Hospital: {{ j.lab_unit.hospital.name if j.lab_unit.hospital else '-' }}</div>
-            {% else %}
-              <span class="text-muted">-</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if j.upload_type %}
-              <span class="badge bg-info text-dark">{{ j.upload_type.replace('_', ' ').title() }}</span>
-            {% else %}
-              <span class="text-muted">-</span>
-            {% endif %}
-          </td>
-          <td>
-            <span class="badge bg-primary">{{ totals.get(j.id, 0) }}</span>
-          </td>
-          <td>
-            <span class="badge bg-success">{{ successes.get(j.id, 0) }}</span>
-          </td>
-          <td><code>{{ j.uploader_ip or '-' }}</code></td>
-          <td>
-            {% set c = 'secondary' %}
-            {% if j.status == 'queued' %}{% set c='secondary' %}
-            {% elif j.status == 'processing' %}{% set c='warning text-dark' %}
-            {% elif j.status == 'done' %}{% set c='success' %}
-            {% elif j.status == 'error' %}{% set c='danger' %}{% endif %}
-            <div class="d-flex gap-2 align-items-center">
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-header bg-light py-2">
+            <div class="d-flex justify-content-between align-items-center">
+              <h6 class="card-title mb-0">
+                <code class="">{{ j.token[:38] }}...</code>
+              </h6>
+              {% set c = 'secondary' %}
+              {% if j.status == 'queued' %}{% set c='secondary' %}
+              {% elif j.status == 'processing' %}{% set c='warning text-dark' %}
+              {% elif j.status == 'done' %}{% set c='success' %}
+              {% elif j.status == 'error' %}{% set c='danger' %}{% endif %}
               <span class="badge bg-{{ c }}">{{ j.status or 'unknown' }}</span>
-              {% if rejections and rejections.get(j.id, 0) > 0 %}
-                <span class="badge bg-danger">Rejected</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="mb-2">
+              <small class="text-muted d-block">Created</small>
+              <span>{{ j.created_at|user_datetime('%Y-%m-%d %H:%M:%S') if j.created_at else '-' }}</span>
+            </div>
+            
+            <div class="mb-2">
+              <small class="text-muted d-block">Job Type</small>
+              {% if j.upload_type %}
+                <span class="badge bg-info text-dark">{{ j.upload_type.replace('_', ' ').title() }}</span>
+              {% else %}
+                <span class="text-muted">-</span>
               {% endif %}
             </div>
-          </td>
-          <td class="small text-muted">{{ (j.error or '')[:120] }}</td>
-          <td class="small text-muted">
-            {% if rejections and rejections.get(j.id, 0) > 0 %}
-              <span class="badge bg-danger me-1">{{ rejections.get(j.id) }}</span>
+            
+            <div class="mb-2">
+              <small class="text-muted d-block">Uploaded By</small>
+              <span>{{ j.uploader_username or '-' }}</span>
+            </div>
+            
+            <div class="mb-2">
+              <small class="text-muted d-block">Lab Unit</small>
+              {% if j.lab_unit %}
+                <div class="small fw-semibold">{{ j.lab_unit.name }}</div>
+                <div class="text-muted small">Hospital: {{ j.lab_unit.hospital.name if j.lab_unit.hospital else '-' }}</div>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </div>
+            
+            <div class="row text-center mb-2">
+              <div class="col-4">
+                <div class="border rounded p-2">
+                  <div class="fw-bold text-primary">{{ totals.get(j.id, 0) }}</div>
+                  <small class="text-muted">Total</small>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded p-2">
+                  <div class="fw-bold text-success">{{ successes.get(j.id, 0) }}</div>
+                  <small class="text-muted">Success</small>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="border rounded p-2">
+                  <div class="fw-bold text-danger">{{ rejections.get(j.id, 0) }}</div>
+                  <small class="text-muted">Rejected</small>
+                </div>
+              </div>
+            </div>
+            
+            {% if j.error or (rejections and rejections.get(j.id, 0) > 0) %}
+            <div class="mb-2">
+              <small class="text-muted d-block">Issues</small>
+              {% if rejections and rejections.get(j.id, 0) > 0 %}
+                <span class="badge bg-danger me-1">{{ rejections.get(j.id) }} Rejected</span>
+              {% endif %}
+              {% if j.error %}
+                <div class="text-danger small">{{ (j.error or '')[:80] }}{% if j.error|length > 80 %}...{% endif %}</div>
+              {% endif %}
+            </div>
             {% endif %}
-            {{ (j.rejected_summary or '')[:120] }}
-          </td>
-          <td>
-            <div class="d-flex gap-1">
+            
+            <div class="mb-2">
+              <small class="text-muted d-block">IP Address</small>
+              <code class="small">{{ j.uploader_ip or '-' }}</code>
+            </div>
+          </div>
+          <div class="card-footer bg-light py-2">
+            <div class="d-flex gap-1 justify-content-end">
               <a class="btn btn-sm btn-outline-primary"
                  href="{{ url_for('jobs.job_status_page', job_token=j.token) }}">
                 View
@@ -115,17 +220,36 @@
               </a>
               {% endif %}
             </div>
-          </td>
-        </tr>
-      {% else %}
-        <tr><td colspan="12" class="text-center text-muted p-4">No jobs yet.</td></tr>
+          </div>
+        </div>
+      </div>
       {% endfor %}
-      </tbody>
-    </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted p-4">
+      <h5>No jobs yet</h5>
+      <p>Upload some files to see jobs listed here.</p>
+      <div class="mt-3">
+        <a class="btn btn-secondary me-2" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
+        <a class="btn btn-success me-2" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+        <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+      </div>
+    </div>
+    {% endif %}
   </div>
+  
 </div>
 
 <div class="mt-3 text-end">
   <a class="btn btn-outline-secondary" href="/healthz">Health</a>
 </div>
+
+<script>
+function changePerPage(perPage) {
+  const url = new URL(window.location);
+  url.searchParams.set('per_page', perPage);
+  url.searchParams.set('page', '1'); // Reset to first page when changing per_page
+  window.location.href = url.toString();
+}
+</script>
 {% endblock %}

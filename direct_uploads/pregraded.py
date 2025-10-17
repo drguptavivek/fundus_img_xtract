@@ -35,6 +35,7 @@ from models import (
     JobItem,
 )
 from services.taskCreationServices import ensure_task
+from utils.jobUtils import get_recent_zip_uploads
 
 
 def _to_int(value: Optional[str]) -> Optional[int]:
@@ -402,12 +403,16 @@ def pregraded_upload():
             db_session.execute(select(Area).order_by(Area.name)).scalars().all()
         )
 
+        # Get recent pregraded uploads for display
+        recent_uploads = get_recent_zip_uploads(limit=5, job_type="pregraded")
+
         context.update({
             "hospitals": hospitals,
             "lab_units": lab_units,
             "cameras": cameras,
             "diseases": diseases,
             "areas": areas,
+            "recent_uploads": recent_uploads,
         })
 
         return render_template("direct_uploads/pregraded_upload.html", **context)

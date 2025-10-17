@@ -32,6 +32,7 @@ from models import (
 from services.taskCreationServices import ensure_task
 from utils.utils import with_session
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.jobUtils import get_recent_zip_uploads
 from utils.dualGradingConsensusUtils import (
     create_or_update_consensus,
     update_task_state_based_on_grades,
@@ -668,6 +669,17 @@ def pregraded_grades():
                 })
                 # Clear the stored data after retrieving it
                 del session["pregraded_form_submission"]
+            
+            # Get recent pregraded grade uploads for display
+            recent_uploads = get_recent_zip_uploads(limit=5, job_type="resident excel")
+            # Also get faculty and AI excel uploads
+            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="faculty excel"))
+            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="ai excel"))
+            # Sort by created_at date and take the top 5
+            recent_uploads.sort(key=lambda x: x['job'].created_at, reverse=True)
+            recent_uploads = recent_uploads[:5]
+                
+            context["recent_uploads"] = recent_uploads
                 
             return _render_page(
                 db_session,

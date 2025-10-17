@@ -20,6 +20,7 @@ from models import (
 
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids
+from utils.jobUtils import get_recent_zip_uploads
 
 
 def _to_int(v):
@@ -236,8 +237,12 @@ def upload():
         diseases = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         areas    = db_session.execute(select(Area).order_by(Area.name)).scalars().all()
 
+        # Get recent direct image uploads for display
+        recent_uploads = get_recent_zip_uploads(limit=5, job_type="direct image")
+
         return render_template("direct_uploads/upload.html",
                                hospitals=hospitals, lab_units=lab_units,
-                               cameras=cameras, diseases=diseases, areas=areas)
+                               cameras=cameras, diseases=diseases, areas=areas,
+                               recent_uploads=recent_uploads)
 
 

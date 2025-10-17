@@ -15,6 +15,7 @@ from worker import queue_job
 from . import bp
 from auth.roles import roles_required
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.jobUtils import get_recent_zip_uploads
 
 
 ALLOWED_EXT = {"zip"}
@@ -88,12 +89,16 @@ def upload_form():
     finally:
         db.close()
 
+    # Get recent ZIP uploads for display
+    recent_uploads = get_recent_zip_uploads(limit=5, job_type="zip upload")
+    
     return render_template(
         "upload/upload_multi.html",
         per_file_mb=int(current_app.config["PER_FILE_MAX_BYTES"] / (1024 * 1024)),
         max_files=current_app.config["MAX_FILES_PER_UPLOAD"],
         hospitals=hospitals,
-        lab_units=lab_units
+        lab_units=lab_units,
+        recent_uploads=recent_uploads
     )
 
 @bp.route("/upload", methods=["POST"])

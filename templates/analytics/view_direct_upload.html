@@ -27,7 +27,7 @@
           <div class="row">
             <div class="col-md-6">
               <p class="mb-1"><strong>Uploaded:</strong> {{ upload.created_at|user_datetime('%Y-%m-%d %H:%M') }}</p>
-              <p class="mb-1"><strong>Uploader:</strong> {{ upload.uploader.username }}</p>
+              <p class="mb-1"><strong>Uploader:</strong> {{ upload.uploader_username or 'Unknown' }}</p>
               <p class="mb-1"><strong>File Hash:</strong> {{ upload.file_hash }}</p>
             </div>
             <div class="col-md-6">
@@ -45,19 +45,19 @@
 
       <dl class="row">
         <dt class="col-sm-3">Hospital</dt>
-        <dd class="col-sm-9">{{ upload.hospital.name if upload.hospital else '—' }}</dd>
+        <dd class="col-sm-9">{{ upload.hospital_name or '—' }}</dd>
 
         <dt class="col-sm-3">Lab Unit</dt>
-        <dd class="col-sm-9">{{ upload.lab_unit.name if upload.lab_unit else '—' }}</dd>
+        <dd class="col-sm-9">{{ upload.lab_unit_name or '—' }}</dd>
 
         <dt class="col-sm-3">Camera</dt>
-        <dd class="col-sm-9">{{ upload.camera.name if upload.camera else '—' }}</dd>
+        <dd class="col-sm-9">{{ upload.camera_name or '—' }}</dd>
 
         <dt class="col-sm-3">Disease</dt>
-        <dd class="col-sm-9">{{ upload.disease.name if upload.disease else '—' }}</dd>
+        <dd class="col-sm-9">{{ upload.disease_name or '—' }}</dd>
 
         <dt class="col-sm-3">Area</dt>
-        <dd class="col-sm-9">{{ upload.area.name if upload.area else '—' }}</dd>
+        <dd class="col-sm-9">{{ upload.area_name or '—' }}</dd>
       </dl>
       
       <!-- Display tasks and gradings -->
@@ -100,7 +100,10 @@
       {% endif %}
     </div>
   </div>
+
 </div>
+
 {% endblock %}
+
 
 {% block page_scripts %}{% endblock %}

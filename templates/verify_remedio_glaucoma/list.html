@@ -2,6 +2,7 @@
 {% block title %}Glaucoma Reports{% endblock %}
 
 {% block content %}
+<div class="container py-4">  
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
   <h3 class="mb-0 me-2">Verification of Glaucoma Reports</h3>
   <a class="btn btn-sm btn-primary" href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Glaucoma Dashboard</a>
@@ -167,5 +168,6 @@
   </div>
 </div>
 {% endif %}
-
+</div>
+</div>
 {% endblock %}

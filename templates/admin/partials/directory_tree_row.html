@@ -1,0 +1,64 @@
+{% macro render_directory_tree(directories) %}
+  {% for directory in directories %}
+    <tr>
+      <td>
+        <div class="d-flex align-items-center" style="margin-left: {{ directory.level * 20 }}px;">
+          {% if directory.has_subdirs %}
+            <button class="btn btn-sm btn-link p-0 me-1" onclick="toggleDirectory('{{ directory.path }}')">
+              {% if directory.expanded %}
+                <i class="bi bi-dash-square text-primary"></i>
+              {% else %}
+                <i class="bi bi-plus-square text-primary"></i>
+              {% endif %}
+            </button>
+          {% else %}
+            <span class="me-1" style="width: 24px; display: inline-block;"></span>
+          {% endif %}
+          
+          {% if directory.is_base_directory %}
+            <i class="bi bi-hdd-stack text-primary me-2"></i>
+          {% else %}
+            <i class="bi bi-folder-fill text-warning me-2"></i>
+          {% endif %}
+          <span>{{ directory.name }}</span>
+        </div>
+      </td>
+      <td>
+        <span class="fw-medium">{{ directory.size_formatted }}</span>
+      </td>
+      <td>{{ directory.dir_count }}</td>
+      <td>
+        <div class="progress" style="height: 20px;">
+          <div class="progress-bar" role="progressbar" 
+               style="width: {{ directory.usage_percentage|round(1) }}%"
+               aria-valuenow="{{ directory.usage_percentage|round(1) }}" 
+               aria-valuemin="0" aria-valuemax="100">
+            {{ directory.usage_percentage|round(1) }}%
+          </div>
+        </div>
+      </td>
+      <td>
+        <span class="small text-muted">{{ directory.modified_at|user_datetime('%Y-%m-%d %H:%M:%S') }}</span>
+      </td>
+      <td data-dir-path="{{ directory.path }}">
+        {% if directory.has_subdirs %}
+          <button class="btn btn-sm btn-outline-primary" onclick="toggleDirectory('{{ directory.path }}')">
+            {% if directory.expanded %}
+              <i class="bi bi-dash-square"></i> Collapse
+            {% else %}
+              <i class="bi bi-plus-square"></i> Expand
+            {% endif %}
+          </button>
+        {% endif %}
+      </td>
+    </tr>
+
+    <!-- Subdirectories (if expanded) -->
+    {% if directory.expanded and directory.subdirectories %}
+      {{ render_directory_tree(directory.subdirectories) }}
+    {% endif %}
+  {% endfor %}
+{% endmacro %}
+
+<!-- Render the tree with the top-level directories -->
+{{ render_directory_tree(directories) }}

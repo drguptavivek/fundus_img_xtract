@@ -370,7 +370,14 @@ def get_direct_image_summary(uuid_str: str):
                 'disease_name': direct_image.disease.name if direct_image.disease else None,
                 'area_name': direct_image.area.name if direct_image.area else None,
                 'is_mydriatic': direct_image.is_mydriatic,
-                'created_at': direct_image.created_at
+                'created_at': direct_image.created_at,
+                'file_hash': direct_image.file_hash,
+                'uploader_username': direct_image.uploader.username if direct_image.uploader else None,
+                'hospital': direct_image.hospital,
+                'lab_unit': direct_image.lab_unit,
+                'camera': direct_image.camera,
+                'disease': direct_image.disease,
+                'area': direct_image.area
             },
             'tasks': []
         }

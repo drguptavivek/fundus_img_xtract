@@ -8,7 +8,7 @@ from .disease_gradings import list_disease_gradings, get_disease_grading_json, d
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
 from .logs import log_viewer
-from .disk_usage import disk_usage, delete_duplicates
+from .disk_usage import disk_usage, delete_duplicates, delete_old_processed_zips
 from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
 
 
@@ -52,6 +52,7 @@ admin_bp.add_url_rule("/logs", view_func=log_viewer, methods=["GET"])
 # Disk usage analysis
 admin_bp.add_url_rule("/disk-usage", view_func=disk_usage, methods=["GET"])
 admin_bp.add_url_rule("/disk-usage/delete-duplicates", view_func=delete_duplicates, methods=["POST"])
+admin_bp.add_url_rule("/disk-usage/delete-old-zips", view_func=delete_old_processed_zips, methods=["POST"])
 
 # AI Model routes
 admin_bp.add_url_rule("/ai-models", view_func=list_and_create_ai_model, methods=["GET", "POST"])

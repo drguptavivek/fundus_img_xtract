@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List
 
 from flask import current_app, render_template, request, jsonify, flash, redirect, url_for
 
 from auth.roles import roles_required
+from models import Session, ZipFile
 
 
 def _get_directories_to_analyze() -> List[Path]:
@@ -266,7 +267,41 @@ def disk_usage():
                 return True
         return False
     
-    has_dupmd5 = has_dupmd5_directory(all_directories)
+    # Also check for dupmd5 directories at the files root level
+    def has_dupmd5_at_root():
+        try:
+            files_root = Path(current_app.root_path) / "files"
+            if files_root.exists():
+                for item in files_root.iterdir():
+                    if item.is_dir() and item.name.startswith("dupmd5_"):
+                        return True
+        except Exception:
+            pass
+        return False
+    
+    has_dupmd5 = has_dupmd5_directory(all_directories) or has_dupmd5_at_root()
+    
+    # Check if there are old processed ZIP files (older than 1 month)
+    def has_old_processed_zips(directories):
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+        for directory in directories:
+            # Check if this is the zips_upload_processed directory
+            if directory["name"] == "zips_upload_processed":
+                # Check subdirectories (date directories)
+                for subdir in directory.get("subdirectories", []):
+                    # Parse the date from directory name (format: YYYY_MM_DD)
+                    try:
+                        dir_date = datetime.strptime(subdir["name"], "%Y_%m_%d").replace(tzinfo=timezone.utc)
+                        if dir_date < cutoff_date:
+                            return True
+                    except ValueError:
+                        continue
+            # Recursively check subdirectories
+            if directory.get("subdirectories") and has_old_processed_zips(directory["subdirectories"]):
+                return True
+        return False
+    
+    has_old_zips = has_old_processed_zips(all_directories)
     
     context = {
         "total_size_bytes": total_size,
@@ -275,6 +310,7 @@ def disk_usage():
         "directories": all_directories,
         "expanded_dirs": ",".join(expanded_dirs),
         "has_dupmd5": has_dupmd5,
+        "has_old_zips": has_old_zips,
     }
     
     return render_template("admin/disk_usage.html", **context)
@@ -326,5 +362,91 @@ def delete_duplicates():
         except Exception as e:
             current_app.logger.error(f"Error deleting duplicates: {e}")
             flash(f"Error deleting duplicates: {str(e)}", "error")
+    
+    return redirect(url_for("admin.disk_usage"))
+
+
+@roles_required("admin")
+def delete_old_processed_zips():
+    """Delete processed ZIP files older than 1 month."""
+    if request.method == "POST":
+        try:
+            # Get the processed directory
+            processed_dir = Path(current_app.root_path) / "files" / "zips_upload_processed"
+            
+            if not processed_dir.exists():
+                flash("Processed ZIP directory not found.", "warning")
+                return redirect(url_for("admin.disk_usage"))
+            
+            # Calculate the cutoff date (1 month ago)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
+            
+            deleted_count = 0
+            deleted_size = 0
+            deleted_dirs = []
+            
+            # Get database session to check ZIP file dates
+            db_session = Session()
+            
+            try:
+                # Iterate through all date subdirectories in the processed directory
+                for date_dir in processed_dir.iterdir():
+                    if not date_dir.is_dir():
+                        continue
+                    
+                    # Parse the date from directory name (format: YYYY_MM_DD)
+                    try:
+                        dir_date = datetime.strptime(date_dir.name, "%Y_%m_%d").replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        # Skip directories that don't match the expected format
+                        current_app.logger.warning(f"Skipping directory with unexpected format: {date_dir.name}")
+                        continue
+                    
+                    # Check if this directory is older than 1 month
+                    if dir_date < cutoff_date:
+                        dir_size = 0
+                        dir_file_count = 0
+                        
+                        # Delete all ZIP files in this directory
+                        for zip_file in date_dir.glob("*.zip"):
+                            try:
+                                file_size = zip_file.stat().st_size
+                                zip_file.unlink()
+                                deleted_count += 1
+                                dir_size += file_size
+                                dir_file_count += 1
+                                current_app.logger.info(f"Deleted processed ZIP file: {zip_file.name}")
+                            except (OSError, PermissionError) as e:
+                                current_app.logger.error(f"Failed to delete {zip_file}: {e}")
+                        
+                        # Try to remove the directory if it's empty
+                        try:
+                            if not any(date_dir.iterdir()):
+                                date_dir.rmdir()
+                                current_app.logger.info(f"Removed empty directory: {date_dir}")
+                        except (OSError, PermissionError) as e:
+                            current_app.logger.warning(f"Could not remove directory {date_dir}: {e}")
+                        
+                        if dir_file_count > 0:
+                            deleted_size += dir_size
+                            deleted_dirs.append(f"{date_dir.name} ({dir_file_count} files)")
+                
+                # Log the action
+                if deleted_count > 0:
+                    current_app.logger.info(f"Deleted {deleted_count} processed ZIP files older than 1 month, freeing {_format_size(deleted_size)} of space")
+                    flash(f"Successfully deleted {deleted_count} processed ZIP files from {len(deleted_dirs)} directories, freeing {_format_size(deleted_size)} of space.", "success")
+                    
+                    # Show which directories were cleaned
+                    if deleted_dirs:
+                        current_app.logger.info(f"Cleaned directories: {', '.join(deleted_dirs)}")
+                else:
+                    flash("No processed ZIP files older than 1 month found to delete.", "info")
+                    
+            finally:
+                db_session.close()
+                
+        except Exception as e:
+            current_app.logger.error(f"Error deleting old processed ZIP files: {e}")
+            flash(f"Error deleting old processed ZIP files: {str(e)}", "error")
     
     return redirect(url_for("admin.disk_usage"))

@@ -4,9 +4,14 @@
 {% block content %}
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-      <h1 class="h4 mb-1">Import Resident & Faculty Grades</h1>
-      <p class="text-muted mb-0">Upload Excel workbooks for pre-graded datasets. Each workbook must follow the required column template.</p>
+    <div class="d-flex align-items-center">
+      <a href="{{ url_for('direct_uploads.upload_index') }}" class="btn btn-outline-secondary btn-sm me-2">
+        <i class="bi bi-arrow-left"></i> Back to Uploads
+      </a>
+      <div>
+        <h1 class="h4 mb-1">Import Resident & Faculty Grades</h1>
+        <p class="text-muted mb-0">Upload Excel workbooks for pre-graded datasets. Each workbook must follow the required column template.</p>
+      </div>
     </div>
   </div>
 

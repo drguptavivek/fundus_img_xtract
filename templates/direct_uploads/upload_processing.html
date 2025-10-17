@@ -5,7 +5,12 @@
 <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h4 mb-0">Upload Processing</h1>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload') }}">New Upload</a>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('direct_uploads.upload_index') }}">Upload Index</a>
+            <a class="btn btn-outline-primary btn-sm" href="{{ url_for('direct_uploads.dashboard') }}">Upload Dashboard</a>
+            <a class="btn btn-success btn-sm" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+            <a class="btn btn-warning btn-sm" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+        </div>
     </div>
 
     <div class="card shadow-sm mb-3">
@@ -34,9 +39,9 @@
 
 {% block page_scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const jobId = {{ job_id }};
-        const overallStatusSpan = document.getElementById('overall-status');
+document.addEventListener('DOMContentLoaded', function() {
+    const jobId = "{{ job_id }}";
+    const overallStatusSpan = document.getElementById('overall-status');
         const progressBar = document.getElementById('progress-bar');
         const fileStatusList = document.getElementById('file-status-list');
         const completionMessage = document.getElementById('completion-message');

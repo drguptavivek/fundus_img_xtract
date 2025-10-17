@@ -73,10 +73,8 @@ python app.py
 - [Database ERD](docs/00-Core/ERD.md) - Entity Relationship Diagram with Mermaid syntax
 - [Master Data Management](docs/00-Core/master_data.md) - Core diseases, hospitals, labs, and grading systems
 - [Scoping Mechanisms](docs/03-Tasks/Scoping.md) - User-LabUnit and Slot-LabUnit based access control
-- [API Documentation](docs/Utilities/api.md)
 - [Application Routes](docs/routes.md) - Comprehensive documentation for all application routes
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
-- [Common Utilities](docs/Utilities/CommonUtils.md) - Core utility functions and reusable components
 - [Security](docs/10-DEVELOP/Security.md) - Comprehensive authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
@@ -105,7 +103,7 @@ python app.py
 ### Task Creation
 - [Scoping](docs/03-Tasks/Scoping.md)
 - [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
-- [Task Utilities](docs/Utilities/taskUtils.md) - Functions for retrieving and managing task information with proper scoping
+- [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for retrieving and managing task information with proper scoping
 
 
 ### Grading System (`docs/04-Grade/`)
@@ -117,26 +115,77 @@ python app.py
 - [Grading Flow Diagram](docs/04-Grade/flowdiagram.md) - Visual representation of grading workflows
 - [Module Integration Guide](docs/04-Grade/module_integration_guide.md) - Integration patterns for grading module
 
-### Utilities (`docs/Utilities/`)
-- [API Documentation](docs/Utilities/api.md)
-- [Common Utilities](docs/Utilities/CommonUtils.md)
-- [Image Search Utilities](docs/Utilities/imageSearchUtils.md)
-- [Task Utilities](docs/Utilities/taskUtils.md)
-- [Utilities README](docs/Utilities/utils2.md)
+### Utilities (`docs/10-DEVELOP/Utilities/`)
+- [Utilities Overview](docs/10-DEVELOP/Utilities/00-utility_locations.md) - Complete listing of all utility functions and modules
+- [Utilities by Category](docs/10-DEVELOP/Utilities/01-overview_of_all_utils.md) - Categorization of utilities by functionality
+
+#### Authentication Utilities
+- [Auth Utilities](docs/10-DEVELOP/Utilities/auth_utils.md) - Functions for time handling and IP address retrieval
+
+#### Analytics Utilities
+- [Analytics Encounter Utilities](docs/10-DEVELOP/Utilities/analytics_encounterUtils.md) - Functions for encounter analytics
+- [Analytics Utilities](docs/10-DEVELOP/Utilities/analytics_utils.md) - General analytics functions
+
+#### API Utilities
+- [API User Utilities](docs/10-DEVELOP/Utilities/api_userUtils.md) - API endpoint utilities for user management
+
+#### Dual Grading Utilities
+- [Dual Grading Fetch Detail Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingFetchDetailUtils.md) - Functions for fetching grades and tasks with related data
+- [Dual Grading Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingEligibility.md) - Functions for checking grading eligibility
+- [Dual Grading Consensus Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingConsensusUtils.md) - Functions for handling consensus in dual grading
+- [Dual Grading Next Tasks Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingGetNextTasks.md) - Functions for getting the next eligible tasks
+- [Dual Grading KPIs Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingKPIs.md) - Functions for tracking dual grading KPIs
+- [Dual Grading Revision Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingRevisionUtils.md) - Functions for checking revision eligibility
+- [Dual Grading Stuck Task Cleanup Utilities](docs/10-DEVELOP/Utilities/utils_dualGradingStuckTaskCleanup.md) - Functions for detecting and cleaning up stuck tasks
+
+#### Email Utilities
+- [Email Utilities](docs/10-DEVELOP/Utilities/utils_emails.md) - Functions for sending emails synchronously and asynchronously
+
+#### File Utilities
+- [File Utilities](docs/10-DEVELOP/Utilities/utils_fileUtils.md) - Functions for file operations, path validation, and security checks
+
+#### Upload Eligibility Utilities
+- [Upload Eligibility Utilities](docs/10-DEVELOP/Utilities/utils_upload_eligibility.md) - Functions for determining user upload eligibility
+
+#### Master Data Utilities
+- [Master Utilities](docs/10-DEVELOP/Utilities/utils_masterUtils.md) - Functions for retrieving core entities like diseases, hospitals, etc.
+
+#### Image Search Utilities
+- [Image Search Utilities](docs/10-DEVELOP/Utilities/utils_imageSearchUtil.md) - Functions for searching images with various filters
+
+#### Task Utilities
+- [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for managing tasks and related information
+
+#### Job Utilities
+- [Job Utilities](docs/10-DEVELOP/Utilities/utils_jobUtils.md) - Functions for handling job data, particularly for ZIP uploads
+
+#### Image Serving Utilities
+- [Image Serving Utilities](docs/10-DEVELOP/Utilities/utils_utilsImgServe.md) - Functions for serving various types of images and reports by UUID
+
+#### Datetime Utilities
+- [Datetime Filters](docs/10-DEVELOP/Utilities/utils_datetime_filters.md) - Jinja filters for timezone-aware datetime rendering
+- [Timezone Choices](docs/10-DEVELOP/Utilities/utils_timezone_choices.md) - Helpers for timezone selection with human-readable labels
+
+#### Error Handling Utilities
+- [Stack Trace Handler](docs/10-DEVELOP/Utilities/utils_stack_trace_handler.md) - Functions for capturing and logging stack traces
+
+#### General Utilities
+- [General Utilities](docs/10-DEVELOP/Utilities/utils_utils.md) - General utility functions for database sessions and access control
+- [Additional Utilities](docs/10-DEVELOP/Utilities/utils_utils2.md) - Miscellaneous helper functions for file handling, data validation, and general operations
 
 
 ### Development & Conventions
 - [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
   - [Logging Conventions](docs/10-DEVELOP/Logging12.md) - Implementation patterns and conventions
-  - [Database Context Manager](docs/10-DEVELOP/DB%20CONTEXT%20MANAGER.md)
+  - [Database Context Manager](docs/10-DEVELOP/DB CONTEXT MANAGER.md)
   - [DateTime Handling](docs/10-DEVELOP/DateTime.md)
 
 ### Frontend Components (`static/`)
 - [Flash Toasts Component](static/js/flash-toasts.md)
 
 ### Module-Specific Documentation
-- [Analytics Utils](analytics/utils.md)
-- [Services Task Creation](services/taskCreationServices.md)
+- [Analytics Utils](docs/10-DEVELOP/Utilities/analytics_utils.md) - Functions for encounter analytics and data processing
+- [Services Task Creation](docs/03-Tasks/taskCreationServices.md) - Task creation services and related functionality
 
 ### Scripts & Migrations (`scripts/`)
 - [User Management Scripts](scripts/USERS.md) - User creation and management

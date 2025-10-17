@@ -4,7 +4,7 @@ A comprehensive system for an eye hospital to manage eye images. It facilitates 
 
 ## Development Guidelines
 
-When adding features to the application, please follow the conventions outlined in [Development Conventions](CONVENTIONS.md) for consistency with the existing codebase. This document includes essential patterns for database operations, CSRF protection, datetime handling, logging, security practices, and more.
+When adding features to the application, please follow the conventions outlined in [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) for consistency with the existing codebase. This document includes essential patterns for database operations, CSRF protection, datetime handling, logging, security practices, and more.
 
 ## Setup
 
@@ -77,7 +77,7 @@ python app.py
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
 - [Security](docs/10-DEVELOP/Security.md) - Comprehensive authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
-- [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Logging System](docs/10-DEVELOP/logging_combined.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
 - [Playwright Testing](docs/10-DEVELOP/playwright.md) - End-to-end testing setup, configuration, and best practices
 - [Build Themes](docs/10-DEVELOP/BUILD_THEMES.md)
 

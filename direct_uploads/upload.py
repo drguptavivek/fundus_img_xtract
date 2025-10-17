@@ -109,6 +109,7 @@ def upload():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit.id,
+                upload_type="direct image",
             )
             db_session.add(new_job)
             db_session.flush()

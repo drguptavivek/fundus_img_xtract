@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}Recent Grading Files{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Recent Grading Files</h2>
+            <p class="text-muted">List of recently uploaded Excel grading files with their processing results.</p>
+        </div>
+    </div>
+    
+    {% if grade_imports %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Excel Grade Imports (Last 10)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Excel File</th>
+                                    <th>Type</th>
+                                    <th>Hospital</th>
+                                    <th>Lab Unit</th>
+                                    <th>Results Summary</th>
+                                    <th>Status</th>
+                                    <th>Uploaded At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for import in grade_imports %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ import.filename }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if import.type == 'Resident' %}bg-primary
+                                            {% elif import.type == 'Faculty' %}bg-success
+                                            {% elif import.type == 'AI' %}bg-info
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ import.type }}
+                                        </span>
+                                    </td>
+                                    <td>{{ import.hospital or '-' }}</td>
+                                    <td>{{ import.lab_unit or '-' }}</td>
+                                    <td>
+                                        {% if import.total_count > 0 %}
+                                            <div>
+                                                <span class="text-success">{{ import.success_count }} successful</span>
+                                                {% if import.error_count > 0 %}
+                                                    <span class="text-danger">, {{ import.error_count }} failed</span>
+                                                {% endif %}
+                                            </div>
+                                            <div class="progress mt-1" style="height: 5px;">
+                                                <div class="progress-bar bg-success" 
+                                                     style="width: {{ (import.success_count / import.total_count * 100)|round }}%"
+                                                     role="progressbar"></div>
+                                                {% if import.error_count > 0 %}
+                                                <div class="progress-bar bg-danger" 
+                                                     style="width: {{ (import.error_count / import.total_count * 100)|round }}%"
+                                                     role="progressbar"></div>
+                                                {% endif %}
+                                            </div>
+                                        {% else %}
+                                            <span class="text-muted">No items processed</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if import.status == 'completed' %}bg-success
+                                            {% elif import.status == 'error' %}bg-danger
+                                            {% elif import.status == 'processing' %}bg-warning
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ import.status.title() }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>{{ import.created_at.strftime('%Y-%m-%d %H:%M') if import.created_at else '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('jobs.job_status_page', job_token=import.token) }}" 
+                                           class="btn btn-sm btn-outline-primary" title="View Details">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h5><i class="bi bi-info-circle"></i> No Grading Files Found</h5>
+                <p class="mb-0">No Excel grading files have been uploaded yet. 
+                   <a href="{{ url_for('direct_uploads.pregraded_grades') }}">Upload your first grading file</a> to get started.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <a href="{{ url_for('direct_uploads.pregraded_grades') }}" class="btn btn-primary">
+                <i class="bi bi-upload"></i> Upload New Grading File
+            </a>
+            <a href="{{ url_for('jobs.list_recent_jobs') }}" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-list-task"></i> View All Jobs
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

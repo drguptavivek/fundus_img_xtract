@@ -13,6 +13,7 @@ def db_create_job(
     uploader_username: Optional[str] = None,
     uploader_ip: Optional[str] = None,
     lab_unit_id: Optional[int] = None,
+    upload_type: Optional[str] = None,
 ) -> str:
     db: DBSession = Session()
     try:
@@ -24,6 +25,7 @@ def db_create_job(
             uploader_username=uploader_username,
             uploader_ip=uploader_ip,
             lab_unit_id=lab_unit_id,
+            upload_type=upload_type,
         )
         db.add(job)
         db.flush()

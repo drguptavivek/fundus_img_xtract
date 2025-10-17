@@ -6,7 +6,9 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from flask import current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user
-from sqlalchemy import and_, select, func
+from sqlalchemy import and_, select, func 
+from sqlalchemy.orm import selectinload
+
 
 from . import bp
 from auth.roles import roles_required
@@ -710,9 +712,16 @@ def pregraded_grades():
                 flash(str(exc), "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
+            # Get the original filename from the session (stored during form processing)
+            excel_filename = session.get("pregraded_excel_filename", "Unknown Excel File")
+            
             summary = f"{pending.role.title()} grade import"
             if pending.role == ROLE_AI and pending.ai_model_id:
                 summary = f"AI grade import (model {pending.ai_model_id})"
+            
+            # Determine upload type based on role
+            upload_type = f"{pending.role} excel"
+            
             job = Job(
                 token=str(uuid.uuid4()),
                 status="processing",
@@ -721,6 +730,8 @@ def pregraded_grades():
                 uploader_ip=request.remote_addr,
                 lab_unit_id=pending.lab_unit_id,
                 rejected_summary=summary,
+                excel_filename=excel_filename,
+                upload_type=upload_type,
             )
             db_session.add(job)
             db_session.flush()
@@ -737,6 +748,10 @@ def pregraded_grades():
             if failures:
                 job.error = f"{failures} of {len(pending.rows)} rows failed."
             db_session.commit()
+            
+            # Clear the Excel filename from session
+            if "pregraded_excel_filename" in session:
+                del session["pregraded_excel_filename"]
 
             flash(
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
@@ -785,6 +800,9 @@ def pregraded_grades():
             processing_logger.warning("No file uploaded for role %s", form_role)
             flash("Please select an Excel file to upload.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
+            
+        # Store the Excel filename in session for later use
+        session["pregraded_excel_filename"] = grades_file.filename
             
         # Clear form data from session after successful validation
         if "pregraded_form_submission" in session:
@@ -912,9 +930,16 @@ def pregraded_grades():
         )
 
         if not unmapped_values:
+            # Get the original filename from the uploaded file
+            excel_filename = grades_file.filename if grades_file else "Unknown Excel File"
+            
             summary = f"{form_role.title()} grade import"
             if form_role == ROLE_AI and ai_model_id:
                 summary = f"AI grade import (model {ai_model_id})"
+            
+            # Determine upload type based on role
+            upload_type = f"{form_role} excel"
+            
             job = Job(
                 token=str(uuid.uuid4()),
                 status="processing",
@@ -923,6 +948,8 @@ def pregraded_grades():
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit_id,
                 rejected_summary=summary,
+                excel_filename=excel_filename,
+                upload_type=upload_type,
             )
             db_session.add(job)
             db_session.flush()
@@ -940,6 +967,10 @@ def pregraded_grades():
             if failures:
                 job.error = f"{failures} of {len(rows)} rows failed."
             db_session.commit()
+            
+            # Clear the Excel filename from session
+            if "pregraded_excel_filename" in session:
+                del session["pregraded_excel_filename"]
 
             flash(
                 f"Imported {success} grade(s); {failures} error(s). Review job details for specifics.",
@@ -980,3 +1011,57 @@ def pregraded_grades():
             ai_models=ai_models,
             context=context,
         )
+
+
+@bp.route("/direct/pregraded/grades/recent", methods=["GET"])
+@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+def recent_pregraded_grades():
+    """Display a list of recent Excel grading files that were uploaded."""
+    with with_session() as db_session:
+        # Query recent jobs that are pre-graded grade imports
+        # Filter by upload_type ending with "excel"
+        recent_jobs = (
+            db_session.query(Job)
+            .filter(
+                Job.upload_type.like("%excel"),
+                Job.uploader_user_id == current_user.id if not current_user.has_role("admin", "data_manager") else True
+            )
+            .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
+            .order_by(Job.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        
+        # Prepare data for template
+        grade_imports = []
+        for job in recent_jobs:
+            # Determine the type from the upload_type
+            import_type = "Unknown"
+            if job.upload_type:
+                if job.upload_type == "resident excel":
+                    import_type = "Resident"
+                elif job.upload_type == "faculty excel":
+                    import_type = "Faculty"
+                elif job.upload_type == "ai excel":
+                    import_type = "AI"
+            
+            # Count successful and failed items
+            success_count = len([item for item in job.items if item.state == "completed"])
+            error_count = len([item for item in job.items if item.state == "error"])
+            
+            grade_imports.append({
+                "id": job.id,
+                "token": job.token,
+                "filename": job.excel_filename or "Unknown Excel File",
+                "type": import_type,
+                "upload_type": job.upload_type,
+                "created_at": job.created_at,
+                "success_count": success_count,
+                "error_count": error_count,
+                "total_count": success_count + error_count,
+                "status": job.status,
+                "lab_unit": job.lab_unit.name if job.lab_unit else None,
+                "hospital": job.lab_unit.hospital.name if job.lab_unit and job.lab_unit.hospital else None,
+            })
+        
+        return render_template("direct_uploads/recent_grades.html", grade_imports=grade_imports)

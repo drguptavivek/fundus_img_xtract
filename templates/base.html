@@ -132,6 +132,10 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.pregraded_grades' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.pregraded_grades') }}">Import Pre-Graded Image Excel Grades</a>
               </li>
+              <li>
+                <a class="dropdown-item {% if request.endpoint == 'direct_uploads.recent_pregraded_grades' %}active{% endif %}"
+                  href="{{ url_for('direct_uploads.recent_pregraded_grades') }}">Recent Grading Files</a>
+              </li>
    
               <li>
                 <hr class="dropdown-divider">

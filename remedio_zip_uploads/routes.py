@@ -221,6 +221,7 @@ def upload_files():
         uploader_username=uploader_username,
         uploader_ip=ip,
         lab_unit_id=lab_unit_id,
+        upload_type="zip upload",
     )
     queue_job(current_app, job_token, saved_paths)
 

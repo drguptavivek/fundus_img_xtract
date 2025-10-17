@@ -308,6 +308,8 @@ class Job(Base):
     status: Mapped[str] = mapped_column(default="queued")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rejected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    excel_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    upload_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     uploader_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)

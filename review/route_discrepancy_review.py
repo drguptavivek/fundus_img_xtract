@@ -70,6 +70,9 @@ def discrepancy_review():
         # Get AI grade filter
         has_ai_grade = request.args.get("has_ai_grade", type=str)
         
+        # Get review grade filter
+        has_review = request.args.get("has_review", type=str)
+        
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
         
@@ -131,6 +134,16 @@ def discrepancy_review():
             # Filter for tasks that don't have an AI grade
             ai_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'ai').subquery()
             query = query.filter(~GradingTask.id.in_(ai_subq))
+        
+        # Apply review grade filter
+        if has_review == 'yes':
+            # Filter for tasks that have a review grade
+            review_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'review').subquery()
+            query = query.filter(GradingTask.id.in_(review_subq))
+        elif has_review == 'no':
+            # Filter for tasks that don't have a review grade
+            review_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'review').subquery()
+            query = query.filter(~GradingTask.id.in_(review_subq))
         
         # Apply AI model filter
         if ai_model_ids:
@@ -232,13 +245,13 @@ def discrepancy_review():
                 'arbitrator_grade': arbitrator_grades,
                 'final_grade': final_grades,
                 'has_ai_grade': has_ai_grade,
+                'has_review': has_review,
                 'ai_model_id': ai_model_ids
             }
         )
     
     finally:
         db.close()
-
 
 
 

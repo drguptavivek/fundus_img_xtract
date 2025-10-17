@@ -194,6 +194,15 @@
         </div>
         
         <div class="col-md-3">
+          <label for="hasReviewSelect" class="form-label">Has Review</label>
+          <select class="form-select" id="hasReviewSelect" name="has_review">
+            <option value="">All Tasks</option>
+            <option value="yes" {% if filters.has_review == 'yes' %}selected{% endif %}>Has Review</option>
+            <option value="no" {% if filters.has_review == 'no' %}selected{% endif %}>No Review</option>
+          </select>
+        </div>
+        
+        <div class="col-md-3">
           <label class="form-label">AI Models</label>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiModelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
@@ -214,10 +223,10 @@
           </div>
         </div>
           
-        <div class="col-md-6 d-flex align-items-end">
-          <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
-          <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
-        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+          </div>
         </div>
       </form>
     </div>
@@ -240,7 +249,7 @@
           <nav aria-label="Tasks pagination">
             <ul class="pagination pagination-sm mb-0">
               <li class="page-item {% if not has_prev %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                <a class="page-link" href="{{ url_for('review.discrepancy_review',
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -248,6 +257,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
+                  has_review=filters.has_review,
                   ai_model_id=filters.ai_model_id or [],
                   page=page-1) if has_prev else '#' }}">
                   Previous
@@ -259,7 +269,7 @@
                 <!-- If total pages <= 7, show all pages -->
                 {% for p in range(1, total_pages + 1) %}
                   <li class="page-item {% if p == page %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                    <a class="page-link" href="{{ url_for('review.discrepancy_review',
                       disease_id=filters.disease_id,
                       lab_unit_id=filters.lab_unit_id,
                       resident_grade=filters.resident_grade or [],
@@ -267,6 +277,7 @@
                       arbitrator_grade=filters.arbitrator_grade or [],
                       final_grade=filters.final_grade or [],
                       has_ai_grade=filters.has_ai_grade,
+                      has_review=filters.has_review,
                       ai_model_id=filters.ai_model_id or [],
                       page=p) }}">
                       {{ p }}
@@ -284,6 +295,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
+                    has_review=filters.has_review,
                     ai_model_id=filters.ai_model_id or [],
                     page=1) }}">
                     1
@@ -299,7 +311,7 @@
                 {% for p in range([page - 1, 2]|sort|first, [page + 2, total_pages]|sort|last) %}
                   {% if p > 1 and p < total_pages %}
                     <li class="page-item {% if p == page %}active{% endif %}">
-                      <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                      <a class="page-link" href="{{ url_for('review.discrepancy_review',
                         disease_id=filters.disease_id,
                         lab_unit_id=filters.lab_unit_id,
                         resident_grade=filters.resident_grade or [],
@@ -307,6 +319,7 @@
                         arbitrator_grade=filters.arbitrator_grade or [],
                         final_grade=filters.final_grade or [],
                         has_ai_grade=filters.has_ai_grade,
+                        has_review=filters.has_review,
                         ai_model_id=filters.ai_model_id or [],
                         page=p) }}">
                         {{ p }}
@@ -322,7 +335,7 @@
                 {% endif %}
                 
                 <li class="page-item {% if total_pages == page %}active{% endif %}">
-                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -330,6 +343,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
+                    has_review=filters.has_review,
                     ai_model_id=filters.ai_model_id or [],
                     page=total_pages) }}">
                     {{ total_pages }}
@@ -338,7 +352,7 @@
               {% endif %}
               
               <li class="page-item {% if not has_next %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                <a class="page-link" href="{{ url_for('review.discrepancy_review',
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
@@ -346,6 +360,7 @@
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
+                  has_review=filters.has_review,
                   ai_model_id=filters.ai_model_id or [],
                   page=page+1) if has_next else '#' }}">
                   Next
@@ -370,6 +385,7 @@
                 <th>Resident Grade</th>
                 <th>Faculty Grade</th>
                 <th>Arbitrator Grade</th>
+                <th>Review</th>
                 <th>Final Grade</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -428,6 +444,15 @@
                   {% endif %}
                 </td>
                 <td>
+                  {% set review_grade = task.grades.get('review') %}
+                  {% if review_grade %}
+                    <span class="badge bg-info">{{ review_grade.impression or '-' }}</span>
+                    {% if review_grade.comment %}<small class="text-muted d-block">Note: {{ review_grade.comment[:30] }}{% if review_grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">No review</span>
+                  {% endif %}
+                </td>
+                <td>
                   {% if task.consensus %}
                     <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
                     <small class="text-muted d-block">{{ task.consensus.method or '' }}</small>
@@ -469,7 +494,7 @@
             <nav aria-label="Tasks pagination (mobile)">
               <ul class="pagination pagination-sm justify-content-center">
                 <li class="page-item {% if not has_prev %}disabled{% endif %}">
-                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -477,13 +502,14 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
+                    has_review=filters.has_review,
                     ai_model_id=filters.ai_model_id or [],
                     page=page-1) if has_prev else '#' }}">
                     Previous
                   </a>
                 </li>
                 <li class="page-item {% if not has_next %}disabled{% endif %}">
-                  <a class="page-link" href="{{ url_for('review.discrepancy_review', 
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
@@ -491,6 +517,7 @@
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
+                    has_review=filters.has_review,
                     ai_model_id=filters.ai_model_id or [],
                     page=page+1) if has_next else '#' }}">
                     Next
@@ -519,6 +546,7 @@ function clearFilters() {
   document.getElementById('diseaseSelect').value = '';
   document.getElementById('labUnitSelect').value = '';
   document.getElementById('hasAiGradeSelect').value = '';
+  document.getElementById('hasReviewSelect').value = '';
   
   // Hide grade filters row when disease is cleared
   document.getElementById('gradeFiltersRow').style.display = 'none';

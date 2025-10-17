@@ -3,91 +3,97 @@
 This document provides an overview of the utility functions available in the analytics module. These utilities are designed to help retrieve and process data related to encounters, tasks, and images.
 
 ## Table of Contents
-- [Task Utilities (`taskUtils.py`)](#task-utilities-taskutilspy)
-- [Image Task Utilities (`imageTasks.py`)](#image-task-utilities-imagetaskspy)
-- [Encounter Utilities (`encounterUtils.py`)](#encounter-utilities-encounterutilspy)
 - [General Utilities (`utils.py`)](#general-utilities-utilspy)
+- [Encounter Utilities (`encounterUtils.py`)](#encounter-utilities-encounterutilspy)
 
-## Task Utilities (`taskUtils.py`)
+## General Utilities (`utils.py`)
 
-### `get_task_summary(task_id: int)`
+### Data Classes
 
-Fetches a summary for a specific grading task, including:
-- Task status
-- Disease
-- All grades for the task
-- Consensus information if it exists
+#### `GradeSummary`
+Render-friendly view of a single grade slot with fields for role, impression, grader, comment, and updated timestamp.
 
-**Parameters:**
-- `task_id` (int): The ID of the grading task
+#### `ConsensusSummary`
+Compact representation of consensus metadata with fields for impression, method, decided_by, and decided_at.
 
-**Returns:**
-- `dict`: A dictionary containing task status, disease, grades, and consensus
+#### `AIGradeSummary`
+Summarizes AI inference metadata for display with fields for model_name, model_version, impression, confidence, and run_id.
 
-## Image Task Utilities (`imageTasks.py`)
+### Core Functions
 
-### `get_tasks_for_image_uuid(uuid_str: str)`
+#### `_summarize_grade(grade: Grade | None) -> Optional[GradeSummary]`
 
-Fetches all tasks associated with a specific image UUID. The function checks both encounter files and direct image uploads.
+Converts a Grade object to a presentation-friendly GradeSummary object.
 
 **Parameters:**
-- `uuid_str` (str): The UUID of the image
+- `grade` (Grade | None): The Grade object to summarize
 
 **Returns:**
-- `dict`: A dictionary containing all tasks associated with the image
+- `Optional[GradeSummary]`: Summarized grade information or None if grade is None
 
-### `get_tasks_for_encounter_image_uuid(uuid_str: str)`
+#### `_summarize_consensus(consensus: Consensus | None) -> Optional[ConsensusSummary]`
 
-Fetches all tasks associated with a specific encounter image UUID.
+Converts a Consensus object to a presentation-friendly ConsensusSummary object.
 
 **Parameters:**
-- `uuid_str` (str): The UUID of the encounter image
+- `consensus` (Consensus | None): The Consensus object to summarize
 
 **Returns:**
-- `dict`: A dictionary containing all tasks associated with the encounter image
+- `Optional[ConsensusSummary]`: Summarized consensus information or None if consensus is None
 
-### `get_tasks_for_direct_image_uuid(uuid_str: str)`
+#### `fetch_image_task_details(db: SASession, tasks: Sequence[GradingTask]) -> List[Dict[str, Any]]`
 
-Fetches all tasks associated with a specific direct image upload UUID.
+Collects enriched details for the provided grading tasks.
 
 **Parameters:**
-- `uuid_str` (str): The UUID of the direct image upload
+- `db` (SASession): Active SQLAlchemy session
+- `tasks` (Sequence[GradingTask]): Grading tasks to be enriched with related data
 
 **Returns:**
-- `dict`: A dictionary containing all tasks associated with the direct image
+- `List[Dict[str, Any]]`: A list of dictionaries, each containing presentation-ready data for one task
 
-### `get_task_ids_for_image_uuid(uuid_str: str)`
+#### `_latest_glaucoma_cleaned(glaucoma_rows: Sequence[GlaucomaResultsCleaned]) -> Optional[Dict[str, Any]]`
 
-Fetches only the task IDs associated with a specific image UUID. The function checks both encounter files and direct image uploads.
+Retrieves the most recent glaucoma results from a sequence of glaucoma results.
 
 **Parameters:**
-- `uuid_str` (str): The UUID of the image
+- `glaucoma_rows` (Sequence[GlaucomaResultsCleaned]): Sequence of glaucoma results
 
 **Returns:**
-- `list`: A list of task IDs associated with the image
+- `Optional[Dict[str, Any]]`: Dictionary containing the latest glaucoma result data or None
+
+#### `_latest_dr_report(dr_rows: Sequence[DiabeticRetinopathyReport]) -> Optional[Dict[str, Any]]`
+
+Retrieves the most recent diabetic retinopathy report from a sequence of reports.
+
+**Parameters:**
+- `dr_rows` (Sequence[DiabeticRetinopathyReport]): Sequence of DR reports
+
+**Returns:**
+- `Optional[Dict[str, Any]]`: Dictionary containing the latest DR report data or None
+
+#### `group_task_details_by_image(task_details: Sequence[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]`
+
+Groups task details by image ID for organized display.
+
+**Parameters:**
+- `task_details` (Sequence[Dict[str, Any]]): Sequence of task detail dictionaries
+
+**Returns:**
+- `Dict[int, List[Dict[str, Any]]]`: Mapping of image IDs to lists of task details
+
+#### `build_encounter_result_payload(encounters: Sequence[PatientEncounters], task_details: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]`
+
+Builds a complete payload for encounter results display.
+
+**Parameters:**
+- `encounters` (Sequence[PatientEncounters]): Sequence of patient encounters
+- `task_details` (Sequence[Dict[str, Any]]): Sequence of task detail dictionaries
+
+**Returns:**
+- `List[Dict[str, Any]]`: List of dictionaries containing complete encounter result data
 
 ## Encounter Utilities (`encounterUtils.py`)
-
-### `get_encounter_summary(encounter_id: int, with_encounter_object: bool = False)`
-
-Fetches a comprehensive summary for a given encounter, including:
-- Image UUIDs
-- Report PDF UUIDs
-- Glaucoma results cleaned with their UUIDs
-- Diabetic retinopathy reports with their UUIDs
-- All tasks with their status, disease, and associated image
-- All gradings for each task
-- Consensus for each task
-- Images with their associated task IDs and disease names
-
-**Parameters:**
-- `encounter_id` (int): The ID of the encounter to fetch summary for
-- `with_encounter_object` (bool): Whether to include the full encounter object (may cause DetachedInstanceError if session closes)
-
-**Returns:**
-- `dict`: A dictionary containing all the requested data for the encounter
-
-### `get_encounters_summary_list(filters=None)`
 
 Fetches a summary list of encounters with basic information. This can be used for the simplified analytics/encounters view.
 

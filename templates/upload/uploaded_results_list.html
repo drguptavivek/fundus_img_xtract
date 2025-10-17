@@ -2,13 +2,17 @@
 {% block title %}Uploaded ZIPs{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Uploaded ZIPs</h3>
-  <div class="d-flex gap-2">
-    <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload</a>
-    <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">Jobs</a>
-  </div>
-</div>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Uploaded ZIPs</h1>
+        <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
+        <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
+        <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
+        <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+         <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
+    </div>
+
+
 
 <div class="card shadow-sm">
   <div class="card-body p-0">

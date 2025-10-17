@@ -2,15 +2,19 @@
 {% block title %}Upload ZIPs (async){% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-lg-8 col-md-10">
-          <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h4 mb-0">Remedio ZIP File Upload</h1>
         <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
         <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
         <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
         <a class="btn btn-warning" href="{{ url_for('direct_uploads.pregraded_upload') }}">Upload Pregrade</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('jobs.list_recent_jobs') }}">All Jobs</a>
     </div>
+
+
+<div class="row justify-content-center">
+  <div class="col-lg-8 col-md-10">
+
     
     <div class="card shadow-sm">
       <div class="card-header bg-primary text-white">

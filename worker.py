@@ -18,7 +18,17 @@ def _process_one_zip(zip_path: Path) -> dict:
     setup_environment()
     db = Session()
     try:
-        pdfs = process_zip_file(zip_path, db)
+        pdfs, status = process_zip_file(zip_path, db)
+        
+        # Handle different status values from process_zip_file
+        if status == "duplicate":
+            return {"status": "skipped", "message": f"Duplicate file (already processed)"}
+        elif status == "error":
+            return {"status": "error", "message": "Processing error"}
+        elif status == "skipped":
+            return {"status": "skipped", "message": "File skipped (resource fork or invalid)"}
+        
+        # For normal processing ("ok" status)
         if not pdfs:
             # Nothing extracted (e.g., images only), treat as ok but skip OCR
             return {"status": "ok", "message": "Ingested (no PDFs to OCR)"}
@@ -36,7 +46,17 @@ def _job_worker(job_token: str, saved_paths: list[Path]):
         for p in saved_paths:
             db_set_item_state(job_token, p.name, "processing")
             result = _process_one_zip(p)
-            db_set_item_state(job_token, p.name, result["status"], result.get("message"))
+            # Map statuses to appropriate job item states
+            if result["status"] == "skipped" and "Duplicate file" in result.get("message", ""):
+                # Mark duplicate files as rejected (error state)
+                item_status = "error"
+            elif result["status"] == "skipped":
+                # Other skipped files (resource fork, etc.) remain as ok
+                item_status = "ok"
+            else:
+                # Use the status as-is for ok/error
+                item_status = result["status"]
+            db_set_item_state(job_token, p.name, item_status, result.get("message"))
         if db_any_item_error(job_token):
             db_set_job_status(job_token, "error", error="One or more files failed")
         else:

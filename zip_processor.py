@@ -159,10 +159,17 @@ def daily_dup_dir() -> Path:
 
 
 # --- Main Processing Logic ---
-def process_zip_file(zip_path: Path, session) -> list[str]:
+def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
     """
     Processes a single ZIP file, extracts metadata, and organizes files.
     Ensures the ZIP file is CLOSED before attempting to move it.
+    
+    Returns:
+        tuple: (list_of_pdf_filenames, status_message)
+        status_message can be:
+        - "ok" for normal processing
+        - "duplicate" for duplicate files
+        - "error" for processing errors
     """
     def safe_move(src: Path, dst: Path, attempts: int = 5):
         # Small retry helper for Windows lock shenanigans
@@ -193,7 +200,8 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
             print(f"Failed to move duplicate '{zip_path.name}': {e}")
 
         log_status(zip_path.name, "SKIPPED_DUPMD5", f"original={original_name}")
-        return
+        # Return empty list with duplicate status to indicate this was a duplicate file
+        return ([], "duplicate")
 
     print(f"\n--- Processing '{zip_path.name}' ---")
 
@@ -208,7 +216,7 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
         if zip_path.name.startswith("._"):
             print(f"Skipping resource-fork file '{zip_path.name}'.")
             log_status(zip_path.name, "SKIPPED_RESOURCEFORK")
-            return
+            return ([], "skipped")
         if not zipfile.is_zipfile(zip_path):
             print(f"File '{zip_path.name}' is not a valid ZIP. Moving to error.")
             try:
@@ -227,7 +235,8 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
             except PermissionError as pe:
                 print(f"Final move failed for '{zip_path.name}' due to a lock: {pe}.")
             log_status(zip_path.name, "ERROR_BADZIP", "not a zip file")
-            return
+            # Return empty list with error status to indicate this was an error
+            return ([], "error")
 
         with zipfile.ZipFile(zip_path, 'r') as zf:
             print("  Archive Contents (Tree Structure):")
@@ -483,7 +492,7 @@ def process_zip_file(zip_path: Path, session) -> list[str]:
         session.commit()
         success = True
         print(f"Successfully processed and logged '{zip_path.name}'.")
-        return added_pdf_filenames
+        return (added_pdf_filenames, "ok")
 
     except (zipfile.BadZipFile, ValueError) as e:
         print(f"Error processing '{zip_path.name}': {e}")

@@ -63,10 +63,18 @@
             {{ (j.rejected_summary or '')[:120] }}
           </td>
           <td>
-            <a class="btn btn-sm btn-outline-primary"
-               href="{{ url_for('jobs.job_status_page', job_token=j.token) }}">
-              View
-            </a>
+            <div class="d-flex gap-1">
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{{ url_for('jobs.job_status_page', job_token=j.token) }}">
+                View
+              </a>
+              {% if j.uploader_user_id == current_user.id or current_user.has_role('admin', 'data_manager') %}
+              <a class="btn btn-sm btn-outline-success"
+                 href="{{ url_for('direct_uploads.upload_results', job_id=j.id) }}">
+                Results
+              </a>
+              {% endif %}
+            </div>
           </td>
         </tr>
       {% else %}

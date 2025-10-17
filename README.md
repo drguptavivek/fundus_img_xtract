@@ -77,7 +77,7 @@ python app.py
 - [Email System](docs/10-DEVELOP/Email.md) - Comprehensive email functionality documentation
 - [Security](docs/10-DEVELOP/Security.md) - Comprehensive authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
-- [Logging System](docs/10-DEVELOP/logging_combined.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
 - [Playwright Testing](docs/10-DEVELOP/playwright.md) - End-to-end testing setup, configuration, and best practices
 - [Build Themes](docs/10-DEVELOP/BUILD_THEMES.md)
 
@@ -176,7 +176,7 @@ python app.py
 
 ### Development & Conventions
 - [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) - Essential patterns for database, CSRF, datetime, logging, and more
-  - [Logging Conventions](docs/10-DEVELOP/Logging12.md) - Implementation patterns and conventions
+
   - [Database Context Manager](docs/10-DEVELOP/DB CONTEXT MANAGER.md)
   - [DateTime Handling](docs/10-DEVELOP/DateTime.md)
 

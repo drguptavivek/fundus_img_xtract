@@ -14,6 +14,17 @@ The logging system is built on Python's standard `logging` module with custom fo
 - **Debug mode enhancements** with additional detail levels
 - **Request context filtering** for HTTP request tracking
 
+## Configuration at a Glance
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `LOG_DIR` | `./logs` | Root directory for generated log files |
+| `LOG_MAX_BYTES` | `2 * 1024 * 1024` | Rotation threshold per file |
+| `LOG_BACKUP_COUNT` | `5` | Number of rotated archives to retain |
+| `ENABLE_DEBUG_LOGGING` | `False` | When true (or when Flask `DEBUG` is on) enable `debug.log` and console streaming |
+
+All file handlers use UTF‑8 encoding and `RotatingFileHandler` with the configured size/backups.
+
 ## Logger Categories
 
 ### Primary Application Loggers
@@ -21,6 +32,7 @@ The logging system is built on Python's standard `logging` module with custom fo
 | Logger Name | Purpose | Log File | Typical Usage |
 |-------------|---------|----------|---------------|
 | `app` | General application events | `app.log` | High-level application flow |
+| `debug` | Debug-level information | `debug.log` | Development debugging |
 | `http_error` | HTTP error responses (4xx, 5xx) | `http_error.log` | Failed HTTP requests |
 | `runtime_error` | Application exceptions and errors | `runtime_error.log` | Unhandled exceptions |
 | `auth` | Authentication and authorization events | `auth.log` | Logins, logouts, permissions |
@@ -30,7 +42,6 @@ The logging system is built on Python's standard `logging` module with custom fo
 | `email_success` | Successful email deliveries | `email_success.log` | Email notifications |
 | `email_error` | Email delivery failures | `email_error.log` | Email system errors |
 | `email_debug` | Detailed email debugging | `email_debug.log` | SMTP interactions |
-| `debug` | Debug-level information | `debug.log` | Development debugging |
 
 ### Legacy/Processing Loggers
 
@@ -117,6 +128,128 @@ When debug mode is enabled:
 - Console output with detailed formatting
 - Stack trace logging for debugging
 - Enhanced error context with file and line numbers
+
+## HTTP Request & Stack-Trace Behaviour
+
+- The `@app.after_request` hook writes responses with status ≥400 to `http_error.log`, including method, URL, status code, user agent, and duration.
+- Global stack trace handlers capture request timing and performance metrics in debug mode
+- Multiple global exception handlers log full tracebacks to `runtime_error.log`:
+  - `_global_exception_handler()` - Primary exception handler
+  - `_global_exception_handler_alt()` - Alternative exception handler
+  - `handle_generic_exception()` - Generic exception handler
+  - `handle_500()` - Specific 500 error handler
+- `utils.stack_trace_handler.log_stack_trace(...)` logs detailed stack traces
+- Request timing is tracked from `_global_stack_trace_handler()` with duration logging
+- The previous `http_success.log` has been removed; rely on proxy or access logs for successful requests.
+
+## Module-Level Logger Usage
+
+Dedicated loggers are imported where audit trails are required:
+
+```python
+import logging
+
+editing_logger = logging.getLogger("editing")
+grades_logger = logging.getLogger("grades")
+consensus_logger = logging.getLogger("consensus")
+auth_logger = logging.getLogger("auth")
+```
+
+Recent changes wire these loggers through the codebase:
+
+- **Editing (`editing.log`)** – Bulk dashboard operations, single-image edits, anonymization save/restore flows, and API saves emit structured audit entries and warnings when operations are blocked.
+- **Grading (`grades.log`)** – Dual-grading routes record submissions, revisions, and any downstream navigation issues.
+- **Consensus (`consensus.log`)** – Consensus utilities track state transitions, exceptions, and diagnostic information.
+- **Authentication (`auth.log`)** – Login, logout, session timeout, lockout events, and inactivity timeout events are logged with user details and IP addresses.
+- **Emails (`email_success`/`email_error`/`email_debug`)** – Email helpers record delivery status in their dedicated files.
+- **Runtime Errors (`runtime_error.log`)** – Global exception handlers and stack trace handlers capture all unhandled exceptions with full context.
+- **HTTP Errors (`http_error.log`)** – All HTTP responses with status ≥400 are logged with method, URL, status, user agent, and duration.
+- **`current_app.logger`** – Automatically targets `app.log` (and `debug.log` when active) for general informational messages.
+
+## Logging Best Practices (Based on Dual Grading Implementation)
+
+### 1. Use Dedicated Loggers for Audit Trails
+
+The dual grading module demonstrates best practice by using a dedicated logger for grades:
+
+```python
+grades_logger = logging.getLogger("grades")
+```
+
+### 2. Include Context-Rich Information
+
+The grades logger includes detailed context in its messages:
+
+```python
+# Log grade submission with comprehensive context
+# Store in UTC for consistency
+timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+
+grade_type = "revision" if had_existing_grade else "new"
+grade_id = existing_grade.id if had_existing_grade and existing_grade else "N/A"
+
+# Create log message
+log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: {slot}] [Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
+if comment:
+    log_message += f" [Comments - {comment}]"
+    
+# If this is a revision, also log the previous grade and comment
+if had_existing_grade and prev_grade_id is not None:
+    prev_comment_display = prev_comment if prev_comment else "None"
+    log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
+
+# Log using dedicated grades logger
+grades_logger.info(log_message)
+```
+
+### 3. Log Exceptions with Full Context
+
+Use exception logging to capture the full stack trace:
+
+```python
+try:
+    # Some operation
+    pass
+except Exception as e:
+    grades_logger.exception("Failed to submit grade: %s", e)
+    # Handle error appropriately
+```
+
+### 4. Log Time-Based Operations
+
+The dual grading implementation includes time tracking:
+
+```python
+# Calculate time taken for grading
+if start_time_str:
+    try:
+        start_time = datetime.fromisoformat(start_time_str)
+        # Handle timezone-naive datetimes by assuming they are UTC
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=timezone.utc)
+        current_time = datetime.now(timezone.utc)
+        time_taken = int((current_time - start_time).total_seconds())
+    except (ValueError, TypeError):
+        # Handle error appropriately
+        pass
+```
+
+### 5. Use Appropriate Log Levels
+
+- `INFO`: Successful operations and progress markers
+- `WARNING`: Non-critical issues that don't stop execution
+- `ERROR`: Problems that affect functionality
+- `EXCEPTION`: Full error details with stack traces
+
+### 6. Include Unique Identifiers
+
+Always log key identifiers like:
+- `user_id`
+- `task_id`
+- `grade_id`
+- `image_uuid`
+- IP addresses
 
 ## Usage Patterns
 

@@ -13,6 +13,7 @@ from utils.utils2 import uniquify
 from . import bp
 from utils.utils import with_session
 from auth.roles import roles_required
+from utils.rate_limiter import upload_rate_limit
 from models import (
     User, LabUnit, Hospital, DirectImageUpload,
     Camera, Disease, Area, Job, JobItem
@@ -39,6 +40,7 @@ def upload_index():
 
 @bp.route("/direct/upload", methods=["GET", "POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@upload_rate_limit("10 per minute")
 def upload():
     with with_session() as db_session:
         if request.method == "POST":

@@ -29,6 +29,7 @@ These provide general system functionality:
 
 - **emails.py**: Email sending and notification system
 - **notifications.py**: In-app notification management
+- **rate_limiter.py**: Rate limiting for security and abuse prevention
 - **stack_trace_handler.py**: Error tracking and debugging
 - **datetime_filters.py**: Timezone-aware datetime formatting
 - **timezone_choices.py**: Timezone selection helpers

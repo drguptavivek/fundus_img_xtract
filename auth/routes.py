@@ -11,6 +11,7 @@ from . import auth_bp
 from .security import verify_password, hash_password
 from .utils import utcnow, get_client_ip
 from flask import flash
+from utils.rate_limiter import auth_rate_limit
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
@@ -116,6 +117,7 @@ def _get_email_results(user_id: str):
 
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
+@auth_rate_limit("5 per minute")
 def login():
     from flask_login import current_user
     # If user is already logged in, redirect to homepage
@@ -244,6 +246,7 @@ def ping():
 
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
+@auth_rate_limit("3 per 5 minutes")
 def forgot_password():
     """
     Route to handle forgot password functionality.
@@ -326,6 +329,7 @@ def forgot_password():
 
 
 @auth_bp.route("/reset-password", methods=["GET", "POST"])
+@auth_rate_limit("5 per 10 minutes")
 def reset_password():
     """
     Route to handle password reset with OTP verification.

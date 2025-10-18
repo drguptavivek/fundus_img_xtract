@@ -147,6 +147,23 @@ For detailed documentation, see [utils_emails.md](utils_emails.md).
 | `send_otp_email(to_email: str, username: str, otp: str, callback: Optional[Callable[[bool], None]] = None)` | Asynchronously send an OTP email to the specified recipient |
 | `send_otp_email_sync(to_email: str, username: str, otp: str)` | Synchronously send an OTP email to the specified recipient |
 
+### utils/rate_limiter.py
+
+For detailed documentation, see [utils_rateLimiter.md](utils_rateLimiter.md).
+
+| Function/Decorator | Description |
+| ------------------- | ----------- |
+| `init_rate_limit(app: Flask)` | Initialize rate limiting for the Flask application |
+| `rate_limit(limit_string: str, key_func: Callable = None)` | Generic rate limit decorator with custom limit and key function |
+| `auth_rate_limit(limit: str = None)` | Decorator for authentication endpoints with strict rate limiting |
+| `upload_rate_limit(limit: str = None)` | Decorator for upload endpoints with moderate rate limiting |
+| `api_rate_limit(limit: str = None)` | Decorator for API endpoints with standard rate limiting |
+| `admin_rate_limit(limit: str = None)` | Decorator for admin endpoints with high rate limiting |
+| `get_rate_limit_key()` | Custom key function for rate limiting that uses user ID or IP address |
+| `get_rate_limit_for_user_role(user_roles: List[str])` | Determine rate limit based on user roles |
+| `get_rate_limit_for_endpoint(endpoint_type: str, user_roles: List[str] = None)` | Get rate limit for specific endpoint types |
+| `rate_limit_handler(e: RateLimitExceeded)` | Custom error handler for rate limit exceeded errors |
+
 ### utils/upload_eligibility.py
 
 For detailed documentation, see [utils_upload_eligibility.md](utils_upload_eligibility.md).

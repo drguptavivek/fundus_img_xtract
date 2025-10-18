@@ -21,6 +21,7 @@ from werkzeug.exceptions import HTTPException
 from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
 from server_side_session import DatabaseSessionInterface, mark_session_ended
+from utils.rate_limiter import init_rate_limiting
 
 
 csrf = CSRFProtect()
@@ -86,6 +87,9 @@ def create_app():
 
     csrf.init_app(app)
     app.session_interface = DatabaseSessionInterface()
+    
+    # Initialize rate limiting
+    init_rate_limiting(app)
     
     # Initialize CORS for API endpoints
     # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies

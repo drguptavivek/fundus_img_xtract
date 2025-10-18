@@ -541,11 +541,65 @@ verify_remedio_nodr
 
 The rate limiter can be configured through environment variables:
 
+### Basic Configuration
 - `RATELIMIT_ENABLED`: Enable/disable rate limiting (default: "true")
-- `RATELIMIT_DEFAULT`: Default rate limit string (default: "100 per hour")
-- `RATELIMIT_STORAGE_URL`: Redis URL for distributed rate limiting (optional)
+- `RATELIMIT_DEFAULT`: Default rate limit string applied to all routes (default: "500 per hour, 50 per minute")
+- `RATELIMIT_STORAGE_URL`: Storage backend URL (memory://, redis://, or memcached://)
+- `RATELIMIT_KEY_PREFIX`: Prefix for rate limit keys (default: empty)
+- `RATELIMIT_STRATEGY`: Rate limiting strategy - fixed-window, moving-window, or fixed-window-elastic-expiry (default: "fixed-window")
+
+### Storage Backend Configuration
+- `RATELIMIT_MEMCACHED_SERVERS`: Comma-separated list of Memcached servers (e.g., "localhost:11211")
+- `RATELIMIT_MEMCACHED_USERNAME`: Username for authenticated Memcached connections (optional)
+- `RATELIMIT_MEMCACHED_PASSWORD`: Password for authenticated Memcached connections (optional)
+- `REDIS_URL`: Redis URL for distributed rate limiting (optional)
+
+### Headers Configuration
 - `RATELIMIT_HEADERS_ENABLED`: Enable rate limit headers in responses (default: "true")
+- `RATELIMIT_HEADER_RESET`: Include X-RateLimit-Reset header with Unix timestamp (default: "false")
+- `RATELIMIT_HEADER_REMAINING`: Include X-RateLimit-Remaining header (default: "true")
+
+### Behavior Configuration
+- `RATELIMIT_FAIL_ON_FIRST_BREACH`: Fail immediately on first breach instead of waiting for window to reset (default: "false")
 - `RATELIMIT_SWALLOW_ERRORS`: Continue processing when rate limit storage fails (default: "false")
+- `RATELIMIT_DEDUPLICATE`: Deduplicate identical requests for rate limiting (default: "false")
+- `RATELIMIT_DEFAULTS_PER_METHOD`: Apply rate limits per HTTP method instead of per endpoint (default: "false")
+- `RATELIMIT_DEFAULTS_COST`: Cost per request for rate limiting (default: "1")
+- `RATELIMIT_DEFAULTS_EXEMPT`: Comma-separated list of route patterns to exempt from rate limiting
+
+### Advanced Configuration
+- `RATELIMIT_KEY_FUNC`: Custom key function class (advanced usage)
+- `RATELIMIT_ON_BREACH`: Custom function to call when rate limit is breached
+- `RATELIMIT_APPLICATION`: Application-wide rate limits that override defaults
+
+### Role-Based Configuration
+- `ADMIN_RATE_LIMIT`: Custom rate limit for admin users
+- `DATA_MANAGER_RATE_LIMIT`: Custom rate limit for data manager users
+- `USER_RATE_LIMIT`: Custom rate limit for regular users
+- `AUTHENTICATED_RATE_LIMIT`: Custom rate limit for any authenticated user
+- `ANONYMOUS_RATE_LIMIT`: Custom rate limit for anonymous users
+
+### Storage Backends
+
+The rate limiter supports multiple storage backends:
+
+1. **In-Memory Storage** (default):
+   - Simple, no external dependencies
+   - Not suitable for production or multi-instance deployments
+   - Rate limits reset on application restart
+
+2. **Redis Storage**:
+   - Suitable for production and distributed systems
+   - Persistent across application restarts
+   - Shared state across multiple application instances
+   - Configuration: Set `RATELIMIT_STORAGE_URL` to Redis connection string (e.g., "redis://localhost:6379")
+
+3. **Memcached Storage**:
+   - High-performance distributed caching
+   - Suitable for production and large-scale deployments
+   - Configuration: Set `RATELIMIT_MEMCACHED_SERVERS` to server list (e.g., "server1:11211,server2:11211")
+   - Optional authentication with username/password
+   - Automatic fallback to in-memory if Memcached is unavailable
 
 ## Functions
 
@@ -723,9 +777,10 @@ Initialize rate limiting for the Flask application.
 - `Limiter`: The configured Limiter instance
 
 **Implementation Details:**
-- Configures storage backend (Redis if available, otherwise in-memory)
+- Configures storage backend (Memcached if configured, Redis if available, otherwise in-memory)
 - Sets up custom key function and error handler
 - Applies configuration from environment variables
+- Automatically detects and configures Memcached with authentication if provided
 - Returns the limiter instance for further configuration if needed
 
 ## Security Features
@@ -744,8 +799,10 @@ Initialize rate limiting for the Flask application.
 
 ### Distributed Support:
 - Redis backend for multi-instance deployments
+- Memcached backend for high-performance distributed caching
 - Shared state across all application instances
 - Consistent rate limiting in distributed environments
+- Automatic fallback to in-memory storage if distributed backend is unavailable
 
 ## Best Practices
 
@@ -809,6 +866,41 @@ from utils.rate_limiter import admin_rate_limit
 def admin_operation():
     # Admin operation here
     pass
+```
+
+### Memcached Configuration Examples
+
+#### Basic Memcached Setup:
+```python
+# .env file
+RATELIMIT_ENABLED=true
+RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+```
+
+#### Distributed Memcached Cluster:
+```python
+# .env file
+RATELIMIT_ENABLED=true
+RATELIMIT_MEMCACHED_SERVERS=memcached1.example.com:11211,memcached2.example.com:11211,memcached3.example.com:11211
+```
+
+#### Authenticated Memcached Connection:
+```python
+# .env file
+RATELIMIT_ENABLED=true
+RATELIMIT_MEMCACHED_SERVERS=secure-memcached.example.com:11211
+RATELIMIT_MEMCACHED_USERNAME=rate_limiter_user
+RATELIMIT_MEMCACHED_PASSWORD=secure_password
+```
+
+#### Production Configuration with Memcached:
+```python
+# .env file
+RATELIMIT_ENABLED=true
+RATELIMIT_DEFAULT="500 per hour, 50 per minute"
+RATELIMIT_MEMCACHED_SERVERS=memcached-cluster.internal:11211
+RATELIMIT_HEADERS_ENABLED=true
+RATELIMIT_SWALLOW_ERRORS=false
 ```
 
 ## Module Constants

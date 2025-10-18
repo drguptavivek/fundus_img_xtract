@@ -31,11 +31,9 @@ def get_rate_limit_key() -> str:
     # Fall back to IP address
     return f"ip:{get_remote_address()}"
 
-# Initialize limiter
+# Initialize limiter (will be configured in init_rate_limiting)
 limiter = Limiter(
     key_func=get_rate_limit_key,
-    default_limits=["2000 per day", "500 per hour"],
-    storage_uri="memory://",  # In production, use Redis or database storage
 )
 
 def rate_limit(
@@ -191,38 +189,99 @@ def get_user_rate_limits(user_id: int) -> dict:
 def init_rate_limiting(app):
     """
     Initialize rate limiting for the Flask application.
+    Reads configuration from environment variables.
     """
-    # Configure rate limiting based on environment
-    if app.config.get('TESTING', False):
-        # Disable rate limiting in testing
+    # Read all rate limiting configuration from environment
+    app.config['RATELIMIT_ENABLED'] = app.config.get('RATELIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_DEFAULT'] = app.config.get('RATELIMIT_DEFAULT', '500 per hour, 50 per minute')
+    app.config['RATELIMIT_STORAGE_URL'] = app.config.get('RATELIMIT_STORAGE_URL', 'memory://')
+    app.config['RATELIMIT_KEY_PREFIX'] = app.config.get('RATELIMIT_KEY_PREFIX', '')
+    app.config['RATELIMIT_STRATEGY'] = app.config.get('RATELIMIT_STRATEGY', 'fixed-window')
+    app.config['RATELIMIT_HEADERS_ENABLED'] = app.config.get('RATELIMIT_HEADERS_ENABLED', 'true').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_HEADER_RESET'] = app.config.get('RATELIMIT_HEADER_RESET', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_HEADER_REMAINING'] = app.config.get('RATELIMIT_HEADER_REMAINING', 'true').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_FAIL_ON_FIRST_BREACH'] = app.config.get('RATELIMIT_FAIL_ON_FIRST_BREACH', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_SWALLOW_ERRORS'] = app.config.get('RATELIMIT_SWALLOW_ERRORS', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_DEDUPLICATE'] = app.config.get('RATELIMIT_DEDUPLICATE', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_DEFAULTS_PER_METHOD'] = app.config.get('RATELIMIT_DEFAULTS_PER_METHOD', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_DEFAULTS_COST'] = int(app.config.get('RATELIMIT_DEFAULTS_COST', '1'))
+    app.config['RATELIMIT_DEFAULTS_EXEMPT'] = app.config.get('RATELIMIT_DEFAULTS_EXEMPT', '')
+    
+    # Configure storage backend based on environment variables
+    storage_configured = False
+    
+    # Check for Memcached configuration (new method)
+    if app.config.get('RATELIMIT_MEMCACHED_SERVERS'):
+        from pymemcache.client.base import Client
+        from pymemcache.client.rendezvous import RendezvousHash
+        from flask_limiter.util import MemcachedStorage
+        
+        servers = app.config.get('RATELIMIT_MEMCACHED_SERVERS').split(',')
+        username = app.config.get('RATELIMIT_MEMCACHED_USERNAME')
+        password = app.config.get('RATELIMIT_MEMCACHED_PASSWORD')
+        
+        try:
+            # Create Memcached client with optional authentication
+            if username and password:
+                client = Client(
+                    servers,
+                    username=username,
+                    password=password,
+                    connect_timeout=2,
+                    timeout=2,
+                    ignore_exc=False
+                )
+            else:
+                client = Client(
+                    servers,
+                    connect_timeout=2,
+                    timeout=2,
+                    ignore_exc=False
+                )
+            
+            # Test connection
+            client.version()
+            
+            # Configure Flask-Limiter to use Memcached
+            app.config['RATELIMIT_STORAGE_URL'] = f"memcached://{','.join(servers)}"
+            rate_limit_logger.info(f"Using Memcached for rate limit storage: {servers}")
+            storage_configured = True
+        except Exception as e:
+            rate_limit_logger.error(f"Failed to connect to Memcached: {e}")
+            if not app.config.get('RATELIMIT_SWALLOW_ERRORS', False):
+                raise
+    
+    # Check for Redis configuration
+    elif app.config.get('REDIS_URL'):
+        app.config['RATELIMIT_STORAGE_URL'] = app.config['REDIS_URL']
+        rate_limit_logger.info("Using Redis for rate limit storage")
+        storage_configured = True
+    
+    # Check if RATELIMIT_STORAGE_URL is explicitly set
+    elif app.config.get('RATELIMIT_STORAGE_URL'):
+        storage_url = app.config['RATELIMIT_STORAGE_URL']
+        if storage_url.startswith('memcached://'):
+            rate_limit_logger.info(f"Using Memcached for rate limit storage (explicitly configured)")
+        elif storage_url.startswith('redis://'):
+            rate_limit_logger.info(f"Using Redis for rate limit storage (explicitly configured)")
+        elif storage_url.startswith('memory://'):
+            rate_limit_logger.warning("Using memory storage for rate limiting (not suitable for production)")
+        storage_configured = True
+    
+    # Override for testing environment
+    if app.config.get('TESTING', False) or app.config.get('DISABLE_RATE_LIMITING', False):
         app.config['RATELIMIT_ENABLED'] = False
         rate_limit_logger.info("Rate limiting disabled for testing environment")
-    elif app.config.get('DISABLE_RATE_LIMITING', False):
-        # Explicitly disabled
-        app.config['RATELIMIT_ENABLED'] = False
-        rate_limit_logger.info("Rate limiting explicitly disabled")
+    
+    # Log configuration
+    if app.config['RATELIMIT_ENABLED']:
+        rate_limit_logger.info(
+            f"Rate limiting enabled - Default: {app.config['RATELIMIT_DEFAULT']}, "
+            f"Storage: {app.config['RATELIMIT_STORAGE_URL']}, "
+            f"Headers: {app.config['RATELIMIT_HEADERS_ENABLED']}"
+        )
     else:
-        # Enable rate limiting
-        app.config['RATELIMIT_ENABLED'] = True
-        
-        if app.config.get('DEBUG', False):
-            # More lenient limits in development
-            app.config['RATELIMIT_DEFAULT'] = "5000 per day, 1000 per hour"
-            rate_limit_logger.info("Development rate limits applied")
-        else:
-            # Production limits
-            app.config['RATELIMIT_DEFAULT'] = "2000 per day, 500 per hour"
-            rate_limit_logger.info("Production rate limits applied")
-        
-        # Configure storage backend based on environment
-        if app.config.get('REDIS_URL'):
-            # Use Redis for distributed rate limiting
-            app.config['RATELIMIT_STORAGE_URL'] = app.config['REDIS_URL']
-            rate_limit_logger.info("Using Redis for rate limit storage")
-        else:
-            # Fall back to memory storage (not suitable for multi-process deployments)
-            app.config['RATELIMIT_STORAGE_URL'] = "memory://"
-            rate_limit_logger.warning("Using memory storage for rate limiting (not suitable for production)")
+        rate_limit_logger.info("Rate limiting disabled")
     
     # Initialize limiter with app
     limiter.init_app(app)

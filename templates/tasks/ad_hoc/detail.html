@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block title %}Ad-hoc Batch #{{ batch.id }}{% endblock %}
+{% block content %}
+  <div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h1 class="h5 mb-0">Ad-hoc Batch #{{ batch.id }}</h1>
+      <a class="btn btn-sm btn-secondary" href="{{ url_for('ad_hoc_tasks.list_batches', ad_hoc_id=batch.id) }}">Back to Batches</a>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-12 col-lg-6">
+        <div class="card">
+          <div class="card-header">Overview</div>
+          <div class="card-body">
+            <div><strong>Created At:</strong> {{ batch.created_at }}</div>
+            <div><strong>Created By:</strong> {{ batch.created_by or '—' }}</div>
+            <div><strong>Randomized:</strong> {{ 'Yes' if batch.randomized else 'No' }}</div>
+            <div><strong>Remarks:</strong> {{ batch.remarks or '—' }}</div>
+            <div><strong>Max Images:</strong> {{ batch.max_images }}</div>
+            <div><strong>Diseases:</strong> {{ batch.disease_names | join(', ') if batch.disease_names else '—' }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-6">
+        <div class="card">
+          <div class="card-header">Summary</div>
+          <div class="card-body">
+            {% set s = summary or {} %}
+            <div><span class="badge bg-success">Created {{ s.created or 0 }}</span>
+                 <span class="badge bg-warning text-dark">Duplicates {{ s.duplicates or 0 }}</span>
+                 {% if s.unsuitable %}<span class="badge bg-secondary">Unsuitable {{ s.unsuitable }}</span>{% endif %}
+                 {% if s.errors %}<span class="badge bg-danger">Errors {{ s.errors }}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">Filters</div>
+          <div class="card-body">
+            {% if filters and filters|length %}
+              <ul class="mb-0 small">
+                {% for f in filters %}
+                  <li><strong>{{ f.key }}</strong>: {{ f.value }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <div class="text-muted small">No filters recorded.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header">Created Tasks</div>
+          <div class="card-body">
+            {% if task_rows and task_rows|length %}
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Task ID</th>
+                      <th>Type</th>
+                      <th>Image</th>
+                      <th>Disease</th>
+                      <th>Lab Unit</th>
+                      <th>State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for t in task_rows %}
+                      <tr>
+                        <td>#{{ t.id }}</td>
+                        <td>{{ t.type | upper }}</td>
+                        <td>
+                          {% if t.uuid %}
+                            {% set gallery_id = 'adhoc-gallery-' ~ t.id %}
+                            <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                              <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=t.uuid) }}" data-pswp-type="image" title="Task {{ t.id }} Image"></a>
+                            </div>
+                            <a class="btn btn-primary btn-sm" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                        <td>{{ t.disease }}</td>
+                        <td>{{ t.lab_unit }}</td>
+                        <td>{{ t.state }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="text-muted small">No tasks found for this batch.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+{% endblock %}

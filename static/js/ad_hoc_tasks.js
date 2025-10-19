@@ -13,6 +13,7 @@
   const diseasesMaster = (() => { try { return JSON.parse(root.dataset.diseases || '[]'); } catch { return []; } })();
   const selectionPreviewEl = document.getElementById('selectionPreview');
   const confirmBtn = document.getElementById('confirmCreateBtn');
+  const randomizeEl = document.getElementById('randomizePick');
 
   const selected = new Map(); // key: `${type}:${id}` -> {source, id, lab_unit_id}
 
@@ -124,10 +125,7 @@
     renderResults(data.items || []);
   }
 
-  filtersForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    doSearch().catch((err) => console.error(err));
-  });
+  // Remove dedicated Search submit flow; doSearch will be called on Preview
 
   // Prefill filters from URL or localStorage
   (function prefillFilters() {
@@ -190,18 +188,22 @@
 
   nextBtn.addEventListener('click', async () => {
     const diseases = getSelectedDiseases();
-    const maxImages = parseInt(document.getElementById('maxImages').value, 10) || 0;
+    const maxInput = document.getElementById('maxImages');
+    const maxImages = parseInt(maxInput.value, 10) || 0;
     const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
     if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
-    if (!(maxImages > 0)) { alert('Enter a positive Max images'); return; }
+    if (!(maxImages > 0)) { maxInput.classList.add('is-invalid'); maxInput.focus(); return; } else { maxInput.classList.remove('is-invalid'); }
     try {
-      const data = await postJSON('/tasks/ad_hoc/preview', { diseases, max_images: maxImages, filters });
+      // Always refresh current results from filters first
+      await doSearch();
+      const data = await postJSON('/tasks/ad_hoc/preview', { diseases, max_images: maxImages, filters, randomize: !!randomizeEl?.checked, selected_image_refs: Array.from(selected.values()) });
       // Criteria summary: filters + disease + eligible
       const filterPairs = Object.entries(filters).filter(([_,v]) => v !== '' && v != null);
       const filterStr = filterPairs.map(([k,v]) => `${k}=${v}`).join(', ');
       criteriaSnapshotEl.textContent = `Disease: ${diseases.join(', ')} · Max: ${maxImages} · Eligible: ${data.eligible_count} · Filters: ${filterStr || '—'}`;
-      // Render selected image list: type, disease, lab unit, dates, existing tasks
-      const rows = Array.from(selected.values()).slice(0, 200).map(ref => {
+      // Decide which list to show: server candidates (randomized or filtered) or current manual selection
+      const previewRefs = (Array.isArray(data.candidates) && data.candidates.length) ? data.candidates.map(c => ({source: c.type, id: c.id, lab_unit_id: c.lab_unit_id})) : Array.from(selected.values());
+      const rows = previewRefs.slice(0, 200).map(ref => {
         // find matching item in last results if available
         const card = (window.__lastResults || []).find(i => (i.type === ref.source) && ((i.direct_image_upload_id||i.encounter_file_id||i.id||i.encounter_id) == ref.id));
         const type = ref.source?.toUpperCase() || (card?.type?.toUpperCase() || '');
@@ -213,6 +215,13 @@
           </li>`;
       }).join('');
       selectionPreviewEl.innerHTML = rows ? `<ol class="mb-0 small">${rows}</ol>` : '<div class="text-muted small">No images selected.</div>';
+      // Set selection mode badge
+      const selectionModeBadge = document.getElementById('selectionModeBadge');
+      if (selectionModeBadge) {
+        const mode = (Array.from(selected.values()).length > 0) ? 'Manual Selection' : (randomizeEl?.checked ? 'Randomized Selection' : 'Manual Selection');
+        selectionModeBadge.textContent = mode;
+        selectionModeBadge.className = `badge ${mode.startsWith('Random') ? 'bg-info' : 'bg-secondary'} ms-2`;
+      }
       const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
       modal.show();
     } catch (e) {
@@ -227,17 +236,20 @@
 
   confirmBtn.addEventListener('click', async () => {
     const diseases = getSelectedDiseases();
-    const maxImages = parseInt(document.getElementById('maxImages').value, 10) || 0;
+    const maxInput = document.getElementById('maxImages');
+    const maxImages = parseInt(maxInput.value, 10) || 0;
     const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
     const selectedRefs = Array.from(selected.values());
+    const remarks = (document.getElementById('adHocRemarks')?.value || '').trim();
     if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
-    if (!(maxImages > 0)) { alert('Enter a positive Max images'); return; }
+    if (!(maxImages > 0)) { maxInput.classList.add('is-invalid'); maxInput.focus(); return; } else { maxInput.classList.remove('is-invalid'); }
     try {
-      const data = await postJSON('/tasks/ad_hoc/create', { diseases, max_images: maxImages, filters, selected_image_refs: selectedRefs });
+      const data = await postJSON('/tasks/ad_hoc/create', { diseases, max_images: maxImages, filters, selected_image_refs: selectedRefs, randomize: !!randomizeEl?.checked, remarks });
+      const viewUrl = `/tasks/ad_hoc/list?ad_hoc_id=${data.ad_hoc_id}`;
       if (window.flashToast) {
-        window.flashToast(`Batch ${data.ad_hoc_id} created. Created: ${data.summary.created}, Duplicates: ${data.summary.duplicates}`, 'success');
+        window.flashToast(`Batch ${data.ad_hoc_id} created. Created: ${data.summary.created}, Duplicates: ${data.summary.duplicates} — <a href="${viewUrl}" class="text-white text-decoration-underline">View Batch</a>`, 'success');
       } else {
-        alert(`Batch ${data.ad_hoc_id} created: ${JSON.stringify(data.summary)}`);
+        alert(`Batch ${data.ad_hoc_id} created: ${JSON.stringify(data.summary)}. View: ${viewUrl}`);
       }
       const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
       modal.hide();
@@ -256,10 +268,24 @@
 
   // Enable Next only when at least one image is selected
   function refreshNextState() {
-    nextBtn.disabled = selected.size === 0;
+    const rand = !!(document.getElementById('randomizePick')?.checked);
+    nextBtn.disabled = (!rand && selected.size === 0);
   }
   // expose hook for selection changes
   root.addEventListener('selection-changed', refreshNextState);
+  // react to randomize toggle
+  randomizeEl?.addEventListener('change', () => {
+    if (randomizeEl.checked) {
+      // Clear all manual selections
+      document.querySelectorAll('input.select-image[type="checkbox"]').forEach(cb => {
+        if (cb.checked) cb.checked = false;
+      });
+      selected.clear();
+    }
+    refreshNextState();
+  });
+  // initial state
+  refreshNextState();
   // also react to diseaseSelect changes for better UX
   diseaseSelect?.addEventListener('change', () => {
     // no-op; Next is gated by selected images, diseases validated at click

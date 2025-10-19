@@ -687,6 +687,8 @@ class AdHocTaskCreation(Base):
     filters_json: Mapped[str] = mapped_column(Text, nullable=False)   # JSON snapshot of filters
     selected_image_refs_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array with {source, id}
     summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON outcome summary
+    randomized: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     creator: Mapped['User'] = relationship('User', foreign_keys=[created_by_id], lazy='joined')
     # Reverse relation from GradingTask via ad_hoc_id

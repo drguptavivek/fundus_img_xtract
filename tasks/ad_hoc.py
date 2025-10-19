@@ -61,6 +61,120 @@ def index():
     return render_template('tasks/ad_hoc/index.html', diseases=diseases, hospitals=hospitals, lab_units=lab_units, cameras=cameras, areas=areas, filters=default_filters)
 
 
+@bp.get('/list')
+@roles_required('admin', 'data_manager')
+def list_batches():
+    """List recent Ad-hoc batches with optional focus on a specific batch via ad_hoc_id."""
+    ad_hoc_id = request.args.get('ad_hoc_id', type=int)
+    with get_db_session() as db:
+        q = db.query(AdHocTaskCreation).order_by(AdHocTaskCreation.created_at.desc())
+        batches = q.limit(200).all()
+        # Build display rows with disease names
+        rows: list[dict[str, Any]] = []
+        # Collect all disease IDs to resolve in bulk
+        all_ids: set[int] = set()
+        parsed_by_batch: dict[int, list[int]] = {}
+        for b in batches:
+            try:
+                diseases = json.loads(b.diseases_json) if b.diseases_json else []
+            except Exception:
+                diseases = []
+            parsed_by_batch[b.id] = diseases
+            for did in diseases:
+                if isinstance(did, int):
+                    all_ids.add(did)
+        names_by_id = {d.id: d.name for d in db.query(Disease).filter(Disease.id.in_(all_ids or {0})).all()}
+        for b in batches:
+            try:
+                summary = json.loads(b.summary_json) if b.summary_json else {}
+            except Exception:
+                summary = {}
+            diseases = parsed_by_batch.get(b.id, [])
+            disease_names = [names_by_id.get(did, str(did)) for did in diseases]
+            rows.append({
+                'id': b.id,
+                'created_at': b.created_at,
+                'created_by': getattr(b.creator, 'username', None) if getattr(b, 'creator', None) else None,
+                'randomized': b.randomized,
+                'remarks': b.remarks,
+                'max_images': b.max_images,
+                'disease_ids': diseases,
+                'disease_names': disease_names,
+                'summary': summary,
+            })
+    return render_template('tasks/ad_hoc/list.html', rows=rows, focus_id=ad_hoc_id)
+
+
+@bp.get('/detail/<int:ad_hoc_id>')
+@roles_required('admin', 'data_manager')
+def detail(ad_hoc_id: int):
+    """Detail view for a single Ad-hoc batch: filters, remarks, diseases, summary."""
+    with get_db_session() as db:
+        b: AdHocTaskCreation | None = db.query(AdHocTaskCreation).get(ad_hoc_id)
+        if not b:
+            abort(404, description='Batch not found')
+        try:
+            filters = json.loads(b.filters_json) if b.filters_json else {}
+        except Exception:
+            filters = {}
+        try:
+            summary = json.loads(b.summary_json) if b.summary_json else {}
+        except Exception:
+            summary = {}
+        try:
+            disease_ids = json.loads(b.diseases_json) if b.diseases_json else []
+        except Exception:
+            disease_ids = []
+        # Resolve disease names
+        names_by_id = {d.id: d.name for d in db.query(Disease).filter(Disease.id.in_(disease_ids or [0])).all()}
+        disease_names = [names_by_id.get(did, str(did)) for did in disease_ids]
+        # Build a readable filters list (skip nulls)
+        pretty_filters = []
+        for k, v in (filters or {}).items():
+            if v in (None, '', []):
+                continue
+            pretty_filters.append({'key': k, 'value': v})
+        # Serialize batch to plain dict to avoid detached instance in template
+        batch_dict = {
+            'id': b.id,
+            'created_at': b.created_at,
+            'created_by': getattr(getattr(b, 'creator', None), 'username', None),
+            'randomized': b.randomized,
+            'remarks': b.remarks,
+            'max_images': b.max_images,
+            'disease_ids': disease_ids,
+            'disease_names': disease_names,
+        }
+        # Fetch created tasks for this batch and resolve image UUIDs (ORM joins; uuid for both models)
+        from models import Disease as DiseaseModel, LabUnit as LabUnitModel, DirectImageUpload, EncounterFile
+        tasks_q = db.query(GradingTask).all()
+        tasks_q = db.query(GradingTask).filter(GradingTask.ad_hoc_id == b.id).all()
+        # Build lookup maps for disease and lab names
+        disease_name_by_id = {d.id: d.name for d in db.query(DiseaseModel).all()}
+        lab_name_by_id = {lu.id: lu.name for lu in db.query(LabUnitModel).all()}
+
+        # Load UUIDs via ORM lookups (small N per batch)
+        task_rows: list[dict[str, Any]] = []
+        for t in tasks_q:
+            src = 'direct' if t.direct_image_upload_id is not None else 'zip'
+            uuid: str | None = None
+            if src == 'direct' and t.direct_image_upload_id:
+                di = db.query(DirectImageUpload).get(t.direct_image_upload_id)
+                uuid = getattr(di, 'uuid', None) if di else None
+            elif src == 'zip' and t.encounter_file_id:
+                ef = db.query(EncounterFile).get(t.encounter_file_id)
+                uuid = getattr(ef, 'uuid', None) if ef else None
+            task_rows.append({
+                'id': t.id,
+                'type': src,
+                'uuid': uuid,
+                'disease': disease_name_by_id.get(t.disease_id, str(t.disease_id)),
+                'lab_unit': lab_name_by_id.get(t.lab_unit_id, str(t.lab_unit_id)),
+                'state': t.state,
+            })
+    return render_template('tasks/ad_hoc/detail.html', batch=batch_dict, disease_names=disease_names, filters=pretty_filters, summary=summary, task_rows=task_rows)
+
+
 @bp.get('/search')
 @roles_required('admin', 'data_manager')
 def search():
@@ -145,6 +259,8 @@ def preview():
     diseases = payload.get('diseases') or []
     max_images = int(payload.get('max_images') or 0)
     filters = payload.get('filters') or {}
+    randomize = bool(payload.get('randomize') or False)
+    selected_refs = payload.get('selected_image_refs') or []
 
     # Validate inputs
     if not isinstance(diseases, list) or not all(isinstance(x, int) for x in diseases) or len(diseases) == 0:
@@ -204,19 +320,76 @@ def preview():
     # Determine eligibility: exclude images that already have a task for selected diseases
     candidates: list[dict[str, Any]] = []
     duplicates = 0
-    for img in images:
-        tasks_for = set(img.get('tasks_for_diseases_ids') or [])
-        available = [d for d in diseases if d not in tasks_for]
-        if available:
-            candidates.append({
-                'uuid': img.get('uuid'),
-                'type': img.get('type'),
-                'available_diseases': available,
-                'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None,
-                'id': img.get('direct_image_upload_id') or img.get('encounter_file_id') or img.get('id') or img.get('encounter_id'),
-            })
-        else:
-            duplicates += 1
+    # If randomize requested and no manual selections, sample across all matches by drawing random pages
+    if randomize and not selected_refs:
+        # Gather across random pages until filled or exhausted
+        import math, random
+        sampled: list[dict[str, Any]] = []
+        seen_ids: set[tuple[str, int | None]] = set()
+        # conservative cap on attempts
+        max_attempts = 10 + max_images
+        attempts = 0
+        while len(sampled) < max_images and attempts < max_attempts:
+            attempts += 1
+            # draw a random page index from 1..ceil(total/per_page)
+            total_pages = max(1, math.ceil(max(1, total) / per_page))
+            page_pick = random.randint(1, total_pages)
+            try:
+                page_images, _ = search_images_strict(
+                    db_session=db,
+                    page=page_pick,
+                    per_page=per_page,
+                    hospital_id=hospital_id,
+                    lab_unit_ids=[lab_unit_id] if lab_unit_id else None,
+                    upload_start=_parse_date(upload_start),
+                    upload_end=_parse_date(upload_end),
+                    camera_ids=[camera_id] if camera_id else None,
+                    disease_ids=[disease_id] if disease_id else None,
+                    area_ids=[area_id] if area_id else None,
+                    is_mydriatic=_parse_bool_param(is_mydriatic),
+                    has_dr_report=_parse_bool_param(has_dr_report),
+                    has_glaucoma_report=_parse_bool_param(has_glaucoma_report),
+                    capture_start=_parse_date(capture_start),
+                    capture_end=_parse_date(capture_end),
+                    image_type=None if source == 'all' else source,
+                )
+            except ImageSearchError:
+                break
+            for img in page_images:
+                if len(sampled) >= max_images:
+                    break
+                tasks_for = set(img.get('tasks_for_diseases_ids') or [])
+                available = [d for d in diseases if d not in tasks_for]
+                if not available:
+                    continue
+                src = (img.get('type') or '').lower()
+                img_id = img.get('direct_image_upload_id') or img.get('encounter_file_id') or img.get('id') or img.get('encounter_id')
+                key = (src, int(img_id) if isinstance(img_id, (int,)) or (isinstance(img_id, str) and img_id.isdigit()) else None)
+                if key in seen_ids:
+                    continue
+                seen_ids.add(key)
+                sampled.append({
+                    'uuid': img.get('uuid'),
+                    'type': img.get('type'),
+                    'available_diseases': available,
+                    'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None,
+                    'id': img_id,
+                })
+        candidates = sampled
+    else:
+        for img in images:
+            tasks_for = set(img.get('tasks_for_diseases_ids') or [])
+            available = [d for d in diseases if d not in tasks_for]
+            if available:
+                candidates.append({
+                    'uuid': img.get('uuid'),
+                    'type': img.get('type'),
+                    'available_diseases': available,
+                    'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None,
+                    'id': img.get('direct_image_upload_id') or img.get('encounter_file_id') or img.get('id') or img.get('encounter_id'),
+                })
+            else:
+                duplicates += 1
 
     eligible_count = len(candidates)
     return jsonify({'eligible_count': eligible_count, 'candidates': candidates[:max_images], 'summary': {'duplicates': duplicates, 'unsuitable': 0}})
@@ -231,8 +404,9 @@ def create():
     max_images = int(payload.get('max_images') or 0)
     filters = payload.get('filters') or {}
     selected_refs = payload.get('selected_image_refs') or []
+    randomize = bool(payload.get('randomize') or False)
 
-    if not diseases or max_images <= 0 or not selected_refs:
+    if not diseases or max_images <= 0:
         return jsonify({'error': 'Invalid request'}), 400
 
     # Persist batch record
@@ -269,6 +443,8 @@ def create():
             max_images=max_images,
             filters_json=json.dumps(filters_norm),
             selected_image_refs_json=json.dumps(selected_refs),
+            randomized=(randomize or None),
+            remarks=(payload.get('remarks') or None),
         )
         session.add(batch)
         session.flush()
@@ -278,7 +454,81 @@ def create():
         duplicates = 0
         unsuitable = 0
         errors = 0
-        for ref in selected_refs[:max_images]:
+        refs_to_use = selected_refs
+        # If randomize requested and no manual selections, sample server-side across all matches
+        if randomize and not refs_to_use:
+            # Rebuild search args like preview
+            from search.route_search_images import _parse_date, _parse_bool_param
+            page = 1
+            per_page = min(200, max_images)
+            try:
+                images, total = search_images_strict(
+                    db_session=session,
+                    page=page,
+                    per_page=per_page,
+                    hospital_id=filters_norm.get('hospital_id'),
+                    lab_unit_ids=[filters_norm.get('lab_unit_id')] if filters_norm.get('lab_unit_id') else None,
+                    upload_start=_parse_date(filters_norm.get('upload_start')),
+                    upload_end=_parse_date(filters_norm.get('upload_end')),
+                    camera_ids=[filters_norm.get('camera_id')] if filters_norm.get('camera_id') else None,
+                    disease_ids=[filters_norm.get('disease_id')] if filters_norm.get('disease_id') else None,
+                    area_ids=[filters_norm.get('area_id')] if filters_norm.get('area_id') else None,
+                    is_mydriatic=_parse_bool_param(filters_norm.get('is_mydriatic')),
+                    has_dr_report=_parse_bool_param(filters_norm.get('has_dr_report')),
+                    has_glaucoma_report=_parse_bool_param(filters_norm.get('has_glaucoma_report')),
+                    capture_start=_parse_date(filters_norm.get('capture_start')),
+                    capture_end=_parse_date(filters_norm.get('capture_end')),
+                    image_type=filters_norm.get('image_type'),
+                )
+            except ImageSearchError:
+                images, total = [], 0
+            # Simple sampling: reuse preview sampler logic via random pages
+            import math, random
+            sampled_refs = []
+            seen = set()
+            total_pages = max(1, math.ceil(max(1, total) / per_page))
+            attempts = 0
+            while len(sampled_refs) < max_images and attempts < (10 + max_images):
+                attempts += 1
+                page_pick = random.randint(1, total_pages)
+                try:
+                    page_images, _ = search_images_strict(
+                        db_session=session,
+                        page=page_pick,
+                        per_page=per_page,
+                        hospital_id=filters_norm.get('hospital_id'),
+                        lab_unit_ids=[filters_norm.get('lab_unit_id')] if filters_norm.get('lab_unit_id') else None,
+                        upload_start=_parse_date(filters_norm.get('upload_start')),
+                        upload_end=_parse_date(filters_norm.get('upload_end')),
+                        camera_ids=[filters_norm.get('camera_id')] if filters_norm.get('camera_id') else None,
+                        disease_ids=[filters_norm.get('disease_id')] if filters_norm.get('disease_id') else None,
+                        area_ids=[filters_norm.get('area_id')] if filters_norm.get('area_id') else None,
+                        is_mydriatic=_parse_bool_param(filters_norm.get('is_mydriatic')),
+                        has_dr_report=_parse_bool_param(filters_norm.get('has_dr_report')),
+                        has_glaucoma_report=_parse_bool_param(filters_norm.get('has_glaucoma_report')),
+                        capture_start=_parse_date(filters_norm.get('capture_start')),
+                        capture_end=_parse_date(filters_norm.get('capture_end')),
+                        image_type=filters_norm.get('image_type'),
+                    )
+                except ImageSearchError:
+                    break
+                for img in page_images:
+                    if len(sampled_refs) >= max_images:
+                        break
+                    tasks_for = set(img.get('tasks_for_diseases_ids') or [])
+                    available = [d for d in diseases if d not in tasks_for]
+                    if not available:
+                        continue
+                    src = (img.get('type') or '').lower()
+                    image_id = img.get('direct_image_upload_id') or img.get('encounter_file_id') or img.get('id') or img.get('encounter_id')
+                    key = (src, image_id)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    sampled_refs.append({'source': src, 'id': image_id, 'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None})
+            refs_to_use = sampled_refs
+
+        for ref in refs_to_use[:max_images]:
             src = ref.get('source')
             image_id = ref.get('id')
             lab_unit_id = ref.get('lab_unit_id') or 1

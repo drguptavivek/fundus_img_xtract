@@ -236,6 +236,8 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}"
                   href="{{ url_for('ad_hoc_tasks.index') }}">Ad-hoc Task Creator</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}"
+                  href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
               {% endif %}
               {% if current_user_has('data_manager') or current_user_has('admin') %}
@@ -244,6 +246,7 @@
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}" href="{{ url_for('ad_hoc_tasks.index') }}">Create Ad-hoc Tasks</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}" href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
               {% endif %}
 

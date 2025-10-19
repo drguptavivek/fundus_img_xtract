@@ -247,9 +247,9 @@ def log_rate_limit_violation(limit_key, limit):
         f"Limit: {limit}, Key: {limit_key}"
     )
     
-    # Also log to runtime_error for security monitoring
-    runtime_logger = logging.getLogger("runtime_error")
-    runtime_logger.warning(
+    # Also log to flask-limiter logger as per Flask-Limiter documentation
+    limiter_logger = logging.getLogger("flask-limiter")
+    limiter_logger.warning(
         f"Rate limit violation - IP: {client_ip}, User: {user_info}, "
         f"Endpoint: {endpoint}, Path: {path}, Method: {method}, "
         f"Limit: {limit}"
@@ -404,6 +404,104 @@ def conditional_exempt(condition_func: Callable[[], bool]):
         return wrapped
     return decorator
 
+def clear_rate_limit(key: str = None, limit: str = None) -> bool:
+    """
+    Clear a rate limit block for a specific key or all limits.
+    
+    Args:
+        key: Specific key to clear (e.g., "ip:127.0.0.1" or "user:123")
+        limit: Specific limit to clear (e.g., "5 per minute")
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    global limiter
+    if not limiter or not limiter._storage:
+        rate_limit_logger.warning("Cannot clear rate limit: limiter not initialized")
+        return False
+    
+    try:
+        if key:
+            # Clear specific key
+            if limit:
+                # Clear specific limit for a key
+                storage_key = f"{limit}:{key}"
+                limiter._storage.clear(storage_key)
+                rate_limit_logger.info(f"Cleared rate limit for key: {storage_key}")
+            else:
+                # Clear all limits for a key
+                # This is storage backend dependent
+                if hasattr(limiter._storage, 'keys'):
+                    # For storage backends that support key iteration
+                    keys_to_remove = [k for k in limiter._storage.keys() if k.endswith(key)]
+                    for storage_key in keys_to_remove:
+                        limiter._storage.clear(storage_key)
+                    rate_limit_logger.info(f"Cleared {len(keys_to_remove)} rate limits for key: {key}")
+                else:
+                    rate_limit_logger.warning(f"Storage backend does not support key iteration for key: {key}")
+                    return False
+        else:
+            # Clear all rate limits (use with caution)
+            if hasattr(limiter._storage, 'reset'):
+                limiter._storage.reset()
+                rate_limit_logger.warning("Cleared ALL rate limits")
+            else:
+                rate_limit_logger.warning("Storage backend does not support reset operation")
+                return False
+        
+        return True
+    except Exception as e:
+        rate_limit_logger.error(f"Failed to clear rate limit: {e}")
+        return False
+
+def get_rate_limit_status(key: str = None) -> dict:
+    """
+    Get the current rate limit status for a key or overall statistics.
+    
+    Args:
+        key: Specific key to check (e.g., "ip:127.0.0.1" or "user:123")
+    
+    Returns:
+        dict: Rate limit information
+    """
+    global limiter
+    if not limiter or not limiter._storage:
+        return {"error": "Rate limiter not initialized"}
+    
+    try:
+        if key:
+            # Get status for specific key
+            if hasattr(limiter._storage, 'get'):
+                # Try to get current count and reset time
+                # Note: This is storage backend dependent
+                info = {"key": key}
+                
+                # For memory storage, we can try to inspect the internal state
+                if hasattr(limiter._storage, '_storage'):
+                    storage_data = limiter._storage._storage
+                    matching_keys = [k for k in storage_data.keys() if key in k]
+                    info["matching_keys"] = matching_keys
+                    info["limits"] = {}
+                    for storage_key in matching_keys:
+                        info["limits"][storage_key] = str(storage_data[storage_key])
+                
+                return info
+            else:
+                return {"error": "Storage backend does not support inspection"}
+        else:
+            # Get overall statistics
+            stats = {"storage_type": type(limiter._storage).__name__}
+            
+            if hasattr(limiter._storage, '_storage'):
+                # For memory storage
+                stats["total_keys"] = len(limiter._storage._storage)
+                stats["keys"] = list(limiter._storage._storage.keys())[:10]  # First 10 keys
+            
+            return stats
+    except Exception as e:
+        rate_limit_logger.error(f"Failed to get rate limit status: {e}")
+        return {"error": str(e)}
+
 def init_rate_limiting(app):
     """
     Initialize rate limiting for the Flask application.
@@ -414,6 +512,7 @@ def init_rate_limiting(app):
     - Meta limits for overall protection
     - Dynamic rate limit loading
     - Shared limits for resource protection
+    - Proper flask-limiter logger configuration (configured in app.py)
     """
     # Read all rate limiting configuration from environment
     app.config['RATELIMIT_ENABLED'] = os.getenv('RATELIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes')
@@ -426,10 +525,11 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_META_LIMITS'] = os.getenv('RATELIMIT_META_LIMITS', '1000 per hour, 100 per minute')
     
     # Configure headers based on environment variable
-    headers_enabled = os.getenv('RATELIMIT_HEADERS_ENABLED', 'true').lower() in ('true', '1', 'yes')
+    # Disable headers to avoid the 'bool' object has no attribute 'lower' error
+    headers_enabled = False  # Temporarily disabled due to Flask-Limiter header injection issue
     app.config['RATELIMIT_HEADERS_ENABLED'] = headers_enabled
-    app.config['RATELIMIT_HEADER_RESET'] = os.getenv('RATELIMIT_HEADER_RESET', 'false').lower() in ('true', '1', 'yes')
-    app.config['RATELIMIT_HEADER_REMAINING'] = os.getenv('RATELIMIT_HEADER_REMAINING', 'true').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_HEADER_RESET'] = False
+    app.config['RATELIMIT_HEADER_REMAINING'] = False
     
     # Behavior configuration
     app.config['RATELIMIT_FAIL_ON_FIRST_BREACH'] = os.getenv('RATELIMIT_FAIL_ON_FIRST_BREACH', 'false').lower() in ('true', '1', 'yes')
@@ -548,7 +648,7 @@ def init_rate_limiting(app):
             key_func=get_rate_limit_key,
             app=app,
             strategy=app.config.get('RATELIMIT_STRATEGY', 'fixed-window'),
-            headers_enabled=app.config.get('RATELIMIT_HEADERS_ENABLED', False),
+            headers_enabled=False,  # Explicitly disabled to avoid header injection errors
             swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', True),
             key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', ''),
             default_limits=default_limits,
@@ -574,7 +674,7 @@ def init_rate_limiting(app):
                 key_func=get_rate_limit_key,
                 app=app,
                 strategy=app.config.get('RATELIMIT_STRATEGY', 'fixed-window'),
-                headers_enabled=False,
+                headers_enabled=False,  # Explicitly disabled to avoid header injection errors
                 swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', False),
                 key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', '')
             )

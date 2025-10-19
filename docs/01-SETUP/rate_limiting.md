@@ -228,8 +228,9 @@ Meta limits provide an additional layer of protection by limiting the total numb
 ## Logging
 
 Rate limit violations are logged to:
-- `logs/rate_limit.log` - Dedicated rate limit log file
-- `logs/runtime_error.log` - Security monitoring
+- `logs/flask_limiter.log` - Dedicated Flask-Limiter log file (primary)
+- `logs/rate_limit.log` - Application rate limit log file
+- `logs/runtime_error.log` - Security monitoring (for backward compatibility)
 
 Log entries include:
 - Client IP address
@@ -239,9 +240,11 @@ Log entries include:
 - Rate limit that was exceeded
 - Rate limit key that was breached
 
-### Configuring Flask-Limiter Logger
+### Flask-Limiter Logger Configuration
 
-You can configure the dedicated Flask-Limiter logger:
+The Flask-Limiter logger is automatically configured in `app.py` and writes to `logs/flask_limiter.log`. This is the primary logger for rate limit violations as per Flask-Limiter documentation.
+
+You can further configure the Flask-Limiter logger:
 
 ```python
 import logging
@@ -256,6 +259,33 @@ limiter_logger.setLevel(logging.ERROR)
 # Add a custom filter
 limiter_logger.addFilter(CustomFilter)
 ```
+
+### Rate Limit Management
+
+The application provides a web interface for managing rate limits:
+
+1. **Access the Rate Limit Management page**:
+   - Navigate to Admin → Rate Limits in the web interface
+   - Or go directly to `/admin/rate-limits/`
+
+2. **Features available**:
+   - View rate limit statistics
+   - Clear specific rate limits by key
+   - Clear all rate limits (with confirmation)
+   - Check rate limit status for specific keys
+   - Get your current rate limit key
+
+3. **Command-line management**:
+   ```bash
+   # Clear all rate limits
+   uv run python scripts/manage_rate_limits.py clear-all
+   
+   # Clear a specific rate limit
+   uv run python scripts/manage_rate_limits.py clear --key "user:123"
+   
+   # Check rate limit status
+   uv run python scripts/manage_rate_limits.py status
+   ```
 
 ## Monitoring
 

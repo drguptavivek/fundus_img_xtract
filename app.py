@@ -178,6 +178,7 @@ def create_app():
     email_success_handler = make_handler("email_success.log", logging.INFO, base_format)
     email_error_handler = make_handler("email_error.log", logging.ERROR, detailed_format)
     app_handler = make_handler("app.log", logging.INFO, base_format)
+    flask_limiter_handler = make_handler("flask_limiter.log", logging.INFO, base_format)
 
     debug_handler = None
     console_handler = None
@@ -197,6 +198,7 @@ def create_app():
     email_success_logger = configure_logger("email_success", logging.INFO, email_success_handler)
     email_error_logger = configure_logger("email_error", logging.ERROR, email_error_handler)
     rate_limit_logger = configure_logger("rate_limit", logging.INFO, app_handler)
+    flask_limiter_logger = configure_logger("flask-limiter", logging.INFO, flask_limiter_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
@@ -236,6 +238,7 @@ def create_app():
     email_success_logger.info("Email success logger initialized at %s", str(log_dir / "email_success.log"))
     email_error_logger.info("Email error logger initialized at %s", str(log_dir / "email_error.log"))
     runtime_error_logger.info("Runtime error logger initialized at %s", str(log_dir / "runtime_error.log"))
+    flask_limiter_logger.info("Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log"))
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor
@@ -572,6 +575,10 @@ def create_app():
 
     from admin import admin_bp
     app.register_blueprint(admin_bp)
+    
+    # Register rate limit admin blueprint
+    from admin.rate_limit_admin import rate_limit_admin_bp
+    app.register_blueprint(rate_limit_admin_bp)
 
     from dashboard import dashboard_bp
     app.register_blueprint(dashboard_bp)
@@ -724,6 +731,14 @@ def create_app():
     @rate_limit("10 per minute")  # Stricter limit for style guide
     def style_guide():
         return render_template("style_guide.html")
+    # -------------------------------
+
+    # -------------------------------
+    # Test endpoint for rate limiting
+    @app.route("/test-rate-limit")
+    @rate_limit("5 per minute")  # Very restrictive for testing
+    def test_rate_limit():
+        return jsonify({"message": "Rate limit test endpoint", "timestamp": time.time()})
     # -------------------------------
 
     @app.route("/healthz", methods=["GET"])

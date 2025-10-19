@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block title %}Rate Limit Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Rate Limit Management</h2>
+            <p class="text-muted">Manage and monitor rate limiting for the application.</p>
+        </div>
+    </div>
+
+    <!-- Statistics Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Rate Limit Statistics</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="refreshStats()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if stats.error %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            {{ stats.error }}
+                        </div>
+                    {% else %}
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="stat-item">
+                                    <label>Storage Type:</label>
+                                    <span class="badge bg-info">{{ stats.storage_type or 'Unknown' }}</span>
+                                </div>
+                            </div>
+                            {% if stats.total_keys is defined %}
+                            <div class="col-md-4">
+                                <div class="stat-item">
+                                    <label>Total Keys:</label>
+                                    <span class="badge bg-primary">{{ stats.total_keys }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        {% if stats.get('keys') %}
+                        <div class="mt-3">
+                            <label>Sample Keys (first 10):</label>
+                            <div class="code-block bg-light p-2 rounded">
+                                <small>
+                                    {% for key in stats.get('keys', []) %}
+                                    <div>{{ key }}</div>
+                                    {% endfor %}
+                                </small>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Rate Limit Form -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Clear Rate Limit</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('rate_limit_admin.clear_limit') }}">
+                        <div class="mb-3">
+                            <label for="key" class="form-label">Key (required)</label>
+                            <input type="text" class="form-control" id="key" name="key" required
+                                   placeholder="e.g., ip:127.0.0.1 or user:123">
+                            <div class="form-text">
+                                Enter the rate limit key to clear. Use "Get My Key" button to see your current key.
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="limit" class="form-label">Limit (optional)</label>
+                            <input type="text" class="form-control" id="limit" name="limit"
+                                   placeholder="e.g., 5 per minute">
+                            <div class="form-text">
+                                Leave empty to clear all limits for the key, or specify a particular limit.
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="bi bi-trash"></i> Clear Rate Limit
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary ms-2" onclick="getMyKey()">
+                            Get My Key
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Status -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Check Key Status</h5>
+                </div>
+                <div class="card-body">
+                    <form id="statusForm">
+                        <div class="mb-3">
+                            <label for="statusKey" class="form-label">Key</label>
+                            <input type="text" class="form-control" id="statusKey" 
+                                   placeholder="e.g., ip:127.0.0.1 or user:123">
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="checkKeyStatus()">
+                            Check Status
+                        </button>
+                    </form>
+                    
+                    <div id="statusResult" class="mt-3" style="display: none;">
+                        <!-- Status will be displayed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dangerous Operations -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-triangle"></i> Dangerous Operations
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> These operations affect all users and should be used with caution.
+                    </div>
+                    
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#clearAllModal">
+                        <i class="bi bi-trash"></i> Clear ALL Rate Limits
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clear All Confirmation Modal -->
+<div class="modal fade" id="clearAllModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirm Clear All Rate Limits</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <strong>This is a dangerous operation!</strong>
+                </div>
+                <p>You are about to clear ALL rate limits for ALL users. This will:</p>
+                <ul>
+                    <li>Remove all current rate limit blocks</li>
+                    <li>Allow all users to make requests without limits until new limits are imposed</li>
+                    <li>Affect IP-based and user-based rate limits</li>
+                </ul>
+                <p>This action cannot be undone.</p>
+                
+                <form method="POST" action="{{ url_for('rate_limit_admin.clear_all') }}">
+                    <div class="mb-3">
+                        <label for="confirm" class="form-label">Type <code>CLEAR_ALL_RATE_LIMITS</code> to confirm:</label>
+                        <input type="text" class="form-control" id="confirm" name="confirm" required>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash"></i> Clear All Rate Limits
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshStats() {
+    location.reload();
+}
+
+function getMyKey() {
+    fetch('{{ url_for("rate_limit_admin.get_my_key") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.key) {
+                document.getElementById('key').value = data.key;
+                document.getElementById('statusKey').value = data.key;
+            }
+        })
+        .catch(error => {
+            console.error('Error getting key:', error);
+        });
+}
+
+function checkKeyStatus() {
+    const key = document.getElementById('statusKey').value;
+    if (!key) {
+        alert('Please enter a key to check');
+        return;
+    }
+    
+    fetch('{{ url_for("rate_limit_admin.status") }}?key=' + encodeURIComponent(key))
+        .then(response => response.json())
+        .then(data => {
+            const resultDiv = document.getElementById('statusResult');
+            resultDiv.style.display = 'block';
+            
+            if (data.error) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        ${data.error}
+                    </div>
+                `;
+            } else {
+                let html = '<div class="card"><div class="card-body">';
+                html += `<h6>Key: ${data.key}</h6>`;
+                
+                if (data.matching_keys) {
+                    html += `<p><strong>Matching Limits:</strong></p>`;
+                    html += '<div class="code-block bg-light p-2 rounded small">';
+                    data.matching_keys.forEach(k => {
+                        html += `<div>${k}</div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                if (data.limits) {
+                    html += `<p><strong>Limit Details:</strong></p>`;
+                    html += '<div class="code-block bg-light p-2 rounded small">';
+                    Object.entries(data.limits).forEach(([k, v]) => {
+                        html += `<div><strong>${k}:</strong> ${v}</div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                html += '</div></div>';
+                resultDiv.innerHTML = html;
+            }
+        })
+        .catch(error => {
+            console.error('Error checking status:', error);
+            document.getElementById('statusResult').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Error checking key status
+                </div>
+            `;
+            document.getElementById('statusResult').style.display = 'block';
+        });
+}
+
+// Auto-refresh stats every 30 seconds
+setInterval(refreshStats, 30000);
+</script>
+
+<style>
+.code-block {
+    font-family: monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+</style>
+{% endblock %}

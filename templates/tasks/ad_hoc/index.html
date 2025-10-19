@@ -4,7 +4,7 @@
   {% include '_forms.html' %}
   <div class="container py-3">
     <h1 class="h4">Ad-hoc Task Creator</h1>
-    <div id="ad-hoc-root" data-csrf-token="{{ csrf_token() }}"></div>
+    <div id="ad-hoc-root" data-csrf-token="{{ csrf_token() }}" data-diseases='{{ diseases|tojson }}'></div>
     <form id="filtersForm" class="mb-3">
       {% set filters = filters or {
         'source':'all','hospital_id':'','lab_unit_id':'','upload_start':'','upload_end':'',
@@ -16,12 +16,14 @@
     <div class="mb-3">
       <div class="row gy-2 gx-3 align-items-end">
         <div class="col-auto">
-          <label class="form-label">Target Diseases</label>
-          <select id="targetDiseases" class="form-select form-select-sm" multiple size="3">
+          <label class="form-label">Target Disease</label>
+          <select id="targetDiseaseSelect" class="form-select form-select-sm">
+            <option value="">Select disease…</option>
             {% for d in diseases %}
             <option value="{{ d.id }}">{{ d.name }}</option>
             {% endfor %}
           </select>
+          <div class="form-text">You can add more in the modal.</div>
         </div>
         <div class="col-auto">
           <label class="form-label">Max images</label>
@@ -51,8 +53,14 @@
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div id="criteriaSnapshot" class="small text-muted"></div>
-            <div id="selectionPreview" class="mt-2"></div>
+            <div class="mb-2">
+              <label class="form-label">Criteria</label>
+              <div id="criteriaSnapshot" class="small text-muted"></div>
+            </div>
+            <div>
+              <label class="form-label">Selected Images</label>
+              <div id="selectionPreview" class="mt-2"></div>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Back</button>

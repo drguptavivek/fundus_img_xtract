@@ -95,12 +95,18 @@
 - Routes/Views: Scaffolded blueprint stubs at `tasks/ad_hoc.py` (index, search, preview, create); Jinja template at `templates/tasks/ad_hoc/index.html`; JS stub at `static/js/ad_hoc_tasks.js` with CSRF-aware POST helper.
 - Tests: Added `tests/test_adhoc_models.py` basic linkage test.
 - Search wired: `/tasks/ad_hoc/search` calls `search_images_strict` with same filters and user scoping as `/search/images`.
-- Preview: filters out images that already have selected diseases; stub suitability check added in `utils/suitability.py` (currently permissive).
+- Preview: filters out images that already have selected diseases using `tasks_for_diseases_ids`; stub suitability check added in `utils/suitability.py` (currently permissive).
 - Create: persists `AdHocTaskCreation`, creates `GradingTask` with `ad_hoc_id`, handles uniqueness conflicts as duplicates.
 - Filters UI: Extracted reusable partial at `templates/search/_filters.html` and reused on Ad-hoc page; fixed toggle behavior (source → direct/zip) and script loading.
 - Navigation: Added menu items under "Tasks and Images" linking to Ad-hoc page.
 - Cleanup: Removed temporary console logs after confirming toggle works.
-- Next up: normalize `/tasks/ad_hoc/search` JSON shape (id, lab_unit_id), implement concrete suitability rules, and add route tests for preview/create per `docs/10-DEVELOP/TESTING.md`.
+- Enriched search results: canonical ids and IDs for logic
+  - Direct: `direct_image_upload_id`, `lab_unit_id`, `direct_image_disease_id`
+  - ZIP: `encounter_file_id`, `lab_unit_id`, `zip_source_disease_id`
+  - Tasks: `tasks_for_diseases` entries include `disease_id`; `tasks_for_diseases_ids` list
+  - AI: `ai_disease_ids`, `ai_diseases` per image
+- UI polish: local-TZ dates, uploaded-for, AI diseases, tasks list, ZIP report badges; Clear Filters resets URL/localStorage; filters persist via URL + localStorage
+- Next up: implement concrete suitability rules, IntegrityError handling with per-image reasons, selection cap, route tests, and docs updates.
 
 ## Key tests (see docs/10-DEVELOP/TESTING.md)
 - Model constraints

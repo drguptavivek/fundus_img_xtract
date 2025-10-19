@@ -9,6 +9,8 @@
   const nextBtn = document.getElementById('nextBtn');
   const previewModalEl = document.getElementById('adHocReviewModal');
   const criteriaSnapshotEl = document.getElementById('criteriaSnapshot');
+  const diseaseSelect = document.getElementById('targetDiseaseSelect');
+  const diseasesMaster = (() => { try { return JSON.parse(root.dataset.diseases || '[]'); } catch { return []; } })();
   const selectionPreviewEl = document.getElementById('selectionPreview');
   const confirmBtn = document.getElementById('confirmCreateBtn');
 
@@ -179,46 +181,89 @@
   setTimeout(toggleScoped, 0);
 
   function getSelectedDiseases() {
-    const sel = document.getElementById('targetDiseases');
-    return Array.from(sel.selectedOptions).map(o => parseInt(o.value, 10)).filter(Boolean);
+    const picked = new Set();
+    // initial picker (single select) seeds selection
+    const seed = parseInt(diseaseSelect?.value || '', 10);
+    if (!isNaN(seed)) picked.add(seed);
+    return Array.from(picked).filter(Boolean);
   }
 
   nextBtn.addEventListener('click', async () => {
     const diseases = getSelectedDiseases();
     const maxImages = parseInt(document.getElementById('maxImages').value, 10) || 0;
-    const filters = Object.fromEntries(new FormData(filtersForm).entries());
-    if (!diseases.length) { alert('Select at least one target disease'); return; }
+    const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
+    if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
+    if (!(maxImages > 0)) { alert('Enter a positive Max images'); return; }
     try {
       const data = await postJSON('/tasks/ad_hoc/preview', { diseases, max_images: maxImages, filters });
-      criteriaSnapshotEl.textContent = `Diseases: ${diseases.join(', ')} · Max: ${maxImages} · Eligible: ${data.eligible_count}`;
-      selectionPreviewEl.innerHTML = `<code>${JSON.stringify(Array.from(selected.values()).slice(0, 10))}</code>`;
+      // Criteria summary: filters + disease + eligible
+      const filterPairs = Object.entries(filters).filter(([_,v]) => v !== '' && v != null);
+      const filterStr = filterPairs.map(([k,v]) => `${k}=${v}`).join(', ');
+      criteriaSnapshotEl.textContent = `Disease: ${diseases.join(', ')} · Max: ${maxImages} · Eligible: ${data.eligible_count} · Filters: ${filterStr || '—'}`;
+      // Render selected image list: type, disease, lab unit, dates, existing tasks
+      const rows = Array.from(selected.values()).slice(0, 200).map(ref => {
+        // find matching item in last results if available
+        const card = (window.__lastResults || []).find(i => (i.type === ref.source) && ((i.direct_image_upload_id||i.encounter_file_id||i.id||i.encounter_id) == ref.id));
+        const type = ref.source?.toUpperCase() || (card?.type?.toUpperCase() || '');
+        const disease = card?.disease || (Array.isArray(card?.ai_diseases) ? card.ai_diseases.join('/') : '');
+        const lab = card?.lab_unit || '';
+        const cap = card?.capture_date ? new Date(card.capture_date).toLocaleDateString() : '—';
+        const exist = Array.isArray(card?.tasks_for_diseases) ? card.tasks_for_diseases.map(t => t?.disease).filter(Boolean).join(', ') : '';
+        return `<li><strong>${type}</strong> — ${disease || '—'} — ${lab || '—'} — Capture: ${cap} — Tasks: ${exist || 'None'}
+          </li>`;
+      }).join('');
+      selectionPreviewEl.innerHTML = rows ? `<ol class="mb-0 small">${rows}</ol>` : '<div class="text-muted small">No images selected.</div>';
       const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
       modal.show();
     } catch (e) {
       console.error(e);
-      alert('Preview failed');
+      if (window.flashToast) {
+        window.flashToast('Preview failed. Check filters and try again.', 'danger');
+      } else {
+        alert('Preview failed');
+      }
     }
   });
 
   confirmBtn.addEventListener('click', async () => {
     const diseases = getSelectedDiseases();
     const maxImages = parseInt(document.getElementById('maxImages').value, 10) || 0;
-    const filters = Object.fromEntries(new FormData(filtersForm).entries());
+    const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
     const selectedRefs = Array.from(selected.values());
-    if (!diseases.length) { alert('Select at least one target disease'); return; }
+    if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
+    if (!(maxImages > 0)) { alert('Enter a positive Max images'); return; }
     try {
       const data = await postJSON('/tasks/ad_hoc/create', { diseases, max_images: maxImages, filters, selected_image_refs: selectedRefs });
-      alert(`Batch ${data.ad_hoc_id} created: ${JSON.stringify(data.summary)}`);
+      if (window.flashToast) {
+        window.flashToast(`Batch ${data.ad_hoc_id} created. Created: ${data.summary.created}, Duplicates: ${data.summary.duplicates}`, 'success');
+      } else {
+        alert(`Batch ${data.ad_hoc_id} created: ${JSON.stringify(data.summary)}`);
+      }
       const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
       modal.hide();
     } catch (e) {
       console.error(e);
-      alert('Create failed');
+      if (window.flashToast) {
+        window.flashToast('Create failed. Please retry.', 'danger');
+      } else {
+        alert('Create failed');
+      }
     }
   });
 
   // Initial load
   doSearch().catch(() => {});
+
+  // Enable Next only when at least one image is selected
+  function refreshNextState() {
+    nextBtn.disabled = selected.size === 0;
+  }
+  // expose hook for selection changes
+  root.addEventListener('selection-changed', refreshNextState);
+  // also react to diseaseSelect changes for better UX
+  diseaseSelect?.addEventListener('change', () => {
+    // no-op; Next is gated by selected images, diseases validated at click
+  });
 
   // Expose minimal API for future wiring
   window.AdHocTasks = { postJSON };

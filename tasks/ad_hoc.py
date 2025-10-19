@@ -146,47 +146,67 @@ def preview():
     max_images = int(payload.get('max_images') or 0)
     filters = payload.get('filters') or {}
 
-    if not diseases or max_images <= 0:
-        return jsonify({'error': 'Invalid diseases or max_images'}), 400
+    # Validate inputs
+    if not isinstance(diseases, list) or not all(isinstance(x, int) for x in diseases) or len(diseases) == 0:
+        return jsonify({'error': 'diseases must be a non-empty array of ints'}), 400
+    if max_images <= 0:
+        return jsonify({'error': 'max_images must be > 0'}), 400
 
     # Fetch candidates using search util, cap to max_images
     page = 1
     per_page = max_images
+    # Translate flat filter form into arguments expected by search_images_strict
+    # Accept both flat ids and arrays from UI
+    def _int_or_none(v: Any) -> int | None:
+        try:
+            return int(v) if v not in (None, '', 'null', 'None') else None
+        except Exception:
+            return None
+
+    source = (filters.get('source') or 'all').strip().lower()
+    hospital_id = _int_or_none(filters.get('hospital_id'))
+    lab_unit_id = _int_or_none(filters.get('lab_unit_id'))
+    camera_id = _int_or_none(filters.get('camera_id'))
+    disease_id = _int_or_none(filters.get('disease_id'))
+    area_id = _int_or_none(filters.get('area_id'))
+    is_mydriatic = filters.get('is_mydriatic')
+    has_dr_report = filters.get('has_dr_report')
+    has_glaucoma_report = filters.get('has_glaucoma_report')
+    upload_start = filters.get('upload_start')
+    upload_end = filters.get('upload_end')
+    capture_start = filters.get('capture_start')
+    capture_end = filters.get('capture_end')
+
     with get_db_session() as db:
         try:
+            from search.route_search_images import _parse_date, _parse_bool_param
             images, total = search_images_strict(
                 db_session=db,
                 page=page,
                 per_page=per_page,
-                hospital_id=filters.get('hospital_id'),
-                lab_unit_ids=filters.get('lab_unit_ids'),
-                upload_start=filters.get('upload_start'),
-                upload_end=filters.get('upload_end'),
-                camera_ids=filters.get('camera_ids'),
-                disease_ids=filters.get('disease_ids'),
-                area_ids=filters.get('area_ids'),
-                is_mydriatic=filters.get('is_mydriatic'),
-                has_dr_report=filters.get('has_dr_report'),
-                has_glaucoma_report=filters.get('has_glaucoma_report'),
-                capture_start=filters.get('capture_start'),
-                capture_end=filters.get('capture_end'),
-                image_type=filters.get('image_type'),
+                hospital_id=hospital_id,
+                lab_unit_ids=[lab_unit_id] if lab_unit_id else None,
+                upload_start=_parse_date(upload_start),
+                upload_end=_parse_date(upload_end),
+                camera_ids=[camera_id] if camera_id else None,
+                disease_ids=[disease_id] if disease_id else None,
+                area_ids=[area_id] if area_id else None,
+                is_mydriatic=_parse_bool_param(is_mydriatic),
+                has_dr_report=_parse_bool_param(has_dr_report),
+                has_glaucoma_report=_parse_bool_param(has_glaucoma_report),
+                capture_start=_parse_date(capture_start),
+                capture_end=_parse_date(capture_end),
+                image_type=None if source == 'all' else source,
             )
         except ImageSearchError as e:
-            return jsonify({'error': str(e)}), 400
+            return jsonify({'error': str(e), 'hint': 'Invalid search filters'}), 400
 
     # Determine eligibility: exclude images that already have a task for selected diseases
     candidates: list[dict[str, Any]] = []
     duplicates = 0
     for img in images:
         tasks_for = set(img.get('tasks_for_diseases_ids') or [])
-        available = []
-        for d in diseases:
-            if d in tasks_for:
-                continue
-            ok, _reason = check_suitability(img, d)
-            if ok:
-                available.append(d)
+        available = [d for d in diseases if d not in tasks_for]
         if available:
             candidates.append({
                 'uuid': img.get('uuid'),
@@ -216,13 +236,38 @@ def create():
         return jsonify({'error': 'Invalid request'}), 400
 
     # Persist batch record
+    # Normalize filters to persist consistent snapshot with batch record
+    def _int_or_none(v: Any) -> int | None:
+        try:
+            return int(v) if v not in (None, '', 'null', 'None') else None
+        except Exception:
+            return None
+
+    source = (filters.get('source') or 'all').strip().lower()
+    filters_norm = {
+        'hospital_id': _int_or_none(filters.get('hospital_id')),
+        'lab_unit_id': _int_or_none(filters.get('lab_unit_id')),
+        'camera_id': _int_or_none(filters.get('camera_id')),
+        'disease_id': _int_or_none(filters.get('disease_id')),
+        'area_id': _int_or_none(filters.get('area_id')),
+        'is_mydriatic': filters.get('is_mydriatic') or None,
+        'has_dr_report': filters.get('has_dr_report') or None,
+        'has_glaucoma_report': filters.get('has_glaucoma_report') or None,
+        'upload_start': filters.get('upload_start') or None,
+        'upload_end': filters.get('upload_end') or None,
+        'capture_start': filters.get('capture_start') or None,
+        'capture_end': filters.get('capture_end') or None,
+        'image_type': (None if source == 'all' else source),
+        'source': source,
+    }
+
     with Session() as session:
         batch = AdHocTaskCreation(
             created_by_id=getattr(current_user, 'id', None) or 0,
             created_at=utcnow(),
             diseases_json=json.dumps(diseases),
             max_images=max_images,
-            filters_json=json.dumps(filters),
+            filters_json=json.dumps(filters_norm),
             selected_image_refs_json=json.dumps(selected_refs),
         )
         session.add(batch)
@@ -239,7 +284,7 @@ def create():
             lab_unit_id = ref.get('lab_unit_id') or 1
             for d in diseases:
                 try:
-                    # Check duplicates via unique constraints mapping
+                    # Only enforce uniqueness: no duplicate task per image+disease
                     if src == 'direct':
                         task = GradingTask(direct_image_upload_id=image_id, disease_id=d, lab_unit_id=lab_unit_id, state='pending', ad_hoc_id=batch.id)
                     else:

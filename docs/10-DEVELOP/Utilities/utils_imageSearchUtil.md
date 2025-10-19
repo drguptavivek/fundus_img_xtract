@@ -205,6 +205,31 @@ This function implements strict filter separation:
 **Returns:**
 - `Tuple[List[Dict[str, Any]], int]`: Tuple of (list of image dictionaries, total count)
 
+### Returned image dictionary fields (enriched)
+
+Common fields
+- `type`: `'direct' | 'zip'`
+- `hospital` (str), `lab_unit` (str)
+- `hospital_id` (int), `lab_unit_id` (int)
+- `upload_date` (datetime), `capture_date` (date|datetime)
+- `tasks_for_diseases` (List[Dict[str, Any]]): entries include `disease` (name), `status`, and `disease_id` (int) for human tasks; also includes a marker `{ disease: 'AI Grade', status: 'present' }` if AI is present
+- `tasks_for_diseases_ids` (List[int]): flat list of human task disease IDs
+- `ai_disease_ids` (List[int]): disease IDs for which AI grades exist
+- `ai_diseases` (List[str]): corresponding disease names
+
+Direct images
+- `uuid` (str)
+- `direct_image_upload_id` (int)
+- `camera` (str), `camera_id` (int)
+- `disease` (str), `direct_image_disease_id` (int)
+- `area` (str), `area_id` (int)
+
+ZIP images
+- `uuid` (str)
+- `encounter_file_id` (int), `encounter_id` (int)
+- `has_dr_report` (bool), `has_glaucoma_report` (bool)
+- `zip_source_disease_id` (int): inferred from presence of reports (Glaucoma if glaucoma report, else DR if DR report, else DR by default), resolved via Diseases table
+
 **Raises:**
 - `ImageSearchError`: If filters are invalid or conflicting
 

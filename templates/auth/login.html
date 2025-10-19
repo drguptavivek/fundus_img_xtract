@@ -39,11 +39,7 @@
 
           <form method="post" action="{{ url_for('auth.login') }}" novalidate>
             {# CSRF token (works if CSRFProtect/Flask-WTF is configured) #}
-            {% if csrf_token is defined %}
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            {% elif form is defined and form.csrf_token is defined %}
-              {{ form.csrf_token }}
-            {% endif %}
+            {{ csrf_field() }}
 
             <div class="mb-3">
               <label class="form-label" for="username">Username</label>

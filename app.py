@@ -22,6 +22,7 @@ from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
 from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
+from utils.security_middleware import PayloadSizeValidator
 
 
 csrf = CSRFProtect()
@@ -90,6 +91,9 @@ def create_app():
     
     # Initialize rate limiting
     init_rate_limiting(app)
+    
+    # Initialize security middleware for payload protection
+    payload_validator = PayloadSizeValidator(app)
     
     # Initialize CORS for API endpoints
     # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
@@ -707,7 +711,7 @@ def create_app():
     # -------------------------------
     # New homepage route
     @app.route("/")
-    @rate_limit("100 per minute")
+    @rate_limit("20 per minute")  # Stricter limit for homepage (was 100 per minute)
     def homepage():
         from home import homepage as home_page
         return home_page()
@@ -716,7 +720,7 @@ def create_app():
     # -------------------------------
     # Style Guide
     @app.route("/style_guide")
-    @rate_limit("100 per minute")
+    @rate_limit("10 per minute")  # Stricter limit for style guide
     def style_guide():
         return render_template("style_guide.html")
     # -------------------------------

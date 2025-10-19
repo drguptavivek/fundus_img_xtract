@@ -12,6 +12,8 @@ from .security import verify_password, hash_password
 from .utils import utcnow, get_client_ip
 from flask import flash
 from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback, rate_limit
+from utils.security_middleware import protect_form_submission, validate_payload_size
+# Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
@@ -43,8 +45,20 @@ def load_user(user_id: str):
 # ----- Helpers -----
 def _is_ip_locked(db, ip: str):
     rec = db.execute(select(IpLock).where(IpLock.ip_address == ip)).scalar_one_or_none()
-    if rec and rec.locked_until > utcnow():
-        return True, rec.locked_until
+    if rec:
+        # Ensure both datetimes are timezone-aware for comparison
+        rec_locked_until = rec.locked_until
+        if rec_locked_until.tzinfo is None:
+            from datetime import timezone
+            rec_locked_until = rec_locked_until.replace(tzinfo=timezone.utc)
+        
+        current_time = utcnow()
+        if current_time.tzinfo is None:
+            from datetime import timezone
+            current_time = current_time.replace(tzinfo=timezone.utc)
+            
+        if rec_locked_until > current_time:
+            return True, rec.locked_until
     return False, None
 
 def _lock_ip(db, ip: str):
@@ -118,6 +132,8 @@ def _get_email_results(user_id: str):
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
 @rate_limit_with_feedback("5 per minute", show_warning=True)
+@protect_form_submission(max_fields=10, max_field_length=100)
+@validate_payload_size(max_size=1024)  # 1KB limit for login form
 def login():
     from flask_login import current_user
     # If user is already logged in, redirect to homepage
@@ -135,9 +151,14 @@ def login():
         # Block if IP locked
         ip_locked, ip_until = _is_ip_locked(db, ip)
         if ip_locked:
+            # Convert to user's timezone for display
+            from utils.datetime_filters import format_user_datetime
+            formatted_time = format_user_datetime(ip_until)
             return render_template("auth/login.html",
-                                   error=f"This IP is temporarily locked until {ip_until.isoformat()}."),
+                                   error=f"This IP is temporarily locked until {formatted_time}.")
         if request.method == "POST":
+            # Flask-WTF CSRF protection is automatically applied
+            # No need for manual validation here
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
 
@@ -149,8 +170,11 @@ def login():
                 if user:
                     until = _lock_user(db, user)
                     _record_attempt(db, username, ip, success=False)
+                    # Convert to user's timezone for display
+                    from utils.datetime_filters import format_user_datetime
+                    formatted_time = format_user_datetime(until)
                     return render_template("auth/login.html",
-                                           error=f"User locked due to repeated failures until {until.isoformat()}.")
+                                           error=f"User locked due to repeated failures until {formatted_time}.")
                 # If user doesn't exist, still fall through and verify → will fail & increase counters,
                 # but we won't create a fake user. The IP rule will still protect.
 
@@ -159,15 +183,33 @@ def login():
             if recent_ip_fails >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
                 _record_attempt(db, username, ip, success=False)
+                # Convert to user's timezone for display
+                from utils.datetime_filters import format_user_datetime
+                formatted_time = format_user_datetime(until)
                 return render_template("auth/login.html",
-                                       error=f"This IP is locked due to repeated failures until {until.isoformat()}.")
+                                       error=f"This IP is locked due to repeated failures until {formatted_time}.")
 
             # Fetch user & enforce user lock
             user = db.execute(select(User).where(func.lower(User.username) == func.lower(username))).scalar_one_or_none()
-            if user and user.is_locked_until and user.is_locked_until > utcnow():
-                _record_attempt(db, username, ip, success=False)
-                return render_template("auth/login.html",
-                                       error=f"User is locked until {user.is_locked_until.isoformat()}.")
+            if user and user.is_locked_until:
+                # Ensure both datetimes are timezone-aware for comparison
+                user_locked_until = user.is_locked_until
+                if user_locked_until.tzinfo is None:
+                    from datetime import timezone
+                    user_locked_until = user_locked_until.replace(tzinfo=timezone.utc)
+                
+                current_time = utcnow()
+                if current_time.tzinfo is None:
+                    from datetime import timezone
+                    current_time = current_time.replace(tzinfo=timezone.utc)
+                
+                if user_locked_until > current_time:
+                    _record_attempt(db, username, ip, success=False)
+                    # Convert to user's timezone for display
+                    from utils.datetime_filters import format_user_datetime
+                    formatted_time = format_user_datetime(user.is_locked_until)
+                    return render_template("auth/login.html",
+                                           error=f"User is locked until {formatted_time}.")
 
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
@@ -198,13 +240,19 @@ def login():
             if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME and user:
                 until = _lock_user(db, user)
                 auth_logger.warning(f"User locked due to repeated failures - User: {username}, IP: {ip}, Until: {until.isoformat()}")
+                # Convert to user's timezone for display
+                from utils.datetime_filters import format_user_datetime
+                formatted_time = format_user_datetime(until)
                 return render_template("auth/login.html",
-                                       error=f"User locked due to repeated failures until {until.isoformat()}.")
+                                       error=f"User locked due to repeated failures until {formatted_time}.")
             if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
                 auth_logger.warning(f"IP locked due to repeated failures - IP: {ip}, Until: {until.isoformat()}")
+                # Convert to user's timezone for display
+                from utils.datetime_filters import format_user_datetime
+                formatted_time = format_user_datetime(until)
                 return render_template("auth/login.html",
-                                       error=f"This IP is locked due to repeated failures until {until.isoformat()}.")
+                                       error=f"This IP is locked due to repeated failures until {formatted_time}.")
 
             # Generic error (avoid username enumeration)
             return render_template("auth/login.html", error="Invalid username or password.")
@@ -247,6 +295,8 @@ def ping():
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
 @auth_rate_limit("3 per 5 minutes")
+@protect_form_submission(max_fields=5, max_field_length=200)
+@validate_payload_size(max_size=1024)  # 1KB limit for forgot password form
 def forgot_password():
     """
     Route to handle forgot password functionality.
@@ -274,6 +324,8 @@ def forgot_password():
         _push_email_result(session_id, result)
     
     if request.method == "POST":
+        # Flask-WTF CSRF protection is automatically applied
+        # No need for manual validation here
         email = request.form.get("email", "").strip()
         ip = get_client_ip()
         
@@ -330,6 +382,8 @@ def forgot_password():
 
 @auth_bp.route("/reset-password", methods=["GET", "POST"])
 @auth_rate_limit("5 per 10 minutes")
+@protect_form_submission(max_fields=5, max_field_length=200)
+@validate_payload_size(max_size=2048)  # 2KB limit for reset password form
 def reset_password():
     """
     Route to handle password reset with OTP verification.
@@ -338,6 +392,8 @@ def reset_password():
     from models import Session
     
     if request.method == "POST":
+        # Flask-WTF CSRF protection is automatically applied
+        # No need for manual validation here
         otp = request.form.get("otp", "").strip()
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
@@ -367,7 +423,15 @@ def reset_password():
         
         # Check if OTP has expired
         expiry_time = datetime.fromisoformat(session_expiry)
-        if datetime.now(timezone.utc) > expiry_time:
+        current_time = datetime.now(timezone.utc)
+        
+        # Ensure both datetimes are timezone-aware for comparison
+        if expiry_time.tzinfo is None:
+            expiry_time = expiry_time.replace(tzinfo=timezone.utc)
+        if current_time.tzinfo is None:
+            current_time = current_time.replace(tzinfo=timezone.utc)
+            
+        if current_time > expiry_time:
             flash("OTP has expired. Please request a new one.", "error")
             # Clear session values
             session.pop('password_reset_otp', None)

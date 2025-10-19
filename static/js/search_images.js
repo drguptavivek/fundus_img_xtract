@@ -97,55 +97,23 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to toggle filter visibility based on source selection
     function toggleFilterVisibility() {
-        const sourceValue = hospitalSelect.form.querySelector('#filter-source').value;
-        
-        // Find the Image-Specific Filters card
-        const imageSpecificCard = document.getElementById('image-specific-filters-card');
-        
-        // ZIP-only filters (capture dates, DR report, Glaucoma report, Has Encounter)
-        const zipOnlyFilters = document.querySelectorAll('.zip-only-filter');
-        
-        // Direct-only filters (camera, disease, area, mydriatic)
-        const directOnlyFilters = document.querySelectorAll('.direct-only-filter');
-        
-        if (sourceValue === 'zip') {
-            // Show Image-Specific Filters card if it exists
-            if (imageSpecificCard) {
-                imageSpecificCard.style.display = 'block';
-            }
-            // Show ZIP-only filters, hide direct-only filters
-            zipOnlyFilters.forEach(filter => {
-                filter.style.display = 'block';
-            });
-            directOnlyFilters.forEach(filter => {
-                filter.style.display = 'none';
-            });
-        } else if (sourceValue === 'direct') {
-            // Show Image-Specific Filters card if it exists
-            if (imageSpecificCard) {
-                imageSpecificCard.style.display = 'block';
-            }
-            // Show direct-only filters, hide ZIP-only filters
-            zipOnlyFilters.forEach(filter => {
-                filter.style.display = 'none';
-            });
-            directOnlyFilters.forEach(filter => {
-                filter.style.display = 'block';
-            });
-        } else {
-            // Hide Image-Specific Filters card for "all" source
-            if (imageSpecificCard) {
-                imageSpecificCard.style.display = 'none';
-            }
-        }
+        const val = (document.getElementById('filter-source')?.value || 'all');
+        const card = document.getElementById('image-specific-filters-card');
+        const zipOnly = document.querySelectorAll('.zip-only-filter');
+        const directOnly = document.querySelectorAll('.direct-only-filter');
+
+        if (card) card.style.display = (val === 'all') ? 'none' : 'block';
+        zipOnly.forEach(el => { el.style.display = (val === 'zip') ? 'block' : 'none'; });
+        directOnly.forEach(el => { el.style.display = (val === 'direct') ? 'block' : 'none'; });
     }
     
     // Add event listener for source dropdown change
     const sourceSelect = document.getElementById('filter-source');
     if (sourceSelect) {
         sourceSelect.addEventListener('change', toggleFilterVisibility);
-        
-        // Initial call to set correct visibility on page load
-        toggleFilterVisibility();
     }
+
+    // Initial call to set correct visibility on page load (run regardless to be robust)
+    toggleFilterVisibility();
+    setTimeout(toggleFilterVisibility, 0);
 });

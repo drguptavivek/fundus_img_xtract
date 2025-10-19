@@ -471,6 +471,8 @@ class GradingTask(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    # Optional linkage to an Ad-hoc batch for auditability
+    ad_hoc_id: Mapped[int | None] = mapped_column(ForeignKey('ad_hoc_task_creations.id', ondelete='SET NULL'), nullable=True, index=True)
 
     # Relationships (no back_populates on existing models to avoid touching them)
     disease: Mapped['Disease'] = relationship('Disease', foreign_keys=[disease_id])
@@ -480,6 +482,11 @@ class GradingTask(Base):
     grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
+    )
+
+    # Relationship added after class AdHocTaskCreation definition
+    ad_hoc: Mapped['AdHocTaskCreation | None'] = relationship(
+        'AdHocTaskCreation', back_populates='tasks', lazy='selectin'
     )
 
     __table_args__ = (
@@ -661,6 +668,30 @@ class NotificationRead(Base):
 
     __table_args__ = (
         UniqueConstraint('notification_id', 'user_id', name='uq_notification_reads_notification_user'),
+    )
+
+
+class AdHocTaskCreation(Base):
+    """Auditable record of an Ad-hoc Task creation workflow.
+    Stores filters used, selected images, diseases, and a summary.
+    Uses JSON text fields for engine portability.
+    """
+    __tablename__ = 'ad_hoc_task_creations'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+    diseases_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array of disease_ids
+    max_images: Mapped[int] = mapped_column(Integer, nullable=False)
+    filters_json: Mapped[str] = mapped_column(Text, nullable=False)   # JSON snapshot of filters
+    selected_image_refs_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array with {source, id}
+    summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON outcome summary
+
+    creator: Mapped['User'] = relationship('User', foreign_keys=[created_by_id], lazy='joined')
+    # Reverse relation from GradingTask via ad_hoc_id
+    tasks: Mapped[list['GradingTask']] = relationship(
+        'GradingTask', back_populates='ad_hoc', lazy='selectin'
     )
 
 

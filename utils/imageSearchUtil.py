@@ -387,7 +387,8 @@ def get_tasks_for_multiple_images(
             result[image_id] = []
         result[image_id].append({
             "disease": disease.name,
-            "status": task.state
+            "status": task.state,
+            "disease_id": disease.id
         })
     
     
@@ -452,7 +453,7 @@ def get_tasks_for_multiple_images(
 
 def format_direct_image_with_tasks(
     item: DirectImageUpload,
-    task_diseases: List[str]
+    task_diseases: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """Format direct image with pre-fetched task information.
     
@@ -470,19 +471,26 @@ def format_direct_image_with_tasks(
         "capture_date": item.created_at,  # Same as upload_date for direct images
         "hospital": item.hospital.name if item.hospital else None,
         "lab_unit": item.lab_unit.name if item.lab_unit else None,
+        "hospital_id": item.hospital_id,
+        "lab_unit_id": item.lab_unit_id,
         "camera": item.camera.name if item.camera else None,
+        "camera_id": item.camera_id,
         "disease": item.disease.name if item.disease else None,
+        "direct_image_disease_id": item.disease_id,
         "area": item.area.name if item.area else None,
+        "area_id": item.area_id,
         "is_mydriatic": item.is_mydriatic,
         "tasks_for_diseases": task_diseases,
+        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_diseases if t.get("disease_id") is not None],
         "uploader": item.uploader.username if item.uploader else None,
         "file_hash": getattr(item, 'file_hash', None),
+        "direct_image_upload_id": item.id,
     }
 
 
 def format_zip_image_with_tasks(
     item: EncounterFile,
-    task_diseases: List[str],
+    task_diseases: List[Dict[str, Any]],
     db_session: Session
 ) -> Dict[str, Any]:
     """Format ZIP image with pre-fetched task information.
@@ -500,11 +508,16 @@ def format_zip_image_with_tasks(
         DiabeticRetinopathyReport.patient_encounter_id == item.patient_encounter.id,
         DiabeticRetinopathyReport.uuid.isnot(None)
     ).first() is not None
-    
+
     has_glaucoma_report = db_session.query(GlaucomaResultsCleaned).filter(
         GlaucomaResultsCleaned.patient_encounter_id == item.patient_encounter.id,
         GlaucomaResultsCleaned.report_uuid.isnot(None)
     ).first() is not None
+
+    # Determine source disease id from reports via Diseases master
+    disease_map = {d.name.strip().lower(): d.id for d in db_session.query(Disease).all()}
+    zip_source_name = 'glaucoma' if has_glaucoma_report else ('dr' if has_dr_report else 'dr')
+    zip_source_disease_id = disease_map.get(zip_source_name)
     
     return {
         "uuid": item.uuid,
@@ -513,10 +526,15 @@ def format_zip_image_with_tasks(
         "capture_date": item.patient_encounter.capture_date_dt,
         "hospital": item.lab_unit.hospital.name if item.lab_unit and item.lab_unit.hospital else None,
         "lab_unit": item.lab_unit.name if item.lab_unit else None,
+        "hospital_id": item.lab_unit.hospital_id if item.lab_unit else None,
+        "lab_unit_id": item.lab_unit_id,
         "has_dr_report": has_dr_report,
         "has_glaucoma_report": has_glaucoma_report,
         "tasks_for_diseases": task_diseases,
+        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_diseases if t.get("disease_id") is not None],
         "encounter_id": item.patient_encounter.id,  # Include encounter ID for ZIP images
+        "encounter_file_id": item.id,
+        "zip_source_disease_id": zip_source_disease_id,
     }
 
 

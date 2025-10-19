@@ -449,6 +449,10 @@ def create_app():
     from tasks import bp as tasks_bp
     app.register_blueprint(tasks_bp)
 
+    # Ad-hoc tasks blueprint
+    from tasks.ad_hoc import bp as ad_hoc_tasks_bp
+    app.register_blueprint(ad_hoc_tasks_bp)
+
     from help import bp as help_bp
     app.register_blueprint(help_bp)
 

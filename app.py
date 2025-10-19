@@ -196,6 +196,7 @@ def create_app():
     consensus_logger = configure_logger("consensus", logging.INFO, consensus_handler)
     email_success_logger = configure_logger("email_success", logging.INFO, email_success_handler)
     email_error_logger = configure_logger("email_error", logging.ERROR, email_error_handler)
+    rate_limit_logger = configure_logger("rate_limit", logging.INFO, app_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)

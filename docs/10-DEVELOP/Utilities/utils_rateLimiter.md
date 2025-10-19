@@ -13,10 +13,10 @@ This module provides a comprehensive rate limiting system using Flask-Limiter wi
 flask limiter config
 ```
 ```ini
-Using memory storage for rate limiting (not suitable for production)
+Using Memcached storage for rate limiting (production ready)
 Setting up the environment...
 Directories are ready.
-                              Flask-Limiter Config                              
+                              Flask-Limiter Config
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Notes                   ┃ Configuration            ┃ Value                   ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
@@ -24,22 +24,22 @@ Directories are ready.
 │ Key Function            │ RATELIMIT_KEY_FUNC       │ utils.rate_limiter.get… │
 │ Key Prefix              │ RATELIMIT_KEY_PREFIX     │ ''                      │
 │ Rate Limiting Config    │ RATELIMIT_STRATEGY       │ FixedWindowRateLimiter  │
-│                         │ ├── RATELIMIT_STORAGE_U… │ └── memory://           │
-│                         │ │   ├── Instance         │     ├── MemoryStorage   │
-│                         │ │   └── Backend          │     ├── Counter()       │
-│                         │ ├── RATELIMIT_STORAGE_O… │     ├── {}              │
+│                         │ ├── RATELIMIT_STORAGE_U… │ └── memcached://        │
+│                         │ │   ├── Instance         │     ├── MemcachedStorage│
+│                         │ │   └── Backend          │     ├── <pymemcache.cl… │
+│                         │ ├── RATELIMIT_STORAGE_O… │     ├── {'connect_tim… │
 │                         │ └── Status               │     └── OK              │
 │ ApplicationLimits       │ RATELIMIT_APPLICATION    │ []                      │
 │ Limits                  │                          │                         │
 │ Default Limits          │ RATELIMIT_DEFAULT        │ [                       │
-│                         │                          │     '2000 per 1 day',   │
-│                         │                          │     '500 per 1 hour'    │
+│                         │                          │     '500 per hour',     │
+│                         │                          │     '50 per minute'     │
 │                         │                          │ ]                       │
 │                         │ RATELIMIT_DEFAULTS_PER_… │ False                   │
 │                         │ RATELIMIT_DEFAULTS_EXEM… │ None                    │
 │                         │ RATELIMIT_DEFAULTS_DEDU… │ None                    │
 │                         │ RATELIMIT_DEFAULTS_COST  │ 1                       │
-│ Header configuration    │ RATELIMIT_HEADERS_ENABL… │ False (disabled for compatibility) │
+│ Header configuration    │ RATELIMIT_HEADERS_ENABL… │ True                    │
 │ Fail on first breach    │ RATELIMIT_FAIL_ON_FIRST… │ True                    │
 │ On breach callback      │ RATELIMIT_ON_BREACH_CAL… │ None                    │
 └─────────────────────────┴──────────────────────────┴─────────────────────────┘

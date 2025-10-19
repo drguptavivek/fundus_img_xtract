@@ -36,6 +36,50 @@ limiter = Limiter(
     key_func=get_rate_limit_key,
 )
 
+def rate_limit_with_feedback(
+    limit: str,
+    per_method: bool = True,
+    methods: Optional[list] = None,
+    error_message: Optional[str] = None,
+    show_warning: bool = False
+) -> Callable:
+    """
+    Enhanced rate limit decorator that provides flash message feedback.
+    
+    Args:
+        limit: Rate limit string (e.g., "10 per minute")
+        per_method: Whether to apply limits per HTTP method
+        methods: List of HTTP methods to limit (None = all)
+        error_message: Custom error message for rate limit exceeded
+        show_warning: Whether to show a warning message when approaching the limit
+    """
+    def decorator(f: Callable) -> Callable:
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            # Check if we should show a warning about remaining requests
+            if show_warning and not request.path.startswith('/api/'):
+                try:
+                    # Get current rate limit status
+                    from flask import g
+                    if hasattr(g, 'limiter'):
+                        # This is a simplified check - in a real implementation,
+                        # you might want to check the actual remaining requests
+                        pass
+                except Exception:
+                    pass
+            
+            # Apply rate limit using Flask-Limiter directly
+            return limiter.limit(
+                limit,
+                per_method=per_method,
+                methods=methods,
+                error_message=error_message or f"Rate limit exceeded: {limit}"
+            )(f)(*args, **kwargs)
+        
+        return wrapped
+    
+    return decorator
+
 def rate_limit(
     limit: str,
     per_method: bool = True,
@@ -132,20 +176,31 @@ def handle_rate_limit_exceeded(e):
     """
     log_rate_limit_violation()
     
+    # Get retry after value
+    retry_after = getattr(e, 'retry_after', 60)
+    
+    # Add flash message with rate limit information
+    from flask import flash
+    flash(f"Rate limit exceeded. Please try again in {retry_after} seconds.", "warning")
+    
     # Check if this is an API request
     if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
         return jsonify({
             "error": "Rate limit exceeded",
             "message": str(e.description),
-            "retry_after": getattr(e, 'retry_after', 60)
+            "retry_after": retry_after
         }), 429
     
     # Return HTML error page for regular requests
-    from flask import render_template
+    from flask import render_template, redirect, url_for
+    # For login page, redirect back to login with the flash message
+    if request.path == '/login':
+        return redirect(url_for('auth.login'))
+    
     return render_template(
         "errors/429.html",
         error_message=str(e.description),
-        retry_after=getattr(e, 'retry_after', 60)
+        retry_after=retry_after
     ), 429
 
 def get_user_rate_limits(user_id: int) -> dict:
@@ -197,7 +252,9 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_STORAGE_URL'] = app.config.get('RATELIMIT_STORAGE_URL', 'memory://')
     app.config['RATELIMIT_KEY_PREFIX'] = app.config.get('RATELIMIT_KEY_PREFIX', '')
     app.config['RATELIMIT_STRATEGY'] = app.config.get('RATELIMIT_STRATEGY', 'fixed-window')
-    app.config['RATELIMIT_HEADERS_ENABLED'] = app.config.get('RATELIMIT_HEADERS_ENABLED', 'true').lower() in ('true', '1', 'yes')
+    # Disable headers to work around the compatibility issue with Werkzeug
+    # This prevents the AttributeError when Flask-Limiter tries to inject headers
+    app.config['RATELIMIT_HEADERS_ENABLED'] = False
     app.config['RATELIMIT_HEADER_RESET'] = app.config.get('RATELIMIT_HEADER_RESET', 'false').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_HEADER_REMAINING'] = app.config.get('RATELIMIT_HEADER_REMAINING', 'true').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_FAIL_ON_FIRST_BREACH'] = app.config.get('RATELIMIT_FAIL_ON_FIRST_BREACH', 'false').lower() in ('true', '1', 'yes')

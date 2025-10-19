@@ -318,6 +318,67 @@ def create_app():
         if response.status_code >= 400:
             http_error_logger.warning(line)
 
+        # Add rate limit information to headers if available
+        try:
+            # Check if Flask-Limiter has set rate limit info in the response
+            if hasattr(response, 'headers') and not response.headers.get('X-RateLimit-Limit'):
+                # Get rate limit info from Flask-Limiter if available
+                from flask import g
+                if hasattr(g, 'limiter_limit') and hasattr(g, 'limiter_remaining'):
+                    # Add rate limit info as custom headers (using different names to avoid conflicts)
+                    response.headers['X-RateLimit-Limit'] = str(g.limiter_limit)
+                    response.headers['X-RateLimit-Remaining'] = str(g.limiter_remaining)
+                    if hasattr(g, 'limiter_reset'):
+                        response.headers['X-RateLimit-Reset'] = str(g.limiter_reset)
+        except Exception as e:
+            # Log the error but don't fail the request
+            import logging
+            rate_limit_logger = logging.getLogger("rate_limit")
+            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+
+        return response
+
+    @app.after_request
+    def add_rate_limit_headers(response):
+        """Add rate limit information to response headers."""
+        try:
+            # Check if Flask-Limiter has set rate limit info in the response or g context
+            from flask import g
+            
+            # Try to get rate limit info from Flask-Limiter's internal storage
+            if hasattr(g, '_rate_limit_limit'):
+                response.headers['X-RateLimit-Limit'] = str(g._rate_limit_limit)
+            if hasattr(g, '_rate_limit_remaining'):
+                response.headers['X-RateLimit-Remaining'] = str(g._rate_limit_remaining)
+            if hasattr(g, '_rate_limit_reset'):
+                response.headers['X-RateLimit-Reset'] = str(g._rate_limit_reset)
+                
+            # Alternative: try to get from limiter directly
+            if not response.headers.get('X-RateLimit-Limit'):
+                try:
+                    from utils.rate_limiter import limiter
+                    # Get the current limit key
+                    key = limiter.key_func()
+                    if key:
+                        # Try to get the current limit state
+                        storage = limiter.storage
+                        if storage:
+                            # Get the limit window for this key
+                            window = storage.get_window(key)
+                            if window:
+                                response.headers['X-RateLimit-Limit'] = str(window.limit)
+                                response.headers['X-RateLimit-Remaining'] = str(window.remaining)
+                                response.headers['X-RateLimit-Reset'] = str(window.reset_time)
+                except Exception:
+                    # If we can't get the info, just skip it
+                    pass
+                    
+        except Exception as e:
+            # Log the error but don't fail the request
+            import logging
+            rate_limit_logger = logging.getLogger("rate_limit")
+            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+        
         return response
 
     #  relative imports

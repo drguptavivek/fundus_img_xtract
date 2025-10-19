@@ -6,6 +6,10 @@ This document provides a comprehensive overview of all Python packages used in t
 
 The application uses 54 direct and indirect Python packages managed through uv. The core application is built on Flask with various extensions for web functionality, security, data processing, and image handling.
 
+## Email and Communication
+
+Note: The application uses Python's built-in `smtplib` and `email.mime` modules for email functionality, which are part of the standard library and don't require separate installation.
+
 ## Core Web Framework
 
 ### Flask v3.1.2
@@ -106,9 +110,10 @@ CORS(app, resources={
 **Dependencies**: None (direct dependency)
 
 ### PyMuPDF v1.26.4
-**Purpose**: PDF document processing
+**Purpose**: PDF document processing (also imported as 'fitz')
 **Usage**: PDF parsing, text extraction, and metadata handling
 **Dependencies**: None (direct dependency)
+**Note**: Imported as 'fitz' in the codebase
 
 ### Pytesseract v0.3.13
 **Purpose**: OCR (Optical Character Recognition)
@@ -144,6 +149,11 @@ CORS(app, resources={
 **Usage**: Array operations, mathematical functions, and data structures
 **Dependencies**: None (direct dependency)
 
+### OpenPyXL
+**Purpose**: Excel file manipulation
+**Usage**: Creating and modifying Excel files for data export
+**Dependencies**: None (development dependency)
+
 ## Content Processing
 
 ### Markdown v3.9
@@ -155,6 +165,11 @@ CORS(app, resources={
 **Purpose**: Mermaid diagram support in Markdown
 **Usage**: Adding flowcharts and diagrams to markdown content
 **Dependencies**: markdown v3.9
+
+### PyYAML
+**Purpose**: YAML parsing and emission
+**Usage**: Configuration file handling, Swagger/OpenAPI documentation
+**Dependencies**: None (development dependency)
 
 ## Caching and Performance
 
@@ -219,6 +234,8 @@ Additional packages used in development (from requirements-dev.txt):
 - fastapi - API development tools
 - beautifulsoup4 - HTML parsing
 - requests - HTTP client library
+- openpyxl - Excel file manipulation
+- pyyaml - YAML parsing and emission
 - And many others for development tooling
 
 ## Security Considerations

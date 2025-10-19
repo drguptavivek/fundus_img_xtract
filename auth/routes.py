@@ -11,7 +11,7 @@ from . import auth_bp
 from .security import verify_password, hash_password
 from .utils import utcnow, get_client_ip
 from flask import flash
-from utils.rate_limiter import auth_rate_limit
+from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
@@ -117,7 +117,7 @@ def _get_email_results(user_id: str):
 
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
-@auth_rate_limit("5 per minute")
+@rate_limit_with_feedback("5 per minute", show_warning=True)
 def login():
     from flask_login import current_user
     # If user is already logged in, redirect to homepage

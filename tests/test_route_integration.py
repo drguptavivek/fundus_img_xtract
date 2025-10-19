@@ -68,7 +68,7 @@ def test_search_route_with_new_util():
         )
         
         # Mock the search_images_strict function to track calls
-        with patch('search.route_search_images.search_images_strict') as mock_search:
+        with patch('utils.imageSearchUtil.search_images_strict') as mock_search:
             # Setup mock to return test data
             mock_search.return_value = (
                 [
@@ -91,7 +91,7 @@ def test_search_route_with_new_util():
             )
             
             # Mock user lab units
-            with patch('search.route_search_images.get_user_lab_unit_ids') as mock_lab_units:
+            with patch('utils.upload_eligibility.get_user_lab_unit_ids') as mock_lab_units:
                 mock_lab_units.return_value = {1, 2, 3}
                 
                 # Make request to search route
@@ -134,11 +134,11 @@ def test_search_route_handles_filter_conflicts():
         )
         
         # Mock the search_images_strict function to raise ImageSearchError
-        with patch('search.route_search_images.search_images_strict') as mock_search:
+        with patch('utils.imageSearchUtil.search_images_strict') as mock_search:
             mock_search.side_effect = ImageSearchError("Cannot apply both direct and ZIP filters")
             
             # Mock user lab units
-            with patch('search.route_search_images.get_user_lab_unit_ids') as mock_lab_units:
+            with patch('utils.upload_eligibility.get_user_lab_unit_ids') as mock_lab_units:
                 mock_lab_units.return_value = {1, 2, 3}
                 
                 # Make request that would cause filter conflict
@@ -171,11 +171,11 @@ def test_search_route_with_zip_filters():
         )
         
         # Mock the search_images_strict function
-        with patch('search.route_search_images.search_images_strict') as mock_search:
+        with patch('utils.imageSearchUtil.search_images_strict') as mock_search:
             mock_search.return_value = ([], 0)
             
             # Mock user lab units
-            with patch('search.route_search_images.get_user_lab_unit_ids') as mock_lab_units:
+            with patch('utils.upload_eligibility.get_user_lab_unit_ids') as mock_lab_units:
                 mock_lab_units.return_value = {1, 2, 3}
                 
                 # Make request with ZIP filters

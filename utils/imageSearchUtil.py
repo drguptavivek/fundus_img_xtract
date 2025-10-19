@@ -357,7 +357,7 @@ def get_tasks_for_multiple_images(
     db_session: Session,
     image_ids: List[int],
     image_type: str
-) -> Dict[int, List[Dict[str, str]]]:
+) -> Dict[int, Dict[str, Any]]:
     """Get task diseases with status for multiple images efficiently.
     
     Args:
@@ -380,12 +380,12 @@ def get_tasks_for_multiple_images(
         tasks = tasks.filter(Task.encounter_file_id.in_(image_ids))
     
     # Group by image ID
-    result = {}
+    result: Dict[int, Dict[str, Any]] = {}
     for task, disease in tasks.all():
         image_id = task.direct_image_upload_id if image_type == "direct" else task.encounter_file_id
         if image_id not in result:
-            result[image_id] = []
-        result[image_id].append({
+            result[image_id] = { 'tasks': [], 'ai_disease_ids': set() }
+        result[image_id]['tasks'].append({
             "disease": disease.name,
             "status": task.state,
             "disease_id": disease.id
@@ -403,57 +403,50 @@ def get_tasks_for_multiple_images(
     task_ids = [task.id for task in image_tasks]
     
     if task_ids:
+        # Fetch AI grades and map to parent Disease via DiseaseGrading
+        from models import DiseaseGrading
         ai_grades_from_grade_table = db_session.query(Grade).outerjoin(
-            Grade.label  # Join with DiseaseGrading to get the impression
+            Grade.label
         ).filter(
             Grade.task_id.in_(task_ids),
             Grade.role_slot == 'ai'
         ).all()
-        
+
         for ai_grade in ai_grades_from_grade_table:
-            # Find the image ID via the task
             task_for_ai = db_session.query(Task).filter(Task.id == ai_grade.task_id).first()
-            if task_for_ai:
-                image_id = task_for_ai.direct_image_upload_id if image_type == "direct" else task_for_ai.encounter_file_id
-                if image_id and image_id in result:
-                    # Add AI grade info to the existing list for this image
-                    grade_impression = ai_grade.label.impression if ai_grade.label else ai_grade.grade_name
-                    # The Grade model stores AI probability in the comment field when role_slot is 'ai'
-                    comment = ai_grade.comment or ""
-                    # Extract probability if it's in the format "AI probability: X.XX; ..." or similar
-                    import re
-                    prob_match = re.search(r'AI probability:\s*([0-9.]+)', comment)
-                    prob_str = f" ({float(prob_match.group(1)):.3f})" if prob_match else ""
-                    # Get model name and version
-                    model_name = ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'Unknown Model')
-                    model_version = ai_grade.ai_model_version or (ai_grade.ai_model.version if ai_grade.ai_model else 'N/A')
-                    result[image_id].append({
-                        "disease": "AI Grade",
-                        "status": f"{model_name} v{model_version}: {grade_impression}{prob_str}"
-                    })
-                elif image_id and image_id not in result:
-                    # Create a new entry for this image if it doesn't exist
-                    grade_impression = ai_grade.label.impression if ai_grade.label else ai_grade.grade_name
-                    # The Grade model stores AI probability in the comment field when role_slot is 'ai'
-                    comment = ai_grade.comment or ""
-                    # Extract probability if it's in the format "AI probability: X.XX; ..." or similar
-                    import re
-                    prob_match = re.search(r'AI probability:\s*([0-9.]+)', comment)
-                    prob_str = f" ({float(prob_match.group(1)):.3f})" if prob_match else ""
-                    # Get model name and version
-                    model_name = ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'Unknown Model')
-                    model_version = ai_grade.ai_model_version or (ai_grade.ai_model.version if ai_grade.ai_model else 'N/A')
-                    result[image_id] = [{
-                        "disease": "AI Grade",
-                        "status": f"{model_name} v{model_version}: {grade_impression}{prob_str}"
-                    }]
+            if not task_for_ai:
+                continue
+            image_id = task_for_ai.direct_image_upload_id if image_type == "direct" else task_for_ai.encounter_file_id
+            if not image_id:
+                continue
+            disease_id_val: Optional[int] = None
+            if ai_grade.label and ai_grade.label.disease_id:
+                disease_id_val = ai_grade.label.disease_id
+            if not disease_id_val and getattr(ai_grade, 'disease_grading_id', None):
+                dg = db_session.query(DiseaseGrading).filter(DiseaseGrading.id == ai_grade.disease_grading_id).first()
+                if dg:
+                    disease_id_val = dg.disease_id
+            # Ensure container exists
+            if image_id not in result:
+                result[image_id] = { 'tasks': [], 'ai_disease_ids': set() }
+            # Mark AI presence (generic entry for UI awareness if needed)
+            result[image_id]['tasks'].append({ "disease": "AI Grade", "status": "present" })
+            if disease_id_val:
+                result[image_id]['ai_disease_ids'].add(disease_id_val)
     
+    # Convert ai disease id sets to lists and attach names for convenience
+    disease_id_to_name = {d.id: d.name for d in db_session.query(Disease).all()}
+    for image_id, payload in result.items():
+        if isinstance(payload, dict):
+            ids = list(payload.get('ai_disease_ids', set()))
+            payload['ai_disease_ids'] = ids
+            payload['ai_diseases'] = [disease_id_to_name.get(i) for i in ids if i in disease_id_to_name]
     return result
 
 
 def format_direct_image_with_tasks(
     item: DirectImageUpload,
-    task_diseases: List[Dict[str, Any]]
+    task_payload: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Format direct image with pre-fetched task information.
     
@@ -464,6 +457,9 @@ def format_direct_image_with_tasks(
     Returns:
         Formatted image dictionary
     """
+    task_list = task_payload.get('tasks', []) if isinstance(task_payload, dict) else (task_payload or [])
+    ai_ids = task_payload.get('ai_disease_ids', []) if isinstance(task_payload, dict) else []
+    ai_names = task_payload.get('ai_diseases', []) if isinstance(task_payload, dict) else []
     return {
         "uuid": item.uuid,
         "type": "direct",
@@ -480,8 +476,10 @@ def format_direct_image_with_tasks(
         "area": item.area.name if item.area else None,
         "area_id": item.area_id,
         "is_mydriatic": item.is_mydriatic,
-        "tasks_for_diseases": task_diseases,
-        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_diseases if t.get("disease_id") is not None],
+        "tasks_for_diseases": task_list,
+        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_list if t.get("disease_id") is not None],
+        "ai_disease_ids": ai_ids,
+        "ai_diseases": ai_names,
         "uploader": item.uploader.username if item.uploader else None,
         "file_hash": getattr(item, 'file_hash', None),
         "direct_image_upload_id": item.id,
@@ -490,7 +488,7 @@ def format_direct_image_with_tasks(
 
 def format_zip_image_with_tasks(
     item: EncounterFile,
-    task_diseases: List[Dict[str, Any]],
+    task_payload: Dict[str, Any],
     db_session: Session
 ) -> Dict[str, Any]:
     """Format ZIP image with pre-fetched task information.
@@ -519,6 +517,9 @@ def format_zip_image_with_tasks(
     zip_source_name = 'glaucoma' if has_glaucoma_report else ('dr' if has_dr_report else 'dr')
     zip_source_disease_id = disease_map.get(zip_source_name)
     
+    task_list = task_payload.get('tasks', []) if isinstance(task_payload, dict) else (task_payload or [])
+    ai_ids = task_payload.get('ai_disease_ids', []) if isinstance(task_payload, dict) else []
+    ai_names = task_payload.get('ai_diseases', []) if isinstance(task_payload, dict) else []
     return {
         "uuid": item.uuid,
         "type": "zip",
@@ -530,8 +531,10 @@ def format_zip_image_with_tasks(
         "lab_unit_id": item.lab_unit_id,
         "has_dr_report": has_dr_report,
         "has_glaucoma_report": has_glaucoma_report,
-        "tasks_for_diseases": task_diseases,
-        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_diseases if t.get("disease_id") is not None],
+        "tasks_for_diseases": task_list,
+        "tasks_for_diseases_ids": [t.get("disease_id") for t in task_list if t.get("disease_id") is not None],
+        "ai_disease_ids": ai_ids,
+        "ai_diseases": ai_names,
         "encounter_id": item.patient_encounter.id,  # Include encounter ID for ZIP images
         "encounter_file_id": item.id,
         "zip_source_disease_id": zip_source_disease_id,
@@ -724,7 +727,7 @@ def search_images_strict(
                 
                 # Format results
                 for img in direct_results:
-                    formatted = format_direct_image_with_tasks(img, direct_tasks.get(img.id, []))
+                    formatted = format_direct_image_with_tasks(img, direct_tasks.get(img.id, { 'tasks': [], 'ai_disease_ids': [], 'ai_diseases': [] }))
                     all_results.append(formatted)
         
         if search_scope in ['zip_only', 'both']:
@@ -745,7 +748,7 @@ def search_images_strict(
                 
                 # Format results
                 for img in zip_results:
-                    formatted = format_zip_image_with_tasks(img, zip_tasks.get(img.id, []), db_session)
+                    formatted = format_zip_image_with_tasks(img, zip_tasks.get(img.id, { 'tasks': [], 'ai_disease_ids': [], 'ai_diseases': [] }), db_session)
                     all_results.append(formatted)
         
         # Sort combined results by upload_date (most recent first)

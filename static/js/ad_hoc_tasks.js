@@ -47,6 +47,21 @@
       const key = `${img.type}:${img.id || img.encounter_id || ''}`;
       const checked = selected.has(key) ? 'checked' : '';
       const labUnitId = img.lab_unit_id || img.lab_unit || null;
+      const taskNames = Array.isArray(img.tasks_for_diseases)
+        ? img.tasks_for_diseases.filter(t => t && t.disease !== 'AI Grade').map(t => t.disease).filter(Boolean)
+        : [];
+      let uploadedFor = '';
+      if (img.type === 'direct') {
+        uploadedFor = img.disease || '';
+      } else if (img.type === 'zip') {
+        if (typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) uploadedFor = 'Glaucoma';
+        else if (typeof img.has_dr_report === 'boolean' && img.has_dr_report) uploadedFor = 'DR';
+        else uploadedFor = 'DR';
+      }
+      const hasAI = Array.isArray(img.ai_diseases) ? img.ai_diseases.length > 0
+        : (Array.isArray(img.tasks_for_diseases) && img.tasks_for_diseases.some(t => t && t.disease === 'AI Grade'));
+      const aiList = Array.isArray(img.ai_diseases) && img.ai_diseases.length ? img.ai_diseases
+        : (img.type === 'direct' ? (img.disease ? [img.disease] : []) : ((typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? ['Glaucoma'] : ['DR']));
       const card = document.createElement('div');
       card.className = 'col';
       card.innerHTML = `
@@ -60,7 +75,9 @@
           <div class="small text-muted">${img.hospital || ''} / ${img.lab_unit || ''}</div>
           <div class="small">Capture: ${img.capture_date || ''}</div>
           <div class="small">Upload: ${img.upload_date || ''}</div>
-          <div class="small">Tasks: ${(img.tasks_for_diseases || []).join(', ')}</div>
+          <div class="small">Uploaded for: ${uploadedFor || '—'}</div>
+          ${hasAI ? `<div class="small">AI: ${aiList.join(', ')}</div>` : ''}
+          <div class="small">Tasks: ${taskNames.length ? taskNames.join(', ') : 'None'}</div>
         </div>`;
       resultsEl.appendChild(card);
     });

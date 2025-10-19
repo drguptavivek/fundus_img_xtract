@@ -1,6 +1,7 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
 import { login, loginWithRole, isLoggedIn, logout } from './utils/login.js';
+import { getLoginUrl, getSearchImagesUrl, getDashboardUrl } from './utils/config.js';
 
 test.describe('Login Utility Tests', () => {
  test('should login with default credentials', async ({ page }) => {
@@ -18,7 +19,7 @@ test.describe('Login Utility Tests', () => {
     await login(page, {
       username: 'admin',
       password: 'Vivek@2026',
-      loginUrl: 'http://localhost:5001/auth/login'
+      loginUrl: getLoginUrl()
     });
     
     // Verify login was successful
@@ -63,14 +64,14 @@ test.describe('Login Utility Tests', () => {
     await login(page);
     
     // Navigate to search images page (requires authentication)
-    await page.goto('http://localhost:5001/search/images');
+    await page.goto(getSearchImagesUrl());
     
     // Verify we can access the page (not redirected to login)
     await expect(page).toHaveURL(/.*search\/images.*/);
     await expect(page.locator('h1')).toContainText('Search Images');
     
     // Try another authenticated page
-    await page.goto('http://localhost:5001/dashboard');
+    await page.goto(getDashboardUrl());
     await expect(page).toHaveURL(/.*dashboard.*/);
   });
 });

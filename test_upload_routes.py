@@ -11,6 +11,10 @@ import tempfile
 from pathlib import Path
 import subprocess
 import json
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add the project directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
@@ -56,8 +60,8 @@ def cleanup_test_admin():
 def test_payload_limits():
     """Test that payload limits are applied correctly to different routes."""
     
-    # Base URL for the application (adjust if needed)
-    BASE_URL = "http://localhost:5000"
+    # Base URL for the application from environment variable
+    BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5001")
     
     print("Testing payload size limits for different routes...")
     print("=" * 60)

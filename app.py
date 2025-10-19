@@ -778,4 +778,5 @@ if __name__ == "__main__":
     cleanup_thread.start()
     
     # dev server; for prod use gunicorn/uwsgi
-    app.run(debug=True, host="127.0.0.1", port=5001)
+    flask_port = int(os.getenv("FLASK_PORT", 5000))
+    app.run(debug=True, host="127.0.0.1", port=flask_port)

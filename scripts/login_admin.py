@@ -8,13 +8,23 @@ import json
 import requests
 from pathlib import Path
 import argparse
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add the project root to the path
 file_path = Path(__file__).resolve()
 project_root = file_path.parent.parent
 sys.path.insert(0, str(project_root))
 
-def login_admin(username="Test", password="test@123", base_url="http://localhost:5000", output_file="admin_cookies.json"):
+def login_admin(username="Test", password="test@123", base_url=None, output_file="admin_cookies.json"):
+    """Login as admin and save session cookies"""
+    
+    # Use BASE_URL from environment if not provided
+    if base_url is None:
+        base_url = os.getenv("BASE_URL", "http://127.0.0.1:5001")
     """Login as admin and save session cookies"""
     
     # Create a session to maintain cookies
@@ -81,7 +91,7 @@ def main():
     parser = argparse.ArgumentParser(description="Login as admin and save session cookies")
     parser.add_argument("--username", default="Test", help="Admin username (default: Test)")
     parser.add_argument("--password", default="test@123", help="Admin password (default: test@123)")
-    parser.add_argument("--base-url", default="http://localhost:5000", help="Base URL of the application")
+    parser.add_argument("--base-url", default=None, help="Base URL of the application (defaults to BASE_URL from env)")
     parser.add_argument("--output", default="admin_cookies.json", help="Output file for cookies")
     
     args = parser.parse_args()

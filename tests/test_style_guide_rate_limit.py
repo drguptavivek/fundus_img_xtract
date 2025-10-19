@@ -3,12 +3,17 @@
 Test script to verify rate limiting functionality on the style_guide route.
 """
 
+import os
 import requests
 import time
 import sys
+from dotenv import load_dotenv
 
-# Base URL of the application
-BASE_URL = "http://127.0.0.1:5001"
+# Load environment variables
+load_dotenv()
+
+# Base URL of the application from environment variable
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5001")
 
 def test_rate_limiter():
     """Test the rate limiter by making multiple requests to the style_guide endpoint."""

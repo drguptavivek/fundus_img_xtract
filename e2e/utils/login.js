@@ -1,5 +1,6 @@
 // @ts-check
 import { expect } from '@playwright/test';
+import { getBaseUrl, getLoginUrl } from './config.js';
 
 /**
  * Generic login utility function for the fundus image management application
@@ -25,7 +26,7 @@ export async function login(page, credentials = {}) {
   const {
     username = process.env.PLAYWRIGHT_USERNAME || 'admin',
     password = process.env.PLAYWRIGHT_PASSWORD || 'Vivek@2026',
-    loginUrl = 'http://localhost:5001/auth/login',
+    loginUrl = getLoginUrl(),
     redirectUrl = '**/grading**'
   } = credentials;
 
@@ -139,5 +140,5 @@ export async function logout(page) {
   }
   
   // If no logout button found, navigate directly to login
-  await page.goto('http://localhost:5001/auth/login');
+  await page.goto(getLoginUrl());
 }

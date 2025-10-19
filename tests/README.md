@@ -1,12 +1,30 @@
-# Image Search Utility Tests
+# Tests
 
-This directory contains comprehensive tests for the new `utils/imageSearchUtil.py` functionality.
+This directory contains comprehensive tests for the application, including the new `utils/imageSearchUtil.py` functionality and security testing.
 
 ## Test Files
 
 1. **`test_imageSearchUtil.py`** - Unit tests with mocked dependencies
 2. **`test_runner.py`** - Integration tests with real database
-3. **`conftest.py`** - Pytest configuration and fixtures
+3. **`test_context_manager.py`** - Tests for database context management
+4. **`test_rate_limiting.py`** - Tests for rate limiting functionality
+5. **`test_route_integration.py`** - Integration tests for updated search routes
+6. **`test_route_verification.py`** - Simple verification tests for updated routes
+7. **`test_server_side_session.py`** - Tests for server-side session management
+8. **`test_style_guide_rate_limit.py`** - Tests for rate limiting on style guide route
+
+## Environment Configuration
+
+Tests use environment variables for configuration. Copy `.env.example` to `.env` and adjust as needed:
+
+```bash
+cp .env.example .env
+```
+
+Key environment variables for tests:
+- `BASE_URL` - Base URL of the application (default: `http://127.0.0.1:5001`)
+- `FLASK_PORT` - Port for the Flask application (default: `5001`)
+- `DATABASE_URL` - Database connection string
 
 ## Running the Tests
 
@@ -31,6 +49,25 @@ uv run python tests/test_runner.py
 The integration tests use the admin credentials:
 - Username: `admin`
 - Password: `Vivek@2026`
+
+### Security Tests
+
+Test the security protection against large or malformed payloads:
+
+```bash
+cd /path/to/fundus_img_xtract
+uv run test_upload_routes.py
+uv run test_csrf_protection.py
+```
+
+### Rate Limiting Tests
+
+Test rate limiting functionality:
+
+```bash
+cd /path/to/fundus_img_xtract
+uv run tests/test_style_guide_rate_limit.py
+```
 
 ## Test Coverage
 
@@ -154,3 +191,5 @@ To add new tests:
 - The integration tests use the actual database and existing test data
 - Tests are designed to be non-destructive and won't modify existing data
 - The test runner creates its own database sessions and properly closes them
+- Security tests verify protection against payload attacks and CSRF vulnerabilities
+- All test scripts read configuration from environment variables for flexibility

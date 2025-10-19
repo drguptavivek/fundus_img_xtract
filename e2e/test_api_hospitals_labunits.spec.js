@@ -1,6 +1,7 @@
 // @ts-check
 import { test, expect } from '@playwright/test';
 import { login } from './utils/login.js';
+import { getApiBaseUrl } from './utils/config.js';
 
 test.describe('Hospital and Lab Unit API Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -10,7 +11,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
 
   test('GET /api/hospitals should return list of hospitals', async ({ page }) => {
     // Make API request to get hospitals
-    const response = await page.request.get('http://localhost:5001/api/hospitals');
+    const response = await page.request.get(`${getApiBaseUrl()}/hospitals`);
     
     // Verify response status
     expect(response.status()).toBe(200);
@@ -38,7 +39,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
 
   test('GET /api/hospitals/<id>/labunits should return lab units for a hospital', async ({ page }) => {
     // First get a list of hospitals to find a valid ID
-    const hospitalsResponse = await page.request.get('http://localhost:5001/api/hospitals');
+    const hospitalsResponse = await page.request.get(`${getApiBaseUrl()}/hospitals`);
     expect(hospitalsResponse.status()).toBe(200);
     const hospitals = await hospitalsResponse.json();
     
@@ -49,7 +50,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
     
     // Get lab units for the first hospital
     const hospitalId = hospitals[0].id;
-    const labUnitsResponse = await page.request.get(`http://localhost:5001/api/hospitals/${hospitalId}/labunits`);
+    const labUnitsResponse = await page.request.get(`${getApiBaseUrl()}/hospitals/${hospitalId}/labunits`);
     
     // Verify response status
     expect(labUnitsResponse.status()).toBe(200);
@@ -81,7 +82,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
   test('GET /api/hospitals/<nonexistent_id>/labunits should return 404', async ({ page }) => {
     // Use a very large ID that's unlikely to exist
     const nonExistentId = 999999;
-    const response = await page.request.get(`http://localhost:5001/api/hospitals/${nonExistentId}/labunits`);
+    const response = await page.request.get(`${getApiBaseUrl()}/hospitals/${nonExistentId}/labunits`);
     
     // Verify response status is 404
     expect(response.status()).toBe(404);
@@ -96,7 +97,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
 
   test('GET /api/hospitals/<invalid_id>/labunits should handle invalid ID', async ({ page }) => {
     // Test with invalid ID format
-    const response = await page.request.get('http://localhost:5001/api/hospitals/invalid_id/labunits');
+    const response = await page.request.get(`${getApiBaseUrl()}/hospitals/invalid_id/labunits`);
     
     // Should return 404 or 400 for invalid ID format
     expect([404, 400]).toContain(response.status());
@@ -109,14 +110,14 @@ test.describe('Hospital and Lab Unit API Tests', () => {
     const unauthenticatedPage = await context.newPage();
     
     // Use the request API to directly test the endpoints
-    const hospitalsResponse = await unauthenticatedPage.request.get('http://localhost:5001/api/hospitals');
+    const hospitalsResponse = await unauthenticatedPage.request.get(`${getApiBaseUrl()}/hospitals`);
     
     // The API should return a 302 redirect when not authenticated
     // Playwright's request API automatically follows redirects, so we check the final URL
     const hospitalsStatus = hospitalsResponse.status();
     
     // Try to access lab units endpoint without authentication
-    const labUnitsResponse = await unauthenticatedPage.request.get('http://localhost:5001/api/hospitals/1/labunits');
+    const labUnitsResponse = await unauthenticatedPage.request.get(`${getApiBaseUrl()}/hospitals/1/labunits`);
     
     // The API should return a 302 redirect when not authenticated
     const labUnitsStatus = labUnitsResponse.status();
@@ -134,7 +135,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
 
   test('API responses should be properly formatted JSON', async ({ page }) => {
     // Test hospitals endpoint
-    const hospitalsResponse = await page.request.get('http://localhost:5001/api/hospitals');
+    const hospitalsResponse = await page.request.get(`${getApiBaseUrl()}/hospitals`);
     expect(hospitalsResponse.status()).toBe(200);
     
     const hospitalsText = await hospitalsResponse.text();
@@ -145,7 +146,7 @@ test.describe('Hospital and Lab Unit API Tests', () => {
     // Test lab units endpoint (if we have hospitals)
     const hospitals = JSON.parse(hospitalsText);
     if (hospitals.length > 0) {
-      const labUnitsResponse = await page.request.get(`http://localhost:5001/api/hospitals/${hospitals[0].id}/labunits`);
+      const labUnitsResponse = await page.request.get(`${getApiBaseUrl()}/hospitals/${hospitals[0].id}/labunits`);
       expect(labUnitsResponse.status()).toBe(200);
       
       const labUnitsText = await labUnitsResponse.text();

@@ -39,12 +39,42 @@ The testing framework automatically creates test users with different roles for 
 - Lab Units: Community Ophthalmology (ID: 1), Retina Lab (ID: 2)
 - Diseases: Glaucoma (ID: 1), DR (ID: 2), AMD (ID: 3)
 
-#### User Lifecycle
+#### User Lifecycle and Persistence
 
 - **Creation**: Test users are created automatically when the `test_users` fixture is used
 - **Isolation**: Each test function gets a fresh database state with clean test users
 - **Cleanup**: Test users are automatically removed when the test session ends
-- **No Persistence**: Test users never persist in the production database
+- **No Persistence in Production**: Test users never persist in the production database
+- **Test Database Retention**: Test users are retained in the test database for the duration of the test session
+- **Session Scope**: Test users exist for the entire test session (not just individual tests) to improve performance
+- **Automatic Rollback**: All database changes are rolled back after each test, ensuring clean state
+
+#### Database Configuration
+
+The testing framework uses two different SQLite databases:
+
+1. **Primary Test Database** (`test_db` fixture):
+   - Type: Temporary file-based SQLite database
+   - Location: Created using `tempfile.mkstemp()` in the system's temp directory
+   - Scope: Session-scoped (created once per test session)
+   - Purpose: Used for creating and managing test data including users, roles, and permissions
+   - Lifecycle: Created at the beginning of the test session and destroyed when the session ends
+
+2. **Flask App Database** (`app` fixture):
+   - Type: In-memory SQLite database
+   - Location: `sqlite:///:memory:`
+   - Scope: Function-scoped (created fresh for each test)
+   - Purpose: Used by the Flask application for HTTP request testing
+   - Lifecycle: Created fresh for each test function and destroyed when the test completes
+
+#### Database Isolation
+
+Both test databases are completely isolated from the production database:
+- **No Production Impact**: Test data never affects the production database
+- **Temporary Storage**: File-based database is stored in a temporary file that's automatically deleted
+- **Memory-based Testing**: Flask tests use a pure in-memory database for maximum speed
+- **Clean State**: Each test starts with a clean database state
+- **Automatic Cleanup**: All databases are automatically cleaned up when tests complete
 
 ### Using Test Users in Tests
 

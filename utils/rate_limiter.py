@@ -1,15 +1,25 @@
 """
 Rate limiting utilities for the Flask application.
 Provides different rate limiting strategies for various endpoints.
+
+Features:
+- Role-based rate limiting
+- Custom key generation for users/IPs
+- Specialized decorators for different endpoint types
+- Memcached/Redis storage backends
+- Meta limits for overall protection
+- Dynamic rate limit configuration
+- Shared limits for resource protection
+- Comprehensive error handling and logging
 """
 
 import os
 import logging
 from functools import wraps
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 from flask import request, jsonify, current_app, g
-from flask_limiter import Limiter
+from flask_limiter import Limiter, ExemptionScope
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from models import Session
@@ -57,7 +67,16 @@ def rate_limit_with_feedback(
         show_warning: Whether to show a warning message when approaching the limit
     """
     def decorator(f: Callable) -> Callable:
-        @wraps(f)
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=per_method,
+            methods=methods,
+            error_message=error_message or f"Rate limit exceeded: {limit}"
+        )(f)
+        
+        @wraps(decorated_func)
         def wrapped(*args, **kwargs):
             # Check if we should show a warning about remaining requests
             if show_warning and not request.path.startswith('/api/'):
@@ -71,13 +90,8 @@ def rate_limit_with_feedback(
                 except Exception:
                     pass
             
-            # Apply rate limit using Flask-Limiter directly
-            return limiter.limit(
-                limit,
-                per_method=per_method,
-                methods=methods,
-                error_message=error_message or f"Rate limit exceeded: {limit}"
-            )(f)(*args, **kwargs)
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
         
         return wrapped
     
@@ -99,21 +113,19 @@ def rate_limit(
         error_message: Custom error message for rate limit exceeded
     """
     def decorator(f: Callable) -> Callable:
-        @wraps(f)
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=per_method,
+            methods=methods,
+            error_message=error_message or f"Rate limit exceeded: {limit}"
+        )(f)
+        
+        @wraps(decorated_func)
         def wrapped(*args, **kwargs):
-            # Get the current limiter instance at runtime
-            from flask import current_app
-            current_limiter = current_app.extensions.get('limiter')
-            if not current_limiter:
-                current_limiter = limiter
-            
-            # Apply rate limit using Flask-Limiter directly
-            return current_limiter.limit(
-                limit,
-                per_method=per_method,
-                methods=methods,
-                error_message=error_message or f"Rate limit exceeded: {limit}"
-            )(f)(*args, **kwargs)
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
         
         return wrapped
     
@@ -124,43 +136,91 @@ def auth_rate_limit(limit: str = "5 per minute") -> Callable:
     Specialized rate limit for authentication endpoints.
     More restrictive than general rate limits.
     """
-    return rate_limit(
-        limit=limit,
-        per_method=True,
-        methods=["POST"],
-        error_message="Too many authentication attempts. Please try again later."
-    )
+    def decorator(f: Callable) -> Callable:
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=True,
+            methods=["POST"],
+            error_message="Too many authentication attempts. Please try again later."
+        )(f)
+        
+        @wraps(decorated_func)
+        def wrapped(*args, **kwargs):
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
+        
+        return wrapped
+    
+    return decorator
 
 def upload_rate_limit(limit: str = "10 per minute") -> Callable:
     """
     Rate limit for file upload endpoints.
     """
-    return rate_limit(
-        limit=limit,
-        per_method=True,
-        methods=["POST"],
-        error_message="Upload rate limit exceeded. Please wait before uploading more files."
-    )
+    def decorator(f: Callable) -> Callable:
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=True,
+            methods=["POST"],
+            error_message="Upload rate limit exceeded. Please wait before uploading more files."
+        )(f)
+        
+        @wraps(decorated_func)
+        def wrapped(*args, **kwargs):
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
+        
+        return wrapped
+    
+    return decorator
 
 def api_rate_limit(limit: str = "100 per minute") -> Callable:
     """
     Rate limit for general API endpoints.
     """
-    return rate_limit(
-        limit=limit,
-        per_method=True,
-        error_message="API rate limit exceeded. Please reduce your request frequency."
-    )
+    def decorator(f: Callable) -> Callable:
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=True,
+            error_message="API rate limit exceeded. Please reduce your request frequency."
+        )(f)
+        
+        @wraps(decorated_func)
+        def wrapped(*args, **kwargs):
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
+        
+        return wrapped
+    
+    return decorator
 
 def admin_rate_limit(limit: str = "50 per minute") -> Callable:
     """
     Rate limit for admin endpoints.
     """
-    return rate_limit(
-        limit=limit,
-        per_method=True,
-        error_message="Admin operation rate limit exceeded."
-    )
+    def decorator(f: Callable) -> Callable:
+        # Apply the limiter decorator directly to the function
+        # This ensures it overrides any default limits
+        decorated_func = limiter.limit(
+            limit,
+            per_method=True,
+            error_message="Admin operation rate limit exceeded."
+        )(f)
+        
+        @wraps(decorated_func)
+        def wrapped(*args, **kwargs):
+            # Call the decorated function
+            return decorated_func(*args, **kwargs)
+        
+        return wrapped
+    
+    return decorator
 
 def log_rate_limit_violation(limit_key, limit):
     """
@@ -273,10 +333,87 @@ def get_user_rate_limits(user_id: int) -> dict:
                 "api": "100 per minute"
             }
 
+def dynamic_rate_limit_from_config():
+    """
+    Dynamically load rate limits from configuration.
+    This allows updating limits without code changes.
+    
+    Returns:
+        str: Rate limit string from config
+    """
+    # Check if there's a custom limit for the current endpoint
+    endpoint = request.endpoint if request else None
+    if endpoint:
+        custom_limit = current_app.config.get(f'RATELIMIT_{endpoint.upper()}_LIMIT')
+        if custom_limit:
+            return custom_limit
+    
+    # Return default limit
+    return current_app.config.get('RATELIMIT_DEFAULT', '500 per hour, 50 per minute')
+
+def shared_resource_limit(resource_name: str, limit: str = None):
+    """
+    Create a shared rate limit for protecting specific resources.
+    Multiple routes can share the same limit bucket.
+    
+    Args:
+        resource_name: Name of the resource to protect
+        limit: Rate limit string (optional, defaults to config)
+    
+    Returns:
+        Callable: Decorator function
+    """
+    if limit is None:
+        limit = current_app.config.get('RATELIMIT_SHARED_DEFAULT', '100 per hour')
+    
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            # Get the current limiter instance
+            current_limiter = current_app.extensions.get('limiter') or limiter
+            
+            # Apply shared limit with resource scope
+            return current_limiter.shared_limit(
+                limit,
+                scope=resource_name
+            )(f)(*args, **kwargs)
+        return wrapped
+    return decorator
+
+def conditional_exempt(condition_func: Callable[[], bool]):
+    """
+    Conditionally exempt a route from rate limiting based on a condition.
+    
+    Args:
+        condition_func: Function that returns True if route should be exempt
+    
+    Returns:
+        Callable: Decorator function
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            # Get the current limiter instance
+            current_limiter = current_app.extensions.get('limiter') or limiter
+            
+            # Apply conditional exemption
+            return current_limiter.limit(
+                "",
+                exempt_when=condition_func
+            )(f)(*args, **kwargs)
+        return wrapped
+    return decorator
+
 def init_rate_limiting(app):
     """
     Initialize rate limiting for the Flask application.
     Reads configuration from environment variables.
+    
+    Implements best practices from Flask-Limiter documentation:
+    - Proper storage backend configuration
+    - Meta limits for overall protection
+    - Dynamic rate limit loading
+    - Shared limits for resource protection
     """
     # Read all rate limiting configuration from environment
     app.config['RATELIMIT_ENABLED'] = os.getenv('RATELIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes')
@@ -284,13 +421,19 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_STORAGE_URL'] = os.getenv('RATELIMIT_STORAGE_URL', 'memory://')
     app.config['RATELIMIT_KEY_PREFIX'] = os.getenv('RATELIMIT_KEY_PREFIX', '')
     app.config['RATELIMIT_STRATEGY'] = os.getenv('RATELIMIT_STRATEGY', 'fixed-window')
+    
+    # Meta limits for overall protection (new feature)
+    app.config['RATELIMIT_META_LIMITS'] = os.getenv('RATELIMIT_META_LIMITS', '1000 per hour, 100 per minute')
+    
     # Configure headers based on environment variable
-    headers_enabled = os.getenv('RATELIMIT_HEADERS_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    headers_enabled = os.getenv('RATELIMIT_HEADERS_ENABLED', 'true').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_HEADERS_ENABLED'] = headers_enabled
     app.config['RATELIMIT_HEADER_RESET'] = os.getenv('RATELIMIT_HEADER_RESET', 'false').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_HEADER_REMAINING'] = os.getenv('RATELIMIT_HEADER_REMAINING', 'true').lower() in ('true', '1', 'yes')
+    
+    # Behavior configuration
     app.config['RATELIMIT_FAIL_ON_FIRST_BREACH'] = os.getenv('RATELIMIT_FAIL_ON_FIRST_BREACH', 'false').lower() in ('true', '1', 'yes')
-    app.config['RATELIMIT_SWALLOW_ERRORS'] = os.getenv('RATELIMIT_SWALLOW_ERRORS', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_SWALLOW_ERRORS'] = os.getenv('RATELIMIT_SWALLOW_ERRORS', 'true').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_DEDUPLICATE'] = os.getenv('RATELIMIT_DEDUPLICATE', 'false').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_DEFAULTS_PER_METHOD'] = os.getenv('RATELIMIT_DEFAULTS_PER_METHOD', 'false').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_DEFAULTS_COST'] = int(os.getenv('RATELIMIT_DEFAULTS_COST', '1'))
@@ -300,6 +443,9 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_MEMCACHED_SERVERS'] = os.getenv('RATELIMIT_MEMCACHED_SERVERS')
     app.config['RATELIMIT_MEMCACHED_USERNAME'] = os.getenv('RATELIMIT_MEMCACHED_USERNAME')
     app.config['RATELIMIT_MEMCACHED_PASSWORD'] = os.getenv('RATELIMIT_MEMCACHED_PASSWORD')
+    app.config['RATELIMIT_MEMCACHED_CONNECT_TIMEOUT'] = os.getenv('RATELIMIT_MEMCACHED_CONNECT_TIMEOUT', '2')
+    app.config['RATELIMIT_MEMCACHED_TIMEOUT'] = os.getenv('RATELIMIT_MEMCACHED_TIMEOUT', '1')
+    app.config['RATELIMIT_MEMCACHED_MAX_POOL_SIZE'] = os.getenv('RATELIMIT_MEMCACHED_MAX_POOL_SIZE', '10')
     
     # Configure storage backend based on environment variables
     storage_configured = False
@@ -393,14 +539,22 @@ def init_rate_limiting(app):
     rate_limit_logger.info(f"Creating limiter with storage_uri: {storage_uri}")
     
     try:
-        # Create a new limiter instance - it will read from Flask config
+        # Parse default and meta limits
+        default_limits = app.config.get('RATELIMIT_DEFAULT', '').split(',') if app.config.get('RATELIMIT_DEFAULT') else None
+        meta_limits = app.config.get('RATELIMIT_META_LIMITS', '').split(',') if app.config.get('RATELIMIT_META_LIMITS') else None
+        
+        # Create a new limiter instance with enhanced configuration
         new_limiter = Limiter(
             key_func=get_rate_limit_key,
             app=app,
             strategy=app.config.get('RATELIMIT_STRATEGY', 'fixed-window'),
-            headers_enabled=False,  # Disable headers to avoid compatibility issues
-            swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', False),
-            key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', '')
+            headers_enabled=app.config.get('RATELIMIT_HEADERS_ENABLED', False),
+            swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', True),
+            key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', ''),
+            default_limits=default_limits,
+            meta_limits=meta_limits,
+            fail_on_first_breach=app.config.get('RATELIMIT_FAIL_ON_FIRST_BREACH', False),
+            on_breach=handle_rate_limit_exceeded
         )
         
         # Update the global limiter

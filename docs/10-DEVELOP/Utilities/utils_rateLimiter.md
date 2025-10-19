@@ -1,15 +1,106 @@
 # Rate Limiter Utilities Documentation
 
-This document provides an overview of the rate limiting utilities available in the rate limiter module. These utilities are designed to protect the application from abuse, brute force attacks, and denial of service attempts by limiting the frequency of requests.
+This document provides a comprehensive overview of the rate limiting utilities available in the rate limiter module. These utilities are designed to protect the application from abuse, brute force attacks, and denial of service attempts by limiting the frequency of requests.
 
 ## Module Overview
 
-This module provides a comprehensive rate limiting system using Flask-Limiter with role-based limits, custom key generation, and specialized decorators for different endpoint types. It implements the OWASP A04:2021 security control for rate limiting.
+This module provides a comprehensive rate limiting system using Flask-Limiter with:
+- Role-based limits
+- Custom key generation for users/IPs
+- Specialized decorators for different endpoint types
+- Meta limits for overall protection
+- Dynamic rate limit configuration
+- Shared limits for resource protection
+- Conditional exemptions
+- Comprehensive error handling and logging
+- Support for Memcached, Redis, and memory storage backends
 
-## Get CUrrent Limits 
+It implements the OWASP A04:2021 security control for rate limiting and follows Flask-Limiter best practices.
+
+## Configuration
+
+Rate limiting is configured through environment variables in the `.env` file:
 
 ```bash
+# Enable/disable rate limiting
+RATELIMIT_ENABLED=true
 
+# Default rate limit applied to all routes
+RATELIMIT_DEFAULT=500 per hour, 50 per minute
+
+# Meta limits for overall protection (applies to all limits)
+RATELIMIT_META_LIMITS=1000 per hour, 100 per minute
+
+# Rate limit storage backend
+RATELIMIT_STORAGE_URL=memcached://
+
+# Memcached server configuration
+RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+RATELIMIT_MEMCACHED_CONNECT_TIMEOUT=2
+RATELIMIT_MEMCACHED_TIMEOUT=1
+RATELIMIT_MEMCACHED_MAX_POOL_SIZE=10
+# RATELIMIT_MEMCACHED_USERNAME=
+# RATELIMIT_MEMCACHED_PASSWORD=
+
+# Rate limiting strategy (fixed-window, moving-window, sliding-window-counter)
+RATELIMIT_STRATEGY=fixed-window
+
+# Include rate limit headers in responses
+RATELIMIT_HEADERS_ENABLED=true
+
+# Swallow errors when storage backend is unavailable
+RATELIMIT_SWALLOW_ERRORS=true
+
+# Fail immediately on first breach
+RATELIMIT_FAIL_ON_FIRST_BREACH=false
+
+# Deduplicate identical requests
+RATELIMIT_DEDUPLICATE=false
+
+# Apply limits per HTTP method
+RATELIMIT_DEFAULTS_PER_METHOD=false
+
+# Default cost per request
+RATELIMIT_DEFAULTS_COST=1
+
+# Key prefix for rate limits
+RATELIMIT_KEY_PREFIX=
+
+# Shared resource limits
+RATELIMIT_SHARED_DEFAULT=100 per hour
+```
+
+### Storage Backends
+
+#### Memory Storage (Development)
+```bash
+RATELIMIT_STORAGE_URL=memory://
+```
+- Suitable for development and single-instance deployments
+- Rate limit data is lost on application restart
+
+#### Memcached (Production)
+```bash
+RATELIMIT_STORAGE_URL=memcached://
+RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+```
+- Recommended for production environments
+- Shared across multiple application instances
+- Requires memcached server to be installed and running
+- Currently configured and active in this application
+
+#### Redis (Production Alternative)
+```bash
+RATELIMIT_STORAGE_URL=redis://localhost:6379/0
+REDIS_URL=redis://localhost:6379/0
+```
+- Alternative to Memcached for production
+- Shared across multiple application instances
+- Requires Redis server to be installed and running
+
+## Get Current Limits 
+
+```bash
 flask limiter config
 ```
 ```ini
@@ -44,7 +135,6 @@ Directories are ready.
 │ On breach callback      │ RATELIMIT_ON_BREACH_CAL… │ None                    │
 └─────────────────────────┴──────────────────────────┴─────────────────────────┘
 ```
-
 
 ```bash
 flask limiter limits
@@ -547,74 +637,145 @@ verify_remedio_nodr
 └── verify_remedio_nodr.nodr_list: /verify_remedio_nodr/list
     ├── 2000 per 1 day
     └── 500 per 1 hour
-
 ```
 
-## Configuration
+## Rate Limit Decorators
 
-The rate limiter can be configured through environment variables:
+The application provides several decorators for applying rate limits. These decorators properly override the default limits when applied to routes.
 
-### Basic Configuration
-- `RATELIMIT_ENABLED`: Enable/disable rate limiting (default: "true")
-- `RATELIMIT_DEFAULT`: Default rate limit string applied to all routes (default: "500 per hour, 50 per minute")
-- `RATELIMIT_STORAGE_URL`: Storage backend URL (memory://, redis://, or memcached://)
-- `RATELIMIT_KEY_PREFIX`: Prefix for rate limit keys (default: empty)
-- `RATELIMIT_STRATEGY`: Rate limiting strategy - fixed-window, moving-window, or fixed-window-elastic-expiry (default: "fixed-window")
+### Basic Rate Limit
+```python
+from utils.rate_limiter import rate_limit
 
-### Storage Backend Configuration
-- `RATELIMIT_MEMCACHED_SERVERS`: Comma-separated list of Memcached servers (e.g., "localhost:11211")
-- `RATELIMIT_MEMCACHED_USERNAME`: Username for authenticated Memcached connections (optional)
-- `RATELIMIT_MEMCACHED_PASSWORD`: Password for authenticated Memcached connections (optional)
-- `REDIS_URL`: Redis URL for distributed rate limiting (optional)
+@app.route('/api/data')
+@rate_limit("100 per hour")
+def get_data():
+    return jsonify(data)
+```
 
-### Headers Configuration
-- `RATELIMIT_HEADERS_ENABLED`: Enable rate limit headers in responses (default: "false" - disabled for compatibility with Werkzeug 3.1.3)
-- `RATELIMIT_HEADER_RESET`: Include X-RateLimit-Reset header with Unix timestamp (default: "false")
-- `RATELIMIT_HEADER_REMAINING`: Include X-RateLimit-Remaining header (default: "true")
+### Authentication Endpoints
+Authentication endpoints use stricter rate limits for security:
 
-**Note**: Due to a compatibility issue between Flask-Limiter (>=3.8.0) and Werkzeug (3.1.3), the built-in header functionality is disabled. Instead, custom headers are added via the `@app.after_request` handler in `app.py`.
+```python
+from utils.rate_limiter import auth_rate_limit
 
-### Behavior Configuration
-- `RATELIMIT_FAIL_ON_FIRST_BREACH`: Fail immediately on first breach instead of waiting for window to reset (default: "false")
-- `RATELIMIT_SWALLOW_ERRORS`: Continue processing when rate limit storage fails (default: "false")
-- `RATELIMIT_DEDUPLICATE`: Deduplicate identical requests for rate limiting (default: "false")
-- `RATELIMIT_DEFAULTS_PER_METHOD`: Apply rate limits per HTTP method instead of per endpoint (default: "false")
-- `RATELIMIT_DEFAULTS_COST`: Cost per request for rate limiting (default: "1")
-- `RATELIMIT_DEFAULTS_EXEMPT`: Comma-separated list of route patterns to exempt from rate limiting
+@auth_bp.route('/login', methods=['POST'])
+@auth_rate_limit("5 per minute")
+def login():
+    # Login logic - limited to 5 attempts per minute
 
-### Advanced Configuration
-- `RATELIMIT_KEY_FUNC`: Custom key function class (advanced usage)
-- `RATELIMIT_ON_BREACH`: Custom function to call when rate limit is breached
-- `RATELIMIT_APPLICATION`: Application-wide rate limits that override defaults
+@auth_bp.route('/forgot-password', methods=['POST'])
+@auth_rate_limit("3 per 5 minutes")
+def forgot_password():
+    # Password reset - limited to 3 attempts per 5 minutes
 
-### Role-Based Configuration
-- `ADMIN_RATE_LIMIT`: Custom rate limit for admin users
-- `DATA_MANAGER_RATE_LIMIT`: Custom rate limit for data manager users
-- `USER_RATE_LIMIT`: Custom rate limit for regular users
-- `AUTHENTICATED_RATE_LIMIT`: Custom rate limit for any authenticated user
-- `ANONYMOUS_RATE_LIMIT`: Custom rate limit for anonymous users
+@auth_bp.route('/reset-password', methods=['POST'])
+@auth_rate_limit("5 per 10 minutes")
+def reset_password():
+    # Password reset - limited to 5 attempts per 10 minutes
+```
 
-### Storage Backends
+### Upload Endpoints
+```python
+from utils.rate_limiter import upload_rate_limit
 
-The rate limiter supports multiple storage backends:
+@upload_bp.route('/upload', methods=['POST'])
+@upload_rate_limit("10 per minute")
+def upload_file():
+    # Upload logic
+```
 
-1. **In-Memory Storage** (default):
-   - Simple, no external dependencies
-   - Not suitable for production or multi-instance deployments
-   - Rate limits reset on application restart
+### API Endpoints
+```python
+from utils.rate_limiter import api_rate_limit
 
-2. **Redis Storage**:
-   - Suitable for production and distributed systems
-   - Persistent across application restarts
-   - Shared state across multiple application instances
-   - Configuration: Set `RATELIMIT_STORAGE_URL` to Redis connection string (e.g., "redis://localhost:6379")
+@api_bp.route('/endpoint')
+@api_rate_limit("100 per minute")
+def api_endpoint():
+    # API logic
+```
 
-3. **Memcached Storage**:
-   - High-performance distributed caching
-   - Suitable for production and large-scale deployments
-   - Configuration: Set `RATELIMIT_MEMCACHED_SERVERS` to server list (e.g., "server1:11211,server2:11211")
-   - Optional authentication with username/password
-   - Automatic fallback to in-memory if Memcached is unavailable
+### Admin Endpoints
+```python
+from utils.rate_limiter import admin_rate_limit
+
+@admin_bp.route('/admin/action')
+@admin_rate_limit("50 per minute")
+def admin_action():
+    # Admin logic
+```
+
+### Rate Limit with Feedback
+For endpoints that need user feedback when approaching limits:
+
+```python
+from utils.rate_limiter import rate_limit_with_feedback
+
+@app.route('/sensitive-action')
+@rate_limit_with_feedback("5 per minute", showWarning=True)
+def sensitive_action():
+    # Will show warning to users when approaching the limit
+    # And flash message when limit is exceeded
+```
+
+## User-Based Rate Limits
+
+Rate limits can be customized based on user roles:
+
+- **Admin**: 5000 per hour, 100 per minute (upload), 1000 per minute (API)
+- **Data Manager/Ophthalmologist**: 2000 per hour, 50 per minute (upload), 500 per minute (API)
+- **File Uploader/Optometrist**: 1000 per hour, 20 per minute (upload), 200 per minute (API)
+- **Default**: 500 per hour, 10 per minute (upload), 100 per minute (API)
+
+## Advanced Features
+
+### Dynamic Rate Limits
+Rate limits can be loaded dynamically from configuration:
+
+```python
+from utils.rate_limiter import dynamic_rate_limit_from_config
+
+@app.route("/api/dynamic")
+@rate_limit(dynamic_rate_limit_from_config)
+def dynamic_endpoint():
+    # Limit is loaded from RATELIMIT_API_DYNAMIC_LIMIT config
+    return jsonify({"data": []})
+```
+
+### Shared Resource Limits
+Protect shared resources across multiple endpoints:
+
+```python
+from utils.rate_limiter import shared_resource_limit
+
+# Apply to database-intensive endpoints
+@shared_resource_limit("database", "50 per minute")
+@app.route("/api/query1")
+def query1():
+    pass
+
+@shared_resource_limit("database", "50 per minute")
+@app.route("/api/query2")
+def query2():
+    pass
+```
+
+### Conditional Exemptions
+Exempt routes based on conditions:
+
+```python
+from utils.rate_limiter import conditional_exempt
+from flask_login import current_user
+
+@conditional_exempt(lambda: current_user.is_admin)
+@app.route("/admin/bypass")
+def admin_endpoint():
+    # No rate limiting for admin users
+    pass
+```
+
+### Meta Limits
+Meta limits provide an additional layer of protection by limiting the total number of times any rate limit can be breached within a given period. This is configured globally via `RATELIMIT_META_LIMITS`.
 
 ## Functions
 
@@ -820,26 +981,203 @@ Initialize rate limiting for the Flask application.
 - Consistent rate limiting in distributed environments
 - Automatic fallback to in-memory storage if distributed backend is unavailable
 
+## Logging
+
+Rate limit violations are logged to:
+- `logs/rate_limit.log` - Dedicated rate limit log file
+- `logs/runtime_error.log` - Security monitoring
+
+Log entries include:
+- Client IP address
+- User information (if authenticated)
+- Endpoint and path
+- HTTP method
+- Rate limit that was exceeded
+- Rate limit key that was breached
+
+### Configuring Flask-Limiter Logger
+
+You can configure the dedicated Flask-Limiter logger:
+
+```python
+import logging
+limiter_logger = logging.getLogger("flask-limiter")
+
+# Force DEBUG logging
+limiter_logger.setLevel(logging.DEBUG)
+
+# Restrict to only error level
+limiter_logger.setLevel(logging.ERROR)
+
+# Add a custom filter
+limiter_logger.addFilter(CustomFilter)
+```
+
+## Monitoring
+
+To monitor rate limiting:
+
+1. Check the log files:
+   ```bash
+   tail -f logs/rate_limit.log
+   ```
+
+2. Monitor memcached usage:
+   ```bash
+   echo "stats" | nc localhost 11211
+   ```
+
+3. View Flask-Limiter configuration:
+   ```bash
+   uv run flask limiter config
+   ```
+
+4. List all configured rate limits:
+   ```bash
+   uv run flask limiter limits
+   ```
+
+5. Filter limits by endpoint:
+   ```bash
+   uv run flask limiter limits --endpoint=my_endpoint
+   ```
+
+6. Filter limits by path:
+   ```bash
+   uv run flask limiter limits --path=/api/myendpoint
+   ```
+
+7. Check rate limit status for specific key:
+   ```bash
+   uv run flask limiter limits --key=127.0.0.1
+   ```
+
+8. Clear rate limits for specific key:
+   ```bash
+   uv run flask limiter clear --key=127.0.0.1 -y
+   ```
+
+## Troubleshooting
+
+### Memcached Connection Issues
+If memcached is not being used:
+
+1. Verify memcached is running:
+   ```bash
+   ps aux | grep memcached
+   ```
+
+2. Check memcached connectivity:
+   ```bash
+   telnet localhost 11211
+   ```
+
+3. Verify configuration in `.env` file:
+   ```bash
+   # Required for memcached
+   RATELIMIT_STORAGE_URL=memcached://
+   RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+   ```
+
+4. Check application logs for errors:
+   ```bash
+   tail -f logs/rate_limit.log
+   ```
+
+5. Verify Flask-Limiter is using Memcached:
+   ```bash
+   uv run flask limiter config
+   ```
+   Look for "MemcachedStorage" in the output under "Rate Limiting Config"
+
+### Rate Limit Not Working
+If rate limiting appears not to work:
+
+1. Verify `RATELIMIT_ENABLED=true` in `.env`
+2. Check if the endpoint has a rate limit decorator
+3. Verify the storage backend is properly configured
+4. Check logs for any error messages
+
+### Custom Limits Not Applied
+If custom rate limits on routes are not being applied (default limits are used instead):
+
+1. Verify the decorator is applied correctly:
+   ```python
+   @auth_bp.route('/login', methods=['POST'])
+   @auth_rate_limit("5 per minute")  # Must be before the function
+   def login():
+       pass
+   ```
+
+2. Check the actual limits applied to routes:
+   ```bash
+   uv run flask limiter limits
+   ```
+   - Custom limits should appear without the default limits
+   - If both appear, the decorator may not be overriding defaults
+
+3. Verify the limiter initialization order:
+   - Rate limiting must be initialized before blueprints are registered
+   - Check `app.py` to ensure `init_rate_limiting(app)` is called before blueprint registration
+
+### Testing Rate Limits
+To test if rate limits are working correctly:
+
+1. Use a script to make multiple requests quickly:
+   ```python
+   import requests
+   
+   for i in range(10):
+       response = requests.post('http://localhost:5000/login', data={'username': 'test', 'password': 'wrong'})
+       print(f"Request {i+1}: Status {response.status_code}")
+       if response.status_code == 429:
+           print(f"Rate limit hit after {i+1} requests")
+           break
+   ```
+
+2. Check response headers for rate limit info:
+   ```bash
+   curl -I http://localhost:5000/api/endpoint
+   # Look for X-RateLimit-Limit, X-RateLimit-Remaining headers
+   ```
+
+## Security Considerations
+
+1. Rate limits are applied per IP address for anonymous users
+2. Authenticated users have rate limits applied per user ID
+3. Rate limit violations are logged for security monitoring
+4. Consider implementing additional monitoring for repeated violations
+5. Authentication endpoints have stricter limits to prevent brute force attacks
+6. Rate limit keys include user ID when authenticated, preventing shared IP attacks
+7. Meta limits provide additional protection against sophisticated attacks
+
 ## Best Practices
 
-### When Applying Rate Limits:
-1. Use stricter limits for authentication endpoints
-2. Apply higher limits for trusted users/admins
-3. Consider the resource cost of each operation
-4. Monitor rate limit violations for security insights
-5. Use appropriate time windows (minute, hour, day)
+1. **Always use specific decorators for sensitive endpoints**:
+   - Authentication endpoints should use `@auth_rate_limit`
+   - Upload endpoints should use `@upload_rate_limit`
+   - API endpoints should use `@api_rate_limit`
 
-### Monitoring:
-- All rate limit violations are logged
-- Include user ID/IP in logs for investigation
-- Monitor patterns of violations for attack detection
+2. **Test your rate limits**:
+   - Verify custom limits override defaults
+   - Test with both authenticated and anonymous requests
+   - Check that memcached is being used in production
 
-### Testing:
-- Use `RATELIMIT_ENABLED=false` in test environments
-- Test with different user roles
-- Verify custom headers are properly set via the after_request handler
-- Test custom error pages
-- Use the test script in `tests/test_style_guide_rate_limit.py` to verify rate limiting on public routes
+3. **Monitor rate limit violations**:
+   - Set up alerts for repeated violations from the same IP
+   - Review logs regularly for attack patterns
+   - Consider auto-blocking IPs with excessive violations
+
+4. **Configure appropriate limits**:
+   - Authentication: 5-10 attempts per minute
+   - Password reset: 3-5 attempts per 5-10 minutes
+   - File uploads: 10-20 per minute
+   - General API: 100-1000 per minute depending on usage
+
+5. **Use memcached in production**:
+   - Ensures rate limits persist across app restarts
+   - Shared across multiple application instances
+   - Better performance than memory storage
 
 ## Implementation Examples
 
@@ -936,34 +1274,106 @@ List of public module members: [
     'get_rate_limit_for_endpoint'
 ]
 
+## Advanced Functions
+
+### `dynamic_rate_limit_from_config() -> str`
+
+Dynamically loads rate limits from configuration, allowing updates without code changes.
+
+**Returns:**
+- `str`: Rate limit string from config
+
+**Implementation Details:**
+- Checks for endpoint-specific limits in config (e.g., `RATELIMIT_API_CUSTOM_LIMIT`)
+- Falls back to default limit if no specific limit is found
+- Allows hot-reloading of rate limits without application restart
+
+### `shared_resource_limit(resource_name: str, limit: str = None) -> Callable`
+
+Creates a shared rate limit for protecting specific resources across multiple endpoints.
+
+**Parameters:**
+- `resource_name` (str): Name of the resource to protect
+- `limit` (str): Optional rate limit string
+
+**Implementation Details:**
+- Multiple routes can share the same limit bucket
+- Useful for protecting shared resources like databases or external APIs
+- Uses Flask-Limiter's `shared_limit` feature with resource scope
+
+### `conditional_exempt(condition_func: Callable[[], bool]) -> Callable`
+
+Conditionally exempts a route from rate limiting based on a condition.
+
+**Parameters:**
+- `condition_func` (Callable): Function that returns True if route should be exempt
+
+**Implementation Details:**
+- Uses Flask-Limiter's `exempt_when` parameter
+- Useful for admin users or internal requests
+- Condition is evaluated for each request
+
 ## Recent Updates
 
-### Flask-Limiter Compatibility Fix (October 2025)
+### Flask-Limiter Enhancement (October 2025)
 
-**Issue**: Flask-Limiter (>=3.8.0) had a compatibility issue with Werkzeug (3.1.3) causing `AttributeError: 'bool' object has no attribute 'lower'` when trying to inject rate limit headers.
+**Improvements**:
+1. Added meta limits for overall protection against repeated breaches
+2. Implemented dynamic rate limit loading from configuration
+3. Added shared resource limits for protecting common resources
+4. Implemented conditional exemptions based on user roles
+5. Enhanced storage backend configuration with connection pooling
+6. Added comprehensive monitoring commands via Flask CLI
+7. Improved error handling and logging
+8. Fixed compatibility with Flask-Limiter 4.0+ API
+9. **Fixed decorator implementation to properly override default limits**
+10. **Verified Memcached is being used for rate limit storage**
 
-**Solution**:
-1. Disabled built-in header functionality by setting `RATELIMIT_HEADERS_ENABLED = False`
-2. Added custom header injection via `@app.after_request` handler in `app.py`
-3. Enhanced error handling to provide user-friendly flash messages
-4. Applied rate limiting to all non-login required routes:
-   - `/favicon.ico` - 100 per minute
-   - `/` (homepage) - 100 per minute
-   - `/style_guide` - 100 per minute
-   - `/healthz` - 200 per minute (higher limit for health checks)
-   - `/email-sse` - 20 per minute (SSE endpoint for real-time email status)
-   - `/check-email-status` - 20 per minute (endpoint for polling email status)
-   - `/check-session` - 20 per minute (endpoint for session validation)
-   - `/docs/` - 20 per minute (documentation index)
-   - `/docs/api.md` - 20 per minute (API documentation)
-   - `/docs/api.html` - 20 per minute (API documentation HTML)
-   - `/docs/openapi.yaml` - 20 per minute (OpenAPI specification)
-   - `/docs/swagger` - 20 per minute (Swagger UI)
-   - `/docs/swagger.json` - 20 per minute (Swagger JSON)
-   - `/help/` - 20 per minute (help documentation)
-   - `/help/<path:doc_path>` - 20 per minute (help documentation paths)
+**New Features**:
+- Meta limits via `RATELIMIT_META_LIMITS` configuration
+- Dynamic limits via `dynamic_rate_limit_from_config()`
+- Shared limits via `shared_resource_limit()`
+- Conditional exemptions via `conditional_exempt()`
+- Enhanced Memcached configuration with timeout and pool settings
+- Flask CLI commands for monitoring and management
+- **Rate limit decorators now properly override default limits**
+
+**Configuration Enhancements**:
+- Added `RATELIMIT_MEMCACHED_CONNECT_TIMEOUT` for connection timeout
+- Added `RATELIMIT_MEMCACHED_TIMEOUT` for operation timeout
+- Added `RATELIMIT_MEMCACHED_MAX_POOL_SIZE` for connection pooling
+- Added `RATELIMIT_SHARED_DEFAULT` for shared resource limits
+- Added `RATELIMIT_FAIL_ON_FIRST_BREACH` for immediate failure
+- Added `RATELIMIT_DEDUPLICATE` for request deduplication
+- Added `RATELIMIT_DEFAULTS_PER_METHOD` for method-specific limits
+- Added `RATELIMIT_DEFAULTS_COST` for request cost weighting
 
 **Testing**:
-- Created test script `tests/test_style_guide_rate_limit.py` to verify rate limiting on public routes
-- Confirmed that rate limiting works correctly with 100 requests allowed before hitting the limit
-- Verified that flash messages are displayed when rate limits are exceeded
+- Verified Memcached storage backend is properly configured
+- Confirmed meta limits protect against repeated breaches
+- Tested dynamic limit loading without application restart
+- Validated shared limits across multiple endpoints
+- Confirmed conditional exemptions work for admin users
+- **Verified auth routes use custom limits instead of defaults**
+- **Confirmed rate limit decorators properly override default limits**
+
+### Issue Resolution (October 2025)
+
+**Problem**: Auth routes were showing both default limits (500 per hour, 50 per minute) AND their custom limits, causing confusion about which limits were actually being applied.
+
+**Root Cause**: The rate limit decorators were not properly applying the limiter decorator to override the default limits.
+
+**Solution**:
+1. Updated all rate limit decorators (`rate_limit`, `auth_rate_limit`, `upload_rate_limit`, `api_rate_limit`, `admin_rate_limit`) to directly apply the limiter decorator to the function
+2. This ensures custom limits override the default limits completely
+3. Auth routes now only show their custom limits in `flask limiter limits` output
+
+**Verification**:
+```bash
+# Check storage backend
+uv run flask limiter config
+# Should show "MemcachedStorage" under Rate Limiting Config
+
+# Check auth routes have only custom limits
+uv run flask limiter limits | grep auth
+# Should show only custom limits like "5 per 1 minute" for login

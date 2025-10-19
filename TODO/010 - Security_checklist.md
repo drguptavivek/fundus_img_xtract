@@ -9,8 +9,21 @@ Prevent
 Use
 - strict CSP headers
 - NONCEs
-- Track illegal 404 requests. - Source n Ip adn PAThs. 
-- Rate Limiting
+- Track illegal 404 requests. - Source n Ip adn PAThs.
+- Rate Limiting (applied to all non-login routes):
+  - Email-related endpoints: 20 requests per minute
+    - /email-sse (Server-Sent Events)
+    - /check-email-status (Email status polling)
+    - /check-session (Session validation)
+  - Documentation endpoints: 20 requests per minute
+    - /docs/ (Documentation index)
+    - /docs/api.md (API documentation)
+    - /docs/api.html (API documentation HTML)
+    - /docs/openapi.yaml (OpenAPI specification)
+    - /docs/swagger (Swagger UI)
+    - /docs/swagger.json (Swagger JSON)
+    - /help/ (Help documentation)
+    - /help/<path:doc_path> (Help documentation paths)
 - Server side valdiation of input
 - Validate all client provided data before processing
 - Disallow insecute HTTP methods

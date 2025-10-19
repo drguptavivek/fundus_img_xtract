@@ -26,6 +26,10 @@ The system implements a robust authentication system with the following security
   - Maximum 5 failed attempts per username within 30 minutes
   - Maximum 5 failed attempts per IP address within 10 minutes
   - 4-hour lockout duration for both usernames and IPs
+  - Email-related endpoints: 20 requests per minute
+    - `/email-sse` - Server-Sent Events for real-time email status
+    - `/check-email-status` - Polling endpoint for email status
+    - `/check-session` - Session validation endpoint
 - **Account Locking**: User accounts are automatically locked after repeated failed attempts
 - **IP Locking**: IP addresses are automatically blocked after repeated failed attempts
 - **Login Attempt Logging**: All login attempts (success and failure) are logged with username, IP, and timestamp
@@ -134,6 +138,7 @@ Session behavior is controlled by these Flask configuration variables:
 - **Rate Limiting**: Maximum 5 password reset attempts per email per day
 - **OTP Expiration**: OTPs expire after 10 minutes
 - **User Enumeration Protection**: Same response shown regardless of whether email exists
+- **Real-time Status Updates**: Server-Sent Events (SSE) for email sending status
 
 ### Authorization System
 
@@ -314,6 +319,8 @@ The system distinguishes between different types of errors:
 - File upload violations are immediately flagged and deleted
 - Session anomalies are detected and logged with timeout events
 - Role-based access checks are logged in debug mode
+- Rate limit violations are tracked across all public endpoints
+- Email-related activities are monitored for abuse patterns
 
 ### Administrative Tools
 - Malicious upload log viewer for administrators

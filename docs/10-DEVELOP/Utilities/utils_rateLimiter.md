@@ -269,12 +269,15 @@ audit
     └── 500 per 1 hour
 auth
 ├── auth.check_email_status: /check-email-status
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── auth.check_session: /check-session
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── auth.email_sse: /email-sse
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── auth.forgot_password: /forgot-password
@@ -316,21 +319,27 @@ dashboard
     └── 500 per 1 hour
 docs
 ├── docs.docs_index: /docs/
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── docs.api_docs_html: /docs/api.html
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── docs.api_docs: /docs/api.md
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── docs.openapi_spec: /docs/openapi.yaml
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── docs.swagger_ui: /docs/swagger
+│   ├── 20 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 └── docs.swagger_json: /docs/swagger.json
+    ├── 20 per minute
     ├── 2000 per 1 day
     └── 500 per 1 hour
 grading
@@ -942,6 +951,17 @@ List of public module members: [
    - `/` (homepage) - 100 per minute
    - `/style_guide` - 100 per minute
    - `/healthz` - 200 per minute (higher limit for health checks)
+   - `/email-sse` - 20 per minute (SSE endpoint for real-time email status)
+   - `/check-email-status` - 20 per minute (endpoint for polling email status)
+   - `/check-session` - 20 per minute (endpoint for session validation)
+   - `/docs/` - 20 per minute (documentation index)
+   - `/docs/api.md` - 20 per minute (API documentation)
+   - `/docs/api.html` - 20 per minute (API documentation HTML)
+   - `/docs/openapi.yaml` - 20 per minute (OpenAPI specification)
+   - `/docs/swagger` - 20 per minute (Swagger UI)
+   - `/docs/swagger.json` - 20 per minute (Swagger JSON)
+   - `/help/` - 20 per minute (help documentation)
+   - `/help/<path:doc_path>` - 20 per minute (help documentation paths)
 
 **Testing**:
 - Created test script `tests/test_style_guide_rate_limit.py` to verify rate limiting on public routes

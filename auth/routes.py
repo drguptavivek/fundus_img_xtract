@@ -408,7 +408,7 @@ def reset_password():
 
 
 @auth_bp.route("/email-sse")
-@rate_limit("60 per minute")  # SSE endpoint needs higher limit for real-time updates
+@rate_limit("20 per minute")  # SSE endpoint for real-time updates
 def email_sse():
     """Server-sent events endpoint for email sending results."""
     def event_stream():
@@ -426,7 +426,7 @@ def email_sse():
 
 
 @auth_bp.route("/check-email-status")
-@rate_limit("30 per minute")  # Status check endpoint
+@rate_limit("20 per minute")  # Status check endpoint
 def check_email_status():
     """Check for any email sending status updates."""
     session_id = session.get('_id', 'unknown')
@@ -442,7 +442,7 @@ def check_email_status():
 
 
 @auth_bp.route("/check-session")
-@rate_limit("30 per minute")  # Session check endpoint
+@rate_limit("20 per minute")  # Session check endpoint
 def check_session():
     """Check if session cookie is valid and redirect to homepage if it is."""
     from flask_login import current_user

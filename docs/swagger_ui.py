@@ -94,14 +94,14 @@ SWAGGER_TEMPLATE = """
 """
 
 @docs_bp.route('/swagger')
-@rate_limit("100 per minute")
+@rate_limit("20 per minute")
 def swagger_ui():
     """Serve Swagger UI for API testing and discovery."""
     spec_url = url_for('docs.openapi_spec')
     return render_template_string(SWAGGER_TEMPLATE, spec_url=spec_url)
 
 @docs_bp.route('/swagger.json')
-@rate_limit("100 per minute")
+@rate_limit("20 per minute")
 def swagger_json():
     """Serve the OpenAPI specification as JSON (converted from YAML)."""
     try:

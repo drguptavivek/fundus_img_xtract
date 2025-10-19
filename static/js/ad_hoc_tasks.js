@@ -14,6 +14,13 @@
 
   const selected = new Map(); // key: `${type}:${id}` -> {source, id, lab_unit_id}
 
+  function fmtLocalDate(val) {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+  }
+
   // Scoped toggle for source-specific filters within this page's form
   function toggleScoped() {
     if (!filtersForm) return;
@@ -62,6 +69,8 @@
         : (Array.isArray(img.tasks_for_diseases) && img.tasks_for_diseases.some(t => t && t.disease === 'AI Grade'));
       const aiList = Array.isArray(img.ai_diseases) && img.ai_diseases.length ? img.ai_diseases
         : (img.type === 'direct' ? (img.disease ? [img.disease] : []) : ((typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? ['Glaucoma'] : ['DR']));
+      const captureStr = fmtLocalDate(img.capture_date);
+      const uploadStr = fmtLocalDate(img.upload_date);
       const card = document.createElement('div');
       card.className = 'col';
       card.innerHTML = `
@@ -73,8 +82,9 @@
             </label>
           </div>
           <div class="small text-muted">${img.hospital || ''} / ${img.lab_unit || ''}</div>
-          <div class="small">Capture: ${img.capture_date || ''}</div>
-          <div class="small">Upload: ${img.upload_date || ''}</div>
+          <div class="small">Capture: ${captureStr || '—'}</div>
+          <div class="small">Upload: ${uploadStr || '—'}</div>
+          ${img.type === 'zip' ? `<div class="small">Reports: DR: ${(typeof img.has_dr_report === 'boolean' && img.has_dr_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}, Glaucoma: ${(typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</div>` : ''}
           <div class="small">Uploaded for: ${uploadedFor || '—'}</div>
           ${hasAI ? `<div class="small">AI: ${aiList.join(', ')}</div>` : ''}
           <div class="small">Tasks: ${taskNames.length ? taskNames.join(', ') : 'None'}</div>
@@ -100,6 +110,11 @@
   async function doSearch() {
     const formData = new FormData(filtersForm);
     const params = new URLSearchParams(formData);
+    // Persist filters to URL and localStorage
+    try {
+      history.replaceState(null, '', `?${params.toString()}`);
+      localStorage.setItem('adhoc_filters', JSON.stringify(Object.fromEntries(formData.entries())));
+    } catch (e) { /* ignore */ }
     const res = await fetch(`/tasks/ad_hoc/search?${params.toString()}`, { credentials: 'same-origin' });
     const data = await res.json();
     try { console.log('[AdHoc] search total=', data.total, 'first item=', (data.items && data.items[0]) || null); } catch (e) {}
@@ -111,6 +126,49 @@
     e.preventDefault();
     doSearch().catch((err) => console.error(err));
   });
+
+  // Prefill filters from URL or localStorage
+  (function prefillFilters() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasUrl = Array.from(urlParams.keys()).length > 0;
+      const saved = !hasUrl ? localStorage.getItem('adhoc_filters') : null;
+      const obj = hasUrl ? Object.fromEntries(urlParams.entries()) : (saved ? JSON.parse(saved) : null);
+      if (obj) {
+        Object.entries(obj).forEach(([k, v]) => {
+          const el = filtersForm.querySelector(`[name="${CSS.escape(k)}"]`);
+          if (!el) return;
+          if (el.tagName === 'SELECT' || el.tagName === 'INPUT') {
+            el.value = v;
+          }
+        });
+      }
+    } catch (e) { /* ignore */ }
+  })();
+
+  // Clear filters handler: clears URL query and localStorage when on Ad-hoc page
+  (function bindClearFilters() {
+    const clearEls = [
+      document.getElementById('clear-filters-link'),
+      document.getElementById('clear-filters-link-2')
+    ].filter(Boolean);
+    clearEls.forEach(el => {
+      el.addEventListener('click', (e) => {
+        try {
+          // Only intercept on Ad-hoc page
+          if (window.location.pathname.startsWith('/tasks/ad_hoc')) {
+            e.preventDefault();
+            localStorage.removeItem('adhoc_filters');
+            history.replaceState(null, '', window.location.pathname);
+            // Reset form fields
+            filtersForm.reset();
+            toggleScoped();
+            doSearch();
+          }
+        } catch (err) { /* ignore */ }
+      });
+    });
+  })();
 
   // Bind and initialize the scoped toggle for source selection
   const srcEl = filtersForm.querySelector('#filter-source');

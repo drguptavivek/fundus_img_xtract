@@ -17,6 +17,23 @@
 
   const selected = new Map(); // key: `${type}:${id}` -> {source, id, lab_unit_id}
 
+  function notify(message, level = 'info') {
+    if (window.flashToast) {
+      window.flashToast(message, level);
+      return;
+    }
+    const alert = document.createElement('div');
+    const levelClass = level === 'danger' ? 'danger' : level === 'success' ? 'success' : (level === 'warning' ? 'warning' : 'info');
+    alert.className = `alert alert-${levelClass} position-fixed top-0 start-50 translate-middle-x mt-3 shadow`; // bootstrap style fallback
+    alert.style.zIndex = '1080';
+    alert.textContent = message;
+    document.body.appendChild(alert);
+    setTimeout(() => {
+      alert.classList.add('fade');
+      setTimeout(() => alert.remove(), 150);
+    }, 4000);
+  }
+
   function fmtLocalDate(val) {
     if (!val) return '';
     const d = new Date(val);
@@ -191,7 +208,7 @@
     const maxInput = document.getElementById('maxImages');
     const maxImages = parseInt(maxInput.value, 10) || 0;
     const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
-    if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
+    if (!Array.isArray(diseases) || diseases.length === 0) { notify('Select at least one target disease', 'warning'); return; }
     if (!(maxImages > 0)) { maxInput.classList.add('is-invalid'); maxInput.focus(); return; } else { maxInput.classList.remove('is-invalid'); }
     try {
       // Always refresh current results from filters first
@@ -226,11 +243,7 @@
       modal.show();
     } catch (e) {
       console.error(e);
-      if (window.flashToast) {
-        window.flashToast('Preview failed. Check filters and try again.', 'danger');
-      } else {
-        alert('Preview failed');
-      }
+      notify('Preview failed. Check filters and try again.', 'danger');
     }
   });
 
@@ -241,25 +254,17 @@
     const filters = Object.fromEntries(new FormData(filtersForm).entries()) || {};
     const selectedRefs = Array.from(selected.values());
     const remarks = (document.getElementById('adHocRemarks')?.value || '').trim();
-    if (!Array.isArray(diseases) || diseases.length === 0) { alert('Select at least one target disease'); return; }
+    if (!Array.isArray(diseases) || diseases.length === 0) { notify('Select at least one target disease', 'warning'); return; }
     if (!(maxImages > 0)) { maxInput.classList.add('is-invalid'); maxInput.focus(); return; } else { maxInput.classList.remove('is-invalid'); }
     try {
       const data = await postJSON('/tasks/ad_hoc/create', { diseases, max_images: maxImages, filters, selected_image_refs: selectedRefs, randomize: !!randomizeEl?.checked, remarks });
       const viewUrl = `/tasks/ad_hoc/list?ad_hoc_id=${data.ad_hoc_id}`;
-      if (window.flashToast) {
-        window.flashToast(`Batch ${data.ad_hoc_id} created. Created: ${data.summary.created}, Duplicates: ${data.summary.duplicates} — <a href="${viewUrl}" class="text-white text-decoration-underline">View Batch</a>`, 'success');
-      } else {
-        alert(`Batch ${data.ad_hoc_id} created: ${JSON.stringify(data.summary)}. View: ${viewUrl}`);
-      }
+      notify(`Batch ${data.ad_hoc_id} created. Created: ${data.summary.created}, Duplicates: ${data.summary.duplicates} — <a href="${viewUrl}" class="text-decoration-underline text-reset">View Batch</a>`, 'success');
       const modal = bootstrap.Modal.getOrCreateInstance(previewModalEl);
       modal.hide();
     } catch (e) {
       console.error(e);
-      if (window.flashToast) {
-        window.flashToast('Create failed. Please retry.', 'danger');
-      } else {
-        alert('Create failed');
-      }
+      notify('Create failed. Please retry.', 'danger');
     }
   });
 

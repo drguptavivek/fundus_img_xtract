@@ -58,6 +58,15 @@
     };
   }
 
+  function formatDiseaseNames(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return '—';
+    const names = ids.map(id => {
+      const match = diseasesMaster.find(d => d.id === id);
+      return match ? match.name : String(id);
+    }).filter(Boolean);
+    return names.length ? names.join(', ') : ids.join(', ');
+  }
+
   function describePreviewItem(item) {
     if (!item) return '';
     const meta = item.meta || {};
@@ -123,6 +132,7 @@
 
   function renderResults(items) {
     resultsEl.innerHTML = '';
+    itemMeta.clear();
     items.forEach((img) => {
       const key = `${img.type}:${img.id || img.encounter_id || ''}`;
       const checked = selected.has(key) ? 'checked' : '';
@@ -182,7 +192,7 @@
         } else {
           selected.delete(key);
         }
-        nextBtn.disabled = selected.size === 0;
+        refreshNextState();
       });
     });
   }
@@ -199,6 +209,7 @@
     const data = await res.json();
     try { console.log('[AdHoc] search total=', data.total, 'first item=', (data.items && data.items[0]) || null); } catch (e) {}
     resultCountEl.textContent = `${data.total} matches`;
+    window.__lastResults = Array.isArray(data.items) ? data.items : [];
     renderResults(data.items || []);
   }
 
@@ -274,28 +285,28 @@
       // Always refresh current results from filters first
       await doSearch();
       const data = await postJSON('/tasks/ad_hoc/preview', { diseases, max_images: maxImages, filters, randomize: !!randomizeEl?.checked, selected_image_refs: Array.from(selected.values()) });
+      previewItems = Array.isArray(data.candidates) ? data.candidates : [];
       // Criteria summary: filters + disease + eligible
       const filterPairs = Object.entries(filters).filter(([_,v]) => v !== '' && v != null);
       const filterStr = filterPairs.map(([k,v]) => `${k}=${v}`).join(', ');
-      criteriaSnapshotEl.textContent = `Disease: ${diseases.join(', ')} · Max: ${maxImages} · Eligible: ${data.eligible_count} · Filters: ${filterStr || '—'}`;
-      // Decide which list to show: server candidates (randomized or filtered) or current manual selection
-      const previewRefs = (Array.isArray(data.candidates) && data.candidates.length) ? data.candidates.map(c => ({source: c.type, id: c.id, lab_unit_id: c.lab_unit_id})) : Array.from(selected.values());
-      const rows = previewRefs.slice(0, 200).map(ref => {
-        // find matching item in last results if available
-        const card = (window.__lastResults || []).find(i => (i.type === ref.source) && ((i.direct_image_upload_id||i.encounter_file_id||i.id||i.encounter_id) == ref.id));
-        const type = ref.source?.toUpperCase() || (card?.type?.toUpperCase() || '');
-        const disease = card?.disease || (Array.isArray(card?.ai_diseases) ? card.ai_diseases.join('/') : '');
-        const lab = card?.lab_unit || '';
-        const cap = card?.capture_date ? new Date(card.capture_date).toLocaleDateString() : '—';
-        const exist = Array.isArray(card?.tasks_for_diseases) ? card.tasks_for_diseases.map(t => t?.disease).filter(Boolean).join(', ') : '';
-        return `<li><strong>${type}</strong> — ${disease || '—'} — ${lab || '—'} — Capture: ${cap} — Tasks: ${exist || 'None'}
-          </li>`;
+      criteriaSnapshotEl.textContent = `Target Disease: ${formatDiseaseNames(diseases)} · Max: ${maxImages} · Eligible: ${data.eligible_count} · Filters: ${filterStr || '—'}`;
+      const hasManualSelection = selected.size > 0;
+      const useServerCandidates = !hasManualSelection && previewItems.length > 0;
+      const displayItems = (useServerCandidates ? previewItems : Array.from(selected.values())).slice(0, maxImages);
+      const rows = displayItems.map(item => {
+        if (!item.meta) {
+          const refSource = item.source || item.type;
+          const refId = item.id;
+          const match = (window.__lastResults || []).find(r => (r.type === refSource) && ((r.direct_image_upload_id || r.encounter_file_id || r.id || r.encounter_id) == refId));
+          if (match) item.meta = buildMetaFromImage(match);
+        }
+        return describePreviewItem(item);
       }).join('');
-      selectionPreviewEl.innerHTML = rows ? `<ol class="mb-0 small">${rows}</ol>` : '<div class="text-muted small">No images selected.</div>';
+      selectionPreviewEl.innerHTML = rows ? `<ol class="mb-0 small ps-3">${rows}</ol>` : '<div class="text-muted small">No images selected.</div>';
       // Set selection mode badge
       const selectionModeBadge = document.getElementById('selectionModeBadge');
       if (selectionModeBadge) {
-        const mode = (Array.from(selected.values()).length > 0) ? 'Manual Selection' : (randomizeEl?.checked ? 'Randomized Selection' : 'Manual Selection');
+        const mode = useServerCandidates ? 'Randomized Selection' : 'Manual Selection';
         selectionModeBadge.textContent = mode;
         selectionModeBadge.className = `badge ${mode.startsWith('Random') ? 'bg-info' : 'bg-secondary'} ms-2`;
       }
@@ -336,8 +347,6 @@
     const rand = !!(document.getElementById('randomizePick')?.checked);
     nextBtn.disabled = (!rand && selected.size === 0);
   }
-  // expose hook for selection changes
-  root.addEventListener('selection-changed', refreshNextState);
   // react to randomize toggle
   randomizeEl?.addEventListener('change', () => {
     if (randomizeEl.checked) {

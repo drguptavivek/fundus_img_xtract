@@ -147,7 +147,6 @@ def detail(ad_hoc_id: int):
         }
         # Fetch created tasks for this batch and resolve image UUIDs (ORM joins; uuid for both models)
         from models import Disease as DiseaseModel, LabUnit as LabUnitModel, DirectImageUpload, EncounterFile
-        tasks_q = db.query(GradingTask).all()
         tasks_q = db.query(GradingTask).filter(GradingTask.ad_hoc_id == b.id).all()
         # Build lookup maps for disease and lab names
         disease_name_by_id = {d.id: d.name for d in db.query(DiseaseModel).all()}

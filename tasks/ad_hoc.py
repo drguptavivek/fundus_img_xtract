@@ -318,6 +318,21 @@ def preview():
             return jsonify({'error': str(e), 'hint': 'Invalid search filters'}), 400
 
     # Determine eligibility: exclude images that already have a task for selected diseases
+    def _build_meta(img: dict[str, Any]) -> dict[str, Any]:
+        return {
+            'camera': img.get('camera') or img.get('camera_name'),
+            'hospital': img.get('hospital') or img.get('hospital_name'),
+            'lab_unit': img.get('lab_unit') or img.get('lab_unit_name'),
+            'capture_date': img.get('capture_date'),
+            'upload_date': img.get('upload_date'),
+            'tasks': img.get('tasks_for_diseases'),
+            'area': img.get('area') or img.get('area_name'),
+            'disease': img.get('disease'),
+            'source': img.get('type'),
+            'uploader': img.get('uploader'),
+            'ai_diseases': img.get('ai_diseases'),
+        }
+
     candidates: list[dict[str, Any]] = []
     duplicates = 0
     # If randomize requested and no manual selections, sample across all matches by drawing random pages
@@ -368,12 +383,14 @@ def preview():
                 if key in seen_ids:
                     continue
                 seen_ids.add(key)
+                meta = _build_meta(img)
                 sampled.append({
                     'uuid': img.get('uuid'),
                     'type': img.get('type'),
                     'available_diseases': available,
                     'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None,
                     'id': img_id,
+                    'meta': meta,
                 })
         candidates = sampled
     else:
@@ -381,12 +398,14 @@ def preview():
             tasks_for = set(img.get('tasks_for_diseases_ids') or [])
             available = [d for d in diseases if d not in tasks_for]
             if available:
+                meta = _build_meta(img)
                 candidates.append({
                     'uuid': img.get('uuid'),
                     'type': img.get('type'),
                     'available_diseases': available,
                     'lab_unit_id': img.get('lab_unit_id') or img.get('lab_unit') or None,
                     'id': img.get('direct_image_upload_id') or img.get('encounter_file_id') or img.get('id') or img.get('encounter_id'),
+                    'meta': meta,
                 })
             else:
                 duplicates += 1

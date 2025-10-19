@@ -15,7 +15,9 @@
   const confirmBtn = document.getElementById('confirmCreateBtn');
   const randomizeEl = document.getElementById('randomizePick');
 
-  const selected = new Map(); // key: `${type}:${id}` -> {source, id, lab_unit_id}
+  const selected = new Map(); // key: `${type}:${id}` -> {source, id, lab_unit_id, meta}
+  const itemMeta = new Map();
+  let previewItems = [];
 
   function notify(message, level = 'info') {
     if (window.flashToast) {
@@ -26,12 +28,63 @@
     const levelClass = level === 'danger' ? 'danger' : level === 'success' ? 'success' : (level === 'warning' ? 'warning' : 'info');
     alert.className = `alert alert-${levelClass} position-fixed top-0 start-50 translate-middle-x mt-3 shadow`; // bootstrap style fallback
     alert.style.zIndex = '1080';
-    alert.textContent = message;
+    alert.innerHTML = message;
     document.body.appendChild(alert);
     setTimeout(() => {
       alert.classList.add('fade');
       setTimeout(() => alert.remove(), 150);
     }, 4000);
+  }
+
+  function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str).replace(/[&<>"]+/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] || c));
+  }
+
+  function buildMetaFromImage(img) {
+    if (!img) return {};
+    return {
+      camera: img.camera || img.camera_name || '',
+      hospital: img.hospital || img.hospital_name || '',
+      lab_unit: img.lab_unit || img.lab_unit_name || '',
+      capture_date: img.capture_date || null,
+      upload_date: img.upload_date || null,
+      tasks: Array.isArray(img.tasks_for_diseases) ? img.tasks_for_diseases : [],
+      area: img.area || img.area_name || '',
+      disease: img.disease || '',
+      uploader: img.uploader || '',
+      source: img.type || '',
+      ai_diseases: Array.isArray(img.ai_diseases) ? img.ai_diseases : [],
+    };
+  }
+
+  function describePreviewItem(item) {
+    if (!item) return '';
+    const meta = item.meta || {};
+    const type = (item.source || item.type || meta.source || '').toUpperCase();
+    const camera = escapeHtml(meta.camera || '');
+    const location = escapeHtml([meta.hospital, meta.lab_unit].filter(Boolean).join(' / '));
+    const capture = fmtLocalDate(meta.capture_date) || '—';
+    const upload = fmtLocalDate(meta.upload_date) || '—';
+    const disease = escapeHtml(meta.disease || '');
+    const ai = Array.isArray(meta.ai_diseases) && meta.ai_diseases.length ? escapeHtml(meta.ai_diseases.join(', ')) : '';
+    const tasks = Array.isArray(meta.tasks) && meta.tasks.length
+      ? escapeHtml(meta.tasks.map(t => {
+          if (!t) return '';
+          const name = t.disease || 'Task';
+          const status = t.status ? ` (${t.status})` : '';
+          return `${name}${status}`;
+        }).filter(Boolean).join(', '))
+      : 'None';
+
+    return `<li class="mb-2">
+      <div><strong>${escapeHtml(type || 'IMAGE')}</strong>${camera ? ` · ${camera}` : ''}</div>
+      <div class="text-muted small">${location || '—'}</div>
+      <div class="small">Capture: ${escapeHtml(capture)} · Upload: ${escapeHtml(upload)}</div>
+      ${disease ? `<div class="small">Image Disease: ${disease}</div>` : ''}
+      ${ai ? `<div class="small">AI Grades: ${ai}</div>` : ''}
+      <div class="small">Tasks: ${tasks}</div>
+    </li>`;
   }
 
   function fmtLocalDate(val) {
@@ -74,6 +127,8 @@
       const key = `${img.type}:${img.id || img.encounter_id || ''}`;
       const checked = selected.has(key) ? 'checked' : '';
       const labUnitId = img.lab_unit_id || img.lab_unit || null;
+      const meta = buildMetaFromImage(img);
+      itemMeta.set(key, meta);
       const taskNames = Array.isArray(img.tasks_for_diseases)
         ? img.tasks_for_diseases.filter(t => t && t.disease !== 'AI Grade').map(t => t.disease).filter(Boolean)
         : [];
@@ -116,7 +171,12 @@
       cb.addEventListener('change', (e) => {
         const el = e.target;
         const key = el.dataset.key;
-        const ref = { source: el.dataset.source, id: parseInt(el.dataset.id, 10), lab_unit_id: parseInt(el.dataset.labUnitId || '0', 10) || null };
+        const ref = {
+          source: el.dataset.source,
+          id: parseInt(el.dataset.id, 10),
+          lab_unit_id: parseInt(el.dataset.labUnitId || '0', 10) || null,
+          meta: itemMeta.get(key) || {},
+        };
         if (el.checked) {
           selected.set(key, ref);
         } else {

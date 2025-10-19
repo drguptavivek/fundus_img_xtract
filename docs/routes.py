@@ -4,6 +4,7 @@ import markdown
 from markdown_mermaid import makeExtension
 from flask import send_from_directory, abort, render_template_string, current_app
 from . import docs_bp
+from utils.rate_limiter import rate_limit
 
 # Get the base directory of the application
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -54,6 +55,7 @@ MARKDOWN_TEMPLATE = """
 """
 
 @docs_bp.route('/api.md')
+@rate_limit("100 per minute")
 def api_docs():
     """Serve the API documentation markdown file."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -63,6 +65,7 @@ def api_docs():
         abort(404)
 
 @docs_bp.route('/api.html')
+@rate_limit("100 per minute")
 def api_docs_html():
     """Serve the API documentation as HTML."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -87,6 +90,7 @@ def api_docs_html():
             abort(404)
 
 @docs_bp.route('/openapi.yaml')
+@rate_limit("100 per minute")
 def openapi_spec():
     """Serve the OpenAPI specification YAML file."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -96,6 +100,7 @@ def openapi_spec():
         abort(404)
 
 @docs_bp.route('/')
+@rate_limit("100 per minute")
 def docs_index():
     """Serve the documentation index."""
     docs_dir = os.path.join(BASE_DIR, 'docs')

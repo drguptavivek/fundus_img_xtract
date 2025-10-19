@@ -39,7 +39,7 @@ Directories are ready.
 │                         │ RATELIMIT_DEFAULTS_EXEM… │ None                    │
 │                         │ RATELIMIT_DEFAULTS_DEDU… │ None                    │
 │                         │ RATELIMIT_DEFAULTS_COST  │ 1                       │
-│ Header configuration    │ RATELIMIT_HEADERS_ENABL… │ False                   │
+│ Header configuration    │ RATELIMIT_HEADERS_ENABL… │ False (disabled for compatibility) │
 │ Fail on first breach    │ RATELIMIT_FAIL_ON_FIRST… │ True                    │
 │ On breach callback      │ RATELIMIT_ON_BREACH_CAL… │ None                    │
 └─────────────────────────┴──────────────────────────┴─────────────────────────┘
@@ -56,15 +56,19 @@ Setting up the environment...
 Directories are ready.
 app
 ├── homepage: /
+│   ├── 100 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── _favicon: /favicon.ico
+│   ├── 100 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── healthz: /healthz
+│   ├── 200 per minute
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 └── style_guide: /style_guide
+    ├── 100 per minute
     ├── 2000 per 1 day
     └── 500 per 1 hour
 account
@@ -555,9 +559,11 @@ The rate limiter can be configured through environment variables:
 - `REDIS_URL`: Redis URL for distributed rate limiting (optional)
 
 ### Headers Configuration
-- `RATELIMIT_HEADERS_ENABLED`: Enable rate limit headers in responses (default: "true")
+- `RATELIMIT_HEADERS_ENABLED`: Enable rate limit headers in responses (default: "false" - disabled for compatibility with Werkzeug 3.1.3)
 - `RATELIMIT_HEADER_RESET`: Include X-RateLimit-Reset header with Unix timestamp (default: "false")
 - `RATELIMIT_HEADER_REMAINING`: Include X-RateLimit-Remaining header (default: "true")
+
+**Note**: Due to a compatibility issue between Flask-Limiter (>=3.8.0) and Werkzeug (3.1.3), the built-in header functionality is disabled. Instead, custom headers are added via the `@app.after_request` handler in `app.py`.
 
 ### Behavior Configuration
 - `RATELIMIT_FAIL_ON_FIRST_BREACH`: Fail immediately on first breach instead of waiting for window to reset (default: "false")
@@ -781,6 +787,7 @@ Initialize rate limiting for the Flask application.
 - Sets up custom key function and error handler
 - Applies configuration from environment variables
 - Automatically detects and configures Memcached with authentication if provided
+- Disables built-in header functionality to prevent compatibility issues with Werkzeug 3.1.3
 - Returns the limiter instance for further configuration if needed
 
 ## Security Features
@@ -821,8 +828,9 @@ Initialize rate limiting for the Flask application.
 ### Testing:
 - Use `RATELIMIT_ENABLED=false` in test environments
 - Test with different user roles
-- Verify headers are properly set
+- Verify custom headers are properly set via the after_request handler
 - Test custom error pages
+- Use the test script in `tests/test_style_guide_rate_limit.py` to verify rate limiting on public routes
 
 ## Implementation Examples
 
@@ -918,3 +926,24 @@ List of public module members: [
     'get_rate_limit_for_user_role',
     'get_rate_limit_for_endpoint'
 ]
+
+## Recent Updates
+
+### Flask-Limiter Compatibility Fix (October 2025)
+
+**Issue**: Flask-Limiter (>=3.8.0) had a compatibility issue with Werkzeug (3.1.3) causing `AttributeError: 'bool' object has no attribute 'lower'` when trying to inject rate limit headers.
+
+**Solution**:
+1. Disabled built-in header functionality by setting `RATELIMIT_HEADERS_ENABLED = False`
+2. Added custom header injection via `@app.after_request` handler in `app.py`
+3. Enhanced error handling to provide user-friendly flash messages
+4. Applied rate limiting to all non-login required routes:
+   - `/favicon.ico` - 100 per minute
+   - `/` (homepage) - 100 per minute
+   - `/style_guide` - 100 per minute
+   - `/healthz` - 200 per minute (higher limit for health checks)
+
+**Testing**:
+- Created test script `tests/test_style_guide_rate_limit.py` to verify rate limiting on public routes
+- Confirmed that rate limiting works correctly with 100 requests allowed before hitting the limit
+- Verified that flash messages are displayed when rate limits are exceeded

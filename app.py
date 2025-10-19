@@ -21,7 +21,7 @@ from werkzeug.exceptions import HTTPException
 from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
 from server_side_session import DatabaseSessionInterface, mark_session_ended
-from utils.rate_limiter import init_rate_limiting
+from utils.rate_limiter import init_rate_limiting, rate_limit
 
 
 csrf = CSRFProtect()
@@ -700,12 +700,14 @@ def create_app():
 
     # Serve classic /favicon.ico path for browsers that request it directly
     @app.get('/favicon.ico')
+    @rate_limit("100 per minute")
     def _favicon():
         return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
     # -------------------------------
     # New homepage route
     @app.route("/")
+    @rate_limit("100 per minute")
     def homepage():
         from home import homepage as home_page
         return home_page()
@@ -714,11 +716,13 @@ def create_app():
     # -------------------------------
     # Style Guide
     @app.route("/style_guide")
+    @rate_limit("100 per minute")
     def style_guide():
         return render_template("style_guide.html")
     # -------------------------------
 
     @app.route("/healthz", methods=["GET"])
+    @rate_limit("200 per minute")
     def healthz():
         db = Session()
         try:

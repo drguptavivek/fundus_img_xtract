@@ -4,6 +4,7 @@ import yaml
 import json
 from flask import render_template_string, abort, url_for
 from . import docs_bp
+from utils.rate_limiter import rate_limit
 
 # Get the base directory of the application
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -93,12 +94,14 @@ SWAGGER_TEMPLATE = """
 """
 
 @docs_bp.route('/swagger')
+@rate_limit("100 per minute")
 def swagger_ui():
     """Serve Swagger UI for API testing and discovery."""
     spec_url = url_for('docs.openapi_spec')
     return render_template_string(SWAGGER_TEMPLATE, spec_url=spec_url)
 
 @docs_bp.route('/swagger.json')
+@rate_limit("100 per minute")
 def swagger_json():
     """Serve the OpenAPI specification as JSON (converted from YAML)."""
     try:

@@ -22,6 +22,7 @@
    - Build POST route `/tasks/intra-rater/batches` with `roles_required("admin", "data_manager")`.
    - Validate graders belong to requested lab units (User-LabUnit scoping) and possess slot permissions for the chosen disease/lab unit (`UserDiseaseUnitRole`); prompt the creator to pick which grading impression represents “Normal” for each disease and ensure sufficient eligible images exist (return flash warnings per grader when short).
    - Persist batch header and associated tasks using `transaction_scope()` to follow the DB context manager pattern and keep the operation atomic.
+   - **Progress:** JSON routes in `tasks/route_intra_rater.py` now list and create batches, applying scoping validation and invoking `IntraRaterService`.
 
 4. **Task Queue Integration**
    - Extend grader queue service to merge `intra_rater_tasks` with existing workload only for the owning grader; exclude for others unless admin/data manager.

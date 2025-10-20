@@ -233,21 +233,17 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.organizational_tasks' else '' }}"
                   href="{{ url_for('tasks.organizational_tasks') }}">All Tasks</a>
               </li>
-              <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}"
-                  href="{{ url_for('ad_hoc_tasks.index') }}">Ad-hoc Task Creator</a>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}"
-                  href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
-              </li>
-              {% endif %}
-              {% if current_user_has('data_manager') or current_user_has('admin') %}
                <li>
                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">All Images</a>
+              </li>
+                                <li>
+                <hr class="dropdown-divider">
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}" href="{{ url_for('ad_hoc_tasks.index') }}">Create Ad-hoc Tasks</a>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}" href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
+
               {% endif %}
 
             </ul>

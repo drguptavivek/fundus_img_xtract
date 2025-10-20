@@ -8,22 +8,32 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>Created At</th>
-            <th>By</th>
-            <th>Randomized</th>
-            <th>Remarks</th>
             <th>Diseases</th>
-            <th>Max</th>
-            <th>Summary</th>
+            <th>Max setting</th>
+            <th>Randomized</th>
+            <th>Images added</th>
+            <th>Remarks</th>
             <th>Actions</th>
+           <th>Created At</th>
+            <th>By</th>
+
           </tr>
         </thead>
         <tbody>
         {% for r in rows %}
           <tr class="{{ 'table-info' if focus_id and r.id == focus_id else '' }}">
             <td>#{{ r.id }}</td>
-            <td>{{ r.created_at }}</td>
-            <td>{{ r.created_by or '—' }}</td>
+            <td>
+              {% if r.disease_names and r.disease_names|length %}
+                {{ r.disease_names | join(', ') }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+                      <td>{{ r.max_images }}</td>
+
+
             <td>
               {% if r.randomized %}
                 <span class="badge bg-info">Yes</span>
@@ -31,25 +41,25 @@
                 <span class="badge bg-secondary">No</span>
               {% endif %}
             </td>
-            <td class="text-truncate" style="max-width: 240px;" title="{{ r.remarks }}">{{ r.remarks or '—' }}</td>
-            <td>
-              {% if r.disease_names and r.disease_names|length %}
-                {{ r.disease_names | join(', ') }}
-                <div class="text-muted small">IDs: {{ r.disease_ids | join(', ') }}</div>
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td>{{ r.max_images }}</td>
-            <td>
+
+                        <td>
               {% set s = r.summary or {} %}
               <span class="badge bg-success">Created {{ s.created or 0 }}</span>
               <span class="badge bg-warning text-dark">Dup {{ s.duplicates or 0 }}</span>
               {% if s.unsuitable %}<span class="badge bg-secondary">Unsuitable {{ s.unsuitable }}</span>{% endif %}
             </td>
+
+            <td class="text-truncate" style="max-width: 240px;" title="{{ r.remarks }}">{{ r.remarks or '—' }}</td>
+            
+  
+
             <td>
               <a class="btn btn-sm btn-outline-primary" href="{{ url_for('ad_hoc_tasks.detail', ad_hoc_id=r.id) }}">View Details</a>
             </td>
+                        <td>{{ r.created_at }}</td>
+                                    <td>{{ r.created_by or '—' }}</td>
+
+
           </tr>
         {% endfor %}
         </tbody>

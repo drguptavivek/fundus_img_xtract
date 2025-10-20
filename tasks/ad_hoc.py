@@ -33,25 +33,25 @@ def index():
         from models import Hospital, LabUnit, Camera, Area
         diseases = [
             {'id': d.id, 'name': d.name}
-            for d in db.query(Disease).order_by(Disease.name).all()
+            for d in db.query(Disease).order_by(Disease.id).all()
         ]
         hospitals = [
             {'id': h.id, 'name': h.name}
-            for h in db.query(Hospital).order_by(Hospital.name).all()
+            for h in db.query(Hospital).order_by(Hospital.id).all()
         ]
         # Include hospital name for lab units to match template display
         from sqlalchemy.orm import joinedload
         lab_units = [
             {'id': lu.id, 'name': lu.name, 'hospital_name': (lu.hospital.name if getattr(lu, 'hospital', None) else None)}
-            for lu in db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.name).all()
+            for lu in db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.id).all()
         ]
         cameras = [
             {'id': c.id, 'name': c.name}
-            for c in db.query(Camera).order_by(Camera.name).all()
+            for c in db.query(Camera).order_by(Camera.id).all()
         ]
         areas = [
             {'id': a.id, 'name': a.name}
-            for a in db.query(Area).order_by(Area.name).all()
+            for a in db.query(Area).order_by(Area.id).all()
         ]
     default_filters = {
         'source': 'all', 'hospital_id': '', 'lab_unit_id': '', 'upload_start': '', 'upload_end': '',

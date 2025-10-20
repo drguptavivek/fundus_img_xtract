@@ -133,7 +133,7 @@
   function renderResults(items) {
     resultsEl.innerHTML = '';
     itemMeta.clear();
-    items.forEach((img) => {
+    items.forEach((img, idx) => {
       const key = `${img.type}:${img.id || img.encounter_id || ''}`;
       const checked = selected.has(key) ? 'checked' : '';
       const labUnitId = img.lab_unit_id || img.lab_unit || null;
@@ -156,25 +156,52 @@
         : (img.type === 'direct' ? (img.disease ? [img.disease] : []) : ((typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? ['Glaucoma'] : ['DR']));
       const captureStr = fmtLocalDate(img.capture_date);
       const uploadStr = fmtLocalDate(img.upload_date);
+      const uuid = img.uuid;
+      const galleryId = uuid ? `adhoc-card-gallery-${idx}-${Math.random().toString(16).slice(2)}` : null;
+      const imageBlock = uuid ? `
+        <div class="mb-2">
+          <div class="rounded border overflow-hidden" style="height: 200px; width: 200px;">
+            <img src="${urlForMedia(uuid)}" class="w-100 h-100 object-fit-cover" alt="Preview ${uuid}">
+          </div>
+          <div id="${galleryId}" class="d-none pswp-gallery">
+            <a href="${urlForMedia(uuid)}" data-pswp-type="image" title="Preview ${uuid}"></a>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary mt-2 view-image-btn" data-gallery="${galleryId}">View Image</button>
+        </div>
+      ` : '';
       const card = document.createElement('div');
       card.className = 'col';
       card.innerHTML = `
         <div class="card card-body p-2 h-100">
+          ${imageBlock}
           <div class="form-check">
             <input class="form-check-input select-image" type="checkbox" data-key="${key}" data-source="${img.type}" data-id="${img.direct_image_upload_id || img.encounter_file_id || img.id || img.encounter_id || ''}" data-lab-unit-id="${labUnitId || ''}" ${checked}>
             <label class="form-check-label">
-              ${img.type?.toUpperCase() || ''} · ${img.camera || ''}
+              ${img.type?.toUpperCase() || ''} 
             </label>
           </div>
-          <div class="small text-muted">${img.hospital || ''} / ${img.lab_unit || ''}</div>
+          <div class="small">Uploaded for: ${uploadedFor || '—'}</div>
+          <div class="small">Current Grading Tasks: ${taskNames.length ? taskNames.join(', ') : 'None'}</div>
+          ${img.type === 'zip' ? `<div class="small">Reports: DR: ${(typeof img.has_dr_report === 'boolean' && img.has_dr_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}, Glaucoma: ${(typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</div>` : ''}
+          ${hasAI ? `<div class="small">AI: ${aiList.join(', ')}</div>` : ''}
+         
+          <div class="small text-muted">${img.hospital || ''} - ${img.lab_unit || ''}</div>
           <div class="small">Capture: ${captureStr || '—'}</div>
           <div class="small">Upload: ${uploadStr || '—'}</div>
-          ${img.type === 'zip' ? `<div class="small">Reports: DR: ${(typeof img.has_dr_report === 'boolean' && img.has_dr_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}, Glaucoma: ${(typeof img.has_glaucoma_report === 'boolean' && img.has_glaucoma_report) ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</div>` : ''}
-          <div class="small">Uploaded for: ${uploadedFor || '—'}</div>
-          ${hasAI ? `<div class="small">AI: ${aiList.join(', ')}</div>` : ''}
-          <div class="small">Tasks: ${taskNames.length ? taskNames.join(', ') : 'None'}</div>
+          
+          <div class="small">Camera: ${img.camera || ''} </div>
         </div>`;
       resultsEl.appendChild(card);
+    });
+
+    resultsEl.querySelectorAll('.view-image-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const gallery = btn.dataset.gallery;
+        if (gallery && typeof window.openPswpGallery === 'function') {
+          window.openPswpGallery(gallery, 0);
+        }
+      });
     });
 
     resultsEl.querySelectorAll('.select-image').forEach((cb) => {
@@ -195,6 +222,10 @@
         refreshNextState();
       });
     });
+  }
+
+  function urlForMedia(uuid) {
+    return `/media/img/${uuid}`;
   }
 
   async function doSearch() {

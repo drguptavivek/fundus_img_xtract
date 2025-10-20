@@ -1,7 +1,13 @@
 # media/routes.py
 from auth.roles import roles_required
-from utils.utilsImgServe import (directImgFinalByUUID, 
-    directImgOrigByUUID, encounterImageByUUID, directImgEdByUUID,imgForGradingByUUID)
+from utils.rate_limiter import rate_limit
+from utils.utilsImgServe import (
+    directImgFinalByUUID,
+    directImgOrigByUUID,
+    encounterImageByUUID,
+    directImgEdByUUID,
+    imgForGradingByUUID,
+)
 
 from . import bp
 
@@ -28,5 +34,6 @@ def _directImgFinalByUUID(uuid_str: str):
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@rate_limit("600 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)

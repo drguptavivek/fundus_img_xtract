@@ -23,16 +23,15 @@
             <option value="{{ d.id }}">{{ d.name }}</option>
             {% endfor %}
           </select>
-          <div class="form-text">You can add more in the modal.</div>
         </div>
         <div class="col-auto">
           <label class="form-label">Max images</label>
-          <input type="number" min="1" max="1000" value="50" id="maxImages" class="form-control form-control-sm" />
+          <input type="number" min="1" max="200" value="50" id="maxImages" class="form-control form-control-sm" />
           <div class="invalid-feedback">Enter a value between 1 and 1000.</div>
         </div>
         <div class="col-auto form-check mt-4">
           <input class="form-check-input" type="checkbox" id="randomizePick">
-          <label class="form-check-label" for="randomizePick">Randomize selection (across all matches)</label>
+          <label class="form-check-label" for="randomizePick">Auto Random Selection (across all matches)</label>
         </div>
         <!-- Removed dedicated Search button; use Preview below -->
       </div>
@@ -80,6 +79,9 @@
 {% endblock %}
 {% block page_scripts %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
   <script src="{{ url_for('static', filename='js/ad_hoc_tasks.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/search_images.js') }}" defer></script>
 {% endblock %}

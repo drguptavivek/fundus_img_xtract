@@ -16,6 +16,7 @@
    - Prioritize abnormal images by ordering candidates (`is_normal = 0` first, then `is_normal = 1`), falling back to normals only when abnormal inventory is exhausted; maintain counts in the audit payload.
    - Enforce cooldown by comparing against latest intra-rater grade and latest original grade for that `(grader, image, disease)` tuple; respect user-lab unit visibility when pre-filtering candidate images.
    - Produce deterministic audit payload containing candidate IDs, reasons for exclusion, abnormal vs normal counts, and final selection order; serialize into `selection_snapshot_json`.
+   - **Progress:** `services/intra_rater_service.py` now provides batch creation logic with abnormal prioritization, cooldown enforcement, and selection audit serialization.
 
 3. **Batch Creation Workflow**
    - Build POST route `/tasks/intra-rater/batches` with `roles_required("admin", "data_manager")`.

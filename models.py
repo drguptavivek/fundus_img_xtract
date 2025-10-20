@@ -697,6 +697,97 @@ class AdHocTaskCreation(Base):
     )
 
 
+class AppSetting(Base):
+    """Key/value application settings store."""
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    value_type: Mapped[str] = mapped_column(String(32), default="string", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class IntraRaterBatch(Base):
+    """Batch metadata for intra-rater reliability assessments."""
+    __tablename__ = "intra_rater_batches"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey("lab_units.id"), nullable=True, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    cooldown_days_override: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_images_per_grader: Mapped[int] = mapped_column(Integer, nullable=False)
+    normal_grade_id: Mapped[int | None] = mapped_column(ForeignKey("disease_gradings.id"), nullable=True, index=True)
+    selection_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False)
+    remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    disease: Mapped["Disease"] = relationship("Disease")
+    lab_unit: Mapped["LabUnit | None"] = relationship("LabUnit")
+    created_by: Mapped["User | None"] = relationship("User")
+    normal_grade: Mapped["DiseaseGrading | None"] = relationship("DiseaseGrading")
+    tasks: Mapped[list["IntraRaterTask"]] = relationship(
+        "IntraRaterTask", back_populates="batch", cascade="all, delete-orphan"
+    )
+    grades: Mapped[list["IntraRaterGrade"]] = relationship(
+        "IntraRaterGrade", back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+class IntraRaterTask(Base):
+    """Individual intra-rater reassessment task scoped to a grader."""
+    __tablename__ = "intra_rater_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("intra_rater_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    grader_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    lab_unit_id: Mapped[int] = mapped_column(ForeignKey("lab_units.id"), nullable=False, index=True)
+    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey("encounter_files.id"), nullable=True, index=True)
+    direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey("direct_image_uploads.id"), nullable=True, index=True)
+    source_task_id: Mapped[int | None] = mapped_column(ForeignKey("grading_tasks.id"), nullable=True, index=True)
+    state: Mapped[str] = mapped_column(String(24), default="pending", nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    batch: Mapped["IntraRaterBatch"] = relationship("IntraRaterBatch", back_populates="tasks")
+    grader: Mapped["User"] = relationship("User")
+    disease: Mapped["Disease"] = relationship("Disease")
+    lab_unit: Mapped["LabUnit"] = relationship("LabUnit")
+    encounter_file: Mapped["EncounterFile | None"] = relationship("EncounterFile")
+    direct_image_upload: Mapped["DirectImageUpload | None"] = relationship("DirectImageUpload")
+    source_task: Mapped["GradingTask | None"] = relationship("GradingTask")
+    grades: Mapped[list["IntraRaterGrade"]] = relationship(
+        "IntraRaterGrade", back_populates="task", cascade="all, delete-orphan"
+    )
+
+
+class IntraRaterGrade(Base):
+    """Grader submission for an intra-rater task."""
+    __tablename__ = "intra_rater_grades"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("intra_rater_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    batch_id: Mapped[int] = mapped_column(ForeignKey("intra_rater_batches.id", ondelete="CASCADE"), nullable=False, index=True)
+    grader_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    disease_grading_id: Mapped[int] = mapped_column(ForeignKey("disease_gradings.id"), nullable=False, index=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    grade_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    grade_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    task: Mapped["IntraRaterTask"] = relationship("IntraRaterTask", back_populates="grades")
+    batch: Mapped["IntraRaterBatch"] = relationship("IntraRaterBatch", back_populates="grades")
+    grader: Mapped["User"] = relationship("User")
+    disease_grading: Mapped["DiseaseGrading"] = relationship("DiseaseGrading")
+
+
 class FlaskSession(Base):
     __tablename__ = "flask_sessions"
     session_id: Mapped[str] = mapped_column(String(255), primary_key=True)

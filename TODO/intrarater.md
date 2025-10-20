@@ -3,22 +3,23 @@
 ## Stepwise Implementation Plan
 
 1. **Schema & Settings**
-   - Design `intra_rater_batches`, `intra_rater_tasks`, `intra_rater_grades`; include foreign keys to `users`, `diseases`, `lab_units`, and `grading_tasks` (`source_task_id`).
+   - Design `intra_rater_batches`, `intra_rater_tasks`, `intra_rater_grades`; include foreign keys to `users`, `diseases`, `lab_units`, and `grading_tasks` (`source_task_id`) plus a nullable `normal_grade_id` to persist the batch-selected “Normal” grading.
    - Introduce nullable `cooldown_days_override` on batches; seed a global `INTRA_RATER_DEFAULT_COOLDOWN_DAYS` in `app_settings`.
    - Add denormalized columns on `intra_rater_grades` for `disease_name`, `grade_name`, and `grade_description` (mirroring the main `grades` table) so historical reporting remains stable when master metadata changes.
    - Author a SQLite migration script (per `docs/10-DEVELOP/CONVENTIONS.md`) under `migrations/` to create tables, indexes on `(grader_user_id, disease_id)` and `(task_id)`, and seed the setting; provide downgrade SQL for rollback.
    - Backfill existing cooldown config from environment if present; ensure the SQL script stays SQLite-safe (e.g., explicit `IF NOT EXISTS` handling).
+   - **Progress:** Models/migration complete and applied via `sqlite3`; default cooldown seeded in `app_settings`.
 
 2. **Selection Engine**
    - Implement `IntraRaterSelectionService` with dependency-injected `Session` and `CooldownConfig`.
-   - Query historical `grades` joined to `grading_tasks`, `DiseaseGrading`, and `GradingTask`’s image reference to scope by disease, lab unit, and grader; enforce slot-lab unit permissions (`UserDiseaseUnitRole`) and prefer abnormal labels using disease grading metadata (`DiseaseGrading.is_normal` or matching `impression` against the configured “Normal” vocabulary).
+   - Query historical `grades` joined to `grading_tasks`, `DiseaseGrading`, and `GradingTask`’s image reference to scope by disease, lab unit, and grader; enforce slot-lab unit permissions (`UserDiseaseUnitRole`) and prefer abnormal labels using batch-specified “Normal” grading metadata (user selects the normal grading during batch creation, fallback to heuristics if omitted).
    - Prioritize abnormal images by ordering candidates (`is_normal = 0` first, then `is_normal = 1`), falling back to normals only when abnormal inventory is exhausted; maintain counts in the audit payload.
    - Enforce cooldown by comparing against latest intra-rater grade and latest original grade for that `(grader, image, disease)` tuple; respect user-lab unit visibility when pre-filtering candidate images.
    - Produce deterministic audit payload containing candidate IDs, reasons for exclusion, abnormal vs normal counts, and final selection order; serialize into `selection_snapshot_json`.
 
 3. **Batch Creation Workflow**
    - Build POST route `/tasks/intra-rater/batches` with `roles_required("admin", "data_manager")`.
-   - Validate graders belong to requested lab units (User-LabUnit scoping) and possess slot permissions for the chosen disease/lab unit (`UserDiseaseUnitRole`); ensure sufficient eligible images exist and return flash warnings per grader when short.
+   - Validate graders belong to requested lab units (User-LabUnit scoping) and possess slot permissions for the chosen disease/lab unit (`UserDiseaseUnitRole`); prompt the creator to pick which grading impression represents “Normal” for each disease and ensure sufficient eligible images exist (return flash warnings per grader when short).
    - Persist batch header and associated tasks using `transaction_scope()` to follow the DB context manager pattern and keep the operation atomic.
 
 4. **Task Queue Integration**
@@ -64,6 +65,7 @@
 - `GradingTask` (`models.py`) retains canonical linkage to encounter files or direct uploads; store its `id` as `source_task_id` in `intra_rater_tasks` to preserve provenance.
 - `Grade` captures historical grader submissions; rely on `Grade.grader_user_id`, `Grade.disease_grading_id`, `Grade.created_at`, and the `role_slot` metadata to filter eligible candidates.
 - `DiseaseGrading` provides disease-specific labels; use the boolean/flag column (`is_normal` or equivalent) or normalized `impression` text to determine “Normal” status during prioritization.
+- `IntraRaterBatch.normal_grade_id` stores the creator-selected “Normal” grading, giving the selection service a definitive reference.
 - Denormalized fields (`disease_name`, `grade_name`, `grade_description`) stored on `intra_rater_grades` should be populated during submission to preserve snapshot context.
 - `UserDiseaseUnitRole` and `user_lab_units` enforce slot-level and lab-unit scoping respectively; join against these tables when validating grader eligibility in selection and batch creation.
 - Newly introduced tables (`intra_rater_batches`, `intra_rater_tasks`, `intra_rater_grades`) should include foreign keys back to the above models plus lab units and diseases to maintain referential integrity.

@@ -16,6 +16,7 @@ from db_transaction_manager import get_db_session
 from models import (
     Disease,
     DiseaseGrading,
+    Hospital,
     IntraRaterBatch,
     IntraRaterTask,
     LabUnit,
@@ -57,7 +58,7 @@ def list_intra_rater_batches() -> Response:
             "page": page,
             "per_page": per_page,
             "total": total,
-            "items": [_batch_to_payload(batch) for batch in batches],
+            "items": [_batch_to_payload(batch, include_counts=True) for batch in batches],
         }
         return jsonify(payload)
 
@@ -147,6 +148,7 @@ def submit_intra_rater_grade(task_id: int) -> Response:
 def _parse_create_payload(payload: dict) -> BatchCreateParams:
     """Validate and coerce incoming payload into BatchCreateParams."""
     disease_id = _require_positive_int(payload.get("disease_id"), "disease_id")
+    _require_positive_int(payload.get("hospital_id"), "hospital_id")
     grader_ids_raw = payload.get("grader_ids")
     if not isinstance(grader_ids_raw, Iterable):
         raise ValueError("grader_ids must be a list of user IDs")
@@ -261,15 +263,12 @@ def _task_to_payload(
         "grade_name": task.grades[0].grade_name if task.grades else None,
         "comment": task.grades[0].comment if task.grades else None,
         "graded_at": task.grades[0].created_at.isoformat() if task.grades and task.grades[0].created_at else None,
-        "batch": {
-            "id": batch.id if batch else None,
-            "normal_grade_id": batch.normal_grade_id if batch else None,
-        },
+        "batch": _batch_to_payload(batch) if batch else None,
     }
 
 
-def _batch_to_payload(batch: IntraRaterBatch) -> dict:
-    return {
+def _batch_to_payload(batch: IntraRaterBatch, include_counts: bool = False) -> dict:
+    payload = {
         "id": batch.id,
         "disease_id": batch.disease_id,
         "lab_unit_id": batch.lab_unit_id,
@@ -282,6 +281,24 @@ def _batch_to_payload(batch: IntraRaterBatch) -> dict:
         "created_at": batch.created_at.isoformat() if batch.created_at else None,
         "updated_at": batch.updated_at.isoformat() if batch.updated_at else None,
     }
+    if include_counts:
+        tasks = batch.tasks
+        payload["image_count"] = len(tasks)
+        grader_disease_counts: dict[str, dict[str, int]] = {}
+        for task in tasks:
+            if not task.grader or not task.disease:
+                continue
+            grader_name = task.grader.full_name or task.grader.username
+            disease_name = task.disease.name
+            disease_map = grader_disease_counts.setdefault(grader_name, {})
+            disease_map[disease_name] = disease_map.get(disease_name, 0) + 1
+        payload["grader_disease_counts"] = grader_disease_counts
+        payload["graders"] = sorted(grader_disease_counts.keys())
+        payload["disease_name"] = batch.disease.name if batch.disease else None
+        payload["lab_unit_name"] = batch.lab_unit.name if batch.lab_unit else None
+        payload["creator_name"] = batch.created_by.full_name if batch.created_by else None
+        payload["normal_grade_name"] = batch.normal_grade.impression if batch.normal_grade else None
+    return payload
 
 
 def _require_positive_int(value: object, field: str) -> int:
@@ -422,6 +439,12 @@ def intra_rater_admin() -> str:
                     {"id": grading.id, "impression": grading.impression}
                 )
 
+        hospitals = db.query(Hospital).order_by(Hospital.name.asc()).all()
+        hospital_list = [
+            {"id": hosp.id, "name": hosp.name}
+            for hosp in hospitals
+        ]
+
         lab_units = (
             db.query(LabUnit)
             .order_by(LabUnit.name.asc())
@@ -431,6 +454,7 @@ def intra_rater_admin() -> str:
             {
                 "id": lu.id,
                 "name": lu.name,
+                "hospital_id": lu.hospital_id,
                 "hospital_name": lu.hospital.name if lu.hospital else "Unknown",
             }
             for lu in lab_units
@@ -486,7 +510,21 @@ def intra_rater_admin() -> str:
             .all()
         )
         recent_payload = []
+        aggregate_counts: dict[str, dict[str, int]] = {}
         for batch in recent_batches:
+            task_count = len(batch.tasks)
+            graders = sorted({task.grader.full_name or task.grader.username for task in batch.tasks if task.grader})
+            grader_disease_counts: dict[str, dict[str, int]] = {}
+            for task in batch.tasks:
+                if not task.grader or not task.disease:
+                    continue
+                grader_name = task.grader.full_name or task.grader.username
+                disease_name = task.disease.name
+                disease_map = grader_disease_counts.setdefault(grader_name, {})
+                disease_map[disease_name] = disease_map.get(disease_name, 0) + 1
+
+                agg_map = aggregate_counts.setdefault(grader_name, {})
+                agg_map[disease_name] = agg_map.get(disease_name, 0) + 1
             recent_payload.append(
                 {
                     "id": batch.id,
@@ -495,6 +533,9 @@ def intra_rater_admin() -> str:
                     "created_at": batch.created_at,
                     "creator_name": batch.created_by.full_name if batch.created_by else None,
                     "target_images_per_grader": batch.target_images_per_grader,
+                    "image_count": task_count,
+                    "graders": graders,
+                    "grader_disease_counts": grader_disease_counts,
                     "cooldown": batch.cooldown_days_override,
                     "normal_grade_name": batch.normal_grade.impression if batch.normal_grade else None,
                 }
@@ -505,9 +546,11 @@ def intra_rater_admin() -> str:
         return render_template(
             "tasks/intra_rater/admin_dashboard.html",
             diseases=disease_list,
+            hospitals=hospital_list,
             lab_units=lab_unit_list,
             graders=sorted(grader_payload, key=lambda g: (g["full_name"] or g["username"])),
             recent_batches=recent_payload,
             default_cooldown=default_cooldown,
             disease_gradings=gradings_by_disease,
+            aggregate_counts=aggregate_counts,
         )

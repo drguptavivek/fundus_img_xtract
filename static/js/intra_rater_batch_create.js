@@ -7,6 +7,16 @@
   var diseaseGradingsMap = {};
   var graderSelect;
   var labUnitSelect;
+  var diseaseSelect;
+  var hospitalSelect;
+  var labUnitWrapper;
+  var graderWrapper;
+  var targetImagesWrapper;
+  var cooldownWrapper;
+  var normalGradeWrapper;
+  var remarksWrapper;
+  var submitWrapper;
+  var labUnits = [];
 
   function showToast(message, level) {
     var container = document.getElementById('flash-toasts');
@@ -68,6 +78,7 @@
 
   function serializeForm(form) {
     var diseaseId = form.querySelector('[name="disease_id"]').value;
+    var hospitalId = form.querySelector('[name="hospital_id"]').value;
     var labUnitSelectEl = form.querySelector('[name="lab_unit_id"]');
     var gradersSelect = form.querySelector('[name="grader_ids"]');
     var targetImages = form.querySelector('[name="target_images_per_grader"]').value;
@@ -81,6 +92,7 @@
 
     return {
       disease_id: parseInt(diseaseId, 10),
+      hospital_id: parseInt(hospitalId, 10),
       lab_unit_id: labUnitSelectEl && labUnitSelectEl.value ? parseInt(labUnitSelectEl.value, 10) : null,
       grader_ids: graderIds,
       target_images_per_grader: parseInt(targetImages, 10),
@@ -99,6 +111,10 @@
       payload = serializeForm(form);
       if (!payload.disease_id) {
         showToast('Please choose a disease for this batch.', 'warning');
+        return;
+      }
+      if (!payload.hospital_id) {
+        showToast('Please choose a hospital for this batch.', 'warning');
         return;
       }
       if (!payload.grader_ids.length) {
@@ -168,6 +184,49 @@
     });
   }
 
+  function filterLabUnits() {
+    if (!labUnitSelect) return;
+    var hospitalId = hospitalSelect ? (hospitalSelect.value || '').trim() : '';
+    Array.from(labUnitSelect.options).forEach(function (opt) {
+      if (!opt.value) return;
+      var optHospital = opt.dataset.hospitalId || '';
+      var allow = !hospitalId || optHospital === hospitalId;
+      opt.hidden = !allow;
+      opt.disabled = !allow;
+      if (!allow) {
+        opt.selected = false;
+      }
+    });
+  }
+
+  function updateVisibility() {
+    var diseaseSelected = diseaseSelect && diseaseSelect.value;
+    var hospitalSelected = hospitalSelect && hospitalSelect.value;
+    if (labUnitWrapper) {
+      labUnitWrapper.classList.toggle('d-none', !(diseaseSelected && hospitalSelected));
+    }
+    if (graderWrapper) {
+      graderWrapper.classList.toggle('d-none', !(diseaseSelected && hospitalSelected));
+    }
+    [targetImagesWrapper, cooldownWrapper, normalGradeWrapper, remarksWrapper, submitWrapper].forEach(function (el) {
+      if (!el) return;
+      el.classList.toggle('d-none', !(diseaseSelected && hospitalSelected));
+    });
+    if (graderSelect) {
+      if (diseaseSelected && hospitalSelected) {
+        graderSelect.setAttribute('required', 'required');
+      } else {
+        graderSelect.removeAttribute('required');
+      }
+      if (!(diseaseSelected && hospitalSelected)) {
+        Array.from(graderSelect.options).forEach(function (opt) { opt.selected = false; });
+      }
+    }
+    if (!(diseaseSelected && hospitalSelected) && labUnitSelect) {
+      labUnitSelect.value = '';
+    }
+  }
+
   function refreshRecentBatches(showToastOnSuccess) {
     fetch('/tasks/intra-rater/batches?per_page=10', {
       method: 'GET',
@@ -179,7 +238,9 @@
         return resp.json();
       })
       .then(function (data) {
-        renderRecentBatches(data.items || []);
+        var items = data.items || [];
+        renderRecentBatches(items);
+        renderAggregateCounts(items);
         if (showToastOnSuccess) {
           showToast('Recent batches updated.', 'info');
         }
@@ -201,28 +262,81 @@
 
     container.innerHTML = items.map(function (item) {
       var badges = '<span class="badge text-bg-info">Batch #' + item.id + '</span>';
-      if (item.disease_id && item.disease_name) {
+      if (item.disease_name) {
         badges += ' <span class="badge text-bg-light">' + item.disease_name + '</span>';
       }
       if (item.lab_unit_name) {
         badges += ' <span class="badge text-bg-secondary">' + item.lab_unit_name + '</span>';
       }
       var created = item.created_at ? new Date(item.created_at).toLocaleString() : 'unknown';
+      var gradersLine = (item.graders && item.graders.length)
+        ? 'Graders: ' + item.graders.join(', ')
+        : 'Graders: None';
+      var graderDetails = '';
+      if (item.grader_disease_counts) {
+        graderDetails = Object.keys(item.grader_disease_counts).map(function (grader) {
+          var entries = Object.keys(item.grader_disease_counts[grader]).map(function (disease) {
+            return disease + ': ' + item.grader_disease_counts[grader][disease];
+          }).join('; ');
+          return '<li>' + grader + ' → ' + entries + '</li>';
+        }).join('');
+        if (graderDetails) {
+          graderDetails = '<ul class="small text-muted mt-2 mb-0 ps-3">' + graderDetails + '</ul>';
+        }
+      }
+
       return '<div class="list-group-item">' +
         '<div class="d-flex flex-column flex-lg-row justify-content-between gap-2">' +
-        '<div>' + badges + '<div class="small text-muted mt-1">Created ' + created + '</div></div>' +
+        '<div>' + badges +
+          '<div class="small text-muted mt-1">Created ' + created + (item.creator_name ? ' by ' + item.creator_name : '') + '</div>' +
+          '<div class="small text-muted">' + gradersLine + '</div>' +
+          graderDetails +
+        '</div>' +
         '<div class="text-muted small text-lg-end">' +
-        '<div>Images/grader: ' + (item.target_images_per_grader || '?') + '</div>' +
-        '<div>Cooldown: ' + (item.cooldown_days_override || 'default') + '</div>' +
-        '<div>Normal grade ID: ' + (item.normal_grade_id || 'not set') + '</div>' +
+          '<div>Total images: ' + (item.image_count != null ? item.image_count : 'N/A') + '</div>' +
+          '<div>Images/grader: ' + (item.target_images_per_grader || '?') + '</div>' +
+          '<div>Cooldown: ' + (item.cooldown_days_override || 'default') + ' days</div>' +
+          '<div>Normal grade: ' + (item.normal_grade_name || 'Not set') + '</div>' +
         '</div>' +
         '</div>' +
         '</div>';
     }).join('');
   }
 
+  function renderAggregateCounts(items) {
+    var card = document.getElementById('intra-aggregate-card');
+    var body = document.getElementById('intra-aggregate-body');
+    if (!card || !body) return;
+
+    var counts = {};
+    items.forEach(function (item) {
+      if (!item.grader_disease_counts) return;
+      Object.keys(item.grader_disease_counts).forEach(function (grader) {
+        var totals = counts[grader] || (counts[grader] = {});
+        var source = item.grader_disease_counts[grader] || {};
+        Object.keys(source).forEach(function (disease) {
+          totals[disease] = (totals[disease] || 0) + source[disease];
+        });
+      });
+    });
+
+    var graderNames = Object.keys(counts).sort();
+    if (!graderNames.length) {
+      card.classList.add('d-none');
+      body.innerHTML = '';
+      return;
+    }
+
+    card.classList.remove('d-none');
+    body.innerHTML = graderNames.map(function (grader) {
+      var badges = Object.keys(counts[grader]).sort().map(function (disease) {
+        return '<span class="badge text-bg-secondary me-1 mb-1">' + disease + ': ' + counts[grader][disease] + '</span>';
+      }).join('');
+      return '<tr><th scope="row" class="fw-semibold">' + grader + '</th><td>' + badges + '</td></tr>';
+    }).join('');
+  }
+
   function bindEvents() {
-    var diseaseSelect = document.getElementById('disease-id');
     if (diseaseSelect) {
       diseaseSelect.addEventListener('change', function (event) {
         var diseaseId = (event.target.value || '').trim();
@@ -232,6 +346,18 @@
         } else {
           populateNormalGradings([]);
         }
+        updateVisibility();
+        var labUnitId = labUnitSelect ? (labUnitSelect.value || '').trim() : null;
+        filterLabUnits();
+        filterGraders(diseaseId, labUnitId);
+      });
+    }
+
+    if (hospitalSelect) {
+      hospitalSelect.addEventListener('change', function () {
+        filterLabUnits();
+        updateVisibility();
+        var diseaseId = diseaseSelect ? (diseaseSelect.value || '').trim() : null;
         var labUnitId = labUnitSelect ? (labUnitSelect.value || '').trim() : null;
         filterGraders(diseaseId, labUnitId);
       });
@@ -252,6 +378,9 @@
         setTimeout(function () {
           populateNormalGradings([]);
           if (diseaseSelect) diseaseSelect.value = '';
+          if (hospitalSelect) hospitalSelect.value = '';
+          filterLabUnits();
+          updateVisibility();
           if (labUnitSelect) labUnitSelect.value = '';
           filterGraders(null, null);
         }, 0);
@@ -290,8 +419,21 @@
     }
     graderSelect = document.getElementById('grader-ids');
     labUnitSelect = document.getElementById('lab-unit-id');
+    diseaseSelect = document.getElementById('disease-id');
+    hospitalSelect = document.getElementById('hospital-id');
+    labUnitWrapper = document.getElementById('lab-unit-wrapper');
+    graderWrapper = document.getElementById('grader-wrapper');
+    targetImagesWrapper = document.getElementById('target-images-wrapper');
+    cooldownWrapper = document.getElementById('cooldown-wrapper');
+    normalGradeWrapper = document.getElementById('normal-grade-wrapper');
+    remarksWrapper = document.getElementById('remarks-wrapper');
+    submitWrapper = document.getElementById('submit-wrapper');
+    labUnits = (window.INTRA_RATER_LAB_UNITS || []);
 
     bindEvents();
+    filterLabUnits();
+    updateVisibility();
     filterGraders(null, null);
+    refreshRecentBatches(false);
   });
 })();

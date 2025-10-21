@@ -32,16 +32,26 @@
         </div>
 
         <div class="col-12 col-md-6">
-          <label class="form-label" for="lab-unit-id">Lab Unit (optional)</label>
-          <select class="form-select" id="lab-unit-id" name="lab_unit_id">
-            <option value="" selected>All eligible lab units</option>
-            {% for lab_unit in lab_units %}
-            <option value="{{ lab_unit.id }}">{{ lab_unit.name }} ({{ lab_unit.hospital_name }})</option>
+          <label class="form-label" for="hospital-id">Hospital</label>
+          <select class="form-select" id="hospital-id" name="hospital_id" required>
+            <option value="" selected disabled>Select hospital</option>
+            {% for hospital in hospitals %}
+            <option value="{{ hospital.id }}">{{ hospital.name }}</option>
             {% endfor %}
           </select>
         </div>
 
-        <div class="col-12">
+        <div id="lab-unit-wrapper" class="col-12 col-md-6 d-none">
+          <label class="form-label" for="lab-unit-id">Lab Unit (optional)</label>
+          <select class="form-select" id="lab-unit-id" name="lab_unit_id">
+            <option value="" selected>All eligible lab units</option>
+            {% for lab_unit in lab_units %}
+            <option value="{{ lab_unit.id }}" data-hospital-id="{{ lab_unit.hospital_id }}">{{ lab_unit.name }} ({{ lab_unit.hospital_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="grader-wrapper" class="col-12 d-none">
           <label class="form-label" for="grader-ids">Graders</label>
           <select class="form-select" id="grader-ids" name="grader_ids" multiple size="8" required>
             {% for grader in graders %}
@@ -51,18 +61,18 @@
           <div class="form-text">Hold Ctrl (Windows) or Cmd (macOS) to select multiple graders.</div>
         </div>
 
-        <div class="col-12 col-md-4">
+        <div id="target-images-wrapper" class="col-12 col-md-4 d-none">
           <label class="form-label" for="target-images">Images per grader</label>
           <input type="number" class="form-control" id="target-images" name="target_images_per_grader" min="1" max="50" value="5" required>
         </div>
 
-        <div class="col-12 col-md-4">
+        <div id="cooldown-wrapper" class="col-12 col-md-4 d-none">
           <label class="form-label" for="cooldown-days">Cooldown override (days)</label>
           <input type="number" class="form-control" id="cooldown-days" name="cooldown_days_override" min="1" max="365" placeholder="Use default">
           <div class="form-text">Default: {{ default_cooldown }} days.</div>
         </div>
 
-        <div class="col-12 col-md-4">
+        <div id="normal-grade-wrapper" class="col-12 col-md-4 d-none">
           <label class="form-label" for="normal-grade-id">Normal grade</label>
           <select class="form-select" id="normal-grade-id" name="normal_grade_id">
             <option value="" selected>Pick after selecting disease</option>
@@ -70,12 +80,12 @@
           <div class="form-text">Used to prioritise abnormal images.</div>
         </div>
 
-        <div class="col-12">
+        <div id="remarks-wrapper" class="col-12 d-none">
           <label class="form-label" for="remarks">Remarks (optional)</label>
           <textarea class="form-control" id="remarks" name="remarks" rows="2" maxlength="250"></textarea>
         </div>
 
-        <div class="col-12 d-flex align-items-center gap-3 pt-2">
+        <div id="submit-wrapper" class="col-12 d-flex align-items-center gap-3 pt-2 d-none">
           <button type="submit" class="btn btn-primary">Create Batch</button>
           <button type="reset" class="btn btn-outline-secondary">Reset</button>
         </div>
@@ -98,8 +108,21 @@
                   {% if batch.lab_unit_name %}<span class="badge text-bg-secondary">{{ batch.lab_unit_name }}</span>{% endif %}
                 </div>
                 <div class="small text-muted mt-1">Created {{ batch.created_at.strftime('%Y-%m-%d %H:%M') if batch.created_at else 'unknown' }} by {{ batch.creator_name or 'System' }}</div>
+                <div class="small text-muted">Graders: {{ batch.graders|join(', ') if batch.graders else 'None' }}</div>
+                {% if batch.grader_disease_counts %}
+                <ul class="small text-muted mt-2 mb-0 ps-3">
+                  {% for grader, disease_map in batch.grader_disease_counts.items() %}
+                  <li>{{ grader }} →
+                    {% for disease_name, count in disease_map.items() %}
+                      {{ disease_name }}: {{ count }}{% if not loop.last %}; {% endif %}
+                    {% endfor %}
+                  </li>
+                  {% endfor %}
+                </ul>
+                {% endif %}
               </div>
-              <div class="text-muted small">
+              <div class="text-muted small text-lg-end">
+                <div>Total images: {{ batch.image_count }}</div>
                 <div>Images/grader: {{ batch.target_images_per_grader }}</div>
                 <div>Cooldown: {{ batch.cooldown or default_cooldown }} days</div>
                 <div>Normal grade: {{ batch.normal_grade_name or 'Not set' }}</div>
@@ -113,6 +136,36 @@
       </div>
     </div>
   </div>
+
+  {% if aggregate_counts %}
+  <div class="card mt-4" id="intra-aggregate-card">
+    <div class="card-header bg-body-tertiary fw-semibold">Grader → Disease Totals</div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Grader</th>
+              <th scope="col">Counts</th>
+            </tr>
+          </thead>
+          <tbody id="intra-aggregate-body">
+            {% for grader, disease_map in aggregate_counts.items() %}
+            <tr>
+              <th scope="row" class="fw-semibold">{{ grader }}</th>
+              <td>
+                {% for disease_name, count in disease_map.items() %}
+                  <span class="badge text-bg-secondary me-1 mb-1">{{ disease_name }}: {{ count }}</span>
+                {% endfor %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -120,6 +173,7 @@
 {{ super() }}
 <script>
   window.INTRA_RATER_GRADINGS = {{ disease_gradings|tojson|safe }};
+  window.INTRA_RATER_LAB_UNITS = {{ lab_units|tojson|safe }};
 </script>
 <script src="{{ url_for('static', filename='js/intra_rater_batch_create.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 {% endblock %}

@@ -3,7 +3,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from models import Session, Disease
 from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic
-
+ 
 
 def register_routes(bp):
     """Register start grading routes with the blueprint."""

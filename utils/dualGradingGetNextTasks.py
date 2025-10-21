@@ -1,5 +1,5 @@
 """
-Utility functions for getting the next eligible dual grading tasks.
+Utility functions for getting the next eligible dual grading tasks. 
 """
 
 from sqlalchemy.orm import selectinload

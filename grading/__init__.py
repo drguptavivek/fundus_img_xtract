@@ -36,6 +36,7 @@ bp = Blueprint("grading", __name__, url_prefix="/grading")
 from .dashboard import index
 from .dual_grading import register_routes as register_dual_grading_routes
 from .start_grading import register_routes as register_start_grading_routes
+from .intra_rater import register_routes as register_intra_rater_routes
 
 # Register routes with the blueprint
 bp.add_url_rule("/", view_func=index, methods=["GET"])
@@ -46,3 +47,5 @@ register_dual_grading_routes(bp)
 # Register start grading routes
 register_start_grading_routes(bp)
 
+# Register intra-rater routes
+register_intra_rater_routes(bp)

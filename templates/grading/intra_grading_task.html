@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Intra-Rater Task{% endblock %}
+
+{% block content %}
+{% from "_forms.html" import csrf_field %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Intra-Rater Reassessment</h3>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
+</div>
+
+<div class="row g-3 mb-3" id="task-info-row">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-3 small">
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Task ID:</span>
+            <code class="mb-0">{{ task.id }}</code>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">State:</span>
+            <strong class="text-capitalize mb-0">{{ task.state }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Disease:</span>
+            <strong class="mb-0">{{ task.disease.name }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Lab/Unit:</span>
+            <strong class="mb-0">{{ task.lab_unit.name }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-lg-9" id="image-card">
+    {% if image_uuid %}
+      {% include 'grading/_viewer_card.html' %}
+    {% else %}
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <p class="text-muted mb-0">Image not available for this intra-rater task.</p>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-12 col-lg-3" id="image-grading-controls">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="alert alert-info small">
+          <strong>Reminder:</strong> Reassess this case independently before proceeding.
+        </div>
+
+        <form method="post" action="{{ url_for('grading.intra_rater_submit') }}" data-grading-form="true">
+          {{ csrf_field() }}
+          <input type="hidden" name="task_id" value="{{ task.id }}">
+          <input type="hidden" name="resume_slot" value="{{ resume_slot or '' }}">
+          <input type="hidden" name="resume_disease_id" value="{{ resume_disease_id or '' }}">
+          {% if start_time_iso %}
+          <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
+          {% endif %}
+
+          <div class="mb-2">
+            <label class="form-label mt-5">Select a Grade</label>
+            <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
+              {% for opt in disease_gradings %}
+                {% set oid = 'imp-' ~ opt.id %}
+                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required>
+                <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
+                  <span>{{ opt.impression }}</span>
+                  <span class="sel-icon d-none">✓</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="comment-textarea" class="form-label">Comments (optional)</label>
+            <textarea class="form-control" id="comment-textarea" name="comment" rows="3" maxlength="1000" placeholder="Add any relevant notes..."></textarea>
+          </div>
+
+          <div class="d-flex justify-content-between gap-2">
+            <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" onclick="saveSelectionOnSubmit()">Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" onclick="saveSelectionOnSubmit()">Save & Next</button>
+            </div>
+          </div>
+
+          <div id="not-gradable-reasons" class="mt-3" style="display: none;">
+            <label class="form-label">Reason for Not Gradable</label>
+            <div class="d-flex flex-wrap gap-1">
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Disc not focussed">Disc not focussed</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Retina not focussed">Retina not focussed</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Disc not complete">Disc not complete</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Artefacts">Artefacts</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Other">Other</button>
+            </div>
+          </div>
+
+          <div id="grading-instructions" class="mt-3 p-3 border rounded" style="display: none;">
+            <h6 class="border-bottom pb-1 mb-2">Grading Instructions</h6>
+            <div id="instructions-content"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  window.gradingGuidelines = {{ grading_guidelines | tojson }};
+  window.taskId = {{ task.id }};
+  window.imageUuid = "{{ image_uuid }}";
+  window.currentUserId = {{ current_user_id or 'null' }};
+  window.currentSlot = "intra";
+</script>
+<script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
+{% endblock %}

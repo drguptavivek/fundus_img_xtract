@@ -20,6 +20,7 @@ from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arb
 from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
 from utils.notifications import send_notification_to_admins
 from db_transaction_manager import transaction_scope
+from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
 
@@ -304,7 +305,7 @@ def dual_grading_task(task_id: int, slot_type: str):
             flash("Failed to load grading task.", "danger")
             return redirect(url_for("grading.index"))
 
-
+ 
 @roles_required("resident", "ophthalmologist", "admin")
 def dual_grading_submit():
     """Submit a grade for a task."""
@@ -545,7 +546,20 @@ def dual_grading_submit():
                 # Since we're closing the current session to get the next task,
                 # we need to commit our changes first
                 db.commit()
-                try:                
+                try:
+                    intra_task = get_next_intra_rater_task(current_user.id, disease_id)
+                    if intra_task and random.random() < 0.5:
+                        flash("Grade submitted successfully.", "success")
+                        flash("A reassessment task has been assigned.", "info")
+                        return redirect(
+                            url_for(
+                                "grading.intra_rater_task",
+                                task_id=intra_task.id,
+                                resume_slot=slot,
+                                resume_disease_id=disease_id,
+                            )
+                        )
+
                     # Try to find the next eligible task with a new session
                     next_task = None
                     if slot == "resident":

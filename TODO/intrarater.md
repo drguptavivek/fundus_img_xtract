@@ -27,6 +27,7 @@
 4. **Operational Follow-ups**
    - Monitor aggregate metrics for performance; consider background job to recalc totals if dataset grows.
    - Keep documentation/help modal in sync with future UX changes.
+   - Review inline dual-grading injection (50% Save & Next handoff) once launched to ensure task availability remains balanced across diseases; externalize probability if adjustments are required.
 
 ## References
 

@@ -13,7 +13,7 @@ from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from utils.dualGradingEligibility import get_user_grading_eligibility_details
 
-
+ 
 
 @roles_required("resident", "ophthalmologist")
 def index():

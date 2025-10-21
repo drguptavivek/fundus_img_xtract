@@ -14,10 +14,12 @@ from sqlalchemy.orm import Session
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import (
+    Disease,
     DiseaseGrading,
     IntraRaterBatch,
     IntraRaterTask,
     LabUnit,
+    User,
     UserDiseaseUnitRole,
 )
 from services.intra_rater_service import (
@@ -25,6 +27,7 @@ from services.intra_rater_service import (
     IntraRaterService,
     SubmitGradeParams,
 )
+from services.intra_rater_service import get_default_cooldown_days
 from flask_wtf.csrf import generate_csrf
 
 from . import bp
@@ -392,4 +395,119 @@ def intra_rater_dashboard() -> str:
             tasks=tasks,
             gradings_map=gradings_map,
             include_completed=False,
+        )
+
+
+@bp.route("/intra-rater/admin", methods=["GET"])
+@roles_required("admin", "data_manager")
+def intra_rater_admin() -> str:
+    with get_db_session() as db:
+        disease_entities = db.query(Disease).order_by(Disease.name.asc()).all()
+        disease_list = [
+            {"id": disease.id, "name": disease.name}
+            for disease in disease_entities
+        ]
+
+        disease_ids = [d["id"] for d in disease_list]
+        gradings_by_disease: dict[int, list[dict]] = {}
+        if disease_ids:
+            gradings = (
+                db.query(DiseaseGrading)
+                .filter(DiseaseGrading.disease_id.in_(disease_ids), DiseaseGrading.is_active.is_(True))
+                .order_by(DiseaseGrading.disease_id.asc(), DiseaseGrading.display_order.asc())
+                .all()
+            )
+            for grading in gradings:
+                gradings_by_disease.setdefault(grading.disease_id, []).append(
+                    {"id": grading.id, "impression": grading.impression}
+                )
+
+        lab_units = (
+            db.query(LabUnit)
+            .order_by(LabUnit.name.asc())
+            .all()
+        )
+        lab_unit_list = [
+            {
+                "id": lu.id,
+                "name": lu.name,
+                "hospital_name": lu.hospital.name if lu.hospital else "Unknown",
+            }
+            for lu in lab_units
+        ]
+
+        graders = (
+            db.query(User)
+            .join(UserDiseaseUnitRole, UserDiseaseUnitRole.user_id == User.id)
+            .filter(UserDiseaseUnitRole.active.is_(True))
+            .distinct()
+            .all()
+        )
+        grader_payload: list[dict] = []
+        for user in graders:
+            roles = (
+                db.query(UserDiseaseUnitRole)
+                .filter(UserDiseaseUnitRole.user_id == user.id, UserDiseaseUnitRole.active.is_(True))
+                .all()
+            )
+            labs = set()
+            lab_ids = set()
+            diseases = set()
+            disease_ids = set()
+            for role in roles:
+                if role.lab_unit_id:
+                    lab = db.get(LabUnit, role.lab_unit_id)
+                    if lab:
+                        labs.add(lab.name)
+                    lab_ids.add(role.lab_unit_id)
+                if role.disease_id:
+                    disease = db.get(Disease, role.disease_id)
+                    if disease:
+                        diseases.add(disease.name)
+                        disease_ids.add(role.disease_id)
+            grader_payload.append(
+                {
+                    "id": user.id,
+                    "username": user.username,
+                    "full_name": user.full_name,
+                    "lab_units": sorted(labs),
+                    "lab_unit_ids": sorted(lab_ids),
+                    "diseases": sorted(diseases),
+                    "lab_summary": ", ".join(sorted(labs)) or "All labs",
+                    "disease_summary": ", ".join(sorted(diseases)) or "All diseases",
+                    "disease_ids": sorted(disease_ids),
+                }
+            )
+
+        recent_batches = (
+            db.query(IntraRaterBatch)
+            .order_by(IntraRaterBatch.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        recent_payload = []
+        for batch in recent_batches:
+            recent_payload.append(
+                {
+                    "id": batch.id,
+                    "disease_name": batch.disease.name if batch.disease else None,
+                    "lab_unit_name": batch.lab_unit.name if batch.lab_unit else None,
+                    "created_at": batch.created_at,
+                    "creator_name": batch.created_by.full_name if batch.created_by else None,
+                    "target_images_per_grader": batch.target_images_per_grader,
+                    "cooldown": batch.cooldown_days_override,
+                    "normal_grade_name": batch.normal_grade.impression if batch.normal_grade else None,
+                }
+            )
+
+        default_cooldown = get_default_cooldown_days(db)
+
+        return render_template(
+            "tasks/intra_rater/admin_dashboard.html",
+            diseases=disease_list,
+            lab_units=lab_unit_list,
+            graders=sorted(grader_payload, key=lambda g: (g["full_name"] or g["username"])),
+            recent_batches=recent_payload,
+            default_cooldown=default_cooldown,
+            disease_gradings=gradings_by_disease,
         )

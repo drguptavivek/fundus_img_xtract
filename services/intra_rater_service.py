@@ -389,6 +389,23 @@ def record_lab_unit_id(db: Session, record: SelectionRecord) -> int:
     return task.lab_unit_id
 
 
+def get_default_cooldown_days(db: Session) -> int:
+    setting = db.execute(
+        select(AppSetting.value).where(AppSetting.key == "INTRA_RATER_DEFAULT_COOLDOWN_DAYS")
+    ).scalar_one_or_none()
+    if setting is None:
+        return DEFAULT_COOLDOWN_DAYS
+    try:
+        return max(1, int(setting))
+    except (TypeError, ValueError):
+        current_app.logger.warning(
+            "Invalid INTRA_RATER_DEFAULT_COOLDOWN_DAYS value '%s'; falling back to %s",
+            setting,
+            DEFAULT_COOLDOWN_DAYS,
+        )
+        return DEFAULT_COOLDOWN_DAYS
+
+
 def create_batch(params: BatchCreateParams) -> IntraRaterBatch:
     """Convenience wrapper using transaction_scope."""
     with transaction_scope() as db:

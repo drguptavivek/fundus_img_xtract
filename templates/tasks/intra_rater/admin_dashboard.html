@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+
+{% block title %}Intra-Rater Batch Creator{% endblock %}
+
+{% block content %}
+<div class="py-4" id="intra-admin-root"
+     data-create-endpoint="{{ url_for('tasks.create_intra_rater_batch') }}"
+     data-csrf-token="{{ csrf_token() }}">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Intra-Rater Batch Creator</h1>
+      <p class="text-muted mb-0">Select graders, choose disease, and schedule a reassessment batch. Only graders, data managers, and admins can see generated tasks.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tasks.list_intra_rater_batches') }}">View JSON batches</a>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header bg-body-tertiary fw-semibold">Create New Batch</div>
+    <div class="card-body">
+      <form id="intra-batch-form" class="row gy-3">
+        {{ csrf_field() }}
+
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="disease-id">Disease</label>
+          <select class="form-select" id="disease-id" name="disease_id" required>
+            <option value="" selected disabled>Select disease</option>
+            {% for disease in diseases %}
+            <option value="{{ disease.id }}">{{ disease.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <label class="form-label" for="lab-unit-id">Lab Unit (optional)</label>
+          <select class="form-select" id="lab-unit-id" name="lab_unit_id">
+            <option value="" selected>All eligible lab units</option>
+            {% for lab_unit in lab_units %}
+            <option value="{{ lab_unit.id }}">{{ lab_unit.name }} ({{ lab_unit.hospital_name }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label" for="grader-ids">Graders</label>
+          <select class="form-select" id="grader-ids" name="grader_ids" multiple size="8" required>
+            {% for grader in graders %}
+            <option value="{{ grader.id }}" data-disease-ids="{{ grader.disease_ids|join(',') }}" data-lab-ids="{{ grader.lab_unit_ids|join(',') }}">{{ grader.full_name or grader.username }} — {{ grader.lab_summary }} — {{ grader.disease_summary }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Hold Ctrl (Windows) or Cmd (macOS) to select multiple graders.</div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="target-images">Images per grader</label>
+          <input type="number" class="form-control" id="target-images" name="target_images_per_grader" min="1" max="50" value="5" required>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="cooldown-days">Cooldown override (days)</label>
+          <input type="number" class="form-control" id="cooldown-days" name="cooldown_days_override" min="1" max="365" placeholder="Use default">
+          <div class="form-text">Default: {{ default_cooldown }} days.</div>
+        </div>
+
+        <div class="col-12 col-md-4">
+          <label class="form-label" for="normal-grade-id">Normal grade</label>
+          <select class="form-select" id="normal-grade-id" name="normal_grade_id">
+            <option value="" selected>Pick after selecting disease</option>
+          </select>
+          <div class="form-text">Used to prioritise abnormal images.</div>
+        </div>
+
+        <div class="col-12">
+          <label class="form-label" for="remarks">Remarks (optional)</label>
+          <textarea class="form-control" id="remarks" name="remarks" rows="2" maxlength="250"></textarea>
+        </div>
+
+        <div class="col-12 d-flex align-items-center gap-3 pt-2">
+          <button type="submit" class="btn btn-primary">Create Batch</button>
+          <button type="reset" class="btn btn-outline-secondary">Reset</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header bg-body-tertiary fw-semibold">Recent Batches</div>
+    <div class="card-body p-0">
+      <div id="intra-batch-list" class="list-group list-group-flush">
+        {% if recent_batches %}
+          {% for batch in recent_batches %}
+          <div class="list-group-item">
+            <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
+              <div>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge text-bg-info">Batch #{{ batch.id }}</span>
+                  <span class="badge text-bg-light">{{ batch.disease_name }}</span>
+                  {% if batch.lab_unit_name %}<span class="badge text-bg-secondary">{{ batch.lab_unit_name }}</span>{% endif %}
+                </div>
+                <div class="small text-muted mt-1">Created {{ batch.created_at.strftime('%Y-%m-%d %H:%M') if batch.created_at else 'unknown' }} by {{ batch.creator_name or 'System' }}</div>
+              </div>
+              <div class="text-muted small">
+                <div>Images/grader: {{ batch.target_images_per_grader }}</div>
+                <div>Cooldown: {{ batch.cooldown or default_cooldown }} days</div>
+                <div>Normal grade: {{ batch.normal_grade_name or 'Not set' }}</div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="p-4 text-center text-muted">No batches yet.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+{{ super() }}
+<script>
+  window.INTRA_RATER_GRADINGS = {{ disease_gradings|tojson|safe }};
+</script>
+<script src="{{ url_for('static', filename='js/intra_rater_batch_create.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
+{% endblock %}

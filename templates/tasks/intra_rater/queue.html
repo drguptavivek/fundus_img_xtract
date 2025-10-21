@@ -96,7 +96,7 @@
 </div>
 {% endblock %}
 
-{% block extra_scripts %}
+{% block page_scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='js/intra_rater_tasks.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 {% endblock %}

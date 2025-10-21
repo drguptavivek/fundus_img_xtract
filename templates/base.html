@@ -236,13 +236,33 @@
                <li>
                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">All Images</a>
               </li>
-                                <li>
+              <li>
                 <hr class="dropdown-divider">
               </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}" href="{{ url_for('ad_hoc_tasks.index') }}">Create Ad-hoc Tasks</a>
+              </li>
+              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}" href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
+
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
+                  <span>My Intra-Rater Tasks</span>
+                  <span class="badge text-bg-info">Intra-rater</span>
+                </a>
+              </li>
+              {% if current_user_has('admin') or current_user_has('data_manager') %}
+              <li>
+                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_admin' else '' }}" href="{{ url_for('tasks.intra_rater_admin') }}">
+                  <span>Intra-Rater Batch Creator</span>
+                  <span class="badge text-bg-secondary">Admin</span>
+                </a>
+              </li>
+              {% endif %}
 
               {% endif %}
 

@@ -9,7 +9,7 @@ from typing import Iterable, List, Optional, Sequence
 
 from flask import current_app
 from sqlalchemy import and_, case, exists, func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from db_transaction_manager import transaction_scope
 from models import (
@@ -95,6 +95,18 @@ class SelectionOutcome:
         return json.dumps(self.to_dict(), default=str)
 
 
+@dataclass(slots=True)
+class SubmitGradeParams:
+    """Parameters for submitting an intra-rater grade."""
+
+    task_id: int
+    grader_user_id: int
+    disease_grading_id: int
+    comment: Optional[str] = None
+    time_taken: Optional[float] = None
+    start_time: Optional[datetime] = None
+
+
 class IntraRaterService:
     """Business logic for creating and managing intra-rater tasks."""
 
@@ -156,6 +168,67 @@ class IntraRaterService:
             self.db.add(task)
 
         return batch
+
+    def list_grader_tasks(self, grader_user_id: int, include_completed: bool = False) -> list[IntraRaterTask]:
+        """Return pending (or all) intra-rater tasks for a grader."""
+        query = (
+            self.db.query(IntraRaterTask)
+            .options(
+                selectinload(IntraRaterTask.disease),
+                selectinload(IntraRaterTask.batch),
+                selectinload(IntraRaterTask.lab_unit),
+            )
+            .filter(IntraRaterTask.grader_user_id == grader_user_id)
+        )
+        if not include_completed:
+            query = query.filter(IntraRaterTask.state == STATE_PENDING)
+        return query.order_by(IntraRaterTask.created_at.asc()).all()
+
+    def submit_grade(self, params: "SubmitGradeParams") -> IntraRaterGrade:
+        """Persist grader submission and close the intra-rater task."""
+        task = self.db.get(IntraRaterTask, params.task_id)
+        if task is None:
+            raise ValueError("Task not found")
+        if task.grader_user_id != params.grader_user_id:
+            raise ValueError("Task is not assigned to the current grader")
+        if task.state == STATE_COMPLETED:
+            raise ValueError("Task already completed")
+
+        existing_grade = (
+            self.db.query(IntraRaterGrade)
+            .filter(IntraRaterGrade.task_id == task.id)
+            .first()
+        )
+        if existing_grade:
+            raise ValueError("Grade already submitted for this task")
+
+        grading = self.db.get(DiseaseGrading, params.disease_grading_id)
+        if grading is None or grading.disease_id != task.disease_id:
+            raise ValueError("Invalid disease grading for this task")
+
+        disease_name = task.disease.name if task.disease else None
+        grade = IntraRaterGrade(
+            task_id=task.id,
+            batch_id=task.batch_id,
+            grader_user_id=params.grader_user_id,
+            disease_grading_id=params.disease_grading_id,
+            comment=params.comment,
+            time_taken=params.time_taken,
+            start_time=params.start_time,
+            disease_name=disease_name,
+            grade_name=grading.impression,
+            grade_description=grading.guidelines,
+        )
+        self.db.add(grade)
+
+        task.state = STATE_COMPLETED
+        task.updated_at = datetime.now(timezone.utc)
+        self.db.add(task)
+
+        self.db.flush()
+
+        return grade
+
 
     # --- Internal helpers ----------------------------------------------- #
 

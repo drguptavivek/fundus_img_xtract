@@ -28,11 +28,13 @@
    - Extend grader queue service to merge `intra_rater_tasks` with existing workload only for the owning grader; exclude for others unless admin/data manager.
    - Present intra-rater tasks with a badge in list/detail templates (`<span class="badge text-bg-info">Intra-rater</span>`); ensure localization hooks if any.
    - Update permission guards to prevent accidental reassignment or visibility leakage, mirroring User-LabUnit vs Slot-LabUnit rules from the scoping guide.
+   - **Progress:** `/tasks/intra-rater/my-tasks` JSON feed exposes pending tasks for the logged-in grader with optional completed toggle.
 
 5. **Grading Submission Flow**
    - Create `IntraRaterGradingService.submit_grade` to write into `intra_rater_grades`, update task `state` to `completed`, and record timing data.
    - Reuse existing form templates but adjust action endpoints to branch based on task type; maintain CSRF tokens via `_forms.html`.
    - On submission, trigger Flash toast confirmation, emit structured entries via `grades_logger` (per logging key steps), persist denormalized disease/grade metadata into the dedicated columns, and optional follow-up actions (e.g., move to next task).
+   - **Progress:** Service-layer submission logic and `/tasks/intra-rater/tasks/<id>/submit` endpoint now persist intra-rater grades and mark tasks complete.
 
 6. **Configuration & Admin UX**
    - Provide UI under `/admin/settings` (or equivalent) to edit the global cooldown and view audit logs for overrides.

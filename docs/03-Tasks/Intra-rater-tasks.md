@@ -49,6 +49,21 @@
 - Submission hits `/tasks/intra-rater/tasks/<task_id>/submit`, calling `IntraRaterService.submit_grade` to persist `IntraRaterGrade`, mark task `completed`, and store denormalized labels/time.
 - JS (`intra_rater_tasks.js`) removes the task from queue and shows a toast; completed history available via toggle.
 
+## Inline Dual-Grading Integration (`/grading`)
+- Dual grading Save & Next flow now rolls for a 50% chance to surface an intra-rater reassessment when pending work exists for the same disease/grader.
+- Helper `utils/getNextIntraRaterTask.get_next_intra_rater_task` encapsulates the selector: given `(user_id, disease_id)` it opens (or reuses) a session, pulls the oldest `STATE_PENDING` `IntraRaterTask` for that grader, and returns the ORM entity. When the helper creates its own session it expunges the object before closing so callers can safely use it outside the helper’s scope. `grading/dual_grading.py` invokes this helper immediately after the primary grade is committed, ensuring the main task transaction is closed before branching into intra-rater handling.
+- When an intra task is selected, graders are redirected to `/grading/intra-task/<task_id>` rendered by `grading/intra_rater.py`, sharing the viewer layout with `templates/grading/intra_grading_task.html`.
+- Submissions post to `/grading/intra-task/submit`, reuse `IntraRaterService.submit_grade`, and optionally resume the dual grading queue (same disease/slot) when “Save & Next” is chosen. This is implemented by passing `resume_slot`/`resume_disease_id` through the intra-rater template, reading them back in `intra_rater_submit`, then calling the same `get_next_eligible_*_task_atomic` helper used by the dual flow to fetch the next dual-grading task before redirecting.
+- Probability is currently hard-coded at 0.5; TODO tracked in `TODO/intrarater.md` to externalize/tune after observing task availability impact.
+
+### Developer Notes
+- Entry point: `grading/dual_grading.py` inside `dual_grading_submit` now commits the primary grade, queries for an intra-rater task, and handles redirect logic. Keep this check near the top of the post-commit block so any future consensus or notification steps run before the redirect is evaluated.
+- Routing: `grading/intra_rater.py` registers `GET /grading/intra-task/<id>` and `POST /grading/intra-task/submit`; the module mirrors dual-grading patterns (transaction scope, eligibility checks, flash messaging) for consistency.
+- Template reuse: `templates/grading/intra_grading_task.html` is intentionally parallel to `dual_grading_task.html`. Shared JS (`static/js/dual-grading-task.js`) is safe because both pages expose the same global variables (`window.gradingGuidelines`, `window.taskId`, etc.). Any JS updates must remain backward compatible with both templates.
+- Session metadata: resume slot/disease are passed via query+hidden inputs (`resume_slot`, `resume_disease_id`) so “Save & Next” can return the grader to the same queue. Validate these params before use to avoid slot spoofing.
+- Service layer: both dual and intra flows call `IntraRaterService.submit_grade`. Maintain the contract (raising `ValueError` for invalid states) so UI routes can continue to surface meaningful flash messages.
+- Randomization: current implementation uses Python's `random.random()`; if determinism/testing becomes important, consider injecting a strategy or seeding in app config.
+
 ## Endpoints Summary
 - `GET /tasks/intra-rater/admin` – HTML batch creator dashboard.
 - `GET /tasks/intra-rater/batches` – JSON feed (supports pagination, returns counts/grader breakdown).
@@ -56,6 +71,8 @@
 - `GET /tasks/intra-rater` – HTML grader queue.
 - `GET /tasks/intra-rater/my-tasks` – JSON queue for current grader.
 - `POST /tasks/intra-rater/tasks/<id>/submit` – submit reassessment.
+- `GET /grading/intra-task/<id>` – inline intra-rater grading page when surfaced during dual grading.
+- `POST /grading/intra-task/submit` – submit intra-rater grade and optionally resume dual grading queue.
 
 ## Workflow Diagram
 
@@ -73,10 +90,33 @@ Intra-Rater Batch + Tasks (DB)
  Grader Queue (filter by grader)
         |
         v
-Grader Submits Grade --> IntraRaterGradingService --> intra_rater_grades (DB)
+Grader Submits Grade --> IntraRaterService.submit_grade --> intra_rater_grades (DB)
         |
         v
 Analytics & QA Dashboards (opt-in)
+```
+
+### Integration in Dual Grading workflow
+
+```
+Dual Grading Save & Next
+        |
+        v
+Commit Grade --> fetch next dual grading task
+        |
+  50% chance + pending intra task?
+       / \
+      /   \
+    yes   no
+    |      |
+    v      v
+Redirect to `/grading/intra-task/<id>`   Continue dual grading queue
+    |
+    v
+Inline intra submission (`/grading/intra-task/submit`)
+    |
+    v
+Resume dual grading queue (if Save & Next)
 ```
 
 ## Key Considerations

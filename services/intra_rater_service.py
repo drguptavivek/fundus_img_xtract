@@ -177,6 +177,7 @@ class IntraRaterService:
                 selectinload(IntraRaterTask.disease),
                 selectinload(IntraRaterTask.batch),
                 selectinload(IntraRaterTask.lab_unit),
+                selectinload(IntraRaterTask.grades),
             )
             .filter(IntraRaterTask.grader_user_id == grader_user_id)
         )

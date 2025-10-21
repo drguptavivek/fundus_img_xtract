@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from typing import Iterable, Sequence
 
-from flask import Response, jsonify, request
+from flask import Response, jsonify, render_template, request, url_for
 from flask_login import current_user
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from services.intra_rater_service import (
     IntraRaterService,
     SubmitGradeParams,
 )
+from flask_wtf.csrf import generate_csrf
 
 from . import bp
 
@@ -107,7 +108,9 @@ def list_my_intra_rater_tasks() -> Response:
             grader_user_id=current_user.id,
             include_completed=include_completed,
         )
-        payload = [_task_to_payload(task) for task in tasks]
+        gradings_map = _load_gradings_map(db, tasks)
+        csrf_token = generate_csrf()
+        payload = [_task_to_payload(task, gradings_map, csrf_token) for task in tasks]
         return jsonify({"items": payload, "include_completed": include_completed})
 
 
@@ -223,10 +226,15 @@ def _parse_submit_payload(task_id: int, payload: dict) -> SubmitGradeParams:
     )
 
 
-def _task_to_payload(task: IntraRaterTask) -> dict:
+def _task_to_payload(
+    task: IntraRaterTask,
+    gradings_map: dict[int, list[DiseaseGrading]] | None = None,
+    csrf_token: str | None = None,
+) -> dict:
     batch = task.batch
     disease = task.disease
     lab_unit = task.lab_unit
+    gradings = (gradings_map or {}).get(task.disease_id, [])
     return {
         "id": task.id,
         "batch_id": task.batch_id,
@@ -241,6 +249,15 @@ def _task_to_payload(task: IntraRaterTask) -> dict:
         "state": task.state,
         "created_at": task.created_at.isoformat() if task.created_at else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+        "submit_url": url_for("tasks.submit_intra_rater_grade", task_id=task.id),
+        "csrf_token": csrf_token,
+        "disease_gradings": [
+            {"id": grading.id, "impression": grading.impression}
+            for grading in gradings
+        ],
+        "grade_name": task.grades[0].grade_name if task.grades else None,
+        "comment": task.grades[0].comment if task.grades else None,
+        "graded_at": task.grades[0].created_at.isoformat() if task.grades and task.grades[0].created_at else None,
         "batch": {
             "id": batch.id if batch else None,
             "normal_grade_id": batch.normal_grade_id if batch else None,
@@ -343,3 +360,36 @@ def _ensure_normal_grade_valid(db: Session, disease_id: int, normal_grade_id: in
     )
     if not db.query(exists_query).scalar():
         raise ValueError("normal_grade_id must reference an active grading for the disease")
+
+
+def _load_gradings_map(db: Session, tasks: Sequence[IntraRaterTask]) -> dict[int, list[DiseaseGrading]]:
+    disease_ids = {task.disease_id for task in tasks if task.disease_id}
+    gradings_map: dict[int, list[DiseaseGrading]] = {}
+    if not disease_ids:
+        return gradings_map
+
+    gradings = (
+        db.query(DiseaseGrading)
+        .filter(DiseaseGrading.disease_id.in_(disease_ids), DiseaseGrading.is_active.is_(True))
+        .order_by(DiseaseGrading.display_order.asc(), DiseaseGrading.impression.asc())
+        .all()
+    )
+    for grading in gradings:
+        gradings_map.setdefault(grading.disease_id, []).append(grading)
+    return gradings_map
+@bp.route("/intra-rater", methods=["GET"])
+@roles_required("ophthalmologist", "admin", "data_manager")
+def intra_rater_dashboard() -> str:
+    """Render the intra-rater task dashboard for the logged-in grader."""
+    with get_db_session() as db:
+        service = IntraRaterService(db)
+        tasks = service.list_grader_tasks(grader_user_id=current_user.id, include_completed=False)
+
+        gradings_map = _load_gradings_map(db, tasks)
+
+        return render_template(
+            "tasks/intra_rater/queue.html",
+            tasks=tasks,
+            gradings_map=gradings_map,
+            include_completed=False,
+        )

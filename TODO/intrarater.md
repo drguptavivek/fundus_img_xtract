@@ -1,60 +1,38 @@
 # Intra-Rater Tasks TODO
 
-## Stepwise Implementation Plan
+## Completed
 
-1. **Schema & Settings**
-   - Design `intra_rater_batches`, `intra_rater_tasks`, `intra_rater_grades`; include foreign keys to `users`, `diseases`, `lab_units`, and `grading_tasks` (`source_task_id`) plus a nullable `normal_grade_id` to persist the batch-selected “Normal” grading.
-   - Introduce nullable `cooldown_days_override` on batches; seed a global `INTRA_RATER_DEFAULT_COOLDOWN_DAYS` in `app_settings`.
-   - Add denormalized columns on `intra_rater_grades` for `disease_name`, `grade_name`, and `grade_description` (mirroring the main `grades` table) so historical reporting remains stable when master metadata changes.
-   - Author a SQLite migration script (per `docs/10-DEVELOP/CONVENTIONS.md`) under `migrations/` to create tables, indexes on `(grader_user_id, disease_id)` and `(task_id)`, and seed the setting; provide downgrade SQL for rollback.
-   - Backfill existing cooldown config from environment if present; ensure the SQL script stays SQLite-safe (e.g., explicit `IF NOT EXISTS` handling).
-   - **Progress:** Models/migration complete and applied via `sqlite3`; default cooldown seeded in `app_settings`.
+- Schema, migrations, and default cooldown seeded (`migrations/20250302_intra_rater_sqlite.sql`, `models.py`).
+- Selection engine + services (`services/intra_rater_service.py`) with abnormal prioritisation, cooldown enforcement, and audit snapshot serialization.
+- Admin and grader routes (`tasks/route_intra_rater.py`) plus templates/JS for batch creation and task submission.
+- UI chrome updates (navigation links, badges, help modal) and aggregate metrics refreshed live.
+- Service-level pytest coverage in `tests/test_intra_rater_service.py`.
+- Technical documentation added at `docs/03-tasks/Intra-rater-tasks.md` (includes workflow diagram and module map).
 
-2. **Selection Engine**
-   - Implement `IntraRaterSelectionService` with dependency-injected `Session` and `CooldownConfig`.
-   - Query historical `grades` joined to `grading_tasks`, `DiseaseGrading`, and `GradingTask`’s image reference to scope by disease, lab unit, and grader; enforce slot-lab unit permissions (`UserDiseaseUnitRole`) and prefer abnormal labels using batch-specified “Normal” grading metadata (user selects the normal grading during batch creation, fallback to heuristics if omitted).
-   - Prioritize abnormal images by ordering candidates (`is_normal = 0` first, then `is_normal = 1`), falling back to normals only when abnormal inventory is exhausted; maintain counts in the audit payload.
-   - Enforce cooldown by comparing against latest intra-rater grade and latest original grade for that `(grader, image, disease)` tuple; respect user-lab unit visibility when pre-filtering candidate images.
-   - Produce deterministic audit payload containing candidate IDs, reasons for exclusion, abnormal vs normal counts, and final selection order; serialize into `selection_snapshot_json`.
-   - **Progress:** `services/intra_rater_service.py` now provides batch creation logic with abnormal prioritization, cooldown enforcement, and selection audit serialization.
+## Remaining Work
 
-3. **Batch Creation Workflow**
-   - Build POST route `/tasks/intra-rater/batches` with `roles_required("admin", "data_manager")`.
-   - Validate graders belong to requested lab units (User-LabUnit scoping) and possess slot permissions for the chosen disease/lab unit (`UserDiseaseUnitRole`); prompt the creator to pick which grading impression represents “Normal” for each disease and ensure sufficient eligible images exist (return flash warnings per grader when short).
-   - Persist batch header and associated tasks using `transaction_scope()` to follow the DB context manager pattern and keep the operation atomic.
-   - **Progress:** JSON routes in `tasks/route_intra_rater.py` now list and create batches, applying scoping validation and invoking `IntraRaterService`.
+1. **Configuration & Admin UX**
+   - Global cooldown editor (e.g., settings screen) and audit history for overrides.
+   - Optional batch detail page/download (image list, abnormal/normal breakdown, CSV export).
+   - Alerting/cron for overdue intra-rater tasks if operationally required.
 
-4. **Task Queue Integration**
-   - Extend grader queue service to merge `intra_rater_tasks` with existing workload only for the owning grader; exclude for others unless admin/data manager.
-   - Present intra-rater tasks with a badge in list/detail templates (`<span class="badge text-bg-info">Intra-rater</span>`); ensure localization hooks if any.
-   - Update permission guards to prevent accidental reassignment or visibility leakage, mirroring User-LabUnit vs Slot-LabUnit rules from the scoping guide.
-   - **Progress:** `/tasks/intra-rater` dashboard rendering + `/tasks/intra-rater/my-tasks` JSON feed expose pending tasks with intra-rater badges and completed toggle; admin batch creator UI wired at `/tasks/intra-rater/admin` and entry added under Tasks menu.
+2. **Analytics & Reporting**
+   - Agreement metrics (intra-rater kappa, drift dashboards) leveraging `intra_rater_grades`.
+   - Dashboard toggles to include/exclude intra-rater data; exports with consensus context.
 
-5. **Grading Submission Flow**
-   - Create `IntraRaterGradingService.submit_grade` to write into `intra_rater_grades`, update task `state` to `completed`, and record timing data.
-   - Reuse existing form templates but adjust action endpoints to branch based on task type; maintain CSRF tokens via `_forms.html`.
-   - On submission, trigger Flash toast confirmation, emit structured entries via `grades_logger` (per logging key steps), persist denormalized disease/grade metadata into the dedicated columns, and optional follow-up actions (e.g., move to next task).
-   - **Progress:** Service-layer submission logic and `/tasks/intra-rater/tasks/<id>/submit` endpoint now persist intra-rater grades and mark tasks complete.
+3. **Testing Enhancements**
+   - Integration/UI tests for batch creator and grader queue flows.
+   - CI updates to ensure new modules participate in default pytest run.
 
-6. **Configuration & Admin UX**
-   - Provide UI under `/admin/settings` (or equivalent) to edit the global cooldown and view audit logs for overrides.
-   - Batch detail page should list selected images, abnormal/normal breakdown, remaining pending counts, and download CSV snapshot.
-   - Implement background job/cron (if available) to remind graders of overdue intra-rater tasks after configurable SLA.
+4. **Operational Follow-ups**
+   - Monitor aggregate metrics for performance; consider background job to recalc totals if dataset grows.
+   - Keep documentation/help modal in sync with future UX changes.
 
-7. **Analytics & Reporting**
-   - Build SQL queries or SQLAlchemy ORM functions to compute intra-rater agreement metrics (e.g., Cohen’s kappa vs original grade).
-   - Ensure existing dashboards exclude intra-rater records by default; add toggles to include for QA analysis.
-   - Provide export endpoint delivering `intra_rater_grades` with context (grader, disease, original consensus).
+## References
 
-8. **Testing Strategy (pytest)**
-   - Unit tests for selection service (cooldown enforcement, abnormal preference, insufficient inventory paths).
-   - Integration tests covering batch creation, form submission, and task visibility with role-based access checks.
-   - Regression tests ensuring dual grading flows remain unaffected (no joins accidentally pulling intra-rater tables) and that logging hooks fire as expected.
-   - pytest-focused coverage for new helper functions: selection filtering, audit snapshot serialization, denormalized metadata population, and queue visibility gating.
-   - Smoke tests for settings form and analytics queries using seeded fixtures.
-   - Reuse fixtures from `tests/conftest.py` (e.g., `db_session`, `app`, `client`, `admin_user`) when adding intra-rater tests to ensure consistent setup.
-   - Update CI scripts if needed so `pytest` runs include the new intra-rater test modules.
-   - **Progress:** `tests/test_intra_rater_service.py` exercises batch creation, submission, and completed-task retrieval using pytest.
+- Detailed design/references: `docs/03-tasks/Intra-rater-tasks.md`.
+- DB & logging conventions: `docs/10-DEVELOP/CONVENTIONS.md`, `docs/10-DEVELOP/DB CONTEXT MANAGER.md`, `docs/10-DEVELOP/Logging_key_steps.md`.
+- Scoping guidance: `docs/03-Tasks/Scoping.md`.
 
 ## Existing Utilities to Leverage
 

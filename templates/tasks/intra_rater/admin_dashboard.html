@@ -12,7 +12,12 @@
       <h1 class="h3 mb-1">Intra-Rater Batch Creator</h1>
       <p class="text-muted mb-0">Select graders, choose disease, and schedule a reassessment batch. Only graders, data managers, and admins can see generated tasks.</p>
     </div>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tasks.list_intra_rater_batches') }}">View JSON batches</a>
+    <div class="d-flex align-items-center gap-2">
+      <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#intraHelpModal">?
+        <span class="visually-hidden">How intra-rater batch creation works</span>
+      </button>
+    <!---  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tasks.list_intra_rater_batches') }}">View JSON batches</a> --->
+    </div>
   </div>
 
   <div class="card mb-4">
@@ -166,6 +171,34 @@
     </div>
   </div>
   {% endif %}
+</div>
+
+<!-- Help Modal -->
+<div class="modal fade" id="intraHelpModal" tabindex="-1" aria-labelledby="intraHelpModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="intraHelpModalLabel">How Intra-Rater Batch Creation Works</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Use this workflow to re-assess images a grader has already seen, so you can measure intra-rater consistency.</p>
+        <ol class="mb-4">
+          <li><strong>Pick a disease and hospital.</strong> These are mandatory. Once both are selected, eligible lab units and grader options become visible.</li>
+          <li><strong>Optional lab unit filter.</strong> Narrowing to a lab restricts the grader list to users mapped to that lab for the chosen disease.</li>
+          <li><strong>Grader eligibility guardrails.</strong> Only users who hold resident/faculty/arbitrator permissions for the disease within the hospital (and lab, if provided) are offered.</li>
+          <li><strong>Historical image selection.</strong> For each grader the service searches their prior grades, skipping images already pending and enforcing the cool-down window (global default or override).</li>
+          <li><strong>Abnormal-first ordering.</strong> The optional “Normal grade” value helps the selector prefer previously abnormal cases before filling with normal ones.</li>
+          <li><strong>Target distribution.</strong> The requested number of images per grader is allocated without duplication; each selection spawns an intra-rater task linked to the original grading task.</li>
+          <li><strong>Immediate feedback.</strong> After creation, the dashboard refreshes the batch list and aggregate counts so you can confirm totals without reloading.</li>
+        </ol>
+        <p class="mb-0 text-muted">All intra-rater tasks remain private to the assigned grader plus admins/data managers, and can be completed from the “My Intra-Rater Tasks” page.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

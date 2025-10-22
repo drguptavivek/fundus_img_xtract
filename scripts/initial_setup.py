@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import shutil
 import os
 import sys
 from pathlib import Path
+import shutil
+from datetime import datetime
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parent.parent
@@ -113,6 +114,36 @@ def reset_files_directory() -> None:
     print(f"  Recreated files directory: {resolved_root}")
 
     create_directories()
+
+
+def backup_and_remove_database() -> None:
+    """Create a timestamped backup of the current database, then delete it."""
+    db_path_str = engine.url.database
+    if not db_path_str:
+        print("No database path configured; skipping database backup.")
+        return
+
+    db_path = Path(db_path_str)
+    if not db_path.is_absolute():
+        db_path = project_root / db_path
+
+    if not db_path.exists():
+        print(f"No database file found at {db_path}; skipping backup.")
+        return
+
+    backups_dir = project_root / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"{db_path.stem}_{timestamp}{db_path.suffix or '.db'}"
+    backup_path = backups_dir / backup_name
+
+    print(f"Backing up database to {backup_path}...")
+    engine.dispose()
+    shutil.copy2(db_path, backup_path)
+    print("  Backup complete. Removing original database file...")
+    db_path.unlink()
+    print("  Database file removed.")
 
 
 def create_directories() -> None:
@@ -227,6 +258,10 @@ def main():
     try:
         # Reset storage directories
         reset_files_directory()
+        print()
+
+        # Backup and remove existing database
+        backup_and_remove_database()
         print()
         
         # Create database

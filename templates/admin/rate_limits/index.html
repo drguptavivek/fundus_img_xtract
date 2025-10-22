@@ -72,6 +72,8 @@
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ url_for('rate_limit_admin.clear_limit') }}">
+                        {% include '_forms.html' %}
+                        {{ csrf_field() }}
                         <div class="mb-3">
                             <label for="key" class="form-label">Key (required)</label>
                             <input type="text" class="form-control" id="key" name="key" required
@@ -169,6 +171,8 @@
                 <p>This action cannot be undone.</p>
                 
                 <form method="POST" action="{{ url_for('rate_limit_admin.clear_all') }}">
+                    {% include '_forms.html' %}
+                    {{ csrf_field() }}
                     <div class="mb-3">
                         <label for="confirm" class="form-label">Type <code>CLEAR_ALL_RATE_LIMITS</code> to confirm:</label>
                         <input type="text" class="form-control" id="confirm" name="confirm" required>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Intra-Rater Task{% endblock %}
+{% block title %}Dual Grading Task{% endblock %}
 
 {% block content %}
 {% from "_forms.html" import csrf_field %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Intra-Rater Reassessment</h3>
+  <h3 class="mb-0">Dual Grading Task</h3>
   <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
 </div>
 
@@ -19,16 +19,16 @@
             <code class="mb-0">{{ task.id }}</code>
           </div>
           <div class="d-flex align-items-center">
-            <span class="text-muted me-1">State:</span>
+            <span class="text-muted me-1">Status:</span>
             <strong class="text-capitalize mb-0">{{ task.state }}</strong>
-          </div>
-          <div class="d-flex align-items-center">
-            <span class="text-muted me-1">Disease:</span>
-            <strong class="mb-0">{{ task.disease.name }}</strong>
           </div>
           <div class="d-flex align-items-center">
             <span class="text-muted me-1">Lab/Unit:</span>
             <strong class="mb-0">{{ task.lab_unit.name }}</strong>
+          </div>
+          <div class="d-flex align-items-center">
+            <span class="text-muted me-1">Disease:</span>
+            <strong class="mb-0">{{ task.disease.name }}</strong>
           </div>
         </div>
       </div>
@@ -41,21 +41,17 @@
     {% if image_uuid %}
       {% include 'grading/_viewer_card.html' %}
     {% else %}
-    <div class="card shadow-sm">
-      <div class="card-body text-center">
-        <p class="text-muted mb-0">Image not available for this intra-rater task.</p>
+      <div class="card shadow-sm">
+        <div class="card-body text-center">
+          <p class="text-muted mb-0">Image not available</p>
+        </div>
       </div>
-    </div>
     {% endif %}
   </div>
 
   <div class="col-12 col-lg-3" id="image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
-        <div class="alert alert-info small">
-          <strong>Reminder:</strong> Reassess this case independently before proceeding.
-        </div>
-
         <form method="post" action="{{ url_for('grading.intra_rater_submit') }}" data-grading-form="true">
           {{ csrf_field() }}
           <input type="hidden" name="task_id" value="{{ task.id }}">
@@ -66,7 +62,7 @@
           {% endif %}
 
           <div class="mb-2">
-            <label class="form-label mt-5">Select a Grade</label>
+            <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name }}</strong></label>
             <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
               {% for opt in disease_gradings %}
                 {% set oid = 'imp-' ~ opt.id %}

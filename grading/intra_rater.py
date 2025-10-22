@@ -201,7 +201,7 @@ def intra_rater_submit():
             flash(str(error), "danger")
             return redirect(_build_intra_task_url(task_id, resume_slot, actual_resume_disease_id))
 
-    flash("Intra-rater grade submitted successfully.", "success")
+    flash("Grade submitted successfully.", "success")
 
     if action == "save_next" and resume_slot in {"resident", "faculty", "arbitrator"} and actual_resume_disease_id:
         next_task = None

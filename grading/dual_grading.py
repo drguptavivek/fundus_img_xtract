@@ -550,7 +550,6 @@ def dual_grading_submit():
                     intra_task = get_next_intra_rater_task(current_user.id, disease_id)
                     if intra_task and random.random() < 0.5:
                         flash("Grade submitted successfully.", "success")
-                        flash("A reassessment task has been assigned.", "info")
                         return redirect(
                             url_for(
                                 "grading.intra_rater_task",

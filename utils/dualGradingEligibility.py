@@ -7,8 +7,8 @@ This design allows for better transaction management and session reuse.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-from sqlalchemy import select
+from typing import Dict, Any, Optional, Sequence
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from models import Grade, User, Disease, LabUnit, UserDiseaseUnitRole, Hospital, GradingTask
 
@@ -120,7 +120,12 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
     if role_slot == "resident":
         eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_resident == True)
     elif role_slot == "resident2":
-        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_resident2 == True)
+        eligibility_query = eligibility_query.filter(
+            or_(
+                UserDiseaseUnitRole.can_grade_resident2 == True,
+                UserDiseaseUnitRole.can_grade_resident == True,
+            )
+        )
     elif role_slot == "arbitrator":
         eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_arbitrate == True)
     
@@ -193,7 +198,10 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
     if role_slot == 'resident':
         eligibility_filter = UserDiseaseUnitRole.can_grade_resident == True
     elif role_slot == 'resident2':
-        eligibility_filter = UserDiseaseUnitRole.can_grade_resident2 == True
+        eligibility_filter = or_(
+            UserDiseaseUnitRole.can_grade_resident2 == True,
+            UserDiseaseUnitRole.can_grade_resident == True,
+        )
     elif role_slot == 'arbitrator':
         eligibility_filter = UserDiseaseUnitRole.can_arbitrate == True
         
@@ -246,3 +254,34 @@ def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
             return True
     
     return False
+
+
+def has_user_graded_task(
+    db,
+    user_id: int,
+    task_id: int,
+    role_slots: Optional[Sequence[str]] = None,
+) -> bool:
+    """
+    Check if a user has graded a task for optional role slots.
+
+    This is used to prevent the same grader from receiving both resident slots.
+
+    Args:
+        db: Database session
+        user_id: The ID of the user
+        task_id: The ID of the task
+        role_slots: Optional list of role slots to filter by
+
+    Returns:
+        True if a grade exists matching the filters, False otherwise
+    """
+    query = db.query(Grade.id).filter(
+        Grade.grader_user_id == user_id,
+        Grade.task_id == task_id,
+    )
+
+    if role_slots:
+        query = query.filter(Grade.role_slot.in_(role_slots))
+
+    return db.query(query.exists()).scalar() or False

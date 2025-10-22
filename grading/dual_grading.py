@@ -19,7 +19,11 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task,
     _has_user_graded_task_2weeks,
 )
-from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
+from utils.dualGradingEligibility import (
+    check_arbitration_eligibility,
+    get_user_eligibility_for_task,
+    has_user_graded_task,
+)
 from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
@@ -197,6 +201,19 @@ def dual_grading_task(task_id: int, slot_type: str):
                     state_validity = False
             
             if not state_validity:
+                return redirect(url_for("grading.index"))
+
+            conflicting_slots = []
+            conflict_message = None
+            if slot_type == 'resident':
+                conflicting_slots = ['resident2']
+                conflict_message = "You already graded this task in the resident2 slot."
+            elif slot_type == 'resident2':
+                conflicting_slots = ['resident']
+                conflict_message = "You already graded this task in the resident slot."
+
+            if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
+                flash(conflict_message or "You already graded this task in the paired slot.", "warning")
                 return redirect(url_for("grading.index"))
             
             # Check if user is eligible for the specified slot
@@ -431,6 +448,19 @@ def dual_grading_submit():
             if not label:
                 flash("Invalid label.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+
+            conflicting_slots = []
+            conflict_message = None
+            if slot == "resident":
+                conflicting_slots = ["resident2"]
+                conflict_message = "You already graded this task in the resident2 slot."
+            elif slot == "resident2":
+                conflicting_slots = ["resident"]
+                conflict_message = "You already graded this task in the resident slot."
+
+            if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
+                flash(conflict_message or "You already graded this task in the paired slot.", "warning")
+                return redirect(url_for("grading.index"))
             
             # Fetch existing grade using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)

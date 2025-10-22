@@ -64,21 +64,15 @@ def edit_eligibility(user_id):
                     can_grade_resident2 = bool(item.get('can_grade_resident2', False))
                     can_arbitrate = bool(item.get('can_arbitrate', False))
                     active = bool(item.get('active', False))
+
+                    # Mirror resident eligibility to resident2 to keep slots in sync.
+                    if can_grade_resident:
+                        can_grade_resident2 = True
                     
                     # Create key for tracking
                     key = (disease_id, lab_unit_id)
                     submitted_keys.add(key)
                     
-                    # Validate that resident and resident2 are not both selected
-                    if can_grade_resident and can_grade_resident2:
-                        # Get the disease and lab unit names for a more user-friendly error message
-                        disease = db.get(Disease, disease_id)
-                        lab_unit = db.get(LabUnit, lab_unit_id)
-                        disease_name = disease.name if disease else f"Unknown Disease (ID: {disease_id})"
-                        lab_unit_name = lab_unit.name if lab_unit else f"Unknown Lab Unit (ID: {lab_unit_id})"
-                        
-                        flash(f"Error: User cannot be both Resident and Resident2 for the same disease and lab unit ({disease_name}, {lab_unit_name}).", "danger")
-                        return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                     
                     # Validate FKs
                     if not db.get(Disease, disease_id) or not db.get(LabUnit, lab_unit_id):

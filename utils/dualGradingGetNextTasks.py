@@ -5,11 +5,15 @@ Utility functions for getting the next eligible dual grading tasks.
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_, func
 from models import Session, GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
-from typing import Optional, Union
+from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
 
-from utils.dualGradingEligibility import _get_user_eligible_lab_unit_ids, _has_user_graded_task_2weeks
+from utils.dualGradingEligibility import (
+    _get_user_eligible_lab_unit_ids,
+    _has_user_graded_task_2weeks,
+    has_user_graded_task,
+)
 from datetime import datetime, timedelta, timezone
 from models import Grade
 
@@ -95,8 +99,16 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     
     # Filter out tasks that the user has graded in the past 2 weeks
     filtered_tasks = []
+    conflicting_slots: List[str] = []
+    if role_slot == "resident":
+        conflicting_slots = ["resident2"]
+    elif role_slot == "resident2":
+        conflicting_slots = ["resident"]
+
     for task in tasks:
         if not _has_user_graded_task_2weeks(db, user_id, task.id):
+            if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
+                continue
             filtered_tasks.append(task)
     
     return filtered_tasks
@@ -275,6 +287,23 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     elif role_slot == "resident2":
         query = query.filter(GradingTask.state == "resident_done")
     
+    conflicting_slots: List[str] = []
+    if role_slot == "resident":
+        conflicting_slots = ["resident2"]
+    elif role_slot == "resident2":
+        conflicting_slots = ["resident"]
+
+    if conflicting_slots:
+        conflict_exists = (
+            db.query(Grade.id)
+            .filter(
+                Grade.task_id == GradingTask.id,
+                Grade.grader_user_id == user_id,
+                Grade.role_slot.in_(conflicting_slots),
+            )
+        )
+        query = query.filter(~conflict_exists.exists())
+
     # Use SELECT FOR UPDATE to lock the rows
     # Order randomly and limit to 1 to get just one task locked
     task = query.with_for_update().order_by(func.random()).first()

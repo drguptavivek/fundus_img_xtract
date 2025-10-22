@@ -46,10 +46,6 @@
                       <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
                     </div>
                     <div class="form-check">
-                      <input class="form-check-input role-checkbox" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident2">
-                      <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Resident2</label>
-                    </div>
-                    <div class="form-check">
                       <input class="form-check-input role-checkbox" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
                       <label class="form-check-label" for="arb-{{ disease.id }}-{{ lab_unit.id }}">Arbitrator</label>
                     </div>
@@ -92,14 +88,9 @@
       .then(data => {
         if (data.eligibility) {
           data.eligibility.forEach(rule => {
-            // Always set the role checkboxes regardless of active status
-            if (rule.can_grade_resident) {
-              const el = document.getElementById(`res-${rule.disease_id}-${rule.lab_unit_id}`);
-              if (el) el.checked = true;
-            }
-            if (rule.can_grade_resident2) {
-              const el = document.getElementById(`fac-${rule.disease_id}-${rule.lab_unit_id}`);
-              if (el) el.checked = true;
+            const residentEl = document.getElementById(`res-${rule.disease_id}-${rule.lab_unit_id}`);
+            if (residentEl && (rule.can_grade_resident || rule.can_grade_resident2)) {
+              residentEl.checked = true;
             }
             if (rule.can_arbitrate) {
               const el = document.getElementById(`arb-${rule.disease_id}-${rule.lab_unit_id}`);
@@ -111,7 +102,7 @@
             if (activeEl) {
               activeEl.checked = rule.active;
               // Enable the active toggle if there are roles
-              if (rule.can_grade_resident || rule.can_grade_resident2 || rule.can_arbitrate) {
+              if ((residentEl && residentEl.checked) || rule.can_arbitrate) {
                 activeEl.disabled = false;
               }
             }
@@ -119,7 +110,7 @@
         }
       });
 
-    // Handle role checkbox changes to prevent resident2 and resident being selected together
+    // Handle role checkbox changes and enable the active toggle when roles are selected
     form.addEventListener('change', function (event) {
       if (event.target.classList.contains('role-checkbox')) {
         const diseaseId = event.target.dataset.diseaseId;
@@ -128,26 +119,11 @@
         
         // Get the checkboxes for this disease/lab unit combination
         const resCheckbox = document.getElementById(`res-${diseaseId}-${labUnitId}`);
-        const facCheckbox = document.getElementById(`fac-${diseaseId}-${labUnitId}`);
         const arbCheckbox = document.getElementById(`arb-${diseaseId}-${labUnitId}`);
         const activeToggle = document.getElementById(`active-${diseaseId}-${labUnitId}`);
         
-        // Check if trying to select both resident and resident2
-        if (resCheckbox && facCheckbox) {
-          if (resCheckbox.checked && facCheckbox.checked) {
-            // Show an alert and uncheck the checkbox that was just checked
-            if (role === 'can_grade_resident') {
-              facCheckbox.checked = false;
-              alert('A user cannot be both Resident and Resident2 for the same disease and lab unit.');
-            } else if (role === 'can_grade_resident2') {
-              resCheckbox.checked = false;
-              alert('A user cannot be both Resident and Resident2 for the same disease and lab unit.');
-            }
-          }
-        }
-        
         // Check if any role is selected for this disease/lab unit
-        const hasRoleSelected = resCheckbox.checked || facCheckbox.checked || (arbCheckbox && arbCheckbox.checked);
+        const hasRoleSelected = (resCheckbox && resCheckbox.checked) || (arbCheckbox && arbCheckbox.checked);
         
         if (hasRoleSelected) {
           activeToggle.disabled = false;
@@ -160,36 +136,6 @@
 
     // Handle form submission
     form.addEventListener('submit', function (event) {
-      // Check for conflicts before submitting
-      let hasConflict = false;
-      
-      // Get all disease/lab unit combinations
-      const combinations = new Set();
-      form.querySelectorAll('input[type="checkbox"].role-checkbox').forEach(checkbox => {
-        const diseaseId = checkbox.dataset.diseaseId;
-        const labUnitId = checkbox.dataset.labUnitId;
-        const key = `${diseaseId}-${labUnitId}`;
-        combinations.add(key);
-      });
-      
-      // Check each combination for conflicts
-      for (const key of combinations) {
-        const [diseaseId, labUnitId] = key.split('-');
-        const resCheckbox = document.getElementById(`res-${diseaseId}-${labUnitId}`);
-        const facCheckbox = document.getElementById(`fac-${diseaseId}-${labUnitId}`);
-        
-        if (resCheckbox && facCheckbox && resCheckbox.checked && facCheckbox.checked) {
-          alert(`Error: User cannot be both Resident and Resident2 for the same disease and lab unit (disease ${diseaseId}, lab unit ${labUnitId}).`);
-          hasConflict = true;
-          break;
-        }
-      }
-      
-      if (hasConflict) {
-        event.preventDefault();
-        return;
-      }
-      
       // Collect all checkbox data
       const payload = { items: [] };
       const itemsMap = new Map();
@@ -219,6 +165,13 @@
         if (checkbox.checked) {
           const item = itemsMap.get(key);
           item[role] = true;
+        }
+      });
+
+      // Mirror resident eligibility to resident2 in payload
+      itemsMap.forEach(item => {
+        if (item.can_grade_resident) {
+          item.can_grade_resident2 = true;
         }
       });
 

@@ -47,9 +47,11 @@
 <div class="row mb-4 g-3">
   {% for disease in diseases %}
     {% set has_pending_tasks = false %}
-    {% if is_resident and kpi_resident_by_disease[disease.name] > 0 %}
+    {% set show_resident_button = false %}
+    {% if (is_resident or is_resident2) and (kpi_resident_by_disease[disease.name] > 0 or kpi_resident2_by_disease[disease.name] > 0) %}
       {% set has_pending_tasks = true %}
-    {% elif is_resident2 and (kpi_resident2_by_disease[disease.name] > 0 or kpi_arbitration_by_disease[disease.name] > 0) %}
+      {% set show_resident_button = true %}
+    {% elif is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
       {% set has_pending_tasks = true %}
     {% endif %}
     
@@ -59,20 +61,14 @@
         <div class="card-body">
           <h5 class="card-title">{{ disease.name }}</h5>
           
-          {% if is_resident and kpi_resident_by_disease[disease.name] > 0 %}
+          {% if show_resident_button %}
+          {% set combined_pending = kpi_resident_by_disease[disease.name] + kpi_resident2_by_disease[disease.name] %}
           <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='resident') }}" 
              class="btn btn-primary w-100 mb-2">
-            Start Resident Grading ({{ kpi_resident_by_disease[disease.name] }} pending)
+            Start Grading ({{ combined_pending }} pending)
           </a>
           {% endif %}
-          
-          {% if is_resident2 and kpi_resident2_by_disease[disease.name] > 0 %}
-          <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='resident2') }}" 
-             class="btn btn-success w-100 mb-2">
-            Start Resident2 Grading ({{ kpi_resident2_by_disease[disease.name] }} pending)
-          </a>
-          {% endif %}
-          
+
           {% if is_resident2 and kpi_arbitration_by_disease[disease.name] > 0 %}
           <a href="{{ url_for('grading.start_grading', disease_id=disease.id, role_slot='arbitrator') }}" 
              class="btn btn-warning w-100">
@@ -103,8 +99,9 @@
             {% for disease_name, roles in diseases.items() %} 
               <div> 
                 <span class="fw-bold">{{ disease_name }}:</span> 
-                {% for role in roles %} 
-                <span class="badge {% if role == 'Resident' %}bg-primary{% elif role == 'Resident2' %}bg-success{% else %}bg-warning{% endif %} ms-1"> {{ role }} </span>
+                {% for role in roles %}
+                {% set display_role = 'Resident' if role == 'Resident2' else role %}
+                <span class="badge {% if display_role == 'Resident' %}bg-primary{% else %}bg-warning{% endif %} ms-1"> {{ display_role }} </span>
                 {% endfor %} 
               </div> 
             {% endfor %} 
@@ -124,17 +121,19 @@
   <div class="col-md-4">
     <div class="card kpi-card kpi--primary shadow-sm h-100">
       <div class="card-body">
-        <h5 class="card-title">Resident</h5>
-        <h2 class="card-text">{{ kpi_resident_pending }}</h2>
-        <p class="text-muted">Pending Grading Tasks</p>
+        {% set combined_resident_pending = kpi_resident_pending + kpi_resident2_pending %}
+        <h5 class="card-title">Resident Grading</h5>
+        <h2 class="card-text">{{ combined_resident_pending }}</h2>
+        <p class="text-muted">Pending Resident &amp; Resident2 Tasks</p>
         {% if kpi_resident_by_disease %}
         <div class="mt-3">
           <h6 class="border-bottom pb-1">By Disease</h6>
           {% for disease_name, count in kpi_resident_by_disease.items() %}
-          {% if count > 0 %}
+          {% set disease_combined = count + kpi_resident2_by_disease.get(disease_name, 0) %}
+          {% if disease_combined > 0 %}
           <div class="d-flex justify-content-between">
             <span>{{ disease_name }}</span>
-            <span class="badge bg-primary">{{ count }}</span>
+            <span class="badge bg-primary">{{ disease_combined }}</span>
           </div>
           {% endif %}
           {% endfor %}
@@ -145,32 +144,6 @@
   </div>
   
 
-  
-  <div class="col-md-4">
-    <div class="card kpi-card kpi--success shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Resident2</h5>
-        <h2 class="card-text">{{ kpi_resident2_pending }}</h2>
-        <p class="text-muted">Pending Review Tasks</p>
-        {% if kpi_resident2_by_disease %}
-        <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6>
-          {% for disease_name, count in kpi_resident2_by_disease.items() %}
-          {% if count > 0 %}
-          <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span>
-            <span class="badge bg-primary">{{ count }}</span>
-          </div>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  
-
-  
   <div class="col-md-4">
     <div class="card kpi-card kpi--info shadow-sm h-100">
       <div class="card-body">
@@ -195,15 +168,17 @@
   <div class="col-md-4">
     <div class="card  kpi-card shadow-sm h-100">
       <div class="card-body">
-        <h5 class="card-title">Resident Completed</h5>
-        <h2 class="card-text">{{ kpi_resident_completed }}</h2>
-        <p class="text-muted">Completed Grading Tasks</p>
+        {% set combined_resident_completed = kpi_resident_completed + kpi_resident2_completed %}
+        <h5 class="card-title">Resident Grading Completed</h5>
+        <h2 class="card-text">{{ combined_resident_completed }}</h2>
+        <p class="text-muted">Completed Resident &amp; Resident2 Tasks</p>
         {% if kpi_resident_completed_by_disease %} <div class="mt-3">
           <h6 class="border-bottom pb-1">By Disease</h6>
           {% for disease_name, count in
           kpi_resident_completed_by_disease.items() %}
-          {% if count > 0 %} <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span> <span class="badge bg-success">{{ count }}</span>
+          {% set disease_completed_combined = count + kpi_resident2_completed_by_disease.get(disease_name, 0) %}
+          {% if disease_completed_combined > 0 %} <div class="d-flex justify-content-between">
+            <span>{{ disease_name }}</span> <span class="badge bg-success">{{ disease_completed_combined }}</span>
           </div>
           {% endif %}
           {% endfor %}
@@ -212,22 +187,6 @@
       </div>
     </div>
   </div> 
-  <div class="col-md-4">
-    <div class="card  kpi-card  shadow-sm h-100">
-      <div class="card-body">
-        <h5 class="card-title">Resident2 Completed</h5>
-        <h2 class="card-text">{{ kpi_resident2_completed }}</h2>
-        <p class="text-muted">Completed Review Tasks</p> {% if kpi_resident2_completed_by_disease %} <div class="mt-3">
-          <h6 class="border-bottom pb-1">By Disease</h6> {% for disease_name, count in
-          kpi_resident2_completed_by_disease.items() %} {% if count > 0 %} <div class="d-flex justify-content-between">
-            <span>{{ disease_name }}</span> <span class="badge bg-success">{{ count }}</span>
-          </div> {% endif %}
-          {% endfor %}
-        </div> {% endif %}
-      </div>
-    </div>
-  </div> 
-  
 <div class="col-md-4">
     <div class="card  kpi-card  shadow-sm h-100">
       <div class="card-body">

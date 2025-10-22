@@ -50,8 +50,30 @@ def start_grading(disease_id: int, role_slot: str):
     
     # Get the next eligible task based on role slot
     task = None
+    effective_slot = role_slot
+    can_grade_resident2 = current_user.has_role('ophthalmologist')
     if role_slot == 'resident':
-        task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
+        resident_message = None
+        resident2_message = None
+
+        if can_grade_resident2:
+            resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
+            if resident2_candidate is not None and not isinstance(resident2_candidate, str):
+                task = resident2_candidate
+                effective_slot = 'resident2'
+            else:
+                resident2_message = resident2_candidate
+
+        if task is None:
+            resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
+            if resident_candidate is not None and not isinstance(resident_candidate, str):
+                task = resident_candidate
+            else:
+                resident_message = resident_candidate
+
+        # Prefer resident2 informational messages if both are messages
+        if task is None:
+            task = resident2_message if resident2_message not in (None, "") else resident_message
     elif role_slot == 'resident2':
         task = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
     elif role_slot == 'arbitrator':
@@ -68,4 +90,4 @@ def start_grading(disease_id: int, role_slot: str):
     else:
         # It's a GradingTask object
         # Call dual_grading_task directly with slot_type as a parameter
-        return redirect(url_for("grading.dual_grading_task", task_id=task.id, slot_type=role_slot))
+        return redirect(url_for("grading.dual_grading_task", task_id=task.id, slot_type=effective_slot))

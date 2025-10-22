@@ -205,7 +205,7 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
     elif role_slot == 'arbitrator':
         eligibility_filter = UserDiseaseUnitRole.can_arbitrate == True
         
-    if eligibility_filter:
+    if eligibility_filter is not None:
         eligibility = db.query(UserDiseaseUnitRole).filter(
             UserDiseaseUnitRole.user_id == user_id,
             UserDiseaseUnitRole.disease_id == task.disease_id,

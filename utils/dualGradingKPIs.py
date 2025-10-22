@@ -101,8 +101,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             ).count()
         
         # Count resident2 pending tasks (only if user has resident2 eligibility)
-        if has_resident2_role and info['can_grade_resident2']:
-            # Exclude tasks that the user has already graded as resident2
+        if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']):
+            # Exclude tasks that the user has already graded in either resident slot
             counts['resident2_pending'] = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
@@ -110,7 +110,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                 ~GradingTask.grades.any(
                     and_(
                         Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'resident2'
+                        Grade.role_slot.in_(('resident', 'resident2'))
                     )
                 )
             ).count()

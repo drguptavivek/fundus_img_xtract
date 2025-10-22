@@ -599,12 +599,35 @@ def dual_grading_submit():
 
                     # Try to find the next eligible task with a new session
                     next_task = None
-                    if slot == "resident":
-                        next_task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-                    elif slot == "resident2":
-                        next_task = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
-                    elif slot == "arbitrator":
+                    next_slot_type = slot
+                    resident_message = None
+                    resident2_message = None
+
+                    if slot in ("resident", "resident2") and current_user.has_role("ophthalmologist"):
+                        resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
+                        if resident2_candidate is not None and not isinstance(resident2_candidate, str):
+                            next_task = resident2_candidate
+                            next_slot_type = "resident2"
+                        else:
+                            resident2_message = resident2_candidate
+
+                    if next_task is None and slot in ("resident", "resident2"):
+                        resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
+                        if resident_candidate is not None and not isinstance(resident_candidate, str):
+                            next_task = resident_candidate
+                            next_slot_type = "resident"
+                        else:
+                            resident_message = resident_candidate
+
+                    if next_task is None and slot == "arbitrator":
                         next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
+
+                    if next_task is None and slot in ("resident", "resident2"):
+                        # Surface resident2 info message first if available
+                        if resident2_message not in (None, ""):
+                            next_task = resident2_message
+                        else:
+                            next_task = resident_message
                     
                     # Handle the result
                     if next_task is None:
@@ -619,7 +642,7 @@ def dual_grading_submit():
                     else:
                         # It's a GradingTask object
                         flash("Grade submitted successfully.", "success")
-                        return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=slot))
+                        return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=next_slot_type))
                 except Exception as e:
                     grades_logger.exception("Failed to find next task: %s", e)
                     flash("Grade submitted successfully, but failed to navigate to next task.", "warning")

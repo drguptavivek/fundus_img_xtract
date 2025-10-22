@@ -75,13 +75,25 @@ def start_grading(disease_id: int, role_slot: str):
         if task is None:
             task = resident2_message if resident2_message not in (None, "") else resident_message
     elif role_slot == 'resident2':
-        task = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
+        resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
+        if resident2_candidate is not None and not isinstance(resident2_candidate, str):
+            task = resident2_candidate
+        else:
+            resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
+            if resident_candidate is not None and not isinstance(resident_candidate, str):
+                task = resident_candidate
+                effective_slot = 'resident'
+            else:
+                if resident2_candidate not in (None, ""):
+                    task = resident2_candidate
+                else:
+                    task = resident_candidate
     elif role_slot == 'arbitrator':
         task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
     
     # Handle the result
     if task is None:
-        flash(f"No tasks available for {disease.name} as {role_slot}.", "info")
+        flash(f"No tasks available for {disease.name} as {effective_slot}.", "info")
         return redirect(url_for("grading.index"))
     elif isinstance(task, str):
         # It's a helpful message

@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Script to create a test admin user with username 'Test' and password 'test@123'
-"""
+"""Create or update the default admin user for local development."""
 
 import sys
 from pathlib import Path
@@ -26,10 +24,10 @@ except ModuleNotFoundError as e:
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-def create_test_admin():
-    """Create test admin user with predefined credentials"""
-    username = "Test"
-    password = "test@123"
+def create_test_admin() -> User | None:
+    """Create or update the default admin user with known credentials."""
+    username = "admin"
+    password = "Vivek@2026"
     
     with SessionLocal() as db:
         # Ensure default roles exist
@@ -56,7 +54,8 @@ def create_test_admin():
                     existing_user.roles.append(admin_role)
                     db.add(existing_user)
                     db.commit()
-                    print(f"Added admin role to existing user '{username}'.")
+                    existing_user.password_hash = hash_password(password)
+                    print(f"Added admin role and refreshed password for existing user '{username}'.")
                     return existing_user
         else:
             # Create new user
@@ -88,9 +87,9 @@ if __name__ == "__main__":
     try:
         user = create_test_admin()
         if user:
-            print("Test admin user created successfully!")
-            print("Username: Test")
-            print("Password: test@123")
+            print("Default admin user is ready for use.")
+            print("Username: admin")
+            print("Password: Vivek@2026")
         else:
             print("Failed to create test admin user.", file=sys.stderr)
             sys.exit(1)

@@ -1,14 +1,7 @@
 PRAGMA foreign_keys=off;
 BEGIN TRANSACTION;
 
--- Update existing data to use the resident2 nomenclature.
-UPDATE grades SET role_slot = 'resident2' WHERE role_slot = 'faculty';
-UPDATE grading_tasks SET state = 'resident2_done' WHERE state = 'faculty_done';
-UPDATE task_tracker SET role_slot = 'resident2' WHERE role_slot = 'faculty';
-UPDATE jobs SET upload_type = 'resident2 excel' WHERE upload_type = 'faculty excel';
-UPDATE jobs SET rejected_summary = REPLACE(rejected_summary, 'Faculty', 'Resident2') WHERE rejected_summary LIKE '%Faculty%';
-
--- Rebuild grading_tasks to refresh the state constraint.
+-- Rebuild grading_tasks to refresh the state constraint and remap state values.
 ALTER TABLE grading_tasks RENAME TO grading_tasks_old;
 CREATE TABLE grading_tasks (
     id INTEGER NOT NULL,
@@ -50,7 +43,10 @@ SELECT
     direct_image_upload_id,
     disease_id,
     lab_unit_id,
-    state,
+    CASE state
+        WHEN 'faculty_done' THEN 'resident2_done'
+        ELSE state
+    END AS state,
     created_at,
     updated_at,
     ad_hoc_id
@@ -64,7 +60,7 @@ CREATE INDEX ix_grading_tasks_lab_unit_id ON grading_tasks (lab_unit_id);
 CREATE INDEX ix_task_disease_lab_state ON grading_tasks (disease_id, lab_unit_id, state);
 CREATE INDEX ix_grading_tasks_ad_hoc_id ON grading_tasks(ad_hoc_id);
 
--- Rebuild grades to update the role_slot constraint.
+-- Rebuild grades to update the role_slot constraint and remap slot values.
 ALTER TABLE grades RENAME TO grades_old;
 CREATE TABLE grades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,7 +107,10 @@ SELECT
     id,
     task_id,
     grader_user_id,
-    role_slot,
+    CASE role_slot
+        WHEN 'faculty' THEN 'resident2'
+        ELSE role_slot
+    END AS role_slot,
     disease_grading_id,
     comment,
     time_taken,
@@ -131,7 +130,7 @@ CREATE INDEX ix_grades_user_slot ON grades (grader_user_id, role_slot);
 CREATE UNIQUE INDEX uq_grades_task_user_slot ON grades (task_id, grader_user_id, role_slot);
 CREATE INDEX ix_grades_ai_model_id ON grades (ai_model_id);
 
--- Rebuild user_disease_unit_role to rename can_grade_faculty -> can_grade_resident2.
+-- Update related tables and rename eligibility column.
 ALTER TABLE user_disease_unit_role RENAME TO user_disease_unit_role_old;
 CREATE TABLE user_disease_unit_role (
     id INTEGER NOT NULL,
@@ -169,7 +168,7 @@ SELECT
     disease_id,
     lab_unit_id,
     can_grade_resident,
-    can_grade_faculty,
+    can_grade_resident2,
     can_arbitrate,
     active,
     created_at
@@ -180,6 +179,11 @@ CREATE INDEX ix_user_dur_unit_disease ON user_disease_unit_role (lab_unit_id, di
 CREATE INDEX ix_user_disease_unit_role_lab_unit_id ON user_disease_unit_role (lab_unit_id);
 CREATE INDEX ix_user_disease_unit_role_user_id ON user_disease_unit_role (user_id);
 CREATE INDEX ix_user_dur_user_active ON user_disease_unit_role (user_id, active);
+
+-- Update supporting tables now that constraints accept the new values.
+UPDATE task_tracker SET role_slot = 'resident2' WHERE role_slot = 'faculty';
+UPDATE jobs SET upload_type = 'resident2 excel' WHERE upload_type = 'faculty excel';
+UPDATE jobs SET rejected_summary = REPLACE(rejected_summary, 'Faculty', 'Resident2') WHERE rejected_summary LIKE '%Faculty%';
 
 COMMIT;
 PRAGMA foreign_keys=on;

@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""
-Initial setup script for the Fundus Image Manager.
-This script:
-1. Creates a new blank database
-2. Creates required directories
-3. Sets up core entities (hospitals, lab units, cameras, areas)
-4. Sets up core diseases (Glaucoma, DR, AMD)
-5. Sets up core disease gradings
-"""
+"""Initial setup script for the Fundus Image Manager."""
 
+from __future__ import annotations
+
+import shutil
 import os
 import sys
 from pathlib import Path
@@ -18,10 +13,12 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 from sqlalchemy import select
-from models import Base, engine, Session, Hospital, LabUnit, Camera, Area, Disease, DiseaseGrading
+from models import Base, engine, Session, Hospital, LabUnit, Camera, Area, Disease, DiseaseGrading, User
 from models import UPLOAD_DIR, PROCESSED_DIR, PROCESSING_ERROR_DIR, IMAGE_DIR
 from models import DIRECT_UPLOAD_DIR, PDF_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR
 from models import SUCCESS_LOG, ERROR_LOG
+from scripts.add_test_users import add_test_users
+from scripts.create_test_admin import create_test_admin
 
 # Core data that must always exist
 
@@ -102,10 +99,26 @@ STANDARD_GRADINGS = {
     ]
 }
 
-def create_directories():
-    """Create all required directories."""
-    print("Creating required directories...")
-    
+def reset_files_directory() -> None:
+    """Clear the files directory and recreate required sub-directories."""
+    files_root = project_root / "files"
+    resolved_root = files_root.resolve()
+    if project_root not in resolved_root.parents and resolved_root != project_root:
+        raise RuntimeError(f"Refusing to delete non-project directory: {resolved_root}")
+
+    if resolved_root.exists():
+        print(f"Clearing files directory at {resolved_root}...")
+        shutil.rmtree(resolved_root)
+    resolved_root.mkdir(parents=True, exist_ok=True)
+    print(f"  Recreated files directory: {resolved_root}")
+
+    create_directories()
+
+
+def create_directories() -> None:
+    """Create all required directories if they are missing."""
+    print("Preparing required directories...")
+
     directories = [
         UPLOAD_DIR,
         PROCESSED_DIR,
@@ -116,12 +129,12 @@ def create_directories():
         DR_PDF_DIR,
         GLAUCOMA_PDF_DIR,
         SUCCESS_LOG.parent,
-        ERROR_LOG.parent
+        ERROR_LOG.parent,
     ]
-    
+
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
-        print(f"  Created directory: {directory}")
+        print(f"  Ready: {directory}")
 
 def create_database():
     """Create a new blank database with all tables."""
@@ -212,8 +225,8 @@ def main():
     print("=" * 50)
     
     try:
-        # Create directories
-        create_directories()
+        # Reset storage directories
+        reset_files_directory()
         print()
         
         # Create database
@@ -226,6 +239,14 @@ def main():
             setup_core_diseases(db)
             setup_core_disease_gradings(db)
             db.commit()
+        print()
+
+        print("Seeding default admin user...")
+        create_test_admin()
+        print()
+
+        print("Seeding development test users...")
+        add_test_users()
         
         print()
         print("✅ Initial setup completed successfully!")
@@ -238,6 +259,7 @@ def main():
             areas = db.execute(select(Area)).scalars().all()
             diseases = db.execute(select(Disease)).scalars().all()
             gradings = db.execute(select(DiseaseGrading)).scalars().all()
+            users = db.execute(select(User)).scalars().all()
             
             print(f"  Hospitals: {len(hospitals)}")
             print(f"  Lab Units: {len(lab_units)}")
@@ -245,7 +267,11 @@ def main():
             print(f"  Areas: {len(areas)}")
             print(f"  Diseases: {len(diseases)}")
             print(f"  Disease Gradings: {len(gradings)}")
+            print(f"  Users: {len(users)}")
         
+        print()
+        print("Default admin credentials -> username: admin / password: Vivek@2026")
+        print("All seeded test users share the password: Vivek@2026")
         print()
         print("Next steps:")
         print("1. Create users: python scripts/create_user.py <username>")

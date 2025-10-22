@@ -241,7 +241,7 @@ flowchart TD
 
     subgraph Dual Grading System
         N --> O[Resident Grading];
-        O --> P[Faculty Grading];
+        O --> P[Resident2 Grading];
         P --> Q{Consensus Required?};
         Q -->|Yes| R[Arbitrator Review];
         Q -->|No| S[Final Grade Established];

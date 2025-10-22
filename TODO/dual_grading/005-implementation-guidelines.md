@@ -6,7 +6,7 @@ Schema (SQLAlchemy in models.py)
   - encounter_file_id (FK nullable), direct_image_upload_id (FK nullable) — with CHECK to allow exactly one non-null
   - disease_id (FK -> Disease)
   - lab_unit_id (FK -> LabUnit)
-  - state: pending | resident_done | faculty_done | arbitration | final (String with CHECK)
+  - state: pending | resident_done | resident2_done | arbitration | final (String with CHECK)
   - created_at, updated_at (UTC timezone-aware)
   - Indexes: (disease_id, lab_unit_id, state), (encounter_file_id), (direct_image_upload_id)
   - Unique: (encounter_file_id, disease_id) and (direct_image_upload_id, disease_id), each scoped to non-null side
@@ -16,7 +16,7 @@ Schema (SQLAlchemy in models.py)
   - id (PK)
   - task_id (FK -> grading_task)
   - grader_user_id (FK -> users)
-  - role_slot: resident | faculty | arbitrator (String with CHECK)
+  - role_slot: resident | resident2 | arbitrator (String with CHECK)
   - disease_grading_id (FK -> DiseaseGrading)
   - comment (Text, nullable, length-limited in validation)
   - created_at, updated_at
@@ -36,7 +36,7 @@ Schema (SQLAlchemy in models.py)
   - user_id (FK -> users)
   - disease_id (FK -> Disease)
   - lab_unit_id (FK -> LabUnit)
-  - can_grade_resident (Bool), can_grade_faculty (Bool), can_arbitrate (Bool), active (Bool)
+  - can_grade_resident (Bool), can_grade_resident2 (Bool), can_arbitrate (Bool), active (Bool)
   - Unique: (user_id, disease_id, lab_unit_id)
   - Indexes: (lab_unit_id, disease_id), (user_id, active)
   - CHECK: at least one of the three flags is true
@@ -53,10 +53,10 @@ Schema (SQLAlchemy in models.py)
 
 Eligibility Enforcement
 - Derive slot permission from two sources:
-  1) Global `user_roles`: must include `resident` for Resident slot; `ophthalmologist` for Faculty/Arbitrator.
+  1) Global `user_roles`: must include `resident` for Resident slot; `ophthalmologist` for Resident2/Arbitrator.
   2) `user_disease_unit_role`: must have `active=true` and the corresponding flag for task’s `(disease_id, lab_unit_id)`.
 - Prevent same user from occupying multiple slots on the same task (enforce in route/service checks).
-- Arbitrator exclusion: a user who graded as Faculty (or Resident) cannot arbitrate the same task.
+- Arbitrator exclusion: a user who graded as Resident2 (or Resident) cannot arbitrate the same task.
 
 Verification Gating
 - Direct images: require `DirectImageVerify.verified_status == 'verified'`.
@@ -83,7 +83,7 @@ Auto-Creation Hooks
 - Glaucoma verification (glaucoma/routes.py): after `glaucoma_verified_status = 'verified'`, loop images and create tasks.
 
 Consensus Logic
-- After each submission, fetch current resident and faculty grades for the task.
+- After each submission, fetch current resident and resident2 grades for the task.
 - If both present and labels match → create/ensure `consensus(method='match')`, set task.state = 'final'.
 - If mismatch and both present → set task.state = 'arbitration'.
 - Arbitration submission → write `consensus(method='adjudication')` with decided_by_user_id, set state = 'final'.
@@ -93,7 +93,7 @@ Routes & Policies (Sketch)
   - Select next verified task I’m eligible for and haven’t graded in my slot; prioritize tasks graded by the other slot.
   - Filter by `(disease_id, lab_unit_id)` using `user_disease_unit_role` matrix; do not move tasks between labs.
 
-- POST /grading/submit (resident/faculty)
+- POST /grading/submit (resident/resident2)
   - Validate csrf; validate enums; eligibility; verification check; idempotent upsert; update task state; possibly finalize consensus.
 
 - GET/POST /grading/arbitrate
@@ -105,8 +105,8 @@ Admin & API
 - Reports: aggregated metrics and CSV exports; denormalized view for analytics.
 
 Denormalized View (Optional)
-- SQL VIEW: join `grading_task` to up-to-date Resident and Faculty grades (latest per user-slot) and `consensus`.
-- Columns per disease may be pivoted, or keep rows as image×disease with columns resident_label, faculty_label, final_label, method.
+- SQL VIEW: join `grading_task` to up-to-date Resident and Resident2 grades (latest per user-slot) and `consensus`.
+- Columns per disease may be pivoted, or keep rows as image×disease with columns resident_label, resident2_label, final_label, method.
 
 Coding Practices
 - PEP 8 / PEP 484; explicit session lifecycle (`with Session() as db:` where possible).

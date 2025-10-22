@@ -19,7 +19,7 @@
                   <option value="">All Statuses</option>
                   <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
                   <option value="resident_done" {% if status_filter == 'resident_done' %}selected{% endif %}>Resident Done</option>
-                  <option value="faculty_done" {% if status_filter == 'faculty_done' %}selected{% endif %}>Faculty Done</option>
+                  <option value="resident2_done" {% if status_filter == 'resident2_done' %}selected{% endif %}>Resident2 Done</option>
                   <option value="arbitration" {% if status_filter == 'arbitration' %}selected{% endif %}>Arbitration</option>
                   <option value="final" {% if status_filter == 'final' %}selected{% endif %}>Final</option>
                 </select>
@@ -155,7 +155,7 @@
                   <span class="badge 
                     {% if task.status == 'pending' %}bg-secondary
                     {% elif task.status == 'resident_done' %}bg-info
-                    {% elif task.status == 'faculty_done' %}bg-warning
+                    {% elif task.status == 'resident2_done' %}bg-warning
                     {% elif task.status == 'arbitration' %}bg-primary
                     {% elif task.status == 'final' %}bg-success
                     {% else %}bg-light text-dark

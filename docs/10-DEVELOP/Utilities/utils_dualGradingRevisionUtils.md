@@ -16,7 +16,7 @@ Check if a user is eligible to revise their grade for a specific task and slot.
 - `db` (Session): Database session
 - `user_id` (int): ID of the user requesting revision
 - `task_id` (int): ID of the grading task
-- `slot_type` (str): The slot type ('resident', 'faculty', 'arbitrator')
+- `slot_type` (str): The slot type ('resident', 'resident2', 'arbitrator')
 - `grade` (Grade): The grade object to check (optional, will be fetched if not provided)
 
 **Returns:**
@@ -29,7 +29,7 @@ Check if a user is eligible to revise their grade for a specific task and slot.
 - Validates the slot type
 - Fetches the grade if not provided using fetch_existing_grade_for_user
 - Checks if the grade belongs to the current user
-- For resident and faculty grades: eligible for revision at any time before finalization
+- For resident and resident2 grades: eligible for revision at any time before finalization
 - For arbitrator grades: only eligible if submitted within the last 6 hours
 - Handles timezone-naive datetime objects by assuming they're in UTC
 
@@ -100,7 +100,7 @@ Check if a user is eligible to revise a grade based on the task state and other 
 
 **Parameters:**
 - `task_state` (str): Current state of the task
-- `role_slot` (str): Role slot ('resident', 'faculty', 'arbitrator')
+- `role_slot` (str): Role slot ('resident', 'resident2', 'arbitrator')
 - `grade_created_at` (Optional[datetime]): When the grade was created (needed for arbitrator revisions)
 
 **Returns:**
@@ -110,6 +110,6 @@ Check if a user is eligible to revise a grade based on the task state and other 
 - For final tasks: only arbitrators can revise if their grade was submitted within 6 hours
 - For non-final tasks:
   - Residents: can revise at any time before finalization
-  - Faculty: can revise at any time before finalization
+  - Resident2: can revise at any time before finalization
   - Arbitrators: can revise if task is in arbitration state OR if their grade was submitted in the last 6 hours
 - Handles timezone-naive datetime objects by assuming they're in UTC

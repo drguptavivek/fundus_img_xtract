@@ -29,7 +29,7 @@ This guide is intended for:
 - **File Uploaders**: Staff responsible for adding images to the system
 - **Optometrists**: Vision care specialists who can upload images and perform initial screenings
 - **Residents**: Medical residents performing initial image grading
-- **Ophthalmologists**: Faculty members providing expert assessments
+- **Ophthalmologists**: Resident2 members providing expert assessments
 - **Data Managers**: Administrators overseeing the system
 
 ## System Features
@@ -40,7 +40,7 @@ This guide is intended for:
 - Automatic image validation and organization
 - Specialized support for Remedio-FOP camera system ZIP downloads
 - Upload AI pre-graded images with existing assessments
-- Import faculty and resident grades for AI-processed images
+- Import resident2 and resident grades for AI-processed images
 
 ### Data Verification & Privacy
 - Extracted data verification from uploaded ZIP files
@@ -49,7 +49,7 @@ This guide is intended for:
 - Secure handling of sensitive medical data
 
 ### Grading Workflow
-- Three-tier grading process (Resident → Faculty → Arbitrator)
+- Three-tier grading process (Resident → Resident2 → Arbitrator)
 - Disease-specific grading for DR, Glaucoma, and AMD
 - Quality control through multiple assessments
 

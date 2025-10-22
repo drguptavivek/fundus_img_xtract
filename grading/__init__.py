@@ -2,7 +2,7 @@
 Dual Grading System Blueprint
 
 This blueprint provides the complete dual grading workflow for retinal fundus images,
-including three-tier grading (resident → faculty → arbitrator), consensus management,
+including three-tier grading (resident → resident2 → arbitrator), consensus management,
 and comprehensive task tracking.
 
 

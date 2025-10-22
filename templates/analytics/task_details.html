@@ -20,7 +20,7 @@
               <p><strong>Status:</strong> 
                 <span class="badge 
                   {% if task.status == 'resident_done' %}bg-warning text-dark
-                  {% elif task.status == 'faculty_done' %}bg-info
+                  {% elif task.status == 'resident2_done' %}bg-info
                   {% elif task.status == 'arbitration' %}bg-danger
                   {% elif task.status == 'final' %}bg-success
                   {% else %}bg-secondary{% endif %}">
@@ -83,12 +83,12 @@
         <div class="card-body">
           {% if task.grades %}
             {% for grade in task.grades %}
-            <div class="border-start border-2 ps-3 mb-3 {% if grade.role_slot == 'arbitrator' %}border-warning{% elif grade.role_slot == 'faculty' %}border-info{% else %}border-secondary{% endif %}">
+            <div class="border-start border-2 ps-3 mb-3 {% if grade.role_slot == 'arbitrator' %}border-warning{% elif grade.role_slot == 'resident2' %}border-info{% else %}border-secondary{% endif %}">
               <div class="d-flex justify-content-between align-items-start">
                 <h6 class="mb-1">
                   <span class="badge 
                     {% if grade.role_slot == 'resident' %}bg-secondary
-                    {% elif grade.role_slot == 'faculty' %}bg-info
+                    {% elif grade.role_slot == 'resident2' %}bg-info
                     {% elif grade.role_slot == 'arbitrator' %}bg-warning text-dark
                     {% else %}bg-light text-dark{% endif %}">
                     {{ grade.role_slot|title }}
@@ -154,7 +154,7 @@
               <li class="small">
                 <span class="badge 
                   {% if grade.role_slot == "resident" %}bg-secondary
-                  {% elif grade.role_slot == "faculty" %}bg-info
+                  {% elif grade.role_slot == "resident2" %}bg-info
                   {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
                   {% else %}bg-light text-dark{% endif %}">
                   {{ grade.role_slot|title }}
@@ -180,7 +180,7 @@
           <p><strong>Task Status:</strong> 
             <span class="badge 
               {% if task.status == "resident_done" %}bg-warning text-dark
-              {% elif task.status == "faculty_done" %}bg-info
+              {% elif task.status == "resident2_done" %}bg-info
               {% elif task.status == "arbitration" %}bg-danger
               {% elif task.status == "final" %}bg-success
               {% else %}bg-secondary{% endif %}">

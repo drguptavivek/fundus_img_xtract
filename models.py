@@ -501,7 +501,7 @@ class GradingTask(Base):
         UniqueConstraint('encounter_file_id', 'disease_id', name='uq_task_encounter_disease'),
         UniqueConstraint('direct_image_upload_id', 'disease_id', name='uq_task_direct_disease'),
         CheckConstraint(
-            "state IN ('pending','resident_done','faculty_done','arbitration','final')",
+            "state IN ('pending','resident_done','resident2_done','arbitration','final')",
             name='ck_task_state_valid'
         ),
         Index('ix_task_disease_lab_state', 'disease_id', 'lab_unit_id', 'state'),
@@ -516,7 +516,7 @@ class Grade(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, index=True)
     grader_user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # resident | faculty | arbitrator | ai
+    # resident | resident2 | arbitrator | ai
     role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
     # Normalized to master labels for the disease
@@ -542,7 +542,7 @@ class Grade(Base):
     ai_model: Mapped[Optional["AIModel"]] = relationship("AIModel", back_populates="grades")
 
     __table_args__ = (
-        CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai','review')", name='ck_grade_role_slot_valid'),
+        CheckConstraint("role_slot IN ('resident','resident2','arbitrator','ai','review')", name='ck_grade_role_slot_valid'),
         Index('ix_grade_task_slot', 'task_id', 'role_slot'),
         Index('ix_grade_user_slot', 'grader_user_id', 'role_slot'),
         UniqueConstraint('task_id', 'grader_user_id', 'role_slot', name='uq_grade_task_user_slot'),
@@ -580,7 +580,7 @@ class UserDiseaseUnitRole(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id', ondelete='CASCADE'), nullable=False, index=True)
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id', ondelete='CASCADE'), nullable=False, index=True)
     can_grade_resident: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    can_grade_faculty: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_grade_resident2: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, name="can_grade_resident2")
     can_arbitrate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -590,7 +590,7 @@ class UserDiseaseUnitRole(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'disease_id', 'lab_unit_id', name='uq_user_disease_unit_role'),
-        CheckConstraint('(can_grade_resident = 1) OR (can_grade_faculty = 1) OR (can_arbitrate = 1)', name='ck_user_dur_has_any_permission'),
+        CheckConstraint('(can_grade_resident = 1) OR (can_grade_resident2 = 1) OR (can_arbitrate = 1)', name='ck_user_dur_has_any_permission'),
         Index('ix_user_dur_unit_disease', 'lab_unit_id', 'disease_id'),
         Index('ix_user_dur_user_active', 'user_id', 'active'),
     )
@@ -607,7 +607,7 @@ class TaskTracker(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
-    role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # resident | faculty | arbitrator
+    role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)  # resident | resident2 | arbitrator
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     

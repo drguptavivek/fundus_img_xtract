@@ -29,7 +29,7 @@ class TestLoginRoute:
         """Test that authenticated users are redirected to appropriate pages"""
         with app.test_client() as client:
             # Test ophthalmologist redirect
-            self._login_as_user(client, test_users["faculty"])
+            self._login_as_user(client, test_users["resident2"])
             response = client.get("/login", follow_redirects=False)
             # Either redirects or shows login page (depending on test environment)
             assert response.status_code in [200, 302]

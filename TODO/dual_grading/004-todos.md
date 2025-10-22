@@ -8,7 +8,7 @@ Foundations
 Eligibility + Admin
 - [X] API: CRUD endpoints for `user_disease_unit_role`.
 - [X] Admin UI: assign per user → diseases → lab units → slot flags.
-- [X] Summary endpoints per lab unit + disease listing eligible residents/faculty/arbitrators.
+- [X] Summary endpoints per lab unit + disease listing eligible residents/resident2/arbitrators.
 
 Task Creation
 - [x] Service: `create_or_get_task(image_ref, disease_id, lab_unit_id)` with exclusivity and idempotency (global one task per image×disease; do not mutate lab_unit).
@@ -20,7 +20,7 @@ Task Creation
 
 Grading Flow
 - [x] Resident submit: eligibility + verification gating + upsert grade.
-- [x] Faculty submit: eligibility + verification gating + upsert grade.
+- [x] Resident2 submit: eligibility + verification gating + upsert grade.
 - [x] Consensus: if labels match → write consensus(method=match), state=final.
 - [x] Escalation: mismatch → state=arbitration; arbitrator pool selection.
 - [x] Arbitration submit: enforce rules; write consensus(method=adjudication), state=final.
@@ -31,7 +31,7 @@ Next-Task & Dashboard
  - [ ] Queue visibility filters by `(disease_id, lab_unit_id)` eligibility; exclude tasks already graded by the user for that slot.
 
 Denormalized View (Optional)
-- [ ] Create SQL view pivoting resident/faculty/final labels per image-per-disease.
+- [ ] Create SQL view pivoting resident/resident2/final labels per image-per-disease.
 - [ ] Optional materialization job for analytics.
 
 Security & Validation
@@ -43,7 +43,7 @@ Security & Validation
 Testing
 - [ ] Unit tests for eligibility, task creation, consensus, arbitration, verification gating.
 - [ ] API tests for eligibility CRUD and ensure_task.
-- [ ] Permissions: prevent same user occupying multiple slots; prevent faculty arbitrating a task they graded.
+- [ ] Permissions: prevent same user occupying multiple slots; prevent resident2 arbitrating a task they graded.
  - [ ] Uniqueness/Gold standard: ensure cross‑lab `ensure_task` returns existing task if not final; returns 409 if final.
 
 Rollout

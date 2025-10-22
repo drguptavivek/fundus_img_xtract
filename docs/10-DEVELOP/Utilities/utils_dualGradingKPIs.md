@@ -12,7 +12,7 @@ This module provides functions for retrieving KPI data for dual grading operatio
 
 Get KPI data for each core disease for pending tasks across all mapped lab units for each slot of a user.
 
-This function provides a comprehensive view of pending tasks by disease for all eligible slots (resident, faculty, arbitration) across all lab units where the user has eligibility.
+This function provides a comprehensive view of pending tasks by disease for all eligible slots (resident, resident2, arbitration) across all lab units where the user has eligibility.
 
 **Parameters:**
 - `db`: Database session (caller is responsible for closing)
@@ -24,7 +24,7 @@ This function provides a comprehensive view of pending tasks by disease for all 
 {
     'Disease Name': {
         'resident_pending': count,
-        'faculty_pending': count,
+        'resident2_pending': count,
         'arbitration_pending': count
     },
     ...
@@ -38,7 +38,7 @@ This function provides a comprehensive view of pending tasks by disease for all 
 - Groups eligible lab units by disease
 - Counts tasks based on state and role:
   - Resident pending: tasks in 'pending' state for which user doesn't have a resident grade
-  - Faculty pending: tasks in 'resident_done' state for which user doesn't have a faculty grade
+  - Resident2 pending: tasks in 'resident_done' state for which user doesn't have a resident2 grade
   - Arbitration pending: tasks in 'arbitration' state that user hasn't graded recently
 - Excludes tasks that the user has already completed in the appropriate role
 
@@ -46,7 +46,7 @@ This function provides a comprehensive view of pending tasks by disease for all 
 
 Get KPI data for each core disease for completed tasks across all mapped lab units for each slot of a user.
 
-This function provides a comprehensive view of completed tasks by disease for all eligible slots (resident, faculty, arbitration) across all lab units where the user has eligibility.
+This function provides a comprehensive view of completed tasks by disease for all eligible slots (resident, resident2, arbitration) across all lab units where the user has eligibility.
 
 **Parameters:**
 - `db`: Database session (caller is responsible for closing)
@@ -58,7 +58,7 @@ This function provides a comprehensive view of completed tasks by disease for al
 {
     'Disease Name': {
         'resident_completed': count,
-        'faculty_completed': count,
+        'resident2_completed': count,
         'arbitration_completed': count
     },
     ...
@@ -71,6 +71,6 @@ This function provides a comprehensive view of completed tasks by disease for al
 - Gets diseases where user has actually completed gradings
 - Counts completed tasks by role:
   - Resident completed: number of grades with role_slot 'resident' for the user in each disease
-  - Faculty completed: number of grades with role_slot 'faculty' for the user in each disease
+  - Resident2 completed: number of grades with role_slot 'resident2' for the user in each disease
   - Arbitration completed: number of grades with role_slot 'arbitrator' for the user in each disease
 - Returns empty dictionary if the user hasn't completed any gradings

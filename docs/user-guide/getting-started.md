@@ -38,7 +38,7 @@ The system supports different user roles with specific permissions:
 - Revise grades before finalization
 - View grading history
 
-### Ophthalmologist (Faculty)
+### Ophthalmologist (Resident2)
 - Provide independent assessments
 - Act as arbitrators for disputed grades
 - Review and finalize grading decisions

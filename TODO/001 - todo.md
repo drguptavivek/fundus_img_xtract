@@ -8,7 +8,7 @@ username test2ComophFac
     Password  Vivek@2026
     Roles     ophthalmologist
     Lab Unit Associations       RPC AIIMS:      Community Ophthalmology
-    Grading Eligibility     RPC AIIMS - Community Ophthalmology: Glaucoma: FacultyDR: Faculty
+    Grading Eligibility     RPC AIIMS - Community Ophthalmology: Glaucoma: Resident2DR: Resident2
 
 username  test2ComophResident
     Roles   Vivek@2026

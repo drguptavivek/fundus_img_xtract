@@ -111,7 +111,7 @@
 - Fixed dual grading workflow with proper task state updates
 - Implemented stuck task cleanup mechanism (60-minute timeout)
 - Added TaskTracker cleanup after successful grade submissions
-- Fixed faculty task availability issues
+- Fixed resident2 task availability issues
 
 ### Timezone Support
 - Rolled out end-to-end support for per-user display timezones

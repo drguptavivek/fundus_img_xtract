@@ -28,7 +28,7 @@ Performs comprehensive eligibility verification:
 2. Verifies permissions for disease and lab unit via `UserDiseaseUnitRole` table
 3. Checks role-specific requirements:
    - For 'resident': requires `can_grade_resident == True`
-   - For 'faculty': requires `can_grade_faculty == True`
+   - For 'resident2': requires `can_grade_resident2 == True`
    - For 'arbitrator': requires `can_arbitrate == True`
 4. Returns boolean eligibility with detailed message
 
@@ -46,7 +46,7 @@ Filters tasks based on:
 2. Disease ID matching
 3. Appropriate task state for role:
    - Residents: `state == "pending"`
-   - Faculty: `state == "resident_done"`
+   - Resident2: `state == "resident_done"`
    - Arbitrators: `state == "arbitration"`
 4. Excludes tasks graded by user in last 2 weeks
 
@@ -60,7 +60,7 @@ Filters tasks based on:
 #### State Validation at Submission
 Prevents race conditions by revalidating task state:
 - Residents: Can grade `pending` or `resident_done` (for revisions)
-- Faculty: Can grade `resident_done`, `faculty_done`, or `arbitration` (for revisions)
+- Resident2: Can grade `resident_done`, `resident2_done`, or `arbitration` (for revisions)
 - Arbitrators: Can grade `arbitration` or `final` (for eligible revisions)
 
 #### Grade Upsert Logic
@@ -147,7 +147,7 @@ def cleanup_task_tracker(task_id, user_id, role_slot, db=None):
 #### `create_or_update_consensus(task_id, db)`
 1. Checks if consensus already exists
 2. Determines consensus method:
-   - **Match**: Resident and faculty grades identical
+   - **Match**: Resident and resident2 grades identical
    - **Adjudication**: Arbitrator decision
 3. Creates consensus record with final grade
 4. Updates task state to `final`

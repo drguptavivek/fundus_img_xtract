@@ -4,7 +4,7 @@
 {% block content %}
 <div class="container py-4">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h4 mb-0">Import Resident & Faculty Grades</h1>
+        <h1 class="h4 mb-0">Import Resident & Resident2 Grades</h1>
         <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
         <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
         <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
@@ -28,7 +28,7 @@
   <div class="alert alert-info d-flex align-items-start gap-2">
     <div><i class="bi bi-info-circle-fill"></i></div>
     <div>
-      <strong>Workbook Template:</strong> columns must include <code>image_name</code>, <code>resident_grade / faculty_grade</code> columns, and optional <code>resident_remarks / faculty_remarks</code> columns .
+      <strong>Workbook Template:</strong> columns must include <code>image_name</code>, <code>resident_grade / resident2_grade</code> columns, and optional <code>resident_remarks / resident2_remarks</code> columns .
       <a href="{{ url_for('direct_uploads.pregraded_upload') }}" class="alert-link">Download template</a> (coming soon).
     </div>
   </div>
@@ -45,9 +45,9 @@
           <i class="bi bi-person-badge"></i> Resident Grades
         </label>
 
-        <input type="radio" class="btn-check" name="gradeTypeSelector" id="facultyRadio" autocomplete="off">
-        <label class="btn btn-outline-success" for="facultyRadio">
-          <i class="bi bi-mortarboard"></i> Faculty Grades
+        <input type="radio" class="btn-check" name="gradeTypeSelector" id="resident2Radio" autocomplete="off">
+        <label class="btn btn-outline-success" for="resident2Radio">
+          <i class="bi bi-mortarboard"></i> Resident2 Grades
         </label>
 
         <input type="radio" class="btn-check" name="gradeTypeSelector" id="aiRadio" autocomplete="off">
@@ -100,28 +100,28 @@
         </div>
       </div>
 
-      <!-- Faculty Grades Form -->
-      <div class="d-none" id="facultyFormContainer">
+      <!-- Resident2 Grades Form -->
+      <div class="d-none" id="resident2FormContainer">
         <div class="card shadow-sm">
           <div class="card-header bg-success-subtle">
-            <h2 class="h5 mb-0 text-success-emphasis">Faculty Grades</h2>
+            <h2 class="h5 mb-0 text-success-emphasis">Resident2 Grades</h2>
           </div>
           <div class="card-body">
-            <form method="post" enctype="multipart/form-data" id="faculty-form">
+            <form method="post" enctype="multipart/form-data" id="resident2-form">
               {{ csrf_field() }}
-              <input type="hidden" name="form_role" value="faculty">
-              <input type="hidden" name="mapping_token" value="{{ modal_token if modal_role == 'faculty' else '' }}">
-              <input type="hidden" name="mapping_json" id="faculty-mapping-json" value="{}">
+              <input type="hidden" name="form_role" value="resident2">
+              <input type="hidden" name="mapping_token" value="{{ modal_token if modal_role == 'resident2' else '' }}">
+              <input type="hidden" name="mapping_json" id="resident2-mapping-json" value="{}">
 
-              {% set form_role = 'faculty' %}
+              {% set form_role = 'resident2' %}
               {% include 'direct_uploads/pregraded_grades_form_fields.html' with context %}
 
               <div class="mb-3">
                 <label class="form-label">Grader</label>
-                <select class="form-select" name="grader_user_id" data-role="faculty">
-                  <option value="">Select Faculty Grader</option>
-                  {% for user in faculty_graders %}
-                  <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and (modal_role == 'faculty' or form_role == 'faculty') %}selected{% endif %}>
+                <select class="form-select" name="grader_user_id" data-role="resident2">
+                  <option value="">Select Resident2 Grader</option>
+                  {% for user in resident2_graders %}
+                  <option value="{{ user.id }}" {% if selected_grader and selected_grader == user.id and (modal_role == 'resident2' or form_role == 'resident2') %}selected{% endif %}>
                     {{ user.username }} (ID: {{ user.id }})
                   </option>
                   {% endfor %}
@@ -129,12 +129,12 @@
               </div>
 
               <div class="mb-3">
-                <label class="form-label">Faculty Grades Workbook (.xlsx)</label>
+                <label class="form-label">Resident2 Grades Workbook (.xlsx)</label>
                 <input type="file" class="form-control" name="grades_file" accept=".xlsx" required>
-                <div class="form-text">Columns required: <code>image_name</code>, <code>faculty_grade</code>. Remarks optional.</div>
+                <div class="form-text">Columns required: <code>image_name</code>, <code>resident2_grade</code>. Remarks optional.</div>
               </div>
 
-              <button type="submit" class="btn btn-success">Upload Faculty Grades</button>
+              <button type="submit" class="btn btn-success">Upload Resident2 Grades</button>
             </form>
           </div>
         </div>
@@ -392,17 +392,17 @@
   document.addEventListener('DOMContentLoaded', function () {
     // Grade type selector functionality
     const residentRadio = document.getElementById('residentRadio');
-    const facultyRadio = document.getElementById('facultyRadio');
+    const resident2Radio = document.getElementById('resident2Radio');
     const aiRadio = document.getElementById('aiRadio');
     
     const residentFormContainer = document.getElementById('residentFormContainer');
-    const facultyFormContainer = document.getElementById('facultyFormContainer');
+    const resident2FormContainer = document.getElementById('resident2FormContainer');
     const aiFormContainer = document.getElementById('aiFormContainer');
     
     function showForm(formContainer) {
       // Hide all form containers
       residentFormContainer.classList.add('d-none');
-      facultyFormContainer.classList.add('d-none');
+      resident2FormContainer.classList.add('d-none');
       aiFormContainer.classList.add('d-none');
       
       // Show the selected form container
@@ -416,9 +416,9 @@
       }
     });
     
-    facultyRadio.addEventListener('change', function() {
+    resident2Radio.addEventListener('change', function() {
       if (this.checked) {
-        showForm(facultyFormContainer);
+        showForm(resident2FormContainer);
       }
     });
     

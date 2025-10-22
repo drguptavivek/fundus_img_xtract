@@ -120,17 +120,17 @@
           </div>
           
           <div class="col-md-3">
-            <label class="form-label">Faculty Grade</label>
+            <label class="form-label">Resident2 Grade</label>
             <div class="dropdown">
-              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="facultyGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="facultyGradeText">All Grades</span>
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="resident2GradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="resident2GradeText">All Grades</span>
               </button>
-              <ul class="dropdown-menu w-100" id="facultyGradeList">
+              <ul class="dropdown-menu w-100" id="resident2GradeList">
                 {% for grade in grade_options %}
                 <li>
                   <div class="form-check ms-4  px-3 py-1">
-                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="faculty_grade" {% if grade.impression in (filters.faculty_grade if filters.faculty_grade else []) %}checked{% endif %}>
-                    <label class="form-check-label" for="faculty_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="resident2_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="resident2_grade" {% if grade.impression in (filters.resident2_grade if filters.resident2_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="resident2_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
                       {{ grade.impression }}
                     </label>
                   </div>
@@ -253,7 +253,7 @@
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
-                  faculty_grade=filters.faculty_grade or [],
+                  resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
@@ -273,7 +273,7 @@
                       disease_id=filters.disease_id,
                       lab_unit_id=filters.lab_unit_id,
                       resident_grade=filters.resident_grade or [],
-                      faculty_grade=filters.faculty_grade or [],
+                      resident2_grade=filters.resident2_grade or [],
                       arbitrator_grade=filters.arbitrator_grade or [],
                       final_grade=filters.final_grade or [],
                       has_ai_grade=filters.has_ai_grade,
@@ -291,7 +291,7 @@
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
-                    faculty_grade=filters.faculty_grade or [],
+                    resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
@@ -315,7 +315,7 @@
                         disease_id=filters.disease_id,
                         lab_unit_id=filters.lab_unit_id,
                         resident_grade=filters.resident_grade or [],
-                        faculty_grade=filters.faculty_grade or [],
+                        resident2_grade=filters.resident2_grade or [],
                         arbitrator_grade=filters.arbitrator_grade or [],
                         final_grade=filters.final_grade or [],
                         has_ai_grade=filters.has_ai_grade,
@@ -339,7 +339,7 @@
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
-                    faculty_grade=filters.faculty_grade or [],
+                    resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
@@ -356,7 +356,7 @@
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
                   resident_grade=filters.resident_grade or [],
-                  faculty_grade=filters.faculty_grade or [],
+                  resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
@@ -383,7 +383,7 @@
                 <th>Lab Unit</th>
                 <th>AI Grade</th>
                 <th>Resident Grade</th>
-                <th>Faculty Grade</th>
+                <th>Resident2 Grade</th>
                 <th>Arbitrator Grade</th>
                 <th>Review</th>
                 <th>Final Grade</th>
@@ -426,7 +426,7 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% set grade = task.grades.get('faculty') %}
+                  {% set grade = task.grades.get('resident2') %}
                   {% if grade %}
                     <span class="badge bg-info text-dark">{{ grade.impression or '-' }}</span>
                     {% if grade.comment %}<small class="text-muted d-block">Note: {{ grade.comment[:30] }}{% if grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
@@ -463,7 +463,7 @@
                 <td>
                   <span class="badge 
                     {% if task.state == 'resident_done' %}bg-warning text-dark
-                    {% elif task.state == 'faculty_done' %}bg-info
+                    {% elif task.state == 'resident2_done' %}bg-info
                     {% elif task.state == 'arbitration' %}bg-danger
                     {% elif task.state == 'final' %}bg-success
                     {% else %}bg-secondary{% endif %}">
@@ -498,7 +498,7 @@
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
-                    faculty_grade=filters.faculty_grade or [],
+                    resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
@@ -513,7 +513,7 @@
                     disease_id=filters.disease_id,
                     lab_unit_id=filters.lab_unit_id,
                     resident_grade=filters.resident_grade or [],
-                    faculty_grade=filters.faculty_grade or [],
+                    resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
@@ -563,7 +563,7 @@ function clearFilters() {
   
   // Update dropdown text to show "All Grades"
   document.getElementById('residentGradeText').textContent = 'All Grades';
-  document.getElementById('facultyGradeText').textContent = 'All Grades';
+  document.getElementById('resident2GradeText').textContent = 'All Grades';
   document.getElementById('arbitratorGradeText').textContent = 'All Grades';
   document.getElementById('finalGradeText').textContent = 'All Grades';
   document.getElementById('aiModelText').textContent = 'All Models';
@@ -591,14 +591,14 @@ fetch('/api/diseases-with-gradings')
 document.addEventListener('DOMContentLoaded', function() {
   const diseaseSelect = document.getElementById('diseaseSelect');
   const residentGradeList = document.getElementById('residentGradeList');
-  const facultyGradeList = document.getElementById('facultyGradeList');
+  const resident2GradeList = document.getElementById('resident2GradeList');
   const arbitratorGradeList = document.getElementById('arbitratorGradeList');
   const finalGradeList = document.getElementById('finalGradeList');
   
   // Store all available grade options to restore when disease is cleared
   const allGradeOptions = {
     resident: Array.from(residentGradeList.querySelectorAll('li')),
-    faculty: Array.from(facultyGradeList.querySelectorAll('li')),
+    resident2: Array.from(resident2GradeList.querySelectorAll('li')),
     arbitrator: Array.from(arbitratorGradeList.querySelectorAll('li')),
     final: Array.from(finalGradeList.querySelectorAll('li'))
   };
@@ -618,7 +618,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (selectedDisease) {
         // Update all grade dropdowns with the disease's gradings
         updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
-        updateGradeCheckboxes(facultyGradeList, selectedDisease.gradings, allGradeOptions.faculty);
+        updateGradeCheckboxes(resident2GradeList, selectedDisease.gradings, allGradeOptions.resident2);
         updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
         updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
       }
@@ -639,15 +639,15 @@ document.addEventListener('DOMContentLoaded', function() {
         residentGradeList.appendChild(newLi);
       });
       
-      facultyGradeList.innerHTML = '';
-      allGradeOptions.faculty.forEach(li => {
-        const existingChecked = facultyGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+      resident2GradeList.innerHTML = '';
+      allGradeOptions.resident2.forEach(li => {
+        const existingChecked = resident2GradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
         const isChecked = existingChecked ? existingChecked.checked : false;
         const newLi = li.cloneNode(true);
         if (isChecked) {
           newLi.querySelector('input').checked = true;
         }
-        facultyGradeList.appendChild(newLi);
+        resident2GradeList.appendChild(newLi);
       });
       
       arbitratorGradeList.innerHTML = '';

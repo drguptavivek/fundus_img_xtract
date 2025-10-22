@@ -49,7 +49,7 @@ classDiagram
         +int encounter_id
         +int direct_image_id
         +int disease_id
-        +string state ("pending" | "resident_done" | "faculty_done" | "arbitration" | "final")
+        +string state ("pending" | "resident_done" | "resident2_done" | "arbitration" | "final")
         +datetime created_at
         +datetime updated_at
     }
@@ -62,7 +62,7 @@ classDiagram
         +int id
         +int task_id
         +int grader_user_id
-        +string role_slot ("resident" | "faculty" | "arbitrator")
+        +string role_slot ("resident" | "resident2" | "arbitrator")
         +int disease_grading_id
         +string comment
         +int time_taken (seconds)
@@ -100,7 +100,7 @@ classDiagram
         +int disease_id
         +int lab_unit_id
         +bool can_grade_resident
-        +bool can_grade_faculty
+        +bool can_grade_resident2
         +bool can_arbitrate
         +datetime created_at
         +datetime updated_at
@@ -152,14 +152,14 @@ classDiagram
                │
                │ Resident grades
         ┌──────▼──────┐
-        │resident_done│  ←─ Faculty grades
+        │resident_done│  ←─ Resident2 grades
         │ Resident    │    (if grades match: "final")
         │ grade only  │    (if grades differ: "arbitration")
         └──────┬──────┘
                │
-               │ Faculty grades  
+               │ Resident2 grades  
         ┌──────▼──────┐    ┌──────────────┐
-        │faculty_done │───▶│arbitration   │←─┐
+        │resident2_done │───▶│arbitration   │←─┐
         │ Both grades │    │Arbitrator    │ │ │
         │ but differ  │    │ decides      │ │ │
         └─────────────┘    └──────┬───────┘ │ │
@@ -182,7 +182,7 @@ classDiagram
 ┌──────────────────────┐
 │  User accesses task  │
 │  with specific role  │
-│  (resident/faculty/  │
+│  (resident/resident2/  │
 │   arbitrator)        │
 └─────────┬────────────┘
           │
@@ -232,7 +232,7 @@ classDiagram
 
 ### Task Assignment Utilities
 - `get_next_eligible_resident_task_atomic()`
-- `get_next_eligible_faculty_task_atomic()`
+- `get_next_eligible_resident2_task_atomic()`
 - `get_next_eligible_arbitrator_task_atomic()`
 - `_get_user_eligible_lab_unit_ids()`
 - `_get_filtered_tasks()`
@@ -250,7 +250,7 @@ When multiple eligible tasks are available, the system applies the following pri
 
 ### Prioritization by Role:
 - **Residents**: Get "pending" tasks prioritized
-- **Faculty**: Get "resident_done" tasks prioritized
+- **Resident2**: Get "resident_done" tasks prioritized
 - **Arbitrators**: Get "arbitration" tasks prioritized to resolve disagreements quickly
 
 ### Eligibility Utilities
@@ -283,7 +283,7 @@ When multiple eligible tasks are available, the system applies the following pri
 
 ## Role-Slot Permission Matrix
 
-| Role/Slot | Resident | Faculty | Arbitrator |
+| Role/Slot | Resident | Resident2 | Arbitrator |
 |-----------|----------|---------|------------|
 | Resident | ✅ Can grade | ❌ Cannot grade | ❌ Cannot grade |
 | Ophthalmologist | ✅ Can grade | ✅ Can grade | ✅ Can grade* if eligible |
@@ -295,37 +295,37 @@ When multiple eligible tasks are available, the system applies the following pri
 
 ### General Cooldown Rule:
 - A user cannot be assigned the same task for grading in any role slot if they have already graded it in the last 2 weeks
-- This applies across all role slots (resident, faculty, arbitrator)
+- This applies across all role slots (resident, resident2, arbitrator)
 
 ### Specific Cooldown Rules:
-- **After resident grading**: The same user cannot be assigned the task as faculty or arbitrator for 2 weeks
-- **After faculty grading**: The same user cannot be assigned the task as resident or arbitrator for 2 weeks
-- **After arbitrator grading**: The same user cannot be assigned the task as resident or faculty for 2 weeks
+- **After resident grading**: The same user cannot be assigned the task as resident2 or arbitrator for 2 weeks
+- **After resident2 grading**: The same user cannot be assigned the task as resident or arbitrator for 2 weeks
+- **After arbitrator grading**: The same user cannot be assigned the task as resident or resident2 for 2 weeks
 - **Arbitrator self-revision**: An arbitrator can revise their own grade within 6 hours of submission (configurable via ARBITRATOR_REVISION_HOURS environment variable)
-- **Arbitrator exclusion**: An arbitrator cannot arbitrate a task they previously graded as resident or faculty within the last 2 weeks, unless they're revising their own arbitrator grade
+- **Arbitrator exclusion**: An arbitrator cannot arbitrate a task they previously graded as resident or resident2 within the last 2 weeks, unless they're revising their own arbitrator grade
 
 ## Task State Rules
 
 ### Resident Access
 - Can access: `pending` tasks only
-- Cannot access: `resident_done`, `faculty_done`, `arbitration`, `final`
+- Cannot access: `resident_done`, `resident2_done`, `arbitration`, `final`
 
-### Faculty Access
+### Resident2 Access
 - Can access: `resident_done` tasks only
-- Can access: `faculty_done`, `arbitration` for revisions
+- Can access: `resident2_done`, `arbitration` for revisions
 - Cannot access: `pending`, `final` (unless revision allowed)
 
 ### Arbitrator Access
 - Can access: `arbitration` tasks (for decision)
 - Can access: `final` tasks (for revision, within 6 hours)
-- Cannot access: `pending`, `resident_done`, `faculty_done`
+- Cannot access: `pending`, `resident_done`, `resident2_done`
 
 ## Consensus Creation Logic
 
 ```
 IF arbitrator grades:
   → Consensus created with method "adjudication"
-ELIF resident and faculty grades match:
+ELIF resident and resident2 grades match:
   → Consensus created with method "match"
 ELIF consensus already exists:
   → No new consensus created
@@ -373,7 +373,7 @@ The start grading module provides the entry point for initiating grading session
 - **`start_grading(disease_id, role_slot)`** - Initiates grading for a specific disease and role
 
 #### Implementation Workflow:
-1. Validates the role slot ('resident', 'faculty', 'arbitrator')
+1. Validates the role slot ('resident', 'resident2', 'arbitrator')
 2. Checks user permissions for the requested role
 3. Verifies the disease exists
 4. Retrieves the next eligible task using atomic task assignment functions
@@ -381,7 +381,7 @@ The start grading module provides the entry point for initiating grading session
 
 #### Role Validation Rules:
 - **Resident grading**: Requires 'resident' or 'ophthalmologist' role
-- **Faculty grading**: Requires 'ophthalmologist' role
+- **Resident2 grading**: Requires 'ophthalmologist' role
 - **Arbitrator grading**: Requires 'ophthalmologist' role
 
 #### Task Assignment:
@@ -397,7 +397,7 @@ The dashboard module provides the main interface for users to view their grading
 - **KPI Display**: Shows pending and completed task counts by role and disease
 - **Grading History**: Paginated list of user's previous gradings with details
 - **Eligibility Information**: Displays user's grading eligibility across different diseases and lab units
-- **Role-Based Views**: Different interfaces for residents vs. faculty
+- **Role-Based Views**: Different interfaces for residents vs. resident2
 
 #### Implementation Details:
 - Uses utility functions for KPI calculations and data fetching

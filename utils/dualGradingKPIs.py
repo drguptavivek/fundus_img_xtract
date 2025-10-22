@@ -17,7 +17,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
     Get KPI data for each core disease for pending tasks across all mapped lab units for each slot of a user.
     
     This function provides a comprehensive view of pending tasks by disease for all eligible slots
-    (resident, faculty, arbitration) across all lab units where the user has eligibility.
+    (resident, resident2, arbitration) across all lab units where the user has eligibility.
     
     Args:
         db: Database session (caller is responsible for closing)
@@ -28,7 +28,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         {
             'Disease Name': {
                 'resident_pending': count,
-                'faculty_pending': count,
+                'resident2_pending': count,
                 'arbitration_pending': count
             },
             ...
@@ -59,12 +59,12 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             disease_lab_units[role.disease_id] = {
                 'lab_units': set(),
                 'can_grade_resident': False,
-                'can_grade_faculty': False,
+                'can_grade_resident2': False,
                 'can_arbitrate': False
             }
         disease_lab_units[role.disease_id]['lab_units'].add(role.lab_unit_id)
         disease_lab_units[role.disease_id]['can_grade_resident'] |= role.can_grade_resident
-        disease_lab_units[role.disease_id]['can_grade_faculty'] |= role.can_grade_faculty
+        disease_lab_units[role.disease_id]['can_grade_resident2'] |= role.can_grade_resident2
         disease_lab_units[role.disease_id]['can_arbitrate'] |= role.can_arbitrate
     
     # Calculate task counts for each disease
@@ -77,16 +77,16 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         counts = {
             'resident_pending': 0,
-            'faculty_pending': 0,
+            'resident2_pending': 0,
             'arbitration_pending': 0
         }
         
         # Check if user has the required roles
         has_resident_role = user.has_role('resident')
-        has_faculty_role = user.has_role('ophthalmologist')
+        has_resident2_role = user.has_role('ophthalmologist')
         
-        # Count resident pending tasks (user can do resident grading if they have resident role or faculty role and resident eligibility)
-        if (has_resident_role or has_faculty_role) and info['can_grade_resident']:
+        # Count resident pending tasks (user can do resident grading if they have resident role or resident2 role and resident eligibility)
+        if (has_resident_role or has_resident2_role) and info['can_grade_resident']:
             # Exclude tasks that the user has already graded as a resident
             counts['resident_pending'] = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
@@ -100,23 +100,23 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                 )
             ).count()
         
-        # Count faculty pending tasks (only if user is faculty and has faculty eligibility)
-        if has_faculty_role and info['can_grade_faculty']:
-            # Exclude tasks that the user has already graded as a faculty
-            counts['faculty_pending'] = db.query(GradingTask).filter(
+        # Count resident2 pending tasks (only if user has resident2 eligibility)
+        if has_resident2_role and info['can_grade_resident2']:
+            # Exclude tasks that the user has already graded as resident2
+            counts['resident2_pending'] = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
                 ~GradingTask.grades.any(
                     and_(
                         Grade.grader_user_id == user_id,
-                        Grade.role_slot == 'faculty'
+                        Grade.role_slot == 'resident2'
                     )
                 )
             ).count()
         
-        # Count arbitration pending tasks (only if user is faculty and has arbitration eligibility)
-        if has_faculty_role and info['can_arbitrate']:
+        # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
+        if has_resident2_role and info['can_arbitrate']:
             # Get tasks in arbitration state
             arbitration_tasks = db.query(GradingTask).filter(
                 GradingTask.state == 'arbitration',
@@ -143,7 +143,7 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
     Get KPI data for each core disease for completed tasks across all mapped lab units for each slot of a user.
     
     This function provides a comprehensive view of completed tasks by disease for all eligible slots
-    (resident, faculty, arbitration) across all lab units where the user has eligibility.
+    (resident, resident2, arbitration) across all lab units where the user has eligibility.
     
     Args:
         db: Database session (caller is responsible for closing)
@@ -154,7 +154,7 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         {
             'Disease Name': {
                 'resident_completed': count,
-                'faculty_completed': count,
+                'resident2_completed': count,
                 'arbitration_completed': count
             },
             ...
@@ -171,7 +171,7 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
     
     # Check if user has the required roles
     has_resident_role = user.has_role('resident')
-    has_faculty_role = user.has_role('ophthalmologist')
+    has_resident2_role = user.has_role('ophthalmologist')
     
     # Get diseases where user has actually completed gradings
     user_graded_diseases = db.query(GradingTask.disease_id).join(Grade, Grade.task_id == GradingTask.id).filter(
@@ -192,29 +192,29 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         
         counts = {
             'resident_completed': 0,
-            'faculty_completed': 0,
+            'resident2_completed': 0,
             'arbitration_completed': 0
         }
         
         # Count resident completed tasks
-        # Allow both residents and faculty to count resident completed tasks
-        if has_resident_role or has_faculty_role:
+        # Allow both residents and resident2 graders to count resident completed tasks
+        if has_resident_role or has_resident2_role:
             counts['resident_completed'] = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'resident',
                 Grade.task.has(GradingTask.disease_id == disease_id)
             ).count()
         
-        # Count faculty completed tasks
-        if has_faculty_role:
-            counts['faculty_completed'] = db.query(Grade).filter(
+        # Count resident2 completed tasks
+        if has_resident2_role:
+            counts['resident2_completed'] = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
-                Grade.role_slot == 'faculty',
+                Grade.role_slot == 'resident2',
                 Grade.task.has(GradingTask.disease_id == disease_id)
             ).count()
-        
+    
         # Count arbitration completed tasks
-        if has_faculty_role:
+        if has_resident2_role:
             counts['arbitration_completed'] = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'arbitrator',

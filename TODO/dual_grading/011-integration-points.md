@@ -34,7 +34,7 @@ Proposed Task Endpoints (Minimal)
   - Body: `{ "image_uuid": "...", "disease_id": 1 }`
   - Returns: `{ "task_id": 123, "state": "pending", "lab_unit_id": 9 }`
   - Errors: 404 image not found; 409 not verified for disease; 403 not eligible.
-- `GET /api/tasks/next?slot=resident|faculty&disease_id=...`
+- `GET /api/tasks/next?slot=resident|resident2&disease_id=...`
   - Returns next eligible task for the user (server accounts for verification and slot rules).
 - `POST /api/tasks/submit`
   - Body: `{ "task_id": 123, "role_slot": "resident", "disease_grading_id": 45, "comment": "..." }`

@@ -6,11 +6,19 @@ import random
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-
+ 
 from auth.roles import roles_required
 from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole, User, Role
 from services.taskCreationServices import ensure_task as svc_ensure_task
-from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic, get_next_eligible_resident_task, get_next_eligible_faculty_task, get_next_eligible_arbitrator_task, _has_user_graded_task_2weeks
+from utils.dualGradingGetNextTasks import (
+    get_next_eligible_resident_task_atomic,
+    get_next_eligible_resident2_task_atomic,
+    get_next_eligible_arbitrator_task_atomic,
+    get_next_eligible_resident_task,
+    get_next_eligible_resident2_task,
+    get_next_eligible_arbitrator_task,
+    _has_user_graded_task_2weeks,
+)
 from utils.dualGradingEligibility import check_arbitration_eligibility, get_user_eligibility_for_task
 from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
@@ -72,7 +80,7 @@ def revise_grading(grade_id: int):
             user_has_role = False
             if slot_type == 'resident':
                 user_has_role = current_user.has_role('resident') or current_user.has_role('ophthalmologist')
-            elif slot_type in ['faculty', 'arbitrator']:
+            elif slot_type in ['resident2', 'arbitrator']:
                 user_has_role = current_user.has_role('ophthalmologist')
             
             if not user_has_role:
@@ -166,7 +174,7 @@ def dual_grading_task(task_id: int, slot_type: str):
                 return redirect(url_for("grading.index"))
             
             # Validate slot_type
-            if slot_type not in ['resident', 'faculty', 'arbitrator']:
+            if slot_type not in ['resident', 'resident2', 'arbitrator']:
                 flash("Invalid slot type.", "danger")
                 return redirect(url_for("grading.index"))
             
@@ -177,10 +185,10 @@ def dual_grading_task(task_id: int, slot_type: str):
                 if task.state not in ['pending']:
                     flash(f"Task is no longer available for resident grading (current state: {task.state}).", "danger")
                     state_validity = False
-            elif slot_type == 'faculty':
-                # Faculty should only be assigned to 'resident_done' tasks
+            elif slot_type == 'resident2':
+                # Resident2 should only be assigned to 'resident_done' tasks
                 if task.state not in ['resident_done']:
-                    flash(f"Task is no longer available for faculty grading (current state: {task.state}).", "danger")
+                    flash(f"Task is no longer available for resident2 grading (current state: {task.state}).", "danger")
                     state_validity = False
             elif slot_type == 'arbitrator':
                 # Arbitrator should only be assigned to 'arbitration' tasks, or 'final' for recent revisions
@@ -251,15 +259,15 @@ def dual_grading_task(task_id: int, slot_type: str):
             # Fetch existing grade for this user and slot (for review purposes) using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
             
-            # If this is an arbitration task, fetch resident and faculty grades to show to the arbitrator
+            # If this is an arbitration task, fetch resident and resident2 grades to show to the arbitrator
             resident_grade = None
-            faculty_grade = None
+            resident2_grade = None
             if slot_type == 'arbitrator' and task.state == 'arbitration':
                 for grade in task.grades:
                     if grade.role_slot == 'resident':
                         resident_grade = grade
-                    elif grade.role_slot == 'faculty':
-                        faculty_grade = grade
+                    elif grade.role_slot == 'resident2':
+                        resident2_grade = grade
         
             # Check if this is an arbitrator revising their recent grade on a final task
             is_arbitrator_revising_recent = False
@@ -295,7 +303,7 @@ def dual_grading_task(task_id: int, slot_type: str):
                 grades=grades,
                 existing_grade_in_header=True,
                 resident_grade=resident_grade,
-                faculty_grade=faculty_grade,
+                resident2_grade=resident2_grade,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
                 start_time_iso=start_time_iso,  # Pass start time to template as hidden field
                 current_user_id=getattr(current_user, "id", None)
@@ -325,7 +333,7 @@ def dual_grading_submit():
         flash("Invalid label ID.", "danger")
         return redirect(url_for("grading.index"))
     
-    if slot not in {"resident", "faculty", "arbitrator"}:
+    if slot not in {"resident", "resident2", "arbitrator"}:
         flash("Invalid slot type.", "danger")
         return redirect(url_for("grading.index"))
     
@@ -364,10 +372,10 @@ def dual_grading_submit():
                 if task.state not in ['pending', 'resident_done']:
                     flash(f"Task state has changed and is no longer available for resident grading (current state: {task.state}).", "danger")
                     state_validity = False
-            elif slot == 'faculty':
-                # Faculty should only be grading 'resident_done', 'faculty_done', or 'arbitration' tasks (for revisions)
-                if task.state not in ['resident_done', 'faculty_done', 'arbitration']:
-                    flash(f"Task state has changed and is no longer available for faculty grading (current state: {task.state}).", "danger")
+            elif slot == 'resident2':
+                # Resident2 should only be grading 'resident_done', 'resident2_done', or 'arbitration' tasks (for revisions)
+                if task.state not in ['resident_done', 'resident2_done', 'arbitration']:
+                    flash(f"Task state has changed and is no longer available for resident2 grading (current state: {task.state}).", "danger")
                     state_validity = False
             elif slot == 'arbitrator':
                 # Arbitrator should only be grading 'arbitration' or 'final' tasks (for eligible revisions)
@@ -397,7 +405,7 @@ def dual_grading_submit():
                     flash("You are not eligible to arbitrate for this task.", "danger")
                     return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
             
-            # Arbitrator exclusion: cannot be prior resident/faculty grader within 2 weeks
+            # Arbitrator exclusion: cannot be prior resident/resident2 grader within 2 weeks
             # However, if this is a revision of an existing arbitrator grade by the same user, skip this check
             if slot == "arbitrator":
                 # Check if this is a revision of an existing arbitrator grade by the same user
@@ -410,7 +418,7 @@ def dual_grading_submit():
                 
                 # Only apply the exclusion check if this is not an arbitrator revising their own grade
                 if not is_arbitrator_revision and _has_user_graded_task_2weeks(db, current_user.id, task_id):
-                    flash("You cannot arbitrate a task you've graded as resident or faculty within the last 2 weeks.", "danger")
+                    flash("You cannot arbitrate a task you've graded as resident or resident2 within the last 2 weeks.", "danger")
                     return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
             
             # Validate label belongs to task.disease_id using utility function
@@ -563,8 +571,8 @@ def dual_grading_submit():
                     next_task = None
                     if slot == "resident":
                         next_task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-                    elif slot == "faculty":
-                        next_task = get_next_eligible_faculty_task_atomic(current_user.id, disease_id)
+                    elif slot == "resident2":
+                        next_task = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
                     elif slot == "arbitrator":
                         next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
                     

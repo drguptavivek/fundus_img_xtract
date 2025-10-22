@@ -33,7 +33,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
     "resident_done",
-    "faculty_done",
+    "resident2_done",
     "arbitration",
     "final",
 )

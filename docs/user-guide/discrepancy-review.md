@@ -5,7 +5,7 @@ This guide explains how to use the Discrepancy Review feature, which allows admi
 ## Overview
 
 The Discrepancy Review feature provides a centralized interface for examining grading tasks with potential discrepancies between:
-- Resident grades vs. Faculty grades
+- Resident grades vs. Resident2 grades
 - AI grades vs. Human grades
 - Arbitrator decisions vs. initial grades
 - Review grades added for quality control
@@ -49,7 +49,7 @@ The system offers several filters to refine the displayed tasks:
 
 #### Grade Filters
 - **Resident Grade**: Filter tasks based on the resident's grade
-- **Faculty Grade**: Filter tasks based on the faculty's grade
+- **Resident2 Grade**: Filter tasks based on the resident2's grade
 - **Arbitrator Grade**: Filter tasks based on arbitrator's grade
 - **Final Grade**: Filter tasks based on the final consensus grade
 
@@ -74,11 +74,11 @@ Each task row displays:
 - **Disease**: The disease being assessed
 - **Lab Unit**: The lab unit where the image originated
 - **Hospital**: The hospital associated with the lab unit
-- **State**: Current state of the task (pending, resident_done, faculty_done, arbitration, final)
+- **State**: Current state of the task (pending, resident_done, resident2_done, arbitration, final)
 
 #### Grade Information
 - **Resident Grade**: The grade assigned by the resident
-- **Faculty Grade**: The grade assigned by the faculty member
+- **Resident2 Grade**: The grade assigned by the resident2 member
 - **AI Grade**: The grade assigned by AI, including model name and version
 - **Arbitrator Grade**: The grade assigned by the arbitrator
 - **Final Grade**: The consensus grade
@@ -90,7 +90,7 @@ Each task row displays:
 ### Identifying Discrepancies
 
 The system does not automatically highlight discrepancies, but you can identify them by comparing grades in the table:
-- When resident and faculty grades differ
+- When resident and resident2 grades differ
 - When AI grade is significantly different from human grades
 - When review grades differ from original grades
 
@@ -109,7 +109,7 @@ The system does not automatically highlight discrepancies, but you can identify 
 4. Note common error patterns for model improvement
 
 ### Training and Calibration
-1. Focus on resident vs. faculty disagreements
+1. Focus on resident vs. resident2 disagreements
 2. Identify residents who may need additional training
 3. Review arbitrator decisions to understand complex cases
 4. Use findings to improve training materials

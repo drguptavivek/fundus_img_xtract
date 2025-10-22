@@ -121,7 +121,7 @@ def add_test_users():
             lab_unit_id=lab_unit.id,
             can_arbitrate=True,
             can_grade_resident=False,
-            can_grade_faculty=False,
+            can_grade_resident2=False,
             active=True
         )
         db.add(glaucoma_arbitration_role)
@@ -133,7 +133,7 @@ def add_test_users():
             lab_unit_id=lab_unit.id,
             can_arbitrate=True,
             can_grade_resident=False,
-            can_grade_faculty=False,
+            can_grade_resident2=False,
             active=True
         )
         db.add(dr_arbitration_role)
@@ -148,13 +148,13 @@ def add_test_users():
         
         if existing_user2:
             # Remove existing user's disease unit roles
-            existing_faculty_roles = db.execute(
+            existing_resident2_roles = db.execute(
                 select(UserDiseaseUnitRole).where(
                     UserDiseaseUnitRole.user_id == existing_user2.id
                 )
             ).scalars().all()
             
-            for role in existing_faculty_roles:
+            for role in existing_resident2_roles:
                 db.delete(role)
             
             # Remove user from lab units
@@ -170,37 +170,37 @@ def add_test_users():
             username="test2ComophFac",
             password_hash=password_hash,
             is_active=True,
-            full_name="Test Comoph Faculty",
+            full_name="Test Comoph resident2",
             roles=[oph_role]
         )
         db.add(user2)
         db.commit()
         print(f"Created user: {user2.username}")
         
-        # Add grading eligibility for faculty
-        # Glaucoma: Faculty
-        glaucoma_faculty_role = UserDiseaseUnitRole(
+        # Add grading eligibility for resident2
+        # Glaucoma: resident2
+        glaucoma_resident2_role = UserDiseaseUnitRole(
             user_id=user2.id,
             disease_id=glaucoma_disease.id,
             lab_unit_id=lab_unit.id,
-            can_grade_faculty=True,
+            can_grade_resident2=True,
             can_grade_resident=False,
             can_arbitrate=False,
             active=True
         )
-        db.add(glaucoma_faculty_role)
+        db.add(glaucoma_resident2_role)
         
-        # DR: Faculty
-        dr_faculty_role = UserDiseaseUnitRole(
+        # DR: resident2
+        dr_resident2_role = UserDiseaseUnitRole(
             user_id=user2.id,
             disease_id=dr_disease.id,
             lab_unit_id=lab_unit.id,
-            can_grade_faculty=True,
+            can_grade_resident2=True,
             can_grade_resident=False,
             can_arbitrate=False,
             active=True
         )
-        db.add(dr_faculty_role)
+        db.add(dr_resident2_role)
         
         db.commit()
         print(f"Updated grading eligibility for {user2.username}")
@@ -248,7 +248,7 @@ def add_test_users():
             disease_id=glaucoma_disease.id,
             lab_unit_id=lab_unit.id,
             can_grade_resident=True,
-            can_grade_faculty=False,
+            can_grade_resident2=False,
             can_arbitrate=False,
             active=True
         )
@@ -260,7 +260,7 @@ def add_test_users():
             disease_id=dr_disease.id,
             lab_unit_id=lab_unit.id,
             can_grade_resident=True,
-            can_grade_faculty=False,
+            can_grade_resident2=False,
             can_arbitrate=False,
             active=True
         )
@@ -283,7 +283,7 @@ def add_test_users():
         print(f"- User: test2ComophArbit, Password: Vivek@2026, Role: ophthalmologist")
         print(f"  Eligibility: Glaucoma Arbitrator, DR Arbitrator")
         print(f"- User: test2ComophFac, Password: Vivek@2026, Role: ophthalmologist")
-        print(f"  Eligibility: Glaucoma Faculty, DR Faculty")
+        print(f"  Eligibility: Glaucoma resident2, DR resident2")
         print(f"- User: test2ComophResident, Password: Vivek@2026, Role: ophthalmologist")
         print(f"  Eligibility: Glaucoma Resident, DR Resident")
 

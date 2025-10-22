@@ -21,7 +21,7 @@ Get detailed grading eligibility information for a user with lab unit and diseas
   - Hospital names as keys
     - Lab unit names as keys
       - Disease names as keys
-        - Lists of roles (Resident, Faculty, Arbitrator) the user has for that combination
+        - Lists of roles (Resident, Resident2, Arbitrator) the user has for that combination
 
 ### `_get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot: str) -> Optional[list]`
 
@@ -31,7 +31,7 @@ Get the list of lab unit IDs that a user is eligible for a specific role and dis
 - `db`: Database session
 - `user_id` (int): The ID of the user
 - `disease_id` (int): The disease ID
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - List of eligible lab unit IDs or None if user has no eligibility
@@ -57,7 +57,7 @@ Check if a user is eligible for a specific role slot for a task.
 - `db`: Database session (caller is responsible for closing)
 - `user_id` (int): The ID of the user
 - `task_id` (int): The ID of the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - True if user is eligible, False otherwise

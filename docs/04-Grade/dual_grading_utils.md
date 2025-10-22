@@ -14,7 +14,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Fetching Details
 
-**Description:** Retrieves detailed grading eligibility information for a user, organizing the data by hospital, then lab unit, then disease. The function returns a dictionary structure containing the user's eligibility details, including their potential roles (Resident, Faculty, Arbitrator) for each disease within each lab unit at each hospital.
+**Description:** Retrieves detailed grading eligibility information for a user, organizing the data by hospital, then lab unit, then disease. The function returns a dictionary structure containing the user's eligibility details, including their potential roles (Resident, Resident2, Arbitrator) for each disease within each lab unit at each hospital.
 
 **Parameters:**
 - `db`: Database session (caller is responsible for closing)
@@ -29,13 +29,13 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Eligibility Check
 
-**Description:** Gets the list of lab unit IDs that a user is eligible for a specific role and disease. Checks user roles and permissions, with special handling for admin users who have access to all lab units. The function supports three role slots: 'resident', 'faculty', or 'arbitrator'.
+**Description:** Gets the list of lab unit IDs that a user is eligible for a specific role and disease. Checks user roles and permissions, with special handling for admin users who have access to all lab units. The function supports three role slots: 'resident', 'resident2', or 'arbitrator'.
 
 **Parameters:**
 - `db`: Database session
 - `user_id` (int): The ID of the user
 - `disease_id` (int): The disease ID
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - List of eligible lab unit IDs or None if user has no eligibility
@@ -69,7 +69,7 @@ This document provides a summary of functions across multiple utility modules fo
 - `db`: Database session (caller is responsible for closing)
 - `user_id` (int): The ID of the user
 - `task_id` (int): The ID of the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - True if user is eligible, False otherwise
@@ -96,7 +96,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Consensus Management
 
-**Description:** Creates or updates consensus for a grading task based on submitted grades. If an arbitrator has graded the task, their grade becomes the final decision via adjudication. If both resident and faculty have graded and their grades match, a match consensus is created. The function handles the session lifecycle internally unless a session is provided.
+**Description:** Creates or updates consensus for a grading task based on submitted grades. If an arbitrator has graded the task, their grade becomes the final decision via adjudication. If both resident and resident2 have graded and their grades match, a match consensus is created. The function handles the session lifecycle internally unless a session is provided.
 
 **Important fixes made:**
 - Fixed SQLAlchemy session refresh issue: Removed `db.refresh(consensus)` call when using shared sessions to prevent "Instance is not persistent within this Session" errors
@@ -116,7 +116,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Fetching Details
 
-**Description:** Retrieves the consensus status for a grading task, including information about any grades submitted by resident, faculty, or arbitrator, and whether consensus has been reached. The function returns comprehensive details about the task's grading status.
+**Description:** Retrieves the consensus status for a grading task, including information about any grades submitted by resident, resident2, or arbitrator, and whether consensus has been reached. The function returns comprehensive details about the task's grading status.
 
 **Parameters:**
 - `task_id` (int): The ID of the task to check
@@ -131,7 +131,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** State Management
 
-**Description:** Updates the state of a grading task based on the grades that have been submitted. The task state can change to 'final', 'arbitration', 'resident_done', 'faculty_done', or 'pending' depending on which grades have been submitted and their values.
+**Description:** Updates the state of a grading task based on the grades that have been submitted. The task state can change to 'final', 'arbitration', 'resident_done', 'resident2_done', or 'pending' depending on which grades have been submitted and their values.
 
 **Parameters:**
 - `task_id` (int): The ID of the task to update
@@ -161,7 +161,7 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Fetching Details
 
-**Description:** Gets the consensus method for a task (either 'match' or 'adjudication'). Match occurs when resident and faculty grades match, while adjudication occurs when an arbitrator makes the final decision.
+**Description:** Gets the consensus method for a task (either 'match' or 'adjudication'). Match occurs when resident and resident2 grades match, while adjudication occurs when an arbitrator makes the final decision.
 
 **Parameters:**
 - `task_id` (int): The ID of the task to check
@@ -206,13 +206,13 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Fetching Details
 
-**Description:** Fetches any existing grade submitted by a specific user for a specific task and role slot (resident, faculty, or arbitrator).
+**Description:** Fetches any existing grade submitted by a specific user for a specific task and role slot (resident, resident2, or arbitrator).
 
 **Parameters:**
 - `db`: Database session (caller is responsible for closing)
 - `task_id` (int): The ID of the task
 - `user_id` (int): The ID of the user
-- `slot_type` (str): The slot type (resident, faculty, arbitrator)
+- `slot_type` (str): The slot type (resident, resident2, arbitrator)
 
 **Returns:**
 - Grade object if found, None otherwise
@@ -223,14 +223,14 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Fetching Details
 
-**Description:** Retrieves a paginated list of grades submitted by a user. Can optionally filter by role slot (resident, faculty, arbitrator).
+**Description:** Retrieves a paginated list of grades submitted by a user. Can optionally filter by role slot (resident, resident2, arbitrator).
 
 **Parameters:**
 - `db`: Database session (caller is responsible for closing)
 - `user_id` (int): ID of the user
 - `page` (int): Page number (1-indexed)
 - `per_page` (int): Number of items per page
-- `role_slot` (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+- `role_slot` (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
 
 **Returns:**
 - Tuple[List[Grade], int]: A tuple containing:
@@ -250,7 +250,7 @@ This document provides a summary of functions across multiple utility modules fo
 - `user_id` (int): ID of the user
 - `page` (int): Page number (1-indexed)
 - `per_page` (int): Number of items per page
-- `role_slot` (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+- `role_slot` (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
 
 **Returns:**
 - Tuple[List[Dict[str, Any]], int]: A tuple containing:
@@ -269,7 +269,7 @@ This document provides a summary of functions across multiple utility modules fo
 - `db`: Database session
 - `user_id` (int): The ID of the user
 - `disease_id` (int): The disease ID
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 - `eligible_lab_unit_ids` (list): List of lab unit IDs the user is eligible for
 
 **Returns:**
@@ -293,11 +293,11 @@ This document provides a summary of functions across multiple utility modules fo
 
 ---
 
-### 18. `get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None)`
+### 18. `get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None)`
 
 **Classification:** Task Assignment
 
-**Description:** Gets the next eligible task for a faculty user. Filters for tasks in resident_done state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 2 weeks.
+**Description:** Gets the next eligible task for a resident2 user. Filters for tasks in resident_done state in eligible lab units for the specified disease. Prevents tasks that the user has graded in the past 2 weeks.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)
@@ -329,13 +329,13 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Eligibility Check
 
-**Description:** Checks if a user is eligible to revise their grade for a specific task and slot. For resident and faculty grades, users can revise at any point before finalization. For arbitrator grades, revisions are only allowed within 6 hours of submission.
+**Description:** Checks if a user is eligible to revise their grade for a specific task and slot. For resident and resident2 grades, users can revise at any point before finalization. For arbitrator grades, revisions are only allowed within 6 hours of submission.
 
 **Parameters:**
 - `db`: Database session
 - `user_id` (int): ID of the user requesting revision
 - `task_id` (int): ID of the grading task
-- `slot_type` (str): The slot type ('resident', 'faculty', 'arbitrator')
+- `slot_type` (str): The slot type ('resident', 'resident2', 'arbitrator')
 - `grade` (Grade, optional): The grade object to check (optional, will be fetched if not provided)
 
 **Returns:**
@@ -403,11 +403,11 @@ This document provides a summary of functions across multiple utility modules fo
 
 **Classification:** Eligibility Check
 
-**Description:** Checks if a user is eligible to revise a grade based on the task state and other conditions. Different rules apply based on whether the user is a resident, faculty, or arbitrator, and whether the task is in a finalized state.
+**Description:** Checks if a user is eligible to revise a grade based on the task state and other conditions. Different rules apply based on whether the user is a resident, resident2, or arbitrator, and whether the task is in a finalized state.
 
 **Parameters:**
 - `task_state` (str): Current state of the task
-- `role_slot` (str): Role slot ('resident', 'faculty', 'arbitrator')
+- `role_slot` (str): Role slot ('resident', 'resident2', 'arbitrator')
 - `grade_created_at` (Optional[datetime]): When the grade was created (needed for arbitrator revisions)
 
 **Returns:**
@@ -424,7 +424,7 @@ This document provides a summary of functions across multiple utility modules fo
 **Parameters:**
 - `task_id` (int): The ID of the grading task being started
 - `user_id` (int): The ID of the user who started the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - Boolean indicating whether the task was successfully marked as started
@@ -468,7 +468,7 @@ This document provides a summary of functions across multiple utility modules fo
 **Parameters:**
 - `task_id` (int): The ID of the grading task
 - `user_id` (int): The ID of the user who completed the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 
 **Returns:**
 - Boolean indicating whether the cleanup was successful

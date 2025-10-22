@@ -19,7 +19,7 @@ This guide explains how to access and interpret the analytics and reporting feat
 Analytics access varies by role:
 - **File Uploaders**: Basic upload statistics
 - **Residents**: Personal grading statistics
-- **Faculty**: Departmental grading metrics
+- **Resident2**: Departmental grading metrics
 - **Data Managers**: Full system analytics
 - **Administrators**: Complete access to all reports
 
@@ -107,7 +107,7 @@ Track grading quality:
 
 ### Individual Statistics
 
-For residents and faculty:
+For residents and resident2:
 - **Images Graded**: Total number of images graded
 - **Average Time**: Time spent per image
 - **Consensus Rate**: How often grades match consensus

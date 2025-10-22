@@ -25,8 +25,8 @@ The testing framework automatically creates test users with different roles for 
 | Admin | test_admin | Test@2026 | test_admin@example.com | - | Full system access |
 | Ophthalmologist | test_ophthalmologist | TestPassword123! | test_ophthalmologist@example.com | Community Ophthalmology | Basic ophthalmologist |
 | Resident | test_resident | TestPassword123! | test_resident@example.com | Community Ophthalmology | Basic ophthalmologist |
-| Faculty | test_faculty | TestPassword123! | test_faculty@example.com | Community Ophthalmology | Basic ophthalmologist |
-| Test Faculty | testFaculty | TestPassword123! | testFaculty@example.com | Community Ophthalmology, Retina Lab | Faculty slot for Glaucoma & DR |
+| Resident2 | test_resident2 | TestPassword123! | test_resident2@example.com | Community Ophthalmology | Basic ophthalmologist |
+| Test Resident2 | testResident2 | TestPassword123! | testResident2@example.com | Community Ophthalmology, Retina Lab | Resident2 slot for Glaucoma & DR |
 | Test Resident | testResident | TestPassword123! | testResident@example.com | Community Ophthalmology, Retina Lab | Resident slot for Glaucoma & DR |
 | Test Arbitrator | testArbitrator | TestPassword123! | testArbitrator@example.com | Community Ophthalmology, Retina Lab | Arbitrator slot for Glaucoma & DR |
 | File Uploader | test_file_uploader | TestPassword123! | test_file_uploader@example.com | - | File upload permissions |

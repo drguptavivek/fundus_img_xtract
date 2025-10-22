@@ -109,7 +109,7 @@ def index():
             type_counts[grade_for] = type_counts.get(grade_for, 0) + 1
 
         # Get dual grading tasks for the current user, separated by disease
-        # and role (resident vs faculty) and arbitration tasks
+        # and role (resident vs resident2) and arbitration tasks
         
         # Get user role to determine which tasks to show
         # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
@@ -132,26 +132,26 @@ def index():
         
         # is_resident means user has permission to do resident-level grading
         is_resident = has_resident_eligibility and (current_user.has_role('resident') or current_user.has_role('ophthalmologist'))
-        is_faculty = current_user.has_role('ophthalmologist')
+        is_resident2 = current_user.has_role('ophthalmologist')
         
         # Initialize KPIs
         kpi_resident_pending = 0
-        kpi_faculty_pending = 0
+        kpi_resident2_pending = 0
         kpi_arbitration_pending = 0
         
         # Initialize disease-specific KPIs
         kpi_resident_by_disease = {}
-        kpi_faculty_by_disease = {}
+        kpi_resident2_by_disease = {}
         kpi_arbitration_by_disease = {}
         
         # Initialize completed KPIs
         kpi_resident_completed = 0
-        kpi_faculty_completed = 0
+        kpi_resident2_completed = 0
         kpi_arbitration_completed = 0
         
         # Initialize disease-specific completed KPIs
         kpi_resident_completed_by_disease = {}
-        kpi_faculty_completed_by_disease = {}
+        kpi_resident2_completed_by_disease = {}
         kpi_arbitration_completed_by_disease = {}
         
         # Get all diseases to ensure we have entries for all diseases
@@ -173,19 +173,19 @@ def index():
             
             # Initialize disease-specific KPIs
             kpi_resident_by_disease[disease_name] = 0
-            kpi_faculty_by_disease[disease_name] = 0
+            kpi_resident2_by_disease[disease_name] = 0
             kpi_arbitration_by_disease[disease_name] = 0
             
             # Get data for this disease if available
             if disease_name in kpi_pending_data:
                 disease_kpi = kpi_pending_data[disease_name]
                 kpi_resident_by_disease[disease_name] = disease_kpi.get('resident_pending', 0)
-                kpi_faculty_by_disease[disease_name] = disease_kpi.get('faculty_pending', 0)
+                kpi_resident2_by_disease[disease_name] = disease_kpi.get('resident2_pending', 0)
                 kpi_arbitration_by_disease[disease_name] = disease_kpi.get('arbitration_pending', 0)
                 
                 # Add to totals
                 kpi_resident_pending += disease_kpi.get('resident_pending', 0)
-                kpi_faculty_pending += disease_kpi.get('faculty_pending', 0)
+                kpi_resident2_pending += disease_kpi.get('resident2_pending', 0)
                 kpi_arbitration_pending += disease_kpi.get('arbitration_pending', 0)
         
         # Calculate completed KPIs using the utility function
@@ -197,19 +197,19 @@ def index():
             
             # Initialize disease-specific completed KPIs
             kpi_resident_completed_by_disease[disease_name] = 0
-            kpi_faculty_completed_by_disease[disease_name] = 0
+            kpi_resident2_completed_by_disease[disease_name] = 0
             kpi_arbitration_completed_by_disease[disease_name] = 0
             
             # Get data for this disease if available
             if disease_name in kpi_completed_data:
                 disease_kpi = kpi_completed_data[disease_name]
                 kpi_resident_completed_by_disease[disease_name] = disease_kpi.get('resident_completed', 0)
-                kpi_faculty_completed_by_disease[disease_name] = disease_kpi.get('faculty_completed', 0)
+                kpi_resident2_completed_by_disease[disease_name] = disease_kpi.get('resident2_completed', 0)
                 kpi_arbitration_completed_by_disease[disease_name] = disease_kpi.get('arbitration_completed', 0)
                 
                 # Add to totals
                 kpi_resident_completed += disease_kpi.get('resident_completed', 0)
-                kpi_faculty_completed += disease_kpi.get('faculty_completed', 0)
+                kpi_resident2_completed += disease_kpi.get('resident2_completed', 0)
                 kpi_arbitration_completed += disease_kpi.get('arbitration_completed', 0)
     finally:
         db.close()
@@ -227,18 +227,18 @@ def index():
         page_next_url=page_next_url,
         filter_date=filter_date,
         is_resident=is_resident,
-        is_faculty=is_faculty,
+        is_resident2=is_resident2,
         kpi_resident_pending=kpi_resident_pending,
-        kpi_faculty_pending=kpi_faculty_pending,
+        kpi_resident2_pending=kpi_resident2_pending,
         kpi_arbitration_pending=kpi_arbitration_pending,
         kpi_resident_by_disease=kpi_resident_by_disease,
-        kpi_faculty_by_disease=kpi_faculty_by_disease,
+        kpi_resident2_by_disease=kpi_resident2_by_disease,
         kpi_arbitration_by_disease=kpi_arbitration_by_disease,
         kpi_resident_completed=kpi_resident_completed,
-        kpi_faculty_completed=kpi_faculty_completed,
+        kpi_resident2_completed=kpi_resident2_completed,
         kpi_arbitration_completed=kpi_arbitration_completed,
         kpi_resident_completed_by_disease=kpi_resident_completed_by_disease,
-        kpi_faculty_completed_by_disease=kpi_faculty_completed_by_disease,
+        kpi_resident2_completed_by_disease=kpi_resident2_completed_by_disease,
         kpi_arbitration_completed_by_disease=kpi_arbitration_completed_by_disease,
         user_eligibility=user_eligibility,
         diseases=diseases_data

@@ -35,7 +35,7 @@ This function should be called when a user accesses a task for grading.
 **Parameters:**
 - `task_id` (int): The ID of the task being worked on
 - `user_id` (int): The ID of the user starting the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 - `db`: Optional database session (if not provided, a new session will be created)
 
 **Returns:**
@@ -55,7 +55,7 @@ Immediately cleanup the TaskTracker record when a task for a specific slot is co
 **Parameters:**
 - `task_id` (int): The ID of the task being completed
 - `user_id` (int): The ID of the user completing the task
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator') being completed
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator') being completed
 - `db`: Optional database session (if not provided, a new session will be created)
 
 **Returns:**

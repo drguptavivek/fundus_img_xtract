@@ -119,7 +119,7 @@
                             <div class="fw-semibold text-muted mb-1">Dual Grading Tasks</div>
                             <div class="d-flex flex-column gap-2">
                               {% for task in image.tasks %}
-                                {% set final_label = task.consensus.impression if task.consensus else (task.arbitrator_grade.impression if task.arbitrator_grade else (task.faculty_grade.impression if task.faculty_grade else (task.resident_grade.impression if task.resident_grade else 'Pending'))) %}
+                                {% set final_label = task.consensus.impression if task.consensus else (task.arbitrator_grade.impression if task.arbitrator_grade else (task.resident2_grade.impression if task.resident2_grade else (task.resident_grade.impression if task.resident_grade else 'Pending'))) %}
                                 <div class="border rounded p-2">
                                   <div class="d-flex justify-content-between align-items-center">
                                     <div class="fw-semibold">{{ task.disease_name or 'Disease Unknown' }}</div>
@@ -130,7 +130,7 @@
                                   </div>
                                   <div class="mt-2 d-flex flex-wrap gap-3 text-muted">
                                     <span>Resident: {% if task.resident_grade %}{{ task.resident_grade.impression or '—' }} ({{ task.resident_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
-                                    <span>Faculty: {% if task.faculty_grade %}{{ task.faculty_grade.impression or '—' }} ({{ task.faculty_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
+                                    <span>Resident2: {% if task.resident2_grade %}{{ task.resident2_grade.impression or '—' }} ({{ task.resident2_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
                                     <span>Arbitrator: {% if task.arbitrator_grade %}{{ task.arbitrator_grade.impression or '—' }} ({{ task.arbitrator_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
                                   </div>
                                   {% if task.consensus %}

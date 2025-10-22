@@ -2,8 +2,12 @@ from flask import redirect, url_for, flash
 from flask_login import current_user
 from auth.roles import roles_required
 from models import Session, Disease
-from utils.dualGradingGetNextTasks import get_next_eligible_resident_task_atomic, get_next_eligible_faculty_task_atomic, get_next_eligible_arbitrator_task_atomic
- 
+from utils.dualGradingGetNextTasks import (
+    get_next_eligible_resident_task_atomic,
+    get_next_eligible_resident2_task_atomic,
+    get_next_eligible_arbitrator_task_atomic,
+)
+  
 
 def register_routes(bp):
     """Register start grading routes with the blueprint."""
@@ -17,10 +21,10 @@ def start_grading(disease_id: int, role_slot: str):
     
     Args:
         disease_id: The ID of the disease to grade
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
     """
     # Validate role_slot
-    if role_slot not in ['resident', 'faculty', 'arbitrator']:
+    if role_slot not in ['resident', 'resident2', 'arbitrator']:
         flash("Invalid role slot.", "danger")
         return redirect(url_for("grading.index"))
     
@@ -30,8 +34,8 @@ def start_grading(disease_id: int, role_slot: str):
         flash("You don't have permission to grade as a resident.", "danger")
         return redirect(url_for("grading.index"))
     
-    if role_slot in ['faculty', 'arbitrator'] and not current_user.has_role('ophthalmologist'):
-        flash("You don't have permission to grade as faculty or arbitrator.", "danger")
+    if role_slot in ['resident2', 'arbitrator'] and not current_user.has_role('ophthalmologist'):
+        flash("You don't have permission to grade as resident2 or arbitrator.", "danger")
         return redirect(url_for("grading.index"))
     
     # Get the disease
@@ -48,8 +52,8 @@ def start_grading(disease_id: int, role_slot: str):
     task = None
     if role_slot == 'resident':
         task = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-    elif role_slot == 'faculty':
-        task = get_next_eligible_faculty_task_atomic(current_user.id, disease_id)
+    elif role_slot == 'resident2':
+        task = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
     elif role_slot == 'arbitrator':
         task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
     

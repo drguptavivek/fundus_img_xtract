@@ -63,7 +63,7 @@ def discrepancy_review():
         
         # Get grade filter values (as lists to support multi-select)
         resident_grades = request.args.getlist("resident_grade")
-        faculty_grades = request.args.getlist("faculty_grade")
+        resident2_grades = request.args.getlist("resident2_grade")
         arbitrator_grades = request.args.getlist("arbitrator_grade")
         final_grades = request.args.getlist("final_grade")
         
@@ -89,15 +89,15 @@ def discrepancy_review():
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
-        if faculty_grades:
+        if resident2_grades:
             # Filter out empty strings
-            faculty_grades = [g for g in faculty_grades if g]
-            if faculty_grades:
-                faculty_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in faculty_grades]
-                faculty_grade_ids = [gid for gid in faculty_grade_ids if gid is not None]  # Filter out None values
-                if faculty_grade_ids:
+            resident2_grades = [g for g in resident2_grades if g]
+            if resident2_grades:
+                resident2_grade_ids = [get_disease_grading_id_by_impression(db, grade) for grade in resident2_grades]
+                resident2_grade_ids = [gid for gid in resident2_grade_ids if gid is not None]  # Filter out None values
+                if resident2_grade_ids:
                     subq = db.query(Grade.task_id).filter(
-                        and_(Grade.role_slot == 'faculty', Grade.disease_grading_id.in_(faculty_grade_ids))
+                        and_(Grade.role_slot == 'resident2', Grade.disease_grading_id.in_(resident2_grade_ids))
                     ).subquery()
                     query = query.filter(GradingTask.id.in_(subq))
         
@@ -241,7 +241,7 @@ def discrepancy_review():
                 'disease_id': disease_id,
                 'lab_unit_id': lab_unit_id,
                 'resident_grade': resident_grades,
-                'faculty_grade': faculty_grades,
+                'resident2_grade': resident2_grades,
                 'arbitrator_grade': arbitrator_grades,
                 'final_grade': final_grades,
                 'has_ai_grade': has_ai_grade,

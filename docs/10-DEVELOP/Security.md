@@ -165,7 +165,7 @@ The system implements Role-Based Access Control (RBAC) with the following featur
 - **Grading Eligibility**: Fine-grained control over who can grade specific diseases in specific units
 
 #### Disease-Specific Permissions
-- **Role Slots**: Different permission levels for resident, faculty, and arbitrator roles
+- **Role Slots**: Different permission levels for resident, resident2, and arbitrator roles
 - **Disease-Unit-Role Matrix**: Complex permissions matrix for grading eligibility
 - **Dynamic Permission Checking**: Runtime verification of user eligibility for specific tasks
 

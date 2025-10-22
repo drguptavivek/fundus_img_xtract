@@ -1,7 +1,7 @@
 """
 Utility functions for detecting and cleaning up stuck tasks in the dual grading system.
 A stuck task is one where a user has accessed the task but not submitted a grade 
-within the specified time limit (default 60 minutes).
+within the specified time limit (default 60 minutes). 
 """
 
 from datetime import datetime, timedelta, timezone
@@ -69,7 +69,7 @@ def mark_task_started(task_id: int, user_id: int, role_slot: str, db=None) -> bo
     Args:
         task_id: The ID of the task being worked on
         user_id: The ID of the user starting the task
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
@@ -150,7 +150,7 @@ def cleanup_task_tracker(task_id: int, user_id: int, role_slot: str, db=None) ->
     Args:
         task_id: The ID of the task being completed
         user_id: The ID of the user completing the task
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator') being completed
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator') being completed
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:

@@ -46,8 +46,8 @@
                       <label class="form-check-label" for="res-{{ disease.id }}-{{ lab_unit.id }}">Resident</label>
                     </div>
                     <div class="form-check">
-                      <input class="form-check-input role-checkbox" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_faculty">
-                      <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Faculty</label>
+                      <input class="form-check-input role-checkbox" type="checkbox" id="fac-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_grade_resident2">
+                      <label class="form-check-label" for="fac-{{ disease.id }}-{{ lab_unit.id }}">Resident2</label>
                     </div>
                     <div class="form-check">
                       <input class="form-check-input role-checkbox" type="checkbox" id="arb-{{ disease.id }}-{{ lab_unit.id }}" data-disease-id="{{ disease.id }}" data-lab-unit-id="{{ lab_unit.id }}" data-role="can_arbitrate">
@@ -97,7 +97,7 @@
               const el = document.getElementById(`res-${rule.disease_id}-${rule.lab_unit_id}`);
               if (el) el.checked = true;
             }
-            if (rule.can_grade_faculty) {
+            if (rule.can_grade_resident2) {
               const el = document.getElementById(`fac-${rule.disease_id}-${rule.lab_unit_id}`);
               if (el) el.checked = true;
             }
@@ -111,7 +111,7 @@
             if (activeEl) {
               activeEl.checked = rule.active;
               // Enable the active toggle if there are roles
-              if (rule.can_grade_resident || rule.can_grade_faculty || rule.can_arbitrate) {
+              if (rule.can_grade_resident || rule.can_grade_resident2 || rule.can_arbitrate) {
                 activeEl.disabled = false;
               }
             }
@@ -119,7 +119,7 @@
         }
       });
 
-    // Handle role checkbox changes to prevent faculty and resident being selected together
+    // Handle role checkbox changes to prevent resident2 and resident being selected together
     form.addEventListener('change', function (event) {
       if (event.target.classList.contains('role-checkbox')) {
         const diseaseId = event.target.dataset.diseaseId;
@@ -132,16 +132,16 @@
         const arbCheckbox = document.getElementById(`arb-${diseaseId}-${labUnitId}`);
         const activeToggle = document.getElementById(`active-${diseaseId}-${labUnitId}`);
         
-        // Check if trying to select both resident and faculty
+        // Check if trying to select both resident and resident2
         if (resCheckbox && facCheckbox) {
           if (resCheckbox.checked && facCheckbox.checked) {
             // Show an alert and uncheck the checkbox that was just checked
             if (role === 'can_grade_resident') {
               facCheckbox.checked = false;
-              alert('A user cannot be both Resident and Faculty for the same disease and lab unit.');
-            } else if (role === 'can_grade_faculty') {
+              alert('A user cannot be both Resident and Resident2 for the same disease and lab unit.');
+            } else if (role === 'can_grade_resident2') {
               resCheckbox.checked = false;
-              alert('A user cannot be both Resident and Faculty for the same disease and lab unit.');
+              alert('A user cannot be both Resident and Resident2 for the same disease and lab unit.');
             }
           }
         }
@@ -179,7 +179,7 @@
         const facCheckbox = document.getElementById(`fac-${diseaseId}-${labUnitId}`);
         
         if (resCheckbox && facCheckbox && resCheckbox.checked && facCheckbox.checked) {
-          alert(`Error: User cannot be both Resident and Faculty for the same disease and lab unit (disease ${diseaseId}, lab unit ${labUnitId}).`);
+          alert(`Error: User cannot be both Resident and Resident2 for the same disease and lab unit (disease ${diseaseId}, lab unit ${labUnitId}).`);
           hasConflict = true;
           break;
         }
@@ -210,7 +210,7 @@
             disease_id: diseaseId,
             lab_unit_id: labUnitId,
             can_grade_resident: false,
-            can_grade_faculty: false,
+            can_grade_resident2: false,
             can_arbitrate: false,
             active: isActive
           });
@@ -239,7 +239,7 @@
       });
 
       payload.items = Array.from(itemsMap.values()).filter(item => 
-        item.can_grade_resident || item.can_grade_faculty || item.can_arbitrate
+        item.can_grade_resident || item.can_grade_resident2 || item.can_arbitrate
       );
       
       // Set the hidden input value to JSON string

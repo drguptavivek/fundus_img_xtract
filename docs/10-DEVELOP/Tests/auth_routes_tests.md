@@ -71,9 +71,9 @@ The tests use the following test users:
 | Username | Role | Password | Description |
 |----------|------|----------|-------------|
 | test_admin | admin | Test@2026 | Administrator user with full system access |
-| test_faculty | ophthalmologist | Test@2026 | Faculty user with grading permissions |
+| test_resident2 | ophthalmologist | Test@2026 | Resident2 user with grading permissions |
 | test_resident | ophthalmologist | TestPassword123! | Resident user with grading permissions |
-| testFaculty | ophthalmologist | TestPassword123! | Faculty user with specific role slots |
+| testResident2 | ophthalmologist | TestPassword123! | Resident2 user with specific role slots |
 | testResident | ophthalmologist | TestPassword123! | Resident user with specific role slots |
 | testArbitrator | ophthalmologist | TestPassword123! | Arbitrator user with specific role slots |
 | test_uploader | fileUploader | TestPassword123! | File uploader user (created during tests) |

@@ -2,7 +2,7 @@
 Migration script to add 'review' as a valid role_slot in the grades table.
 
 This script updates the check constraint to allow 'review' as a valid role_slot
-in addition to 'resident', 'faculty', 'arbitrator', and 'ai'.
+in addition to 'resident', 'resident2', 'arbitrator', and 'ai'.
 """
 
 import sys
@@ -51,7 +51,7 @@ def migrate():
                         FOREIGN KEY (grader_user_id) REFERENCES users (id) ON DELETE CASCADE,
                         FOREIGN KEY (disease_grading_id) REFERENCES disease_gradings (id),
                         FOREIGN KEY (ai_model_id) REFERENCES ai_models (id) ON DELETE SET NULL,
-                        CHECK (role_slot IN ('resident','faculty','arbitrator','ai','review'))
+                        CHECK (role_slot IN ('resident','resident2','arbitrator','ai','review'))
                     )
                 """))
                 
@@ -92,7 +92,7 @@ def migrate():
                 conn.execute(text("""
                     ALTER TABLE grades 
                     ADD CONSTRAINT ck_grade_role_slot_valid 
-                    CHECK (role_slot IN ('resident','faculty','arbitrator','ai','review'))
+                    CHECK (role_slot IN ('resident','resident2','arbitrator','ai','review'))
                 """))
             
             # Commit the transaction

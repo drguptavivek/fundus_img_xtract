@@ -76,7 +76,7 @@
       {% for row in rows %}
       <div class="col">
         <div class="card h-100 shadow-sm">
-          {% set final_grade = row.consensus.impression if row.consensus else (row.arbitrator_grade.impression if row.arbitrator_grade else (row.faculty_grade.impression if row.faculty_grade else (row.resident_grade.impression if row.resident_grade else None))) %}
+          {% set final_grade = row.consensus.impression if row.consensus else (row.arbitrator_grade.impression if row.arbitrator_grade else (row.resident2_grade.impression if row.resident2_grade else (row.resident_grade.impression if row.resident_grade else None))) %}
           <div class="card-header py-2 px-3">
             <div class="d-flex flex-column gap-1">
               <div class="flex-grow-1">
@@ -139,7 +139,7 @@
               <div class="text-muted fw-semibold">Grades</div>
               <ul class="list-unstyled mb-0">
                 <li>Resident: {% if row.resident_grade %}{{ row.resident_grade.impression or '—' }} <span class="text-muted">({{ row.resident_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
-                <li>Faculty: {% if row.faculty_grade %}{{ row.faculty_grade.impression or '—' }} <span class="text-muted">({{ row.faculty_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
+                <li>Resident2: {% if row.resident2_grade %}{{ row.resident2_grade.impression or '—' }} <span class="text-muted">({{ row.resident2_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
                 <li>Arbitrator: {% if row.arbitrator_grade %}{{ row.arbitrator_grade.impression or '—' }} <span class="text-muted">({{ row.arbitrator_grade.grader or 'Unknown' }})</span>{% else %}<span class="text-muted">Pending</span>{% endif %}</li>
               </ul>
             </div>

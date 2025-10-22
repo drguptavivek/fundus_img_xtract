@@ -151,20 +151,20 @@
         return;
       }
       storage.setItem(key, JSON.stringify(mapping));
-      const hiddenInputId = role === 'resident' ? 'resident-mapping-json' : 'faculty-mapping-json';
+      const hiddenInputId = role === 'resident' ? 'resident-mapping-json' : 'resident2-mapping-json';
       const hiddenInput = document.getElementById(hiddenInputId);
       if (hiddenInput) {
         hiddenInput.value = JSON.stringify(mapping);
       }
       const mappingToken = document.getElementById('mapping-token');
       if (mappingToken) {
-        const formId = role === 'resident' ? 'resident-form' : 'faculty-form';
+        const formId = role === 'resident' ? 'resident-form' : 'resident2-form';
         const form = document.getElementById(formId);
         form.querySelector('input[name="mapping_token"]').value = mappingToken.value;
       }
       const bootstrapModal = bootstrap.Modal.getInstance(modalEl);
       bootstrapModal?.hide();
-      const formId = role === 'resident' ? 'resident-form' : 'faculty-form';
+      const formId = role === 'resident' ? 'resident-form' : 'resident2-form';
       document.getElementById(formId)?.submit();
     });
   }
@@ -172,7 +172,7 @@
   function preloadMapping(form) {
     const role = form.querySelector('input[name="form_role"]').value;
     const diseaseSelect = form.querySelector('.disease-select');
-    const hiddenInputId = role === 'resident' ? 'resident-mapping-json' : 'faculty-mapping-json';
+    const hiddenInputId = role === 'resident' ? 'resident-mapping-json' : 'resident2-mapping-json';
     const hiddenInput = document.getElementById(hiddenInputId);
     if (!diseaseSelect || !hiddenInput) return;
 

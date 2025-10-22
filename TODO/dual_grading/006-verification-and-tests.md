@@ -19,8 +19,8 @@ Quick Setup
 - Verify tables and constraints via SQLite console or Python shell:
   - Unique per image×disease on `grading_task` (two uniques split across encounter vs direct columns).
   - CHECK: exactly one of `encounter_file_id` or `direct_image_upload_id` is non‑null.
-  - CHECK: `grade.role_slot` ∈ {resident, faculty, arbitrator}.
-  - CHECK: `user_disease_unit_role` has at least one true flag among resident/faculty/arbitrate.
+  - CHECK: `grade.role_slot` ∈ {resident, resident2, arbitrator}.
+  - CHECK: `user_disease_unit_role` has at least one true flag among resident/resident2/arbitrate.
   - Mapper pairings: `GradingTask.grades ↔ Grade.task` and `GradingTask.consensus ↔ Consensus.task` are explicitly linked with `back_populates`; no SAWarnings/ArgumentError during import.
 
 Example (Python shell):
@@ -29,10 +29,10 @@ Example (Python shell):
 2) Seed Eligibility (Roles + Matrix)
 - Create users:
   - `resident_user` with role `resident`.
-  - `faculty_user` with role `ophthalmologist`.
+  - `resident2_user` with role `ophthalmologist`.
   - `arb_user` with role `ophthalmologist` (can act as arbitrator).
 - Create `user_disease_unit_role` rows:
-  - For disease DR and lab unit L1: set resident flag for `resident_user`, faculty+arbitrate flags for `faculty_user` and `arb_user`.
+  - For disease DR and lab unit L1: set resident flag for `resident_user`, resident2+arbitrate flags for `resident2_user` and `arb_user`.
 - Verify via API or direct query that the matrix rows exist and are active.
 
 3) Prepare Verified Images
@@ -61,22 +61,22 @@ Example (Python shell):
 6) Eligibility Enforcement
 - Resident try to submit DR grade for task at lab unit L1 → allowed (resident role + matrix flag must pass).
 - Resident try to submit Glaucoma grade without eligibility or for another lab unit → 403/blocked.
-- Faculty submit DR grade → allowed based on `ophthalmologist` role + faculty flag.
+- Resident2 submit DR grade → allowed based on `ophthalmologist` role + resident2 flag.
 - Arbitrator listing includes only tasks where user has `can_arbitrate=true` and did not already grade that task.
 
 7) Dual Match (No Arbitration)
 - Resident submits DR label `X`.
-- Faculty submits DR label `X` for the same task.
+- Resident2 submits DR label `X` for the same task.
 - Verify:
   - `grading_task.state == 'final'`.
   - `consensus` row exists with `method='match'` and `final_disease_grading_id` maps to `X`.
 
 8) Discrepancy → Arbitration
 - Resident submits DR label `A`.
-- Faculty submits DR label `B` (A != B).
+- Resident2 submits DR label `B` (A != B).
 - Verify:
   - `grading_task.state == 'arbitration'`.
-  - Arbitrator pool excludes the same `faculty_user` and `resident_user` for this task.
+  - Arbitrator pool excludes the same `resident2_user` and `resident_user` for this task.
 - Arbitrator submits label `A` or `B` (or different, if permitted by schema).
 - Verify:
   - `grading_task.state == 'final'`.
@@ -86,19 +86,19 @@ Example (Python shell):
 - For `resident_user`:
   - “Start Grading” returns a verified task at lab unit L1 for a disease where the user has resident permission and hasn’t graded that task.
   - Preference: tasks already graded by the other slot should be offered first.
-- For `faculty_user`:
-  - Same as above using faculty permission.
+- For `resident2_user`:
+  - Same as above using resident2 permission.
   - Queue filters must respect lab_unit scoping: only tasks for lab units where the user has eligibility are included; do not move tasks between labs.
 
 10) Denormalized View Sanity (Optional)
-- Create the SQL VIEW (or materialized table) that pivots resident/faculty/final labels per image×disease.
+- Create the SQL VIEW (or materialized table) that pivots resident/resident2/final labels per image×disease.
 - Verify example rows show:
-  - ResidentLabel/FacultyLabel populated after submissions.
+  - ResidentLabel/Resident2Label populated after submissions.
   - FinalLabel and Method populated after match or adjudication.
 
 11) Negative Cases
-- Same user attempts both Resident and Faculty submissions for the same task → blocked.
-- Faculty who graded attempts to arbitrate the same task → blocked.
+- Same user attempts both Resident and Resident2 submissions for the same task → blocked.
+- Resident2 who graded attempts to arbitrate the same task → blocked.
 - Submit with invalid `disease_grading_id` or role_slot → 400 validation error.
 - Attempt to grade a locked image → blocked with friendly message.
 - Attempt to create/ensure a task for an image×disease that is already final in any lab unit → 409 conflict with message indicating gold standard already set and cross‑lab reassignment is disabled.
@@ -121,13 +121,13 @@ Example (Python shell):
 14) Manual UI Smoke (Optional)
 - Log in as `resident_user` and navigate to `/grading/`.
 - Click “Start Grading” for DR; submit a label.
-- Log in as `faculty_user`; open the same image; submit the same label → observe “finalized”.
+- Log in as `resident2_user`; open the same image; submit the same label → observe “finalized”.
 - Repeat with a mismatch to trigger arbitration; log in as `arb_user` to resolve.
 
 Success Criteria
 - Verified images auto‑produce native‑disease tasks; non‑verified never appear to graders.
 - Eligibility strictly controls who can grade and arbitrate by disease and lab unit.
-- Resident+Faculty match auto‑finalizes; mismatch triggers arbitration and excludes prior graders from arbitrator slot.
+- Resident+Resident2 match auto‑finalizes; mismatch triggers arbitration and excludes prior graders from arbitrator slot.
 - Denormalized view reflects the current state for analytics.
 - Logs record transitions; tests pass.
 

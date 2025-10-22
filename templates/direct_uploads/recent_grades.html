@@ -5,7 +5,7 @@
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h4 mb-0">Recently Imported Resident & Faculty Grades</h1>
+        <h1 class="h4 mb-0">Recently Imported Resident & Resident2 Grades</h1>
         <a class="btn btn-primary" href="{{ url_for('direct_uploads.upload_index') }}">Uploads Home</a>
         <a class="btn btn-secondary" href="{{ url_for('remedio_zip_uploads.upload_form') }}">Upload ZIPs</a>
         <a class="btn btn-success" href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
@@ -51,7 +51,7 @@
                                     <td>
                                         <span class="badge 
                                             {% if import.type == 'Resident' %}bg-primary
-                                            {% elif import.type == 'Faculty' %}bg-success
+                                            {% elif import.type == 'Resident2' %}bg-success
                                             {% elif import.type == 'AI' %}bg-info
                                             {% else %}bg-secondary{% endif %}">
                                             {{ import.type }}

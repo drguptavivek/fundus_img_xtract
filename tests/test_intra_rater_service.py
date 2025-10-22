@@ -86,7 +86,7 @@ def intra_rater_fixture(db_session):
         user_id=grader.id,
         disease_id=disease.id,
         lab_unit_id=lab_unit.id,
-        can_grade_faculty=True,
+        can_grade_resident2=True,
     )
     db.add(user_role)
 
@@ -130,7 +130,7 @@ def intra_rater_fixture(db_session):
     historical_grade = Grade(
         task_id=grading_task.id,
         grader_user_id=grader.id,
-        role_slot="faculty",
+        role_slot="resident2",
         disease_grading_id=abnormal_grading.id,
         comment="Original grading",
         time_taken=45.0,

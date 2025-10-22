@@ -42,7 +42,7 @@ This document explains how the various modules in the dual grading system work t
 - System validates user permissions for the requested role
 - Calls appropriate atomic task assignment function:
   - `get_next_eligible_resident_task_atomic()`
-  - `get_next_eligible_faculty_task_atomic()`
+  - `get_next_eligible_resident2_task_atomic()`
   - `get_next_eligible_arbitrator_task_atomic()`
 - Redirects to `dual_grading_task()` with the assigned task
 
@@ -74,7 +74,7 @@ This document explains how the various modules in the dual grading system work t
 - User accesses grade via `/grading/revise/<grade_id>`
 - System validates ownership and revision eligibility
 - Different rules apply based on role:
-  - Residents/Faculty: Can revise until task is finalized
+  - Residents/Resident2: Can revise until task is finalized
   - Arbitrators: Can revise within 6 hours of submission
 - Renders revision interface with prefilled values
 
@@ -156,7 +156,7 @@ When testing the integrated system, verify:
 3. **Concurrent Access**: Multiple users accessing different tasks simultaneously
 4. **Error Recovery**: System behavior when transactions fail or are interrupted
 5. **Stuck Task Recovery**: Background cleanup of abandoned tasks
-6. **Role Transitions**: User behavior when changing between resident/faculty roles
+6. **Role Transitions**: User behavior when changing between resident/resident2 roles
 
 ## Future Enhancement Opportunities
 

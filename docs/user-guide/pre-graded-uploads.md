@@ -61,13 +61,13 @@ Create an Excel file with the following structure:
 - **image_name**: The filename of the graded image (must match uploaded files)
 - **{role}_grade**: Grade value for the specific role
   - For resident grades: `resident_grade`
-  - For faculty grades: `faculty_grade`
+  - For resident2 grades: `resident2_grade`
   - For AI grades: `ai_grade`
 
 #### Optional Columns
 - **{role}_remarks**: Additional notes or comments
   - For resident grades: `resident_remarks`
-  - For faculty grades: `faculty_remarks`
+  - For resident2 grades: `resident2_remarks`
   - For AI grades: `ai_remarks`
 - **ai_probability**: Confidence score for AI grades (only for AI grades)
 
@@ -75,7 +75,7 @@ Create an Excel file with the following structure:
 1. Navigate to **Direct Uploads** → **Pre-Graded Grades**
 2. Select the grader type:
    - **Resident**: For resident doctor grades
-   - **Faculty**: For faculty/ophthalmologist grades
+   - **Resident2**: For resident2/ophthalmologist grades
    - **AI**: For artificial intelligence grades
 3. Fill in the required information:
    - **Hospital**: Select the hospital (must match image upload)
@@ -100,7 +100,7 @@ The system will:
 2. Match grades to uploaded images by filename
 3. Create grade records for each image
 4. Update task states for human grades
-5. Create consensus grades for faculty grades
+5. Create consensus grades for resident2 grades
 6. Display a summary of successful and failed imports
 
 ## Supported Grade Types
@@ -111,8 +111,8 @@ The system will:
 - **Process**: Grades are imported and task states are updated
 - **Use Case**: Training evaluation, quality assessment
 
-### Faculty Grades
-- **Who**: Senior ophthalmologists and faculty members
+### Resident2 Grades
+- **Who**: Senior ophthalmologists and resident2 members
 - **Requirements**: User must have "ophthalmologist" role
 - **Process**: Grades are imported and consensus is calculated
 - **Use Case**: Gold standard grades, reference data
@@ -209,7 +209,7 @@ The system follows these steps to match grades to images:
 - Pre-graded uploads automatically create grading tasks
 - Tasks are marked with appropriate grader assignments
 - Human grades update task states automatically
-- Faculty grades trigger consensus calculations
+- Resident2 grades trigger consensus calculations
 
 ### Review Process
 - Pre-graded images appear in regular grading queues

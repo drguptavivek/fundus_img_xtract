@@ -45,8 +45,14 @@ grades_logger = logging.getLogger("grades")
 
 
 ROLE_RESIDENT = "resident"
-ROLE_FACULTY = "faculty"
+ROLE_RESIDENT2 = "resident2"
 ROLE_AI = "ai"
+
+ROLE_DISPLAY_NAME = {
+    ROLE_RESIDENT: "Resident",
+    ROLE_RESIDENT2: "Resident 2",
+    ROLE_AI: "AI",
+}
 
 
 @dataclass
@@ -523,9 +529,9 @@ def _process_rows(
                 ai_model_version=ai_version if pending.role == ROLE_AI else None,
             )
 
-            if pending.role in (ROLE_RESIDENT, ROLE_FACULTY):
+            if pending.role in (ROLE_RESIDENT, ROLE_RESIDENT2):
                 update_task_state_based_on_grades(task.id, db=db_session)
-                if pending.role == ROLE_FACULTY:
+                if pending.role == ROLE_RESIDENT2:
                     create_or_update_consensus(task.id, db=db_session)
 
             success += 1
@@ -570,7 +576,7 @@ def _render_page(
     db_session,
     *,
     resident_graders: List[User],
-    faculty_graders: List[User],
+    resident2_graders: List[User],
     ai_models: List[AIModel],
     context: Optional[dict] = None,
 ):
@@ -630,7 +636,7 @@ def _render_page(
             "diseases": diseases,
             "areas": areas,
             "resident_graders": resident_graders,
-            "faculty_graders": faculty_graders,
+            "resident2_graders": resident2_graders,
             "ai_models": ai_models,
             "grade_options": grade_options,
         }
@@ -643,7 +649,7 @@ def _render_page(
 def pregraded_grades():
     with with_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
-        faculty_graders = _eligible_graders(db_session, ["ophthalmologist"])
+        resident2_graders = _eligible_graders(db_session, ["ophthalmologist"])
         ai_models = (
             db_session.execute(
                 select(AIModel).order_by(AIModel.name, AIModel.version)
@@ -672,8 +678,8 @@ def pregraded_grades():
             
             # Get recent pregraded grade uploads for display
             recent_uploads = get_recent_zip_uploads(limit=5, job_type="resident excel")
-            # Also get faculty and AI excel uploads
-            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="faculty excel"))
+            # Also get resident2 and AI excel uploads
+            recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="resident2 excel"))
             recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="ai excel"))
             # Sort by created_at date and take the top 5
             recent_uploads.sort(key=lambda x: x['job'].created_at, reverse=True)
@@ -684,13 +690,13 @@ def pregraded_grades():
             return _render_page(
                 db_session,
                 resident_graders=resident_graders,
-                faculty_graders=faculty_graders,
+                resident2_graders=resident2_graders,
                 ai_models=ai_models,
                 context=context,
             )
 
         form_role = request.form.get("form_role")
-        if form_role not in {ROLE_RESIDENT, ROLE_FACULTY, ROLE_AI}:
+        if form_role not in {ROLE_RESIDENT, ROLE_RESIDENT2, ROLE_AI}:
             flash("Invalid form submission.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -727,7 +733,8 @@ def pregraded_grades():
             # Get the original filename from the session (stored during form processing)
             excel_filename = session.get("pregraded_excel_filename", "Unknown Excel File")
             
-            summary = f"{pending.role.title()} grade import"
+            display_role = ROLE_DISPLAY_NAME.get(pending.role, pending.role.title())
+            summary = f"{display_role} grade import"
             if pending.role == ROLE_AI and pending.ai_model_id:
                 summary = f"AI grade import (model {pending.ai_model_id})"
             
@@ -894,9 +901,9 @@ def pregraded_grades():
                 processing_logger.warning("Grader %s lacks resident role", grader_user_id)
                 flash("Selected user is not eligible for resident grading.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
-            if form_role == ROLE_FACULTY and "ophthalmologist" not in role_names:
-                processing_logger.warning("Grader %s lacks faculty eligibility", grader_user_id)
-                flash("Selected user is not eligible for faculty grading.", "danger")
+            if form_role == ROLE_RESIDENT2 and "ophthalmologist" not in role_names:
+                processing_logger.warning("Grader %s lacks resident2 eligibility", grader_user_id)
+                flash("Selected user is not eligible for resident2 grading.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
             effective_grader_id = grader_user_id
 
@@ -945,7 +952,8 @@ def pregraded_grades():
             # Get the original filename from the uploaded file
             excel_filename = grades_file.filename if grades_file else "Unknown Excel File"
             
-            summary = f"{form_role.title()} grade import"
+            display_role = ROLE_DISPLAY_NAME.get(form_role, form_role.title())
+            summary = f"{display_role} grade import"
             if form_role == ROLE_AI and ai_model_id:
                 summary = f"AI grade import (model {ai_model_id})"
             
@@ -1019,7 +1027,7 @@ def pregraded_grades():
         return _render_page(
             db_session,
             resident_graders=resident_graders,
-            faculty_graders=faculty_graders,
+            resident2_graders=resident2_graders,
             ai_models=ai_models,
             context=context,
         )
@@ -1052,8 +1060,8 @@ def recent_pregraded_grades():
             if job.upload_type:
                 if job.upload_type == "resident excel":
                     import_type = "Resident"
-                elif job.upload_type == "faculty excel":
-                    import_type = "Faculty"
+                elif job.upload_type == "resident2 excel":
+                    import_type = "Resident 2"
                 elif job.upload_type == "ai excel":
                     import_type = "AI"
             

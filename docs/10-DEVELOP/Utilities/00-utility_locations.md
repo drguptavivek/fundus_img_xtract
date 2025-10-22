@@ -97,11 +97,11 @@ For detailed documentation, see [utils_dualGradingGetNextTasks.md](utils_dualGra
 | `_has_user_graded_task_6hr(db, user_id: int, task_id: int)` | Check if a user has graded a task in the last 6 hours (or configured timeframe) |
 | `_get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list)` | Get filtered tasks based on role slot and other criteria |
 | `get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a resident user |
-| `get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a faculty user |
+| `get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a resident2 user |
 | `get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for an arbitrator user |
 | `_atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list)` | Atomically get and lock a task for a user to prevent race conditions |
 | `get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a resident user with atomic locking to prevent race conditions |
-| `get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a faculty user with atomic locking to prevent race conditions |
+| `get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for a resident2 user with atomic locking to prevent race conditions |
 | `get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None)` | Get the next eligible task for an arbitrator user with atomic locking to prevent race conditions |
 
 ### utils/dualGradingKPIs.py

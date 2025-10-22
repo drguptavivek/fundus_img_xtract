@@ -64,7 +64,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         db: Database session
         user_id: The ID of the user
         disease_id: The disease ID
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
         eligible_lab_unit_ids: List of lab unit IDs the user is eligible for
         
     Returns:
@@ -86,8 +86,8 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     elif role_slot == "resident":
         # Residents see pending tasks
         query = query.filter(GradingTask.state == "pending")
-    elif role_slot == "faculty":
-        # Faculty see tasks where resident has completed grading
+    elif role_slot == "resident2":
+        # Resident2 graders see tasks where resident has completed grading
         query = query.filter(GradingTask.state == "resident_done")
     
     # Get all matching tasks
@@ -150,9 +150,9 @@ def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: 
             db.close()
 
 
-def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
-    Get the next eligible task for a faculty user.
+    Get the next eligible task for a resident2 user.
     
     Args:
         user_id: The ID of the user (must be an ophthalmologist or admin)
@@ -169,8 +169,8 @@ def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: O
         db = Session()
         close_db = True
     try:
-        # Get user's eligible lab unit IDs for faculty role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "faculty")
+        # Get user's eligible lab unit IDs for resident2 role and specified disease
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
         if eligible_lab_unit_ids is None:
             return None
         
@@ -184,7 +184,7 @@ def get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: O
         # Try up to 3 times to find a suitable task
         for attempt in range(3):
             # Get filtered tasks
-            tasks = _get_filtered_tasks(db, user_id, disease_id, "faculty", eligible_lab_unit_ids)
+            tasks = _get_filtered_tasks(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
             
             # If we have tasks, return a random one
             if tasks:
@@ -255,7 +255,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
         db: Database session
         user_id: The ID of the user
         disease_id: The disease ID
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
         eligible_lab_unit_ids: List of lab unit IDs the user is eligible for
     
     Returns:
@@ -272,7 +272,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
         query = query.filter(GradingTask.state == "arbitration")
     elif role_slot == "resident":
         query = query.filter(GradingTask.state == "pending")
-    elif role_slot == "faculty":
+    elif role_slot == "resident2":
         query = query.filter(GradingTask.state == "resident_done")
     
     # Use SELECT FOR UPDATE to lock the rows
@@ -331,9 +331,9 @@ def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_un
             db.close()
 
 
-def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
+def get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
-    Get the next eligible task for a faculty user with atomic locking to prevent race conditions.
+    Get the next eligible task for a resident2 user with atomic locking to prevent race conditions.
     
     Args:
         user_id: The ID of the user (must be an ophthalmologist or admin)
@@ -350,8 +350,8 @@ def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_uni
         db = Session()
         close_db = True
     try:
-        # Get user's eligible lab unit IDs for faculty role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "faculty")
+        # Get user's eligible lab unit IDs for resident2 role and specified disease
+        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
         if eligible_lab_unit_ids is None:
             return None
         
@@ -364,7 +364,7 @@ def get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_uni
         
         # Try up to 3 times to find a suitable task with atomic locking
         for attempt in range(3):
-            task = _atomically_get_and_lock_task(db, user_id, disease_id, "faculty", eligible_lab_unit_ids)
+            task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
             if task:
                 return task
         

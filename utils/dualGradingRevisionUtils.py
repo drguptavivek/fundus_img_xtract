@@ -1,5 +1,5 @@
 """
-Utility functions for dual grading system, specifically for revision eligibility checks.
+Utility functions for dual grading system, specifically for revision eligibility checks. 
 """
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
         db: Database session
         user_id: ID of the user requesting revision
         task_id: ID of the grading task
-        slot_type: The slot type ('resident', 'faculty', 'arbitrator')
+        slot_type: The slot type ('resident', 'resident2', 'arbitrator')
         grade: The grade object to check (optional, will be fetched if not provided)
         
     Returns:
@@ -34,7 +34,7 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
     }
     
     # Check if slot type is valid
-    if slot_type not in ['resident', 'faculty', 'arbitrator']:
+    if slot_type not in ['resident', 'resident2', 'arbitrator']:
         result["message"] = f"Invalid slot type: {slot_type}"
         return result
 
@@ -52,8 +52,8 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
         result["message"] = "You are not authorized to revise this grade."
         return result
     
-    # For resident and faculty, revision is allowed if the task is not yet finalized
-    if slot_type in ['resident', 'faculty']:
+    # For resident and resident2, revision is allowed if the task is not yet finalized
+    if slot_type in ['resident', 'resident2']:
         # These users can revise their grades at any point before finalization
         result["eligible"] = True
         result["message"] = "Eligible for revision"
@@ -223,7 +223,7 @@ def check_revision_eligibility_by_task_state(task_state: str, role_slot: str, gr
     
     Args:
         task_state: Current state of the task
-        role_slot: Role slot ('resident', 'faculty', 'arbitrator')
+        role_slot: Role slot ('resident', 'resident2', 'arbitrator')
         grade_created_at: When the grade was created (needed for arbitrator revisions)
     
     Returns:
@@ -252,9 +252,9 @@ def check_revision_eligibility_by_task_state(task_state: str, role_slot: str, gr
     if role_slot == "resident":
         # Resident can revise their grade at any point before finalization
         return True, "Eligible for revision (resident)"
-    elif role_slot == "faculty":
-        # Faculty can revise their grade at any point before finalization
-        return True, "Eligible for revision (faculty)"
+    elif role_slot == "resident2":
+        # Resident2 can revise their grade at any point before finalization
+        return True, "Eligible for revision (resident2)"
     elif role_slot == "arbitrator":
         # Arbitrator can revise if task is in arbitration state OR if their grade was submitted in the last 6 hours
         if task_state == "arbitration":

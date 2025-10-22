@@ -19,7 +19,7 @@ This document describes the implementation of the Review Grade feature for the F
 - Shows model names with versions (e.g., "WadwaniAI vsep_2026")
 
 #### UI/UX Improvements
-- Made grade filters (Resident, Faculty, Arbitrator, Final) only visible when a disease is selected
+- Made grade filters (Resident, Resident2, Arbitrator, Final) only visible when a disease is selected
 - Improved checkbox visibility with better contrast and borders
 - Added dark mode support for checkbox styling
 - Fixed various alignment and display issues
@@ -28,7 +28,7 @@ This document describes the implementation of the Review Grade feature for the F
 
 #### Review Grade Feature
 - Added a "Review Grade" section to the task details page
-- Only users with Faculty or Arbitrator permissions for the task's disease-lab_unit combination can add review grades
+- Only users with Resident2 or Arbitrator permissions for the task's disease-lab_unit combination can add review grades
 - Users can select a grade from the available options for the disease
 - Users can add optional comments with their review
 - Existing review grades can be updated
@@ -56,8 +56,8 @@ This document describes the implementation of the Review Grade feature for the F
 
 1. **Updated `models.py`**:
    - Modified the Grade model's check constraint to include 'review' as a valid role_slot
-   - Changed from: `CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai')", name='ck_grade_role_slot_valid')`
-   - To: `CheckConstraint("role_slot IN ('resident','faculty','arbitrator','ai','review')", name='ck_grade_role_slot_valid')`
+   - Changed from: `CheckConstraint("role_slot IN ('resident','resident2','arbitrator','ai')", name='ck_grade_role_slot_valid')`
+   - To: `CheckConstraint("role_slot IN ('resident','resident2','arbitrator','ai','review')", name='ck_grade_role_slot_valid')`
 
 2. **Database Migration**:
    - Created migration script: `scripts/migrations/20250116_add_review_role_slot.sql`
@@ -80,7 +80,7 @@ This document describes the implementation of the Review Grade feature for the F
 ## Security Considerations
 
 1. **Permission Checking**:
-   - Review grades can only be added by users with Faculty or Arbitrator permissions
+   - Review grades can only be added by users with Resident2 or Arbitrator permissions
    - Permission checking is done using existing `dualGradingEligibility.py` functions
 
 2. **CSRF Protection**:
@@ -101,7 +101,7 @@ This document describes the implementation of the Review Grade feature for the F
 
 ### For Task Details Page:
 1. Navigate to a task details page via `/review/reviewTaskDetails/<task_id>`
-2. If you have Faculty or Arbitrator permissions, you'll see the "Review Grade" section
+2. If you have Resident2 or Arbitrator permissions, you'll see the "Review Grade" section
 3. Select a grade from the available options
 4. Add optional comments
 5. Click "Save Review Grade" to submit

@@ -67,7 +67,7 @@
    - TASK TRACKER MODEL: A new TaskTracker model was introduced to store task access information including:
      * task_id: The ID of the grading task
      * user_id: The ID of the user who started the task
-     * role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+     * role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
      * started_at: The timestamp when the user started working on the task
      * created_at: The timestamp when the tracker record was created
    - IMMEDIATE TASK CLEANUP: When a user successfully submits a grade for a task and role slot, the corresponding
@@ -101,15 +101,15 @@
 
 
   6. Task State Transitions Edge Cases [RESOLVED]
-   - If a faculty member grades a task that's already in "final" state (after an arbitrator has decided), the
+   - If a resident2 member grades a task that's already in "final" state (after an arbitrator has decided), the
      system should prevent this but there could be a race condition
-   - If both resident and faculty grades are submitted nearly simultaneously to a pending task, the state may
+   - If both resident and resident2 grades are submitted nearly simultaneously to a pending task, the state may
      transition directly from pending to final without going through resident_done
-   - If an arbitrator grades and then both resident and faculty submit matching grades, the state might be
+   - If an arbitrator grades and then both resident and resident2 submit matching grades, the state might be
      incorrectly updated
-   - SOLUTION: Implemented proper state validation at task assignment and at faculty submission to ensure:
-     1. When assigning task to faculty, verify the task is still in 'pending' or 'resident_done' state
-     2. At faculty submission, validate that the task is still in expected state before accepting the grade
+   - SOLUTION: Implemented proper state validation at task assignment and at resident2 submission to ensure:
+     1. When assigning task to resident2, verify the task is still in 'pending' or 'resident_done' state
+     2. At resident2 submission, validate that the task is still in expected state before accepting the grade
      3. Additional validation re-checks the state at submission time to prevent race conditions
      4. The system now checks task availability based on user role and current state at assignment time
      5. Database-level constraints and atomic operations help prevent invalid state transitions
@@ -118,14 +118,14 @@ These edge cases were addressed by implementing comprehensive state validation c
 
   7. Arbitrator Exclusion Logic Conflicts [RESOLVED]
    - The 2-week exclusion between role slots could prevent a qualified arbitrator from arbitrating if they
-     recently graded as faculty or resident
+     recently graded as resident2 or resident
    - There's complexity in the exclusion logic during submission that checks whether it's a revision of an
      existing arbitrator grade, which could have edge cases
    - The logic should work at both allocation and submission time:
      * At allocation time, the system uses _has_user_graded_task_2weeks() to filter out tasks the arbitrator
        has graded in the past 2 weeks across any role slot
      * At submission time, the system performs an additional check specifically for arbitrator exclusion:
-       - It verifies if the user has graded as resident or faculty within the last 2 weeks before allowing
+       - It verifies if the user has graded as resident or resident2 within the last 2 weeks before allowing
          them to arbitrate (unless they're revising their own arbitrator grade)
        - This provides more granular control than the general 2-week exclusion
      * However, there's a potential race condition where the state of the task or user permissions might
@@ -133,15 +133,15 @@ These edge cases were addressed by implementing comprehensive state validation c
      * The current implementation handles this with checks at both phases, but there might be edge cases
        where the allocation and submission time checks are not in sync
      * Example scenario: An arbitrator gets allocated a task (passes 2-week check at allocation time), 
-       but before they submit their arbitration grade, they submit a grade as a faculty member on the
+       but before they submit their arbitration grade, they submit a grade as a resident2 member on the
        same task. The submission-time check should prevent them from arbitrating, but this creates a
        confusing experience for the arbitrator who was initially allowed to access the task.
-       - Detailed scenario: An arbitrator with permissions for both faculty and arbitrator roles
+       - Detailed scenario: An arbitrator with permissions for both resident2 and arbitrator roles
          gets allocated an arbitration task for Task X. At allocation time, they haven't graded this 
          task in the past 2 weeks in any role, so allocation is allowed. However, before submitting
-         their arbitration grade, they also grade the same task X in their faculty role (perhaps on
+         their arbitration grade, they also grade the same task X in their resident2 role (perhaps on
          a different day or as part of different workflow). When they return to submit their 
-         arbitrator grade, the submission will be blocked because they now have a faculty grade for
+         arbitrator grade, the submission will be blocked because they now have a resident2 grade for
          the same task within the 2-week window. This creates a confusing experience as the 
          arbitrator was initially granted access to the task but then denied at the point of 
          submission. 
@@ -157,7 +157,7 @@ These edge cases were addressed by implementing comprehensive state validation c
     1. During task allocation: The _has_user_graded_task_2weeks() function prevents arbitrators from being
        assigned tasks they've graded in the past 2 weeks across any role slot
     2. During grade submission: Additional specific checks ensure arbitrators haven't graded as resident or
-       faculty within the past 2 weeks unless they're revising their own arbitrator grade
+       resident2 within the past 2 weeks unless they're revising their own arbitrator grade
     3. This dual-layer approach ensures that even if there are race conditions between allocation and
        submission, the system maintains the integrity of the arbitrator exclusion rule at the critical
        moment of grade submission

@@ -27,7 +27,7 @@ Comprehensive documentation for the Review System including:
 The task management system handles the complete lifecycle of grading tasks, from creation through the dual grading workflow to final review. Key components include:
 
 1. **Task Creation**: Automated creation of grading tasks from verified images
-2. **Dual Grading**: Three-tier grading system (resident → faculty → arbitrator)
+2. **Dual Grading**: Three-tier grading system (resident → resident2 → arbitrator)
 3. **Review System**: Quality control and retrospective analysis
 4. **Scoping**: Access control mechanisms for data and operations
 
@@ -38,10 +38,10 @@ The grading system supports multiple role slots, each with specific purposes:
 | Role Slot | Purpose | Users |
 |-----------|---------|--------|
 | `resident` | Initial grading by residents | Users with `can_grade_resident` permission |
-| `faculty` | Secondary grading by faculty | Users with `can_grade_faculty` permission |
+| `resident2` | Secondary grading by resident2 | Users with `can_grade_resident2` permission |
 | `arbitrator` | Final decision for discrepancies | Users with `can_arbitrate` permission |
 | `ai` | AI model predictions | Automated system processes |
-| `review` | Quality control reviews | Faculty and Arbitrators |
+| `review` | Quality control reviews | Resident2 and Arbitrators |
 
 ## Related Code Locations
 

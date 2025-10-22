@@ -254,7 +254,7 @@ def fetch_image_task_details(
 
         grade_map = grades_by_task.get(task.id, {})
         resident_grade = _summarize_grade(grade_map.get("resident"))
-        faculty_grade = _summarize_grade(grade_map.get("faculty"))
+        resident2_grade = _summarize_grade(grade_map.get("resident2"))
         arbitrator_grade = _summarize_grade(grade_map.get("arbitrator"))
 
         consensus_summary = _summarize_consensus(consensus_map.get(task.id))
@@ -294,7 +294,7 @@ def fetch_image_task_details(
                 "hospital_name": hospital_name,
                 "lab_unit_name": lab_unit_name,
                 "resident_grade": resident_grade,
-                "faculty_grade": faculty_grade,
+                "resident2_grade": resident2_grade,
                 "arbitrator_grade": arbitrator_grade,
                 "consensus": consensus_summary,
                 "ai_grades": ai_grades,

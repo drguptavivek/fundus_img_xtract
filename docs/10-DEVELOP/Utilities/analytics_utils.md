@@ -162,7 +162,7 @@ Builds a payload containing encounter data with associated task details.
 
 ### `GradeSummary`
 Render-friendly view of a single grade slot containing:
-- role: the grading role (resident, faculty, arbitrator)
+- role: the grading role (resident, resident2, arbitrator)
 - impression: the grade impression
 - grader: the username of the person who did the grading
 - comment: any comment associated with the grade

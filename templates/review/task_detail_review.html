@@ -43,7 +43,7 @@
           <h5 class="card-title mb-0">Disease: {{ task.disease or 'N/A' }}</h5>
           <span class="badge 
             {% if task.status == "resident_done" %}bg-warning text-dark
-            {% elif task.status == "faculty_done" %}bg-info
+            {% elif task.status == "resident2_done" %}bg-info
             {% elif task.status == "arbitration" %}bg-danger
             {% elif task.status == "final" %}bg-success
             {% else %}bg-secondary{% endif %}">
@@ -58,7 +58,7 @@
             <span class="fw-semibold">
               <span class="badge 
                 {% if grade.role_slot == "resident" %}bg-secondary
-                {% elif grade.role_slot == "faculty" %}bg-info
+                {% elif grade.role_slot == "resident2" %}bg-info
                 {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
                 {% else %}bg-light text-dark{% endif %}">
                 {{ grade.role_slot|title }}

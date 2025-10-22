@@ -4,7 +4,7 @@ This document provides an overview of the utility functions available in the dua
 
 ## Module Overview
 
-This module provides functions for determining and retrieving the next eligible dual grading tasks for different user roles (resident, faculty, arbitrator).
+This module provides functions for determining and retrieving the next eligible dual grading tasks for different user roles (resident, resident2, arbitrator).
 
 ## Functions
 
@@ -33,7 +33,7 @@ Get filtered tasks based on role slot and other criteria.
 - `db`: Database session
 - `user_id` (int): The ID of the user
 - `disease_id` (int): The disease ID
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 - `eligible_lab_unit_ids` (list): List of lab unit IDs the user is eligible for
 
 **Returns:**
@@ -45,7 +45,7 @@ Get filtered tasks based on role slot and other criteria.
 - Filters tasks by role-specific states:
   - Arbitrators: only see tasks in "arbitration" state
   - Residents: only see tasks in "pending" state
-  - Faculty: only see tasks in "resident_done" state
+  - Resident2: only see tasks in "resident_done" state
 - Excludes tasks that the user has graded in the past 2 weeks
 
 ### `get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
@@ -68,9 +68,9 @@ Get the next eligible task for a resident user.
 - Returns a random task from the filtered list if available
 - Returns a helpful message if no tasks are found after 3 attempts
 
-### `get_next_eligible_faculty_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
+### `get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
 
-Get the next eligible task for a faculty user.
+Get the next eligible task for a resident2 user.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)
@@ -82,7 +82,7 @@ Get the next eligible task for a faculty user.
 - `Optional[Union[GradingTask, str]]`: The next eligible GradingTask, None if no tasks are available, or a helpful message if no suitable tasks are found after 3 tries
 
 **Implementation Details:**
-- Gets user's eligible lab unit IDs for faculty role and specified disease
+- Gets user's eligible lab unit IDs for resident2 role and specified disease
 - If a specific lab unit is requested, checks if user is eligible for it
 - Tries up to 3 times to find a suitable task using _get_filtered_tasks
 - Returns a random task from the filtered list if available
@@ -116,7 +116,7 @@ Atomically get and lock a task for a user to prevent race conditions. This funct
 - `db`: Database session
 - `user_id` (int): The ID of the user
 - `disease_id` (int): The disease ID
-- `role_slot` (str): The role slot ('resident', 'faculty', or 'arbitrator')
+- `role_slot` (str): The role slot ('resident', 'resident2', or 'arbitrator')
 - `eligible_lab_unit_ids` (list): List of lab unit IDs the user is eligible for
 
 **Returns:**
@@ -148,9 +148,9 @@ Get the next eligible task for a resident user with atomic locking to prevent ra
 - Returns a locked task from the filtered list if available
 - Returns a helpful message if no tasks are found after 3 attempts
 
-### `get_next_eligible_faculty_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
+### `get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]`
 
-Get the next eligible task for a faculty user with atomic locking to prevent race conditions.
+Get the next eligible task for a resident2 user with atomic locking to prevent race conditions.
 
 **Parameters:**
 - `user_id` (int): The ID of the user (must be an ophthalmologist or admin)
@@ -162,7 +162,7 @@ Get the next eligible task for a faculty user with atomic locking to prevent rac
 - `Optional[Union[GradingTask, str]]`: The next eligible GradingTask, None if no tasks are available, or a helpful message if no suitable tasks are found after 3 tries
 
 **Implementation Details:**
-- Gets user's eligible lab unit IDs for faculty role and specified disease
+- Gets user's eligible lab unit IDs for resident2 role and specified disease
 - If a specific lab unit is requested, checks if user is eligible for it
 - Tries up to 3 times to find a suitable task using _atomically_get_and_lock_task
 - Returns a locked task from the filtered list if available

@@ -31,7 +31,7 @@ from dual_grading_services import ensure_task as svc_ensure_task  # if extracted
 {
   "image_uuid": "<uuid>",
   "disease_id": 1,
-  "slot": "resident" | "faculty"   // optional hint for eligibility check
+  "slot": "resident" | "resident2"   // optional hint for eligibility check
 }
 ```
 - Response 200 JSON:
@@ -57,7 +57,7 @@ def tasks_ensure():
     payload = request.get_json(silent=True) or {}
     image_uuid = (payload.get('image_uuid') or '').strip()
     disease_id = payload.get('disease_id')
-    slot = (payload.get('slot') or '').strip().lower()  # resident|faculty|''
+    slot = (payload.get('slot') or '').strip().lower()  # resident|resident2|''
     if not image_uuid or not isinstance(disease_id, int):
         return jsonify({'error': 'invalid_request'}), 400
     try:
@@ -75,13 +75,13 @@ def tasks_ensure():
 
 Helper `is_user_eligible_for_slot(user, task, slot)`
 - Resident: user has global role `resident` AND matrix row with `can_grade_resident = true` for `(task.disease_id, task.lab_unit_id)`.
-- Faculty: user has global role `ophthalmologist` AND `can_grade_faculty = true` for the tuple.
-- If `slot` unspecified: allow either resident or faculty if user passes one of them.
+- Resident2: user has global role `ophthalmologist` AND `can_grade_resident2 = true` for the tuple.
+- If `slot` unspecified: allow either resident or resident2 if user passes one of them.
 
 ## GET /api/tasks/next
 - Description: Returns the next eligible task for the caller for a given slot and optional disease.
 - Roles: resident, ophthalmologist, admin.
-- Request (query): `?slot=resident|faculty&disease_id=<id>` (disease optional)
+- Request (query): `?slot=resident|resident2&disease_id=<id>` (disease optional)
 - Response 200 JSON:
 ```json
 {
@@ -95,7 +95,7 @@ Helper `is_user_eligible_for_slot(user, task, slot)`
 - 204 No Content if nothing eligible.
 
 Selection logic (simplified):
-- Only tasks in states pending|resident_done|faculty_done|arbitration (depending on slot) and verified by construction.
+- Only tasks in states pending|resident_done|resident2_done|arbitration (depending on slot) and verified by construction.
 - Enforce eligibility matrix and global roles.
 - Exclude tasks already graded by this user for that slot.
 - Prefer tasks where the complementary slot already has a grade.
@@ -108,7 +108,7 @@ Selection logic (simplified):
 ```json
 {
   "task_id": 123,
-  "role_slot": "resident" | "faculty" | "arbitrator",
+  "role_slot": "resident" | "resident2" | "arbitrator",
   "disease_grading_id": 45,
   "comment": "optional notes"
 }
@@ -135,7 +135,7 @@ def tasks_submit():
     p = request.get_json(silent=True) or {}
     task_id = p.get('task_id'); slot = (p.get('role_slot') or '').lower()
     label_id = p.get('disease_grading_id'); comment = p.get('comment')
-    if not isinstance(task_id, int) or slot not in {'resident','faculty','arbitrator'} or not isinstance(label_id, int):
+    if not isinstance(task_id, int) or slot not in {'resident','resident2','arbitrator'} or not isinstance(label_id, int):
         return jsonify({'error': 'invalid_request'}), 400
     with Session() as db:
         task = db.get(GradingTask, task_id)
@@ -144,7 +144,7 @@ def tasks_submit():
         # Eligibility
         if not is_user_eligible_for_slot(current_user, task, slot):
             return jsonify({'error': 'forbidden'}), 403
-        # Arbitrator exclusion: cannot be prior resident/faculty grader
+        # Arbitrator exclusion: cannot be prior resident/resident2 grader
         if slot == 'arbitrator' and user_already_graded_task(db, current_user.id, task.id):
             return jsonify({'error': 'forbidden'}), 403
         # Validate label belongs to task.disease_id
@@ -161,14 +161,14 @@ def tasks_submit():
 ```
 
 State transition rules (transition_task_state):
-- If both resident and faculty grades exist:
+- If both resident and resident2 grades exist:
   - If same label → create consensus(method=match), state=final.
   - Else → state=arbitration (no consensus yet).
 - If arbitrator submits → create consensus(method=adjudication), state=final.
-- Else → state remains resident_done or faculty_done depending on which grade(s) exist.
+- Else → state remains resident_done or resident2_done depending on which grade(s) exist.
 
 Utilities (sketch)
-- `user_already_graded_task(db, user_id, task_id)` → bool for resident/faculty grade existence.
+- `user_already_graded_task(db, user_id, task_id)` → bool for resident/resident2 grade existence.
 - `label_belongs_to_disease(db, label_id, disease_id)` → ensures `DiseaseGrading.disease_id == disease_id`.
 - `upsert_grade(db, task_id, user_id, slot, label_id, comment)` → insert if none, else update the existing row for this user+slot+task.
 

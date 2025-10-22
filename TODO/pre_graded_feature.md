@@ -1,10 +1,10 @@
 # Pre-Graded Upload & Grade Ingestion
 
-This document captures the agreed plan for supporting datasets that arrive with resident, faculty, and AI grades already assigned.
+This document captures the agreed plan for supporting datasets that arrive with resident, resident2, and AI grades already assigned.
 
 ## Scope Summary
 - Extend the direct upload flow with a “pre-graded” variant that accepts image files (even if they duplicate prior MD5 hashes), sets `is_pregraded`, writes `original_filename`, auto-verifies, and immediately creates grading tasks.
-- Provide Excel ingestion for resident/faculty grades (two workbooks) and AI grades (separate workbook plus AI model selection).
+- Provide Excel ingestion for resident/resident2 grades (two workbooks) and AI grades (separate workbook plus AI model selection).
 - Record AI metadata in a new master table and persist AI grades in the `grades` table with `role_slot="ai"`.
 - Expose the new tooling via the Upload menu, driven through the existing Jobs infrastructure with robust per-row error reporting.
 
@@ -13,8 +13,8 @@ This document captures the agreed plan for supporting datasets that arrive with 
 **Progress:** 2025-02-14 — Confirmed legacy `file_hash` duplicate checks still work in code; database backfill populates `original_filename` and `content_hash`.
 **Progress:** 2025-02-14 — Dashboard shows pre-graded batches with filtering and disables image editing for them.
 **Progress:** 2025-02-14 — Verified pre-graded uploads appear anonymized, auto-verified, and create pending entries in `grading_tasks`.
-**Progress:** 2025-02-15 — Added resident/faculty grade import workflow with mapping modal and job-based ingestion.
-**Progress:** 2025-02-15 — Resident grades ingested successfully (auto-mapped); faculty import with manual grade mapping updated tasks to final/arbitration and consensus matched as expected.
+**Progress:** 2025-02-15 — Added resident/resident2 grade import workflow with mapping modal and job-based ingestion.
+**Progress:** 2025-02-15 — Resident grades ingested successfully (auto-mapped); resident2 import with manual grade mapping updated tasks to final/arbitration and consensus matched as expected.
 **Progress:** 2025-02-15 — Added AI grade import (model selection/creation, per-row logging, no state changes).
 **Progress:** 2025-02-15 — AI imports now denormalize `ai_model_name`/`ai_model_version` into `grades`; re-upload updates existing AI grades correctly.
  
@@ -24,7 +24,7 @@ This document captures the agreed plan for supporting datasets that arrive with 
   - `original_filename` (`String(255)`) to preserve dataset names.
   - Relax duplicate blocking by replacing the unique `file_hash` constraint with a non-unique `content_hash` index.
 - **`grades`**
-  - Allow `role_slot` values `resident`, `faculty`, `arbitrator`, `ai`.
+  - Allow `role_slot` values `resident`, `resident2`, `arbitrator`, `ai`.
   - Add nullable `ai_model_id` foreign key.
 - **`ai_models`** (new table)
   - Columns: `id`, `name`, `version`, `description`, `created_at`, unique `(name, version)`.
@@ -38,16 +38,16 @@ This document captures the agreed plan for supporting datasets that arrive with 
 6. Call `ensure_task(upload.uuid, disease_id)` per image; log failures in `JobItem`.
 
 ## Grade Ingestion Jobs
-### Resident & Faculty Workbooks
-- Workbook schema: `image_name`, `resident_grade`, `resident_remarks`, `faculty_grade`, `faculty_remarks`.
-- During resident ingest, read resident columns; during faculty ingest, read faculty columns.
+### Resident & Resident2 Workbooks
+- Workbook schema: `image_name`, `resident_grade`, `resident_remarks`, `resident2_grade`, `resident2_remarks`.
+- During resident ingest, read resident columns; during resident2 ingest, read resident2 columns.
 - Validate grades against `DiseaseGrading` for the selected disease (e.g., Glaucoma labels: `Glaucoma`, `Normal`, `Not Gradable`, `Other Retinal`, `Suspect`).
 - For each row:
   - Resolve pre-graded upload by `original_filename` + lab/disease.
   - Locate the associated `GradingTask`; fail row if missing.
   - Insert or update the corresponding `Grade`.
   - Run `update_task_state_based_on_grades`.
-  - After faculty ingest, trigger `create_or_update_consensus` to finalize matches.
+  - After resident2 ingest, trigger `create_or_update_consensus` to finalize matches.
 - Jobs record per-row success/error through `JobItem`, surfaced via `/jobs/<token>`.
 
 ### AI Workbook
@@ -60,7 +60,7 @@ This document captures the agreed plan for supporting datasets that arrive with 
 - Upload navbar gains “Pre-Graded” submenu linking to:
   - Pre-graded image upload.
   - Resident grade import.
-  - Faculty grade import.
+  - Resident2 grade import.
   - AI grade import.
   - Filtered job history.
 - Templates under `templates/direct_uploads/pregraded/` provide step-by-step guidance and list expected Excel headers.
@@ -74,7 +74,7 @@ This document captures the agreed plan for supporting datasets that arrive with 
 ## Testing Strategy
 - Unit tests for:
   - Pre-graded upload pipeline (duplicate acceptance, auto-task creation).
-  - Resident/faculty imports (state transitions, consensus creation, error logging).
+  - Resident/resident2 imports (state transitions, consensus creation, error logging).
   - AI grade imports (role slot handling, AI model linkage).
 - Integration tests hitting new routes with synthetic files using Flask’s test client and verifying job payloads.
 - Migration smoke tests to confirm legacy direct uploads remain unaffected.

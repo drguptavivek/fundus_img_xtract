@@ -64,7 +64,7 @@ def fetch_existing_grade_for_user(db, task_id: int, user_id: int, slot_type: str
         db: Database session (caller is responsible for closing)
         task_id: The ID of the task
         user_id: The ID of the user
-        slot_type: The slot type (resident, faculty, arbitrator)
+        slot_type: The slot type (resident, resident2, arbitrator)
         
     Returns:
         Grade object if found, None otherwise
@@ -95,7 +95,7 @@ def get_user_gradings(
         user_id (int): ID of the user
         page (int): Page number (1-indexed)
         per_page (int): Number of items per page
-        role_slot (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+        role_slot (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
         
     Returns:
         Tuple[List[Grade], int]: A tuple containing:
@@ -138,7 +138,7 @@ def get_user_gradings_with_details(
         user_id (int): ID of the user
         page (int): Page number (1-indexed)
         per_page (int): Number of items per page
-        role_slot (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+        role_slot (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
         filter_date (Optional[str]): Filter by date in YYYY-MM-DD format
         
     Returns:

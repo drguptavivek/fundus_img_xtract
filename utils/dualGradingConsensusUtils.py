@@ -4,7 +4,7 @@ Utility functions for handling consensus in the dual grading system.
 This module provides functions for:
 - Creating consensus records when grading tasks reach agreement
 - Checking consensus status for tasks
-- Updating task states based on grading activity
+- Updating task states based on grading activity 
 """
 
 from typing import Optional, Tuple
@@ -47,7 +47,7 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
         
         # Check for grades by role
         resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
-        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        resident2_grade = next((g for g in all_grades if g.role_slot == "resident2"), None)
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
         # Check if consensus already exists
@@ -77,9 +77,9 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
                 final_grade_name=final_disease_grading.impression if final_disease_grading else None,
                 final_grade_description=final_disease_grading.guidelines if final_disease_grading else None
             )
-        elif resident_grade and faculty_grade:
-            # Both resident and faculty have graded - check for match
-            if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
+        elif resident_grade and resident2_grade:
+            # Both resident and resident2 have graded - check for match
+            if resident_grade.disease_grading_id == resident2_grade.disease_grading_id:
                 # Labels match, create match consensus
                 # Fetch the disease and grade information to populate denormalized fields
                 final_disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == resident_grade.disease_grading_id).first()
@@ -112,10 +112,10 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
                     f"[User ID: {resident_grade.grader_user_id}]"
                 )
             
-            if faculty_grade:
+            if resident2_grade:
                 consensus_logger.info(
-                    f"  Faculty Grade [ID: {faculty_grade.id}] [Grade ID: {faculty_grade.disease_grading_id}] "
-                    f"[User ID: {faculty_grade.grader_user_id}]"
+                    f"  resident2 Grade [ID: {resident2_grade.id}] [Grade ID: {resident2_grade.disease_grading_id}] "
+                    f"[User ID: {resident2_grade.grader_user_id}]"
                 )
             
             if arbitrator_grade:
@@ -177,7 +177,7 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
         
         # Check for grades by role
         resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
-        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        resident2_grade = next((g for g in all_grades if g.role_slot == "resident2"), None)
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
         # Check for existing consensus
@@ -193,13 +193,13 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
                 "grader": resident_grade.grader.username if resident_grade and resident_grade.grader else None,
                 "created_at": resident_grade.created_at if resident_grade else None
             } if resident_grade else None,
-            "faculty_grade": {
-                "id": faculty_grade.id,
-                "label_id": faculty_grade.disease_grading_id,
-                "label_impression": faculty_grade.label.impression if faculty_grade and faculty_grade.label else None,
-                "grader": faculty_grade.grader.username if faculty_grade and faculty_grade.grader else None,
-                "created_at": faculty_grade.created_at if faculty_grade else None
-            } if faculty_grade else None,
+            "resident2_grade": {
+                "id": resident2_grade.id,
+                "label_id": resident2_grade.disease_grading_id,
+                "label_impression": resident2_grade.label.impression if resident2_grade and resident2_grade.label else None,
+                "grader": resident2_grade.grader.username if resident2_grade and resident2_grade.grader else None,
+                "created_at": resident2_grade.created_at if resident2_grade else None
+            } if resident2_grade else None,
             "arbitrator_grade": {
                 "id": arbitrator_grade.id,
                 "label_id": arbitrator_grade.disease_grading_id,
@@ -217,7 +217,7 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
                 "decided_at": existing_consensus.decided_at
             } if existing_consensus else None,
             "can_create_consensus": bool(
-                (resident_grade and faculty_grade and resident_grade.disease_grading_id == faculty_grade.disease_grading_id) or
+                (resident_grade and resident2_grade and resident_grade.disease_grading_id == resident2_grade.disease_grading_id) or
                 arbitrator_grade
             )
         }
@@ -255,28 +255,28 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
         
         # Check for grades by role
         resident_grade = next((g for g in all_grades if g.role_slot == "resident"), None)
-        faculty_grade = next((g for g in all_grades if g.role_slot == "faculty"), None)
+        resident2_grade = next((g for g in all_grades if g.role_slot == "resident2"), None)
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
         # Log current state and grades for debugging
-        consensus_logger.debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, faculty_grade={faculty_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
+        consensus_logger.debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, resident2_grade={resident2_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
         
         # Determine new state
         if arbitrator_grade:
             # Arbitrator has graded - finalize task
             new_state = "final"
-        elif resident_grade and faculty_grade:
+        elif resident_grade and resident2_grade:
             # Both grades submitted, check for match
-            if resident_grade.disease_grading_id == faculty_grade.disease_grading_id:
+            if resident_grade.disease_grading_id == resident2_grade.disease_grading_id:
                 # Match - finalize task
                 new_state = "final"
             else:
                 # No match - go to arbitration
                 new_state = "arbitration"
-        elif resident_grade and not faculty_grade:
+        elif resident_grade and not resident2_grade:
             new_state = "resident_done"
-        elif faculty_grade and not resident_grade:
-            new_state = "faculty_done"
+        elif resident2_grade and not resident_grade:
+            new_state = "resident2_done"
         else:
             new_state = "pending"
         

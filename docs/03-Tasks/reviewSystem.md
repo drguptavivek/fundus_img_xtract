@@ -2,14 +2,14 @@
 
 ## Overview
 
-The Review System provides a quality control mechanism for the dual grading workflow. It allows authorized users (Faculty and Arbitrators) to add review grades to tasks that have already been graded, providing an additional layer of quality assurance and enabling retrospective analysis of grading decisions.
+The Review System provides a quality control mechanism for the dual grading workflow. It allows authorized users (Resident2 and Arbitrators) to add review grades to tasks that have already been graded, providing an additional layer of quality assurance and enabling retrospective analysis of grading decisions.
 
 ## Purpose
 
 The Review System serves several important purposes:
 
 1. **Quality Control**: Allows senior graders to review and validate grading decisions
-2. **Training Support**: Enables feedback on resident and faculty grading performance
+2. **Training Support**: Enables feedback on resident and resident2 grading performance
 3. **Audit Trail**: Creates a permanent record of review assessments
 4. **Discrepancy Resolution**: Provides a mechanism to document disagreements with original grades
 5. **Dataset Curation**: Helps identify high-quality grades for training AI models
@@ -25,14 +25,14 @@ The grading system supports multiple role slots, each with a specific purpose:
    - First step in the dual grading workflow
    - Can be performed by users with `can_grade_resident` permission
 
-2. **`faculty`**
-   - Secondary grading performed by faculty ophthalmologists
+2. **`resident2`**
+   - Secondary grading performed by resident2 ophthalmologists
    - Second step in the dual grading workflow
-   - Can be performed by users with `can_grade_faculty` permission
+   - Can be performed by users with `can_grade_resident2` permission
 
 3. **`arbitrator`**
-   - Final decision when resident and faculty grades disagree
-   - Only created when there's a discrepancy between resident and faculty grades
+   - Final decision when resident and resident2 grades disagree
+   - Only created when there's a discrepancy between resident and resident2 grades
    - Can be performed by users with `can_arbitrate` permission
 
 ### Special Slots
@@ -44,7 +44,7 @@ The grading system supports multiple role slots, each with a specific purpose:
    - Used for AI-human comparison studies
 
 5. **`review`**
-   - Review grades added by faculty or arbitrators for quality control
+   - Review grades added by resident2 or arbitrators for quality control
    - Can be added to any task regardless of its current state
    - Provides retrospective assessment of grading quality
    - Used for training, audit, and quality improvement
@@ -64,7 +64,7 @@ Located at `/review/discrepancy-review`, this interface provides:
   - Displays model names with versions (e.g., "WadwaniAI vsep_2026")
   - Allows comparison between different AI models
 
-- **Grade Filtering**: Filter by resident, faculty, arbitrator, and final grades
+- **Grade Filtering**: Filter by resident, resident2, arbitrator, and final grades
   - Only visible when a disease is selected
   - Helps identify specific grading patterns
 
@@ -73,7 +73,7 @@ Located at `/review/discrepancy-review`, this interface provides:
 Located at `/review/reviewTaskDetails/<task_id>`, this interface provides:
 
 - **Review Grade Form**: Allows authorized users to add review grades
-  - Only visible to users with Faculty or Arbitrator permissions
+  - Only visible to users with Resident2 or Arbitrator permissions
   - Shows all available disease grading options
   - Includes optional comment field for detailed feedback
 
@@ -82,7 +82,7 @@ Located at `/review/reviewTaskDetails/<task_id>`, this interface provides:
   - Ensures only qualified users can add review grades
 
 - **Grade History**: Displays all grades associated with the task
-  - Shows resident, faculty, arbitrator, AI, and existing review grades
+  - Shows resident, resident2, arbitrator, AI, and existing review grades
   - Includes timestamps and grader information
 
 ## Implementation Details
@@ -93,14 +93,14 @@ The `Grade` model supports all role slots through the `role_slot` field:
 
 ```python
 role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
-# Valid values: 'resident', 'faculty', 'arbitrator', 'ai', 'review'
+# Valid values: 'resident', 'resident2', 'arbitrator', 'ai', 'review'
 ```
 
 ### Permission Model
 
 Review grades use the same permission model as the dual grading system:
 
-- **Faculty Review**: Users with `can_grade_faculty` permission can add review grades
+- **Resident2 Review**: Users with `can_grade_resident2` permission can add review grades
 - **Arbitrator Review**: Users with `can_arbitrate` permission can add review grades
 - **Disease-Specific**: Permissions are specific to disease-lab_unit combinations
 
@@ -131,7 +131,7 @@ Review grades use the same permission model as the dual grading system:
    - Focus on cases with discrepancies or unusual patterns
 
 2. **Review Task**: Open task detail view to examine all grades
-   - Compare resident, faculty, and AI grades
+   - Compare resident, resident2, and AI grades
    - Review image and clinical context
 
 3. **Add Review Grade**: Submit review assessment with comments
@@ -141,7 +141,7 @@ Review grades use the same permission model as the dual grading system:
 
 ### Training Support
 
-1. **Resident Training**: Faculty can review resident grades
+1. **Resident Training**: Resident2 can review resident grades
    - Provide feedback on grading accuracy
    - Document areas for improvement
 

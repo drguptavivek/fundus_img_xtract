@@ -50,9 +50,9 @@ def review_task_details(task_id: int):
             from flask import abort
             abort(404, description="Task not found")
         
-        # Check if user can review this task (has Faculty or Arbitrator permissions)
+        # Check if user can review this task (has Resident2 or Arbitrator permissions)
         can_review = (
-            get_user_eligibility_for_task(db, current_user.id, task_id, 'faculty') or
+            get_user_eligibility_for_task(db, current_user.id, task_id, 'resident2') or
             get_user_eligibility_for_task(db, current_user.id, task_id, 'arbitrator')
         )
         

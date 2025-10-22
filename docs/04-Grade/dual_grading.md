@@ -4,8 +4,8 @@
 
 The dual grading system implements a three-tier grading process for retinal fundus images:
 1. **Resident** performs initial grading
-2. **Faculty** (ophthalmologist) provides independent assessment
-3. **Arbitrator** (ophthalmologist) resolves discrepancies when resident and faculty grades differ
+2. **Resident2** (ophthalmologist) provides independent assessment
+3. **Arbitrator** (ophthalmologist) resolves discrepancies when resident and resident2 grades differ
 
 This system ensures quality control through multiple independent assessments and provides a consensus mechanism for final decisions.
 
@@ -21,8 +21,8 @@ This system ensures quality control through multiple independent assessments and
 - They provide their assessment of the image
 - After submission, task state changes to `resident_done`
 
-### 3. Faculty Grading
-- Faculty members access tasks in `resident_done` state
+### 3. Resident2 Grading
+- Resident2 members access tasks in `resident_done` state
 - They provide independent assessment without seeing resident's grade
 - After submission:
   - If grades match: task state changes to `final` and consensus is created
@@ -30,7 +30,7 @@ This system ensures quality control through multiple independent assessments and
 
 ### 4. Arbitration (when needed)
 - Arbitrators access tasks in `arbitration` state
-- They can see both resident and faculty grades to make informed decision
+- They can see both resident and resident2 grades to make informed decision
 - Their decision becomes the final consensus
 - Task state changes to `final`
 
@@ -49,7 +49,7 @@ This system ensures quality control through multiple independent assessments and
 **Display grading task** - Shows the grading interface for a specific task
 - **Parameters**:
   - `task_id`: The ID of the task to display
-  - `slot_type`: The role slot (`resident`, `faculty`, or `arbitrator`)
+  - `slot_type`: The role slot (`resident`, `resident2`, or `arbitrator`)
 - **Authentication**: Requires `resident`, `ophthalmologist`, or `admin` role
 - **Access Control**: Users can only access tasks appropriate for their role and task state
 
@@ -57,7 +57,7 @@ This system ensures quality control through multiple independent assessments and
 **Submit grade** - Saves a grade for a task
 - **Parameters**:
   - `task_id`: The ID of the task
-  - `slot`: The role slot (`resident`, `faculty`, or `arbitrator`)
+  - `slot`: The role slot (`resident`, `resident2`, or `arbitrator`)
   - `label_id`: The ID of the disease grading label
   - `comment`: Optional comment
   - `action`: Optional action (`save_next` or `save_close`)
@@ -69,7 +69,7 @@ This system ensures quality control through multiple independent assessments and
   - `grade_id`: The ID of the grade to revise
 - **Authentication**: Requires `resident`, `ophthalmologist`, or `admin` role
 - **Restrictions**:
-  - Residents and faculty can revise until task is finalized
+  - Residents and resident2 can revise until task is finalized
   - Arbitrators can only revise within 6 hours of submission
 
 ## Task States
@@ -77,8 +77,8 @@ This system ensures quality control through multiple independent assessments and
 | State | Description | Who Can Access |
 |-------|-------------|----------------|
 | `pending` | New task waiting for resident grading | Residents |
-| `resident_done` | Resident has graded, waiting for faculty | Faculty |
-| `faculty_done` | Faculty has graded, waiting for resident (edge case) | Residents |
+| `resident_done` | Resident has graded, waiting for resident2 | Resident2 |
+| `resident2_done` | Resident2 has graded, waiting for resident (edge case) | Residents |
 | `arbitration` | Grades differ, needs arbitrator decision | Arbitrators |
 | `final` | Task completed with consensus | No one (except arbitrator revision) |
 
@@ -86,7 +86,7 @@ This system ensures quality control through multiple independent assessments and
 
 ### Role-Based Permissions
 - **Resident**: Must have 'resident' role, can only grade as 'resident'
-- **Faculty**: Must have 'ophthalmologist' role, can grade as 'faculty'
+- **Resident2**: Must have 'ophthalmologist' role, can grade as 'resident2'
 - **Arbitrator**: Must have 'ophthalmologist' role with arbitration permissions, can grade as 'arbitrator'
 
 ### Task-Specific Eligibility
@@ -104,7 +104,7 @@ The system checks:
 ## Revision Logic
 
 ### Time-Based Restrictions
-- **Residents and Faculty**: Can revise grades until task is finalized
+- **Residents and Resident2**: Can revise grades until task is finalized
 - **Arbitrators**: Can only revise within 6 hours of submission (configurable via `ARBITRATOR_REVISION_HOURS`)
 - **General exclusion**: Users cannot be assigned tasks they've graded in the last 2 weeks
 
@@ -121,10 +121,10 @@ The system checks:
 
 ### Revision Impact on Task State
 
-#### Resident/Faculty Revisions
+#### Resident/Resident2 Revisions
 - **Before Finalization**: Task remains in current state, consensus is updated if exists
 - **If consensus exists**: Previous consensus is deleted, new consensus may be created
-- **If arbitration was triggered**: Task may revert to `resident_done` or `faculty_done` based on new grade match
+- **If arbitration was triggered**: Task may revert to `resident_done` or `resident2_done` based on new grade match
 
 #### Arbitrator Revisions
 - **Within 6 hours**: Consensus is updated with new decision
@@ -133,19 +133,19 @@ The system checks:
 
 ### Revision Workflow Examples
 
-#### Example 1: Resident Revision Before Faculty Grading
+#### Example 1: Resident Revision Before Resident2 Grading
 ```
 Initial: Task in 'pending' state
 1. Resident submits grade A → Task state: 'resident_done'
 2. Resident revises to grade B → Task state: 'resident_done' (consensus unchanged)
-3. Faculty submits grade B → Task state: 'final' (match consensus created)
+3. Resident2 submits grade B → Task state: 'final' (match consensus created)
 ```
 
-#### Example 2: Faculty Revision Triggering Arbitration
+#### Example 2: Resident2 Revision Triggering Arbitration
 ```
 Initial: Task in 'resident_done' with resident grade A
-1. Faculty submits grade B → Task state: 'arbitration'
-2. Faculty revises to grade A → Task state: 'final' (match consensus created)
+1. Resident2 submits grade B → Task state: 'arbitration'
+2. Resident2 revises to grade A → Task state: 'final' (match consensus created)
 ```
 
 #### Example 3: Arbitrator Revision
@@ -174,14 +174,14 @@ Initial: Task in 'final' with arbitrator decision C
 
 | Role | Task State | Time Constraint | Additional Restrictions | Reason |
 |------|------------|-----------------|------------------------|--------|
-| **Resident** | `pending` | Until faculty grades | Must be original grader | Prevents changes after faculty review begins |
-| **Resident** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before faculty completion |
+| **Resident** | `pending` | Until resident2 grades | Must be original grader | Prevents changes after resident2 review begins |
+| **Resident** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before resident2 completion |
 | **Resident** | `arbitration` | Not allowed | - | Task under arbitrator review |
 | **Resident** | `final` | Not allowed | - | Task finalized, consensus established |
-| **Faculty** | `pending` | Not allowed | - | Faculty cannot grade before resident |
-| **Faculty** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before arbitration |
-| **Faculty** | `arbitration` | Not allowed | - | Task under arbitrator review |
-| **Faculty** | `final` | Not allowed | - | Task finalized, consensus established |
+| **Resident2** | `pending` | Not allowed | - | Resident2 cannot grade before resident |
+| **Resident2** | `resident_done` | Until arbitration or final | Must be original grader | Allows revision before arbitration |
+| **Resident2** | `arbitration` | Not allowed | - | Task under arbitrator review |
+| **Resident2** | `final` | Not allowed | - | Task finalized, consensus established |
 | **Arbitrator** | `pending` | Not allowed | - | No arbitrator decision made yet |
 | **Arbitrator** | `resident_done` | Not allowed | - | No arbitrator decision made yet |
 | **Arbitrator** | `arbitration` | Until finalization | Must be original grader | Can revise during arbitration process |
@@ -221,7 +221,7 @@ Initial: Task in 'final' with arbitrator decision C
 ## Consensus Creation
 
 ### Match Consensus
-- Created automatically when resident and faculty grades match
+- Created automatically when resident and resident2 grades match
 - Method: "match"
 - No arbitrator involvement needed
 
@@ -240,7 +240,7 @@ Represents a grading task for an image and disease combination.
   - `direct_image_upload_id`: Foreign key to DirectImageUpload (nullable)
   - `disease_id`: Foreign key to Disease
   - `lab_unit_id`: Foreign key to LabUnit
-  - `state`: Task state (`pending`, `resident_done`, `faculty_done`, `arbitration`, `final`)
+  - `state`: Task state (`pending`, `resident_done`, `resident2_done`, `arbitration`, `final`)
   - `created_at`, `updated_at`: Timestamps
 - **Relationships**:
   - `disease`: The disease for this task
@@ -256,7 +256,7 @@ Represents a grade given by a user for a task.
   - `id`: Primary key
   - `task_id`: Foreign key to GradingTask
   - `grader_user_id`: Foreign key to User
-  - `role_slot`: The role slot (`resident`, `faculty`, or `arbitrator`)
+  - `role_slot`: The role slot (`resident`, `resident2`, or `arbitrator`)
   - `disease_grading_id`: Foreign key to DiseaseGrading
   - `comment`: Optional comment
   - `time_taken`: Time taken to grade (in seconds)

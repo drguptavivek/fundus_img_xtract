@@ -2,7 +2,7 @@
 
 ## Overview
 
-The dual grading system is a core component of the fundus image management application that implements a multi-tiered medical image grading workflow. It supports resident, faculty, and arbitrator roles with consensus mechanisms to ensure accurate and reliable grading of medical images.
+The dual grading system is a core component of the fundus image management application that implements a multi-tiered medical image grading workflow. It supports resident, resident2, and arbitrator roles with consensus mechanisms to ensure accurate and reliable grading of medical images.
 
 ## System Architecture
 
@@ -23,18 +23,18 @@ The dual grading system consists of several interconnected utility modules that 
 The system follows a structured workflow for assigning grading tasks:
 
 1. **Resident Grading**: Tasks are initially assigned to residents for initial assessment
-2. **Faculty Review**: After resident completion, tasks are assigned to faculty for review
-3. **Consensus Check**: If resident and faculty grades match, consensus is reached automatically
+2. **Resident2 Review**: After resident completion, tasks are assigned to resident2 for review
+3. **Consensus Check**: If resident and resident2 grades match, consensus is reached automatically
 4. **Arbitration**: If grades differ, tasks are sent to arbitrators for final decision
 
 ### 2. Role-Based Access Control
 
 The system implements fine-grained access control based on:
 
-- **User Roles**: resident, ophthalmologist (faculty), admin
+- **User Roles**: resident, ophthalmologist (resident2), admin
 - **Lab Unit Assignments**: Users can only grade tasks within their assigned lab units
 - **Disease Permissions**: Users are specifically authorized for certain diseases
-- **Role Slots**: resident, faculty, arbitrator permissions are tracked separately
+- **Role Slots**: resident, resident2, arbitrator permissions are tracked separately
 
 ## Core Utilities
 
@@ -50,7 +50,7 @@ Creates or updates consensus for a task based on submitted grades.
 
 **Logic:**
 - If an arbitrator has graded, uses adjudication method
-- If resident and faculty grades match, uses match method
+- If resident and resident2 grades match, uses match method
 - Populates denormalized fields for efficient querying
 
 **Parameters:**
@@ -71,8 +71,8 @@ Retrieves detailed consensus status for a task including all grades and consensu
 
 Updates task state based on current grades:
 - `pending` → `resident_done` (after resident grading)
-- `resident_done` → `arbitration` (if faculty disagrees)
-- `resident_done` → `final` (if faculty agrees)
+- `resident_done` → `arbitration` (if resident2 disagrees)
+- `resident_done` → `final` (if resident2 agrees)
 - `arbitration` → `final` (after arbitrator grading)
 
 ### User Eligibility (`dualGradingEligibility.py`)
@@ -95,7 +95,7 @@ Checks if a user is eligible for a specific role slot for a task.
 **Validation Steps:**
 1. Verify user has required base role (resident/ophthalmologist)
 2. Check lab unit and disease permissions
-3. Validate role-specific permissions (can_grade_resident, can_grade_faculty, can_arbitrate)
+3. Validate role-specific permissions (can_grade_resident, can_grade_resident2, can_arbitrate)
 
 ##### `check_arbitration_eligibility(db, user_id: int, disease_id: int, lab_unit_id: int)`
 
@@ -139,7 +139,7 @@ This module implements intelligent task assignment with race condition preventio
 
 Atomic task assignment functions for each role:
 - `get_next_eligible_resident_task_atomic`
-- `get_next_eligible_faculty_task_atomic`
+- `get_next_eligible_resident2_task_atomic`
 - `get_next_eligible_arbitrator_task_atomic`
 
 **Features:**
@@ -166,7 +166,7 @@ This module provides key performance indicators for monitoring grading workflow 
 Calculates pending task counts by disease for each role slot.
 
 **Returns:**
-- Dictionary structure: `{disease_name: {resident_pending: X, faculty_pending: Y, arbitration_pending: Z}}`
+- Dictionary structure: `{disease_name: {resident_pending: X, resident2_pending: Y, arbitration_pending: Z}}`
 
 ##### `get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[str, int]]`
 
@@ -185,7 +185,7 @@ This module handles grade revision functionality with time-based restrictions.
 ##### `is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_type: str, grade: Grade = None) -> dict`
 
 Determines if a user can revise their grade based on:
-- Role type (resident/faculty can revise until finalization)
+- Role type (resident/resident2 can revise until finalization)
 - Time restrictions (arbitrators only within 6 hours)
 - Task state considerations
 

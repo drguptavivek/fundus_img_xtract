@@ -81,8 +81,8 @@ The system implements role-based access control with the following core roles:
 | Admin | System administrator with full system access |
 | Data Manager | Manages data uploads and exports |
 | Resident Grader | Junior medical staff performing initial grading |
-| Faculty Grader | Senior medical staff performing secondary grading |
-| Arbitrator | Senior ophthalmologist resolving grading disputes |
+| Resident 2 Grader | Senior medical staff performing secondary grading |
+| Arbitrator | Resident2 and Senior ophthalmologist resolving grading disputes |
 | Viewer | Read-only access to reports and analytics |
 
 #### User-Lab Unit Relationships
@@ -145,7 +145,7 @@ When users upload images directly, they must select from the master data:
 Grading tasks are assigned based on:
 - Lab unit affiliation of the image
 - User permissions for specific diseases and lab units
-- Role-based grading workflow (resident → faculty → arbitrator)
+- Role-based grading workflow (resident → resident2 → arbitrator)
 
 ### Access Control
 - Users can only access images from their assigned lab units

@@ -345,7 +345,7 @@ def get_task_stats(db_session, lab_unit_ids: Optional[List[int]] = None) -> Dict
     
     # Count tasks by state (status in GradingTask)
     pending_count = query.filter(Task.state == 'pending').count()
-    in_progress_count = query.filter(Task.state.in_(['resident_done', 'faculty_done'])).count()
+    in_progress_count = query.filter(Task.state.in_(['resident_done', 'resident2_done'])).count()
     completed_count = query.filter(Task.state == 'final').count()
     # For GradingTask, we can consider 'arbitration' state as overdue if needed
     overdue_count = 0  # GradingTask doesn't have a due_date field, so we can't calculate

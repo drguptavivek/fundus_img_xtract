@@ -61,7 +61,7 @@ def edit_eligibility(user_id):
                     disease_id = int(item.get('disease_id'))
                     lab_unit_id = int(item.get('lab_unit_id'))
                     can_grade_resident = bool(item.get('can_grade_resident', False))
-                    can_grade_faculty = bool(item.get('can_grade_faculty', False))
+                    can_grade_resident2 = bool(item.get('can_grade_resident2', False))
                     can_arbitrate = bool(item.get('can_arbitrate', False))
                     active = bool(item.get('active', False))
                     
@@ -69,15 +69,15 @@ def edit_eligibility(user_id):
                     key = (disease_id, lab_unit_id)
                     submitted_keys.add(key)
                     
-                    # Validate that resident and faculty are not both selected
-                    if can_grade_resident and can_grade_faculty:
+                    # Validate that resident and resident2 are not both selected
+                    if can_grade_resident and can_grade_resident2:
                         # Get the disease and lab unit names for a more user-friendly error message
                         disease = db.get(Disease, disease_id)
                         lab_unit = db.get(LabUnit, lab_unit_id)
                         disease_name = disease.name if disease else f"Unknown Disease (ID: {disease_id})"
                         lab_unit_name = lab_unit.name if lab_unit else f"Unknown Lab Unit (ID: {lab_unit_id})"
                         
-                        flash(f"Error: User cannot be both Resident and Faculty for the same disease and lab unit ({disease_name}, {lab_unit_name}).", "danger")
+                        flash(f"Error: User cannot be both Resident and Resident2 for the same disease and lab unit ({disease_name}, {lab_unit_name}).", "danger")
                         return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                     
                     # Validate FKs
@@ -90,19 +90,19 @@ def edit_eligibility(user_id):
                         # Update existing record
                         row = existing_map[key]
                         row.can_grade_resident = can_grade_resident
-                        row.can_grade_faculty = can_grade_faculty
+                        row.can_grade_resident2 = can_grade_resident2
                         row.can_arbitrate = can_arbitrate
                         row.active = active
                         updated.append(row.id)
                     else:
                         # Create new record only if at least one permission is set
-                        if can_grade_resident or can_grade_faculty or can_arbitrate:
+                        if can_grade_resident or can_grade_resident2 or can_arbitrate:
                             row = UserDiseaseUnitRole(
                                 user_id=user_id,
                                 disease_id=disease_id,
                                 lab_unit_id=lab_unit_id,
                                 can_grade_resident=can_grade_resident,
-                                can_grade_faculty=can_grade_faculty,
+                                can_grade_resident2=can_grade_resident2,
                                 can_arbitrate=can_arbitrate,
                                 active=active,
                             )

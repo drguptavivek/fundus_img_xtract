@@ -66,14 +66,14 @@ class UserDiseaseUnitRole(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id', ondelete='CASCADE'), nullable=False, index=True)
     lab_unit_id: Mapped[int] = mapped_column(ForeignKey('lab_units.id', ondelete='CASCADE'), nullable=False, index=True)
     can_grade_resident: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    can_grade_faculty: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    can_grade_resident2: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     can_arbitrate: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 ```
 
 ### Permission Types
 - **can_grade_resident**: User can perform resident-level grading
-- **can_grade_faculty**: User can perform faculty-level grading
+- **can_grade_resident2**: User can perform resident2-level grading
 - **can_arbitrate**: User can perform arbitration between conflicting grades
 
 ### Access Control Pattern
@@ -91,7 +91,7 @@ available_tasks = session.query(GradingTask).join(UserDiseaseUnitRole).filter(
 ### Key Features
 - More granular control than User-LabUnit scoping
 - Disease-specific permissions within lab units
-- Role-based grading permissions (resident, faculty, arbitrator)
+- Role-based grading permissions (resident, resident2, arbitrator)
 - Supports the dual grading workflow
 
 ## Comparison of Scoping Mechanisms

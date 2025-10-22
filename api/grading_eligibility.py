@@ -27,7 +27,7 @@ def get_user_grading_eligibility(user_id: int):
                 'disease_id': r.disease_id,
                 'lab_unit_id': r.lab_unit_id,
                 'can_grade_resident': r.can_grade_resident,
-                'can_grade_faculty': r.can_grade_faculty,
+                'can_grade_resident2': r.can_grade_resident2,
                 'can_arbitrate': r.can_arbitrate,
                 'active': r.active,
             })
@@ -57,7 +57,7 @@ def get_user_grading_eligibility_details(user_id: int):
         # Group by lab unit
         grouped = {}
         for r in rows:
-            if r.can_grade_resident or r.can_grade_faculty or r.can_arbitrate:
+            if r.can_grade_resident or r.can_grade_resident2 or r.can_arbitrate:
                 lab_unit_id = r.lab_unit_id
                 disease_id = r.disease_id
                 
@@ -83,8 +83,8 @@ def get_user_grading_eligibility_details(user_id: int):
                 # Add roles
                 if r.can_grade_resident:
                     grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Resident')
-                if r.can_grade_faculty:
-                    grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Faculty')
+                if r.can_grade_resident2:
+                    grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Resident 2')
                 if r.can_arbitrate:
                     grouped[lab_unit_id]['diseases'][disease_id]['roles'].append('Arbitrator')
         

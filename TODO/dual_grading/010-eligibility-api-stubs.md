@@ -41,7 +41,7 @@ def get_user_grading_eligibility(user_id: int):
                 'disease_id': r.disease_id,
                 'lab_unit_id': r.lab_unit_id,
                 'can_grade_resident': r.can_grade_resident,
-                'can_grade_faculty': r.can_grade_faculty,
+                'can_grade_resident2': r.can_grade_resident2,
                 'can_arbitrate': r.can_arbitrate,
                 'active': r.active,
             })
@@ -65,7 +65,7 @@ def set_user_grading_eligibility(user_id: int):
             disease_id = int(it.get('disease_id'))
             lab_unit_id = int(it.get('lab_unit_id'))
             cgr = bool(it.get('can_grade_resident', False))
-            cgf = bool(it.get('can_grade_faculty', False))
+            cgf = bool(it.get('can_grade_resident2', False))
             car = bool(it.get('can_arbitrate', False))
             active = bool(it.get('active', True))
             if not (cgr or cgf or car):
@@ -82,7 +82,7 @@ def set_user_grading_eligibility(user_id: int):
             ).scalar_one_or_none()
             if row:
                 row.can_grade_resident = cgr
-                row.can_grade_faculty = cgf
+                row.can_grade_resident2 = cgf
                 row.can_arbitrate = car
                 row.active = active
             else:
@@ -91,7 +91,7 @@ def set_user_grading_eligibility(user_id: int):
                     disease_id=disease_id,
                     lab_unit_id=lab_unit_id,
                     can_grade_resident=cgr,
-                    can_grade_faculty=cgf,
+                    can_grade_resident2=cgf,
                     can_arbitrate=car,
                     active=active,
                 )
@@ -114,12 +114,12 @@ def get_lab_unit_disease_eligibility(lab_unit_id: int, disease_id: int):
                    UserDiseaseUnitRole.disease_id == disease_id,
                    UserDiseaseUnitRole.active == True)
         ).scalars().all()
-        res = {'resident': [], 'faculty': [], 'arbitrator': []}
+        res = {'resident': [], 'resident2': [], 'arbitrator': []}
         for r in rows:
             if r.can_grade_resident:
                 res['resident'].append(r.user_id)
-            if r.can_grade_faculty:
-                res['faculty'].append(r.user_id)
+            if r.can_grade_resident2:
+                res['resident2'].append(r.user_id)
             if r.can_arbitrate:
                 res['arbitrator'].append(r.user_id)
         return jsonify(res)
@@ -148,8 +148,8 @@ Validation and Safety
 Queue Visibility
 - Purpose: Scope grading queues to tasks the user can work on based on `(disease_id, lab_unit_id)` eligibility.
 - Rule: `lab_unit_id` on tasks is used strictly for visibility/assignment; it does not redefine image identity.
-- Resident queue filter (sketch): tasks in states `pending|faculty_done|arbitration` where a `user_disease_unit_role` row exists with `active = true` and `can_grade_resident = true` for the task’s `(disease_id, lab_unit_id)`. Exclude tasks already graded by the user for resident.
-- Faculty queue filter: analogous with `can_grade_faculty = true` and eligible states.
+- Resident queue filter (sketch): tasks in states `pending|resident2_done|arbitration` where a `user_disease_unit_role` row exists with `active = true` and `can_grade_resident = true` for the task’s `(disease_id, lab_unit_id)`. Exclude tasks already graded by the user for resident.
+- Resident2 queue filter: analogous with `can_grade_resident2 = true` and eligible states.
 - Optional narrowing: allow query params `disease_id` and/or `lab_unit_id` to further filter queues to the user’s eligible sets.
 
 Next Steps

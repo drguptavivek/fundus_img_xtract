@@ -112,7 +112,7 @@ Always include key identifiers in log messages:
 - `grade_id`
 - `disease_id`
 - IP addresses
-- Slot type (resident, faculty, arbitrator)
+- Slot type (resident, resident2, arbitrator)
 
 ## 8. Handle Revision Logging
 

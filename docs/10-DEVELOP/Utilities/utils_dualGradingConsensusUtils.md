@@ -24,10 +24,10 @@ Create or update consensus for a task based on grades.
 
 **Implementation Details:**
 - Fetches the task with all related grades and graders
-- Checks for grades by role (resident, faculty, arbitrator)
+- Checks for grades by role (resident, resident2, arbitrator)
 - If an arbitrator has graded, creates consensus using the "adjudication" method
-- If resident and faculty grades match, creates consensus using the "match" method
-- If resident and faculty grades don't match, no consensus is created yet (needs arbitration)
+- If resident and resident2 grades match, creates consensus using the "match" method
+- If resident and resident2 grades don't match, no consensus is created yet (needs arbitration)
 - Logs consensus creation with task details
 - Properly manages database sessions (creates one if not provided, commits if managing its own session)
 
@@ -46,7 +46,7 @@ Get the consensus status for a task.
 - `task_id` (int): The ID of the task
 - `task_state` (str): The current state of the task
 - `resident_grade` (dict): Details about the resident's grade (if it exists)
-- `faculty_grade` (dict): Details about the faculty's grade (if it exists)
+- `resident2_grade` (dict): Details about the resident2's grade (if it exists)
 - `arbitrator_grade` (dict): Details about the arbitrator's grade (if it exists)
 - `consensus` (dict): Details about the consensus (if it exists)
 - `can_create_consensus` (bool): Whether consensus can be created based on current grades
@@ -65,10 +65,10 @@ Update the task state based on the current grades.
 **Implementation Details:**
 - Determines the new state based on the grades that have been submitted:
   - If arbitrator has graded: state becomes "final"
-  - If both resident and faculty have graded and they match: state becomes "final"
-  - If both resident and faculty have graded but they don't match: state becomes "arbitration"
+  - If both resident and resident2 have graded and they match: state becomes "final"
+  - If both resident and resident2 have graded but they don't match: state becomes "arbitration"
   - If only resident has graded: state becomes "resident_done"
-  - If only faculty has graded: state becomes "faculty_done"
+  - If only resident2 has graded: state becomes "resident2_done"
   - If no grades have been submitted: state remains "pending"
 - Only updates the task if the state actually changed
 - Logs state changes for debugging and monitoring
@@ -97,7 +97,7 @@ Get the consensus method for a task (match or adjudication).
 - `Optional[str]`: Method string ('match' or 'adjudication') or None if no consensus
 
 **Implementation Details:**
-- Returns 'match' when consensus was reached because resident and faculty grades matched
+- Returns 'match' when consensus was reached because resident and resident2 grades matched
 - Returns 'adjudication' when consensus was established by an arbitrator's decision
 - Returns None if no consensus has been reached yet
 

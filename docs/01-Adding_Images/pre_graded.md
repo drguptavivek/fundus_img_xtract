@@ -30,7 +30,7 @@ The pre-graded image upload feature allows users to upload fundus images with pr
   - Accepts Excel files containing image names and grades
   - Maps grade text values to system grade IDs
   - Imports grades into existing grading tasks
-  - Supports resident, faculty, and AI grades
+  - Supports resident, resident2, and AI grades
 
 ### 2. Data Models
 
@@ -45,7 +45,7 @@ The pre-graded image upload feature allows users to upload fundus images with pr
 
 #### GradingTask and Grade
 - Grading tasks are created for each pre-graded image
-- Grades can be imported with resident, faculty, or AI roles
+- Grades can be imported with resident, resident2, or AI roles
 - Grade records include comment, disease name, and grade description
 
 ### 3. Configuration Parameters
@@ -78,7 +78,7 @@ DIRECT_UPLOAD_ALLOWED_MIMETYPES="image/jpeg,image/png"
 
 #### Grade Import Process
 1. **File Validation**: Validate Excel file structure
-2. **Role Detection**: Identify if grades are for resident, faculty, or AI
+2. **Role Detection**: Identify if grades are for resident, resident2, or AI
 3. **Grade Mapping**: Map grade text values to system grade IDs
 4. **Row Extraction**: Extract image names and grade values from spreadsheet
 5. **Auto-Mapping**: Attempt to automatically map grade values to system grades. If not, ask User for mapoing
@@ -87,7 +87,7 @@ DIRECT_UPLOAD_ALLOWED_MIMETYPES="image/jpeg,image/png"
    - Ensure grading task exists
    - Apply grade to the task
    - Update task state based on grades
-   - Create consensus if faculty grade added
+   - Create consensus if resident2 grade added
 7. **Logging**: Detailed logging for each step of processing
 
 ### 5. Key Functions
@@ -168,7 +168,7 @@ Database Storage -> Verification -> Grade Application -> Task State Updates
   - DirectImageVerify records
   - Grade records
   - GradingTask updates
-  - Consensus creation (when faculty grades added)
+  - Consensus creation (when resident2 grades added)
 
 ### 11. Performance Considerations
 

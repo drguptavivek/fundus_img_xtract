@@ -98,7 +98,7 @@ Great! Thanks for confirming the upload flow, dashboard visibility, and verifica
 I also confirm that these appear in grading_tasks with pending tasks
 
 
-Perfect—knowing the tasks are created in grading_tasks and land in pending state means the pipeline from upload through task provisioning is solid. Whenever you’re ready, we can continue with the resident/faculty Excel ingestion work.
+Perfect—knowing the tasks are created in grading_tasks and land in pending state means the pipeline from upload through task provisioning is solid. Whenever you’re ready, we can continue with the resident/resident2 Excel ingestion work.
 
 
 
@@ -117,7 +117,7 @@ Logged completed work in TODO/pre_graded_feature.md.
 
 
 
-Before coding the resident/faculty ingestion workflow, here’s the plan I’d like to follow:
+Before coding the resident/resident2 ingestion workflow, here’s the plan I’d like to follow:
 
 Data Intake & Validation
 
@@ -125,14 +125,14 @@ Create small helper(s) to load the spreadsheet (probably pandas.read_excel) and 
 Translate grade text to DiseaseGrading.id for the target disease; surface human-readable errors if the workbook references labels we don’t know.
 Job Flow Structure
 
-Add a new route/page (under Upload or Pre-Graded submenu) that lists the two stages (“Upload Resident Grades”, “Upload Faculty Grades”) and handles file uploads. Each submission should spawn a Job entry with a clear type (e.g., pregraded_resident_grades, pregraded_faculty_grades).
+Add a new route/page (under Upload or Pre-Graded submenu) that lists the two stages (“Upload Resident Grades”, “Upload Resident2 Grades”) and handles file uploads. Each submission should spawn a Job entry with a clear type (e.g., pregraded_resident_grades, pregraded_resident2_grades).
 Reuse the existing Job infrastructure so users can monitor progress via the same /jobs/<token> endpoints.
 Row Processing
 
 For each row, find the exact pre-graded DirectImageUpload (matching on original_filename and scoped to selected disease/lab/hospital to avoid accidental collisions).
 Fetch the associated GradingTask. If it’s missing or already has a grade for that role:
 Resident import: create Grade with role_slot='resident', attach remarks, update denormalised name fields, and call update_task_state_based_on_grades.
-Faculty import: insert/replace role_slot='faculty', then run update_task_state_based_on_grades and create_or_update_consensus to auto-finalise matching grades.
+Resident2 import: insert/replace role_slot='resident2', then run update_task_state_based_on_grades and create_or_update_consensus to auto-finalise matching grades.
 On errors (missing task, invalid grade, duplicate grade), record the failure in JobItem while continuing with other rows.
 State & Idempotency Safeguards
 
@@ -144,19 +144,19 @@ Build a new template (e.g., templates/direct_uploads/pregraded_grades.html) that
 shows the dataset label & counts,
 provides download links to a CSV template/model label key,
 allows selecting the target disease/lab (pre-populated from pre-graded uploads),
-offers file inputs for resident and faculty uploads with instructions.
+offers file inputs for resident and resident2 uploads with instructions.
 Add the navigation link under the Upload → Pre-Graded submenu.
 Testing & Logging
 
 Introduce utility tests for the grade-import parser (valid/invalid rows, duplicate detection).
 Ensure job execution logs notable events (unknown images, grade mismatches) to current_app.logger for troubleshooting.
-If this direction aligns with your expectations, I’ll start implementing the helper utilities and resident-import route first, then layer on the faculty pass.
+If this direction aligns with your expectations, I’ll start implementing the helper utilities and resident-import route first, then layer on the resident2 pass.
 
 I agree. Define a template for data ingestion. Also need to identify the user_id who graded those images when uploading exel file using a dropdown.
 
 
 Documented the Excel ingestion template and UI requirements:
-TODO/pregraded_feature_excel_import.md now spells out the workbook format (headers, allowed values), the need for a grader dropdown (resident/faculty role-filtered), validation rules, job flow, processing logic, and testing/logging notes.
+TODO/pregraded_feature_excel_import.md now spells out the workbook format (headers, allowed values), the need for a grader dropdown (resident/resident2 role-filtered), validation rules, job flow, processing logic, and testing/logging notes.
 Ready to start implementing the resident-grade import when you give the go-ahead.
 
 
@@ -167,10 +167,10 @@ Parsing the workbook and extracting unique grade strings.
 If any value doesn’t auto-map to a known DiseaseGrading, we pop a modal that lists the unique values and lets the operator map each to an available grading (dropdown populated from the disease’s grading options).
 Persist the user’s mapping (so they aren’t prompted next time for the same label).
 Ready to build the UI flow with that modal when you are.
-Resident/faculty ingestion is in place:
+Resident/resident2 ingestion is in place:
 
-Added direct_uploads/pregraded_grades.py with the full workflow: uploads are parsed via pandas, unknown grade strings trigger a mapping modal, and completed mappings run through the Jobs pipeline (auto-creating tasks, applying grades, updating task state, and creating consensus for faculty runs). Pending imports are persisted in the session so the modal can round-trip cleanly.
-New UI (templates/direct_uploads/pregraded_grades.html plus partial) provides resident/faculty forms with grader selection, dataset selectors, and the Bootstrap modal. A companion script (static/js/pregraded_grades.js) handles hospital/lab filtering, localStorage-backed grade mappings per disease/role, and modal submission.
+Added direct_uploads/pregraded_grades.py with the full workflow: uploads are parsed via pandas, unknown grade strings trigger a mapping modal, and completed mappings run through the Jobs pipeline (auto-creating tasks, applying grades, updating task state, and creating consensus for resident2 runs). Pending imports are persisted in the session so the modal can round-trip cleanly.
+New UI (templates/direct_uploads/pregraded_grades.html plus partial) provides resident/resident2 forms with grader selection, dataset selectors, and the Bootstrap modal. A companion script (static/js/pregraded_grades.js) handles hospital/lab filtering, localStorage-backed grade mappings per disease/role, and modal submission.
 Navigation now links to “Import Pre-Graded Grades”; blueprint registration updated.
 Logged the milestone in TODO/pre_graded_feature.md.
 Next: add tests/documentation polish once you’ve run through the flow in the UI.
@@ -193,21 +193,21 @@ pregraded_grades.py
 Suceess in imporfting resident gardes. no MODAL shown. All imported
 
 
-Great news—resident grades now import cleanly. The batch completed with no modal show because every grade string auto‑matched a known DiseaseGrading, so the importer was able to proceed without extra prompts. The detailed logging and case-insensitive lookup ensured Glau_Lab_20_Sep_000182.jpg and the rest of the entries were matched and written correctly. Let me know when you’re ready to tackle the faculty ingestion pass or any follow-up tasks.
+Great news—resident grades now import cleanly. The batch completed with no modal show because every grade string auto‑matched a known DiseaseGrading, so the importer was able to proceed without extra prompts. The detailed logging and case-insensitive lookup ensured Glau_Lab_20_Sep_000182.jpg and the rest of the entries were matched and written correctly. Let me know when you’re ready to tackle the resident2 ingestion pass or any follow-up tasks.
 
 now i will try uplaodng faculy grades with non matching grades
 
 
-Perfect—go ahead and upload the faculty workbook. The importer will flag any grade values that don’t match the known DiseaseGrading impressions, prompt you (or record warnings) for mappings, and log the outcome for each row. If anything unexpected pops up, just let me know and we’ll adjust.
+Perfect—go ahead and upload the resident2 workbook. The importer will flag any grade values that don’t match the known DiseaseGrading impressions, prompt you (or record warnings) for mappings, and log the outcome for each row. If anything unexpected pops up, just let me know and we’ll adjust.
 
 I did. These ae imported. The mappimngs worked. State has been corercted to final or arbitration. COnsenus crerated for matcehd images.
 
 
-Fantastic! Faculty imports are now mapping correctly, task states are promoting to final/arbitration as appropriate, and consensus records are being created when resident and faculty grades align.
+Fantastic! Resident2 imports are now mapping correctly, task states are promoting to final/arbitration as appropriate, and consensus records are being created when resident and resident2 grades align.
 
 Next up, we should polish and prep the code for review:
 
-Summarize the key additions (pre-graded uploads, resident/faculty importer, logging) into a progress note or TODO update.
+Summarize the key additions (pre-graded uploads, resident/resident2 importer, logging) into a progress note or TODO update.
 Run through code-style checks or tests if needed.
 Stage the changed files for a commit.
 Let me know if you’d like me to gather any verification data (job entries, consensus snapshots), update documentation/notes, or start assembling the git commit summary.
@@ -215,37 +215,37 @@ Let me know if you’d like me to gather any verification data (job entries, con
 One thing, in my /grading/ route, I do not see pedning arbitrations as admin. Is it becuase I am logged in as admin and resdent_grade was attribuetd to admin for these images and there is a 2 week colling off period ?
 
 
-That’s exactly what’s happening. The dashboard fetches tasks that the current user hasn’t touched in the last two weeks (_has_user_graded_task_2weeks). Because the admin account you used to run the imports is also stored as the grader for those resident/faculty entries, the cooldown flags every one of those tasks and filters them out—so you won’t see them in the pending/arbitration counts while logged in as that user.
+That’s exactly what’s happening. The dashboard fetches tasks that the current user hasn’t touched in the last two weeks (_has_user_graded_task_2weeks). Because the admin account you used to run the imports is also stored as the grader for those resident/resident2 entries, the cooldown flags every one of those tasks and filters them out—so you won’t see them in the pending/arbitration counts while logged in as that user.
 
 Two easy workarounds:
 
-re-upload and attribute the grades to a different resident/faculty user (one you don’t log in as), or
+re-upload and attribute the grades to a different resident/resident2 user (one you don’t log in as), or
 temporarily disable the two-week guard in _has_user_graded_task_2weeks / _get_filtered_tasks if you want to inspect these tasks as admin.
 Once you view the dashboard as a user who didn’t record those grades (or after the cooldown), the arbitration queue and KPIs will show up as expected.
 
 I logged in as another test user and caould see these new images as avaiable for arbitration
 
 
-Great—that confirms the ingestion and workflow updates are behaving as expected. The new resident and faculty grades are driving the correct task states and arbitration visibility for users who didn’t submit them.
+Great—that confirms the ingestion and workflow updates are behaving as expected. The new resident and resident2 grades are driving the correct task states and arbitration visibility for users who didn’t submit them.
 
 Great. The gardnes are all accepted. I was able to arbitrate. Adjudication and macthing is working
 
 
-All pre-graded workflows are now end-to-end functional: resident/faculty imports succeeded (with modal mapping), tasks advanced to the correct states, consensus records were created for matching grades, and arbitration worked as expected—including adjudication. Let me know when you’d like help wrapping up the code changes or prepping a commit.
+All pre-graded workflows are now end-to-end functional: resident/resident2 imports succeeded (with modal mapping), tasks advanced to the correct states, consensus records were created for matching grades, and arbitration worked as expected—including adjudication. Let me know when you’d like help wrapping up the code changes or prepping a commit.
 
 Update the documentation in @TODO please with the progress
 
 
-Documentation updated: TODO/pre_graded_feature.md now records the successful resident/faculty imports, including the mapping modal, final/arbitration state transitions, and consensus creation. Let me know if you want any other notes captured before we move on.
+Documentation updated: TODO/pre_graded_feature.md now records the successful resident/resident2 imports, including the mapping modal, final/arbitration state transitions, and consensus creation. Let me know if you want any other notes captured before we move on.
 
 
 
-AI grade ingestion is now in place alongside the resident/faculty flows:
+AI grade ingestion is now in place alongside the resident/resident2 flows:
 
 direct_uploads/pregraded_grades.py gained support for a third, AI-specific import path (form role ai). Operators can upload an AI workbook, map any unknown grade strings, and either pick an existing model or create a new AIModel on the fly. Grades are stored with role_slot='ai', optional probability is added to the comment, and task states/consensus remain untouched. Detailed per-row logging continues, and jobs surface errors via JobItem.
 The UI (templates/direct_uploads/pregraded_grades.html) now shows an “AI Grades” card with model selection/creation fields plus the same hospital/lab/disease filters. Existing JS and the modal workflow continue to work for the new role.
-Progress docs (TODO/pre_graded_feature.md) now record the successful resident/faculty imports and the completion of the AI ingestion feature.
-Everything else (pre-graded uploads, resident/faculty imports, arbitration, consensus) remains functional.
+Progress docs (TODO/pre_graded_feature.md) now record the successful resident/resident2 imports and the completion of the AI ingestion feature.
+Everything else (pre-graded uploads, resident/resident2 imports, arbitration, consensus) remains functional.
 
 
 

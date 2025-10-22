@@ -24,7 +24,7 @@ from models import IntraRaterTask
 from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task_atomic,
-    get_next_eligible_faculty_task_atomic,
+    get_next_eligible_resident2_task_atomic,
     get_next_eligible_resident_task_atomic,
 )
 from utils.masterUtils import fetch_active_disease_gradings
@@ -52,7 +52,7 @@ def intra_rater_task(task_id: int):
     resume_slot = (request.args.get("resume_slot") or "").strip().lower() or None
     resume_disease_id = request.args.get("resume_disease_id", type=int)
 
-    if resume_slot not in {"resident", "faculty", "arbitrator"}:
+    if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
 
     with transaction_scope() as db:
@@ -123,7 +123,7 @@ def intra_rater_submit():
     resume_disease_id = request.form.get("resume_disease_id", type=int)
     start_time_iso = (request.form.get("start_time_iso") or "").strip() or None
     actual_resume_disease_id = resume_disease_id
-    if resume_slot not in {"resident", "faculty", "arbitrator"}:
+    if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
 
     if not task_id or not isinstance(task_id, int) or task_id <= 0:
@@ -203,13 +203,13 @@ def intra_rater_submit():
 
     flash("Grade submitted successfully.", "success")
 
-    if action == "save_next" and resume_slot in {"resident", "faculty", "arbitrator"} and actual_resume_disease_id:
+    if action == "save_next" and resume_slot in {"resident", "resident2", "arbitrator"} and actual_resume_disease_id:
         next_task = None
         try:
             if resume_slot == "resident":
                 next_task = get_next_eligible_resident_task_atomic(current_user.id, actual_resume_disease_id)
-            elif resume_slot == "faculty":
-                next_task = get_next_eligible_faculty_task_atomic(current_user.id, actual_resume_disease_id)
+            elif resume_slot == "resident2":
+                next_task = get_next_eligible_resident2_task_atomic(current_user.id, actual_resume_disease_id)
             elif resume_slot == "arbitrator":
                 next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, actual_resume_disease_id)
         except Exception as exc:  # pragma: no cover - defensive logging via flash

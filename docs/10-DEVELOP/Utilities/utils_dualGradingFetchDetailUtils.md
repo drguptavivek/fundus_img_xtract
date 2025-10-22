@@ -47,7 +47,7 @@ Fetch existing grade for this user and slot (for review purposes).
 - `db`: Database session (caller is responsible for closing)
 - `task_id` (int): The ID of the task
 - `user_id` (int): The ID of the user
-- `slot_type` (str): The slot type (resident, faculty, arbitrator)
+- `slot_type` (str): The slot type (resident, resident2, arbitrator)
 
 **Returns:**
 - `Grade` object if found, None otherwise
@@ -63,7 +63,7 @@ This function returns Grade model objects. For a version that includes related d
 - `user_id` (int): ID of the user
 - `page` (int): Page number (1-indexed), defaults to 1
 - `per_page` (int): Number of items per page, defaults to 20
-- `role_slot` (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+- `role_slot` (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
 
 **Returns:**
 - `Tuple[List[Grade], int]`: A tuple containing:
@@ -79,7 +79,7 @@ Retrieve a paginated list of gradings done by a user with related details.
 - `user_id` (int): ID of the user
 - `page` (int): Page number (1-indexed), defaults to 1
 - `per_page` (int): Number of items per page, defaults to 20
-- `role_slot` (Optional[str]): Filter by role slot (resident, faculty, arbitrator)
+- `role_slot` (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
 - `filter_date` (Optional[str]): Filter by date in YYYY-MM-DD format
 
 **Returns:**
@@ -91,7 +91,7 @@ Retrieve a paginated list of gradings done by a user with related details.
 - `id`: Grade ID
 - `task_id`: Task ID
 - `grader_user_id`: User ID of the grader
-- `role_slot`: Role slot (resident, faculty, arbitrator)
+- `role_slot`: Role slot (resident, resident2, arbitrator)
 - `disease_grading_id`: Disease grading ID
 - `comment`: Grade comment
 - `created_at`: Creation timestamp

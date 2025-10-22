@@ -186,21 +186,21 @@ def test_users(db_session):
         db_session.add(users["admin"])
         db_session.commit()
     
-    # Faculty user
-    users["faculty"] = db_session.query(User).filter(User.username == "test_faculty").first()
-    if not users["faculty"]:
-        users["faculty"] = User(
-            username="test_faculty",
+    # resident2 user
+    users["resident2"] = db_session.query(User).filter(User.username == "test_resident2").first()
+    if not users["resident2"]:
+        users["resident2"] = User(
+            username="test_resident2",
             password_hash=hash_password("Test@2026"),
             is_active=True,
-            full_name="Test Faculty",
+            full_name="Test resident2",
             roles=[oph_role]
         )
-        db_session.add(users["faculty"])
+        db_session.add(users["resident2"])
         db_session.commit()
         
         # Add lab unit
-        users["faculty"].lab_units.append(lab_unit1)
+        users["resident2"].lab_units.append(lab_unit1)
         db_session.commit()
     
     # Resident user
@@ -220,34 +220,34 @@ def test_users(db_session):
         users["resident"].lab_units.append(lab_unit1)
         db_session.commit()
     
-    # Test Faculty user (testFaculty) - with faculty slot
-    users["testFaculty"] = db_session.query(User).filter(User.username == "testFaculty").first()
-    if not users["testFaculty"]:
-        users["testFaculty"] = User(
-            username="testFaculty",
+    # Test resident2 user (testresident2) - with resident2 slot
+    users["testresident2"] = db_session.query(User).filter(User.username == "testresident2").first()
+    if not users["testresident2"]:
+        users["testresident2"] = User(
+            username="testresident2",
             password_hash=hash_password("TestPassword123!"),
             is_active=True,
-            full_name="Test Faculty User",
+            full_name="Test resident2 User",
             roles=[oph_role]
         )
-        db_session.add(users["testFaculty"])
+        db_session.add(users["testresident2"])
         db_session.commit()
         
         # Add to both lab units
-        users["testFaculty"].lab_units.append(lab_unit1)
-        users["testFaculty"].lab_units.append(lab_unit2)
+        users["testresident2"].lab_units.append(lab_unit1)
+        users["testresident2"].lab_units.append(lab_unit2)
         db_session.commit()
         
-        # Add faculty slot permissions for both diseases in both lab units
+        # Add resident2 slot permissions for both diseases in both lab units
         for disease in [glaucoma, dr]:
             for unit in [lab_unit1, lab_unit2]:
-                faculty_role = UserDiseaseUnitRole(
-                    user_id=users["testFaculty"].id,
+                resident2_role = UserDiseaseUnitRole(
+                    user_id=users["testresident2"].id,
                     disease_id=disease.id,
                     lab_unit_id=unit.id,
-                    can_grade_faculty=True
+                    can_grade_resident2=True
                 )
-                db_session.add(faculty_role)
+                db_session.add(resident2_role)
         db_session.commit()
     
     # Test Resident user (testResident) - with resident slot

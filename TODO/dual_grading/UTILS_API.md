@@ -10,8 +10,8 @@ These functions calculate totals across all lab units where a user has eligibili
   - Get total pending resident tasks for a user and disease across all eligible lab units
   - For admin users, returns totals across ALL lab units
 
-- `get_all_pending_faculty_for_disease(user_id: int, disease_id: int) -> Dict[str, int]`
-  - Get total pending faculty tasks for a user and disease across all eligible lab units
+- `get_all_pending_resident2_for_disease(user_id: int, disease_id: int) -> Dict[str, int]`
+  - Get total pending resident2 tasks for a user and disease across all eligible lab units
   - For admin users, returns totals across ALL lab units
 
 - `get_all_pending_arbitration_for_disease(user_id: int, disease_id: int) -> Dict[str, int]`
@@ -25,8 +25,8 @@ These functions work with specific lab unit and disease combinations:
 - `get_all_pending_resident_for_labUnit_disease(user_id: int, lab_unit_id: int, disease_id: int) -> Dict[str, Optional[int]]`
   - Get all pending resident tasks for a user, lab unit, and disease
 
-- `get_all_pending_faculty_for_labUnit_disease(user_id: int, lab_unit_id: int, disease_id: int) -> Dict[str, Optional[int]]`
-  - Get all pending faculty tasks for a user, lab unit, and disease
+- `get_all_pending_resident2_for_labUnit_disease(user_id: int, lab_unit_id: int, disease_id: int) -> Dict[str, Optional[int]]`
+  - Get all pending resident2 tasks for a user, lab unit, and disease
 
 - `get_all_pending_arbitration_for_labUnit_disease(user_id: int, lab_unit_id: int, disease_id: int) -> Dict[str, Optional[int]]`
   - Get all pending arbitration tasks for a user, lab unit, and disease

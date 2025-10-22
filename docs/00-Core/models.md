@@ -20,7 +20,7 @@ The database manages medical imaging data, specifically retinal fundus images, f
 
 - **`UserDiseaseUnitRole`**: Granular permissions for users to grade specific diseases in specific lab units.
   - **Key Fields**: `user_id`, `disease_id`, `lab_unit_id`
-  - **Permission Flags**: `can_grade_resident`, `can_grade_faculty`, `can_arbitrate`
+  - **Permission Flags**: `can_grade_resident`, `can_grade_resident2`, `can_arbitrate`
   - **Purpose**: Enables fine-grained access control for the dual grading system
 
 ### 2. Organizational Structure
@@ -110,7 +110,7 @@ These models track the raw data as it is uploaded and processed.
 
 - **`GradingTask`**: Tasks created for grading specific images for specific diseases.
   - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `disease_id`, `lab_unit_id`, `state`
-  - **State Values**: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
+  - **State Values**: 'pending', 'resident_done', 'resident2_done', 'arbitration', 'final'
   - **Uniqueness**: One task per image-disease combination globally
   - **Purpose**: Core entity for the three-tier grading workflow
 
@@ -118,17 +118,17 @@ These models track the raw data as it is uploaded and processed.
   - **Key Fields**: `id`, `task_id`, `grader_user_id`, `role_slot`, `disease_grading_id`, `comment`, `time_taken`
   - **Role Slots**:
     - 'resident': Initial grading by resident ophthalmologists
-    - 'faculty': Secondary grading by faculty ophthalmologists
-    - 'arbitrator': Final decision when resident and faculty grades disagree
+    - 'resident2': Secondary grading by resident2 ophthalmologists
+    - 'arbitrator': Final decision when resident and resident2 grades disagree
     - 'ai': Grades submitted by AI models
-    - 'review': Review grades added by faculty or arbitrators for quality control
+    - 'review': Review grades added by resident2 or arbitrators for quality control
   - **AI Model Fields**: `ai_model_id`, `ai_model_name`, `ai_model_version` for AI grades
   - **Denormalized Fields**: `disease_name`, `grade_name`, `grade_description` for historical preservation
   - **Uniqueness**: One grade per user per role per task
 
 - **`Consensus`**: Final consensus decision for tasks.
   - **Key Fields**: `id`, `task_id` (unique), `final_disease_grading_id`, `method`, `decided_by_user_id`
-  - **Method Values**: 'match' (resident and faculty agreed), 'adjudication' (arbitrator decision)
+  - **Method Values**: 'match' (resident and resident2 agreed), 'adjudication' (arbitrator decision)
   - **Purpose**: Stores the final grading decision
 
 - **`TaskTracker`**: Tracks when users start working on tasks.
@@ -242,8 +242,8 @@ User (many) -- (many) Disease (via UserDiseaseUnitRole)
 
 ### Check Constraints
 - Image references: Either `encounter_file_id` OR `direct_image_upload_id` must be set, never both
-- Task states limited to: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
-- Role slots limited to: 'resident', 'faculty', 'arbitrator', 'ai', 'review'
+- Task states limited to: 'pending', 'resident_done', 'resident2_done', 'arbitration', 'final'
+- Role slots limited to: 'resident', 'resident2', 'arbitrator', 'ai', 'review'
 - Consensus methods limited to: 'match', 'adjudication'
 
 ### Performance Indexes

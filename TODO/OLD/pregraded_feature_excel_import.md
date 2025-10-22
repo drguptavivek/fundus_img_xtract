@@ -4,17 +4,17 @@
 - Format: `.xlsx`, single sheet (default name acceptable).
 - Required headers (case-insensitive):
   - `image_name`
-  - `resident_grade` (resident load only; optional for faculty run)
+  - `resident_grade` (resident load only; optional for resident2 run)
   - `resident_remarks`
-  - `faculty_grade` (faculty load only; optional for resident run)
-  - `faculty_remarks`
+  - `resident2_grade` (resident2 load only; optional for resident run)
+  - `resident2_remarks`
 - Provide downloadable template with those columns plus instructions that valid grade labels must match the active `DiseaseGrading.impression` list for the chosen disease (e.g., Glaucoma → `Glaucoma`, `Normal`, `Not Gradable`, `Other Retinal`, `Suspect`).
 - Treat `"-"` or blank remarks as empty.
 
 ## Grade Attribution
 - Each upload requires the operator to choose the grader whose ID will be stamped on every imported row.
   - Resident ingest dropdown: users with `resident` or `ophthalmologist` role.
-  - Faculty ingest dropdown: users with `ophthalmologist` role (or designated faculty role).
+  - Resident2 ingest dropdown: users with `ophthalmologist` role (or designated resident2 role).
 - Persist selection as `grader_user_id` on new/updated `Grade` objects.
 - If the workbook mixes graders, operators must split the file and run multiple imports.
 
@@ -30,8 +30,8 @@
 ## Job Flow Structure
 - New Upload submenu page (`templates/direct_uploads/pregraded_grades.html`) with two sections:
   1. Resident grades upload
-  2. Faculty grades upload
-- Each submission spawns a `Job` (types: `pregraded_resident_grades`, `pregraded_faculty_grades`) and leverages the existing Jobs status UI.
+  2. Resident2 grades upload
+- Each submission spawns a `Job` (types: `pregraded_resident_grades`, `pregraded_resident2_grades`) and leverages the existing Jobs status UI.
 
 ## Row Processing Logic
 - Resolve pre-graded `DirectImageUpload` and corresponding `GradingTask`.
@@ -39,8 +39,8 @@
   - Insert or overwrite `Grade(role_slot='resident')`.
   - Update denormalised fields (disease/grade names, description).
   - Call `update_task_state_based_on_grades`.
-- Faculty run:
-  - Insert or overwrite `Grade(role_slot='faculty')`.
+- Resident2 run:
+  - Insert or overwrite `Grade(role_slot='resident2')`.
   - Recalculate task state and invoke `create_or_update_consensus`.
 - Record per-row failures in `JobItem` (missing task, invalid grade, etc.) and continue processing.
 
@@ -50,5 +50,5 @@
 
 ## Testing & Logging
 - Unit tests for the parser/validator (valid/invalid files, duplicate detection).
-- Integration test covering end-to-end resident load → faculty load → consensus update.
+- Integration test covering end-to-end resident load → resident2 load → consensus update.
 - Add structured logging for missing images, grade mismatches, and user attribution.

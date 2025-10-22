@@ -23,10 +23,10 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 ### Dual Grading Utility Functions
   Enhanced `utils/dualGradingKPIs.py` with additional utility functions:
   - `get_all_pending_resident_for_disease()`: Get total pending resident tasks for a user and disease across all eligible lab units
-  - `get_all_pending_faculty_for_disease()`: Get total pending faculty tasks for a user and disease across all eligible lab units
+  - `get_all_pending_resident2_for_disease()`: Get total pending resident2 tasks for a user and disease across all eligible lab units
   - `get_all_pending_arbitration_for_disease()`: Get total pending arbitration tasks for a user and disease across all eligible lab units
   - `get_all_pending_resident_for_labUnit_disease()`: Get all pending resident tasks for a user, specific lab unit, and disease
-  - `get_all_pending_faculty_for_labUnit_disease()`: Get all pending faculty tasks for a user, specific lab unit, and disease
+  - `get_all_pending_resident2_for_labUnit_disease()`: Get all pending resident2 tasks for a user, specific lab unit, and disease
   - `get_all_pending_arbitration_for_labUnit_disease()`: Get all pending arbitration tasks for a user, specific lab unit, and disease
   - `get_user_eligibility_for_task()`: Check if a user is eligible for a specific role slot for a task
   - `get_next_eligible_task()`: Get the next eligible task for a user and role slot
@@ -35,15 +35,15 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
 
 ### Grading Flow (Routes)
   The Grading Flow has been successfully implemented:
-  - Resident/Faculty submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table
+  - Resident/Resident2 submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table
   - Arbitration routes: list/claim tasks in `arbitration` state; enforce ophthalmologist + can_arbitrate and exclude prior graders
-  - Consensus logic: when resident + faculty labels match, write `consensus(method=match)`; else escalate to arbitration
+  - Consensus logic: when resident + resident2 labels match, write `consensus(method=match)`; else escalate to arbitration
   - Arbitration submission: enforces rules; writes `consensus(method=adjudication)` and sets state=final
 
 ### Dashboard Improvements
   Enhanced the dashboard with KPIs for better visibility:
   - Total pending Resident Grading tasks across all diseases and lab units
-  - Total pending Faculty Grading tasks across all diseases and lab units
+  - Total pending Resident2 Grading tasks across all diseases and lab units
   - Total pending Arbitration tasks across all diseases and lab units
   - Disease-specific breakdown for each KPI showing pending tasks by disease
   - Added completed task KPIs to show gradings done by users
@@ -56,11 +56,11 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Implemented `get_user_kpi_completed_task_count_data()` function to track completed gradings by users
   - Updated dashboard to show completed task KPIs alongside pending task KPIs
   - Enhanced "My Gradings" section to display role slot type, lab unit name, and hospital name
-  - Fixed faculty completed KPI to correctly count all completed gradings regardless of current eligibility status
+  - Fixed resident2 completed KPI to correctly count all completed gradings regardless of current eligibility status
   - Removed admin-specific logic from KPI functions to treat all users consistently
   - Moved `get_user_kpi_completed_task_count_data` function to `utils/dualGradingKPIs.py` for better organization
   - Added user grading eligibility details section showing hospital, lab unit, and disease-wise slot information
-  - Restored Arbitration KPIs with same visibility logic as Resident and Faculty KPIs (visible to residents and ophthalmologists)
+  - Restored Arbitration KPIs with same visibility logic as Resident and Resident2 KPIs (visible to residents and ophthalmologists)
   - Restructured dashboard route to serve only residents and ophthalmologists (removed admin-specific logic)
   - Implemented compact listing format for displaying user grading eligibility information
 
@@ -77,7 +77,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Added `revise_grading` route and function in `grading/dual_grading.py`
   - Updated dashboard template to include "Revise" buttons for existing gradings
   - Enhanced revision validation logic to be more permissive for users revising their own work
-  - Fixed issue where faculty and residents couldn't revise grades when tasks were in arbitration state
+  - Fixed issue where resident2 and residents couldn't revise grades when tasks were in arbitration state
   - Implemented proper role checking for revision without requiring current eligibility matrix validation
   - Added comprehensive error handling and user feedback for revision attempts
 
@@ -88,7 +88,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
   - Enhanced `_get_filtered_tasks` function to filter out tasks that have been recently graded by the user
   - This prevents over-grading and ensures diverse grader participation in the dual grading workflow
   - After 2 weeks, users can grade the same image in a different slot of the same task
-  - The 2-week restriction applies to all role slots (resident, faculty, arbitrator) during task assignment
+  - The 2-week restriction applies to all role slots (resident, resident2, arbitrator) during task assignment
 
 
   Recent Key Enhancements
@@ -106,7 +106,7 @@ Next,  implemented the "Eligibility Matrix (Admin-Managed)" phase. This requires
    10. 2-Week Restriction Logic
        - Prevents users from grading the same task multiple times within 2 weeks
        - Ensures diverse grader participation
-       - Applies to all role slots (resident, faculty, arbitrator)
+       - Applies to all role slots (resident, resident2, arbitrator)
 
   Recent UI/UX Fixes
 

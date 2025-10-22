@@ -42,7 +42,7 @@ def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
     # Group by hospital first, then by lab unit
     grouped = {}
     for r in rows:
-        if r.can_grade_resident or r.can_grade_faculty or r.can_arbitrate:
+        if r.can_grade_resident or r.can_grade_resident2 or r.can_arbitrate:
             lab_unit_id = r.lab_unit_id
             disease_id = r.disease_id
             
@@ -71,8 +71,8 @@ def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
             # Add roles
             if r.can_grade_resident:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Resident')
-            if r.can_grade_faculty:
-                grouped[hospital_name][lab_unit_name][disease_name].append('Faculty')
+            if r.can_grade_resident2:
+                grouped[hospital_name][lab_unit_name][disease_name].append('Resident2')
             if r.can_arbitrate:
                 grouped[hospital_name][lab_unit_name][disease_name].append('Arbitrator')
     
@@ -87,7 +87,7 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
         db: Database session
         user_id: The ID of the user
         disease_id: The disease ID
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
         
     Returns:
         List of eligible lab unit IDs or None if user has no eligibility
@@ -106,7 +106,7 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
     # Allow both residents and ophthalmologists to do resident grading based on eligibility
     if role_slot == "resident" and not (user.has_role('resident') or user.has_role('ophthalmologist')):
         return None
-    elif role_slot in ["faculty", "arbitrator"] and not user.has_role('ophthalmologist'):
+    elif role_slot in ["resident2", "arbitrator"] and not user.has_role('ophthalmologist'):
         return None
     
     # Build eligibility query based on role slot
@@ -119,8 +119,8 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
     # Add role-specific filter
     if role_slot == "resident":
         eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_resident == True)
-    elif role_slot == "faculty":
-        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_faculty == True)
+    elif role_slot == "resident2":
+        eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_grade_resident2 == True)
     elif role_slot == "arbitrator":
         eligibility_query = eligibility_query.filter(UserDiseaseUnitRole.can_arbitrate == True)
     
@@ -162,7 +162,7 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
         db: Database session (caller is responsible for closing)
         user_id: The ID of the user
         task_id: The ID of the task
-        role_slot: The role slot ('resident', 'faculty', or 'arbitrator')
+        role_slot: The role slot ('resident', 'resident2', or 'arbitrator')
         
     Returns:
         True if user is eligible, False otherwise
@@ -185,15 +185,15 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
     # Allow both residents and ophthalmologists to do resident grading based on eligibility
     if role_slot == 'resident' and not (user.has_role('resident') or user.has_role('ophthalmologist')):
         return False
-    elif role_slot in ('faculty', 'arbitrator') and not user.has_role('ophthalmologist'):
+    elif role_slot in ('resident2', 'arbitrator') and not user.has_role('ophthalmologist'):
         return False
         
     # Check eligibility matrix using UserDiseaseUnitRole table
     eligibility_filter = None
     if role_slot == 'resident':
         eligibility_filter = UserDiseaseUnitRole.can_grade_resident == True
-    elif role_slot == 'faculty':
-        eligibility_filter = UserDiseaseUnitRole.can_grade_faculty == True
+    elif role_slot == 'resident2':
+        eligibility_filter = UserDiseaseUnitRole.can_grade_resident2 == True
     elif role_slot == 'arbitrator':
         eligibility_filter = UserDiseaseUnitRole.can_arbitrate == True
         
@@ -246,4 +246,3 @@ def _has_user_graded_task_2weeks(db, user_id: int, task_id: int) -> bool:
             return True
     
     return False
-

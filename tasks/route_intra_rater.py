@@ -354,7 +354,7 @@ def _ensure_graders_authorized(
         UserDiseaseUnitRole.active.is_(True),
         or_(
             UserDiseaseUnitRole.can_grade_resident.is_(True),
-            UserDiseaseUnitRole.can_grade_faculty.is_(True),
+            UserDiseaseUnitRole.can_grade_resident2.is_(True),
             UserDiseaseUnitRole.can_arbitrate.is_(True),
         ),
     )

@@ -1,26 +1,26 @@
-# Dual Grading (Resident + Faculty) with Arbitration — Overview
+# Dual Grading (Resident + Resident2) with Arbitration — Overview
 
-Purpose: Introduce a normalized, extensible grading workflow where each image can be graded independently per disease by a Resident and Faculty; disagreements are resolved by a third Ophthalmologist (Arbitrator). Eligibility to grade/arbitrate is controlled per user, per disease, and per lab unit. Only anonymized/verified images enter the grading flow.
+Purpose: Introduce a normalized, extensible grading workflow where each image can be graded independently per disease by a Resident and Resident2; disagreements are resolved by a third Ophthalmologist (Arbitrator). Eligibility to grade/arbitrate is controlled per user, per disease, and per lab unit. Only anonymized/verified images enter the grading flow.
 
 Status: ✅ Core implementation complete, 🔄 Dashboard/UX improvements in progress
 
 Scope and Principles
 - Per-disease tasks: Exactly one grading task per image×disease globally. The optional `lab_unit_id` on a task is for grading assignment and queue scoping only (which graders see/work the task); it does not redefine image identity. Once any image×disease task reaches a final consensus (agreement or adjudication) in any lab unit, the gold standard is established and the image must not be re-tasked for the same disease in another lab unit.
-- Dual independent grading: Resident and Faculty submit independently and are masked from each other.
-- Arbitration: If Resident and Faculty disagree, a third Ophthalmologist adjudicates; adjudicator sees grader identities (per requirement).
+- Dual independent grading: Resident and Resident2 submit independently and are masked from each other.
+- Arbitration: If Resident and Resident2 disagree, a third Ophthalmologist adjudicates; adjudicator sees grader identities (per requirement).
 - Eligibility model: No new global roles. Slot permissions derive from existing `user_roles` (resident/ophthalmologist) AND a new grading eligibility matrix per user×disease×lab_unit.
 - Verification gating: Only anonymized/verified images are eligible for task creation and grading selection.
 - Extensible: Images can be graded for multiple diseases at different times (e.g., DR today, AMD later), each as its own task.
 - Auditable: Full history of grade attempts is retained; consensus recorded per task.
 - Revision capability: Users can revise their own gradings before task finalization, with appropriate validation.
-- Role-based exclusivity: A user cannot grade the same task in multiple roles (e.g., as both resident and faculty).
+- Role-based exclusivity: A user cannot grade the same task in multiple roles (e.g., as both resident and resident2).
 - 2-week restriction: Users cannot be assigned the same task for grading within a 2-week period, regardless of slot. After 2 weeks, users can grade the same image in a different slot of the same task.
 
 Key Entities (Normalized)
 - grading_task: Anchor for an image-per-disease. Holds lab_unit, state.
-- grade: Individual grade attempt tied to a task with slot `resident|faculty|arbitrator` and a `DiseaseGrading` label.
-- consensus: Final decision per task, method is `match` (resident/faculty agree) or `adjudication` (arbitrator decided).
-- user_disease_unit_role: Eligibility flags per user×disease×lab_unit: `can_grade_resident`, `can_grade_faculty`, `can_arbitrate`.
+- grade: Individual grade attempt tied to a task with slot `resident|resident2|arbitrator` and a `DiseaseGrading` label.
+- consensus: Final decision per task, method is `match` (resident/resident2 agree) or `adjudication` (arbitrator decided).
+- user_disease_unit_role: Eligibility flags per user×disease×lab_unit: `can_grade_resident`, `can_grade_resident2`, `can_arbitrate`.
 - ai_grade (optional): AI model outputs per image-per-disease; decoupled from human consensus.
 
 Verification Rules (Entry Criteria)
@@ -92,8 +92,8 @@ flowchart TD
     CT --> EC{Eligibility Check}
     EC -->|Resident slot| ER{user_roles has 'resident' AND
     user_disease_unit_role.can_grade_resident}
-    EC -->|Faculty slot| EF{user_roles has 'ophthalmologist' AND
-    user_disease_unit_role.can_grade_faculty}
+    EC -->|Resident2 slot| EF{user_roles has 'ophthalmologist' AND
+    user_disease_unit_role.can_grade_resident2}
     EC -->|Arbitration| EA{user_roles has 'ophthalmologist' AND
     user_disease_unit_role.can_arbitrate AND
     user not prior grader}
@@ -102,13 +102,13 @@ flowchart TD
     EF -->|Fail| BF[Block]
     EA -->|Fail| BA[Block]
     ER -->|Pass| GR["Submit Grade role=resident"]
-    EF -->|Pass| GF["Submit Grade role=faculty"]
+    EF -->|Pass| GF["Submit Grade role=resident2"]
     EA -->|Pass| GA["Submit Grade role=arbitrator"]
 
     %% Dual grading convergence
-    GR --> CK{"Resident & Faculty present?"}
+    GR --> CK{"Resident & Resident2 present?"}
     GF --> CK
-    CK -->|No| WAIT["State = resident_done or faculty_done"]
+    CK -->|No| WAIT["State = resident_done or resident2_done"]
     CK -->|Yes| MATCH{Labels match?}
     MATCH -->|Yes| CM["Consensus - method=match; State=final"]
     MATCH -->|No| ARB["State=arbitration; build arbitrator pool"]
@@ -138,7 +138,7 @@ flowchart LR
     A["Admin UI: Assign Eligibility"] --> F1["Select User"]
     F1 --> F2["Select Diseases"]
     F2 --> F3["Select Grading Lab Units"]
-    F3 --> F4["Toggle Slot Flags <br/> resident faculty arbitrator"]
+    F3 --> F4["Toggle Slot Flags <br/> resident resident2 arbitrator"]
     F4 --> API["POST api/grading-eligibility/users/user_id <br/> items: disease_id, lab_unit_id, flags"]
     API --> DUR[(user_disease_unit_role)]
 
@@ -179,7 +179,7 @@ flowchart LR
     TWOR -->|No| ASSIGN["Assign Task for Grading<br/>(After 2 weeks, user can<br/>grade in different slot)"]
 
     %% Reporting/Exports
-    GT -.-> VIEW[["Denormalized View <br/> image×disease: resident, faculty, final, method"]]
+    GT -.-> VIEW[["Denormalized View <br/> image×disease: resident, resident2, final, method"]]
     VIEW --> CSV["CSV Exports / Dashboards"]
 
     classDef db fill:#eef,stroke:#66f,stroke-width:1px

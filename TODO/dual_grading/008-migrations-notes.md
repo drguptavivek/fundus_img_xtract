@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS grading_tasks (
   ),
   CONSTRAINT uq_task_encounter_disease UNIQUE (encounter_file_id, disease_id),
   CONSTRAINT uq_task_direct_disease UNIQUE (direct_image_upload_id, disease_id),
-  CONSTRAINT ck_task_state_valid CHECK (state IN ('pending','resident_done','faculty_done','arbitration','final'))
+  CONSTRAINT ck_task_state_valid CHECK (state IN ('pending','resident_done','resident2_done','arbitration','final'))
 );
 CREATE INDEX IF NOT EXISTS ix_task_encounter ON grading_tasks(encounter_file_id);
 CREATE INDEX IF NOT EXISTS ix_task_direct ON grading_tasks(direct_image_upload_id);
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS grades (
   comment TEXT NULL,
   created_at TIMESTAMP NOT NULL,
   updated_at TIMESTAMP NOT NULL,
-  CONSTRAINT ck_grade_role_slot_valid CHECK (role_slot IN ('resident','faculty','arbitrator'))
+  CONSTRAINT ck_grade_role_slot_valid CHECK (role_slot IN ('resident','resident2','arbitrator'))
 );
 CREATE INDEX IF NOT EXISTS ix_grade_task ON grades(task_id);
 CREATE INDEX IF NOT EXISTS ix_grade_user ON grades(grader_user_id);
@@ -95,13 +95,13 @@ CREATE TABLE IF NOT EXISTS user_disease_unit_role (
   disease_id INTEGER NOT NULL,
   lab_unit_id INTEGER NOT NULL,
   can_grade_resident BOOLEAN NOT NULL DEFAULT 0,
-  can_grade_faculty BOOLEAN NOT NULL DEFAULT 0,
+  can_grade_resident2 BOOLEAN NOT NULL DEFAULT 0,
   can_arbitrate BOOLEAN NOT NULL DEFAULT 0,
   active BOOLEAN NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL,
   CONSTRAINT uq_user_disease_unit_role UNIQUE (user_id, disease_id, lab_unit_id),
   CONSTRAINT ck_user_dur_has_any_permission CHECK (
-    can_grade_resident = 1 OR can_grade_faculty = 1 OR can_arbitrate = 1
+    can_grade_resident = 1 OR can_grade_resident2 = 1 OR can_arbitrate = 1
   )
 );
 CREATE INDEX IF NOT EXISTS ix_user_dur_unit_disease ON user_disease_unit_role(lab_unit_id, disease_id);

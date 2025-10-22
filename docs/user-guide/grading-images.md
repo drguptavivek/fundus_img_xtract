@@ -7,7 +7,7 @@ This guide explains the image grading process for retinal fundus images. The sys
 The grading process follows these steps:
 
 1. **Resident Grading**: Initial assessment by a resident
-2. **Faculty Grading**: Independent assessment by an ophthalmologist
+2. **Resident2 Grading**: Independent assessment by an ophthalmologist
 3. **Arbitration**: Resolution of discrepancies by a senior ophthalmologist
 
 ## Accessing Grading Tasks
@@ -84,13 +84,13 @@ For each disease, select from these options:
 3. Choose "Save and Next" to continue to the next task
 4. Or choose "Save and Close" to return to the dashboard
 
-## Faculty Grading
+## Resident2 Grading
 
 ### Accessing Tasks
 
-Faculty members review tasks after resident grading:
+Resident2 members review tasks after resident grading:
 1. Go to your grading dashboard
-2. Look for tasks in "Faculty Review" status
+2. Look for tasks in "Resident2 Review" status
 3. Click on a task to begin your assessment
 
 ### Independent Assessment
@@ -111,7 +111,7 @@ After submission:
 ### When Arbitration is Needed
 
 Arbitration occurs when:
-- Resident and faculty grades differ
+- Resident and resident2 grades differ
 - Additional expertise is required
 - Quality control indicates a review is needed
 
@@ -133,8 +133,8 @@ Arbitration occurs when:
 
 ### When Can You Revise?
 
-- **Residents**: Until faculty grading begins
-- **Faculty**: Until arbitration or finalization
+- **Residents**: Until resident2 grading begins
+- **Resident2**: Until arbitration or finalization
 - **Arbitrators**: Within 6 hours of submission
 
 ### How to Revise
@@ -222,7 +222,7 @@ Your dashboard shows:
 
 ### Match Consensus
 
-When resident and faculty grades agree:
+When resident and resident2 grades agree:
 - Consensus is automatically created
 - Task is marked as final
 - No further action needed
@@ -245,7 +245,7 @@ View consensus reports to understand:
 
 ### Learning Resources
 
-- Review challenging cases with faculty
+- Review challenging cases with resident2
 - Participate in grading calibration sessions
 - Study reference images and standards
 - Attend relevant training sessions

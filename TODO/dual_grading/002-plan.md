@@ -9,8 +9,8 @@ Phases and Deliverables
 
 2) Eligibility Matrix (Admin-Managed)
 - Build CRUD endpoints for `user_disease_unit_role`.
-- Admin page to assign grading lab units and per-disease slot flags (resident/faculty/arbitrator) per user.
-- Seeding utility: derive defaults from `user_roles` (resident→can_grade_resident; ophthalmologist→can_grade_faculty,can_arbitrate).
+- Admin page to assign grading lab units and per-disease slot flags (resident/resident2/arbitrator) per user.
+- Seeding utility: derive defaults from `user_roles` (resident→can_grade_resident; ophthalmologist→can_grade_resident2,can_arbitrate).
 
 3) Task Creation Services
 - Implement `create_or_get_task(image_ref, disease_id, lab_unit_id)` with idempotency.
@@ -19,9 +19,9 @@ Phases and Deliverables
  - Enforce global uniqueness per image×disease across labs; never mutate `lab_unit_id` on existing tasks; if a task is final, block cross‑lab reassignment (gold standard established).
 
 4) Grading Flow (Routes)
-- Resident/Faculty submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table.
+- Resident/Resident2 submit routes: enforce eligibility (role + matrix), verification gating, idempotent upsert to `grade` table.
 - Arbitration routes: list/claim tasks in `arbitration` state; enforce ophthalmologist + can_arbitrate and exclude prior graders.
-- When resident + faculty labels match, write `consensus(method=match)`; else escalate to arbitration.
+- When resident + resident2 labels match, write `consensus(method=match)`; else escalate to arbitration.
 
 5) Dashboard and “Start Grading”
 - Next-task selection prioritizes: images graded by the other slot but not by me; otherwise any pending verified tasks I’m eligible for.
@@ -29,7 +29,7 @@ Phases and Deliverables
  - Filter queues by `(disease_id, lab_unit_id)` based on the eligibility matrix; exclude tasks I already graded for my slot.
 
 6) Denormalized View (Optional)
-- Create a SQL view to pivot per image-per-disease: resident_label, faculty_label, final_label, method, timestamps.
+- Create a SQL view to pivot per image-per-disease: resident_label, resident2_label, final_label, method, timestamps.
 - Optionally materialize for reports.
 
 7) Security, Validation, and Logging
@@ -50,7 +50,7 @@ Milestone Checklist
 - M1: Schema + setup scripts. ✅
 - M2: Eligibility admin API + UI. ✅
 - M3: Task services + auto-creation hooks. ✅
-- M4: Resident/Faculty flows + consensus. ✅
+- M4: Resident/Resident2 flows + consensus. ✅
 - M5: Arbitration flows. ✅
 - M6: Dashboard + start-grade logic. ⏳
 - M7: Denormalized view + reports. ⏳

@@ -378,7 +378,7 @@ erDiagram
         int disease_id FK
         int lab_unit_id FK
         boolean can_grade_resident
-        boolean can_grade_faculty
+        boolean can_grade_resident2
         boolean can_arbitrate
         boolean active
         datetime created_at
@@ -505,8 +505,8 @@ erDiagram
 
 ### Check Constraints
 - Image grading tables enforce that either `encounter_file_id` OR `direct_image_upload_id` is set, but not both
-- Task states are limited to specific values: 'pending', 'resident_done', 'faculty_done', 'arbitration', 'final'
-- Role slots are limited to: 'resident', 'faculty', 'arbitrator'
+- Task states are limited to specific values: 'pending', 'resident_done', 'resident2_done', 'arbitration', 'final'
+- Role slots are limited to: 'resident', 'resident2', 'arbitrator'
 - Consensus methods are limited to: 'match', 'adjudication'
 
 ### Cascade Deletes

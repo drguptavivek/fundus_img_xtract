@@ -84,7 +84,7 @@ class TestRateLimitDecorators(unittest.TestCase):
         """Test basic rate limit decorator."""
         mock_decorated_func = Mock()
         mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = rate_limit("100 per hour")(self.mock_func)
         result = decorated()
@@ -100,9 +100,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_rate_limit_decorator_with_custom_params(self, mock_limiter):
         """Test rate limit decorator with custom parameters."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = rate_limit(
             "50 per minute",
@@ -123,9 +121,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_auth_rate_limit_decorator(self, mock_limiter):
         """Test auth rate limit decorator."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = auth_rate_limit("5 per minute")(self.mock_func)
         result = decorated()
@@ -141,9 +137,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_auth_rate_limit_decorator_default(self, mock_limiter):
         """Test auth rate limit decorator with default limit."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = auth_rate_limit()(self.mock_func)
         result = decorated()
@@ -159,9 +153,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_upload_rate_limit_decorator(self, mock_limiter):
         """Test upload rate limit decorator."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = upload_rate_limit("20 per minute")(self.mock_func)
         result = decorated()
@@ -177,9 +169,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_api_rate_limit_decorator(self, mock_limiter):
         """Test API rate limit decorator."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = api_rate_limit("200 per minute")(self.mock_func)
         result = decorated()
@@ -194,9 +184,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_admin_rate_limit_decorator(self, mock_limiter):
         """Test admin rate limit decorator."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = admin_rate_limit("100 per minute")(self.mock_func)
         result = decorated()
@@ -211,9 +199,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     @patch('utils.rate_limiter.limiter')
     def test_rate_limit_with_feedback_decorator(self, mock_limiter):
         """Test rate limit with feedback decorator."""
-        mock_decorated_func = Mock()
-        mock_decorated_func.return_value = "test_response"
-        mock_limiter.limit.return_value = mock_decorated_func
+        mock_limiter.limit.return_value = lambda f: f
         
         decorated = rate_limit_with_feedback(
             "10 per minute",
@@ -240,66 +226,69 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         self.mock_request_limit.key = "ip:192.168.1.1"
         self.mock_request_limit.retry_after = 60
     
-    @patch('utils.rate_limiter.jsonify')
-    @patch('utils.rate_limiter.make_response')
-    @patch('utils.rate_limiter.request')
-    @patch('utils.rate_limiter.log_rate_limit_violation')
-    def test_api_request_rate_limit_error(self, mock_log, mock_request, mock_make_response, mock_jsonify):
+    def test_api_request_rate_limit_error(self):
         """Test rate limit error handling for API requests."""
-        mock_request.path = "/api/test"
-        mock_request.headers = {"Accept": "application/json"}
-        mock_jsonify.return_value = {"error": "Rate limit exceeded"}
-        mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
-        
-        result = handle_rate_limit_exceeded(self.mock_request_limit)
-        
-        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
-        mock_jsonify.assert_called_once_with({
-            "error": "Rate limit exceeded",
-            "message": "Rate limit exceeded: 5 per minute",
-            "retry_after": 60
-        })
-        mock_make_response.assert_called_once()
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.jsonify') as mock_jsonify, \
+             patch('utils.rate_limiter.make_response') as mock_make_response, \
+             patch('utils.rate_limiter.log_rate_limit_violation') as mock_log:
+            
+            mock_request.path = "/api/test"
+            mock_request.headers = {"Accept": "application/json"}
+            mock_jsonify.return_value = {"error": "Rate limit exceeded"}
+            mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
+            
+            result = handle_rate_limit_exceeded(self.mock_request_limit)
+            
+            mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
+            mock_jsonify.assert_called_once_with({
+                "error": "Rate limit exceeded",
+                "message": "Rate limit exceeded: 5 per minute",
+                "retry_after": 60
+            })
+            mock_make_response.assert_called_once()
     
-    @patch('utils.rate_limiter.flash')
-    @patch('utils.rate_limiter.render_template')
-    @patch('utils.rate_limiter.request')
-    @patch('utils.rate_limiter.log_rate_limit_violation')
-    def test_web_request_rate_limit_error(self, mock_log, mock_request, mock_render_template, mock_flash):
+    def test_web_request_rate_limit_error(self):
         """Test rate limit error handling for web requests."""
-        mock_request.path = "/test"
-        mock_request.headers = {}
-        mock_render_template.return_value = "Error page"
-        
-        result = handle_rate_limit_exceeded(self.mock_request_limit)
-        
-        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
-        mock_flash.assert_called_once_with(
-            "Rate limit exceeded. Please try again in 60 seconds.",
-            "warning"
-        )
-        mock_render_template.assert_called_once_with(
-            "errors/429.html",
-            error_message="Rate limit exceeded: 5 per minute",
-            retry_after=60
-        )
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.flash') as mock_flash, \
+             patch('utils.rate_limiter.render_template') as mock_render_template, \
+             patch('utils.rate_limiter.log_rate_limit_violation') as mock_log:
+            
+            mock_request.path = "/test"
+            mock_request.headers = {}
+            mock_render_template.return_value = "Error page"
+            
+            result = handle_rate_limit_exceeded(self.mock_request_limit)
+            
+            mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
+            mock_flash.assert_called_once_with(
+                "Rate limit exceeded. Please try again in 60 seconds.",
+                "warning"
+            )
+            mock_render_template.assert_called_once_with(
+                "errors/429.html",
+                error_message="Rate limit exceeded: 5 per minute",
+                retry_after=60
+            )
     
-    @patch('utils.rate_limiter.url_for')
-    @patch('utils.rate_limiter.redirect')
-    @patch('utils.rate_limiter.request')
-    @patch('utils.rate_limiter.log_rate_limit_violation')
-    def test_login_page_rate_limit_error(self, mock_log, mock_request, mock_redirect, mock_url_for):
+    def test_login_page_rate_limit_error(self):
         """Test rate limit error handling for login page."""
-        mock_request.path = "/login"
-        mock_request.headers = {}
-        mock_url_for.return_value = "/login"
-        mock_redirect.return_value = "Redirect response"
-        
-        result = handle_rate_limit_exceeded(self.mock_request_limit)
-        
-        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
-        mock_url_for.assert_called_once_with("auth.login")
-        mock_redirect.assert_called_once_with("/login")
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.url_for') as mock_url_for, \
+             patch('utils.rate_limiter.redirect') as mock_redirect, \
+             patch('utils.rate_limiter.log_rate_limit_violation') as mock_log:
+            
+            mock_request.path = "/login"
+            mock_request.headers = {}
+            mock_url_for.return_value = "/login"
+            mock_redirect.return_value = "Redirect response"
+            
+            result = handle_rate_limit_exceeded(self.mock_request_limit)
+            
+            mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
+            mock_url_for.assert_called_once_with("auth.login")
+            mock_redirect.assert_called_once_with("/login")
     
     def test_missing_attributes_handling(self):
         """Test handling when RequestLimit has missing attributes."""
@@ -308,21 +297,20 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         incomplete_request_limit.key = None
         incomplete_request_limit.retry_after = None
         
-        with patch('utils.rate_limiter.request') as mock_request:
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.jsonify') as mock_jsonify, \
+             patch('utils.rate_limiter.make_response') as mock_make_response:
+            
             mock_request.path = "/api/test"
             mock_request.headers = {"Accept": "application/json"}
+            mock_jsonify.return_value = {"error": "Rate limit exceeded"}
+            mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
             
-            with patch('utils.rate_limiter.jsonify') as mock_jsonify:
-                mock_jsonify.return_value = {"error": "Rate limit exceeded"}
-                
-                with patch('utils.rate_limiter.make_response') as mock_make_response:
-                    mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
-                    
-                    result = handle_rate_limit_exceeded(incomplete_request_limit)
-                    
-                    mock_make_response.assert_called_once()
-                    json_args, _ = mock_jsonify.call_args
-                    self.assertIn("Too many requests", json_args[0]["message"])
+            result = handle_rate_limit_exceeded(incomplete_request_limit)
+            
+            mock_make_response.assert_called_once()
+            json_args, _ = mock_jsonify.call_args
+            self.assertIn("Too many requests", json_args[0]["message"])
     
     def test_runtime_limit_object_parsing(self):
         """Test handling of RuntimeLimit object with limit/per attributes."""
@@ -334,22 +322,21 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         runtime_limit.key = "ip:127.0.0.1"
         runtime_limit.retry_after = 60
         
-        with patch('utils.rate_limiter.request') as mock_request:
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.jsonify') as mock_jsonify, \
+             patch('utils.rate_limiter.make_response') as mock_make_response:
+            
             mock_request.path = "/api/test"
             mock_request.headers = {"Accept": "application/json"}
+            mock_jsonify.return_value = {"error": "Rate limit exceeded"}
+            mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
             
-            with patch('utils.rate_limiter.jsonify') as mock_jsonify:
-                mock_jsonify.return_value = {"error": "Rate limit exceeded"}
-                
-                with patch('utils.rate_limiter.make_response') as mock_make_response:
-                    mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
-                    
-                    result = handle_rate_limit_exceeded(runtime_limit)
-                    
-                    # Verify it parsed the limit correctly
-                    mock_make_response.assert_called_once()
-                    json_args, _ = mock_jsonify.call_args
-                    self.assertIn("20 per minute", json_args[0]["message"])
+            result = handle_rate_limit_exceeded(runtime_limit)
+            
+            # Verify it parsed the limit correctly
+            mock_make_response.assert_called_once()
+            json_args, _ = mock_jsonify.call_args
+            self.assertIn("20 per minute", json_args[0]["message"])
     
     def test_runtime_limit_repr_parsing(self):
         """Test handling of RuntimeLimit object with repr string."""
@@ -359,22 +346,21 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         runtime_limit.key = "ip:127.0.0.1"
         runtime_limit.retry_after = 60
         
-        with patch('utils.rate_limiter.request') as mock_request:
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.jsonify') as mock_jsonify, \
+             patch('utils.rate_limiter.make_response') as mock_make_response:
+            
             mock_request.path = "/api/test"
             mock_request.headers = {"Accept": "application/json"}
+            mock_jsonify.return_value = {"error": "Rate limit exceeded"}
+            mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
             
-            with patch('utils.rate_limiter.jsonify') as mock_jsonify:
-                mock_jsonify.return_value = {"error": "Rate limit exceeded"}
-                
-                with patch('utils.rate_limiter.make_response') as mock_make_response:
-                    mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
-                    
-                    result = handle_rate_limit_exceeded(runtime_limit)
-                    
-                    # Verify it extracted the limit from the repr
-                    mock_make_response.assert_called_once()
-                    json_args, _ = mock_jsonify.call_args
-                    self.assertIn("20 per minute", json_args[0]["message"])
+            result = handle_rate_limit_exceeded(runtime_limit)
+            
+            # Verify it extracted the limit from the repr
+            mock_make_response.assert_called_once()
+            json_args, _ = mock_jsonify.call_args
+            self.assertIn("20 per minute", json_args[0]["message"])
     
     def test_flash_message_clearing(self):
         """Test that existing flash messages are cleared to prevent duplicates."""
@@ -384,26 +370,26 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         request_limit.key = "ip:127.0.0.1"
         request_limit.retry_after = 30
         
-        with patch('utils.rate_limiter.request') as mock_request:
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.flash') as mock_flash, \
+             patch('utils.rate_limiter.get_flashed_messages') as mock_get_flashed, \
+             patch('utils.rate_limiter.render_template') as mock_render:
+            
             mock_request.path = '/test'
             mock_request.headers = {}
+            mock_render.return_value = "Error page"
             
-            with patch('utils.rate_limiter.flash') as mock_flash:
-                with patch('utils.rate_limiter.get_flashed_messages') as mock_get_flashed:
-                    with patch('utils.rate_limiter.render_template') as mock_render:
-                        mock_render.return_value = "Error page"
-                        
-                        from utils.rate_limiter import handle_rate_limit_exceeded
-                        result = handle_rate_limit_exceeded(request_limit)
-                        
-                        # Verify get_flashed_messages was called to clear existing messages
-                        mock_get_flashed.assert_called_once()
-                        
-                        # Verify flash was called with our message
-                        mock_flash.assert_called_once_with(
-                            "Rate limit exceeded. Please try again in 30 seconds.",
-                            "warning"
-                        )
+            from utils.rate_limiter import handle_rate_limit_exceeded
+            result = handle_rate_limit_exceeded(request_limit)
+            
+            # Verify get_flashed_messages was called to clear existing messages
+            mock_get_flashed.assert_called_once()
+            
+            # Verify flash was called with our message
+            mock_flash.assert_called_once_with(
+                "Rate limit exceeded. Please try again in 30 seconds.",
+                "warning"
+            )
     
     def test_flash_message_with_none_retry_after(self):
         """Test flash message when retry_after is None."""
@@ -413,62 +399,63 @@ class TestRateLimitErrorHandling(unittest.TestCase):
         request_limit.key = "ip:127.0.0.1"
         request_limit.retry_after = None
         
-        with patch('utils.rate_limiter.request') as mock_request:
+        with patch('utils.rate_limiter.request') as mock_request, \
+             patch('utils.rate_limiter.flash') as mock_flash, \
+             patch('utils.rate_limiter.get_flashed_messages') as mock_get_flashed, \
+             patch('utils.rate_limiter.render_template') as mock_render:
+            
             mock_request.path = '/test'
             mock_request.headers = {}
+            mock_render.return_value = "Error page"
             
-            with patch('utils.rate_limiter.flash') as mock_flash:
-                with patch('utils.rate_limiter.get_flashed_messages') as mock_get_flashed:
-                    with patch('utils.rate_limiter.render_template') as mock_render:
-                        mock_render.return_value = "Error page"
-                        
-                        from utils.rate_limiter import handle_rate_limit_exceeded
-                        result = handle_rate_limit_exceeded(request_limit)
-                        
-                        # Verify get_flashed_messages was called to clear existing messages
-                        mock_get_flashed.assert_called_once()
-                        
-                        # Verify flash was called with fallback message
-                        mock_flash.assert_called_once_with(
-                            "Rate limit exceeded. Please try again later.",
-                            "warning"
-                        )
+            from utils.rate_limiter import handle_rate_limit_exceeded
+            result = handle_rate_limit_exceeded(request_limit)
+            
+            # Verify get_flashed_messages was called to clear existing messages
+            mock_get_flashed.assert_called_once()
+            
+            # Verify flash was called with fallback message
+            mock_flash.assert_called_once_with(
+                "Rate limit exceeded. Please try again later.",
+                "warning"
+            )
 
 
 class TestRateLimitLogging(unittest.TestCase):
     """Test rate limit logging functionality."""
     
-    @patch('utils.rate_limiter.get_remote_address')
-    @patch('flask.request')
-    @patch('flask_login.current_user')
-    @patch('utils.rate_limiter.rate_limit_logger')
-    @patch('utils.rate_limiter.logging.getLogger')
-    def test_log_rate_limit_violation(self, mock_get_logger, mock_rate_logger, mock_current_user, mock_request, mock_get_ip):
+    def test_log_rate_limit_violation(self):
         """Test rate limit violation logging."""
-        mock_get_ip.return_value = "192.168.1.1"
-        mock_request.endpoint = "test_endpoint"
-        mock_request.method = "POST"
-        mock_request.path = "/test"
-        mock_current_user.is_authenticated = True
-        mock_current_user.id = 123
-        mock_current_user.username = "testuser"
-        
-        mock_limiter_logger = Mock()
-        mock_get_logger.return_value = mock_limiter_logger
-        
-        log_rate_limit_violation("ip:192.168.1.1", "5 per minute")
-        
-        mock_rate_logger.warning.assert_called_once()
-        mock_limiter_logger.warning.assert_called_once()
-        
-        # Check the log message contains expected information
-        log_call_args = mock_rate_logger.warning.call_args[0][0]
-        self.assertIn("IP: 192.168.1.1", log_call_args)
-        self.assertIn("User: user:123(testuser)", log_call_args)
-        self.assertIn("Endpoint: test_endpoint", log_call_args)
-        self.assertIn("Method: POST", log_call_args)
-        self.assertIn("Path: /test", log_call_args)
-        self.assertIn("Limit: 5 per minute", log_call_args)
+        with patch('utils.rate_limiter.get_remote_address') as mock_get_ip, \
+             patch('flask.request') as mock_request, \
+             patch('flask_login.current_user') as mock_current_user, \
+             patch('utils.rate_limiter.rate_limit_logger') as mock_rate_logger, \
+             patch('utils.rate_limiter.logging.getLogger') as mock_get_logger:
+            
+            mock_get_ip.return_value = "192.168.1.1"
+            mock_request.endpoint = "test_endpoint"
+            mock_request.method = "POST"
+            mock_request.path = "/test"
+            mock_current_user.is_authenticated = True
+            mock_current_user.id = 123
+            mock_current_user.username = "testuser"
+            
+            mock_limiter_logger = Mock()
+            mock_get_logger.return_value = mock_limiter_logger
+            
+            log_rate_limit_violation("ip:192.168.1.1", "5 per minute")
+            
+            mock_rate_logger.warning.assert_called_once()
+            mock_limiter_logger.warning.assert_called_once()
+            
+            # Check the log message contains expected information
+            log_call_args = mock_rate_logger.warning.call_args[0][0]
+            self.assertIn("IP: 192.168.1.1", log_call_args)
+            self.assertIn("User: user:123(testuser)", log_call_args)
+            self.assertIn("Endpoint: test_endpoint", log_call_args)
+            self.assertIn("Method: POST", log_call_args)
+            self.assertIn("Path: /test", log_call_args)
+            self.assertIn("Limit: 5 per minute", log_call_args)
 
 
 class TestUserRateLimits(unittest.TestCase):
@@ -500,12 +487,10 @@ class TestUserRateLimits(unittest.TestCase):
         
         # Check that the user has the expected roles
         self.assertTrue(mock_user.has_role.called)
-        # The actual implementation returns admin limits if user has admin role
-        # Since we're mocking has_role to return True for data_manager and ophthalmologist,
-        # we should get the appropriate limits
-        self.assertIn("default", limits)
-        self.assertIn("upload", limits)
-        self.assertIn("api", limits)
+        # The actual implementation returns data_manager limits if user has data_manager role
+        self.assertEqual(limits["default"], "2000 per hour")
+        self.assertEqual(limits["upload"], "50 per minute")
+        self.assertEqual(limits["api"], "500 per minute")
     
     @patch('utils.rate_limiter.Session')
     @patch('models.User')
@@ -520,9 +505,9 @@ class TestUserRateLimits(unittest.TestCase):
         # Check that the user has the expected roles
         self.assertTrue(mock_user.has_role.called)
         # Verify the structure of returned limits
-        self.assertIn("default", limits)
-        self.assertIn("upload", limits)
-        self.assertIn("api", limits)
+        self.assertEqual(limits["default"], "1000 per hour")
+        self.assertEqual(limits["upload"], "20 per minute")
+        self.assertEqual(limits["api"], "200 per minute")
     
     @patch('utils.rate_limiter.Session')
     @patch('models.User')
@@ -535,11 +520,11 @@ class TestUserRateLimits(unittest.TestCase):
         limits = get_user_rate_limits(999)
         
         # Check that the user has no special roles
-        mock_user.has_role.assert_called()
+        self.assertTrue(mock_user.has_role.called)
         # Verify the structure of returned limits
-        self.assertIn("default", limits)
-        self.assertIn("upload", limits)
-        self.assertIn("api", limits)
+        self.assertEqual(limits["default"], "500 per hour")
+        self.assertEqual(limits["upload"], "10 per minute")
+        self.assertEqual(limits["api"], "100 per minute")
     
     @patch('utils.rate_limiter.Session')
     def test_get_user_rate_limits_user_not_found(self, mock_session):

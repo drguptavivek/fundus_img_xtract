@@ -6,6 +6,7 @@ Tests rate limiting against a running server using baseURL and port from .env.
 
 import os
 import sys
+from pathlib import Path
 import requests
 import time
 import json
@@ -13,8 +14,9 @@ import subprocess
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add the project root directory to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 # Load environment variables
 load_dotenv()

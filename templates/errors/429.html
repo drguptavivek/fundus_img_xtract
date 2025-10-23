@@ -4,106 +4,40 @@
 
 {% block content %}
 <div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card border-danger">
-                <div class="card-header bg-danger text-white">
-                    <h4 class="mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Rate Limit Exceeded
-                    </h4>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-warning" role="alert">
-                        <i class="fas fa-clock me-2"></i>
-                        <strong>Too Many Requests</strong>
-                    </div>
-                    
-                    <p class="card-text">
-                        {{ error_message or "You have exceeded the rate limit for this service. Please wait before making additional requests." }}
-                    </p>
-                    
-                    {% if retry_after %}
-                    <p class="card-text">
-                        <small class="text-muted">
-                            You can try again in <strong>{{ retry_after }}</strong> seconds.
-                        </small>
-                    </p>
-                    {% endif %}
-                    
-                    <div class="d-flex justify-content-between mt-4">
-                        <a href="{{ url_for('homepage') }}" class="btn btn-primary">
-                            <i class="fas fa-home me-2"></i>
-                            Go to Homepage
-                        </a>
-                        
-                        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
-                            <i class="fas fa-arrow-left me-2"></i>
-                            Go Back
-                        </button>
-                    </div>
-                    
-                    {% if retry_after %}
-                    <div class="mt-3">
-                        <div class="progress">
-                            <div id="retry-progress" class="progress-bar bg-warning" role="progressbar" 
-                                 style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                            </div>
-                        </div>
-                        <small class="text-muted text-center d-block mt-1">
-                            Auto-refreshing in <span id="retry-countdown">{{ retry_after }}</span> seconds...
-                        </small>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            
-            {% if current_user.is_authenticated and current_user.has_role('admin') %}
-            <div class="card mt-3 border-info">
-                <div class="card-header bg-info text-white">
-                    <h5 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Admin Information
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <p class="card-text mb-0">
-                        <small>
-                            Rate limits are in place to protect system resources and ensure fair usage.
-                            If this is impacting legitimate work, consider adjusting rate limits in the application configuration.
-                        </small>
-                    </p>
-                </div>
-            </div>
-            {% endif %}
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card border-danger">
+        <div class="card-header bg-danger text-white">
+          <h4 class="mb-0">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Rate Limit Exceeded
+          </h4>
         </div>
+        <div class="card-body">
+          <p class="card-text">
+            {{ error_message or "You have exceeded the rate limit for this service." }}
+          </p>
+          {% if retry_after %}
+          <p class="card-text">
+            <strong>Please wait {{ retry_after }} seconds before trying again.</strong>
+          </p>
+          {% endif %}
+          <p class="card-text">
+            This limit helps ensure fair usage of our services for all users.
+          </p>
+          <div class="d-flex justify-content-between">
+            {% if dashboard_url %}
+            <a href="{{ dashboard_url }}" class="btn btn-primary">
+              <i class="fas fa-home me-2"></i>Go to Dashboard
+            </a>
+            {% endif %}
+            <button onclick="history.back()" class="btn btn-secondary">
+              <i class="fas fa-arrow-left me-2"></i>Go Back
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
-
-{% if retry_after %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    let retryAfter = parseInt("{{ retry_after }}") || 60;
-    const countdownElement = document.getElementById('retry-countdown');
-    const progressBar = document.getElementById('retry-progress');
-    const maxRetry = retryAfter;
-    
-    const countdown = setInterval(function() {
-        retryAfter--;
-        countdownElement.textContent = retryAfter;
-        
-        // Update progress bar
-        const progress = ((maxRetry - retryAfter) / maxRetry) * 100;
-        progressBar.style.width = progress + '%';
-        progressBar.setAttribute('aria-valuenow', progress);
-        
-        if (retryAfter <= 0) {
-            clearInterval(countdown);
-            // Refresh the page
-            window.location.reload();
-        }
-    }, 1000);
-});
-</script>
-{% endif %}
 {% endblock %}

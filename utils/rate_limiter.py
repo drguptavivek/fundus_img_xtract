@@ -67,16 +67,7 @@ def rate_limit_with_feedback(
         show_warning: Whether to show a warning message when approaching the limit
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=per_method,
-            methods=methods,
-            error_message=error_message or f"Rate limit exceeded: {limit}"
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
             # Check if we should show a warning about remaining requests
             if show_warning and not request.path.startswith('/api/'):
@@ -90,8 +81,30 @@ def rate_limit_with_feedback(
                 except Exception:
                     pass
             
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=per_method,
+                methods=methods,
+                error_message=error_message or f"Rate limit exceeded: {limit}",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -113,19 +126,32 @@ def rate_limit(
         error_message: Custom error message for rate limit exceeded
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=per_method,
-            methods=methods,
-            error_message=error_message or f"Rate limit exceeded: {limit}"
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=per_method,
+                methods=methods,
+                error_message=error_message or f"Rate limit exceeded: {limit}",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -137,19 +163,32 @@ def auth_rate_limit(limit: str = "5 per minute") -> Callable:
     More restrictive than general rate limits.
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=True,
-            methods=["POST"],
-            error_message="Too many authentication attempts. Please try again later."
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=True,
+                methods=["POST"],
+                error_message="Too many authentication attempts. Please try again later.",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -160,19 +199,32 @@ def upload_rate_limit(limit: str = "200 per minute") -> Callable:
     Rate limit for file upload endpoints.
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=True,
-            methods=["POST"],
-            error_message="Upload rate limit exceeded. Please wait before uploading more files."
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=True,
+                methods=["POST"],
+                error_message="Upload rate limit exceeded. Please wait before uploading more files.",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -183,18 +235,31 @@ def api_rate_limit(limit: str = "100 per minute") -> Callable:
     Rate limit for general API endpoints.
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=True,
-            error_message="API rate limit exceeded. Please reduce your request frequency."
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=True,
+                error_message="API rate limit exceeded. Please reduce your request frequency.",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -205,18 +270,31 @@ def admin_rate_limit(limit: str = "100 per minute") -> Callable:
     Rate limit for admin endpoints.
     """
     def decorator(f: Callable) -> Callable:
-        # Apply the limiter decorator directly to the function
-        # This ensures it overrides any default limits
-        decorated_func = limiter.limit(
-            limit,
-            per_method=True,
-            error_message="Admin operation rate limit exceeded."
-        )(f)
-        
-        @wraps(decorated_func)
+        @wraps(f)
         def wrapped(*args, **kwargs):
-            # Call the decorated function
-            return decorated_func(*args, **kwargs)
+            # Get the limiter from app context or use global
+            from flask import current_app
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
+            
+            if current_limiter is None:
+                # If no limiter is available, just call the function
+                return f(*args, **kwargs)
+            
+            # Apply the limiter dynamically
+            return current_limiter.limit(
+                limit,
+                per_method=True,
+                error_message="Admin operation rate limit exceeded.",
+                override_defaults=True
+            )(f)(*args, **kwargs)
         
         return wrapped
     
@@ -351,11 +429,29 @@ def handle_rate_limit_exceeded(request_limit):
     if request.path == '/login':
         return redirect(url_for('auth.login'))
     
-    return render_template(
-        "errors/429.html",
-        error_message=error_message,
-        retry_after=retry_after
-    ), 429
+    # Check if dashboard route exists
+    dashboard_url = None
+    try:
+        dashboard_url = url_for('dashboard.index')
+    except:
+        # Dashboard route doesn't exist, don't include the link
+        pass
+    
+    # Try to render the template, fall back to JSON if not available
+    try:
+        return render_template(
+            "errors/429.html",
+            error_message=error_message,
+            retry_after=retry_after,
+            dashboard_url=dashboard_url
+        ), 429
+    except Exception:
+        # Template not available, return JSON response
+        return make_response(jsonify({
+            "error": "Rate limit exceeded",
+            "message": error_message,
+            "retry_after": retry_after
+        }), 429)
 
 def get_user_rate_limits(user_id: int) -> dict:
     """
@@ -432,7 +528,15 @@ def shared_resource_limit(resource_name: str, limit: str = None):
         @wraps(f)
         def wrapped(*args, **kwargs):
             # Get the current limiter instance
-            current_limiter = current_app.extensions.get('limiter') or limiter
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
             
             # Apply shared limit with resource scope
             return current_limiter.shared_limit(
@@ -456,7 +560,15 @@ def conditional_exempt(condition_func: Callable[[], bool]):
         @wraps(f)
         def wrapped(*args, **kwargs):
             # Get the current limiter instance
-            current_limiter = current_app.extensions.get('limiter') or limiter
+            if current_app and 'limiter' in current_app.extensions:
+                # Flask-Limiter 4.0 stores the limiter in a set
+                limiter_set = current_app.extensions['limiter']
+                if isinstance(limiter_set, set) and limiter_set:
+                    current_limiter = next(iter(limiter_set))
+                else:
+                    current_limiter = limiter_set
+            else:
+                current_limiter = limiter
             
             # Apply conditional exemption
             return current_limiter.limit(
@@ -763,8 +875,9 @@ def init_rate_limiting(app):
         storage_uri = storage_url
         storage_configured = True
     
-    # Override for testing environment
-    if app.config.get('TESTING', False) or app.config.get('DISABLE_RATE_LIMITING', False):
+    # Override for testing environment only if explicitly disabled
+    # Don't disable if rate limiting is explicitly enabled in config
+    if (app.config.get('TESTING', False) or app.config.get('DISABLE_RATE_LIMITING', False)) and not app.config.get('RATELIMIT_ENABLED', True):
         app.config['RATELIMIT_ENABLED'] = False
         rate_limit_logger.info("Rate limiting disabled for testing environment")
     
@@ -828,8 +941,6 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_STORAGE_OPTIONS'] = storage_options
     
     # Initialize limiter with app
-    global limiter
-    
     # Debug logging
     rate_limit_logger.info(f"Creating limiter with storage_uri: {storage_uri}")
     
@@ -853,6 +964,7 @@ def init_rate_limiting(app):
         )
         
         # Update the global limiter
+        global limiter
         limiter = new_limiter
         
         # Debug logging after initialization

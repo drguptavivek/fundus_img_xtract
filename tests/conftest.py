@@ -62,7 +62,18 @@ def app(db_session):
         WTF_CSRF_ENABLED=False,
         SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
         LOGIN_DISABLED=False,
+        # Enable rate limiting for testing
+        RATELIMIT_ENABLED='true',
+        RATELIMIT_STORAGE_URI='memory://',
+        REDIS_URL='memory://',  # Override Redis URL to use memory
+        RATELIMIT_DEFAULT='500 per hour, 50 per minute',
+        RATELIMIT_APPLICATION='1000 per hour, 100 per minute',
+        RATELIMIT_SWALLOW_ERRORS='false'  # Don't swallow errors so we can see what's happening
     )
+    
+    # Re-initialize rate limiting with updated config
+    from utils.rate_limiter import init_rate_limiting
+    init_rate_limiting(app)
     
     # Use FlaskLoginClient for testing
     app.test_client_class = FlaskLoginClient
@@ -115,7 +126,19 @@ def app_factory():
             SECRET_KEY="test-secret-key",
             WTF_CSRF_ENABLED=False,
             SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
+            # Rate limiting configuration for testing
+            RATELIMIT_ENABLED='true',
+            RATELIMIT_STORAGE_URI='memory://',
+            REDIS_URL='memory://',  # Override Redis URL to use memory
+            RATELIMIT_DEFAULT='500 per hour, 50 per minute',
+            RATELIMIT_APPLICATION='1000 per hour, 100 per minute',
+            RATELIMIT_SWALLOW_ERRORS='false'  # Don't swallow errors so we can see what's happening
         )
+        
+        # Initialize rate limiting
+        from utils.rate_limiter import init_rate_limiting
+        init_rate_limiting(app)
+        
         return app
     return _create_app
 

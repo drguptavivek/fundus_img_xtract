@@ -87,7 +87,7 @@ def test_payload_limits():
         else:
             print(f"✗ Login route should have rejected payload (status: {response.status_code})")
     except requests.exceptions.ConnectionError:
-        print("! Could not connect to application. Make sure it's running on localhost:5000")
+        print("! Could not connect to application. Make sure it's running on localhost:5001")
         return
     
     # Test 2: Direct upload route should allow larger payloads

@@ -25,8 +25,8 @@ import requests
 
 def get_base_url():
     """Get base URL from environment or use default."""
-    base_url = os.getenv("BASE_URL", "http://127.0.0.1:5000")
-    port = os.getenv("FLASK_PORT", "5000")
+    base_url = os.getenv("BASE_URL", "http://127.0.0.1:5001")
+    port = os.getenv("FLASK_PORT", "5001")
     
     # If BASE_URL doesn't include port, add it
     if f":{port}" not in base_url:

@@ -1,135 +1,722 @@
 #!/usr/bin/env python3
 """
-Unit test for the rate limiter fix to verify RequestLimit object handling.
+Comprehensive unit tests for Flask-Limiter 4.0 implementation.
+Tests all rate limiter utilities, decorators, and helper functions.
 """
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-import sys
 import os
-
-from utils.rate_limiter import handle_rate_limit_exceeded
+import sys
+from unittest.mock import Mock, patch, MagicMock, call
+from datetime import datetime, timedelta
+import json
+import time
 
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from utils.rate_limiter import (
+    get_rate_limit_key,
+    rate_limit,
+    rate_limit_with_feedback,
+    auth_rate_limit,
+    upload_rate_limit,
+    api_rate_limit,
+    admin_rate_limit,
+    handle_rate_limit_exceeded,
+    log_rate_limit_violation,
+    get_user_rate_limits,
+    dynamic_rate_limit_from_config,
+    shared_resource_limit,
+    conditional_exempt,
+    clear_rate_limit,
+    get_rate_limit_status,
+    init_rate_limiting
+)
 
-class TestRateLimiterFix(unittest.TestCase):
-    """Test cases for the rate limiter fix."""
+
+class TestRateLimitKeyGeneration(unittest.TestCase):
+    """Test rate limit key generation functions."""
+    
+    @patch('flask_login.current_user')
+    @patch('utils.rate_limiter.get_remote_address')
+    def test_key_generation_for_authenticated_user(self, mock_get_ip, mock_current_user):
+        """Test key generation for authenticated users."""
+        mock_current_user.is_authenticated = True
+        mock_current_user.id = 123
+        mock_get_ip.return_value = "192.168.1.1"
+        
+        key = get_rate_limit_key()
+        self.assertEqual(key, "user:123")
+        mock_get_ip.assert_not_called()
+    
+    @patch('flask_login.current_user')
+    @patch('utils.rate_limiter.get_remote_address')
+    def test_key_generation_for_anonymous_user(self, mock_get_ip, mock_current_user):
+        """Test key generation for anonymous users."""
+        mock_current_user.is_authenticated = False
+        mock_get_ip.return_value = "192.168.1.1"
+        
+        key = get_rate_limit_key()
+        self.assertEqual(key, "ip:192.168.1.1")
+        mock_get_ip.assert_called_once()
+    
+    @patch('flask_login.current_user')
+    def test_key_generation_when_current_user_not_available(self, mock_current_user):
+        """Test key generation when current_user is not available."""
+        # Simulate when current_user doesn't have is_authenticated attribute
+        del mock_current_user.is_authenticated
+        
+        with patch('utils.rate_limiter.get_remote_address', return_value="192.168.1.1"):
+            key = get_rate_limit_key()
+            self.assertEqual(key, "ip:192.168.1.1")
+
+
+class TestRateLimitDecorators(unittest.TestCase):
+    """Test rate limit decorators."""
     
     def setUp(self):
         """Set up test fixtures."""
-        # Create a mock RequestLimit object
+        self.mock_func = Mock(return_value="test_response")
+        
+    @patch('utils.rate_limiter.limiter')
+    def test_rate_limit_decorator(self, mock_limiter):
+        """Test basic rate limit decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = rate_limit("100 per hour")(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "100 per hour",
+            per_method=True,
+            methods=None,
+            error_message="Rate limit exceeded: 100 per hour"
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_rate_limit_decorator_with_custom_params(self, mock_limiter):
+        """Test rate limit decorator with custom parameters."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = rate_limit(
+            "50 per minute",
+            per_method=False,
+            methods=["POST", "PUT"],
+            error_message="Custom error message"
+        )(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "50 per minute",
+            per_method=False,
+            methods=["POST", "PUT"],
+            error_message="Custom error message"
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_auth_rate_limit_decorator(self, mock_limiter):
+        """Test auth rate limit decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = auth_rate_limit("5 per minute")(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "5 per minute",
+            per_method=True,
+            methods=["POST"],
+            error_message="Too many authentication attempts. Please try again later."
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_auth_rate_limit_decorator_default(self, mock_limiter):
+        """Test auth rate limit decorator with default limit."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = auth_rate_limit()(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "5 per minute",
+            per_method=True,
+            methods=["POST"],
+            error_message="Too many authentication attempts. Please try again later."
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_upload_rate_limit_decorator(self, mock_limiter):
+        """Test upload rate limit decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = upload_rate_limit("20 per minute")(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "20 per minute",
+            per_method=True,
+            methods=["POST"],
+            error_message="Upload rate limit exceeded. Please wait before uploading more files."
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_api_rate_limit_decorator(self, mock_limiter):
+        """Test API rate limit decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = api_rate_limit("200 per minute")(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "200 per minute",
+            per_method=True,
+            error_message="API rate limit exceeded. Please reduce your request frequency."
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_admin_rate_limit_decorator(self, mock_limiter):
+        """Test admin rate limit decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = admin_rate_limit("100 per minute")(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "100 per minute",
+            per_method=True,
+            error_message="Admin operation rate limit exceeded."
+        )
+        self.assertEqual(result, "test_response")
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_rate_limit_with_feedback_decorator(self, mock_limiter):
+        """Test rate limit with feedback decorator."""
+        mock_limiter.limit.return_value = self.mock_func
+        
+        decorated = rate_limit_with_feedback(
+            "10 per minute",
+            show_warning=True
+        )(self.mock_func)
+        result = decorated()
+        
+        mock_limiter.limit.assert_called_once_with(
+            "10 per minute",
+            per_method=True,
+            methods=None,
+            error_message="Rate limit exceeded: 10 per minute"
+        )
+        self.assertEqual(result, "test_response")
+
+
+class TestRateLimitErrorHandling(unittest.TestCase):
+    """Test rate limit error handling."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
         self.mock_request_limit = Mock()
         self.mock_request_limit.limit = "5 per minute"
-        self.mock_request_limit.key = "ip:127.0.0.1"
+        self.mock_request_limit.key = "ip:192.168.1.1"
         self.mock_request_limit.retry_after = 60
     
-    @patch('flask.make_response')
-    @patch('flask.jsonify')
-    @patch('flask.request')
-    def test_api_request_rate_limit(self, mock_request, mock_jsonify, mock_make_response):
-        """Test rate limit handling for API requests."""
-        # Configure mock request for API endpoint
-        mock_request.path = '/api/test'
-        mock_request.headers = {'Accept': 'application/json'}
-        
-        # Configure mock responses
+    @patch('utils.rate_limiter.jsonify')
+    @patch('utils.rate_limiter.make_response')
+    @patch('utils.rate_limiter.request')
+    @patch('utils.rate_limiter.log_rate_limit_violation')
+    def test_api_request_rate_limit_error(self, mock_log, mock_request, mock_make_response, mock_jsonify):
+        """Test rate limit error handling for API requests."""
+        mock_request.path = "/api/test"
+        mock_request.headers = {"Accept": "application/json"}
         mock_jsonify.return_value = {"error": "Rate limit exceeded"}
         mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
         
-        # Call the handler
-        from utils.rate_limiter import handle_rate_limit_exceeded
         result = handle_rate_limit_exceeded(self.mock_request_limit)
         
-        # Verify the response
+        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
+        mock_jsonify.assert_called_once_with({
+            "error": "Rate limit exceeded",
+            "message": "Rate limit exceeded: 5 per minute",
+            "retry_after": 60
+        })
         mock_make_response.assert_called_once()
-        args, kwargs = mock_make_response.call_args
-        
-        # Check that jsonify was called with correct error message
-        mock_jsonify.assert_called_once()
-        json_args, json_kwargs = mock_jsonify.call_args
-        self.assertEqual(json_args[0]["error"], "Rate limit exceeded")
-        self.assertIn("Rate limit exceeded: 5 per minute", json_args[0]["message"])
-        self.assertEqual(json_args[0]["retry_after"], 60)
     
-    @patch('flask.render_template')
-    @patch('flask.flash')
-    @patch('flask.request')
-    def test_web_request_rate_limit(self, mock_request, mock_flash, mock_render_template):
-        """Test rate limit handling for web requests."""
-        # Configure mock request for web endpoint
-        mock_request.path = '/test'
+    @patch('utils.rate_limiter.flash')
+    @patch('utils.rate_limiter.render_template')
+    @patch('utils.rate_limiter.request')
+    @patch('utils.rate_limiter.log_rate_limit_violation')
+    def test_web_request_rate_limit_error(self, mock_log, mock_request, mock_render_template, mock_flash):
+        """Test rate limit error handling for web requests."""
+        mock_request.path = "/test"
         mock_request.headers = {}
+        mock_render_template.return_value = "Error page"
         
-        # Configure mock render_template response
-        mock_render_template.return_value = "HTML Error Page"
-        
-        # Call the handler
-        from utils.rate_limiter import handle_rate_limit_exceeded
         result = handle_rate_limit_exceeded(self.mock_request_limit)
         
-        # Verify flash message was added
+        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
         mock_flash.assert_called_once_with(
             "Rate limit exceeded. Please try again in 60 seconds.",
             "warning"
         )
-        
-        # Verify render_template was called with correct arguments
         mock_render_template.assert_called_once_with(
             "errors/429.html",
             error_message="Rate limit exceeded: 5 per minute",
             retry_after=60
         )
     
-    @patch('flask.url_for')
-    @patch('flask.redirect')
-    @patch('flask.request')
-    def test_login_page_rate_limit(self, mock_request, mock_redirect, mock_url_for):
-        """Test rate limit handling for login page."""
-        # Configure mock request for login page
-        mock_request.path = '/login'
+    @patch('utils.rate_limiter.url_for')
+    @patch('utils.rate_limiter.redirect')
+    @patch('utils.rate_limiter.request')
+    @patch('utils.rate_limiter.log_rate_limit_violation')
+    def test_login_page_rate_limit_error(self, mock_log, mock_request, mock_redirect, mock_url_for):
+        """Test rate limit error handling for login page."""
+        mock_request.path = "/login"
         mock_request.headers = {}
+        mock_url_for.return_value = "/login"
+        mock_redirect.return_value = "Redirect response"
         
-        # Configure mock url_for and redirect
-        mock_url_for.return_value = '/login'
-        mock_redirect.return_value = "Redirect Response"
-        
-        # Call the handler
-        from utils.rate_limiter import handle_rate_limit_exceeded
         result = handle_rate_limit_exceeded(self.mock_request_limit)
         
-        # Verify redirect to login page
-        mock_url_for.assert_called_once_with('auth.login')
-        mock_redirect.assert_called_once_with('/login')
+        mock_log.assert_called_once_with("ip:192.168.1.1", "5 per minute")
+        mock_url_for.assert_called_once_with("auth.login")
+        mock_redirect.assert_called_once_with("/login")
     
-    def test_missing_attributes(self):
+    def test_missing_attributes_handling(self):
         """Test handling when RequestLimit has missing attributes."""
-        # Create a mock with missing attributes
         incomplete_request_limit = Mock()
         incomplete_request_limit.limit = None
         incomplete_request_limit.key = None
         incomplete_request_limit.retry_after = None
         
-        # This should not raise an exception
-        with patch('flask.request') as mock_request:
-            mock_request.path = '/api/test'
-            mock_request.headers = {'Accept': 'application/json'}
+        with patch('utils.rate_limiter.request') as mock_request:
+            mock_request.path = "/api/test"
+            mock_request.headers = {"Accept": "application/json"}
             
-            with patch('flask.jsonify') as mock_jsonify:
+            with patch('utils.rate_limiter.jsonify') as mock_jsonify:
                 mock_jsonify.return_value = {"error": "Rate limit exceeded"}
                 
-                with patch('flask.make_response') as mock_make_response:
+                with patch('utils.rate_limiter.make_response') as mock_make_response:
                     mock_make_response.return_value = ({"error": "Rate limit exceeded"}, 429)
                     
-                    # This should not raise an AttributeError
-                    from utils.rate_limiter import handle_rate_limit_exceeded
                     result = handle_rate_limit_exceeded(incomplete_request_limit)
                     
-                    # Verify it handled the missing attributes gracefully
                     mock_make_response.assert_called_once()
                     json_args, _ = mock_jsonify.call_args
                     self.assertIn("unknown limit", json_args[0]["message"])
+
+
+class TestRateLimitLogging(unittest.TestCase):
+    """Test rate limit logging functionality."""
+    
+    @patch('utils.rate_limiter.get_remote_address')
+    @patch('flask.request')
+    @patch('flask_login.current_user')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    @patch('utils.rate_limiter.logging.getLogger')
+    def test_log_rate_limit_violation(self, mock_get_logger, mock_rate_logger, mock_current_user, mock_request, mock_get_ip):
+        """Test rate limit violation logging."""
+        mock_get_ip.return_value = "192.168.1.1"
+        mock_request.endpoint = "test_endpoint"
+        mock_request.method = "POST"
+        mock_request.path = "/test"
+        mock_current_user.is_authenticated = True
+        mock_current_user.id = 123
+        mock_current_user.username = "testuser"
+        
+        mock_limiter_logger = Mock()
+        mock_get_logger.return_value = mock_limiter_logger
+        
+        log_rate_limit_violation("ip:192.168.1.1", "5 per minute")
+        
+        mock_rate_logger.warning.assert_called_once()
+        mock_limiter_logger.warning.assert_called_once()
+        
+        # Check the log message contains expected information
+        log_call_args = mock_rate_logger.warning.call_args[0][0]
+        self.assertIn("IP: 192.168.1.1", log_call_args)
+        self.assertIn("User: user:123(testuser)", log_call_args)
+        self.assertIn("Endpoint: test_endpoint", log_call_args)
+        self.assertIn("Method: POST", log_call_args)
+        self.assertIn("Path: /test", log_call_args)
+        self.assertIn("Limit: 5 per minute", log_call_args)
+
+
+class TestUserRateLimits(unittest.TestCase):
+    """Test user-based rate limit functions."""
+    
+    @patch('utils.rate_limiter.Session')
+    @patch('models.User')
+    def test_get_user_rate_limits_admin(self, mock_user_class, mock_session):
+        """Test getting rate limits for admin user."""
+        mock_user = Mock()
+        mock_user.has_role.return_value = True
+        mock_session.return_value.get.return_value = mock_user
+        
+        limits = get_user_rate_limits(123)
+        
+        self.assertEqual(limits["default"], "5000 per hour")
+        self.assertEqual(limits["upload"], "100 per minute")
+        self.assertEqual(limits["api"], "1000 per minute")
+    
+    @patch('utils.rate_limiter.Session')
+    @patch('models.User')
+    def test_get_user_rate_limits_data_manager(self, mock_user_class, mock_session):
+        """Test getting rate limits for data manager user."""
+        mock_user = Mock()
+        mock_user.has_role.side_effect = lambda role: role in ['data_manager', 'ophthalmologist']
+        mock_session.return_value.get.return_value = mock_user
+        
+        limits = get_user_rate_limits(456)
+        
+        self.assertEqual(limits["default"], "2000 per hour")
+        self.assertEqual(limits["upload"], "50 per minute")
+        self.assertEqual(limits["api"], "500 per minute")
+    
+    @patch('utils.rate_limiter.Session')
+    @patch('models.User')
+    def test_get_user_rate_limits_file_uploader(self, mock_user_class, mock_session):
+        """Test getting rate limits for file uploader user."""
+        mock_user = Mock()
+        mock_user.has_role.side_effect = lambda role: role in ['fileUploader', 'optometrist']
+        mock_session.return_value.get.return_value = mock_user
+        
+        limits = get_user_rate_limits(789)
+        
+        self.assertEqual(limits["default"], "1000 per hour")
+        self.assertEqual(limits["upload"], "20 per minute")
+        self.assertEqual(limits["api"], "200 per minute")
+    
+    @patch('utils.rate_limiter.Session')
+    @patch('models.User')
+    def test_get_user_rate_limits_default(self, mock_user_class, mock_session):
+        """Test getting default rate limits for regular user."""
+        mock_user = Mock()
+        mock_user.has_role.return_value = False
+        mock_session.return_value.get.return_value = mock_user
+        
+        limits = get_user_rate_limits(999)
+        
+        self.assertEqual(limits["default"], "500 per hour")
+        self.assertEqual(limits["upload"], "10 per minute")
+        self.assertEqual(limits["api"], "100 per minute")
+    
+    @patch('utils.rate_limiter.Session')
+    def test_get_user_rate_limits_user_not_found(self, mock_session):
+        """Test getting rate limits for non-existent user."""
+        mock_session.return_value.get.return_value = None
+        
+        limits = get_user_rate_limits(111)
+        
+        self.assertEqual(limits["default"], "500 per hour")
+
+
+class TestDynamicRateLimits(unittest.TestCase):
+    """Test dynamic rate limit functions."""
+    
+    @patch('flask.request')
+    @patch('flask.current_app')
+    def test_dynamic_rate_limit_from_config(self, mock_current_app, mock_request):
+        """Test loading dynamic rate limits from config."""
+        mock_request.endpoint = "test_endpoint"
+        mock_current_app.config.get.side_effect = lambda key, default=None: {
+            'RATELIMIT_TEST_ENDPOINT_LIMIT': '200 per minute',
+            'RATELIMIT_DEFAULT': '500 per hour, 50 per minute'
+        }.get(key, default)
+        
+        limit = dynamic_rate_limit_from_config()
+        
+        self.assertEqual(limit, "200 per minute")
+    
+    @patch('flask.request')
+    @patch('flask.current_app')
+    def test_dynamic_rate_limit_from_config_default(self, mock_current_app, mock_request):
+        """Test loading default rate limit when no custom limit exists."""
+        mock_request.endpoint = "test_endpoint"
+        mock_current_app.config.get.side_effect = lambda key, default=None: {
+            'RATELIMIT_DEFAULT': '500 per hour, 50 per minute'
+        }.get(key, default)
+        
+        limit = dynamic_rate_limit_from_config()
+        
+        self.assertEqual(limit, "500 per hour, 50 per minute")
+    
+    @patch('flask.request')
+    @patch('flask.current_app')
+    def test_dynamic_rate_limit_no_endpoint(self, mock_current_app, mock_request):
+        """Test dynamic rate limit when no endpoint is available."""
+        mock_request.endpoint = None
+        mock_current_app.config.get.return_value = '500 per hour, 50 per minute'
+        
+        limit = dynamic_rate_limit_from_config()
+        
+        self.assertEqual(limit, "500 per hour, 50 per minute")
+
+
+class TestSharedResourceLimits(unittest.TestCase):
+    """Test shared resource limit functions."""
+    
+    @patch('flask.current_app')
+    def test_shared_resource_limit(self, mock_current_app):
+        """Test shared resource limit decorator."""
+        mock_current_app.config.get.return_value = "100 per hour"
+        mock_limiter = Mock()
+        mock_limiter.shared_limit.return_value = lambda f: f
+        mock_current_app.extensions.get.return_value = mock_limiter
+        
+        @shared_resource_limit("database", "50 per minute")
+        def test_function():
+            pass
+        
+        mock_limiter.shared_limit.assert_called_once_with("50 per minute", scope="database")
+    
+    @patch('flask.current_app')
+    def test_shared_resource_limit_default(self, mock_current_app):
+        """Test shared resource limit with default limit."""
+        mock_current_app.config.get.return_value = "100 per hour"
+        mock_limiter = Mock()
+        mock_limiter.shared_limit.return_value = lambda f: f
+        mock_current_app.extensions.get.return_value = mock_limiter
+        
+        @shared_resource_limit("database")
+        def test_function():
+            pass
+        
+        mock_limiter.shared_limit.assert_called_once_with("100 per hour", scope="database")
+
+
+class TestConditionalExemption(unittest.TestCase):
+    """Test conditional exemption functions."""
+    
+    @patch('flask.current_app')
+    def test_conditional_exempt_true(self, mock_current_app):
+        """Test conditional exemption when condition is True."""
+        mock_limiter = Mock()
+        mock_limiter.limit.return_value = lambda f: f
+        mock_current_app.extensions.get.return_value = mock_limiter
+        
+        condition_func = Mock(return_value=True)
+        
+        @conditional_exempt(condition_func)
+        def test_function():
+            pass
+        
+        mock_limiter.limit.assert_called_once_with("", exempt_when=condition_func)
+    
+    @patch('flask.current_app')
+    def test_conditional_exempt_false(self, mock_current_app):
+        """Test conditional exemption when condition is False."""
+        mock_limiter = Mock()
+        mock_limiter.limit.return_value = lambda f: f
+        mock_current_app.extensions.get.return_value = mock_limiter
+        
+        condition_func = Mock(return_value=False)
+        
+        @conditional_exempt(condition_func)
+        def test_function():
+            pass
+        
+        mock_limiter.limit.assert_called_once_with("", exempt_when=condition_func)
+
+
+class TestRateLimitManagement(unittest.TestCase):
+    """Test rate limit management functions."""
+    
+    @patch('utils.rate_limiter.limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_clear_rate_limit_all(self, mock_logger, mock_limiter):
+        """Test clearing all rate limits."""
+        mock_storage = Mock()
+        mock_storage.reset.return_value = True
+        mock_limiter._storage = mock_storage
+        
+        result = clear_rate_limit()
+        
+        self.assertTrue(result)
+        mock_storage.reset.assert_called_once()
+        mock_logger.warning.assert_called_once_with("Cleared ALL rate limits")
+    
+    @patch('utils.rate_limiter.limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_clear_rate_limit_specific_key(self, mock_logger, mock_limiter):
+        """Test clearing rate limit for specific key."""
+        mock_storage = Mock()
+        mock_storage.keys.return_value = ["limit1:ip:192.168.1.1", "limit2:ip:192.168.1.1"]
+        mock_storage.clear.return_value = True
+        mock_limiter._storage = mock_storage
+        
+        result = clear_rate_limit(key="ip:192.168.1.1")
+        
+        self.assertTrue(result)
+        self.assertEqual(mock_storage.clear.call_count, 2)
+        mock_logger.info.assert_called_once()
+    
+    @patch('utils.rate_limiter.limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_clear_rate_limit_not_initialized(self, mock_logger, mock_limiter):
+        """Test clearing rate limit when limiter is not initialized."""
+        mock_limiter._storage = None
+        
+        result = clear_rate_limit()
+        
+        self.assertFalse(result)
+        mock_logger.warning.assert_called_once_with("Cannot clear rate limit: limiter not initialized")
+    
+    @patch('utils.rate_limiter.limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_get_rate_limit_status(self, mock_logger, mock_limiter):
+        """Test getting rate limit status."""
+        mock_storage = Mock()
+        mock_storage._storage = {"limit1:ip:192.168.1.1": "data1", "limit2:ip:192.168.1.1": "data2"}
+        mock_limiter._storage = mock_storage
+        
+        status = get_rate_limit_status("ip:192.168.1.1")
+        
+        self.assertIn("key", status)
+        self.assertIn("matching_keys", status)
+        self.assertIn("limits", status)
+        self.assertEqual(len(status["matching_keys"]), 2)
+    
+    @patch('utils.rate_limiter.limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_get_rate_limit_status_overall(self, mock_logger, mock_limiter):
+        """Test getting overall rate limit status."""
+        mock_storage = Mock()
+        mock_storage._storage = {"limit1:ip:192.168.1.1": "data1", "limit2:ip:192.168.1.1": "data2"}
+        mock_limiter._storage = mock_storage
+        
+        status = get_rate_limit_status()
+        
+        self.assertIn("storage_type", status)
+        self.assertIn("total_keys", status)
+        self.assertIn("keys", status)
+        self.assertEqual(status["total_keys"], 2)
+    
+    @patch('utils.rate_limiter.limiter')
+    def test_get_rate_limit_status_not_initialized(self, mock_limiter):
+        """Test getting rate limit status when limiter is not initialized."""
+        mock_limiter._storage = None
+        
+        status = get_rate_limit_status()
+        
+        self.assertIn("error", status)
+        self.assertEqual(status["error"], "Rate limiter not initialized")
+
+
+class TestRateLimitInitialization(unittest.TestCase):
+    """Test rate limit initialization."""
+    
+    @patch.dict(os.environ, {
+        'RATELIMIT_ENABLED': 'true',
+        'RATELIMIT_DEFAULT': '500 per hour, 50 per minute',
+        'RATELIMIT_APPLICATION': '1000 per hour, 100 per minute',
+        'RATELIMIT_STORAGE_URI': 'redis://localhost:6379/10',
+        'REDIS_URL': 'redis://localhost:6379/10',
+        'RATELIMIT_HEADERS_ENABLED': 'true',
+        'RATELIMIT_STRATEGY': 'fixed-window',
+        'RATELIMIT_SWALLOW_ERRORS': 'true',
+        'RATELIMIT_KEY_PREFIX': '',
+    })
+    @patch('utils.rate_limiter.Limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_init_rate_limiting_redis(self, mock_logger, mock_limiter_class):
+        """Test rate limiting initialization with Redis."""
+        mock_app = Mock()
+        mock_app.config = {}
+        
+        mock_limiter = Mock()
+        mock_limiter._storage = Mock()
+        mock_limiter._storage_uri = "redis://localhost:6379/10"
+        mock_limiter_class.return_value = mock_limiter
+        
+        init_rate_limiting(mock_app)
+        
+        # Check app configuration
+        self.assertTrue(mock_app.config['RATELIMIT_ENABLED'])
+        self.assertEqual(mock_app.config['RATELIMIT_DEFAULT'], '500 per hour, 50 per minute')
+        self.assertEqual(mock_app.config['RATELIMIT_APPLICATION'], '1000 per hour, 100 per minute')
+        self.assertEqual(mock_app.config['RATELIMIT_STORAGE_URI'], 'redis://localhost:6379/10')
+        self.assertTrue(mock_app.config['RATELIMIT_HEADERS_ENABLED'])
+        self.assertEqual(mock_app.config['RATELIMIT_STRATEGY'], 'fixed-window')
+        
+        # Check limiter initialization
+        mock_limiter_class.assert_called_once()
+        mock_app.errorhandler.assert_called_once_with(429)
+    
+    @patch.dict(os.environ, {
+        'RATELIMIT_ENABLED': 'false',
+        'RATELIMIT_DEFAULT': '500 per hour, 50 per minute',
+        'RATELIMIT_STORAGE_URI': 'memory://',
+    })
+    @patch('utils.rate_limiter.Limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_init_rate_limiting_disabled(self, mock_logger, mock_limiter_class):
+        """Test rate limiting initialization when disabled."""
+        mock_app = Mock()
+        mock_app.config = {}
+        
+        mock_limiter = Mock()
+        mock_limiter._storage = Mock()
+        mock_limiter._storage_uri = "memory://"
+        mock_limiter_class.return_value = mock_limiter
+        
+        init_rate_limiting(mock_app)
+        
+        self.assertFalse(mock_app.config['RATELIMIT_ENABLED'])
+        mock_logger.info.assert_any_call("Rate limiting disabled")
+    
+    @patch.dict(os.environ, {
+        'RATELIMIT_ENABLED': 'true',
+        'RATELIMIT_DEFAULT': '500 per hour, 50 per minute',
+        'RATELIMIT_STORAGE_URI': 'redis://localhost:6379/10',
+    })
+    @patch('utils.rate_limiter.Limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_init_rate_limiting_fallback(self, mock_logger, mock_limiter_class):
+        """Test rate limiting initialization fallback to memory."""
+        mock_app = Mock()
+        mock_app.config = {}
+        
+        # First limiter fails, second succeeds
+        mock_limiter_class.side_effect = [
+            Exception("Redis connection failed"),
+            Mock(_storage=Mock(), _storage_uri="memory://")
+        ]
+        
+        init_rate_limiting(mock_app)
+        
+        # Should log error and fallback
+        mock_logger.error.assert_called()
+        mock_logger.warning.assert_called_with("Falling back to memory storage for rate limiting")
+    
+    @patch.dict(os.environ, {
+        'RATELIMIT_ENABLED': 'true',
+        'RATELIMIT_STORAGE_URI': 'memcached://localhost:11211',
+    })
+    @patch('pymemcache.client.base.Client')
+    @patch('utils.rate_limiter.Limiter')
+    @patch('utils.rate_limiter.rate_limit_logger')
+    def test_init_rate_limiting_memcached(self, mock_logger, mock_limiter_class, mock_client_class):
+        """Test rate limiting initialization with Memcached."""
+        mock_app = Mock()
+        mock_app.config = {}
+        
+        mock_client = Mock()
+        mock_client.version.return_value = "1.6.0"
+        mock_client_class.return_value = mock_client
+        
+        mock_limiter = Mock()
+        mock_limiter._storage = Mock()
+        mock_limiter._storage_uri = "memcached://localhost:11211"
+        mock_limiter_class.return_value = mock_limiter
+        
+        init_rate_limiting(mock_app)
+        
+        self.assertEqual(mock_app.config['RATELIMIT_STORAGE_URI'], 'memcached://localhost:11211')
+        mock_client.version.assert_called_once()
 
 
 if __name__ == '__main__':

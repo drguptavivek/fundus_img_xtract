@@ -58,6 +58,10 @@ source .venv/Scripts/activate
 python app.py
 
 
+# Check Port
+lsof -i :5001 
+kill -9 PID to stop if app running in background
+
 ```
 
 ## Documentation

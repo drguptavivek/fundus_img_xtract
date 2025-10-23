@@ -101,7 +101,7 @@ def test_csrf_protection():
             print("! Could not extract CSRF token from login page")
             print("  This might be expected if using session-based CSRF")
     except requests.exceptions.ConnectionError:
-        print("! Could not connect to application. Make sure it's running on localhost:5000")
+        print("! Could not connect to application. Make sure it's running on localhost:5001")
         cleanup_test_admin()
         return
     

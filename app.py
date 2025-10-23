@@ -99,7 +99,7 @@ def create_app():
     # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5000", "http://127.0.0.1:5000"],
+            "origins": ["http://localhost:5001", "http://127.0.0.1:5001"],
             "supports_credentials": True
         }
     }, supports_credentials=True)
@@ -799,5 +799,5 @@ if __name__ == "__main__":
     cleanup_thread.start()
     
     # dev server; for prod use gunicorn/uwsgi
-    flask_port = int(os.getenv("FLASK_PORT", 5000))
+    flask_port = int(os.getenv("FLASK_PORT", 5001))
     app.run(debug=True, host="127.0.0.1", port=flask_port)

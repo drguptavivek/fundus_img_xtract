@@ -496,6 +496,7 @@ def create_app():
             or path == "/reset-password"
             or path == "/check-email-status"
             or path == "/email-sse"
+            or path=="/test-rate-limit"
             or path.startswith("/docs/")
             or path.startswith("/help/")
         ):
@@ -746,7 +747,7 @@ def create_app():
     # -------------------------------
 
     @app.route("/healthz", methods=["GET"])
-    @rate_limit("200 per minute")
+    @rate_limit("100 per minute")
     def healthz():
         db = Session()
         try:

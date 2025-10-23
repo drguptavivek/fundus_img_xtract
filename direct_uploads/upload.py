@@ -40,7 +40,7 @@ def upload_index():
 
 @bp.route("/direct/upload", methods=["GET", "POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
-@upload_rate_limit("10 per minute")
+@upload_rate_limit("200 per minute")
 def upload():
     with with_session() as db_session:
         if request.method == "POST":

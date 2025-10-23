@@ -155,7 +155,7 @@ def auth_rate_limit(limit: str = "5 per minute") -> Callable:
     
     return decorator
 
-def upload_rate_limit(limit: str = "10 per minute") -> Callable:
+def upload_rate_limit(limit: str = "200 per minute") -> Callable:
     """
     Rate limit for file upload endpoints.
     """
@@ -200,7 +200,7 @@ def api_rate_limit(limit: str = "100 per minute") -> Callable:
     
     return decorator
 
-def admin_rate_limit(limit: str = "50 per minute") -> Callable:
+def admin_rate_limit(limit: str = "100 per minute") -> Callable:
     """
     Rate limit for admin endpoints.
     """
@@ -256,32 +256,53 @@ def log_rate_limit_violation(limit_key, limit):
     )
 
 # Custom error handler for rate limit exceeded
-def handle_rate_limit_exceeded(e):
+def handle_rate_limit_exceeded(request_limit):
     """
     Custom error handler for rate limit exceeded.
     Returns JSON response for API endpoints and HTML for others.
+    
+    Args:
+        request_limit: RequestLimit object containing limit information
     """
-    # Extract limit information from the exception
-    limit = getattr(e, 'limit', 'unknown')
-    limit_key = getattr(e, 'key', 'unknown')
+    from flask import make_response
+    
+    # Extract limit information from the RequestLimit object
+    # In flask-limiter 4.0.0, RequestLimit has these attributes:
+    # - limit: the limit that was breached
+    # - key: the key that was rate limited
+    # - retry_after: seconds until the limit resets
+    limit = getattr(request_limit, 'limit', None)
+    limit_key = getattr(request_limit, 'key', None)
+    
+    # Get the limit string representation
+    if limit:
+        limit_str = str(limit)
+    else:
+        limit_str = "unknown limit"
     
     # Log the violation
-    log_rate_limit_violation(limit_key, limit)
+    if limit_key:
+        log_rate_limit_violation(limit_key, limit_str)
+    else:
+        log_rate_limit_violation("unknown", limit_str)
     
-    # Get retry after value
-    retry_after = getattr(e, 'retry_after', 60)
+    # Get retry after value from the limit
+    retry_after = getattr(request_limit, 'retry_after', 60)
     
-    # Add flash message with rate limit information
-    from flask import flash
-    flash(f"Rate limit exceeded. Please try again in {retry_after} seconds.", "warning")
+    # Create appropriate error message
+    error_message = f"Rate limit exceeded: {limit_str}"
     
     # Check if this is an API request
     if request.path.startswith('/api/') or request.headers.get('Accept') == 'application/json':
-        return jsonify({
+        return make_response(jsonify({
             "error": "Rate limit exceeded",
-            "message": str(e.description),
+            "message": error_message,
             "retry_after": retry_after
-        }), 429
+        }), 429)
+    
+    # Add flash message with rate limit information for web requests
+    from flask import flash
+    flash(f"Rate limit exceeded. Please try again in {retry_after} seconds.", "warning")
     
     # Return HTML error page for regular requests
     from flask import render_template, redirect, url_for
@@ -291,7 +312,7 @@ def handle_rate_limit_exceeded(e):
     
     return render_template(
         "errors/429.html",
-        error_message=str(e.description),
+        error_message=error_message,
         retry_after=retry_after
     ), 429
 
@@ -521,8 +542,8 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_KEY_PREFIX'] = os.getenv('RATELIMIT_KEY_PREFIX', '')
     app.config['RATELIMIT_STRATEGY'] = os.getenv('RATELIMIT_STRATEGY', 'fixed-window')
     
-    # Meta limits for overall protection (new feature)
-    app.config['RATELIMIT_META_LIMITS'] = os.getenv('RATELIMIT_META_LIMITS', '1000 per hour, 100 per minute')
+    # Application limits for overall protection (Flask-Limiter 4.0)
+    app.config['RATELIMIT_APPLICATION'] = os.getenv('RATELIMIT_APPLICATION', '1000 per hour, 100 per minute')
     
     # Configure headers based on environment variable
     # Disable headers to avoid the 'bool' object has no attribute 'lower' error
@@ -546,6 +567,22 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_MEMCACHED_CONNECT_TIMEOUT'] = os.getenv('RATELIMIT_MEMCACHED_CONNECT_TIMEOUT', '2')
     app.config['RATELIMIT_MEMCACHED_TIMEOUT'] = os.getenv('RATELIMIT_MEMCACHED_TIMEOUT', '1')
     app.config['RATELIMIT_MEMCACHED_MAX_POOL_SIZE'] = os.getenv('RATELIMIT_MEMCACHED_MAX_POOL_SIZE', '10')
+    
+    # Read Redis configuration
+    app.config['RATELIMIT_REDIS_URL'] = os.getenv('RATELIMIT_REDIS_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    app.config['RATELIMIT_REDIS_HOST'] = os.getenv('RATELIMIT_REDIS_HOST', 'localhost')
+    app.config['RATELIMIT_REDIS_PORT'] = int(os.getenv('RATELIMIT_REDIS_PORT', '6379'))
+    app.config['RATELIMIT_REDIS_DB'] = int(os.getenv('RATELIMIT_REDIS_DB', '0'))
+    app.config['RATELIMIT_REDIS_PASSWORD'] = os.getenv('RATELIMIT_REDIS_PASSWORD')
+    app.config['RATELIMIT_REDIS_USERNAME'] = os.getenv('RATELIMIT_REDIS_USERNAME')
+    app.config['RATELIMIT_REDIS_SSL'] = os.getenv('RATELIMIT_REDIS_SSL', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_REDIS_SSL_CERT_REQS'] = os.getenv('RATELIMIT_REDIS_SSL_CERT_REQS', 'required')
+    app.config['RATELIMIT_REDIS_CONNECTION_POOL_KWARGS'] = os.getenv('RATELIMIT_REDIS_CONNECTION_POOL_KWARGS', '{}')
+    app.config['RATELIMIT_REDIS_SOCKET_TIMEOUT'] = int(os.getenv('RATELIMIT_REDIS_SOCKET_TIMEOUT', '5'))
+    app.config['RATELIMIT_REDIS_SOCKET_CONNECT_TIMEOUT'] = int(os.getenv('RATELIMIT_REDIS_SOCKET_CONNECT_TIMEOUT', '5'))
+    app.config['RATELIMIT_REDIS_RETRY_ON_TIMEOUT'] = os.getenv('RATELIMIT_REDIS_RETRY_ON_TIMEOUT', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_REDIS_HEALTH_CHECK_INTERVAL'] = int(os.getenv('RATELIMIT_REDIS_HEALTH_CHECK_INTERVAL', '0'))
+    app.config['RATELIMIT_REDIS_CLIENT_NAME'] = os.getenv('RATELIMIT_REDIS_CLIENT_NAME', 'flask-limiter')
     
     # Configure storage backend based on environment variables
     storage_configured = False
@@ -596,10 +633,33 @@ def init_rate_limiting(app):
                 raise
     
     # Check for Redis configuration
-    elif app.config.get('REDIS_URL'):
-        storage_uri = app.config['REDIS_URL']
-        rate_limit_logger.info("Using Redis for rate limit storage")
-        storage_configured = True
+    elif app.config.get('REDIS_URL') or app.config.get('RATELIMIT_REDIS_URL'):
+        # Build Redis URL from components if full URL not provided
+        redis_url = app.config.get('RATELIMIT_REDIS_URL') or app.config.get('REDIS_URL')
+        
+        if not redis_url and app.config.get('RATELIMIT_REDIS_HOST'):
+            # Build Redis URL from individual components
+            redis_host = app.config.get('RATELIMIT_REDIS_HOST', 'localhost')
+            redis_port = app.config.get('RATELIMIT_REDIS_PORT', 6379)
+            redis_db = app.config.get('RATELIMIT_REDIS_DB', 0)
+            redis_password = app.config.get('RATELIMIT_REDIS_PASSWORD')
+            redis_username = app.config.get('RATELIMIT_REDIS_USERNAME')
+            redis_ssl = app.config.get('RATELIMIT_REDIS_SSL', False)
+            
+            if redis_username:
+                redis_url = f"redis://{redis_username}:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
+            elif redis_password:
+                redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
+            else:
+                redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
+            
+            if redis_ssl:
+                redis_url = redis_url.replace('redis://', 'rediss://')
+        
+        if redis_url:
+            storage_uri = redis_url
+            rate_limit_logger.info(f"Using Redis for rate limit storage: {redis_url}")
+            storage_configured = True
     
     # Check if RATELIMIT_STORAGE_URL is explicitly set
     elif app.config.get('RATELIMIT_STORAGE_URL'):
@@ -630,7 +690,52 @@ def init_rate_limiting(app):
     
     # Set Flask config variables for rate limiting
     app.config['RATELIMIT_STORAGE_URI'] = storage_uri
-    app.config['RATELIMIT_STORAGE_OPTIONS'] = {}
+    
+    # Configure Redis storage options if using Redis
+    storage_options = {}
+    if storage_uri and storage_uri.startswith(('redis://', 'rediss://')):
+        # Redis connection pool options
+        connection_pool_kwargs = {}
+        
+        # Parse connection pool kwargs from environment if provided
+        pool_kwargs_str = app.config.get('RATELIMIT_REDIS_CONNECTION_POOL_KWARGS', '{}')
+        try:
+            import ast
+            connection_pool_kwargs = ast.literal_eval(pool_kwargs_str)
+        except (ValueError, SyntaxError):
+            rate_limit_logger.warning(f"Invalid RATELIMIT_REDIS_CONNECTION_POOL_KWARGS: {pool_kwargs_str}")
+        
+        # Add standard Redis connection options
+        if app.config.get('RATELIMIT_REDIS_SOCKET_TIMEOUT'):
+            connection_pool_kwargs['socket_timeout'] = app.config.get('RATELIMIT_REDIS_SOCKET_TIMEOUT')
+        
+        if app.config.get('RATELIMIT_REDIS_SOCKET_CONNECT_TIMEOUT'):
+            connection_pool_kwargs['socket_connect_timeout'] = app.config.get('RATELIMIT_REDIS_SOCKET_CONNECT_TIMEOUT')
+        
+        if app.config.get('RATELIMIT_REDIS_RETRY_ON_TIMEOUT'):
+            connection_pool_kwargs['retry_on_timeout'] = app.config.get('RATELIMIT_REDIS_RETRY_ON_TIMEOUT')
+        
+        if app.config.get('RATELIMIT_REDIS_HEALTH_CHECK_INTERVAL', 0) > 0:
+            connection_pool_kwargs['health_check_interval'] = app.config.get('RATELIMIT_REDIS_HEALTH_CHECK_INTERVAL')
+        
+        if app.config.get('RATELIMIT_REDIS_CLIENT_NAME'):
+            connection_pool_kwargs['client_name'] = app.config.get('RATELIMIT_REDIS_CLIENT_NAME')
+        
+        # SSL configuration for Redis
+        if storage_uri.startswith('rediss://') or app.config.get('RATELIMIT_REDIS_SSL'):
+            ssl_config = {}
+            cert_reqs = app.config.get('RATELIMIT_REDIS_SSL_CERT_REQS', 'required')
+            if cert_reqs in ['required', 'optional', 'none']:
+                ssl_config['cert_reqs'] = cert_reqs
+            connection_pool_kwargs['ssl'] = ssl_config
+        
+        if connection_pool_kwargs:
+            storage_options = connection_pool_kwargs
+            rate_limit_logger.info(f"Redis connection options configured: {list(connection_pool_kwargs.keys())}")
+        else:
+            storage_options = {}
+    
+    app.config['RATELIMIT_STORAGE_OPTIONS'] = storage_options
     
     # Initialize limiter with app
     global limiter
@@ -639,20 +744,20 @@ def init_rate_limiting(app):
     rate_limit_logger.info(f"Creating limiter with storage_uri: {storage_uri}")
     
     try:
-        # Parse default and meta limits
+        # Parse default and application limits
         default_limits = app.config.get('RATELIMIT_DEFAULT', '').split(',') if app.config.get('RATELIMIT_DEFAULT') else None
-        meta_limits = app.config.get('RATELIMIT_META_LIMITS', '').split(',') if app.config.get('RATELIMIT_META_LIMITS') else None
+        application_limits = app.config.get('RATELIMIT_APPLICATION', '').split(',') if app.config.get('RATELIMIT_APPLICATION') else None
         
         # Create a new limiter instance with enhanced configuration
         new_limiter = Limiter(
             key_func=get_rate_limit_key,
             app=app,
             strategy=app.config.get('RATELIMIT_STRATEGY', 'fixed-window'),
-            headers_enabled=False,  # Explicitly disabled to avoid header injection errors
+            headers_enabled=app.config.get('RATELIMIT_HEADERS_ENABLED', False),  # Use config value
             swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', True),
             key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', ''),
             default_limits=default_limits,
-            meta_limits=meta_limits,
+            application_limits=application_limits,
             fail_on_first_breach=app.config.get('RATELIMIT_FAIL_ON_FIRST_BREACH', False),
             on_breach=handle_rate_limit_exceeded
         )

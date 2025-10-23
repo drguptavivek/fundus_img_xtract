@@ -294,7 +294,7 @@ def ping():
 
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
-@auth_rate_limit("3 per 5 minutes")
+@auth_rate_limit("5 per 5 minutes")
 @protect_form_submission(max_fields=5, max_field_length=200)
 @validate_payload_size(max_size=1024)  # 1KB limit for forgot password form
 def forgot_password():
@@ -381,7 +381,7 @@ def forgot_password():
 
 
 @auth_bp.route("/reset-password", methods=["GET", "POST"])
-@auth_rate_limit("5 per 10 minutes")
+@auth_rate_limit("5 per 5 minutes")
 @protect_form_submission(max_fields=5, max_field_length=200)
 @validate_payload_size(max_size=2048)  # 2KB limit for reset password form
 def reset_password():

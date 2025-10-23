@@ -538,7 +538,7 @@ def init_rate_limiting(app):
     # Read all rate limiting configuration from environment
     app.config['RATELIMIT_ENABLED'] = os.getenv('RATELIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_DEFAULT'] = os.getenv('RATELIMIT_DEFAULT', '500 per hour, 50 per minute')
-    app.config['RATELIMIT_STORAGE_URL'] = os.getenv('RATELIMIT_STORAGE_URL', 'memory://')
+    app.config['RATELIMIT_STORAGE_URI'] = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
     app.config['RATELIMIT_KEY_PREFIX'] = os.getenv('RATELIMIT_KEY_PREFIX', '')
     app.config['RATELIMIT_STRATEGY'] = os.getenv('RATELIMIT_STRATEGY', 'fixed-window')
     
@@ -546,11 +546,10 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_APPLICATION'] = os.getenv('RATELIMIT_APPLICATION', '1000 per hour, 100 per minute')
     
     # Configure headers based on environment variable
-    # Disable headers to avoid the 'bool' object has no attribute 'lower' error
-    headers_enabled = False  # Temporarily disabled due to Flask-Limiter header injection issue
-    app.config['RATELIMIT_HEADERS_ENABLED'] = headers_enabled
-    app.config['RATELIMIT_HEADER_RESET'] = False
-    app.config['RATELIMIT_HEADER_REMAINING'] = False
+    app.config['RATELIMIT_HEADERS_ENABLED'] = os.getenv('RATELIMIT_HEADERS_ENABLED', 'false').lower() in ('true', '1', 'yes')
+    app.config['RATELIMIT_HEADER_LIMIT'] = os.getenv('RATELIMIT_HEADER_LIMIT', 'X-RateLimit-Limit')
+    app.config['RATELIMIT_HEADER_REMAINING'] = os.getenv('RATELIMIT_HEADER_REMAINING', 'X-RateLimit-Remaining')
+    app.config['RATELIMIT_HEADER_RESET'] = os.getenv('RATELIMIT_HEADER_RESET', 'X-RateLimit-Reset')
     
     # Behavior configuration
     app.config['RATELIMIT_FAIL_ON_FIRST_BREACH'] = os.getenv('RATELIMIT_FAIL_ON_FIRST_BREACH', 'false').lower() in ('true', '1', 'yes')
@@ -586,7 +585,7 @@ def init_rate_limiting(app):
     
     # Configure storage backend based on environment variables
     storage_configured = False
-    storage_uri = app.config.get('RATELIMIT_STORAGE_URL', 'memory://')
+    storage_uri = app.config.get('RATELIMIT_STORAGE_URI', 'memory://')
     
     # Check for Memcached configuration
     if app.config.get('RATELIMIT_MEMCACHED_SERVERS'):
@@ -661,9 +660,9 @@ def init_rate_limiting(app):
             rate_limit_logger.info(f"Using Redis for rate limit storage: {redis_url}")
             storage_configured = True
     
-    # Check if RATELIMIT_STORAGE_URL is explicitly set
-    elif app.config.get('RATELIMIT_STORAGE_URL'):
-        storage_url = app.config['RATELIMIT_STORAGE_URL']
+    # Check if RATELIMIT_STORAGE_URI is explicitly set
+    elif app.config.get('RATELIMIT_STORAGE_URI'):
+        storage_url = app.config['RATELIMIT_STORAGE_URI']
         if storage_url.startswith('memcached://'):
             rate_limit_logger.info(f"Using Memcached for rate limit storage (explicitly configured)")
         elif storage_url.startswith('redis://'):
@@ -682,7 +681,7 @@ def init_rate_limiting(app):
     if app.config['RATELIMIT_ENABLED']:
         rate_limit_logger.info(
             f"Rate limiting enabled - Default: {app.config['RATELIMIT_DEFAULT']}, "
-            f"Storage: {app.config['RATELIMIT_STORAGE_URL']}, "
+            f"Storage: {app.config['RATELIMIT_STORAGE_URI']}, "
             f"Headers: {app.config['RATELIMIT_HEADERS_ENABLED']}"
         )
     else:

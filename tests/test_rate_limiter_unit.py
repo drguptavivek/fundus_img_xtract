@@ -120,7 +120,8 @@ class TestRateLimitDecorators(unittest.TestCase):
             "50 per minute",
             per_method=False,
             methods=["POST", "PUT"],
-            error_message="Custom error message"
+            error_message="Custom error message",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -136,7 +137,8 @@ class TestRateLimitDecorators(unittest.TestCase):
             "5 per minute",
             per_method=True,
             methods=["POST"],
-            error_message="Too many authentication attempts. Please try again later."
+            error_message="Too many authentication attempts. Please try again later.",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -152,7 +154,8 @@ class TestRateLimitDecorators(unittest.TestCase):
             "5 per minute",
             per_method=True,
             methods=["POST"],
-            error_message="Too many authentication attempts. Please try again later."
+            error_message="Too many authentication attempts. Please try again later.",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -168,7 +171,8 @@ class TestRateLimitDecorators(unittest.TestCase):
             "20 per minute",
             per_method=True,
             methods=["POST"],
-            error_message="Upload rate limit exceeded. Please wait before uploading more files."
+            error_message="Upload rate limit exceeded. Please wait before uploading more files.",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -183,7 +187,8 @@ class TestRateLimitDecorators(unittest.TestCase):
         mock_limiter.limit.assert_called_once_with(
             "200 per minute",
             per_method=True,
-            error_message="API rate limit exceeded. Please reduce your request frequency."
+            error_message="API rate limit exceeded. Please reduce your request frequency.",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -198,7 +203,8 @@ class TestRateLimitDecorators(unittest.TestCase):
         mock_limiter.limit.assert_called_once_with(
             "100 per minute",
             per_method=True,
-            error_message="Admin operation rate limit exceeded."
+            error_message="Admin operation rate limit exceeded.",
+            override_defaults=True
         )
         self.assertEqual(result, "test_response")
     
@@ -216,11 +222,7 @@ class TestRateLimitDecorators(unittest.TestCase):
             SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
             LOGIN_DISABLED=False,
         )
-        with test_app.test_request_context('/test-rate-limit'), \
-             patch('utils.rate_limiter.limiter') as mock_limiter:
-            
-            mock_limiter.limit.return_value = lambda f: f
-            
+        with test_app.test_request_context('/test-rate-limit'):
             # Create a real function instead of mock for decorator
             def real_test_func():
                 return "test_response"
@@ -235,7 +237,8 @@ class TestRateLimitDecorators(unittest.TestCase):
                 "10 per minute",
                 per_method=True,
                 methods=None,
-                error_message="Rate limit exceeded: 10 per minute"
+                error_message="Rate limit exceeded: 10 per minute",
+                override_defaults=True
             )
             self.assertEqual(result, "test_response")
 

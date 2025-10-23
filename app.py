@@ -724,7 +724,7 @@ def create_app():
     # -------------------------------
     # New homepage route
     @app.route("/")
-    @rate_limit("20 per minute")  # Stricter limit for homepage (was 100 per minute)
+    @rate_limit("60 per minute")  # Homepage - moderate limit for regular access
     def homepage():
         from home import homepage as home_page
         return home_page()
@@ -733,7 +733,7 @@ def create_app():
     # -------------------------------
     # Style Guide
     @app.route("/style_guide")
-    @rate_limit("10 per minute")  # Stricter limit for style guide
+    @rate_limit("30 per minute")  # Style guide - moderate limit
     def style_guide():
         return render_template("style_guide.html")
     # -------------------------------
@@ -741,7 +741,7 @@ def create_app():
     # -------------------------------
     # Test endpoint for rate limiting
     @app.route("/test-rate-limit")
-    @rate_limit("5 per minute")  # Very restrictive for testing
+    @rate_limit("10 per minute")  # Test endpoint - restrictive but not too limiting
     def test_rate_limit():
         return jsonify({"message": "Rate limit test endpoint", "timestamp": time.time()})
     # -------------------------------

@@ -55,7 +55,7 @@ MARKDOWN_TEMPLATE = """
 """
 
 @docs_bp.route('/api.md')
-@rate_limit("20 per minute")
+@rate_limit("60 per minute")
 def api_docs():
     """Serve the API documentation markdown file."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -65,7 +65,7 @@ def api_docs():
         abort(404)
 
 @docs_bp.route('/api.html')
-@rate_limit("20 per minute")
+@rate_limit("60 per minute")
 def api_docs_html():
     """Serve the API documentation as HTML."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -90,7 +90,7 @@ def api_docs_html():
             abort(404)
 
 @docs_bp.route('/openapi.yaml')
-@rate_limit("20 per minute")
+@rate_limit("60 per minute")
 def openapi_spec():
     """Serve the OpenAPI specification YAML file."""
     docs_dir = os.path.join(BASE_DIR, 'docs')
@@ -100,7 +100,7 @@ def openapi_spec():
         abort(404)
 
 @docs_bp.route('/')
-@rate_limit("20 per minute")
+@rate_limit("60 per minute")
 def docs_index():
     """Serve the documentation index."""
     docs_dir = os.path.join(BASE_DIR, 'docs')

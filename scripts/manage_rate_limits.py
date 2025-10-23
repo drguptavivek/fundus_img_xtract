@@ -184,7 +184,8 @@ def main():
     clear_parser.add_argument("--limit", help="Specific limit to clear (e.g., '15 per minute')")
     
     # Clear all command
-    subparsers.add_parser("clear-all", help="Clear ALL rate limits (use with caution)")
+    clear_all_parser = subparsers.add_parser("clear-all", help="Clear ALL rate limits (use with caution)")
+    clear_all_parser.add_argument("--force", action="store_true", help="Skip confirmation prompt")
     
     # Status command
     status_parser = subparsers.add_parser("status", help="Show rate limit status")
@@ -214,11 +215,16 @@ def main():
         clear_rate_limit(key=args.key, limit=args.limit)
     
     elif args.command == "clear-all":
-        confirm = input("⚠️  This will clear ALL rate limits. Are you sure? (yes/no): ")
-        if confirm.lower() == "yes":
-            clear_rate_limit()
-        else:
-            print("Operation cancelled.")
+        if not args.force:
+            try:
+                confirm = input("⚠️  This will clear ALL rate limits. Are you sure? (yes/no): ")
+                if confirm.lower() != "yes":
+                    print("Operation cancelled.")
+                    return
+            except EOFError:
+                print("Cannot read input. Use --force flag to bypass confirmation.")
+                return
+        clear_rate_limit()
     
     elif args.command == "status":
         get_status(key=args.key)

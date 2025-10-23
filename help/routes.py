@@ -37,7 +37,7 @@ def read_markdown_file(relative_path):
 
 
 @bp.route("/")
-@rate_limit("100 per minute")
+@rate_limit("120 per minute")
 def index():
     """Main help page - shows the user guide README."""
     print("Help index route called!")
@@ -54,7 +54,7 @@ def index():
 
 
 @bp.route("/<path:doc_path>")
-@rate_limit("100 per minute")
+@rate_limit("120 per minute")
 def view_document(doc_path):
     """View a specific documentation file."""
     # Security check - only allow paths within user-guide directory

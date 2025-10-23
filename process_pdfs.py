@@ -169,10 +169,22 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
 
 
             # Perform OCR extraction
-            (pageNumberDiabeticReport, pageNumberGlaucomaReport,
-             text_diabetic_result, text_diabetic_qual_result,
-             text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result) = \
-                find_report_pages_by_coords_with_grid(str(pdf_path)) # find_report_pages_by_coords_with_grid expects string path
+            ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path)) # find_report_pages_by_coords_with_grid expects string path
+            
+            # Handle different return formats from OCR function
+            if len(ocr_result) == 8:
+                # Full result with all 8 values
+                (pageNumberDiabeticReport, pageNumberGlaucomaReport,
+                 text_diabetic_result, text_diabetic_qual_result,
+                 text_glaucoma_result, vcdr_rt, vcdr_lt, text_gl_qual_result) = ocr_result
+            elif len(ocr_result) == 2:
+                # Minimal result with just page numbers
+                pageNumberDiabeticReport, pageNumberGlaucomaReport = ocr_result
+                text_diabetic_result = text_diabetic_qual_result = None
+                text_glaucoma_result = vcdr_rt = vcdr_lt = text_gl_qual_result = None
+            else:
+                # Unexpected result format
+                raise ValueError(f"OCR function returned {len(ocr_result)} values, expected 2 or 8")
 
             # Open the PDF for splitting if any report page is found
             pdf_document = None

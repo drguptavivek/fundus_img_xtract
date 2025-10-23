@@ -2,18 +2,24 @@
 from math import ceil
 import re
 from datetime import datetime
-from flask import abort, render_template, request, current_app, url_for
+from flask import abort, render_template, request, current_app, url_for, flash, redirect
 from flask_login import current_user
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
 
 from auth.roles import roles_required
+from utils.rate_limiter import rate_limit
 from . import bp
-from models import Session, PatientEncounters, LabUnit, Hospital
+from models import (
+    Session, PatientEncounters, LabUnit, Hospital,
+    EncounterFilePDF, DiabeticRetinopathyReport, GlaucomaReport, ZipFile
+)
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.rate_limiter import rate_limit
  
 @bp.route("/", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@rate_limit("120 per minute")
 def list_screenings():
     # Query params
     page = request.args.get("page", default=1, type=int) or 1
@@ -35,6 +41,7 @@ def list_screenings():
                 selectinload(PatientEncounters.glaucoma_reports),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.encounter_file_pdfs),
                 joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
             )
             .order_by(
@@ -130,6 +137,7 @@ def list_screenings():
 
 @bp.route("/<int:encounter_id>", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@rate_limit("120 per minute")
 def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
@@ -145,6 +153,7 @@ def screening_detail(encounter_id: int):
                 selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.glaucoma_reports),
+                selectinload(PatientEncounters.encounter_file_pdfs),
                 joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
             )
             .filter(PatientEncounters.id == encounter_id)
@@ -214,5 +223,241 @@ def screening_detail(encounter_id: int):
         back_url=url_for("screenings.list_screenings"),
         prev_url=prev_url,
         next_url=next_url,
-        gallery_id=gallery_id,     
+        gallery_id=gallery_id,
     )
+
+
+@bp.route("/reprocess_pdf/<int:encounter_id>", methods=["POST"])
+@roles_required("admin", "data_manager")
+def reprocess_pdf(encounter_id: int):
+    """Reset OCR processing flag for a specific encounter to allow reprocessing."""
+    db = Session()
+    try:
+        # Get the encounter
+        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        if not encounter:
+            flash("Encounter not found", "danger")
+            return redirect(url_for("screenings.list_screenings"))
+        
+        # Find PDF files for this encounter
+        pdf_files = db.query(EncounterFilePDF).filter(
+            EncounterFilePDF.patient_encounter_id == encounter_id
+        ).all()
+        
+        if not pdf_files:
+            flash("No PDF files found for this encounter", "warning")
+            return redirect(url_for("screenings.screening_detail", encounter_id=encounter_id))
+        
+        # Check for existing reports
+        dr_reports = db.query(DiabeticRetinopathyReport).filter_by(
+            patient_encounter_id=encounter_id
+        ).all()
+        
+        gl_reports = db.query(GlaucomaReport).filter_by(
+            patient_encounter_id=encounter_id
+        ).all()
+        
+        reports_exist = len(dr_reports) > 0 or len(gl_reports) > 0
+        
+        # Reset OCR processed flag for all PDFs
+        reset_count = 0
+        for pdf_file in pdf_files:
+            if pdf_file.ocr_processed:
+                pdf_file.ocr_processed = False
+                db.add(pdf_file)
+                reset_count += 1
+        
+        if reset_count > 0:
+            db.commit()
+            message = f"Reset OCR processing for {reset_count} PDF file(s)"
+            if reports_exist:
+                message += ". Note: Existing reports were not deleted - you may want to delete them manually if needed"
+            flash(message, "success")
+        else:
+            flash("PDF files were already marked for processing", "info")
+        
+        # Queue the PDF processing job
+        from job_store import db_create_job
+        from worker import queue_job
+        
+        job_token = db_create_job(
+            [f"Reprocess encounter {encounter_id} (Patient: {encounter.patient_id})"],
+            [],
+            uploader_user_id=current_user.id,
+            uploader_username=getattr(current_user, 'username', None),
+            uploader_ip=request.remote_addr,
+            lab_unit_id=encounter.lab_unit_id,
+            upload_type="pdf reprocess",
+        )
+        
+        queue_job(current_app, job_token, [])
+        
+        flash(f"PDF reprocessing job queued (Job ID: {job_token})", "info")
+        
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Error reprocessing PDF for encounter {encounter_id}: {str(e)}")
+        flash(f"Error reprocessing PDF: {str(e)}", "danger")
+        
+    finally:
+        db.close()
+    
+    return redirect(url_for("screenings.screening_detail", encounter_id=encounter_id))
+
+
+@bp.route("/delete/<int:encounter_id>", methods=["POST"])
+@roles_required("admin", "data_manager")
+def delete_encounter(encounter_id: int):
+    """Delete an entire encounter including all associated data."""
+    db = Session()
+    try:
+        # Get the encounter with all related data
+        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        if not encounter:
+            flash("Encounter not found", "danger")
+            return redirect(url_for("screenings.list_screenings"))
+        
+        # Check permissions
+        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager")
+        
+        if not is_admin_like and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+            abort(403)
+        
+        # Store patient info for flash message
+        patient_id = encounter.patient_id
+        patient_name = encounter.name
+        
+        # Delete all associated data (cascade delete should handle most of this)
+        # But we'll be explicit for clarity and to ensure files are cleaned up
+        
+        # Delete encounter files (images and PDFs)
+        from models import EncounterFile, EncounterFilePDF
+        import os
+        
+        # Delete image files from disk
+        image_files = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter_id).all()
+        for img_file in image_files:
+            try:
+                # Get the file path based on zip file upload date
+                zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                if zip_file:
+                    upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+                    from models import IMAGE_DIR
+                    img_path = IMAGE_DIR / upload_date_str / img_file.filename
+                    if img_path.exists():
+                        os.remove(img_path)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete image file {img_file.filename}: {e}")
+        
+        # Delete PDF files from disk
+        pdf_files = db.query(EncounterFilePDF).filter(EncounterFilePDF.patient_encounter_id == encounter_id).all()
+        for pdf_file in pdf_files:
+            try:
+                # Get the file path based on zip file upload date
+                zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                if zip_file:
+                    upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+                    from models import PDF_DIR
+                    pdf_path = PDF_DIR / upload_date_str / pdf_file.filename
+                    if pdf_path.exists():
+                        os.remove(pdf_path)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete PDF file {pdf_file.filename}: {e}")
+        
+        # Delete split DR and Glaucoma report files
+        from models import DiabeticRetinopathyReport, GlaucomaReport, DR_PDF_DIR, GLAUCOMA_PDF_DIR
+        
+        dr_reports = db.query(DiabeticRetinopathyReport).filter(DiabeticRetinopathyReport.patient_encounter_id == encounter_id).all()
+        for dr_report in dr_reports:
+            if dr_report.report_file_name:
+                try:
+                    zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                    if zip_file:
+                        upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+                        dr_pdf_path = DR_PDF_DIR / upload_date_str / dr_report.report_file_name
+                        if dr_pdf_path.exists():
+                            os.remove(dr_pdf_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to delete DR report file {dr_report.report_file_name}: {e}")
+        
+        gl_reports = db.query(GlaucomaReport).filter(GlaucomaReport.patient_encounter_id == encounter_id).all()
+        for gl_report in gl_reports:
+            if gl_report.report_file_name:
+                try:
+                    zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                    if zip_file:
+                        upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+                        gl_pdf_path = GLAUCOMA_PDF_DIR / upload_date_str / gl_report.report_file_name
+                        if gl_pdf_path.exists():
+                            os.remove(gl_pdf_path)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to delete Glaucoma report file {gl_report.report_file_name}: {e}")
+        
+        # Delete the encounter (cascade will handle related database records)
+        db.delete(encounter)
+        
+        # Also delete the ZIP file record to allow re-uploading the same ZIP
+        zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+        if zip_file:
+            db.delete(zip_file)
+        
+        db.commit()
+        
+        flash(f"Successfully deleted screening for Patient ID: {patient_id} ({patient_name or 'Unknown'})", "success")
+        
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Error deleting encounter {encounter_id}: {str(e)}")
+        flash(f"Error deleting screening: {str(e)}", "danger")
+        
+    finally:
+        db.close()
+    
+    return redirect(url_for("screenings.list_screenings"))
+
+
+@bp.route("/delete_reports/<int:encounter_id>", methods=["POST"])
+@roles_required("admin", "data_manager")
+def delete_reports(encounter_id: int):
+    """Delete existing DR and Glaucoma reports for an encounter."""
+    db = Session()
+    try:
+        # Get the encounter
+        encounter = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id).first()
+        if not encounter:
+            flash("Encounter not found", "danger")
+            return redirect(url_for("screenings.list_screenings"))
+        
+        # Delete existing reports
+        dr_reports = db.query(DiabeticRetinopathyReport).filter_by(
+            patient_encounter_id=encounter_id
+        ).all()
+        
+        gl_reports = db.query(GlaucomaReport).filter_by(
+            patient_encounter_id=encounter_id
+        ).all()
+        
+        deleted_count = len(dr_reports) + len(gl_reports)
+        
+        # Delete all reports
+        for report in dr_reports:
+            db.delete(report)
+        for report in gl_reports:
+            db.delete(report)
+        
+        if deleted_count > 0:
+            db.commit()
+            flash(f"Deleted {deleted_count} report(s) for patient {encounter.patient_id}", "success")
+        else:
+            flash("No reports found to delete", "info")
+        
+    except Exception as e:
+        db.rollback()
+        current_app.logger.error(f"Error deleting reports for encounter {encounter_id}: {str(e)}")
+        flash(f"Error deleting reports: {str(e)}", "danger")
+        
+    finally:
+        db.close()
+    
+    return redirect(url_for("screenings.screening_detail", encounter_id=encounter_id))

@@ -294,7 +294,7 @@ def ping():
 
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
-@auth_rate_limit("5 per 5 minutes")
+@auth_rate_limit("10 per 5 minutes")  # Slightly less restrictive for user convenience
 @protect_form_submission(max_fields=5, max_field_length=200)
 @validate_payload_size(max_size=1024)  # 1KB limit for forgot password form
 def forgot_password():
@@ -381,7 +381,7 @@ def forgot_password():
 
 
 @auth_bp.route("/reset-password", methods=["GET", "POST"])
-@auth_rate_limit("5 per 5 minutes")
+@auth_rate_limit("10 per 5 minutes")  # Slightly less restrictive for user convenience
 @protect_form_submission(max_fields=5, max_field_length=200)
 @validate_payload_size(max_size=2048)  # 2KB limit for reset password form
 def reset_password():
@@ -472,7 +472,7 @@ def reset_password():
 
 
 @auth_bp.route("/email-sse")
-@rate_limit("20 per minute")  # SSE endpoint for real-time updates
+@rate_limit("30 per minute")  # SSE endpoint for real-time updates
 def email_sse():
     """Server-sent events endpoint for email sending results."""
     def event_stream():
@@ -490,7 +490,7 @@ def email_sse():
 
 
 @auth_bp.route("/check-email-status")
-@rate_limit("20 per minute")  # Status check endpoint
+@rate_limit("30 per minute")  # Status check endpoint
 def check_email_status():
     """Check for any email sending status updates."""
     session_id = session.get('_id', 'unknown')
@@ -506,7 +506,7 @@ def check_email_status():
 
 
 @auth_bp.route("/check-session")
-@rate_limit("20 per minute")  # Session check endpoint
+@rate_limit("30 per minute")  # Session check endpoint
 def check_session():
     """Check if session cookie is valid and redirect to homepage if it is."""
     from flask_login import current_user

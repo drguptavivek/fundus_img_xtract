@@ -8,7 +8,7 @@ from models import User, LabUnit
 
 @bp.route("/api/lab-units/<int:user_id>", methods=["GET"])
 @login_required
-@api_rate_limit("60 per minute")
+@api_rate_limit("120 per minute")
 def get_lab_units(user_id):
     with with_session() as db:
         user = db.get(User, user_id)
@@ -20,7 +20,7 @@ def get_lab_units(user_id):
 
 @bp.route("/api/hospital/<int:lab_unit_id>", methods=["GET"])
 @login_required
-@api_rate_limit("60 per minute")
+@api_rate_limit("120 per minute")
 def get_hospital(lab_unit_id):
     with with_session() as db:
         lu = db.get(LabUnit, lab_unit_id)

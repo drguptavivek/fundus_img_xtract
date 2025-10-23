@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_forms.html" as forms %}
 {% block title %}Screening #{{ encounter.id }}{% endblock %}
 
 {% block content %}
@@ -76,6 +77,63 @@
                     </dl>
                 </div>
             </div>
+
+            {# Main Report PDF #}
+            <div class="card shadow-sm mb-3">
+                <div class="card-header"><strong>Main Report PDF</strong></div>
+                <div class="card-body">
+                    {% set pdf_files = encounter.encounter_file_pdfs or [] %}
+                    {% if pdf_files %}
+                        {% for pdf in pdf_files %}
+                            <div class="mb-2">
+                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}" target="_blank" rel="noopener">
+                                    <i class="bi bi-file-pdf"></i> Open Original PDF
+                                </a>
+                                <small class="text-muted d-block mt-1">{{ pdf.filename }}</small>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <em class="text-muted">No PDF files available for this encounter.</em>
+                    {% endif %}
+                </div>
+            </div>
+
+            {# Admin Actions for PDF Reprocessing #}
+            {% if current_user.has_role('admin', 'data_manager') %}
+            <div class="card shadow-sm mb-3">
+                <div class="card-header"><strong>PDF Processing Actions</strong></div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <form method="post" action="{{ url_for('screenings.reprocess_pdf', encounter_id=encounter.id) }}"
+                              onsubmit="return confirm('This will reset the OCR processing flag for PDFs in this encounter and queue them for reprocessing. Continue?')">
+                            {{ forms.csrf_field() }}
+                            <button type="submit" class="btn btn-warning btn-sm">
+                                <i class="bi bi-arrow-clockwise"></i> Reprocess PDFs
+                            </button>
+                        </form>
+                        {% if dr_reports or gl_reports %}
+                        <form method="post" action="{{ url_for('screenings.delete_reports', encounter_id=encounter.id) }}"
+                              onsubmit="return confirm('This will permanently delete all DR and Glaucoma reports for this encounter. This action cannot be undone. Continue?')">
+                            {{ forms.csrf_field() }}
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="bi bi-trash"></i> Delete Existing Reports
+                            </button>
+                        </form>
+                        {% endif %}
+                        <form method="post" action="{{ url_for('screenings.delete_encounter', encounter_id=encounter.id) }}"
+                              onsubmit="return confirm('WARNING: This will permanently delete this entire screening including all images, PDFs, and reports. This action cannot be undone. Are you absolutely sure?')">
+                            {{ forms.csrf_field() }}
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="bi bi-exclamation-triangle"></i> Delete Entire Screening
+                            </button>
+                        </form>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        Use these options if PDF processing failed or reports need to be regenerated.
+                    </small>
+                </div>
+            </div>
+            {% endif %}
 
             {# DR Reports #}
             <div class="card shadow-sm mb-3">

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Tuple
 from flask import send_file, abort, flash, make_response
-from models import DirectImageVerify, Disease, Session, EncounterFile, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from models import DirectImageVerify, Disease, Session, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from sqlalchemy import  and_, select
 
 
@@ -64,6 +64,35 @@ def encounterGlaucomaReportByUUID(uuid: str):
             abort(404)
         return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
     finally: db.close()
+
+def encounterPDFByUUID(uuid: str):
+    """
+    Serve the original PDF file from an encounter by UUID.
+    """
+    db = Session()
+    try:
+        result = (
+            db.query(EncounterFilePDF, PatientEncounters, ZipFile)
+            .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
+            .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+            .filter(EncounterFilePDF.uuid == uuid)
+            .first()
+        )
+        if not result or not result[0].filename:
+            flash(f"Error: Encounter PDF not found with UUID: {uuid}", "danger")
+            abort(404)
+        
+        pdf_file, patient_encounter, zip_file = result
+        upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+        pdf_path_str = str(PDF_DIR / upload_date_str / pdf_file.filename)
+        
+        if not os.path.exists(pdf_path_str):
+            flash(f"Error: PDF file not found on disk: {uuid}", "danger")
+            abort(404)
+        
+        return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
+    finally:
+        db.close()
 
 def directImgOrigByUUID(uuid: str):
     db = Session()

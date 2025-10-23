@@ -150,7 +150,7 @@ def rate_limit(
                 per_method=per_method,
                 methods=methods,
                 error_message=error_message or f"Rate limit exceeded: {limit}",
-                override_defaults=True
+                override_defaults=False
             )(f)(*args, **kwargs)
         
         return wrapped
@@ -230,7 +230,7 @@ def upload_rate_limit(limit: str = "200 per minute") -> Callable:
     
     return decorator
 
-def api_rate_limit(limit: str = "100 per minute") -> Callable:
+def api_rate_limit(limit: str = "200 per minute") -> Callable:
     """
     Rate limit for general API endpoints.
     """
@@ -469,19 +469,19 @@ def get_user_rate_limits(user_id: int) -> dict:
         if user.has_role('admin'):
             return {
                 "default": "5000 per hour",
-                "upload": "100 per minute",
+                "upload": "200 per minute",
                 "api": "1000 per minute"
             }
         elif user.has_role('data_manager', 'ophthalmologist'):
             return {
                 "default": "2000 per hour",
-                "upload": "50 per minute",
+                "upload": "200 per minute",
                 "api": "500 per minute"
             }
         elif user.has_role('fileUploader', 'optometrist'):
             return {
                 "default": "1000 per hour",
-                "upload": "20 per minute",
+                "upload": "200 per minute",
                 "api": "200 per minute"
             }
         else:
@@ -522,7 +522,7 @@ def shared_resource_limit(resource_name: str, limit: str = None):
         Callable: Decorator function
     """
     if limit is None:
-        limit = current_app.config.get('RATELIMIT_SHARED_DEFAULT', '100 per hour')
+        limit = current_app.config.get('RATELIMIT_SHARED_DEFAULT', '200 per hour')
     
     def decorator(f):
         @wraps(f)
@@ -950,6 +950,7 @@ def init_rate_limiting(app):
         application_limits = app.config.get('RATELIMIT_APPLICATION', '').split(',') if app.config.get('RATELIMIT_APPLICATION') else None
         
         # Create a new limiter instance with enhanced configuration
+        # Set application_limits to None to avoid overriding route-specific limits
         new_limiter = Limiter(
             key_func=get_rate_limit_key,
             app=app,
@@ -958,7 +959,7 @@ def init_rate_limiting(app):
             swallow_errors=app.config.get('RATELIMIT_SWALLOW_ERRORS', True),
             key_prefix=app.config.get('RATELIMIT_KEY_PREFIX', ''),
             default_limits=default_limits,
-            application_limits=application_limits,
+            application_limits=None,  # Disable application limits to avoid overriding route-specific limits
             fail_on_first_breach=app.config.get('RATELIMIT_FAIL_ON_FIRST_BREACH', False),
             on_breach=handle_rate_limit_exceeded
         )

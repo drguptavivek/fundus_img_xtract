@@ -71,7 +71,7 @@ pycparser==2.22
     # via cffi
 pygments==2.19.2
     # via pytest
-pymupdf==1.26.4
+pymupdf==1.26.5
     # via fundus-img-xtract (pyproject.toml)
 pyparsing==3.2.3
     # via matplotlib

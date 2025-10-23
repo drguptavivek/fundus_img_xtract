@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_forms.html" as forms %}
 {% block title %}Screenings{% endblock %}
 
 {% block content %}
@@ -155,16 +156,29 @@
           <div class="d-flex flex-column align-items-lg-end gap-2">
             <span class="badge bg-dark-subtle text-dark-emphasis scr-badge-enhanced">#{{ enc.id }}</span>
             
-            <a class="btn btn-primary btn-sm shadow-sm fw-semibold detail-btn px-3"
-              href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">
-              <span class="me-1" aria-hidden="true">
-                <!-- eye icon -->
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" focusable="false">
-                  <path d="M8 3c3.3 0 5.9 2.1 7.3 4.6a.9.9 0 0 1 0 .8C13.9 11.9 11.3 14 8 14s-5.9-2.1-7.3-4.6a.9.9 0 0 1 0-.8C2.1 5.1 4.7 3 8 3zm0 1.6c-2.6 0-4.7 1.6-6 3.4 1.3 1.8 3.4 3.4 6 3.4s4.7-1.6 6-3.4c-1.3-1.8-3.4-3.4-6-3.4zM8 6.2a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z"/>
-                </svg>
-              </span>
-              Screening Detail
-            </a>
+            <div class="d-flex gap-2 flex-wrap align-items-lg-end">
+              <a class="btn btn-primary btn-sm shadow-sm fw-semibold detail-btn px-3"
+                href="{{ url_for('screenings.screening_detail', encounter_id=enc.id) }}">
+                <span class="me-1" aria-hidden="true">
+                  <!-- eye icon -->
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" focusable="false">
+                    <path d="M8 3c3.3 0 5.9 2.1 7.3 4.6a.9.9 0 0 1 0 .8C13.9 11.9 11.3 14 8 14s-5.9-2.1-7.3-4.6a.9.9 0 0 1 0-.8C2.1 5.1 4.7 3 8 3zm0 1.6c-2.6 0-4.7 1.6-6 3.4 1.3 1.8 3.4 3.4 6 3.4s4.7-1.6 6-3.4c-1.3-1.8-3.4-3.4-6-3.4zM8 6.2a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z"/>
+                  </svg>
+                </span>
+                Screening Detail
+              </a>
+              
+              {% if current_user.has_role('admin', 'data_manager') %}
+              <form method="post" action="{{ url_for('screenings.delete_encounter', encounter_id=enc.id) }}"
+                    onsubmit="return confirm('Are you sure you want to delete this entire screening? This action cannot be undone and will delete all associated images, PDFs, and reports.')"
+                    class="m-0">
+                {{ forms.csrf_field() }}
+                <button type="submit" class="btn btn-danger" title="Delete Screening">
+                  <i class="bi bi-trash"></i>Delete Entire Screening
+                </button>
+              </form>
+              {% endif %}
+            </div>
           </div>
         </div>
       </div>
@@ -173,6 +187,30 @@
       <!-- Body: responsive columns -->
       <div class="card-body pt-3 pb-3">
         <div class="row g-3">
+          <!-- Main Report PDF -->
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="h-100">
+              <div class="scr-sec-title small text-uppercase text-muted mb-2">Main Report PDF</div>
+              {% set pdf_files = enc.encounter_file_pdfs or [] %}
+              {% if pdf_files %}
+                <div class="p-3 rounded bg-light-subtle">
+                  <div class="mb-2">
+                    <span class="fw-semibold">{{ pdf_files|length }} PDF file{{ 's' if pdf_files|length != 1 else '' }}</span>
+                  </div>
+                  {% for pdf in pdf_files %}
+                    <a class="btn btn-sm btn-outline-primary me-2 mb-2" href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}" target="_blank" rel="noopener">
+                      <i class="bi bi-file-pdf"></i> Open PDF
+                    </a>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="p-3 rounded bg-light-subtle text-center">
+                  <span class="text-muted">No PDF files</span>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+
           <!-- DR Report -->
           <div class="col-12 col-md-6 col-xl-4">
             <div class="h-100">

@@ -112,7 +112,17 @@ def check_app_running():
 
 def main():
     """Main function to run tests based on command line arguments."""
-    parser = argparse.ArgumentParser(description="Flask-Limiter 4.0 Test Runner")
+    parser = argparse.ArgumentParser(
+        description="Flask-Limiter 4.0 Test Runner",
+        epilog="""
+Rate limit management commands:
+  uv run scripts/manage_rate_limits.py list
+  uv run scripts/manage_rate_limits.py status [--key <key>]
+  uv run scripts/manage_rate_limits.py clear --key <key> [--limit <limit>]
+  uv run scripts/manage_rate_limits.py clear-all
+  uv run scripts/manage_rate_limits.py my-key
+        """
+    )
     parser.add_argument(
         "test_type",
         choices=["unit", "integration", "e2e", "all"],

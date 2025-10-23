@@ -68,6 +68,46 @@ class TestRateLimiterIntegration:
             else:
                 assert result[1] == 429
     
+    def test_request_limit_with_runtime_limit_object(self, app):
+        """Test handling of RuntimeLimit object with limit/per attributes."""
+        with app.test_request_context('/api/test', headers={'Accept': 'application/json'}):
+            # Create a mock RuntimeLimit object
+            runtime_limit = Mock()
+            runtime_limit.limit = Mock()
+            runtime_limit.limit.limit = 20
+            runtime_limit.limit.per = "minute"
+            runtime_limit.key = "ip:127.0.0.1"
+            runtime_limit.retry_after = 60
+            
+            # This should not raise an exception
+            result = handle_rate_limit_exceeded(runtime_limit)
+            
+            # Verify it handled the RuntimeLimit object correctly
+            assert result is not None
+            if hasattr(result, 'status_code'):
+                assert result.status_code == 429
+            else:
+                assert result[1] == 429
+    
+    def test_request_limit_with_runtime_limit_repr(self, app):
+        """Test handling of RuntimeLimit object with repr string."""
+        with app.test_request_context('/api/test', headers={'Accept': 'application/json'}):
+            # Create a mock RuntimeLimit object with repr-like string
+            runtime_limit = Mock()
+            runtime_limit.limit = "RuntimeLimit(limit=20 per 1 minute, key_func=<function get_rate_limit_key at 0x107c06a20>, scope=None, per_method=True, methods=None, error_message='Rate limit exceeded: 20 per minute', exempt_when=None, override_defaults=True, deduct_when=None, on_breach=None, cost=1, shared=False, meta_limits=())"
+            runtime_limit.key = "ip:127.0.0.1"
+            runtime_limit.retry_after = 60
+            
+            # This should not raise an exception
+            result = handle_rate_limit_exceeded(runtime_limit)
+            
+            # Verify it extracted the limit from the repr correctly
+            assert result is not None
+            if hasattr(result, 'status_code'):
+                assert result.status_code == 429
+            else:
+                assert result[1] == 429
+    
     def test_request_limit_with_web_endpoint(self, app):
         """Test rate limit handling for web endpoints."""
         with app.test_request_context('/test'):

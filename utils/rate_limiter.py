@@ -267,8 +267,8 @@ def handle_rate_limit_exceeded(request_limit):
     from flask import make_response
     
     # Extract limit information from the RequestLimit object
-    # In flask-limiter 4.0.0, RequestLimit has these attributes:
-    # - limit: the limit that was breached
+    # In flask-limiter 4.0.0, RequestLimit (or RuntimeLimit) has these attributes:
+    # - limit: the limit that was breached (may be a string or Limit object)
     # - key: the key that was rate limited
     # - retry_after: seconds until the limit resets
     limit = getattr(request_limit, 'limit', None)
@@ -276,9 +276,27 @@ def handle_rate_limit_exceeded(request_limit):
     
     # Get the limit string representation
     if limit:
-        limit_str = str(limit)
+        # Handle different limit object types in Flask-Limiter 4.0
+        if hasattr(limit, 'limit') and hasattr(limit, 'per'):
+            # This is a Limit object (e.g., "20 per minute")
+            limit_str = f"{limit.limit} per {limit.per}"
+        elif hasattr(limit, '__str__'):
+            # Try to convert to string
+            limit_str = str(limit)
+            # If it looks like a repr, try to extract the actual limit
+            if 'RuntimeLimit' in limit_str or 'limit=' in limit_str:
+                # Extract the limit from the repr
+                import re
+                match = re.search(r'(\d+)\s+per\s+(\w+)', limit_str)
+                if match:
+                    limit_str = f"{match.group(1)} per {match.group(2)}"
+                else:
+                    # Fallback to a generic message
+                    limit_str = "Too many requests"
+        else:
+            limit_str = "Too many requests"
     else:
-        limit_str = "unknown limit"
+        limit_str = "Too many requests"
     
     # Log the violation
     if limit_key:
@@ -287,7 +305,21 @@ def handle_rate_limit_exceeded(request_limit):
         log_rate_limit_violation("unknown", limit_str)
     
     # Get retry after value from the limit
-    retry_after = getattr(request_limit, 'retry_after', 60)
+    # In Flask-Limiter 4.0, retry_after might be in different places
+    retry_after = getattr(request_limit, 'retry_after', None)
+    
+    # Try to get retry_after from the limit object if it's None
+    if retry_after is None and hasattr(limit, 'reset_in'):
+        retry_after = limit.reset_in
+    elif retry_after is None and hasattr(limit, 'parsed_limit'):
+        # For some limit objects, the reset time might be in parsed_limit
+        parsed = limit.parsed_limit
+        if hasattr(parsed, 'reset_in'):
+            retry_after = parsed.reset_in
+    
+    # Default to 60 seconds if still None
+    if retry_after is None:
+        retry_after = 60
     
     # Create appropriate error message
     error_message = f"Rate limit exceeded: {limit_str}"
@@ -301,8 +333,17 @@ def handle_rate_limit_exceeded(request_limit):
         }), 429)
     
     # Add flash message with rate limit information for web requests
-    from flask import flash
-    flash(f"Rate limit exceeded. Please try again in {retry_after} seconds.", "warning")
+    # Clear any existing flash messages to avoid duplicates
+    from flask import flash, get_flashed_messages
+    
+    # Clear existing flash messages to prevent duplicates
+    get_flashed_messages()
+    
+    # Add our flash message
+    if retry_after and retry_after > 0:
+        flash(f"Rate limit exceeded. Please try again in {retry_after} seconds.", "warning")
+    else:
+        flash("Rate limit exceeded. Please try again later.", "warning")
     
     # Return HTML error page for regular requests
     from flask import render_template, redirect, url_for
@@ -446,24 +487,41 @@ def clear_rate_limit(key: str = None, limit: str = None) -> bool:
             # Clear specific key
             if limit:
                 # Clear specific limit for a key
+                # For Redis, we need to construct the key properly
                 storage_key = f"{limit}:{key}"
                 limiter._storage.clear(storage_key)
                 rate_limit_logger.info(f"Cleared rate limit for key: {storage_key}")
             else:
                 # Clear all limits for a key
-                # This is storage backend dependent
-                if hasattr(limiter._storage, 'keys'):
+                # For Redis storage, we need to use the Redis client directly
+                if hasattr(limiter._storage, 'storage'):
+                    # RedisStorage has a 'storage' attribute which is the Redis client
+                    redis_client = limiter._storage.storage
+                    # Search for keys matching the pattern
+                    pattern = f"*{key}"
+                    keys = redis_client.keys(pattern)
+                    if keys:
+                        redis_client.delete(*keys)
+                        rate_limit_logger.info(f"Cleared {len(keys)} rate limits for key pattern: {pattern}")
+                    else:
+                        rate_limit_logger.info(f"No rate limits found for key pattern: {pattern}")
+                elif hasattr(limiter._storage, 'keys'):
                     # For storage backends that support key iteration
-                    keys_to_remove = [k for k in limiter._storage.keys() if k.endswith(key)]
+                    keys_to_remove = [k for k in limiter._storage.keys() if key in k]
                     for storage_key in keys_to_remove:
                         limiter._storage.clear(storage_key)
                     rate_limit_logger.info(f"Cleared {len(keys_to_remove)} rate limits for key: {key}")
                 else:
-                    rate_limit_logger.warning(f"Storage backend does not support key iteration for key: {key}")
+                    rate_limit_logger.warning(f"Storage backend does not support key clearing for key: {key}")
                     return False
         else:
             # Clear all rate limits (use with caution)
-            if hasattr(limiter._storage, 'reset'):
+            if hasattr(limiter._storage, 'storage'):
+                # For Redis, flush the database
+                redis_client = limiter._storage.storage
+                redis_client.flushdb()
+                rate_limit_logger.warning("Cleared ALL rate limits from Redis database")
+            elif hasattr(limiter._storage, 'reset'):
                 limiter._storage.reset()
                 rate_limit_logger.warning("Cleared ALL rate limits")
             else:
@@ -492,28 +550,59 @@ def get_rate_limit_status(key: str = None) -> dict:
     try:
         if key:
             # Get status for specific key
-            if hasattr(limiter._storage, 'get'):
-                # Try to get current count and reset time
-                # Note: This is storage backend dependent
-                info = {"key": key}
+            info = {"key": key}
+            
+            # For Redis storage, use the Redis client directly
+            if hasattr(limiter._storage, 'storage'):
+                redis_client = limiter._storage.storage
+                # Search for keys matching the pattern
+                pattern = f"*{key}"
+                keys = redis_client.keys(pattern)
+                info["matching_keys"] = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keys]
+                info["limits"] = {}
                 
-                # For memory storage, we can try to inspect the internal state
-                if hasattr(limiter._storage, '_storage'):
-                    storage_data = limiter._storage._storage
-                    matching_keys = [k for k in storage_data.keys() if key in k]
-                    info["matching_keys"] = matching_keys
-                    info["limits"] = {}
-                    for storage_key in matching_keys:
-                        info["limits"][storage_key] = str(storage_data[storage_key])
+                # Get values for matching keys
+                for storage_key in keys:
+                    key_str = storage_key.decode('utf-8') if isinstance(storage_key, bytes) else storage_key
+                    value = redis_client.get(storage_key)
+                    if value:
+                        value_str = value.decode('utf-8') if isinstance(value, bytes) else str(value)
+                        info["limits"][key_str] = value_str
                 
-                return info
+                info["total_matching_keys"] = len(keys)
+            elif hasattr(limiter._storage, '_storage'):
+                # For memory storage
+                storage_data = limiter._storage._storage
+                matching_keys = [k for k in storage_data.keys() if key in k]
+                info["matching_keys"] = matching_keys
+                info["limits"] = {}
+                for storage_key in matching_keys:
+                    info["limits"][storage_key] = str(storage_data[storage_key])
+                info["total_matching_keys"] = len(matching_keys)
             else:
                 return {"error": "Storage backend does not support inspection"}
+            
+            return info
         else:
             # Get overall statistics
             stats = {"storage_type": type(limiter._storage).__name__}
             
-            if hasattr(limiter._storage, '_storage'):
+            # For Redis storage, get database info
+            if hasattr(limiter._storage, 'storage'):
+                redis_client = limiter._storage.storage
+                # Get basic Redis info
+                info = redis_client.info()
+                stats["redis_info"] = {
+                    "used_memory": info.get("used_memory_human"),
+                    "connected_clients": info.get("connected_clients"),
+                    "total_commands_processed": info.get("total_commands_processed")
+                }
+                
+                # Get sample keys
+                keys = redis_client.keys()[:10]  # First 10 keys
+                stats["total_keys"] = redis_client.dbsize()
+                stats["sample_keys"] = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keys]
+            elif hasattr(limiter._storage, '_storage'):
                 # For memory storage
                 stats["total_keys"] = len(limiter._storage._storage)
                 stats["keys"] = list(limiter._storage._storage.keys())[:10]  # First 10 keys

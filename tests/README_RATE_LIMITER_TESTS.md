@@ -108,6 +108,7 @@ The tests use the following configuration from `.env`:
    - Clearing specific rate limits
    - Clearing all rate limits
    - Getting rate limit status
+   - Listing all active rate limit blocks
    - Rate limit recovery
 
 6. **Headers**
@@ -154,6 +155,66 @@ uv run python tests/test_rate_limiter_runner.py e2e
 
 # Run all test suites
 uv run python tests/test_rate_limiter_runner.py all
+```
+
+## Rate Limit Management Commands
+
+The application provides utilities to manage rate limits:
+
+```bash
+# List all rate limit blocks currently in place
+uv run scripts/manage_rate_limits.py list
+
+# Get current rate limit key
+uv run scripts/manage_rate_limits.py my-key
+
+# Check rate limit status
+uv run scripts/manage_rate_limits.py status
+
+# Check status for specific key
+uv run scripts/manage_rate_limits.py status --key "ip:127.0.0.1"
+
+# Clear specific rate limit
+uv run scripts/manage_rate_limits.py clear --key "ip:127.0.0.1"
+
+# Clear specific limit for a key
+uv run scripts/manage_rate_limits.py clear --key "user:123" --limit "5 per minute"
+
+# Clear ALL rate limits (use with caution)
+uv run scripts/manage_rate_limits.py clear-all
+```
+
+### List Command Details
+The `list` command provides comprehensive information about all active rate limit blocks:
+- Storage type (Redis, Memory, etc.)
+- Total number of rate limit keys
+- Redis server information (if using Redis)
+- Sample rate limit keys
+- Grouped view by IP-based and User-based limits
+
+Example output:
+```
+All Rate Limit Blocks
+============================================================
+Storage Type: RedisStorage
+Total Keys: 42
+
+Redis Information:
+  Used Memory: 1.2M
+  Connected Clients: 3
+  Total Commands: 1250
+
+Grouped by Client:
+
+  IP-based Limits (25):
+    - ip:192.168.1.100
+    - ip:10.0.0.5
+    ... and 23 more
+
+  User-based Limits (17):
+    - user:123
+    - user:456
+    ... and 15 more
 ```
 
 ## Test Environment Variables

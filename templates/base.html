@@ -539,7 +539,8 @@
 
   {% if current_user.is_authenticated %}
   <script id="idle-timeout-js" src="{{ url_for('static', filename='js/idle-timeout.js') }}" async data-enabled="1"
-    data-timeout-min="{{ config.get('INACTIVITY_TIMEOUT_MINUTES', 30)|int }}" data-warn-lead-min="2"
+    data-timeout-min="{{ config.get('INACTIVITY_TIMEOUT_MINUTES', 30)|int }}"
+    data-warn-lead-min="{{ config.get('INACTIVITY_WARNING_LEAD_MINUTES', 2)|int }}"
     data-ping-url="{{ url_for('auth.ping') }}" data-login-url="{{ url_for('auth.login') }}">
     </script>
   {% endif %}

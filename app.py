@@ -75,6 +75,7 @@ def create_app():
     )
     # --- Inactivity timeout (sliding) ---
     app.config["INACTIVITY_TIMEOUT_MINUTES"] = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 30))
+    app.config["INACTIVITY_WARNING_LEAD_MINUTES"] = int(os.getenv("INACTIVITY_WARNING_LEAD_MINUTES", 2))
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta( minutes=app.config["INACTIVITY_TIMEOUT_MINUTES"])
     # refresh cookie each request (sliding window)
     app.config["SESSION_REFRESH_EACH_REQUEST"] = True

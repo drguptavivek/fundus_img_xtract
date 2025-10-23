@@ -208,11 +208,8 @@ class TestRateLimitDecorators(unittest.TestCase):
         )
         self.assertEqual(result, "test_response")
     
-    @patch('utils.rate_limiter.limiter')
-    def test_rate_limit_with_feedback_decorator(self, mock_limiter):
+    def test_rate_limit_with_feedback_decorator(self):
         """Test rate limit with feedback decorator."""
-        mock_limiter.limit.return_value = lambda f: f
-        
         # Use the Flask app context
         test_app = create_app()
         test_app.config.update(
@@ -222,7 +219,12 @@ class TestRateLimitDecorators(unittest.TestCase):
             SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
             LOGIN_DISABLED=False,
         )
-        with test_app.test_request_context('/test-rate-limit'):
+        
+        with test_app.app_context(), \
+             patch('utils.rate_limiter.limiter') as mock_limiter:
+            
+            mock_limiter.limit.return_value = lambda f: f
+            
             # Create a real function instead of mock for decorator
             def real_test_func():
                 return "test_response"
@@ -231,7 +233,9 @@ class TestRateLimitDecorators(unittest.TestCase):
                 "10 per minute",
                 show_warning=True
             )(real_test_func)
-            result = decorated()
+            
+            with test_app.test_request_context('/test-rate-limit'):
+                result = decorated()
             
             mock_limiter.limit.assert_called_once_with(
                 "10 per minute",
@@ -308,7 +312,8 @@ class TestRateLimitErrorHandling(unittest.TestCase):
             mock_render_template.assert_called_once_with(
                 "errors/429.html",
                 error_message="Rate limit exceeded: 5 per minute",
-                retry_after=60
+                retry_after=60,
+                dashboard_url=None
             )
             
             # Verify the result is a tuple with status code 429

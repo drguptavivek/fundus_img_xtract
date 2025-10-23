@@ -1,35 +1,26 @@
 # Rate Limiting Configuration
 
-This document explains how rate limiting is configured in the Fundus Image Manager application.
+This document explains how rate limiting is configured in the Fundus Image Manager application using Flask-Limiter with Redis backend.
 
 ## Overview
 
-The application uses Flask-Limiter to implement rate limiting for API endpoints and web routes. Rate limiting helps prevent abuse and ensures fair usage of resources.
+The application uses Flask-Limiter 4.0+ with Redis as the storage backend to implement distributed rate limiting for API endpoints and web routes. Rate limiting helps prevent abuse and ensures fair usage of resources across multiple application instances.
 
 ## Configuration
 
 Rate limiting is configured through environment variables in the `.env` file:
 
+### Core Flask-Limiter 4.0 Settings
+
 ```bash
-# Enable/disable rate limiting
+# Enable/disable rate limiting globally
 RATELIMIT_ENABLED=true
 
-# Default rate limit applied to all routes
+# Default rate limit applied to all routes (format: "count per period")
 RATELIMIT_DEFAULT=500 per hour, 50 per minute
 
-# Meta limits for overall protection (applies to all limits)
-RATELIMIT_META_LIMITS=1000 per hour, 100 per minute
-
-# Rate limit storage backend
-RATELIMIT_STORAGE_URL=memcached://
-
-# Memcached server configuration
-RATELIMIT_MEMCACHED_SERVERS=localhost:11211
-RATELIMIT_MEMCACHED_CONNECT_TIMEOUT=2
-RATELIMIT_MEMCACHED_TIMEOUT=1
-RATELIMIT_MEMCACHED_MAX_POOL_SIZE=10
-# RATELIMIT_MEMCACHED_USERNAME=
-# RATELIMIT_MEMCACHED_PASSWORD=
+# Application-wide limits that apply to all routes
+RATELIMIT_APPLICATION=1000 per hour, 100 per minute
 
 # Rate limiting strategy (fixed-window, moving-window, sliding-window-counter)
 RATELIMIT_STRATEGY=fixed-window
@@ -37,7 +28,12 @@ RATELIMIT_STRATEGY=fixed-window
 # Include rate limit headers in responses
 RATELIMIT_HEADERS_ENABLED=true
 
-# Swallow errors when storage backend is unavailable
+# Configure individual header names
+RATELIMIT_HEADER_LIMIT=X-RateLimit-Limit
+RATELIMIT_HEADER_REMAINING=X-RateLimit-Remaining
+RATELIMIT_HEADER_RESET=X-RateLimit-Reset
+
+# Swallow errors when storage backend is unavailable (useful for development)
 RATELIMIT_SWALLOW_ERRORS=true
 
 # Fail immediately on first breach
@@ -55,37 +51,92 @@ RATELIMIT_DEFAULTS_COST=1
 # Key prefix for rate limits
 RATELIMIT_KEY_PREFIX=
 
-# Shared resource limits
-RATELIMIT_SHARED_DEFAULT=100 per hour
+# Routes exempt from rate limiting (comma-separated patterns)
+RATELIMIT_DEFAULTS_EXEMPT=
+```
+
+### Redis Storage Configuration
+
+```bash
+# Storage Backend Configuration
+# -------------------------------------------------------------------
+# Primary storage backend for rate limiting
+# Options: memory:// (development), redis:// (production), memcached:// (alternative)
+RATELIMIT_STORAGE_URI=redis://localhost:6379/10
+
+# Redis Configuration (Preferred for Production)
+# -------------------------------------------------------------------
+# Redis connection URL (takes precedence over individual settings)
+REDIS_URL=redis://localhost:6379/10
+
+# Redis storage options (JSON format for connection pool parameters)
+# RATELIMIT_STORAGE_OPTIONS={"socket_connect_timeout": 5, "socket_timeout": 5, "client_name": "flask-limiter"}
+
+# Redis Connection Pool Settings
+# RATELIMIT_STORAGE_OPTIONS={"socket_connect_timeout": 5, "socket_timeout": 5, "retry_on_timeout": false, "health_check_interval": 0, "client_name": "flask-limiter"}
+
+# Redis SSL/TLS Configuration (for secure connections)
+# RATELIMIT_STORAGE_OPTIONS={"socket_connect_timeout": 5, "socket_timeout": 5, "ssl": true, "ssl_cert_reqs": "required"}
+
+# Redis Cluster Configuration
+# REDIS_STORAGE_URI=redis+cluster://localhost:7000,localhost:7001,localhost:7002
+```
+
+### Advanced Redis Configuration
+
+For production environments, you can configure additional Redis options:
+
+```bash
+# Redis Connection Options (JSON format)
+RATELIMIT_STORAGE_OPTIONS={
+  "socket_connect_timeout": 5,
+  "socket_timeout": 5,
+  "retry_on_timeout": false,
+  "health_check_interval": 0,
+  "client_name": "flask-limiter",
+  "max_connections": 50,
+  "connection_pool_kwargs": {
+    "socket_keepalive": true,
+    "socket_keepalive_options": {}
+  }
+}
+
+# Redis Authentication
+REDIS_URL=redis://username:password@localhost:6379/10
+
+# Redis with SSL
+REDIS_URL=rediss://localhost:6379/10
+RATELIMIT_STORAGE_OPTIONS={"ssl_cert_reqs": "required"}
 ```
 
 ## Storage Backends
 
 ### Memory Storage (Development)
 ```bash
-RATELIMIT_STORAGE_URL=memory://
+RATELIMIT_STORAGE_URI=memory://
 ```
 - Suitable for development and single-instance deployments
 - Rate limit data is lost on application restart
+- No external dependencies
 
-### Memcached (Production)
+### Redis (Production - Recommended)
 ```bash
-RATELIMIT_STORAGE_URL=memcached://
-RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+RATELIMIT_STORAGE_URI=redis://localhost:6379/10
+REDIS_URL=redis://localhost:6379/10
 ```
 - Recommended for production environments
 - Shared across multiple application instances
-- Requires memcached server to be installed and running
-- Currently configured and active in this application
-
-### Redis (Production Alternative)
-```bash
-RATELIMIT_STORAGE_URL=redis://localhost:6379/0
-REDIS_URL=redis://localhost:6379/0
-```
-- Alternative to Memcached for production
-- Shared across multiple application instances
+- Persistent storage with automatic expiration
 - Requires Redis server to be installed and running
+- Supports clustering for high availability
+
+### Memcached (Production Alternative)
+```bash
+RATELIMIT_STORAGE_URI=memcached://localhost:11211
+```
+- Alternative to Redis for production
+- Shared across multiple application instances
+- Requires memcached server to be installed and running
 
 ## Rate Limit Decorators
 
@@ -222,15 +273,12 @@ def admin_endpoint():
     pass
 ```
 
-### Meta Limits
-Meta limits provide an additional layer of protection by limiting the total number of times any rate limit can be breached within a given period. This is configured globally via `RATELIMIT_META_LIMITS`.
-
 ## Logging
 
 Rate limit violations are logged to:
 - `logs/flask_limiter.log` - Dedicated Flask-Limiter log file (primary)
 - `logs/rate_limit.log` - Application rate limit log file
-- `logs/runtime_error.log` - Security monitoring (for backward compatibility)
+- `logs/runtime_error.log` - Security monitoring  
 
 Log entries include:
 - Client IP address
@@ -294,75 +342,76 @@ To monitor rate limiting:
 1. Check the log files:
    ```bash
    tail -f logs/rate_limit.log
+   tail -f logs/flask_limiter.log
    ```
 
-2. Monitor memcached usage:
+2. Monitor Redis usage:
    ```bash
-   echo "stats" | nc localhost 11211
+   redis-cli info memory
+   redis-cli info stats
    ```
 
 3. View Flask-Limiter configuration:
    ```bash
-   uv run flask limiter config
+   uv run python -c "from utils.rate_limiter import limiter; print(limiter.limiter.config)"
    ```
 
-4. List all configured rate limits:
+4. Check Redis connection:
    ```bash
-   uv run flask limiter limits
+   uv run python -c "import redis; r = redis.Redis(host='localhost', port=6379, db=10); print('Redis connection:', r.ping())"
    ```
 
-5. Filter limits by endpoint:
-   ```bash
-   uv run flask limiter limits --endpoint=my_endpoint
-   ```
+## Requirements
 
-6. Filter limits by path:
-   ```bash
-   uv run flask limiter limits --path=/api/myendpoint
-   ```
+The following Python packages are required:
+- `flask-limiter>=4.0.0`
+- `redis>=7.0.0`
 
-7. Check rate limit status for specific key:
-   ```bash
-   uv run flask limiter limits --key=127.0.0.1
-   ```
+These are included in `requirements.txt`.
 
-8. Clear rate limits for specific key:
-   ```bash
-   uv run flask limiter clear --key=127.0.0.1 -y
-   ```
+## Production Considerations
+
+1. **Redis Server**: Ensure Redis server is properly configured for production use
+2. **Persistence**: Configure Redis persistence to maintain rate limits across restarts if needed
+3. **Memory Management**: Monitor Redis memory usage as rate limit data accumulates
+4. **High Availability**: Consider Redis Sentinel or Cluster for high-availability setups
+5. **Security**: Use Redis authentication and SSL/TLS in production environments
+6. **Connection Pooling**: Configure appropriate connection pool sizes for your load
+7. **Monitoring**: Set up monitoring for Redis performance and rate limit violations
 
 ## Troubleshooting
 
-### Memcached Connection Issues
-If memcached is not being used:
+### Redis Connection Issues
+If Redis is not being used:
 
-1. Verify memcached is running:
+1. Verify Redis is running:
    ```bash
-   ps aux | grep memcached
+   redis-cli ping
    ```
 
-2. Check memcached connectivity:
+2. Check Redis connectivity:
    ```bash
-   telnet localhost 11211
+   redis-cli -h localhost -p 6379 -n 10 ping
    ```
 
 3. Verify configuration in `.env` file:
    ```bash
-   # Required for memcached
-   RATELIMIT_STORAGE_URL=memcached://
-   RATELIMIT_MEMCACHED_SERVERS=localhost:11211
+   # Required for Redis
+   RATELIMIT_STORAGE_URI=redis://localhost:6379/10
+   REDIS_URL=redis://localhost:6379/10
    ```
 
 4. Check application logs for errors:
    ```bash
    tail -f logs/rate_limit.log
+   tail -f logs/flask_limiter.log
    ```
 
-5. Verify Flask-Limiter is using Memcached:
+5. Verify Flask-Limiter is using Redis:
    ```bash
-   uv run flask limiter config
+   uv run python -c "from utils.rate_limiter import limiter; print('Storage type:', type(limiter.limiter.storage))"
    ```
-   Look for "MemcachedStorage" in the output under "Rate Limiting Config"
+   Look for "RedisStorage" in the output
 
 ### Rate Limit Not Working
 If rate limiting appears not to work:
@@ -385,10 +434,8 @@ If custom rate limits on routes are not being applied (default limits are used i
 
 2. Check the actual limits applied to routes:
    ```bash
-   uv run flask limiter limits
+   uv run python -c "from utils.rate_limiter import limiter; print(limiter.limiter.limits)"
    ```
-   - Custom limits should appear without the default limits
-   - If both appear, the decorator may not be overriding defaults
 
 3. Verify the limiter initialization order:
    - Rate limiting must be initialized before blueprints are registered
@@ -402,7 +449,7 @@ To test if rate limits are working correctly:
    import requests
    
    for i in range(10):
-       response = requests.post('http://localhost:5000/login', data={'username': 'test', 'password': 'wrong'})
+       response = requests.post('http://localhost:5001/login', data={'username': 'test', 'password': 'wrong'})
        print(f"Request {i+1}: Status {response.status_code}")
        if response.status_code == 429:
            print(f"Rate limit hit after {i+1} requests")
@@ -423,7 +470,7 @@ To test if rate limits are working correctly:
 4. Consider implementing additional monitoring for repeated violations
 5. Authentication endpoints have stricter limits to prevent brute force attacks
 6. Rate limit keys include user ID when authenticated, preventing shared IP attacks
-7. Meta limits provide additional protection against sophisticated attacks
+7. Application limits provide additional protection against sophisticated attacks
 
 ## Best Practices
 
@@ -435,7 +482,7 @@ To test if rate limits are working correctly:
 2. **Test your rate limits**:
    - Verify custom limits override defaults
    - Test with both authenticated and anonymous requests
-   - Check that memcached is being used in production
+   - Check that Redis is being used in production
 
 3. **Monitor rate limit violations**:
    - Set up alerts for repeated violations from the same IP
@@ -448,7 +495,21 @@ To test if rate limits are working correctly:
    - File uploads: 10-20 per minute
    - General API: 100-1000 per minute depending on usage
 
-5. **Use memcached in production**:
+5. **Use Redis in production**:
    - Ensures rate limits persist across app restarts
    - Shared across multiple application instances
    - Better performance than memory storage
+   - Supports distributed deployments
+
+## Migration from Previous Versions
+
+If you're migrating from an older version of Flask-Limiter or from Memcached:
+
+1. **Update Dependencies**: Ensure you have Flask-Limiter 4.0+ and Redis 7.0+
+2. **Update Configuration**: Replace deprecated variables:
+   - `RATELIMIT_STORAGE_URL` → `RATELIMIT_STORAGE_URI`
+   - `RATELIMIT_META_LIMITS` → `RATELIMIT_APPLICATION`
+3. **Update Environment**: Use the new configuration format shown above
+4. **Test Thoroughly**: Verify all rate limits work as expected after migration
+
+For detailed migration instructions, see the migration guide in `docs/FLASK_LIMITER_MIGRATION_SUMMARY.md`.

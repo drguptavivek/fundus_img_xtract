@@ -498,7 +498,8 @@ def clear_rate_limit(key: str = None, limit: str = None) -> bool:
                     # RedisStorage has a 'storage' attribute which is the Redis client
                     redis_client = limiter._storage.storage
                     # Search for keys matching the pattern
-                    pattern = f"*{key}"
+                    # Flask-Limiter 4.0 key format: LIMITS:LIMITER/<key>/<endpoint>/<count>/<period>/<per>
+                    pattern = f"LIMITS:LIMITER/{key}/*"
                     keys = redis_client.keys(pattern)
                     if keys:
                         redis_client.delete(*keys)
@@ -556,7 +557,8 @@ def get_rate_limit_status(key: str = None) -> dict:
             if hasattr(limiter._storage, 'storage'):
                 redis_client = limiter._storage.storage
                 # Search for keys matching the pattern
-                pattern = f"*{key}"
+                # Flask-Limiter 4.0 key format: LIMITS:LIMITER/<key>/<endpoint>/<count>/<period>/<per>
+                pattern = f"LIMITS:LIMITER/{key}/*"
                 keys = redis_client.keys(pattern)
                 info["matching_keys"] = [k.decode('utf-8') if isinstance(k, bytes) else k for k in keys]
                 info["limits"] = {}

@@ -63,6 +63,163 @@
         </div>
     </div>
 
+    <!-- Existing Rate Limits -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Existing Rate Limits</h5>
+                    <div class="d-flex gap-2">
+                        <span class="badge bg-secondary">
+                            {{ limits.get('total', 0) }} total limits
+                        </span>
+                        {% if limits.get('pages', 0) > 1 %}
+                        <span class="badge bg-info">
+                            Page {{ limits.get('current_page', 1) }} of {{ limits.get('pages', 1) }}
+                        </span>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshLimits()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if limits.get('error') %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            {{ limits.get('error') }}
+                        </div>
+                    {% elif limits.get('items') %}
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Client Type</th>
+                                        <th>Client Value</th>
+                                        <th>Endpoint</th>
+                                        <th>Limit</th>
+                                        <th>TTL (seconds)</th>
+                                        <th>Value</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in limits.get('items', []) %}
+                                    <tr>
+                                        <td>
+                                            {% if item.parsed.client_type == 'IP' %}
+                                                <span class="badge bg-primary">IP</span>
+                                            {% elif item.parsed.client_type == 'User' %}
+                                                <span class="badge bg-success">User</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ item.parsed.client_type }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <code class="small">{{ item.parsed.client_value }}</code>
+                                        </td>
+                                        <td>
+                                            {% if item.parsed.endpoint_display == 'Global Limit' %}
+                                                <span class="badge bg-warning">Global</span>
+                                            {% else %}
+                                                <span class="text-muted">{{ item.parsed.endpoint_display }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-info">{{ item.parsed.limit }}</span>
+                                        </td>
+                                        <td>
+                                            {% if item.ttl is not none %}
+                                                {% if item.ttl > 0 %}
+                                                    {{ item.ttl }}
+                                                {% else %}
+                                                    <span class="text-muted">No expiry</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if item.value %}
+                                                <code class="small text-truncate" style="max-width: 100px; display: inline-block;">
+                                                    {{ item.value[:50] }}{% if item.value|length > 50 %}...{% endif %}
+                                                </code>
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button type="button" class="btn btn-outline-danger"
+                                                        onclick="clearRateLimit('{{ item.parsed.client_key }}')"
+                                                        title="Clear this rate limit">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        {% if limits.get('pages', 0) > 1 %}
+                        <nav aria-label="Rate limits pagination">
+                            <ul class="pagination justify-content-center">
+                                {% if limits.get('has_prev', False) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('rate_limit_admin.index', page=limits.get('prev_num')) }}">
+                                        <i class="bi bi-chevron-left"></i> Previous
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link"><i class="bi bi-chevron-left"></i> Previous</span>
+                                </li>
+                                {% endif %}
+                                
+                                {% for p in range(1, limits.get('pages', 1) + 1) %}
+                                    {% if p == limits.get('current_page', 1) %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ p }}</span>
+                                    </li>
+                                    {% elif p <= 3 or p >= limits.get('pages', 1) - 2 or (p >= limits.get('current_page', 1) - 2 and p <= limits.get('current_page', 1) + 2) %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('rate_limit_admin.index', page=p) }}">{{ p }}</a>
+                                    </li>
+                                    {% elif p == 4 or p == limits.get('pages', 1) - 3 %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">...</span>
+                                    </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if limits.get('has_next', False) %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('rate_limit_admin.index', page=limits.get('next_num')) }}">
+                                        Next <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">Next <i class="bi bi-chevron-right"></i></span>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            No rate limits found.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Clear Rate Limit Form -->
     <div class="row mb-4">
         <div class="col-md-6">
@@ -192,6 +349,70 @@
 <script>
 function refreshStats() {
     location.reload();
+}
+
+function refreshLimits() {
+    location.reload();
+}
+
+function clearRateLimit(clientValue) {
+    if (confirm(`Are you sure you want to clear the rate limit for ${clientValue}?`)) {
+        fetch('{{ url_for("rate_limit_admin.clear_limit_ajax") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                key: clientValue
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <i class="bi bi-check-circle"></i> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                
+                // Insert at the top of the card body
+                const cardBody = document.querySelector('.card-body');
+                cardBody.insertBefore(alertDiv, cardBody.firstChild);
+                
+                // Refresh the page after a short delay to show updated limits
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                // Show error message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    <i class="bi bi-exclamation-triangle"></i> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                
+                // Insert at the top of the card body
+                const cardBody = document.querySelector('.card-body');
+                cardBody.insertBefore(alertDiv, cardBody.firstChild);
+            }
+        })
+        .catch(error => {
+            console.error('Error clearing rate limit:', error);
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="bi bi-exclamation-triangle"></i> Error clearing rate limit
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            const cardBody = document.querySelector('.card-body');
+            cardBody.insertBefore(alertDiv, cardBody.firstChild);
+        });
+    }
 }
 
 function getMyKey() {

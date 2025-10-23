@@ -62,6 +62,11 @@ This document summarizes the fixes applied to the Flask-Limiter 4.0 implementati
 - **Purpose**: Test rate limit clearing functionality
 - **Usage**: `uv run python scripts/test_clear_rate_limit.py`
 
+### 4. UI Rate Limit Clear Test
+- **File**: `scripts/test_ui_clear_rate_limit.py`
+- **Purpose**: Test rate limit clearing from UI perspective
+- **Usage**: `uv run python scripts/test_ui_clear_rate_limit.py`
+
 ## Rate Limiter Test Suite
 
 Created a comprehensive test suite with three types of tests:
@@ -97,6 +102,20 @@ All fixes have been tested and verified:
 4. ✅ No duplicate flash messages
 5. ✅ Test suite passes all tests
 6. ✅ Redis connection works properly
+7. ✅ IP-based rate limits can be cleared from UI
+
+## Additional Fixes
+
+### 5. UI Rate Limit Clear for IP Addresses
+**Problem**: The admin interface was not clearing IP-based rate limits correctly. The UI displayed the client value as just the IP address (e.g., "127.0.0.1") but when clearing, it needed the full key (e.g., "ip:127.0.0.1").
+
+**Root Cause**: The `parse_rate_limit_key` function was stripping the `ip:` prefix when displaying the client value, but the clear function needed the full key.
+
+**Solution**: Added `client_key` field to the parsed data that retains the full key (including the `ip:` or `user:` prefix) and updated the template to use this field when clearing rate limits.
+
+**Files Changed**:
+- `admin/rate_limit_admin.py` - Added `client_key` field to `parse_rate_limit_key` function
+- `templates/admin/rate_limits/index.html` - Updated to use `client_key` when clearing
 
 ## Best Practices Implemented
 
@@ -106,3 +125,4 @@ All fixes have been tested and verified:
 4. Comprehensive test coverage
 5. Clear documentation
 6. Test scripts for troubleshooting
+7. Proper key format handling for both IP and user-based limits

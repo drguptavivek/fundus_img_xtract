@@ -7,7 +7,6 @@ import os
 import json
 from json import JSONDecodeError
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
  
 from auth.roles import roles_required
 from models import (
@@ -51,25 +50,6 @@ from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
 grades_logger = logging.getLogger("grades")
-
-
-def _ensure_image_uuid(image_obj, db_session):
-    """Ensure encounter or direct-upload image has a UUID, assigning one if missing."""
-    if image_obj is None:
-        return None
-
-    current_uuid = getattr(image_obj, "uuid", None)
-    if current_uuid:
-        return current_uuid
-
-    new_uuid = str(uuid4())
-    setattr(image_obj, "uuid", new_uuid)
-    try:
-        db_session.flush()
-    except Exception:
-        grades_logger.exception("Failed to assign UUID for image object %s", image_obj)
-        return None
-    return new_uuid
 
 
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
@@ -186,9 +166,9 @@ def revise_grading(grade_id: int):
             # Determine image URL
             image_uuid = None
             if task.encounter_file:
-                image_uuid = _ensure_image_uuid(task.encounter_file, db)
+                image_uuid = task.encounter_file.uuid
             elif task.direct_image:
-                image_uuid = _ensure_image_uuid(task.direct_image, db)
+                image_uuid = task.direct_image.uuid
 
             if image_uuid is None:
                 missing_ref = None
@@ -374,9 +354,9 @@ def dual_grading_task(task_id: int, slot_type: str):
             # Determine image URL
             image_uuid = None
             if task.encounter_file:
-                image_uuid = _ensure_image_uuid(task.encounter_file, db)
+                image_uuid = task.encounter_file.uuid
             elif task.direct_image:
-                image_uuid = _ensure_image_uuid(task.direct_image, db)
+                image_uuid = task.direct_image.uuid
 
             if image_uuid is None:
                 missing_ref = None

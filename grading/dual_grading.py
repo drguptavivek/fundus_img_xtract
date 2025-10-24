@@ -5,6 +5,7 @@ import random
 import logging
 import os
 import json
+from json import JSONDecodeError
 from datetime import datetime, timedelta, timezone
  
 from auth.roles import roles_required
@@ -49,6 +50,21 @@ from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
 grades_logger = logging.getLogger("grades")
+
+
+def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
+    """Convert persisted selected feature payload into a python list for display."""
+    if not selected_features_json:
+        return []
+
+    try:
+        parsed = json.loads(selected_features_json)
+        if isinstance(parsed, list):
+            return parsed
+    except JSONDecodeError:
+        grades_logger.warning("Failed to parse stored selected_features_json", exc_info=True)
+
+    return []
 
 
 def register_routes(bp):
@@ -166,6 +182,7 @@ def revise_grading(grade_id: int):
                 
             # Use the existing grade as the existing_grade parameter
             existing_grade = grade
+            existing_selected_features = _parse_selected_features(existing_grade.selected_features_json)
 
             response = make_response(render_template(
                 "grading/dual_grading_task.html",
@@ -175,6 +192,7 @@ def revise_grading(grade_id: int):
                 grading_features=grading_features,
                 current_slot=slot_type,
                 existing_grade=existing_grade,
+                existing_selected_features=existing_selected_features,
                 image_uuid=image_uuid,
                 grades=task.grades,
                 existing_grade_in_header=True,
@@ -335,6 +353,9 @@ def dual_grading_task(task_id: int, slot_type: str):
                 
             # Fetch existing grade for this user and slot (for review purposes) using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
+            existing_selected_features = _parse_selected_features(
+                existing_grade.selected_features_json if existing_grade else None
+            )
             
             # If this is an arbitration task, fetch resident and resident2 grades to show to the arbitrator
             resident_grade = None
@@ -385,6 +406,7 @@ def dual_grading_task(task_id: int, slot_type: str):
                 start_time_iso=start_time_iso,  # Pass start time to template as hidden field
                 current_user_id=getattr(current_user, "id", None),
                 grading_features=grading_features,
+                existing_selected_features=existing_selected_features,
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)

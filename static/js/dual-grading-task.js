@@ -413,6 +413,8 @@ const DualGradingTask = (function() {
                 instructionsDiv.style.display = 'none';
             }
 
+            FeaturesDisplay.updateFeatures(gradingId);
+
             // Show/hide not gradable reasons section based on current selection
             const impressionText = checked?.nextElementSibling?.textContent?.trim();
             const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
@@ -595,6 +597,17 @@ const FeaturesDisplay = (function() {
         if (!featuresSection || !featuresContainer) {
             setTimeout(init, 100);
             return;
+        }
+
+        const initiallyChecked = document.querySelector('input[type="radio"][name="label_id"]:checked');
+        if (initiallyChecked) {
+            const gradingId = Number(initiallyChecked.value);
+            if (!Number.isNaN(gradingId)) {
+                updateFeatures(gradingId);
+            }
+        } else {
+            featuresSection.style.display = 'none';
+            featuresContainer.innerHTML = '';
         }
     }
 

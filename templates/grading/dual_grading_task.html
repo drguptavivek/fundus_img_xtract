@@ -207,6 +207,20 @@
             {% if existing_grade.comment %}
             <div class="text-muted fst-italic">"{{ existing_grade.comment }}"</div>
             {% endif %}
+            {% if existing_selected_features %}
+            <div class="mt-1">
+              <div class="small text-uppercase text-muted">Features Noted</div>
+              <ul class="list-unstyled mb-0 small">
+                {% for feature in existing_selected_features %}
+                {% if feature is mapping %}
+                <li>{{ feature.label or ('Feature #' ~ feature.id) }}</li>
+                {% else %}
+                <li>{{ feature }}</li>
+                {% endif %}
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
             <div class="text-muted">{{ existing_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
         </div>
@@ -229,8 +243,8 @@
   // Pass disease gradings with features to JavaScript
   window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
   // Pass existing selected features if available
-  {% if existing_grade and existing_grade.selected_features_json %}
-  window.existingSelectedFeatures = {{ existing_grade.selected_features_json | safe }};
+  {% if existing_selected_features %}
+  window.existingSelectedFeatures = {{ existing_selected_features | tojson }};
   {% else %}
   window.existingSelectedFeatures = null;
   {% endif %}

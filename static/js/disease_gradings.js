@@ -6,6 +6,7 @@
 // Global variables to track state
 let featureCount = 0;
 let isEditMode = false;
+let deleteCallback = null;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -26,11 +27,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Add event listeners for delete buttons
+    const deleteButtons = document.querySelectorAll('.delete-grading-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const gradingId = this.dataset.gradingId;
+            const impression = this.dataset.impression;
+            
+            confirmDelete(gradingId, impression);
+        });
+    });
+    
     // Handle modal close events to reset form
     const modal = document.getElementById('gradingModal');
     modal.addEventListener('hidden.bs.modal', function() {
         resetForm();
     });
+    
+    // Handle confirmation modal button
+    const confirmButton = document.getElementById('confirmModalButton');
+    if (confirmButton) {
+        confirmButton.addEventListener('click', function() {
+            if (deleteCallback) {
+                deleteCallback();
+                deleteCallback = null;
+            }
+            // Close the confirmation modal
+            const confirmModal = bootstrap.Modal.getInstance(document.getElementById('confirmModal'));
+            if (confirmModal) {
+                confirmModal.hide();
+            }
+        });
+    }
 });
 
 /**
@@ -102,16 +130,16 @@ function addFeature(label = '') {
     featureDiv.id = `feature-row-${featureCount}`;
     
     featureDiv.innerHTML = `
-        <div class="col-md-1">
-            <label class="form-label">Sr. No.</label>
+        <div class="col-md-2">
+            <label class="form-label">Sr.</label>
             <input type="number" class="form-control" name="feature_sr_no" value="${featureCount}" min="1">
         </div>
-        <div class="col-md-9">
+        <div class="col-md-8">
             <label class="form-label">Feature Label</label>
             <input type="text" class="form-control" name="feature_label" value="${label}" placeholder="Enter feature name">
         </div>
         <div class="col-md-2 d-flex align-items-end">
-            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeFeature('feature-row-${featureCount}')">
+            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="confirmRemoveFeature('feature-row-${featureCount}')">
                 <i class="bi bi-trash"></i> Remove
             </button>
         </div>
@@ -130,6 +158,30 @@ function removeFeature(rowId) {
         // Update serial numbers
         updateSerialNumbers();
     }
+}
+
+/**
+ * Show confirmation modal for removing a feature
+ */
+function confirmRemoveFeature(rowId) {
+    const modalTitle = document.getElementById('confirmModalTitle');
+    const modalMessage = document.getElementById('confirmModalMessage');
+    const confirmButton = document.getElementById('confirmModalButton');
+    
+    modalTitle.textContent = 'Confirm Remove Feature';
+    modalMessage.textContent = 'Are you sure you want to remove this feature?';
+    confirmButton.textContent = 'Remove';
+    confirmButton.className = 'btn btn-warning';
+    
+    // Set up callback for feature removal
+    deleteCallback = function() {
+        removeFeature(rowId);
+        deleteCallback = null;
+    };
+    
+    // Show confirmation modal
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    confirmModal.show();
 }
 
 /**
@@ -156,6 +208,79 @@ function resetForm() {
 }
 
 /**
+ * Show confirmation modal for delete action
+ */
+function confirmDelete(gradingId, impression) {
+    const modalTitle = document.getElementById('confirmModalTitle');
+    const modalMessage = document.getElementById('confirmModalMessage');
+    const confirmButton = document.getElementById('confirmModalButton');
+    
+    modalTitle.textContent = 'Confirm Delete';
+    modalMessage.textContent = `Are you sure you want to delete the grading "${impression}"? This action cannot be undone.`;
+    confirmButton.textContent = 'Delete';
+    confirmButton.className = 'btn btn-danger';
+    
+    // Set up the callback for deletion
+    deleteCallback = function() {
+        // Create and submit form for deletion
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/admin/disease-gradings/${gradingId}/delete`;
+        form.style.display = 'none';
+        
+        // Add CSRF token - get from existing form
+        const csrfField = document.querySelector('input[name="csrf_token"]');
+        if (csrfField) {
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            csrfInput.value = csrfField.value;
+            form.appendChild(csrfInput);
+        }
+        
+        document.body.appendChild(form);
+        form.submit();
+    };
+    
+    // Show the confirmation modal
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    confirmModal.show();
+}
+
+/**
+ * Show toast message
+ */
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('flash-toasts');
+    if (!toastContainer) return;
+    
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    const toastElement = document.getElementById(toastId);
+    if (toastElement) {
+        const toast = new bootstrap.Toast(toastElement, { autohide: true, delay: 3000 });
+        toast.show();
+        
+        // Remove from DOM after hidden
+        toastElement.addEventListener('hidden.bs.toast', function() {
+            toastElement.remove();
+        });
+    }
+}
+
+/**
  * Validate form before submission
  */
 document.getElementById('grading-form').addEventListener('submit', function(e) {
@@ -164,13 +289,13 @@ document.getElementById('grading-form').addEventListener('submit', function(e) {
     
     if (!diseaseId) {
         e.preventDefault();
-        alert('Please select a disease.');
+        showToast('Please select a disease.', 'danger');
         return;
     }
     
     if (!impression) {
         e.preventDefault();
-        alert('Please enter an impression.');
+        showToast('Please enter an impression.', 'danger');
         return;
     }
     
@@ -182,7 +307,7 @@ document.getElementById('grading-form').addEventListener('submit', function(e) {
     const uniqueLabels = [...new Set(featureLabels)];
     if (featureLabels.length !== uniqueLabels.length) {
         e.preventDefault();
-        alert('Duplicate feature labels are not allowed.');
+        showToast('Duplicate feature labels are not allowed.', 'danger');
         return;
     }
     

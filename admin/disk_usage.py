@@ -12,7 +12,7 @@ from flask import current_app, render_template, request, jsonify, flash, redirec
 from auth.roles import roles_required
 from models import Session, ZipFile
 
-
+@roles_required('admin')
 def _get_directories_to_analyze() -> List[Path]:
     """Return the base directories to analyze (files and logs)."""
     directories = []
@@ -96,7 +96,7 @@ def _count_directories(path: Path) -> int:
     
     return count
 
-
+@roles_required('admin')
 def _format_size(size_bytes: int) -> str:
     """Format size in bytes to human readable format."""
     if size_bytes == 0:
@@ -112,7 +112,7 @@ def _format_size(size_bytes: int) -> str:
     
     return f"{size:.2f} {size_names[i]}"
 
-
+@roles_required('admin')
 def _analyze_directory(path: Path, parent_path: Path = None, level: int = 0, expanded_dirs: set = None) -> List[Dict]:
     """Analyze a directory and return information about its subdirectories recursively.
     

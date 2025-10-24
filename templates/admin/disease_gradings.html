@@ -59,21 +59,23 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if grading.features_json %}
-                                                {% set features_data = grading.features_json | from_json %}
-                                                {% if features_data and features_data.features %}
-                                                    <span class="badge bg-info">{{ features_data.features | length }} feature{{ 's' if features_data.features | length != 1 else '' }}</span>
-                                                {% else %}
-                                                    <span class="text-muted">No features</span>
-                                                {% endif %}
+                                            {% if grading.features %}
+                                                <span class="badge bg-info">{{ grading.features | length }} feature{{ 's' if grading.features | length != 1 else '' }}</span>
                                             {% else %}
                                                 <span class="text-muted">No features</span>
                                             {% endif %}
                                         </td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            <button type="button" class="btn btn-sm btn-outline-primary edit-grading-btn"
                                                     data-bs-toggle="modal" data-bs-target="#gradingModal"
-                                                    onclick="openEditModal({{ grading.id }}, {{ disease.id }}, '{{ disease.name }}', '{{ grading.impression | e }}', {{ grading.display_order }}, {{ grading.is_active | lower }}, '{{ grading.guidelines | e }}', '{{ grading.features_json | e }}')">
+                                                    data-grading-id="{{ grading.id }}"
+                                                    data-disease-id="{{ disease.id }}"
+                                                    data-disease-name="{{ disease.name }}"
+                                                    data-impression="{{ grading.impression | e }}"
+                                                    data-display-order="{{ grading.display_order }}"
+                                                    data-is-active="{{ grading.is_active | lower }}"
+                                                    data-guidelines="{{ grading.guidelines | e }}"
+                                                    data-features="{{ grading.features | map(attribute='label') | list | join(',') if grading.features else '' }}">
                                                 Edit
                                             </button>
                                             <form method="POST"

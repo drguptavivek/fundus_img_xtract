@@ -35,9 +35,10 @@ admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/edit", view_func=edit_
 admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/delete", view_func=delete_lookup, methods=["POST"])
 
 # Disease grading routes
-admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/edit", view_func=edit_disease_grading, methods=["GET"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/delete", view_func=delete_disease_grading, methods=["POST"])
+
 
 # Grading Eligibility routes
 admin_bp.add_url_rule("/grading-eligibility", view_func=manage_eligibility_users, methods=["GET"])

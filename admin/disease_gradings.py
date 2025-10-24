@@ -4,13 +4,13 @@ Handles disease gradings and their features in a streamlined manner.
 """
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from models import Disease, DiseaseGrading, Session
+from models import Disease, DiseaseGrading, GradingsFeatures, Session
 import json
 
-
+@roles_required('admin')
 def list_disease_gradings():
     """List all disease gradings and handle creation/update."""
     if request.method == "POST":
@@ -23,31 +23,8 @@ def list_disease_gradings():
             guidelines = request.form.get("guidelines", "").strip()
             
             # Process features from form data
-            features = []
             feature_labels = request.form.getlist("feature_label")
             feature_sr_nos = request.form.getlist("feature_sr_no")
-            
-            # Handle both new features and existing features
-            for i, label in enumerate(feature_labels):
-                if label.strip():  # Only include non-empty labels
-                    sr_no = int(feature_sr_nos[i]) if i < len(feature_sr_nos) and feature_sr_nos[i] else i + 1
-                    features.append({
-                        "sr_no": sr_no,
-                        "label": label.strip()
-                    })
-            
-            # If no new features were added but we have existing features, preserve them
-            if not features and grading_id:
-                # Preserve existing features when editing without adding new ones
-                existing_grading = db.get(DiseaseGrading, int(grading_id))
-                if existing_grading and existing_grading.features_json:
-                    features_json = existing_grading.features_json
-            else:
-                # Renumber features sequentially
-                for idx, feature in enumerate(features, 1):
-                    feature["sr_no"] = idx
-                
-                features_json = json.dumps({"features": features}) if features else None
             
             # Validation
             error = None
@@ -85,7 +62,23 @@ def list_disease_gradings():
                         grading.display_order = display_order
                         grading.is_active = is_active
                         grading.guidelines = guidelines or None
-                        grading.features_json = features_json
+                        
+                        # Update features - delete existing and create new ones
+                        db.execute(
+                            delete(GradingsFeatures).where(GradingsFeatures.disease_grading_id == grading.id)
+                        )
+                        
+                        # Add new features
+                        for i, label in enumerate(feature_labels):
+                            if label.strip():  # Only include non-empty labels
+                                sr_no = int(feature_sr_nos[i]) if i < len(feature_sr_nos) and feature_sr_nos[i] else i + 1
+                                feature = GradingsFeatures(
+                                    disease_grading_id=grading.id,
+                                    sr_no=sr_no,
+                                    label=label.strip()
+                                )
+                                db.add(feature)
+                        
                         flash("Disease grading updated successfully.", "success")
                     else:
                         flash("Error: Disease grading not found for update.", "danger")
@@ -96,10 +89,22 @@ def list_disease_gradings():
                         impression=impression,
                         display_order=display_order,
                         is_active=is_active,
-                        guidelines=guidelines or None,
-                        features_json=features_json
+                        guidelines=guidelines or None
                     )
                     db.add(grading)
+                    db.flush()  # Get the ID of the new grading
+                    
+                    # Add features
+                    for i, label in enumerate(feature_labels):
+                        if label.strip():  # Only include non-empty labels
+                            sr_no = int(feature_sr_nos[i]) if i < len(feature_sr_nos) and feature_sr_nos[i] else i + 1
+                            feature = GradingsFeatures(
+                                disease_grading_id=grading.id,
+                                sr_no=sr_no,
+                                label=label.strip()
+                            )
+                            db.add(feature)
+                    
                     flash("Disease grading created successfully.", "success")
                 
                 db.commit()
@@ -111,7 +116,7 @@ def list_disease_gradings():
             select(DiseaseGrading)
             .join(Disease)
             .order_by(Disease.name, DiseaseGrading.display_order)
-            .options(selectinload(DiseaseGrading.disease))
+            .options(selectinload(DiseaseGrading.disease), selectinload(DiseaseGrading.features))
         ).scalars().all()
         
         diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
@@ -122,15 +127,40 @@ def list_disease_gradings():
 def edit_disease_grading(grading_id):
     """Edit a specific disease grading."""
     with Session() as db:
-        grading = db.get(DiseaseGrading, grading_id)
+        grading = db.execute(
+            select(DiseaseGrading)
+            .options(selectinload(DiseaseGrading.features))
+            .where(DiseaseGrading.id == grading_id)
+        ).scalar_one_or_none()
+        
         if not grading:
             flash("Disease grading not found.", "danger")
             return redirect(url_for('admin.list_disease_gradings'))
+    
+    
+    def get_grading_features(grading_id):
+        """Get features for a specific grading as JSON."""
+        with Session() as db:
+            grading = db.execute(
+                select(DiseaseGrading)
+                .options(selectinload(DiseaseGrading.features))
+                .where(DiseaseGrading.id == grading_id)
+            ).scalar_one_or_none()
+            
+            if not grading:
+                return jsonify({"error": "Grading not found"}), 404
+            
+            features = [
+                {"sr_no": feature.sr_no, "label": feature.label}
+                for feature in sorted(grading.features, key=lambda x: x.sr_no)
+            ]
+            
+            return jsonify({"features": features})
         
         diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
         return render_template("admin/disease_gradings.html", grading=grading, diseases=diseases)
 
-
+@roles_required('admin')
 def delete_disease_grading(grading_id):
     """Delete a disease grading."""
     with Session() as db:

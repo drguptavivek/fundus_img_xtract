@@ -157,11 +157,26 @@ class DiseaseGrading(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     guidelines: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing applicable features
+    features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing applicable features (deprecated)
     disease: Mapped["Disease"] = relationship("Disease", back_populates="disease_gradings")
+    features: Mapped[List["GradingsFeatures"]] = relationship("GradingsFeatures", back_populates="disease_grading", cascade="all, delete-orphan")
     __table_args__ = (
         UniqueConstraint('disease_id', 'impression', name='uq_disease_grading_disease_impression'),
         Index('ix_disease_gradings_disease_order', 'disease_id', 'display_order'),
+    )
+
+
+class GradingsFeatures(Base):
+    __tablename__ = 'gradings_features'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id', ondelete='CASCADE'), nullable=False, index=True)
+    sr_no: Mapped[int] = mapped_column(Integer, nullable=False)  # Display order
+    label: Mapped[str] = mapped_column(String(255), nullable=False)  # Feature name
+    disease_grading: Mapped["DiseaseGrading"] = relationship("DiseaseGrading", back_populates="features")
+    
+    __table_args__ = (
+        UniqueConstraint('disease_grading_id', 'sr_no', name='uq_gradings_features_order'),
+        Index('ix_gradings_features_grading_order', 'disease_grading_id', 'sr_no'),
     )
 
 

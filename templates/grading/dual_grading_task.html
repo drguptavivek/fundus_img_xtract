@@ -226,7 +226,7 @@
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "{{ current_slot or '' }}";
   // Pass disease gradings with features to JavaScript
-  window.diseaseGradingsWithFeatures = {{ disease_gradings | tojson }};
+  window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
   // Pass existing selected features if available
   {% if existing_grade and existing_grade.selected_features_json %}
   window.existingSelectedFeatures = {{ existing_grade.selected_features_json | safe }};

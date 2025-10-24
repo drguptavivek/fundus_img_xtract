@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from typing import Optional, List
 from dotenv import load_dotenv
 from uuid import uuid4
-
+ 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -157,6 +157,7 @@ class DiseaseGrading(Base):
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     guidelines: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing applicable features
     disease: Mapped["Disease"] = relationship("Disease", back_populates="disease_gradings")
     __table_args__ = (
         UniqueConstraint('disease_id', 'impression', name='uq_disease_grading_disease_impression'),
@@ -522,6 +523,7 @@ class Grade(Base):
     # Normalized to master labels for the disease
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey('disease_gradings.id'), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selected_features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing selected features
     time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)  # Time taken in seconds
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

@@ -10,7 +10,9 @@ const DOM_ELEMENTS = {
     INSTRUCTIONS_CONTENT: 'instructions-content',
     COMMENT_TEXTAREA: 'comment-textarea',
     CLEAR_IMPRESSION: 'clear-impression',
-    NOT_GRADABLE_REASONS: 'not-gradable-reasons'
+    NOT_GRADABLE_REASONS: 'not-gradable-reasons',
+    FEATURES_SECTION: 'features-section',
+    FEATURES_CONTAINER: 'features-container'
 };
 
 const CSS_CLASSES = {
@@ -26,8 +28,8 @@ const STORAGE = {
 // Wait for DOM and required data to be ready
 document.addEventListener('DOMContentLoaded', function() {
     // Ensure required global variables are set
-    if (typeof window.gradingGuidelines === 'undefined' || 
-        typeof window.taskId === 'undefined' || 
+    if (typeof window.gradingGuidelines === 'undefined' ||
+        typeof window.taskId === 'undefined' ||
         typeof window.imageUuid === 'undefined') {
         console.error('Required global variables not set. Please check template.');
         return;
@@ -36,6 +38,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize all components
     DualGradingTask.init();
     NotGradableReasons.init();
+    FeaturesDisplay.init();
     
     // Scroll to top of image viewer card on page load
     scrollToImageCard();
@@ -309,6 +312,9 @@ const DualGradingTask = (function() {
                 notGradableSection.style.display = 'none';
             }
 
+            // Update features display based on selected grading
+            FeaturesDisplay.updateFeatures(gradingId);
+
             // Save selection to localStorage
             saveSelectionToStorage(gradingId);
         } else {
@@ -424,6 +430,12 @@ const DualGradingTask = (function() {
             const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
             if (notGradableSection) {
                 notGradableSection.style.display = 'none';
+            }
+
+            // Hide features section when no option is selected
+            const featuresSection = document.getElementById(DOM_ELEMENTS.FEATURES_SECTION);
+            if (featuresSection) {
+                featuresSection.style.display = 'none';
             }
         }
     }
@@ -551,5 +563,118 @@ const NotGradableReasons = (function() {
     // Public API
     return {
         init
+    };
+})();
+
+/**
+ * Features Display Module
+ * Handles dynamic display of features based on selected grading
+ */
+const FeaturesDisplay = (function() {
+    // Private variables
+    let featuresSection, featuresContainer;
+    let diseaseGradingsWithFeatures;
+
+    /**
+     * Initialize the module
+     */
+    function init() {
+        // Get DOM elements
+        featuresSection = document.getElementById(DOM_ELEMENTS.FEATURES_SECTION);
+        featuresContainer = document.getElementById(DOM_ELEMENTS.FEATURES_CONTAINER);
+        
+        // Get disease gradings data from global variable
+        diseaseGradingsWithFeatures = window.diseaseGradingsWithFeatures || [];
+        
+        // If elements don't exist, wait a bit and try again
+        if (!featuresSection || !featuresContainer) {
+            setTimeout(init, 100);
+            return;
+        }
+    }
+
+    /**
+     * Update features display based on selected grading
+     * @param {number} gradingId - The selected grading ID
+     */
+    function updateFeatures(gradingId) {
+        if (!featuresSection || !featuresContainer || !diseaseGradingsWithFeatures) {
+            return;
+        }
+
+        // Find the selected grading data
+        const selectedGrading = diseaseGradingsWithFeatures.find(grading => grading.id === gradingId);
+        
+        if (!selectedGrading) {
+            // Hide features section if no grading is selected
+            featuresSection.style.display = 'none';
+            featuresContainer.innerHTML = '';
+            return;
+        }
+
+        // Parse features JSON if it exists
+        let featuresData = [];
+        if (selectedGrading.features_json) {
+            try {
+                const parsed = JSON.parse(selectedGrading.features_json);
+                featuresData = parsed.features || [];
+            } catch (e) {
+                console.error('Error parsing features JSON:', e);
+                featuresData = [];
+            }
+        }
+
+        // Hide features section if no features are available
+        if (!featuresData || featuresData.length === 0) {
+            featuresSection.style.display = 'none';
+            featuresContainer.innerHTML = '';
+            return;
+        }
+
+        // Show features section and populate with checkboxes
+        featuresSection.style.display = 'block';
+        featuresContainer.innerHTML = '';
+
+        // Get existing selected features for this grading
+        let existingSelectedFeatures = [];
+        if (window.existingSelectedFeatures && Array.isArray(window.existingSelectedFeatures)) {
+            existingSelectedFeatures = window.existingSelectedFeatures;
+        }
+
+        featuresData.forEach((feature) => {
+            const featureId = `feature-${gradingId}-${feature.sr_no}`;
+            const checkboxId = `checkbox-${gradingId}-${feature.sr_no}`;
+            
+            // Create feature checkbox element
+            const featureElement = document.createElement('div');
+            featureElement.className = 'form-check';
+            
+            // Handle simplified feature format with sr_no and label
+            let featureLabel = '';
+            
+            if (typeof feature === 'string') {
+                featureLabel = feature;
+            } else if (typeof feature === 'object' && feature !== null) {
+                featureLabel = feature.label || '';
+            }
+            
+            // Check if this feature was previously selected
+            const isChecked = existingSelectedFeatures.includes(featureLabel);
+            
+            featureElement.innerHTML = `
+                <input class="form-check-input" type="checkbox" value="${featureLabel}" id="${checkboxId}" name="selected_features" ${isChecked ? 'checked' : ''}>
+                <label class="form-check-label" for="${checkboxId}">
+                    ${featureLabel}
+                </label>
+            `;
+            
+            featuresContainer.appendChild(featureElement);
+        });
+    }
+
+    // Public API
+    return {
+        init,
+        updateFeatures
     };
 })();

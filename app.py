@@ -46,6 +46,16 @@ def create_app():
         os.getenv("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
     )
     app.jinja_env.filters["user_datetime"] = format_user_datetime
+    
+    # Add from_json filter for parsing JSON in templates
+    def from_json(value):
+        import json
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    
+    app.jinja_env.filters["from_json"] = from_json
 
     @app.context_processor
     def inject_default_theme():

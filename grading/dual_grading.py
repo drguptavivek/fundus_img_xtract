@@ -335,11 +335,16 @@ def dual_grading_task(task_id: int, slot_type: str):
 def dual_grading_submit():
     """Submit a grade for a task."""
     from flask import session as flask_session
+    import json
     
     task_id = request.form.get("task_id", type=int)
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
+    
+    # Get selected features from form
+    selected_features = request.form.getlist("selected_features")
+    selected_features_json = json.dumps(selected_features) if selected_features else None
     
     # Validate inputs
     if not task_id or not isinstance(task_id, int) or task_id <= 0:
@@ -529,6 +534,7 @@ def dual_grading_submit():
                 
                 existing_grade.disease_grading_id = label_id
                 existing_grade.comment = comment
+                existing_grade.selected_features_json = selected_features_json
                 existing_grade.time_taken = time_taken
                 # Update denormalized fields as well
                 existing_grade.disease_name = disease.name if disease else None
@@ -549,6 +555,7 @@ def dual_grading_submit():
                     role_slot=slot,
                     disease_grading_id=label_id,
                     comment=comment,
+                    selected_features_json=selected_features_json,
                     time_taken=time_taken,
                     disease_name=disease.name if disease else None,
                     grade_name=disease_grading.impression if disease_grading else None,

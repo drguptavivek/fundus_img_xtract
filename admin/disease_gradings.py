@@ -1,12 +1,18 @@
+"""
+Simplified Disease Gradings Management
+Handles disease gradings and their features in a streamlined manner.
+"""
+
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from models import Disease, DiseaseGrading, Session
+import json
 
 
 def list_disease_gradings():
-    """List all disease gradings and handle creation/updates."""
+    """List all disease gradings and handle creation/update."""
     if request.method == "POST":
         with Session() as db:
             grading_id = request.form.get("grading_id")
@@ -16,6 +22,34 @@ def list_disease_gradings():
             is_active = request.form.get("is_active") == "1"
             guidelines = request.form.get("guidelines", "").strip()
             
+            # Process features from form data
+            features = []
+            feature_labels = request.form.getlist("feature_label")
+            feature_sr_nos = request.form.getlist("feature_sr_no")
+            
+            # Handle both new features and existing features
+            for i, label in enumerate(feature_labels):
+                if label.strip():  # Only include non-empty labels
+                    sr_no = int(feature_sr_nos[i]) if i < len(feature_sr_nos) and feature_sr_nos[i] else i + 1
+                    features.append({
+                        "sr_no": sr_no,
+                        "label": label.strip()
+                    })
+            
+            # If no new features were added but we have existing features, preserve them
+            if not features and grading_id:
+                # Preserve existing features when editing without adding new ones
+                existing_grading = db.get(DiseaseGrading, int(grading_id))
+                if existing_grading and existing_grading.features_json:
+                    features_json = existing_grading.features_json
+            else:
+                # Renumber features sequentially
+                for idx, feature in enumerate(features, 1):
+                    feature["sr_no"] = idx
+                
+                features_json = json.dumps({"features": features}) if features else None
+            
+            # Validation
             error = None
             if not disease_id or not impression:
                 error = "Disease and impression are required."
@@ -51,6 +85,7 @@ def list_disease_gradings():
                         grading.display_order = display_order
                         grading.is_active = is_active
                         grading.guidelines = guidelines or None
+                        grading.features_json = features_json
                         flash("Disease grading updated successfully.", "success")
                     else:
                         flash("Error: Disease grading not found for update.", "danger")
@@ -61,23 +96,16 @@ def list_disease_gradings():
                         impression=impression,
                         display_order=display_order,
                         is_active=is_active,
-                        guidelines=guidelines or None
+                        guidelines=guidelines or None,
+                        features_json=features_json
                     )
                     db.add(grading)
                     flash("Disease grading created successfully.", "success")
                 
                 db.commit()
-
-            # After a POST, always re-query and return the partial for HTMX
-            gradings = db.execute(
-                select(DiseaseGrading)
-                .join(Disease)
-                .order_by(Disease.name, DiseaseGrading.display_order)
-                .options(selectinload(DiseaseGrading.disease))
-            ).scalars().all()
-            return render_template("admin/partials/disease_gradings_list.html", gradings=gradings)
+                return redirect(url_for('admin.list_disease_gradings'))
     
-    # This part now only handles GET requests for the full page
+    # GET request - show the form and list
     with Session() as db:
         gradings = db.execute(
             select(DiseaseGrading)
@@ -91,20 +119,16 @@ def list_disease_gradings():
     return render_template("admin/disease_gradings.html", gradings=gradings, diseases=diseases)
 
 
-def get_disease_grading_json(grading_id):
-    """Get a single disease grading as JSON."""
+def edit_disease_grading(grading_id):
+    """Edit a specific disease grading."""
     with Session() as db:
         grading = db.get(DiseaseGrading, grading_id)
         if not grading:
-            return jsonify({"error": "Not found"}), 404
-        return jsonify({
-            "id": grading.id,
-            "disease_id": grading.disease_id,
-            "impression": grading.impression,
-            "display_order": grading.display_order,
-            "is_active": grading.is_active,
-            "guidelines": grading.guidelines or ""
-        })
+            flash("Disease grading not found.", "danger")
+            return redirect(url_for('admin.list_disease_gradings'))
+        
+        diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
+        return render_template("admin/disease_gradings.html", grading=grading, diseases=diseases)
 
 
 def delete_disease_grading(grading_id):
@@ -118,11 +142,4 @@ def delete_disease_grading(grading_id):
             db.commit()
             flash("Disease grading deleted successfully.", "success")
         
-        # After deleting, re-query and return the list partial
-        gradings = db.execute(
-            select(DiseaseGrading)
-            .join(Disease)
-            .order_by(Disease.name, DiseaseGrading.display_order)
-            .options(selectinload(DiseaseGrading.disease))
-        ).scalars().all()
-        return render_template("admin/partials/disease_gradings_list.html", gradings=gradings)
+        return redirect(url_for('admin.list_disease_gradings'))

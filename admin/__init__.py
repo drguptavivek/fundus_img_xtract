@@ -4,7 +4,7 @@ from flask import Blueprint
 from .users import users_list, add_user, edit_user, users_update
 from .security import change_password, manage_roles, role_usage, routes_by_role
 from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
-from .disease_gradings import list_disease_gradings, get_disease_grading_json, delete_disease_grading
+from .disease_gradings import list_disease_gradings, edit_disease_grading, delete_disease_grading
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
 from .logs import log_viewer
@@ -36,7 +36,7 @@ admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/delete", view_func=del
 
 # Disease grading routes
 admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])
-admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/json", view_func=get_disease_grading_json, methods=["GET"])
+admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/edit", view_func=edit_disease_grading, methods=["GET"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/delete", view_func=delete_disease_grading, methods=["POST"])
 
 # Grading Eligibility routes

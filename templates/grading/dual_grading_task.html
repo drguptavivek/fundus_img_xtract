@@ -117,10 +117,16 @@
               {% endfor %}
             </div>
           </div>
-          
-
-          
-          <div class="mb-2">
+        
+        <!-- Features Section -->
+        <div class="mb-2" id="features-section" style="display: none;">
+          <label class="form-label">Relevant Features</label>
+          <div id="features-container" class="d-flex flex-column gap-2">
+            <!-- Features will be dynamically populated here -->
+          </div>
+        </div>
+        
+        <div class="mb-2">
             <label class="form-label">Remarks (optional)</label>
             <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if task.state == "final" and not is_arbitrator_revising_recent %}disabled{% endif %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
           </div>
@@ -219,6 +225,14 @@
   window.imageUuid = "{{ image_uuid }}";
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "{{ current_slot or '' }}";
+  // Pass disease gradings with features to JavaScript
+  window.diseaseGradingsWithFeatures = {{ disease_gradings | tojson }};
+  // Pass existing selected features if available
+  {% if existing_grade and existing_grade.selected_features_json %}
+  window.existingSelectedFeatures = {{ existing_grade.selected_features_json | safe }};
+  {% else %}
+  window.existingSelectedFeatures = null;
+  {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

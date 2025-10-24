@@ -410,10 +410,97 @@ def dashboard():
                     
                 rows = db_session.execute(q).scalars().all()
 
+                # Check for grading tasks before deletion
+                upload_ids = [u.id for u in rows]
+                tasks_by_upload: dict[int, list[GradingTask]] = {}
+                if upload_ids:
+                    task_rows = db_session.execute(
+                        select(GradingTask).where(GradingTask.direct_image_upload_id.in_(upload_ids))
+                    ).scalars().all()
+                    for task in task_rows:
+                        if task.direct_image_upload_id is None:
+                            continue
+                        tasks_by_upload.setdefault(task.direct_image_upload_id, []).append(task)
+
+                blocked_uploads: list[tuple[DirectImageUpload, list[GradingTask]]] = []
+                deletable_uploads: list[DirectImageUpload] = []
+                for u in rows:
+                    related_tasks = tasks_by_upload.get(u.id, [])
+                    if any(task.state != 'pending' for task in related_tasks):
+                        blocked_uploads.append((u, related_tasks))
+                    else:
+                        deletable_uploads.append(u)
+
+                if blocked_uploads and not deletable_uploads:
+                    # All uploads are blocked, abort entirely
+                    skipped_payload = [
+                        {
+                            "upload_id": upload.id,
+                            "filename": upload.filename,
+                            "non_pending_states": sorted(
+                                {task.state for task in related_tasks if task.state != 'pending'}
+                            ),
+                        }
+                        for upload, related_tasks in blocked_uploads
+                    ]
+                    editing_logger.warning(
+                        "Bulk delete aborted; all uploads blocked=%s user_id=%s",
+                        [item["upload_id"] for item in skipped_payload],
+                        current_user.id,
+                    )
+                    
+                    # Build detailed error message for user
+                    blocked_details = []
+                    for upload, related_tasks in blocked_uploads:
+                        non_pending_states = sorted({task.state for task in related_tasks if task.state != 'pending'})
+                        blocked_details.append(
+                            f"Image '{upload.filename}' has tasks in states: {', '.join(non_pending_states)}"
+                        )
+                    
+                    flash(
+                        f"Cannot delete {len(blocked_uploads)} image(s) with active grading tasks. "
+                        f"{' '.join(blocked_details)}",
+                        "danger"
+                    )
+                    return redirect(url_for("direct_uploads.dashboard"), code=303)
+                elif blocked_uploads and deletable_uploads:
+                    # Some uploads blocked, but we can proceed with deletable ones
+                    skipped_payload = [
+                        {
+                            "upload_id": upload.id,
+                            "filename": upload.filename,
+                            "non_pending_states": sorted(
+                                {task.state for task in related_tasks if task.state != 'pending'}
+                            ),
+                        }
+                        for upload, related_tasks in blocked_uploads
+                    ]
+                    editing_logger.warning(
+                        "Bulk delete partially blocked; uploads blocked=%s proceeding=%s user_id=%s",
+                        [item["upload_id"] for item in skipped_payload],
+                        [u.id for u in deletable_uploads],
+                        current_user.id,
+                    )
+                    
+                    # Build warning message for user about blocked uploads
+                    blocked_details = []
+                    for upload, related_tasks in blocked_uploads:
+                        non_pending_states = sorted({task.state for task in related_tasks if task.state != 'pending'})
+                        blocked_details.append(
+                            f"Image '{upload.filename}' has tasks in states: {', '.join(non_pending_states)}"
+                        )
+                    
+                    flash(
+                        f"Skipping {len(blocked_uploads)} image(s) with active grading tasks. "
+                        f"{' '.join(blocked_details)} "
+                        f"Proceeding with {len(deletable_uploads)} deletable image(s).",
+                        "warning"
+                    )
+
                 deleted_files = 0
                 deleted_rows = 0
 
-                for u in rows:
+                for u in deletable_uploads:
                     # Try to delete edited first (if present)
                     if getattr(u, "edited_filename", None):
                         try:
@@ -453,14 +540,42 @@ def dashboard():
                     db_session.delete(u)
                     deleted_rows += 1
 
+                # Delete pending grading tasks for the deleted images
+                deleted_upload_ids = [u.id for u in deletable_uploads]
+                deleted_task_count = 0
+                if deleted_upload_ids:
+                    pending_tasks = db_session.execute(
+                        select(GradingTask).where(
+                            GradingTask.direct_image_upload_id.in_(deleted_upload_ids),
+                            GradingTask.state == 'pending'
+                        )
+                    ).scalars().all()
+                    
+                    for task in pending_tasks:
+                        db_session.delete(task)
+                        deleted_task_count += 1
+                    
+                    if deleted_task_count > 0:
+                        editing_logger.info(
+                            "Deleted %s pending grading tasks for removed images by user_id=%s",
+                            deleted_task_count,
+                            current_user.id,
+                        )
+
                 db_session.commit()
                 editing_logger.info(
-                    "Bulk delete removed %s record(s) and %s file(s) by user_id=%s",
+                    "Bulk delete removed %s record(s), %s file(s), and %s pending task(s) by user_id=%s",
                     deleted_rows,
                     deleted_files,
+                    deleted_task_count,
                     current_user.id,
                 )
-                flash(f"Deleted {deleted_rows} record(s). Removed {deleted_files} file(s) from disk.", "success")
+                
+                # Success message (we already showed warning about blocked uploads if needed)
+                if deleted_task_count > 0:
+                    flash(f"Deleted {deleted_rows} record(s). Removed {deleted_files} file(s) and {deleted_task_count} pending task(s).", "success")
+                else:
+                    flash(f"Deleted {deleted_rows} record(s). Removed {deleted_files} file(s).", "success")
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
 
 

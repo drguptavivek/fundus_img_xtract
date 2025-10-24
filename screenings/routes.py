@@ -324,9 +324,40 @@ def delete_encounter(encounter_id: int):
         if not is_admin_like and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
             abort(403)
         
+        # Check if there are any non-pending grading tasks for this encounter's images
+        from models import GradingTask
+        
+        # Get all encounter file IDs for this encounter
+        encounter_file_ids = [ef.id for ef in encounter.encounter_files] if encounter.encounter_files else []
+        
+        if encounter_file_ids:
+            # Check for any non-pending grading tasks for these images
+            non_pending_tasks = db.query(GradingTask).filter(
+                GradingTask.encounter_file_id.in_(encounter_file_ids),
+                GradingTask.state != 'pending'
+            ).all()
+            
+            if non_pending_tasks:
+                # Build error message with details
+                task_details = []
+                for task in non_pending_tasks:
+                    task_details.append(f"Image ID {task.encounter_file_id} has task in '{task.state}' state")
+                
+                flash(
+                    f"Cannot delete screening: {len(non_pending_tasks)} grading task(s) are not in pending state. "
+                    f"{' '.join(task_details)}",
+                    "danger"
+                )
+                return redirect(url_for("screenings.screening_detail", encounter_id=encounter_id))
+        
         # Store patient info for flash message
         patient_id = encounter.patient_id
         patient_name = encounter.name
+        
+        # Get the ZIP file record once for reuse
+        zip_file = None
+        if encounter.zip_file_id:
+            zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
         
         # Delete all associated data (cascade delete should handle most of this)
         # But we'll be explicit for clarity and to ensure files are cleaned up
@@ -339,8 +370,7 @@ def delete_encounter(encounter_id: int):
         image_files = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter_id).all()
         for img_file in image_files:
             try:
-                # Get the file path based on zip file upload date
-                zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                # Use the already queried zip_file
                 if zip_file:
                     upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
                     from models import IMAGE_DIR
@@ -354,8 +384,7 @@ def delete_encounter(encounter_id: int):
         pdf_files = db.query(EncounterFilePDF).filter(EncounterFilePDF.patient_encounter_id == encounter_id).all()
         for pdf_file in pdf_files:
             try:
-                # Get the file path based on zip file upload date
-                zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                # Use the already queried zip_file
                 if zip_file:
                     upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
                     from models import PDF_DIR
@@ -372,7 +401,7 @@ def delete_encounter(encounter_id: int):
         for dr_report in dr_reports:
             if dr_report.report_file_name:
                 try:
-                    zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                    # Use the already queried zip_file
                     if zip_file:
                         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
                         dr_pdf_path = DR_PDF_DIR / upload_date_str / dr_report.report_file_name
@@ -385,7 +414,7 @@ def delete_encounter(encounter_id: int):
         for gl_report in gl_reports:
             if gl_report.report_file_name:
                 try:
-                    zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
+                    # Use the already queried zip_file
                     if zip_file:
                         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
                         gl_pdf_path = GLAUCOMA_PDF_DIR / upload_date_str / gl_report.report_file_name
@@ -394,11 +423,21 @@ def delete_encounter(encounter_id: int):
                 except Exception as e:
                     current_app.logger.warning(f"Failed to delete Glaucoma report file {gl_report.report_file_name}: {e}")
         
+        # Delete all pending grading tasks for this encounter's images
+        if encounter_file_ids:
+            pending_tasks = db.query(GradingTask).filter(
+                GradingTask.encounter_file_id.in_(encounter_file_ids),
+                GradingTask.state == 'pending'
+            ).all()
+            
+            for task in pending_tasks:
+                db.delete(task)
+                current_app.logger.info(f"Deleted pending grading task {task.id} for image {task.encounter_file_id}")
+        
         # Delete the encounter (cascade will handle related database records)
         db.delete(encounter)
         
         # Also delete the ZIP file record to allow re-uploading the same ZIP
-        zip_file = db.query(ZipFile).filter(ZipFile.id == encounter.zip_file_id).first()
         if zip_file:
             db.delete(zip_file)
         

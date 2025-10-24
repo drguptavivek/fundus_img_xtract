@@ -4,19 +4,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/quill.snow.css') }}?v={{ v }}">
     <style>
       /* Fix Quill editor height and prevent overlap with features */
-      #modal_guidelines_editor {
-        min-height: 150px;
-        max-height: 300px;
-        overflow-y: auto;
-      }
+
       
       .ql-container {
-        min-height: 150px;
         font-size: 14px;
+        height: auto;
       }
       
       .ql-editor {
-        min-height: 120px;
         padding: 12px;
       }
       

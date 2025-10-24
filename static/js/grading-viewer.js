@@ -26,6 +26,9 @@
   const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
+  const IMG_PAN_STEP = 5;
+  const IMG_PAN_MIN = -45;
+  const IMG_PAN_MAX = 45;
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
@@ -122,6 +125,10 @@
       if (rawKey === ']' || rawKey === '}') { e.preventDefault(); state?.adjustLoupeSize?.(+1); return; }
       if (rawKey === '-' || rawKey === '_') { e.preventDefault(); state?.adjustLoupeZoom?.(-1); return; }
       if (rawKey === '=' || rawKey === '+' ) { e.preventDefault(); state?.adjustLoupeZoom?.(+1); return; }
+      if (k === 'w') { e.preventDefault(); state?.adjustImagePan?.(0, -1); return; }
+      if (k === 's') { e.preventDefault(); state?.adjustImagePan?.(0, +1); return; }
+      if (k === 'a') { e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
+      if (k === 'd') { e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
 
       if (rawKey === '<' || rawKey === ',') { e.preventDefault(); adjustRangeInput(bright, -1); return; }
       if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
@@ -167,6 +174,8 @@
     let loupeSize = storedLoupe?.size ?? DEFAULT_LOUPE_SIZE;
     let loupeZoom = storedLoupe?.zoom ?? DEFAULT_LOUPE_ZOOM;
     let lastPointerPos = null;
+    let imgPanX = 0;
+    let imgPanY = 0;
 
     function svgUrlFor(val){
       switch((val||'').toLowerCase()){
@@ -201,7 +210,11 @@
         none.checked = true;
         none.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      if (typeof resetLoupe === 'function') resetLoupe();
+      if (typeof resetLoupe === 'function') {
+        resetLoupe();
+      } else {
+        resetImagePan();
+      }
       applyFilter();
     });
     // Initial
@@ -211,6 +224,31 @@
       if (!loupe) return;
       loupe.style.width = `${loupeSize}px`;
       loupe.style.height = `${loupeSize}px`;
+    }
+
+    function applyImagePan(){
+      if (!mainImg) return;
+      mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%)`;
+    }
+
+    function adjustImagePan(stepX, stepY){
+      const nextX = clamp(imgPanX + stepX * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
+      const nextY = clamp(imgPanY + stepY * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
+      if (Math.abs(nextX - imgPanX) < 0.01 && Math.abs(nextY - imgPanY) < 0.01) return;
+      imgPanX = nextX;
+      imgPanY = nextY;
+      applyImagePan();
+      if (loupeEnabled) {
+        updateLoupeAssets();
+        if (lastPointerPos) updateLoupePosition(lastPointerPos);
+      }
+    }
+
+    function resetImagePan(){
+      imgPanX = 0;
+      imgPanY = 0;
+      applyImagePan();
+      if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
     }
 
     function updateLoupeAssets(){
@@ -313,6 +351,7 @@
       applyLoupeDimensions();
       updateLoupeAssets();
       setLoupeEnabled(false);
+      resetImagePan();
       writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
 
@@ -335,12 +374,15 @@
     window.addEventListener('resize', () => { if (loupeEnabled) updateLoupeAssets(); });
     mainImg.addEventListener('load', () => { if (loupeEnabled) updateLoupeAssets(); });
 
+    applyImagePan();
     applyLoupeDimensions();
     viewerStates.set(root, {
       toggleLoupe: () => setLoupeEnabled(!loupeEnabled),
       adjustLoupeSize,
       adjustLoupeZoom,
+      adjustImagePan,
       resetLoupe,
+      resetImagePan,
     });
 
     const activate = () => { activeRoot = root; };

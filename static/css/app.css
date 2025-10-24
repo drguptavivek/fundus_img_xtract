@@ -756,6 +756,8 @@
   object-position: center center;
   display: block;
   margin: auto;
+  transition: transform 0.12s ease;
+  will-change: transform;
 }
 
 /* Grading filters: button active state */

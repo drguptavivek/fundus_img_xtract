@@ -43,18 +43,48 @@
     return document.fullscreenElement === el || document.webkitFullscreenElement === el;
   }
 
+  function adjustRangeInput(input, direction){
+    if (!input || !direction) return;
+    const stepStr = (input.step && input.step !== '') ? input.step : '0.05';
+    const step = parseFloat(stepStr) || 0.05;
+    const min = (input.min && input.min !== '') ? parseFloat(input.min) : -Infinity;
+    const max = (input.max && input.max !== '') ? parseFloat(input.max) : Infinity;
+    const current = parseFloat(input.value) || 0;
+    let next = current + (direction * step);
+    if (!Number.isFinite(next)) return;
+    next = Math.min(max, Math.max(min, next));
+    if (Math.abs(next - current) < 1e-6) return;
+    const precision = stepStr.includes('.') ? (stepStr.split('.')[1]?.length || 0) : 0;
+    const adjusted = precision > 0 ? parseFloat(next.toFixed(precision)) : next;
+    input.value = `${adjusted}`;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   // Bind once: global keyboard shortcuts routed to the active viewer
   if (!window.__imggrKeysBound) {
     window.__imggrKeysBound = true;
     window.addEventListener('keydown', (e) => {
       if (!activeRoot) return;
-      const k = (e.key||'').toLowerCase();
+      const rawKey = e.key || '';
+      const k = rawKey.toLowerCase();
       if (!k) return;
       const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
       if (['input','textarea','select'].includes(tag)) return;
 
       const main = activeRoot.querySelector('.imggr-main');
       if (!main) return;
+
+      const card = activeRoot.closest('.card');
+      const bright = card ? card.querySelector('.imggr-bright') : null;
+      const contr = card ? card.querySelector('.imggr-contrast') : null;
+      const resetBtn = card ? card.querySelector('.imggr-reset') : null;
+
+      if (rawKey === '<' || rawKey === ',') { e.preventDefault(); adjustRangeInput(bright, -1); return; }
+      if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
+      if (rawKey === ';' || rawKey === ':') { e.preventDefault(); adjustRangeInput(contr, -1); return; }
+      if (rawKey === '\'' || rawKey === '"') { e.preventDefault(); adjustRangeInput(contr, +1); return; }
+      if (rawKey === '/' || rawKey === '?') { e.preventDefault(); resetBtn?.click(); return; }
 
       if (k === 'f') { e.preventDefault(); isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); return; }
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }

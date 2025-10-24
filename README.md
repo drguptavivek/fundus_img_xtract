@@ -11,9 +11,7 @@ When adding features to the application, please follow the conventions outlined 
 ```bash
 git clone https://github.com/drguptavivek/fundus_img_xtract.git
 
-# Install NPM packages and create directories
-python3 setup_env_and_npm.py 
-python setup_env_and_npm.py 
+
 ```
 
 ### PYTHON PACKAGES SETUP
@@ -24,7 +22,7 @@ uv init
 uv add -r requirements.txt
 
 # OR if you do not prefer / have uv
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```

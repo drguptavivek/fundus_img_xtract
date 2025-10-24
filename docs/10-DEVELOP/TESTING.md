@@ -6,38 +6,61 @@ The Fundus Image Manager application uses pytest as its primary testing framewor
 
 ## Test User Management
 
+### Creating Test Users
+
+For local development and testing, you can create test users using the provided scripts:
+
+1. **Create Admin User**:
+   ```bash
+   uv run python scripts/create_test_admin.py
+   ```
+   This creates an admin user with username `admin` and password `Vivek@2026`.
+
+2. **Create All Test Users**:
+   ```bash
+   uv run python scripts/add_test_users.py
+   ```
+   This creates a comprehensive set of test users with different roles and permissions.
+
 ### Automatic Test User Creation
 
 The testing framework automatically creates test users with different roles for testing purposes. These users are created in the test database and are isolated from the production database.
 
 #### Test User Roles Created
 
-1. **Admin User**: Full system access for testing admin functionality
-2. **Ophthalmologist User**: Medical professional access for grading and review
-3. **Resident User**: Medical trainee access for learning and grading
-4. **File Uploader User**: Access to upload and manage images
-5. **Optometrist User**: Access to upload and review images
+1. **Admin Users**: Full system access for testing admin functionality
+   - `admin`: Default admin user created by `create_test_admin.py`
+   - `testadmin`: Development administrator created by `add_test_users.py`
+2. **Ophthalmologist Users**: Medical professional access for grading and review
+   - `test2ComophArbit`: Arbitrator for Glaucoma and DR
+   - `test2ComophFac`: Resident2 for Glaucoma and DR
+   - `test2ComophResident`: Resident for Glaucoma and DR
+3. **File Uploader User**: Access to upload and manage images
+   - `testUploader`: File upload permissions
+4. **Optometrist User**: Access to upload and review images
+   - `testOptometrist`: Optometrist permissions
+5. **Data Manager User**: Data management permissions
+   - `testManager`: Data management permissions
 
 #### Test Account Credentials
 
-| Role | Username | Password | Email | Lab Units | Special Permissions |
-|------|----------|----------|-------|-----------|-------------------|
-| Admin | test_admin | Test@2026 | test_admin@example.com | - | Full system access |
-| Ophthalmologist | test_ophthalmologist | TestPassword123! | test_ophthalmologist@example.com | Community Ophthalmology | Basic ophthalmologist |
-| Resident | test_resident | TestPassword123! | test_resident@example.com | Community Ophthalmology | Basic ophthalmologist |
-| Resident2 | test_resident2 | TestPassword123! | test_resident2@example.com | Community Ophthalmology | Basic ophthalmologist |
-| Test Resident2 | testResident2 | TestPassword123! | testResident2@example.com | Community Ophthalmology, Retina Lab | Resident2 slot for Glaucoma & DR |
-| Test Resident | testResident | TestPassword123! | testResident@example.com | Community Ophthalmology, Retina Lab | Resident slot for Glaucoma & DR |
-| Test Arbitrator | testArbitrator | TestPassword123! | testArbitrator@example.com | Community Ophthalmology, Retina Lab | Arbitrator slot for Glaucoma & DR |
-| File Uploader | test_file_uploader | TestPassword123! | test_file_uploader@example.com | - | File upload permissions |
-| Optometrist | test_optometrist | TestPassword123! | test_optometrist@example.com | - | Optometrist permissions |
+| Role | Username | Password | Full Name | Lab Units | Special Permissions |
+|------|----------|----------|-----------|-----------|-------------------|
+| Admin | admin | Vivek@2026 | Default Admin | - | Full system access |
+| Admin | testadmin | Vivek@2026 | Development Administrator | Community Ophthalmology | Full system access |
+| Ophthalmologist | test2ComophArbit | Vivek@2026 | Test Comoph Arbitrator | Community Ophthalmology | Arbitrator for Glaucoma & DR |
+| Ophthalmologist | test2ComophFac | Vivek@2026 | Test Comoph Resident2 | Community Ophthalmology | Resident2 for Glaucoma & DR |
+| Ophthalmologist | test2ComophResident | Vivek@2026 | Test Comoph Resident | Community Ophthalmology | Resident for Glaucoma & DR |
+| File Uploader | testUploader | Vivek@2026 | Test Community Ophthalmology Uploader | Community Ophthalmology | File upload permissions |
+| Optometrist | testOptometrist | Vivek@2026 | Test Community Ophthalmology Optometrist | Community Ophthalmology | Optometrist permissions |
+| Data Manager | testManager | Vivek@2026 | Test Community Ophthalmology Manager | Community Ophthalmology | Data management permissions |
 
 **Note**:
-- Most test accounts use `TestPassword123!` except the admin account which uses `Test@2026`
+- All test accounts use `Vivek@2026` as the password
 - Test users use core entities from the application (hospitals, lab units, diseases)
-- Hospital: RPC AIIMS (ID: 1)
-- Lab Units: Community Ophthalmology (ID: 1), Retina Lab (ID: 2)
-- Diseases: Glaucoma (ID: 1), DR (ID: 2), AMD (ID: 3)
+- Hospital: RPC AIIMS
+- Lab Unit: Community Ophthalmology
+- Diseases: Glaucoma, DR (Diabetic Retinopathy)
 
 #### User Lifecycle and Persistence
 
@@ -82,7 +105,7 @@ Both test databases are completely isolated from the production database:
 def test_with_admin_user(admin_user):
     """Test using the admin user fixture"""
     # admin_user fixture provides a pre-created admin user
-    assert admin_user.username == "test_admin"
+    assert admin_user.username == "testadmin"
     assert admin_user.has_role("admin")
 
 def test_with_multiple_roles(test_users):
@@ -100,10 +123,10 @@ def test_with_multiple_roles(test_users):
 
 ### Security Considerations
 
-- Test users use different passwords than production users
-- Test user emails use example.com domain to avoid real email conflicts
-- Test user IDs are consistent and predictable for reliable testing
-- Test users are created with the same entity IDs as defined in `scripts/setup_core_entities.py`
+- All test users use the same password: `Vivek@2026`
+- Test users have predictable usernames for reliable testing
+- Test users are created with the same entity IDs as defined in the core setup
+- Test users are associated with the Community Ophthalmology lab unit under RPC AIIMS hospital
 
 ## Test Structure
 
@@ -271,8 +294,8 @@ def test_route_with_client(app):
     with app.test_client() as client:
         # Login if needed
         client.post('/auth/login', data={
-            'username': 'admin',
-            'password': 'test_password'
+            'username': 'testadmin',
+            'password': 'Vivek@2026'
         })
         
         # Test the route
@@ -406,15 +429,15 @@ uv run pytest --pdb
 def test_login_success(client):
     """Test successful login"""
     response = client.post('/auth/login', data={
-        'username': 'admin',
-        'password': 'correct_password'
+        'username': 'testadmin',
+        'password': 'Vivek@2026'
     })
     assert response.status_code == 302  # Redirect after login
     
 def test_login_failure(client):
     """Test login with wrong password"""
     response = client.post('/auth/login', data={
-        'username': 'admin',
+        'username': 'testadmin',
         'password': 'wrong_password'
     })
     assert response.status_code == 200

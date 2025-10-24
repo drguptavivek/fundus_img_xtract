@@ -186,6 +186,7 @@ Located in [`api/disease.py`](../../api/disease.py):
 
 - **[`GET /api/disease-grades/<disease_id>`](../../api/disease.py:9)**: Get grades applicable to a specific disease
 - **[`GET /api/diseases-with-gradings`](../../api/disease.py:38)**: Get all diseases with their associated gradings
+- **[`GET /api/diseases-gradings-features/<disease_id>`](../../api/disease.py:67)**: Get all gradings and features for a specific disease in hierarchical structure
 
 ### Implementation Examples
 

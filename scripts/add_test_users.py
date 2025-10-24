@@ -60,7 +60,7 @@ class TestUserConfig:
 
 TEST_USER_CONFIGS: List[TestUserConfig] = [
     TestUserConfig(
-        username="admin",
+        username="testadmin",
         full_name="Development Administrator",
         role_names=("admin",),
     ),

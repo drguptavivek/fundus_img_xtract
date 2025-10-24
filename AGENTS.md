@@ -13,6 +13,9 @@
 - `uv pip install` - Install dependencies with uv
 - `npn run build:css` - Build Theme 
 
+- PORT 5001
+- use virtual enviroinment .venv
+
 
 ## CODING PROTOCOL ##
 **Coding Instructions**

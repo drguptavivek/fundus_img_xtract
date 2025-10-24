@@ -11,6 +11,15 @@
       ],
       "disabled": false,
       "alwaysAllow": []
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@chrome-devtools-mcp@latest"
+      ],
+      "disabled": false,
+      "alwaysAllow": []
     }
   }
 }

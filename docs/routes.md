@@ -322,6 +322,7 @@ The application includes comprehensive API endpoints that are documented separat
 | /api/upload-jobs/\<int:job_id\>/status | GET | api/direct_uploads.py | Job owner | Get upload job status |
 | /api/disease-grades/\<int:disease_id\> | GET | api/disease.py | admin, data_manager, optometrist | Get disease grading options |
 | /api/diseases-with-gradings | GET | api/disease.py | admin, data_manager, optometrist | Get all diseases with gradings |
+| /api/diseases-gradings-features/\<int:disease_id\> | GET | api/disease.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all gradings and features for a disease |
 | /api/grading-eligibility/users/\<int:user_id\> | GET | api/grading_eligibility.py | admin | Get user grading eligibility |
 | /api/grading-eligibility/users/\<int:user_id\>/details | GET | api/grading_eligibility.py | admin | Get detailed grading eligibility |
 | /api/gradings | GET | api/gradings.py | admin, resident, ophthalmologist | Get filtered gradings data |

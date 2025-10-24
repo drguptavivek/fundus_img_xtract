@@ -505,6 +505,7 @@ def create_app():
             or path == "/style_guide"
             or path== "/forgot-password"
             or path == "/reset-password"
+            or path == "/healthz"
             or path == "/check-email-status"
             or path == "/email-sse"
             or path=="/test-rate-limit"

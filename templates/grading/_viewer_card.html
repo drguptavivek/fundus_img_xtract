@@ -46,6 +46,14 @@
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
 
+      <!-- Loupe -->
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
+              aria-pressed="false"
+              aria-label="Toggle loupe magnifier">
+        Loupe
+      </button>
+
       <!-- Shortcut hint -->
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
@@ -81,6 +89,7 @@
         <img         class="imggr-main-img" 
         style="width:100%; height:100%; object-fit:contain; display:block;"
         src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
+        <div class="imggr-loupe" aria-hidden="true"></div>
         <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
       </div>
       {# No thumbnails in grading view #}

@@ -117,6 +117,10 @@
     const bright = card ? card.querySelector('.imggr-bright') : null;
     const contr = card ? card.querySelector('.imggr-contrast') : null;
     const resetBtn = card ? card.querySelector('.imggr-reset') : null;
+    const loupeToggle = card ? card.querySelector('.imggr-loupe-toggle') : null;
+    const loupe = root.querySelector('.imggr-loupe');
+    let loupeEnabled = false;
+    let lastPointerPos = null;
 
     function svgUrlFor(val){
       switch((val||'').toLowerCase()){
@@ -155,6 +159,80 @@
     });
     // Initial
     applyFilter();
+
+    function updateLoupeAssets(){
+      if (!loupe || !mainImg) return;
+      const src = mainImg.currentSrc || mainImg.src;
+      if (src) loupe.style.backgroundImage = `url(${JSON.stringify(src)})`;
+      const rect = mainImg.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        loupe.style.backgroundSize = `${rect.width * 2}px ${rect.height * 2}px`;
+      }
+    }
+
+    function setLoupeEnabled(flag){
+      if (!loupe || !loupeToggle) return;
+      loupeEnabled = !!flag;
+      loupeToggle.setAttribute('aria-pressed', loupeEnabled ? 'true' : 'false');
+      loupeToggle.classList.toggle('active', loupeEnabled);
+      if (!loupeEnabled) {
+        loupe.classList.remove('is-active');
+        return;
+      }
+      updateLoupeAssets();
+      if (lastPointerPos) {
+        updateLoupePosition(lastPointerPos);
+      }
+    }
+
+    function pointerWithinRect(coord, size){
+      return Math.max(0, Math.min(size, coord));
+    }
+
+    function updateLoupePosition(e){
+      if (!loupeEnabled || !loupe || !main || !e) return;
+      const mainRect = main.getBoundingClientRect();
+      if (!mainRect.width || !mainRect.height) return;
+      const pointerX = pointerWithinRect(e.clientX - mainRect.left, mainRect.width);
+      const pointerY = pointerWithinRect(e.clientY - mainRect.top, mainRect.height);
+      loupe.style.left = `${pointerX}px`;
+      loupe.style.top = `${pointerY}px`;
+
+      const imgRect = mainImg.getBoundingClientRect();
+      if (imgRect.width && imgRect.height) {
+        const imgX = pointerWithinRect(e.clientX - imgRect.left, imgRect.width);
+        const imgY = pointerWithinRect(e.clientY - imgRect.top, imgRect.height);
+        const bgX = (imgX / imgRect.width) * 100;
+        const bgY = (imgY / imgRect.height) * 100;
+        loupe.style.backgroundPosition = `${bgX}% ${bgY}%`;
+      }
+      loupe.classList.add('is-active');
+    }
+
+    function handlePointerLeave(){
+      lastPointerPos = null;
+      if (!loupeEnabled || !loupe) return;
+      loupe.classList.remove('is-active');
+    }
+
+    loupeToggle?.addEventListener('click', () => {
+      setLoupeEnabled(!loupeEnabled);
+    });
+
+    main.addEventListener('pointerenter', (e) => {
+      lastPointerPos = { clientX: e.clientX, clientY: e.clientY };
+      if (!loupeEnabled) return;
+      updateLoupeAssets();
+      updateLoupePosition(lastPointerPos);
+    });
+    main.addEventListener('pointermove', (e) => {
+      lastPointerPos = { clientX: e.clientX, clientY: e.clientY };
+      if (!loupeEnabled) return;
+      updateLoupePosition(lastPointerPos);
+    });
+    main.addEventListener('pointerleave', handlePointerLeave);
+    window.addEventListener('resize', () => { if (loupeEnabled) updateLoupeAssets(); });
+    mainImg.addEventListener('load', () => { if (loupeEnabled) updateLoupeAssets(); });
 
     const activate = () => { activeRoot = root; };
     main.addEventListener('click', activate);

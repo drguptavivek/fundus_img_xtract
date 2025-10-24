@@ -10,7 +10,6 @@ const DOM_ELEMENTS = {
     INSTRUCTIONS_CONTENT: 'instructions-content',
     COMMENT_TEXTAREA: 'comment-textarea',
     CLEAR_IMPRESSION: 'clear-impression',
-    NOT_GRADABLE_REASONS: 'not-gradable-reasons',
     FEATURES_SECTION: 'features-section',
     FEATURES_CONTAINER: 'features-container'
 };
@@ -37,7 +36,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize all components
     DualGradingTask.init();
-    NotGradableReasons.init();
     FeaturesDisplay.init();
     
     // Scroll to top of image viewer card on page load
@@ -303,15 +301,6 @@ const DualGradingTask = (function() {
                 instructionsDiv.style.display = 'none';
             }
 
-            // Show/hide not gradable reasons section
-            const impressionText = checked.nextElementSibling?.textContent?.trim();
-            const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
-            if (impressionText && impressionText.toLowerCase().includes('not gradable')) {
-                notGradableSection.style.display = 'block';
-            } else {
-                notGradableSection.style.display = 'none';
-            }
-
             // Update features display based on selected grading
             FeaturesDisplay.updateFeatures(gradingId);
 
@@ -335,12 +324,6 @@ const DualGradingTask = (function() {
         });
         instructionsDiv.style.display = 'none';
         clearSelectionFromStorage();
-        
-        // Hide not gradable reasons section
-        const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
-        if (notGradableSection) {
-            notGradableSection.style.display = 'none';
-        }
         
         // Clear comments box
         const commentTextarea = document.getElementById(DOM_ELEMENTS.COMMENT_TEXTAREA);
@@ -414,25 +397,8 @@ const DualGradingTask = (function() {
             }
 
             FeaturesDisplay.updateFeatures(gradingId);
-
-            // Show/hide not gradable reasons section based on current selection
-            const impressionText = checked?.nextElementSibling?.textContent?.trim();
-            const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
-            if (notGradableSection) {
-                if (impressionText && impressionText.toLowerCase().includes('not gradable')) {
-                    notGradableSection.style.display = 'block';
-                } else {
-                    notGradableSection.style.display = 'none';
-                }
-            }
         } else {
             instructionsDiv.style.display = 'none';
-
-            // Hide not gradable reasons section when no option is selected
-            const notGradableSection = document.getElementById(DOM_ELEMENTS.NOT_GRADABLE_REASONS);
-            if (notGradableSection) {
-                notGradableSection.style.display = 'none';
-            }
 
             // Hide features section when no option is selected
             const featuresSection = document.getElementById(DOM_ELEMENTS.FEATURES_SECTION);
@@ -509,64 +475,6 @@ function cleanupLegacyStorage(taskId, imageUuid) {
         console.debug('Unable to clean legacy localStorage key');
     }
 }
-
-/**
- * Not Gradable Reasons Module
- * Handles the functionality for adding reasons when an image is marked as not gradable
- */
-const NotGradableReasons = (function() {
-    // Private variables
-    let reasonButtons, commentTextarea;
-
-    /**
-     * Initialize the module
-     */
-    function init() {
-        // Get DOM elements
-        reasonButtons = document.querySelectorAll('.not-gradable-reason');
-        commentTextarea = document.getElementById(DOM_ELEMENTS.COMMENT_TEXTAREA);
-
-        if (reasonButtons.length && commentTextarea) {
-            registerEventHandlers();
-        } else {
-            // If elements don't exist yet, wait a bit and try again
-            setTimeout(init, 100);
-        }
-    }
-
-    /**
-     * Register event handlers
-     */
-    function registerEventHandlers() {
-        reasonButtons.forEach(button => {
-            button.addEventListener('click', addReasonToComments);
-        });
-    }
-
-    /**
-     * Add selected reason to comments textarea
-     */
-    function addReasonToComments() {
-        const reason = this.getAttribute('data-reason');
-        const currentText = commentTextarea.value;
-
-        // If the comment area is empty, just add the reason
-        // Otherwise, add a comma and space before the reason
-        if (currentText.trim() === '') {
-            commentTextarea.value = reason;
-        } else if (!currentText.includes(reason)) {
-            commentTextarea.value = currentText + ', ' + reason;
-        }
-
-        // Focus the textarea so the user can continue typing if needed
-        commentTextarea.focus();
-    }
-
-    // Public API
-    return {
-        init
-    };
-})();
 
 /**
  * Features Display Module

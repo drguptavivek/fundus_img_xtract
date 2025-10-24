@@ -63,7 +63,7 @@ def get_diseases_with_gradings():
     finally:
         db.close()
 
-
+ 
 @api_bp.route("/diseases-gradings-features/<int:disease_id>", methods=["GET"])
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_disease_gradings_features(disease_id: int):

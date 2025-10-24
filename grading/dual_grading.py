@@ -24,6 +24,7 @@ from utils.dualGradingEligibility import (
     get_user_eligibility_for_task,
     has_user_graded_task,
 )
+
 from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
@@ -95,6 +96,7 @@ def revise_grading(grade_id: int):
             is_arbitrator_revising_recent = eligibility_result.get("is_recent", False) and task.state == 'final'
             
             # Fetch disease gradings for this disease using utility function
+            # TODO: hydrate GradingsFeatures data server-side to avoid template JS fetching.
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
             
             # Check if disease_gradings are missing or invalid

@@ -17,13 +17,13 @@
   // Ordered list of filter values for cycling
   const FILTER_ORDER = ['none','redfree','greenboost','bluemono','gray','contrast'];
   const viewerStates = new WeakMap();
-  const DEFAULT_LOUPE_SIZE = 160;
+  const DEFAULT_LOUPE_SIZE = 200;
   const LOUPE_SIZE_STEP = 20;
   const LOUPE_SIZE_MIN = 100;
-  const LOUPE_SIZE_MAX = 280;
+  const LOUPE_SIZE_MAX = 400;
   const DEFAULT_LOUPE_ZOOM = 2;
   const LOUPE_ZOOM_STEP = 0.25;
-  const LOUPE_ZOOM_MIN = 1.25;
+  const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
 
   function clamp(value, min, max){

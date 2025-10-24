@@ -124,8 +124,9 @@ def list_disease_gradings():
     return render_template("admin/disease_gradings.html", gradings=gradings, diseases=diseases)
 
 
-def edit_disease_grading(grading_id):
-    """Edit a specific disease grading."""
+@roles_required('admin')
+def get_grading_features(grading_id):
+    """Get features for a specific grading as JSON."""
     with Session() as db:
         grading = db.execute(
             select(DiseaseGrading)
@@ -134,31 +135,14 @@ def edit_disease_grading(grading_id):
         ).scalar_one_or_none()
         
         if not grading:
-            flash("Disease grading not found.", "danger")
-            return redirect(url_for('admin.list_disease_gradings'))
-    
-    
-    def get_grading_features(grading_id):
-        """Get features for a specific grading as JSON."""
-        with Session() as db:
-            grading = db.execute(
-                select(DiseaseGrading)
-                .options(selectinload(DiseaseGrading.features))
-                .where(DiseaseGrading.id == grading_id)
-            ).scalar_one_or_none()
-            
-            if not grading:
-                return jsonify({"error": "Grading not found"}), 404
-            
-            features = [
-                {"sr_no": feature.sr_no, "label": feature.label}
-                for feature in sorted(grading.features, key=lambda x: x.sr_no)
-            ]
-            
-            return jsonify({"features": features})
+            return jsonify({"error": "Grading not found"}), 404
         
-        diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
-        return render_template("admin/disease_gradings.html", grading=grading, diseases=diseases)
+        features = [
+            {"sr_no": feature.sr_no, "label": feature.label}
+            for feature in sorted(grading.features, key=lambda x: x.sr_no)
+        ]
+        
+        return jsonify({"features": features})
 
 @roles_required('admin')
 def delete_disease_grading(grading_id):

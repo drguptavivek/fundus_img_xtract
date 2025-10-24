@@ -11,8 +11,8 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import select
-from models import Base, engine, Session, Disease, DiseaseGrading
+from sqlalchemy import select, delete
+from models import Base, engine, Session, Disease, DiseaseGrading, GradingsFeatures
 
 # Sample features for each disease grading - using simplified sr_no and label structure
 SAMPLE_FEATURES = {
@@ -166,8 +166,22 @@ def populate_sample_features():
                             "remarks": sample_data["remarks"]
                         }, indent=2)
                         
-                        # Update the grading
-                        grading.features_json = features_json
+                        # Update the grading with new features structure
+                        # Delete existing features and create new ones
+                        db.execute(
+                            delete(GradingsFeatures).where(GradingsFeatures.disease_grading_id == grading.id)
+                        )
+                        
+                        # Add new features from sample data
+                        for i, feature_data in enumerate(sample_data["features"], 1):
+                            feature = GradingsFeatures(
+                                disease_grading_id=grading.id,
+                                sr_no=feature_data["sr_no"],
+                                label=feature_data["label"]
+                            )
+                            db.add(feature)
+                        
+                        # Note: We're not setting features_json anymore as it's deprecated
                         total_updated += 1
                         print(f"    ✓ Updated: {grading.impression}")
                     else:

@@ -98,6 +98,9 @@ def verify_migration():
         logger.info(f"Verification results:")
         logger.info(f"  - Gradings with features_json: {gradings_with_json}")
         logger.info(f"  - Gradings with features in new table: {gradings_with_features}")
+        
+        # Note: features_json is now deprecated but kept for backward compatibility
+        logger.info("  - features_json field is deprecated but kept for backward compatibility")
         logger.info(f"  - Total features in new table: {total_features}")
         
         if gradings_with_json == gradings_with_features:

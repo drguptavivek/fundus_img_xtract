@@ -1,19 +1,37 @@
-from flask import render_template, request, jsonify, flash, redirect, url_for
+from flask import render_template, request, flash, redirect, url_for
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 import logging
+import json
+from json import JSONDecodeError
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from models import GradingTask, LabUnit, Grade, DiseaseGrading, Session as DBSession
+from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Session as DBSession
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
+from utils.masterUtils import fetch_active_disease_gradings
 from datetime import datetime, timezone
 from . import bp
 
 # Initialize grades logger for review grade submissions
 grades_logger = logging.getLogger("grades")
+
+
+def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
+    """Return a best-effort parsed list of previously selected features."""
+    if not selected_features_json:
+        return []
+
+    try:
+        parsed = json.loads(selected_features_json)
+        if isinstance(parsed, list):
+            return parsed
+    except JSONDecodeError:
+        grades_logger.warning("Failed to parse stored review selected_features_json", exc_info=True)
+
+    return []
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -64,16 +82,39 @@ def review_task_details(task_id: int):
                 Grade.grader_user_id == current_user.id,
                 Grade.role_slot == 'review'
             ).first()
-        
+
+        existing_selected_features = _parse_selected_features(
+            existing_review_grade.selected_features_json if existing_review_grade else None
+        )
+
         # Handle POST request for submitting review grade
         if request.method == 'POST' and can_review:
-            grading_id = request.form.get('grading_id')
+            grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
-            
+            raw_selected_features = request.form.getlist('selected_features')
+            selected_feature_ids: list[int] = []
+            for raw_feature in raw_selected_features:
+                if raw_feature is None or raw_feature == "":
+                    continue
+                try:
+                    selected_feature_ids.append(int(raw_feature))
+                except (TypeError, ValueError):
+                    flash('Invalid feature selection submitted.', 'error')
+                    return redirect(url_for('review.review_task_details', task_id=task_id))
+
+            unique_feature_ids: list[int] = []
+            seen_feature_ids: set[int] = set()
+            for feature_id in selected_feature_ids:
+                if feature_id not in seen_feature_ids:
+                    unique_feature_ids.append(feature_id)
+                    seen_feature_ids.add(feature_id)
+
+            selected_features_json: str | None = None
+
             if not grading_id:
                 flash('Please select a grade', 'error')
                 return redirect(url_for('review.review_task_details', task_id=task_id))
-            
+
             # Get the disease grading
             disease_grading = db.query(DiseaseGrading).filter(
                 DiseaseGrading.id == grading_id,
@@ -83,7 +124,35 @@ def review_task_details(task_id: int):
             if not disease_grading:
                 flash('Invalid grade selected', 'error')
                 return redirect(url_for('review.review_task_details', task_id=task_id))
-            
+
+            if unique_feature_ids:
+                available_features = (
+                    db.query(GradingsFeatures)
+                    .filter(GradingsFeatures.disease_grading_id == grading_id)
+                    .all()
+                )
+                features_by_id = {feature.id: feature for feature in available_features}
+                invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
+                if invalid_features:
+                    flash('One or more selected features are not valid for the chosen grade.', 'error')
+                    return redirect(url_for('review.review_task_details', task_id=task_id))
+
+                selected_feature_entities = sorted(
+                    (features_by_id[fid] for fid in unique_feature_ids),
+                    key=lambda feature: ((feature.sr_no or 0), feature.id),
+                )
+
+                selected_features_json = json.dumps(
+                    [
+                        {
+                            "id": feature.id,
+                            "label": feature.label,
+                            "sr_no": feature.sr_no,
+                        }
+                        for feature in selected_feature_entities
+                    ]
+                )
+
             # Log review grade submission (including revisions) using dedicated grades logger
             # Store in UTC for consistency
             timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -121,6 +190,8 @@ def review_task_details(task_id: int):
                 existing_review_grade.comment = comment
                 existing_review_grade.grade_name = disease_grading.impression
                 existing_review_grade.disease_name = task.disease.name if task.disease else None
+                existing_review_grade.grade_description = disease_grading.guidelines
+                existing_review_grade.selected_features_json = selected_features_json
                 existing_review_grade.updated_at = datetime.now(timezone.utc)
             else:
                 new_review_grade = Grade(
@@ -131,21 +202,43 @@ def review_task_details(task_id: int):
                     comment=comment,
                     grade_name=disease_grading.impression,
                     disease_name=task.disease.name if task.disease else None,
+                    grade_description=disease_grading.guidelines,
+                    selected_features_json=selected_features_json,
                     created_at=datetime.now(timezone.utc),
                     updated_at=datetime.now(timezone.utc)
                 )
                 db.add(new_review_grade)
-            
+
             db.commit()
             flash('Review grade submitted successfully', 'success')
             return redirect(url_for('review.review_task_details', task_id=task_id))
         
         # Get available grades for the disease
-        available_grades = db.query(DiseaseGrading).filter(
-            DiseaseGrading.disease_id == task.disease_id,
-            DiseaseGrading.is_active == True
-        ).order_by(DiseaseGrading.display_order).all()
-        
+        available_grades = fetch_active_disease_gradings(db, task.disease_id)
+
+        grading_features: list[dict[str, object]] = []
+        for grade in available_grades:
+            sorted_features = sorted(
+                grade.features or [],
+                key=lambda feature: ((feature.sr_no or 0), feature.id),
+            )
+            grading_features.append(
+                {
+                    "id": grade.id,
+                    "impression": grade.impression,
+                    "display_order": grade.display_order,
+                    "guidelines": grade.guidelines,
+                    "features": [
+                        {
+                            "id": feature.id,
+                            "sr_no": feature.sr_no,
+                            "label": feature.label,
+                        }
+                        for feature in sorted_features
+                    ],
+                }
+            )
+
         # Determine which image object to use for the viewer
         image_object = task.encounter_file if task.encounter_file else task.direct_image
 
@@ -156,5 +249,7 @@ def review_task_details(task_id: int):
             image_object=image_object,
             can_review=can_review,
             existing_review_grade=existing_review_grade,
-            available_grades=available_grades
+            available_grades=available_grades,
+            grading_features=grading_features,
+            existing_selected_features=existing_selected_features,
         )

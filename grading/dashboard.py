@@ -45,7 +45,8 @@ def index():
             user_id=getattr(current_user, 'id', None),
             page=page,
             per_page=per_page,
-            filter_date=filter_date
+            filter_date=filter_date,
+            exclude_role_slots={'review'}
         )
         
         # Get all available grading dates for this user
@@ -115,7 +116,40 @@ def index():
         # For dual grading, determine eligibility based on user's eligibility matrix rather than specific 'resident' role
         # Any user with role that allows them to grade (resident, ophthalmologist) can do resident grading
         raw_user_eligibility = get_user_grading_eligibility_details(db, current_user.id)
-        user_eligibility = raw_user_eligibility if isinstance(raw_user_eligibility, Mapping) else {}
+        user_eligibility: dict[str, dict[str, dict[str, list[str]]]] = {}
+        if isinstance(raw_user_eligibility, Mapping):
+            for hospital_name, lab_units in raw_user_eligibility.items():
+                normalized_lab_units: dict[str, dict[str, list[str]]] = {}
+                if not isinstance(lab_units, Mapping):
+                    continue
+                for lab_unit_name, diseases in lab_units.items():
+                    normalized_diseases: dict[str, list[str]] = {}
+                    if not isinstance(diseases, Mapping):
+                        continue
+                    for disease_name, roles in diseases.items():
+                        seen_roles: set[str] = set()
+                        display_roles: list[str] = []
+                        if isinstance(roles, (list, tuple, set)):
+                            iterable_roles = roles
+                        else:
+                            iterable_roles = [roles]
+                        for role in iterable_roles:
+                            if not isinstance(role, str):
+                                continue
+                            role_lower = role.lower()
+                            if role_lower in {"resident", "resident2"}:
+                                display_role = "Resident"
+                            else:
+                                display_role = role.capitalize() if role.islower() else role
+                            key = display_role.lower()
+                            if key not in seen_roles:
+                                seen_roles.add(key)
+                                display_roles.append(display_role)
+                        normalized_diseases[disease_name] = display_roles
+                    normalized_lab_units[lab_unit_name] = normalized_diseases
+                user_eligibility[hospital_name] = normalized_lab_units
+        else:
+            user_eligibility = {}
 
         # Check if user has any resident eligibility
         has_resident_eligibility = False

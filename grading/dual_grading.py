@@ -7,6 +7,7 @@ import os
 import json
 from json import JSONDecodeError
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
  
 from auth.roles import roles_required
 from models import (
@@ -50,6 +51,25 @@ from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
 
 grades_logger = logging.getLogger("grades")
+
+
+def _ensure_image_uuid(image_obj, db_session):
+    """Ensure encounter or direct-upload image has a UUID, assigning one if missing."""
+    if image_obj is None:
+        return None
+
+    current_uuid = getattr(image_obj, "uuid", None)
+    if current_uuid:
+        return current_uuid
+
+    new_uuid = str(uuid4())
+    setattr(image_obj, "uuid", new_uuid)
+    try:
+        db_session.flush()
+    except Exception:
+        grades_logger.exception("Failed to assign UUID for image object %s", image_obj)
+        return None
+    return new_uuid
 
 
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
@@ -166,20 +186,37 @@ def revise_grading(grade_id: int):
             # Determine image URL
             image_uuid = None
             if task.encounter_file:
-                image_uuid = task.encounter_file.uuid
+                image_uuid = _ensure_image_uuid(task.encounter_file, db)
             elif task.direct_image:
-                image_uuid = task.direct_image.uuid
-            
-            # Check if image_uuid is None and handle it appropriately
+                image_uuid = _ensure_image_uuid(task.direct_image, db)
+
             if image_uuid is None:
-                flash("Warning: No image associated with this task. Please contact the system administrator.", "warning")
-                # Send notification to admin about the missing image
+                missing_ref = None
+                if task.encounter_file_id:
+                    missing_ref = f"Encounter file ID {task.encounter_file_id}"
+                elif task.direct_image_upload_id:
+                    missing_ref = f"Direct upload ID {task.direct_image_upload_id}"
+
+                details = f" ({missing_ref})" if missing_ref else ""
+                flash(
+                    f"No image is available for this task{details}. The task has been released."
+                    " Please contact the system administrator if the issue persists.",
+                    "warning",
+                )
                 send_notification_to_admins(
                     title="Missing Image in Task",
-                    message=f"Task ID {task.id} does not have an associated image. Please investigate and resolve this issue.",
-                    notification_type="warning"
+                    message=(
+                        f"Task ID {task.id} for user {getattr(current_user, 'id', None)} does not have an"
+                        f" associated image{details}."
+                    ),
+                    notification_type="warning",
                 )
-                
+                try:
+                    cleanup_task_tracker(task.id, current_user.id, slot_type, db)
+                except Exception:
+                    grades_logger.exception("Failed to cleanup task tracker for missing image task %s", task.id)
+                return redirect(url_for("grading.index"))
+
             # Use the existing grade as the existing_grade parameter
             existing_grade = grade
             existing_selected_features = _parse_selected_features(existing_grade.selected_features_json)
@@ -337,20 +374,37 @@ def dual_grading_task(task_id: int, slot_type: str):
             # Determine image URL
             image_uuid = None
             if task.encounter_file:
-                image_uuid = task.encounter_file.uuid
+                image_uuid = _ensure_image_uuid(task.encounter_file, db)
             elif task.direct_image:
-                image_uuid = task.direct_image.uuid
-            
-            # Check if image_uuid is None and handle it appropriately
+                image_uuid = _ensure_image_uuid(task.direct_image, db)
+
             if image_uuid is None:
-                flash("Warning: No image associated with this task. Please contact the system administrator.", "warning")
-                # Send notification to admin about the missing image
+                missing_ref = None
+                if task.encounter_file_id:
+                    missing_ref = f"Encounter file ID {task.encounter_file_id}"
+                elif task.direct_image_upload_id:
+                    missing_ref = f"Direct upload ID {task.direct_image_upload_id}"
+
+                details = f" ({missing_ref})" if missing_ref else ""
+                flash(
+                    f"No image is available for this task{details}. The task has been released."
+                    " Please contact the system administrator if the issue persists.",
+                    "warning",
+                )
                 send_notification_to_admins(
                     title="Missing Image in Task",
-                    message=f"Task ID {task_id} does not have an associated image. Please investigate and resolve this issue.",
-                    notification_type="warning"
+                    message=(
+                        f"Task ID {task.id} for user {getattr(current_user, 'id', None)} does not have an"
+                        f" associated image{details}."
+                    ),
+                    notification_type="warning",
                 )
-                
+                try:
+                    cleanup_task_tracker(task.id, current_user.id, slot_type, db)
+                except Exception:
+                    grades_logger.exception("Failed to cleanup task tracker for missing image task %s", task.id)
+                return redirect(url_for("grading.index"))
+
             # Fetch existing grade for this user and slot (for review purposes) using utility function
             existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
             existing_selected_features = _parse_selected_features(

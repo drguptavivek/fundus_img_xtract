@@ -137,6 +137,11 @@
                     {% endfor %}
                   </div>
                 </div>
+
+                <div class="mb-3" id="review-features-section" style="display: none;">
+                  <label class="form-label">Relevant Features</label>
+                  <div id="review-features-container" class="d-flex flex-column gap-2"></div>
+                </div>
               </div>
               
               <div class="col-md-4">
@@ -153,6 +158,34 @@
               </div>
             </div>
           </form>
+
+          {% if existing_review_grade %}
+          <div class="mt-3">
+            <h6 class="border-bottom pb-1">Existing Review</h6>
+            <div class="small mb-2 p-2 rounded">
+              <div><strong class="text-capitalize">{{ existing_review_grade.role_slot }}</strong> - Grader ID: {{ existing_review_grade.grader_user_id }}</div>
+              <div>{{ existing_review_grade.grade_name or (existing_review_grade.label.impression if existing_review_grade.label) or 'N/A' }}</div>
+              {% if existing_review_grade.comment %}
+              <div class="text-muted fst-italic">"{{ existing_review_grade.comment }}"</div>
+              {% endif %}
+              {% if existing_selected_features %}
+              <div class="mt-1">
+                <div class="small text-uppercase text-muted">Features Noted</div>
+                <ul class="list-unstyled mb-0 small">
+                  {% for feature in existing_selected_features %}
+                  {% if feature is mapping %}
+                  <li>{{ feature.label or ('Feature #' ~ feature.id) }}</li>
+                  {% else %}
+                  <li>{{ feature }}</li>
+                  {% endif %}
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+              <div class="text-muted">Updated: {{ existing_review_grade.updated_at.strftime('%Y-%m-%d %H:%M') if existing_review_grade.updated_at else 'N/A' }}</div>
+            </div>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -190,33 +223,163 @@
 </div>
 
 <script>
-// Handle radio button selection visual feedback
+const reviewGradingFeatures = {{ grading_features | tojson }};
+const existingReviewSelectedFeatures = {{ existing_selected_features | tojson }};
+const existingReviewGradeId = {{ existing_review_grade.disease_grading_id if existing_review_grade else 'null' }};
+
+function normalizeExistingFeatures(rawSelection) {
+  const normalized = { ids: [], labels: [] };
+
+  if (!Array.isArray(rawSelection)) {
+    return normalized;
+  }
+
+  rawSelection.forEach(entry => {
+    if (entry && typeof entry === 'object') {
+      if (Object.prototype.hasOwnProperty.call(entry, 'id')) {
+        const numericId = Number(entry.id);
+        if (!Number.isNaN(numericId)) {
+          normalized.ids.push(numericId);
+        }
+      }
+
+      if (typeof entry.label === 'string') {
+        normalized.labels.push(entry.label);
+      }
+    } else if (typeof entry === 'number') {
+      normalized.ids.push(entry);
+    } else if (typeof entry === 'string') {
+      normalized.labels.push(entry);
+    }
+  });
+
+  return normalized;
+}
+
+function isFeaturePreselected(feature, normalizedSelection) {
+  const featureId = Number(feature.id);
+  const featureLabel = typeof feature.label === 'string' ? feature.label : null;
+
+  if (!Number.isNaN(featureId) && normalizedSelection.ids.includes(featureId)) {
+    return true;
+  }
+
+  if (featureLabel && normalizedSelection.labels.includes(featureLabel)) {
+    return true;
+  }
+
+  return false;
+}
+
+function renderReviewFeatures(gradingId, shouldPreserveExisting) {
+  const featuresSection = document.getElementById('review-features-section');
+  const featuresContainer = document.getElementById('review-features-container');
+
+  if (!featuresSection || !featuresContainer) {
+    return;
+  }
+
+  const gradingData = reviewGradingFeatures.find(grade => grade.id === gradingId);
+  if (!gradingData || !Array.isArray(gradingData.features) || gradingData.features.length === 0) {
+    featuresSection.style.display = 'none';
+    featuresContainer.innerHTML = '';
+    return;
+  }
+
+  const normalizedExisting = shouldPreserveExisting
+    ? normalizeExistingFeatures(existingReviewSelectedFeatures)
+    : { ids: [], labels: [] };
+
+  const sortedFeatures = gradingData.features
+    .slice()
+    .sort((a, b) => {
+      const srA = Number(a.sr_no);
+      const srB = Number(b.sr_no);
+      const normalizedSrA = Number.isNaN(srA) ? 0 : srA;
+      const normalizedSrB = Number.isNaN(srB) ? 0 : srB;
+
+      if (normalizedSrA !== normalizedSrB) {
+        return normalizedSrA - normalizedSrB;
+      }
+
+      const idA = Number(a.id);
+      const idB = Number(b.id);
+
+      if (!Number.isNaN(idA) && !Number.isNaN(idB)) {
+        return idA - idB;
+      }
+
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+  featuresSection.style.display = 'block';
+  featuresContainer.innerHTML = '';
+
+  sortedFeatures.forEach(feature => {
+    const numericId = Number(feature.id);
+    if (Number.isNaN(numericId)) {
+      return;
+    }
+
+    const checkboxId = `review-feature-${gradingId}-${numericId}`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'form-check';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'form-check-input';
+    checkbox.id = checkboxId;
+    checkbox.name = 'selected_features';
+    checkbox.value = numericId;
+
+    if (shouldPreserveExisting && isFeaturePreselected(feature, normalizedExisting)) {
+      checkbox.checked = true;
+    }
+
+    const label = document.createElement('label');
+    label.className = 'form-check-label';
+    label.setAttribute('for', checkboxId);
+    label.textContent = typeof feature.label === 'string' ? feature.label : '';
+
+    wrapper.appendChild(checkbox);
+    wrapper.appendChild(label);
+    featuresContainer.appendChild(wrapper);
+  });
+}
+
+// Handle radio button selection visual feedback and feature hydration
 document.addEventListener('DOMContentLoaded', function() {
   const radioInputs = document.querySelectorAll('input[type="radio"][name="grading_id"]');
-  
+
   radioInputs.forEach(input => {
     input.addEventListener('change', function() {
-      // Hide all check icons
-      document.querySelectorAll('.sel-icon').forEach(icon => {
-        icon.classList.add('d-none');
-      });
-      
-      // Show check icon for selected option
+      document.querySelectorAll('.sel-icon').forEach(icon => icon.classList.add('d-none'));
+
       if (this.checked) {
         const label = document.querySelector(`label[for="${this.id}"]`);
-        const icon = label.querySelector('.sel-icon');
+        const icon = label ? label.querySelector('.sel-icon') : null;
         if (icon) {
           icon.classList.remove('d-none');
         }
+
+        const gradingId = Number(this.value);
+        if (!Number.isNaN(gradingId)) {
+          renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
+        }
       }
     });
-    
-    // Initialize check icon visibility for pre-selected option
+
     if (input.checked) {
       const label = document.querySelector(`label[for="${input.id}"]`);
-      const icon = label.querySelector('.sel-icon');
+      const icon = label ? label.querySelector('.sel-icon') : null;
       if (icon) {
         icon.classList.remove('d-none');
+      }
+
+      const gradingId = Number(input.value);
+      if (!Number.isNaN(gradingId)) {
+        renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
       }
     }
   });

@@ -6,7 +6,7 @@ The caller is responsible for managing the session lifecycle (opening and closin
 This design allows for better transaction management and session reuse.
 """
 
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Iterable
 from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
 from models import Grade, GradingTask, Consensus, Disease, DiseaseGrading, LabUnit, Hospital, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload
@@ -128,7 +128,8 @@ def get_user_gradings_with_details(
     page: int = 1,
     per_page: int = 20,
     role_slot: Optional[str] = None,
-    filter_date: Optional[str] = None
+    filter_date: Optional[str] = None,
+    exclude_role_slots: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Retrieve a paginated list of gradings done by a user with related details.
@@ -140,6 +141,7 @@ def get_user_gradings_with_details(
         per_page (int): Number of items per page
         role_slot (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
         filter_date (Optional[str]): Filter by date in YYYY-MM-DD format
+        exclude_role_slots (Optional[Iterable[str]]): Role slots to exclude from the result set
         
     Returns:
         Tuple[List[Dict[str, Any]], int]: A tuple containing:
@@ -170,6 +172,10 @@ def get_user_gradings_with_details(
     # Filter by role slot if provided
     if role_slot:
         query = query.filter(Grade.role_slot == role_slot)
+    elif exclude_role_slots:
+        slots_to_exclude = [slot for slot in exclude_role_slots if slot]
+        if slots_to_exclude:
+            query = query.filter(~Grade.role_slot.in_(slots_to_exclude))
     
     # Filter by date if provided
     if filter_date:

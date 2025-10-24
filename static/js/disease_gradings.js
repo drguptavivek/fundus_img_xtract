@@ -7,6 +7,7 @@
 let featureCount = 0;
 let isEditMode = false;
 let deleteCallback = null;
+let guidelinesEditor = null;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
@@ -44,6 +45,11 @@ document.addEventListener('DOMContentLoaded', function() {
         resetForm();
     });
     
+    // Initialize CKEditor when modal is shown
+    modal.addEventListener('shown.bs.modal', function() {
+        initializeGuidelinesEditor();
+    });
+    
     // Handle confirmation modal button
     const confirmButton = document.getElementById('confirmModalButton');
     if (confirmButton) {
@@ -78,6 +84,8 @@ function openAddModal(diseaseId, diseaseName) {
     document.getElementById('modal_display_order').value = '0';
     document.getElementById('modal_is_active').value = '1';
     document.getElementById('modal_guidelines').value = '';
+
+
     
     // Clear features
     document.getElementById('features-list').innerHTML = '';
@@ -103,6 +111,13 @@ function openEditModal(gradingId, diseaseId, diseaseName, impression, displayOrd
     document.getElementById('modal_is_active').value = isActive ? '1' : '0';
     document.getElementById('modal_guidelines').value = guidelines;
     
+    // Set Quill editor content after a delay to ensure it's initialized
+    setTimeout(() => {
+        if (guidelinesEditor && guidelines) {
+            guidelinesEditor.root.innerHTML = guidelines;
+        }
+    }, 100);
+
     // Clear and populate features
     document.getElementById('features-list').innerHTML = '';
     featureCount = 0;
@@ -205,6 +220,48 @@ function resetForm() {
     document.getElementById('features-list').innerHTML = '';
     featureCount = 0;
     isEditMode = false;
+    
+    // Reset Quill editor content
+    if (guidelinesEditor) {
+        guidelinesEditor.setText('');
+        document.getElementById('modal_guidelines').value = '';
+    }
+}
+
+/**
+ * Initialize Quill editor for guidelines field
+ */
+function initializeGuidelinesEditor() {
+    if (guidelinesEditor) {
+        return; // Already initialized
+    }
+    
+    // Initialize Quill editor
+    guidelinesEditor = new Quill('#modal_guidelines_editor', {
+        theme: 'snow',
+        placeholder: 'Enter guidelines...',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline'],
+                ['link'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['clean']
+            ]
+        }
+    });
+    
+    // Sync content with hidden textarea
+    guidelinesEditor.on('text-change', function() {
+        const content = guidelinesEditor.root.innerHTML;
+        document.getElementById('modal_guidelines').value = content;
+    });
+    
+    // Set initial content if in edit mode
+    const guidelinesTextarea = document.getElementById('modal_guidelines');
+    if (guidelinesTextarea && guidelinesTextarea.value) {
+        guidelinesEditor.root.innerHTML = guidelinesTextarea.value;
+    }
 }
 
 /**
@@ -288,6 +345,7 @@ document.getElementById('grading-form').addEventListener('submit', function(e) {
     const impression = document.getElementById('modal_impression').value.trim();
     const gradingId = document.getElementById('modal_grading_id').value;
     
+
     if (!diseaseId) {
         e.preventDefault();
         showToast('Please select a disease.', 'danger');

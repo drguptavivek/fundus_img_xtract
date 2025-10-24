@@ -1,4 +1,37 @@
 {% extends "base.html" %}
+ 
+  {% block extra_styles %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/quill.snow.css') }}?v={{ v }}">
+    <style>
+      /* Fix Quill editor height and prevent overlap with features */
+      #modal_guidelines_editor {
+        min-height: 150px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      
+      .ql-container {
+        min-height: 150px;
+        font-size: 14px;
+      }
+      
+      .ql-editor {
+        min-height: 120px;
+        padding: 12px;
+      }
+      
+      /* Ensure proper spacing between guidelines and features */
+      .row.mb-3 + .row {
+        margin-top: 1rem;
+      }
+      
+      /* Features section styling */
+      .border.rounded.p-3.bg-light {
+        margin-top: 0.5rem;
+      }
+    </style>
+  {% endblock %}
+
 
 {% block title %}Disease Gradings{% endblock %}
 
@@ -138,8 +171,9 @@
                     <div class="row">
                         <div class="col-12 mb-3">
                             <label for="modal_guidelines" class="form-label">Guidelines</label>
-                            <textarea class="form-control" id="modal_guidelines" name="guidelines" 
-                                      rows="4" placeholder="Enter guidelines..."></textarea>
+                            <div id="modal_guidelines_editor"></div>
+                            <textarea class="form-control d-none" id="modal_guidelines" name="guidelines"
+                                      placeholder="Enter guidelines..."></textarea>
                             <div class="form-text">Guidelines will be shown to graders when selecting this impression.</div>
                         </div>
                     </div>
@@ -195,5 +229,6 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="{{ url_for('static', filename='js/quill.js') }}"></script>
 <script src="{{ url_for('static', filename='js/disease_gradings.js') }}"></script>
 {% endblock %}

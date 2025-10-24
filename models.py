@@ -547,6 +547,7 @@ class Grade(Base):
     disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Copy of disease.name at time of grading
     grade_name: Mapped[str | None] = mapped_column(String(64), nullable=True)     # Copy of disease_grading.impression at time of grading
     grade_description: Mapped[str | None] = mapped_column(Text, nullable=True)    # Copy of disease_grading.guidelines at time of grading
+    
     ai_model_id: Mapped[int | None] = mapped_column(ForeignKey('ai_models.id', ondelete='SET NULL'), nullable=True, index=True)
     # Denormalized AI model metadata (if role_slot == 'ai')
     ai_model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -25,9 +25,32 @@
   const LOUPE_ZOOM_STEP = 0.25;
   const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
+  const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
+  }
+
+  function readLoupePrefs(){
+    try {
+      const raw = window.localStorage?.getItem(LOUPE_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      const size = clamp(Number(parsed.size) || DEFAULT_LOUPE_SIZE, LOUPE_SIZE_MIN, LOUPE_SIZE_MAX);
+      const zoom = clamp(Number(parsed.zoom) || DEFAULT_LOUPE_ZOOM, LOUPE_ZOOM_MIN, LOUPE_ZOOM_MAX);
+      return { size, zoom };
+    } catch(_) { return null; }
+  }
+
+  function writeLoupePrefs(prefs){
+    if (!prefs) return;
+    try {
+      window.localStorage?.setItem(LOUPE_STORAGE_KEY, JSON.stringify({
+        size: clamp(prefs.size ?? DEFAULT_LOUPE_SIZE, LOUPE_SIZE_MIN, LOUPE_SIZE_MAX),
+        zoom: clamp(prefs.zoom ?? DEFAULT_LOUPE_ZOOM, LOUPE_ZOOM_MIN, LOUPE_ZOOM_MAX),
+      }));
+    } catch(_) {}
   }
 
   function currentFilter(root){
@@ -140,8 +163,9 @@
     const loupeToggle = card ? card.querySelector('.imggr-loupe-toggle') : null;
     const loupe = root.querySelector('.imggr-loupe');
     let loupeEnabled = false;
-    let loupeSize = DEFAULT_LOUPE_SIZE;
-    let loupeZoom = DEFAULT_LOUPE_ZOOM;
+    const storedLoupe = readLoupePrefs();
+    let loupeSize = storedLoupe?.size ?? DEFAULT_LOUPE_SIZE;
+    let loupeZoom = storedLoupe?.zoom ?? DEFAULT_LOUPE_ZOOM;
     let lastPointerPos = null;
 
     function svgUrlFor(val){
@@ -177,6 +201,7 @@
         none.checked = true;
         none.dispatchEvent(new Event('change', { bubbles: true }));
       }
+      if (typeof resetLoupe === 'function') resetLoupe();
       applyFilter();
     });
     // Initial
@@ -216,23 +241,23 @@
       }
     }
 
-    function pointerWithinRect(coord, size){
-      return Math.max(0, Math.min(size, coord));
-    }
-
     function updateLoupePosition(e){
       if (!loupeEnabled || !loupe || !main || !e) return;
       const mainRect = main.getBoundingClientRect();
       if (!mainRect.width || !mainRect.height) return;
-      const pointerX = pointerWithinRect(e.clientX - mainRect.left, mainRect.width);
-      const pointerY = pointerWithinRect(e.clientY - mainRect.top, mainRect.height);
+      const pointerXRaw = e.clientX - mainRect.left;
+      const pointerYRaw = e.clientY - mainRect.top;
+      const pointerX = clamp(pointerXRaw, 0, mainRect.width);
+      const pointerY = clamp(pointerYRaw, 0, mainRect.height);
       loupe.style.left = `${pointerX}px`;
       loupe.style.top = `${pointerY}px`;
 
       const imgRect = mainImg.getBoundingClientRect();
       if (imgRect.width && imgRect.height) {
-        const imgX = pointerWithinRect(e.clientX - imgRect.left, imgRect.width);
-        const imgY = pointerWithinRect(e.clientY - imgRect.top, imgRect.height);
+        const imgXRaw = pointerX + mainRect.left - imgRect.left;
+        const imgYRaw = pointerY + mainRect.top - imgRect.top;
+        const imgX = clamp(imgXRaw, 0, imgRect.width);
+        const imgY = clamp(imgYRaw, 0, imgRect.height);
         const bgX = (imgX / imgRect.width) * 100;
         const bgY = (imgY / imgRect.height) * 100;
         loupe.style.backgroundPosition = `${bgX}% ${bgY}%`;
@@ -261,6 +286,7 @@
       } else {
         setLoupeEnabled(true);
       }
+      writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
 
     function adjustLoupeZoom(stepDir){
@@ -277,6 +303,17 @@
       } else {
         setLoupeEnabled(true);
       }
+      writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
+    }
+
+    function resetLoupe(){
+      loupeSize = DEFAULT_LOUPE_SIZE;
+      loupeZoom = DEFAULT_LOUPE_ZOOM;
+      lastPointerPos = null;
+      applyLoupeDimensions();
+      updateLoupeAssets();
+      setLoupeEnabled(false);
+      writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
 
     loupeToggle?.addEventListener('click', () => {
@@ -303,6 +340,7 @@
       toggleLoupe: () => setLoupeEnabled(!loupeEnabled),
       adjustLoupeSize,
       adjustLoupeZoom,
+      resetLoupe,
     });
 
     const activate = () => { activeRoot = root; };

@@ -1227,12 +1227,13 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 160px;
-  height: 160px;
+  width: 200px;
+  height: 200px;
   border-radius: 50%;
   border: 2px solid rgba(248, 250, 252, 0.85);
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
   pointer-events: none;
+  z-index: 25;
   opacity: 0;
   visibility: hidden;
   transform: translate(-50%, -50%) scale(0.95);

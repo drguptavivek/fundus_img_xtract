@@ -28,7 +28,7 @@
     </div>
 
     <!-- Brightness / Contrast Controls -->
-    <div class="d-flex flex-wrap flex-sm-nowrap align-items-center gap-2 ms-auto">
+    <div class="d-flex flex-wrap flex-sm-nowrap align-items-center gap-2 ms-auto position-relative imggr-controls">
       <!-- Brightness -->
       <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
         <label class="small mb-0" for="imggr-bright-{{ uuid }}">Brightness</label>
@@ -45,6 +45,31 @@
 
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
+
+      <!-- Shortcut hint -->
+      <button type="button"
+              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
+              aria-describedby="imggr-shortcuts-{{ uuid }}"
+              aria-label="Keyboard shortcuts">
+        <span aria-hidden="true">?</span>
+      </button>
+      <div id="imggr-shortcuts-{{ uuid }}"
+           class="imggr-shortcuts-tooltip"
+           role="tooltip">
+        <p class="fw-semibold mb-2 text-uppercase small">Keyboard shortcuts</p>
+        <dl class="row g-1 mb-0 small">
+          <dt class="col-auto"><kbd>&lt;</kbd>/<kbd>&gt;</kbd></dt>
+          <dd class="col">Adjust brightness</dd>
+          <dt class="col-auto"><kbd>;</kbd>/<kbd>'</kbd></dt>
+          <dd class="col">Adjust contrast</dd>
+          <dt class="col-auto"><kbd>/</kbd></dt>
+          <dd class="col">Reset sliders &amp; filters</dd>
+          <dt class="col-auto"><kbd>←</kbd>/<kbd>→</kbd></dt>
+          <dd class="col">Cycle filters</dd>
+          <dt class="col-auto"><kbd>F</kbd></dt>
+          <dd class="col">Toggle fullscreen</dd>
+        </dl>
+      </div>
     </div>
   </div>
 </div>

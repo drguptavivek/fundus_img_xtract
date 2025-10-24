@@ -1216,10 +1216,11 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
     translate: 0 calc(-1 * var(--imggr-tooltip-offset));
   }
 
-.imggr-shortcuts-trigger:hover + .imggr-shortcuts-tooltip,
-.imggr-shortcuts-trigger:focus-visible + .imggr-shortcuts-tooltip {
-  transform: none;
-  translate: 0 calc(-1 * (var(--imggr-tooltip-offset) + 0.35rem));
+  .imggr-shortcuts-trigger:hover + .imggr-shortcuts-tooltip,
+  .imggr-shortcuts-trigger:focus-visible + .imggr-shortcuts-tooltip {
+    transform: none;
+    translate: 0 calc(-1 * (var(--imggr-tooltip-offset) + 0.35rem));
+  }
 }
 
 .imggr-loupe {
@@ -1251,5 +1252,4 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   opacity: 1;
   visibility: visible;
   transform: translate(-50%, -50%) scale(1);
-}
 }

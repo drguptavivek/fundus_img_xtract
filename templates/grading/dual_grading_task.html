@@ -225,6 +225,7 @@
   window.imageUuid = "{{ image_uuid }}";
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "{{ current_slot or '' }}";
+  window.featuresReadOnly = {{ (task.state == "final" and not is_arbitrator_revising_recent)|tojson }};
   // Pass disease gradings with features to JavaScript
   window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
   // Pass existing selected features if available

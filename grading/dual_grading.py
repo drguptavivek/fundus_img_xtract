@@ -1,14 +1,25 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
 from flask_login import current_user
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import selectinload
 import random
 import logging
 import os
+import json
 from datetime import datetime, timedelta, timezone
  
 from auth.roles import roles_required
-from models import Session, GradingTask, Grade, Consensus, DiseaseGrading, Disease, UserDiseaseUnitRole, User, Role
+from models import (
+    Session,
+    GradingTask,
+    Grade,
+    Consensus,
+    DiseaseGrading,
+    Disease,
+    GradingsFeatures,
+    UserDiseaseUnitRole,
+    User,
+    Role,
+)
 from services.taskCreationServices import ensure_task as svc_ensure_task
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident_task_atomic,
@@ -96,7 +107,6 @@ def revise_grading(grade_id: int):
             is_arbitrator_revising_recent = eligibility_result.get("is_recent", False) and task.state == 'final'
             
             # Fetch disease gradings for this disease using utility function
-            # TODO: hydrate GradingsFeatures data server-side to avoid template JS fetching.
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
             
             # Check if disease_gradings are missing or invalid
@@ -112,6 +122,30 @@ def revise_grading(grade_id: int):
             
             # Create a dictionary mapping grading IDs to their guidelines
             grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+
+            # Build serialized feature payload for template hydration
+            grading_features = []
+            for grading in disease_gradings:
+                sorted_features = sorted(
+                    grading.features or [],
+                    key=lambda feature: ((feature.sr_no or 0), feature.id),
+                )
+                grading_features.append(
+                    {
+                        "id": grading.id,
+                        "impression": grading.impression,
+                        "display_order": grading.display_order,
+                        "guidelines": grading.guidelines,
+                        "features": [
+                            {
+                                "id": feature.id,
+                                "sr_no": feature.sr_no,
+                                "label": feature.label,
+                            }
+                            for feature in sorted_features
+                        ],
+                    }
+                )
             
             # Determine image URL
             image_uuid = None
@@ -138,6 +172,7 @@ def revise_grading(grade_id: int):
                 task=task,
                 disease_gradings=disease_gradings,
                 grading_guidelines=grading_guidelines,
+                grading_features=grading_features,
                 current_slot=slot_type,
                 existing_grade=existing_grade,
                 image_uuid=image_uuid,
@@ -257,6 +292,29 @@ def dual_grading_task(task_id: int, slot_type: str):
             
             # Create a dictionary mapping grading IDs to their guidelines
             grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+
+            grading_features = []
+            for grading in disease_gradings:
+                sorted_features = sorted(
+                    grading.features or [],
+                    key=lambda feature: ((feature.sr_no or 0), feature.id),
+                )
+                grading_features.append(
+                    {
+                        "id": grading.id,
+                        "impression": grading.impression,
+                        "display_order": grading.display_order,
+                        "guidelines": grading.guidelines,
+                        "features": [
+                            {
+                                "id": feature.id,
+                                "sr_no": feature.sr_no,
+                                "label": feature.label,
+                            }
+                            for feature in sorted_features
+                        ],
+                    }
+                )
             
             # Determine image URL
             image_uuid = None
@@ -325,7 +383,8 @@ def dual_grading_task(task_id: int, slot_type: str):
                 resident2_grade=resident2_grade,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
                 start_time_iso=start_time_iso,  # Pass start time to template as hidden field
-                current_user_id=getattr(current_user, "id", None)
+                current_user_id=getattr(current_user, "id", None),
+                grading_features=grading_features,
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)
@@ -337,7 +396,6 @@ def dual_grading_task(task_id: int, slot_type: str):
 def dual_grading_submit():
     """Submit a grade for a task."""
     from flask import session as flask_session
-    import json
     
     task_id = request.form.get("task_id", type=int)
     slot = (request.form.get("slot") or "").strip().lower()
@@ -345,8 +403,26 @@ def dual_grading_submit():
     comment = (request.form.get("comment") or "").strip() or None
     
     # Get selected features from form
-    selected_features = request.form.getlist("selected_features")
-    selected_features_json = json.dumps(selected_features) if selected_features else None
+    raw_selected_features = request.form.getlist("selected_features")
+    selected_feature_ids: list[int] = []
+    for raw_feature in raw_selected_features:
+        if raw_feature is None or raw_feature == "":
+            continue
+        try:
+            selected_feature_ids.append(int(raw_feature))
+        except (TypeError, ValueError):
+            flash("Invalid feature selection submitted.", "danger")
+            return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+
+    # Deduplicate while preserving submission order
+    unique_feature_ids: list[int] = []
+    seen_feature_ids: set[int] = set()
+    for feature_id in selected_feature_ids:
+        if feature_id not in seen_feature_ids:
+            unique_feature_ids.append(feature_id)
+            seen_feature_ids.add(feature_id)
+
+    selected_features_json: str | None = None
     
     # Validate inputs
     if not task_id or not isinstance(task_id, int) or task_id <= 0:
@@ -455,6 +531,35 @@ def dual_grading_submit():
             if not label:
                 flash("Invalid label.", "danger")
                 return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+
+            # Validate selected features correspond to the chosen grading
+            if unique_feature_ids:
+                available_features = (
+                    db.query(GradingsFeatures)
+                    .filter(GradingsFeatures.disease_grading_id == label_id)
+                    .all()
+                )
+                features_by_id = {feature.id: feature for feature in available_features}
+                invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
+                if invalid_features:
+                    flash("One or more selected features are not valid for the chosen grade.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+
+                selected_feature_entities = sorted(
+                    (features_by_id[fid] for fid in unique_feature_ids),
+                    key=lambda feature: ((feature.sr_no or 0), feature.id),
+                )
+
+                selected_features_json = json.dumps(
+                    [
+                        {
+                            "id": feature.id,
+                            "label": feature.label,
+                            "sr_no": feature.sr_no,
+                        }
+                        for feature in selected_feature_entities
+                    ]
+                )
 
             conflicting_slots = []
             conflict_message = None

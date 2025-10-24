@@ -574,6 +574,7 @@ const FeaturesDisplay = (function() {
     // Private variables
     let featuresSection, featuresContainer;
     let diseaseGradingsWithFeatures;
+    let normalizedExistingSelection = { ids: [], labels: [] };
 
     /**
      * Initialize the module
@@ -582,15 +583,83 @@ const FeaturesDisplay = (function() {
         // Get DOM elements
         featuresSection = document.getElementById(DOM_ELEMENTS.FEATURES_SECTION);
         featuresContainer = document.getElementById(DOM_ELEMENTS.FEATURES_CONTAINER);
-        
+
         // Get disease gradings data from global variable
-        diseaseGradingsWithFeatures = window.diseaseGradingsWithFeatures || [];
-        
+        diseaseGradingsWithFeatures = Array.isArray(window.diseaseGradingsWithFeatures)
+            ? window.diseaseGradingsWithFeatures
+            : [];
+
+        normalizedExistingSelection = normalizeExistingFeatures(window.existingSelectedFeatures);
+
         // If elements don't exist, wait a bit and try again
         if (!featuresSection || !featuresContainer) {
             setTimeout(init, 100);
             return;
         }
+    }
+
+    /**
+     * Prepare a normalized representation of already selected features
+     * @param {Array|undefined|null} rawSelection
+     * @returns {{ids: number[], labels: string[]}}
+     */
+    function normalizeExistingFeatures(rawSelection) {
+        const normalized = { ids: [], labels: [] };
+
+        if (!Array.isArray(rawSelection)) {
+            return normalized;
+        }
+
+        rawSelection.forEach((entry) => {
+            if (entry && typeof entry === 'object') {
+                if (Object.prototype.hasOwnProperty.call(entry, 'id')) {
+                    const numericId = Number(entry.id);
+                    if (!Number.isNaN(numericId)) {
+                        normalized.ids.push(numericId);
+                    }
+                }
+
+                if (typeof entry.label === 'string') {
+                    normalized.labels.push(entry.label);
+                }
+            } else if (typeof entry === 'number') {
+                normalized.ids.push(entry);
+            } else if (typeof entry === 'string') {
+                normalized.labels.push(entry);
+            }
+        });
+
+        return normalized;
+    }
+
+    /**
+     * Determine whether a feature should be marked as checked
+     * @param {Object} feature
+     * @returns {boolean}
+     */
+    function isFeaturePreselected(feature) {
+        const featureId = Number(feature.id);
+        const featureLabel = typeof feature.label === 'string' ? feature.label : null;
+
+        if (!Number.isNaN(featureId) && normalizedExistingSelection.ids.includes(featureId)) {
+            return true;
+        }
+
+        if (featureLabel && normalizedExistingSelection.labels.includes(featureLabel)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Normalize sr_no for sorting
+     * @param {number|string|null|undefined} srNo
+     * @returns {number}
+     */
+    function normalizeSrNo(srNo) {
+        const parsed = Number(srNo);
+        return Number.isNaN(parsed) ? 0 : parsed;
     }
 
     /**
@@ -603,8 +672,8 @@ const FeaturesDisplay = (function() {
         }
 
         // Find the selected grading data
-        const selectedGrading = diseaseGradingsWithFeatures.find(grading => grading.id === gradingId);
-        
+        const selectedGrading = diseaseGradingsWithFeatures.find((grading) => grading.id === gradingId);
+
         if (!selectedGrading) {
             // Hide features section if no grading is selected
             featuresSection.style.display = 'none';
@@ -612,20 +681,10 @@ const FeaturesDisplay = (function() {
             return;
         }
 
-        // Parse features JSON if it exists
-        let featuresData = [];
-        if (selectedGrading.features_json) {
-            try {
-                const parsed = JSON.parse(selectedGrading.features_json);
-                featuresData = parsed.features || [];
-            } catch (e) {
-                console.error('Error parsing features JSON:', e);
-                featuresData = [];
-            }
-        }
+        const featuresData = Array.isArray(selectedGrading.features) ? selectedGrading.features.slice() : [];
 
         // Hide features section if no features are available
-        if (!featuresData || featuresData.length === 0) {
+        if (featuresData.length === 0) {
             featuresSection.style.display = 'none';
             featuresContainer.innerHTML = '';
             return;
@@ -635,46 +694,61 @@ const FeaturesDisplay = (function() {
         featuresSection.style.display = 'block';
         featuresContainer.innerHTML = '';
 
-        // Get existing selected features for this grading
-        let existingSelectedFeatures = [];
-        if (window.existingSelectedFeatures && Array.isArray(window.existingSelectedFeatures)) {
-            existingSelectedFeatures = window.existingSelectedFeatures;
-        }
+        featuresData
+            .sort((a, b) => {
+                const srComparison = normalizeSrNo(a.sr_no) - normalizeSrNo(b.sr_no);
+                if (srComparison !== 0) {
+                    return srComparison;
+                }
+                const idA = Number(a.id);
+                const idB = Number(b.id);
 
-        featuresData.forEach((feature) => {
-            const featureId = `feature-${gradingId}-${feature.sr_no}`;
-            const checkboxId = `checkbox-${gradingId}-${feature.sr_no}`;
-            
-            // Create feature checkbox element
-            const featureElement = document.createElement('div');
-            featureElement.className = 'form-check';
-            
-            // Handle simplified feature format with sr_no and label
-            let featureLabel = '';
-            
-            if (typeof feature === 'string') {
-                featureLabel = feature;
-            } else if (typeof feature === 'object' && feature !== null) {
-                featureLabel = feature.label || '';
-            }
-            
-            // Check if this feature was previously selected
-            const isChecked = existingSelectedFeatures.includes(featureLabel);
-            
-            featureElement.innerHTML = `
-                <input class="form-check-input" type="checkbox" value="${featureLabel}" id="${checkboxId}" name="selected_features" ${isChecked ? 'checked' : ''}>
-                <label class="form-check-label" for="${checkboxId}">
-                    ${featureLabel}
-                </label>
-            `;
-            
-            featuresContainer.appendChild(featureElement);
-        });
+                if (!Number.isNaN(idA) && !Number.isNaN(idB)) {
+                    return idA - idB;
+                }
+
+                return String(a.id).localeCompare(String(b.id));
+            })
+            .forEach((feature) => {
+                const numericId = Number(feature.id);
+
+                if (Number.isNaN(numericId)) {
+                    return;
+                }
+
+                const checkboxId = `checkbox-${gradingId}-${numericId}`;
+                const featureElement = document.createElement('div');
+                featureElement.className = 'form-check';
+
+                const checkbox = document.createElement('input');
+                checkbox.className = 'form-check-input';
+                checkbox.type = 'checkbox';
+                checkbox.name = 'selected_features';
+                checkbox.id = checkboxId;
+                checkbox.value = numericId;
+
+                if (isFeaturePreselected(feature)) {
+                    checkbox.checked = true;
+                }
+
+                if (window.featuresReadOnly) {
+                    checkbox.disabled = true;
+                }
+
+                const labelElement = document.createElement('label');
+                labelElement.className = 'form-check-label';
+                labelElement.setAttribute('for', checkboxId);
+                labelElement.textContent = typeof feature.label === 'string' ? feature.label : '';
+
+                featureElement.appendChild(checkbox);
+                featureElement.appendChild(labelElement);
+                featuresContainer.appendChild(featureElement);
+            });
     }
 
     // Public API
     return {
         init,
-        updateFeatures
+        updateFeatures,
     };
 })();

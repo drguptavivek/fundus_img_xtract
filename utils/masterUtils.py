@@ -73,10 +73,16 @@ def fetch_active_disease_gradings(db, disease_id: int):
     Returns:
         List of active DiseaseGrading objects ordered by display order
     """
-    return db.query(DiseaseGrading).filter(
-        DiseaseGrading.disease_id == disease_id,
-        DiseaseGrading.is_active == True
-    ).order_by(DiseaseGrading.display_order).all()
+    return (
+        db.query(DiseaseGrading)
+        .options(selectinload(DiseaseGrading.features))
+        .filter(
+            DiseaseGrading.disease_id == disease_id,
+            DiseaseGrading.is_active == True,
+        )
+        .order_by(DiseaseGrading.display_order)
+        .all()
+    )
 
 
 def get_all_hospitals() -> List[Dict[str, Any]]:

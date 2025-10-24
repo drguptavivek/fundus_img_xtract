@@ -53,6 +53,10 @@ def list_disease_gradings():
             if error:
                 flash(error, "danger")
             else:
+                # Get disease name for more informative messages
+                disease = db.get(Disease, int(disease_id))
+                disease_name = disease.name if disease else "Unknown"
+                
                 if grading_id:
                     # Update existing grading
                     grading = db.get(DiseaseGrading, int(grading_id))
@@ -79,7 +83,7 @@ def list_disease_gradings():
                                 )
                                 db.add(feature)
                         
-                        flash("Disease grading updated successfully.", "success")
+                        flash(f"'{disease_name}': '{impression}' - Updated successfully.", "success")
                     else:
                         flash("Error: Disease grading not found for update.", "danger")
                 else:
@@ -105,7 +109,7 @@ def list_disease_gradings():
                             )
                             db.add(feature)
                     
-                    flash("Disease grading created successfully.", "success")
+                    flash(f"{disease_name}': '{impression}' - Created successfully.", "success")
                 
                 db.commit()
                 return redirect(url_for('admin.list_disease_gradings'))
@@ -148,12 +152,19 @@ def get_grading_features(grading_id):
 def delete_disease_grading(grading_id):
     """Delete a disease grading."""
     with Session() as db:
-        grading = db.get(DiseaseGrading, grading_id)
+        grading = db.execute(
+            select(DiseaseGrading)
+            .options(selectinload(DiseaseGrading.disease))
+            .where(DiseaseGrading.id == grading_id)
+        ).scalar_one_or_none()
+        
         if not grading:
             flash("Disease grading not found.", "danger")
         else:
+            disease_name = grading.disease.name if grading.disease else "Unknown"
+            impression = grading.impression
             db.delete(grading)
             db.commit()
-            flash("Disease grading deleted successfully.", "success")
+            flash(f"{disease_name}': '{impression}' - Deleted successfully.", "success")
         
         return redirect(url_for('admin.list_disease_gradings'))

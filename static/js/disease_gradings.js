@@ -286,6 +286,7 @@ function showToast(message, type = 'info') {
 document.getElementById('grading-form').addEventListener('submit', function(e) {
     const diseaseId = document.getElementById('modal_disease_id').value;
     const impression = document.getElementById('modal_impression').value.trim();
+    const gradingId = document.getElementById('modal_grading_id').value;
     
     if (!diseaseId) {
         e.preventDefault();
@@ -311,5 +312,5 @@ document.getElementById('grading-form').addEventListener('submit', function(e) {
         return;
     }
     
-    // Form is valid, allow submission
+    // Form is valid, allow submission - server will handle success messages via flash-toasts
 });

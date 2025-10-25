@@ -26,6 +26,7 @@
   const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
+  const VIEWER_SETTINGS_KEY = 'imggrViewerSettings';
   const IMG_PAN_STEP = 5;
   const IMG_PAN_MIN = -600;
   const IMG_PAN_MAX = 600;
@@ -186,6 +187,36 @@
     let imgPanY = 0;
     let currentZoom = 100; // Store current zoom level as percentage
     
+    // Load saved viewer settings
+    function loadViewerSettings() {
+      try {
+        const saved = window.localStorage?.getItem(VIEWER_SETTINGS_KEY);
+        if (saved) {
+          const settings = JSON.parse(saved);
+          return settings || {};
+        }
+      } catch(e) {
+        console.error('Error loading viewer settings:', e);
+      }
+      return {};
+    }
+    
+    function saveViewerSettings() {
+      try {
+        const settings = {
+          zoom: currentZoom,
+          panX: imgPanX,
+          panY: imgPanY,
+          brightness: bright ? parseFloat(bright.value) : 1,
+          contrast: contr ? parseFloat(contr.value) : 1,
+          filter: currentRadio()
+        };
+        window.localStorage?.setItem(VIEWER_SETTINGS_KEY, JSON.stringify(settings));
+      } catch(e) {
+        console.error('Error saving viewer settings:', e);
+      }
+    }
+    
     // Touch/gesture state
     let touchStartDistance = 0;
     let touchStartZoom = 100;
@@ -217,6 +248,10 @@
       const c = card.querySelector('.imggr-filters input[type="radio"]:checked');
       return c ? c.value : 'none';
     }
+    // Flags to indicate if we're in initial setup mode (don't save settings during initialization)
+    let isInitializing = true;
+    let isApplyingSavedSettings = false;
+    
     function applyFilter(){
       const url = svgUrlFor(currentRadio());
       const b = parseFloat((bright && bright.value) || '1') || 1;
@@ -227,6 +262,10 @@
         if (loupe) loupe.style.filter = chain;
       } catch(_) {}
       updateZoomDisplay();
+      // Only save settings after initialization is complete and not during saved settings application
+      if (!isInitializing && !isApplyingSavedSettings) {
+        saveViewerSettings();
+      }
     }
     rad && rad.forEach && rad.forEach(r => r.addEventListener('change', applyFilter));
     bright && bright.addEventListener('input', applyFilter);
@@ -242,9 +281,47 @@
       // Reset both zoom and pan
       resetImagePan();
       applyFilter();
+      saveViewerSettings();
     });
-    // Initial
-    applyFilter();
+    // Initial apply without saving
+    const url = svgUrlFor(currentRadio());
+    const b = parseFloat((bright && bright.value) || '1') || 1;
+    const c = parseFloat((contr && contr.value) || '1') || 1;
+    const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+    try {
+      mainImg.style.filter = chain;
+      if (loupe) loupe.style.filter = chain;
+    } catch(_) {}
+    
+    // Apply saved filter and brightness/contrast after image is loaded
+    mainImg.addEventListener('load', () => {
+      isApplyingSavedSettings = true;
+      if (savedSettings.filter) {
+        const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
+        if (filterInput) {
+          filterInput.checked = true;
+          // Don't trigger change event during initialization to avoid saving defaults
+          const url = svgUrlFor(savedSettings.filter);
+          const b = parseFloat((bright && bright.value) || '1') || 1;
+          const c = parseFloat((contr && contr.value) || '1') || 1;
+          const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
+          try {
+            mainImg.style.filter = chain;
+            if (loupe) loupe.style.filter = chain;
+          } catch(_) {}
+        }
+      }
+      if (savedSettings.brightness && bright) {
+        bright.value = clamp(savedSettings.brightness, 0.5, 1.5);
+      }
+      if (savedSettings.contrast && contr) {
+        contr.value = clamp(savedSettings.contrast, 0.5, 1.5);
+      }
+      updateZoomDisplay();
+      // Mark initialization as complete so future changes will be saved
+      isInitializing = false;
+      isApplyingSavedSettings = false;
+    });
 
     function applyLoupeDimensions(){
       if (!loupe) return;
@@ -303,6 +380,7 @@
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
       }
       updateZoomDisplay();
+      saveViewerSettings();
     }
 
     function resetImagePan(){
@@ -477,6 +555,7 @@
         
         applyImagePan();
         updateZoomDisplay();
+        saveViewerSettings();
       } else if (e.touches.length === 2) {
         // Two touches - pinch zoom
         const currentDistance = getTouchDistance(e.touches);
@@ -539,6 +618,7 @@
         
         applyImagePan();
         updateZoomDisplay();
+        saveViewerSettings();
         e.preventDefault();
       }
     }
@@ -568,6 +648,14 @@
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
     });
+    
+    // Save settings when the page is unloaded or hidden
+    const saveSettingsOnUnload = () => {
+      saveViewerSettings();
+    };
+    
+    window.addEventListener('beforeunload', saveSettingsOnUnload);
+    window.addEventListener('pagehide', saveSettingsOnUnload);
     function updateZoomDisplay() {
       const metrics = getDisplayedImageMetrics();
       if (!metrics || !card) return;
@@ -616,15 +704,27 @@
       }
     }
 
+    // Load saved settings on initialization
+    const savedSettings = loadViewerSettings();
+    if (savedSettings.zoom) {
+      currentZoom = clamp(savedSettings.zoom, ZOOM_MIN, ZOOM_MAX);
+    }
+    if (savedSettings.panX !== undefined) {
+      imgPanX = clamp(savedSettings.panX, IMG_PAN_MIN, IMG_PAN_MAX);
+    }
+    if (savedSettings.panY !== undefined) {
+      imgPanY = clamp(savedSettings.panY, IMG_PAN_MIN, IMG_PAN_MAX);
+    }
+    
+    applyImagePan();
+    applyLoupeDimensions();
+    updateZoomDisplay();
+    
     mainImg.addEventListener('load', () => {
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
       updateZoomDisplay();
     });
-
-    applyImagePan();
-    applyLoupeDimensions();
-    updateZoomDisplay();
     
     // Get zoom controls
     const zoomSlider = card ? card.querySelector('.imggr-zoom-slider') : null;
@@ -638,12 +738,17 @@
         updateLoupeAssets();
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
       }
+      if (!isInitializing) {
+        saveViewerSettings();
+      }
     }
     
     function fitToContainer() {
       // Set zoom to 100% to fit the image to its container
       setZoomLevel(100);
     }
+    
+    // The saveSettingsOnUnload function is already defined above
     
     // Zoom slider event
     zoomSlider?.addEventListener('input', (e) => {

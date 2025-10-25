@@ -197,7 +197,10 @@
       const b = parseFloat((bright && bright.value) || '1') || 1;
       const c = parseFloat((contr && contr.value) || '1') || 1;
       const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
-      try { mainImg.style.filter = chain; } catch(_) {}
+      try {
+        mainImg.style.filter = chain;
+        if (loupe) loupe.style.filter = chain;
+      } catch(_) {}
     }
     rad && rad.forEach && rad.forEach(r => r.addEventListener('change', applyFilter));
     bright && bright.addEventListener('input', applyFilter);

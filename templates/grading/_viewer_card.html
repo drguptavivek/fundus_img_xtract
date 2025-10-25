@@ -57,34 +57,76 @@
       <!-- Shortcut hint -->
       <button type="button"
               class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
-              aria-describedby="imggr-shortcuts-{{ uuid }}"
+              data-bs-toggle="modal"
+              data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
               aria-label="Keyboard shortcuts">
         <span aria-hidden="true">?</span>
       </button>
-      <div id="imggr-shortcuts-{{ uuid }}"
-           class="imggr-shortcuts-tooltip"
-           role="tooltip">
-        <p class="fw-semibold mb-2 text-uppercase small">Keyboard shortcuts</p>
-        <dl class="row g-1 mb-0 small">
-          <dt class="col-auto"><kbd>&lt;</kbd>/<kbd>&gt;</kbd></dt>
-          <dd class="col">Adjust brightness</dd>
-          <dt class="col-auto"><kbd>;</kbd>/<kbd>'</kbd></dt>
-          <dd class="col">Adjust contrast</dd>
-          <dt class="col-auto"><kbd>L</kbd></dt>
-          <dd class="col">Toggle loupe magnifier</dd>
-          <dt class="col-auto"><kbd>[</kbd>/<kbd>]</kbd></dt>
-          <dd class="col">Change loupe size</dd>
-          <dt class="col-auto"><kbd>-</kbd>/<kbd>=</kbd></dt>
-          <dd class="col">Change loupe zoom</dd>
-          <dt class="col-auto"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
-          <dd class="col">Pan base image</dd>
-          <dt class="col-auto"><kbd>/</kbd></dt>
-          <dd class="col">Reset sliders &amp; filters</dd>
-          <dt class="col-auto"><kbd>←</kbd>/<kbd>→</kbd></dt>
-          <dd class="col">Cycle filters</dd>
-          <dt class="col-auto"><kbd>F</kbd></dt>
-          <dd class="col">Toggle fullscreen</dd>
-        </dl>
+      
+      <!-- Shortcuts Modal -->
+      <div class="modal fade" id="imggr-shortcuts-modal-{{ uuid }}" tabindex="-1" aria-labelledby="shortcutsModalLabel-{{ uuid }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="shortcutsModalLabel-{{ uuid }}">Image Viewer Controls</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <h6 class="text-uppercase small mb-3">Image Controls</h6>
+                  <dl class="row g-2 mb-3 small">
+                    <dt class="col-5"><kbd>Z</kbd>/<kbd>X</kbd></dt>
+                    <dd class="col-7">Zoom in/out</dd>
+                    <dt class="col-5"><kbd>0</kbd></dt>
+                    <dd class="col-7">Reset zoom to 100%</dd>
+                    <dt class="col-5"><kbd>Home</kbd></dt>
+                    <dd class="col-7">Fit to container</dd>
+                    <dt class="col-5"><kbd>Ctrl</kbd>+<kbd>Wheel</kbd></dt>
+                    <dd class="col-7">Zoom with mouse</dd>
+                    <dt class="col-5"><kbd>Left Click + Drag</kbd></dt>
+                    <dd class="col-7">Pan image with mouse</dd>
+                    <dt class="col-5"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
+                    <dd class="col-7">Pan base image</dd>
+                  </dl>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="text-uppercase small mb-3">Touch Controls</h6>
+                  <dl class="row g-2 mb-3 small">
+                    <dt class="col-5"><kbd>Touch</kbd></dt>
+                    <dd class="col-7">1-finger drag to pan, 2-finger drag/pan, pinch to zoom</dd>
+                  </dl>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="text-uppercase small mb-3">Loupe Controls</h6>
+                  <dl class="row g-2 mb-3 small">
+                    <dt class="col-5"><kbd>L</kbd></dt>
+                    <dd class="col-7">Toggle loupe magnifier</dd>
+                    <dt class="col-5"><kbd>[</kbd>/<kbd>]</kbd></dt>
+                    <dd class="col-7">Change loupe size</dd>
+                    <dt class="col-5"><kbd>-</kbd>/<kbd>=</kbd></dt>
+                    <dd class="col-7">Change loupe zoom</dd>
+                  </dl>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="text-uppercase small mb-3">Filter & Display</h6>
+                  <dl class="row g-2 mb-3 small">
+                    <dt class="col-5"><kbd>&lt;</kbd>/<kbd>&gt;</kbd></dt>
+                    <dd class="col-7">Adjust brightness</dd>
+                    <dt class="col-5"><kbd>;</kbd>/<kbd>'</kbd></dt>
+                    <dd class="col-7">Adjust contrast</dd>
+                    <dt class="col-5"><kbd>←</kbd>/<kbd>→</kbd></dt>
+                    <dd class="col-7">Cycle filters</dd>
+                    <dt class="col-5"><kbd>F</kbd></dt>
+                    <dd class="col-7">Toggle fullscreen</dd>
+                    <dt class="col-5"><kbd>/</kbd></dt>
+                    <dd class="col-7">Reset sliders &amp; filters</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -103,6 +145,36 @@
         <div class="imggr-loupe" aria-hidden="true"></div>
       </div>
       {# No thumbnails in grading view #}
+    </div>
+  </div>
+  <div class="card-footer py-2">
+    <div class="mb-2">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted imggr-zoom-info" id="imggr-zoom-{{ uuid }}"
+              title="Current zoom level as percentage of original image size">
+          <span class="imggr-zoom-level">100%</span> zoom
+        </small>
+        <small class="text-muted imggr-dim-info" id="imggr-dim-{{ uuid }}"
+              title="Image dimensions in pixels (width × height)">
+          Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
+        </small>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ uuid }}">Zoom:</label>
+        <input id="imggr-zoom-slider-{{ uuid }}"
+               class="form-range imggr-zoom-slider flex-grow-1"
+               type="range"
+               min="10"
+               max="400"
+               step="5"
+               value="100"
+               title="Adjust image zoom level">
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
+                title="Fit image to container">
+          Fit
+        </button>
+      </div>
     </div>
   </div>
 </div>

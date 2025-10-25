@@ -27,8 +27,11 @@
   const LOUPE_ZOOM_MAX = 4;
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
   const IMG_PAN_STEP = 5;
-  const IMG_PAN_MIN = -45;
-  const IMG_PAN_MAX = 45;
+  const IMG_PAN_MIN = -600;
+  const IMG_PAN_MAX = 600;
+  const ZOOM_MIN = 40;
+  const ZOOM_MAX = 500;
+  const ZOOM_STEP = 20;
 
   function clamp(value, min, max){
     return Math.min(max, Math.max(min, value));
@@ -129,6 +132,11 @@
       if (k === 's') { e.preventDefault(); state?.adjustImagePan?.(0, +1); return; }
       if (k === 'a') { e.preventDefault(); state?.adjustImagePan?.(-1, 0); return; }
       if (k === 'd') { e.preventDefault(); state?.adjustImagePan?.(+1, 0); return; }
+      // Use Z and X keys for image zoom to avoid conflict with loupe zoom
+      if (k === 'z') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) + ZOOM_STEP); return; }
+      if (k === 'x') { e.preventDefault(); state?.setZoomLevel?.((state.currentZoom || 100) - ZOOM_STEP); return; }
+      if (k === '0') { e.preventDefault(); state?.setZoomLevel?.(100); return; }
+      if (k === 'home') { e.preventDefault(); state?.fitToContainer?.(); return; }
 
       if (rawKey === '<' || rawKey === ',') { e.preventDefault(); adjustRangeInput(bright, -1); return; }
       if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
@@ -176,6 +184,23 @@
     let lastPointerPos = null;
     let imgPanX = 0;
     let imgPanY = 0;
+    let currentZoom = 100; // Store current zoom level as percentage
+    
+    // Touch/gesture state
+    let touchStartDistance = 0;
+    let touchStartZoom = 100;
+    let touchStartPanX = 0;
+    let touchStartPanY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let twoFingerStartCenterX = 0;
+    let twoFingerStartCenterY = 0;
+    let isMouseDragging = false;
+    let mouseDragStartX = 0;
+    let mouseDragStartY = 0;
+    let mouseDragStartPanX = 0;
+    let mouseDragStartPanY = 0;
 
     function svgUrlFor(val){
       switch((val||'').toLowerCase()){
@@ -201,6 +226,7 @@
         mainImg.style.filter = chain;
         if (loupe) loupe.style.filter = chain;
       } catch(_) {}
+      updateZoomDisplay();
     }
     rad && rad.forEach && rad.forEach(r => r.addEventListener('change', applyFilter));
     bright && bright.addEventListener('input', applyFilter);
@@ -213,11 +239,8 @@
         none.checked = true;
         none.dispatchEvent(new Event('change', { bubbles: true }));
       }
-      if (typeof resetLoupe === 'function') {
-        resetLoupe();
-      } else {
-        resetImagePan();
-      }
+      // Reset both zoom and pan
+      resetImagePan();
       applyFilter();
     });
     // Initial
@@ -231,7 +254,7 @@
 
     function applyImagePan(){
       if (!mainImg) return;
-      mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%)`;
+      mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%) scale(${currentZoom / 100})`;
     }
 
     function getDisplayedImageMetrics(){
@@ -246,6 +269,7 @@
           displayHeight: rect.height,
           offsetX: 0,
           offsetY: 0,
+          zoomLevel: 0,
         };
       }
       const aspect = natW / natH;
@@ -262,7 +286,9 @@
         offsetY = 0;
         offsetX = (rect.width - displayWidth) / 2;
       }
-      return { rect, displayWidth, displayHeight, offsetX, offsetY };
+      // Calculate zoom level as percentage of natural size
+      const zoomLevel = Math.round((displayWidth / natW) * 100);
+      return { rect, displayWidth, displayHeight, offsetX, offsetY, zoomLevel, natW, natH };
     }
 
     function adjustImagePan(stepX, stepY){
@@ -276,12 +302,15 @@
         updateLoupeAssets();
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
       }
+      updateZoomDisplay();
     }
 
     function resetImagePan(){
       imgPanX = 0;
       imgPanY = 0;
+      currentZoom = 100;
       applyImagePan();
+      updateZoomDisplay();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
     }
 
@@ -406,17 +435,226 @@
       updateLoupePosition(lastPointerPos);
     });
     main.addEventListener('pointerleave', handlePointerLeave);
+    
+    // Touch/gesture event handlers
+    function getTouchDistance(touches) {
+      if (!touches || touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    function handleTouchStart(e) {
+      if (e.touches.length === 1) {
+        // Single touch - prepare for drag
+        isDragging = true;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        touchStartPanX = imgPanX;
+        touchStartPanY = imgPanY;
+      } else if (e.touches.length === 2) {
+        // Two touches - prepare for pinch zoom
+        isDragging = false;
+        touchStartDistance = getTouchDistance(e.touches);
+        touchStartZoom = currentZoom;
+      }
+      e.preventDefault();
+    }
+    
+    function handleTouchMove(e) {
+      if (e.touches.length === 1 && isDragging) {
+        // Single touch drag - pan the image
+        const deltaX = e.touches[0].clientX - dragStartX;
+        const deltaY = e.touches[0].clientY - dragStartY;
+        
+        // Convert pixel movement to percentage-based pan
+        const containerRect = main.getBoundingClientRect();
+        const panStepX = (deltaX / containerRect.width) * 100;
+        const panStepY = (deltaY / containerRect.height) * 100;
+        
+        imgPanX = clamp(touchStartPanX + panStepX, IMG_PAN_MIN, IMG_PAN_MAX);
+        imgPanY = clamp(touchStartPanY + panStepY, IMG_PAN_MIN, IMG_PAN_MAX);
+        
+        applyImagePan();
+        updateZoomDisplay();
+      } else if (e.touches.length === 2) {
+        // Two touches - pinch zoom
+        const currentDistance = getTouchDistance(e.touches);
+        if (touchStartDistance > 0) {
+          const scale = currentDistance / touchStartDistance;
+          const newZoom = clamp(touchStartZoom * scale, ZOOM_MIN, ZOOM_MAX);
+          setZoomLevel(newZoom);
+        }
+      }
+      e.preventDefault();
+    }
+    
+    function handleTouchEnd(e) {
+      isDragging = false;
+      touchStartDistance = 0;
+      e.preventDefault();
+    }
+    
+    // Add touch event listeners
+    main.addEventListener('touchstart', handleTouchStart, { passive: false });
+    main.addEventListener('touchmove', handleTouchMove, { passive: false });
+    main.addEventListener('touchend', handleTouchEnd, { passive: false });
+    main.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    
+    // Mouse wheel zoom for desktop
+    main.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+        setZoomLevel(currentZoom + delta, e.clientX, e.clientY);
+      }
+    }, { passive: false });
+    
+    // Mouse drag panning for desktop
+    function handleMouseDown(e) {
+      // Only enable mouse panning when left mouse button is pressed and loupe is not active
+      if (e.button === 0 && !loupeEnabled) {
+        isMouseDragging = true;
+        mouseDragStartX = e.clientX;
+        mouseDragStartY = e.clientY;
+        mouseDragStartPanX = imgPanX;
+        mouseDragStartPanY = imgPanY;
+        main.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    }
+    
+    function handleMouseMove(e) {
+      if (isMouseDragging) {
+        const deltaX = e.clientX - mouseDragStartX;
+        const deltaY = e.clientY - mouseDragStartY;
+        
+        // Convert pixel movement to percentage-based pan
+        const containerRect = main.getBoundingClientRect();
+        const panStepX = (deltaX / containerRect.width) * 150; // Use same sensitivity as touch
+        const panStepY = (deltaY / containerRect.height) * 150;
+        
+        imgPanX = clamp(mouseDragStartPanX + panStepX, IMG_PAN_MIN, IMG_PAN_MAX);
+        imgPanY = clamp(mouseDragStartPanY + panStepY, IMG_PAN_MIN, IMG_PAN_MAX);
+        
+        applyImagePan();
+        updateZoomDisplay();
+        e.preventDefault();
+      }
+    }
+    
+    function handleMouseUp(e) {
+      if (isMouseDragging) {
+        isMouseDragging = false;
+        main.style.cursor = '';
+        e.preventDefault();
+      }
+    }
+    
+    // Add mouse event listeners
+    main.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    // Handle case when mouse leaves the window
+    window.addEventListener('blur', () => {
+      if (isMouseDragging) {
+        isMouseDragging = false;
+        main.style.cursor = '';
+      }
+    });
     window.addEventListener('resize', () => {
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
+      updateZoomDisplay();
     });
+    function updateZoomDisplay() {
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics || !card) return;
+      
+      const zoomInfo = card.querySelector('.imggr-zoom-level');
+      const dimInfo = card.querySelector('.imggr-display-dim');
+      const natDimInfo = card.querySelector('.imggr-natural-dim');
+      const zoomSlider = card.querySelector('.imggr-zoom-slider');
+      
+      if (zoomInfo) {
+        zoomInfo.textContent = `${currentZoom}%`;
+      }
+      
+      if (dimInfo && metrics.natW && metrics.natH) {
+        // Calculate actual display dimensions based on zoom level
+        const mainDiv = main.querySelector('.imggr-main');
+        if (mainDiv) {
+          const containerRect = mainDiv.getBoundingClientRect();
+          const aspectRatio = metrics.natW / metrics.natH;
+          
+          // Calculate the base display size (without zoom)
+          let baseDisplayWidth, baseDisplayHeight;
+          if (aspectRatio > 1) {
+            // Landscape image
+            baseDisplayWidth = containerRect.width;
+            baseDisplayHeight = containerRect.width / aspectRatio;
+          } else {
+            // Portrait or square image
+            baseDisplayHeight = containerRect.height;
+            baseDisplayWidth = containerRect.height * aspectRatio;
+          }
+          
+          // Apply zoom to get actual display dimensions
+          const scaledWidth = Math.round(baseDisplayWidth * (currentZoom / 100));
+          const scaledHeight = Math.round(baseDisplayHeight * (currentZoom / 100));
+          dimInfo.textContent = `${scaledWidth}×${scaledHeight}`;
+        }
+      }
+      
+      if (natDimInfo && metrics.natW && metrics.natH) {
+        natDimInfo.textContent = `${metrics.natW}×${metrics.natH}`;
+      }
+      
+      if (zoomSlider) {
+        zoomSlider.value = currentZoom;
+      }
+    }
+
     mainImg.addEventListener('load', () => {
       updateLoupeAssets();
       if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
+      updateZoomDisplay();
     });
 
     applyImagePan();
     applyLoupeDimensions();
+    updateZoomDisplay();
+    
+    // Get zoom controls
+    const zoomSlider = card ? card.querySelector('.imggr-zoom-slider') : null;
+    const zoomFitBtn = card ? card.querySelector('.imggr-zoom-fit') : null;
+    
+    function setZoomLevel(zoomPercent) {
+      currentZoom = clamp(zoomPercent, ZOOM_MIN, ZOOM_MAX);
+      applyImagePan();
+      updateZoomDisplay();
+      if (loupeEnabled) {
+        updateLoupeAssets();
+        if (lastPointerPos) updateLoupePosition(lastPointerPos);
+      }
+    }
+    
+    function fitToContainer() {
+      // Set zoom to 100% to fit the image to its container
+      setZoomLevel(100);
+    }
+    
+    // Zoom slider event
+    zoomSlider?.addEventListener('input', (e) => {
+      setZoomLevel(parseFloat(e.target.value));
+    });
+    
+    // Fit button event
+    zoomFitBtn?.addEventListener('click', () => {
+      fitToContainer();
+    });
+    
     viewerStates.set(root, {
       toggleLoupe: () => setLoupeEnabled(!loupeEnabled),
       adjustLoupeSize,
@@ -424,6 +662,9 @@
       adjustImagePan,
       resetLoupe,
       resetImagePan,
+      setZoomLevel,
+      fitToContainer,
+      currentZoom, // Expose current zoom level for keyboard shortcuts
     });
 
     const activate = () => { activeRoot = root; };

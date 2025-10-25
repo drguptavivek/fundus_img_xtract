@@ -1225,8 +1225,15 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   }
 }
 
+.imggr-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
 .imggr-loupe {
-  position: absolute;
+  position: fixed;
   left: 50%;
   top: 50%;
   width: 200px;

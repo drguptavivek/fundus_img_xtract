@@ -92,13 +92,15 @@
 
   <div class="card-body p-0">
     <div id="imggr-view-{{ uuid }}" class="imggr-viewer-root" data-enc-id="{{ uuid }}">
-      <div class="imggr-main bg-black rounded position-relative" 
-      style="aspect-ratio:1/1; width:100%; height:auto; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-        <img         class="imggr-main-img" 
-        style="width:100%; height:100%; object-fit:contain; display:block;"
-        src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
+      <div class="imggr-stage position-relative">
+        <div class="imggr-main bg-black rounded position-relative" 
+        style="aspect-ratio:1/1; width:100%; height:auto; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+          <img         class="imggr-main-img" 
+          style="width:100%; height:100%; object-fit:contain; display:block;"
+          src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
+          <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+        </div>
         <div class="imggr-loupe" aria-hidden="true"></div>
-        <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
       </div>
       {# No thumbnails in grading view #}
     </div>

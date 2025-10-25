@@ -20,8 +20,8 @@
   const DEFAULT_LOUPE_SIZE = 200;
   const LOUPE_SIZE_STEP = 20;
   const LOUPE_SIZE_MIN = 100;
-  const LOUPE_SIZE_MAX = 400;
-  const DEFAULT_LOUPE_ZOOM = 1.5;
+  const LOUPE_SIZE_MAX = 500;
+  const DEFAULT_LOUPE_ZOOM = 2;
   const LOUPE_ZOOM_STEP = 0.25;
   const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
@@ -323,15 +323,15 @@
       if (!mainRect.width || !mainRect.height) return;
       const pointerXRaw = e.clientX - mainRect.left;
       const pointerYRaw = e.clientY - mainRect.top;
-      const pointerX = clamp(pointerXRaw, 0, mainRect.width);
-      const pointerY = clamp(pointerYRaw, 0, mainRect.height);
-      loupe.style.left = `${pointerX}px`;
-      loupe.style.top = `${pointerY}px`;
+      const constrainedX = clamp(pointerXRaw, 0, mainRect.width);
+      const constrainedY = clamp(pointerYRaw, 0, mainRect.height);
+      loupe.style.left = `${e.clientX}px`;
+      loupe.style.top = `${e.clientY}px`;
 
       const imgRect = mainImg.getBoundingClientRect();
       if (imgRect.width && imgRect.height) {
-        const imageX = clamp(pointerXRaw - offsetX, 0, displayWidth);
-        const imageY = clamp(pointerYRaw - offsetY, 0, displayHeight);
+        const imageX = clamp(constrainedX - offsetX, 0, displayWidth);
+        const imageY = clamp(constrainedY - offsetY, 0, displayHeight);
         const bgX = displayWidth > 0 ? (imageX / displayWidth) * 100 : 50;
         const bgY = displayHeight > 0 ? (imageY / displayHeight) * 100 : 50;
         loupe.style.backgroundPosition = `${bgX}% ${bgY}%`;

@@ -21,7 +21,7 @@
   const LOUPE_SIZE_STEP = 20;
   const LOUPE_SIZE_MIN = 100;
   const LOUPE_SIZE_MAX = 400;
-  const DEFAULT_LOUPE_ZOOM = 2;
+  const DEFAULT_LOUPE_ZOOM = 1.5;
   const LOUPE_ZOOM_STEP = 0.25;
   const LOUPE_ZOOM_MIN = 1;
   const LOUPE_ZOOM_MAX = 4;
@@ -231,6 +231,37 @@
       mainImg.style.transform = `translate(${imgPanX}%, ${imgPanY}%)`;
     }
 
+    function getDisplayedImageMetrics(){
+      if (!mainImg) return null;
+      const rect = mainImg.getBoundingClientRect();
+      const natW = mainImg.naturalWidth || 0;
+      const natH = mainImg.naturalHeight || 0;
+      if (!rect.width || !rect.height || !natW || !natH) {
+        return {
+          rect,
+          displayWidth: rect.width,
+          displayHeight: rect.height,
+          offsetX: 0,
+          offsetY: 0,
+        };
+      }
+      const aspect = natW / natH;
+      const containerAspect = rect.width / rect.height;
+      let displayWidth, displayHeight, offsetX, offsetY;
+      if (aspect > containerAspect) {
+        displayWidth = rect.width;
+        displayHeight = rect.width / aspect;
+        offsetX = 0;
+        offsetY = (rect.height - displayHeight) / 2;
+      } else {
+        displayHeight = rect.height;
+        displayWidth = rect.height * aspect;
+        offsetY = 0;
+        offsetX = (rect.width - displayWidth) / 2;
+      }
+      return { rect, displayWidth, displayHeight, offsetX, offsetY };
+    }
+
     function adjustImagePan(stepX, stepY){
       const nextX = clamp(imgPanX + stepX * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
       const nextY = clamp(imgPanY + stepY * IMG_PAN_STEP, IMG_PAN_MIN, IMG_PAN_MAX);
@@ -255,10 +286,12 @@
       if (!loupe || !mainImg) return;
       const src = mainImg.currentSrc || mainImg.src;
       if (src) loupe.style.backgroundImage = `url(${JSON.stringify(src)})`;
-      const rect = mainImg.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        const sizeX = rect.width * loupeZoom;
-        const sizeY = rect.height * loupeZoom;
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics) return;
+      const { displayWidth, displayHeight } = metrics;
+      if (displayWidth > 0 && displayHeight > 0) {
+        const sizeX = displayWidth * loupeZoom;
+        const sizeY = displayHeight * loupeZoom;
         loupe.style.backgroundSize = `${sizeX}px ${sizeY}px`;
       }
     }
@@ -281,7 +314,9 @@
 
     function updateLoupePosition(e){
       if (!loupeEnabled || !loupe || !main || !e) return;
-      const mainRect = main.getBoundingClientRect();
+      const metrics = getDisplayedImageMetrics();
+      if (!metrics) return;
+      const { rect: mainRect, displayWidth, displayHeight, offsetX, offsetY } = metrics;
       if (!mainRect.width || !mainRect.height) return;
       const pointerXRaw = e.clientX - mainRect.left;
       const pointerYRaw = e.clientY - mainRect.top;
@@ -292,12 +327,10 @@
 
       const imgRect = mainImg.getBoundingClientRect();
       if (imgRect.width && imgRect.height) {
-        const imgXRaw = pointerX + mainRect.left - imgRect.left;
-        const imgYRaw = pointerY + mainRect.top - imgRect.top;
-        const imgX = clamp(imgXRaw, 0, imgRect.width);
-        const imgY = clamp(imgYRaw, 0, imgRect.height);
-        const bgX = (imgX / imgRect.width) * 100;
-        const bgY = (imgY / imgRect.height) * 100;
+        const imageX = clamp(pointerXRaw - offsetX, 0, displayWidth);
+        const imageY = clamp(pointerYRaw - offsetY, 0, displayHeight);
+        const bgX = displayWidth > 0 ? (imageX / displayWidth) * 100 : 50;
+        const bgY = displayHeight > 0 ? (imageY / displayHeight) * 100 : 50;
         loupe.style.backgroundPosition = `${bgX}% ${bgY}%`;
       }
       loupe.classList.add('is-active');
@@ -352,7 +385,6 @@
       updateLoupeAssets();
       setLoupeEnabled(false);
       resetImagePan();
-      writeLoupePrefs({ size: loupeSize, zoom: loupeZoom });
     }
 
     loupeToggle?.addEventListener('click', () => {
@@ -371,8 +403,14 @@
       updateLoupePosition(lastPointerPos);
     });
     main.addEventListener('pointerleave', handlePointerLeave);
-    window.addEventListener('resize', () => { if (loupeEnabled) updateLoupeAssets(); });
-    mainImg.addEventListener('load', () => { if (loupeEnabled) updateLoupeAssets(); });
+    window.addEventListener('resize', () => {
+      updateLoupeAssets();
+      if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
+    });
+    mainImg.addEventListener('load', () => {
+      updateLoupeAssets();
+      if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
+    });
 
     applyImagePan();
     applyLoupeDimensions();

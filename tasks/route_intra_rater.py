@@ -16,6 +16,7 @@ from db_transaction_manager import get_db_session
 from models import (
     Disease,
     DiseaseGrading,
+    Grade,
     Hospital,
     IntraRaterBatch,
     IntraRaterTask,
@@ -114,7 +115,7 @@ def list_my_intra_rater_tasks() -> Response:
         )
         gradings_map = _load_gradings_map(db, tasks)
         csrf_token = generate_csrf()
-        payload = [_task_to_payload(task, gradings_map, csrf_token) for task in tasks]
+        payload = [_task_to_payload(task, gradings_map, csrf_token, db) for task in tasks]
         return jsonify({"items": payload, "include_completed": include_completed})
 
 
@@ -235,13 +236,28 @@ def _task_to_payload(
     task: IntraRaterTask,
     gradings_map: dict[int, list[DiseaseGrading]] | None = None,
     csrf_token: str | None = None,
+    db: Session = None,
 ) -> dict:
     batch = task.batch
     disease = task.disease
     lab_unit = task.lab_unit
     gradings = (gradings_map or {}).get(task.disease_id, [])
+    
+    # Get original grade from source task using denormalized data
+    # The task already has grades loaded via selectinload, so we can access source task grades
+    original_grade = None
+    original_grading = None
+    if task.source_task_id and hasattr(task, 'source_task') and task.source_task:
+        # Find the grade from the source task for the same user
+        source_grades = [grade for grade in task.source_task.grades if grade.grader_user_id == task.grader_user_id]
+        if source_grades:
+            original_grade = source_grades[0]  # Take the first/most recent grade
+            # Get the disease grading from the gradings_map
+            original_grading = next((g for g in gradings_map.get(task.disease_id, []) if g.id == original_grade.disease_grading_id), None)
+    
     return {
         "id": task.id,
+        "uuid": task.uuid,
         "batch_id": task.batch_id,
         "grader_user_id": task.grader_user_id,
         "disease_id": task.disease_id,
@@ -263,6 +279,10 @@ def _task_to_payload(
         "grade_name": task.grades[0].grade_name if task.grades else None,
         "comment": task.grades[0].comment if task.grades else None,
         "graded_at": task.grades[0].created_at.isoformat() if task.grades and task.grades[0].created_at else None,
+        "original_grade_name": original_grading.impression if original_grading else None,
+        "original_grade_id": original_grade.disease_grading_id if original_grade else None,
+        "original_comment": original_grade.comment if original_grade else None,
+        "original_graded_at": original_grade.created_at.isoformat() if original_grade and original_grade.created_at else None,
         "batch": _batch_to_payload(batch) if batch else None,
     }
 
@@ -403,7 +423,7 @@ def intra_rater_dashboard() -> str:
     """Render the intra-rater task dashboard for the logged-in grader."""
     with get_db_session() as db:
         service = IntraRaterService(db)
-        tasks = service.list_grader_tasks(grader_user_id=current_user.id, include_completed=False)
+        tasks = service.list_grader_tasks(grader_user_id=current_user.id, include_completed=True)
 
         gradings_map = _load_gradings_map(db, tasks)
 
@@ -411,7 +431,7 @@ def intra_rater_dashboard() -> str:
             "tasks/intra_rater/queue.html",
             tasks=tasks,
             gradings_map=gradings_map,
-            include_completed=False,
+            include_completed=True,
         )
 
 

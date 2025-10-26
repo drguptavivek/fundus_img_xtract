@@ -1,0 +1,53 @@
+TASKS WITH MISSING IMAGE FILES
+==================================================
+
+Task Type: GradingTask
+Task ID: 39
+Task UUID: 4564a030-bc0f-4c4a-8fbf-664e647ec174
+Image Type: encounter_file
+Expected Path: No filename in database record
+Error Reason: Encounter file ID 72 not found
+Disease ID: 2
+Lab Unit ID: 1
+State: pending
+--------------------------------------------------
+Task Type: GradingTask
+Task ID: 40
+Task UUID: 41d848c5-9300-4685-95b3-7e0c37d11009
+Image Type: encounter_file
+Expected Path: No filename in database record
+Error Reason: Encounter file ID 73 not found
+Disease ID: 2
+Lab Unit ID: 1
+State: pending
+--------------------------------------------------
+Task Type: GradingTask
+Task ID: 41
+Task UUID: 29f8f1bc-5140-4845-9935-173595f69bd1
+Image Type: encounter_file
+Expected Path: No filename in database record
+Error Reason: Encounter file ID 74 not found
+Disease ID: 2
+Lab Unit ID: 1
+State: pending
+--------------------------------------------------
+Task Type: GradingTask
+Task ID: 42
+Task UUID: 9c8d047c-8066-4f02-9c89-36d056baec7b
+Image Type: encounter_file
+Expected Path: No filename in database record
+Error Reason: Encounter file ID 75 not found
+Disease ID: 2
+Lab Unit ID: 1
+State: pending
+--------------------------------------------------
+Task Type: IntraRaterTask
+Task ID: 11
+Task UUID: 5a372b5e-ee3d-46ee-88f7-64e81dbf370c
+Image Type: None
+Expected Path: None
+Error Reason: None
+Disease ID: 1
+Lab Unit ID: 1
+State: completed
+--------------------------------------------------

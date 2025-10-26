@@ -190,6 +190,7 @@ def create_app():
     email_error_handler = make_handler("email_error.log", logging.ERROR, detailed_format)
     app_handler = make_handler("app.log", logging.INFO, base_format)
     flask_limiter_handler = make_handler("flask_limiter.log", logging.INFO, base_format)
+    intra_rater_debug_handler = make_handler("intra_rater_debug.log", logging.INFO, base_format)
 
     debug_handler = None
     console_handler = None
@@ -210,6 +211,7 @@ def create_app():
     email_error_logger = configure_logger("email_error", logging.ERROR, email_error_handler)
     rate_limit_logger = configure_logger("rate_limit", logging.INFO, app_handler)
     flask_limiter_logger = configure_logger("flask-limiter", logging.INFO, flask_limiter_handler)
+    intra_rater_debug_logger = configure_logger("intra_rater_debug", logging.INFO, intra_rater_debug_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
@@ -250,6 +252,7 @@ def create_app():
     email_error_logger.info("Email error logger initialized at %s", str(log_dir / "email_error.log"))
     runtime_error_logger.info("Runtime error logger initialized at %s", str(log_dir / "runtime_error.log"))
     flask_limiter_logger.info("Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log"))
+    intra_rater_debug_logger.info("Intra-rater debug logger initialized at %s", str(log_dir / "intra_rater_debug.log"))
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

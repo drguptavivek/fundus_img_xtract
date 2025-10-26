@@ -775,8 +775,14 @@ def dual_grading_submit():
                 # we need to commit our changes first
                 db.commit()
                 try:
+                    grades_logger.info(f"Looking for intra-rater task for user {current_user.id}, disease {disease_id}")
                     intra_task = get_next_intra_rater_task(current_user.id, disease_id)
-                    if intra_task and random.random() < 0.5:
+                    
+                    random_value = random.random()
+                    grades_logger.info(f"Intra-rater task found: {intra_task is not None}, random value: {random_value} (needs < 0.5)")
+                    
+                    if intra_task and random_value < 0.5:
+                        grades_logger.info(f"Redirecting to intra-rater task {intra_task.uuid} for user {current_user.id}")
                         flash("Grade submitted successfully.", "success")
                         return redirect(
                             url_for(
@@ -786,6 +792,10 @@ def dual_grading_submit():
                                 resume_disease_id=disease_id,
                             )
                         )
+                    elif intra_task:
+                        grades_logger.info(f"Intra-rater task found but random value {random_value} >= 0.5, skipping")
+                    else:
+                        grades_logger.warning(f"No intra-rater task found for user {current_user.id}, disease {disease_id}")
 
                     # Try to find the next eligible task with a new session
                     next_task = None

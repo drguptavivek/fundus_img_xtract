@@ -279,6 +279,8 @@
     
     var diseaseLabel = item.disease_name || 'Unknown disease';
     var gradedAt = item.graded_at ? new Date(item.graded_at).toLocaleString() : 'unknown';
+    var originalGradedAt = item.original_graded_at ? new Date(item.original_graded_at).toLocaleString() : 'unknown';
+    
     container.innerHTML =
       '<div>' +
       '<div class="d-flex align-items-center gap-2">' +
@@ -287,9 +289,22 @@
       '</div>' +
       '<div class="small text-muted mt-1">Completed at ' + gradedAt + '</div>' +
       '</div>' +
-      '<div class="text-muted small">' +
-      (item.grade_name ? ('Grade: <strong>' + item.grade_name + '</strong>') : '') +
-      (item.comment ? ('<br>Comment: ' + item.comment) : '') +
+      '<div class="row">' +
+      '<div class="col-md-6">' +
+      '<h6 class="text-success">Intra-rater Grade</h6>' +
+      '<div class="small">' +
+      (item.grade_name ? ('<strong>Grade:</strong> ' + item.grade_name) : '') +
+      (item.comment ? ('<br><strong>Comment:</strong> ' + item.comment) : '') +
+      '</div>' +
+      '</div>' +
+      '<div class="col-md-6">' +
+      '<h6 class="text-primary">Original Grade</h6>' +
+      '<div class="small">' +
+      (item.original_grade_name ? ('<strong>Grade:</strong> ' + item.original_grade_name) : '') +
+      (item.original_comment ? ('<br><strong>Comment:</strong> ' + item.original_comment) : '') +
+      '<br><span class="text-muted">Graded at ' + originalGradedAt + '</span>' +
+      '</div>' +
+      '</div>' +
       '</div>';
     return container;
   }
@@ -302,6 +317,9 @@
     }
 
     enhanceForms();
+
+    // Auto-load completed tasks on page load since we now show completed tasks by default
+    refreshTasks(true);
 
     var toggle = document.getElementById('intra-show-completed');
     if (toggle) {

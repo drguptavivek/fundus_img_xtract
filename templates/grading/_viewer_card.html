@@ -5,7 +5,7 @@
 {% set uuid = image_uuid or image.uuid %}
 <div class="card shadow-sm h-100">
 <div class="card-header">
-  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div class="d-flex align-items-center justify-content-start flex-wrap gap-2">
     <!-- Filter buttons -->
     <div class="imggr-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
       <input class="btn-check" type="radio" name="imggrFilter-{{ uuid }}" id="imggr-none-{{ uuid }}" value="none" checked>
@@ -28,7 +28,7 @@
     </div>
 
     <!-- Brightness / Contrast Controls -->
-    <div class="d-flex flex-wrap flex-sm-nowrap align-items-center gap-2 ms-auto position-relative imggr-controls">
+    <div class="d-flex flex-sm-nowrap align-items-center justify-content-start gap-2 ms-auto position-relative imggr-controls flex-grow-1">
       <!-- Brightness -->
       <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-1">
         <label class="small mb-0" for="imggr-bright-{{ uuid }}">Brightness</label>
@@ -42,9 +42,26 @@
         <input id="imggr-contrast-{{ uuid }}" class="form-range imggr-contrast form-range-light"
                type="range" min="0.5" max="1.5" step="0.05" value="1">
       </div>
+    </div>
 
+    <!-- Reset loupe Help tooltips-->
+    <div class="d-flex gap-2 flex-grow-1 align-items-sm-end justify-content-end">
       <!-- Reset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
+
+      <!-- Presets -->
+      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets">
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="1">1</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="2">2</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="3">3</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="4">4</button>
+        <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="5">5</button>
+      </div>
+      
+      <!-- Save Preset -->
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ uuid }}">
+        Save Preset
+      </button>
 
       <!-- Loupe -->
       <button type="button"
@@ -56,78 +73,12 @@
 
       <!-- Shortcut hint -->
       <button type="button"
-              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger"
+              class="btn btn-outline-secondary btn-sm imggr-shortcuts-trigger align-self-end"
               data-bs-toggle="modal"
               data-bs-target="#imggr-shortcuts-modal-{{ uuid }}"
               aria-label="Keyboard shortcuts">
         <span aria-hidden="true">?</span>
       </button>
-      
-      <!-- Shortcuts Modal -->
-      <div class="modal fade" id="imggr-shortcuts-modal-{{ uuid }}" tabindex="-1" aria-labelledby="shortcutsModalLabel-{{ uuid }}" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title" id="shortcutsModalLabel-{{ uuid }}">Image Viewer Controls</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-              <div class="row">
-                <div class="col-md-6">
-                  <h6 class="text-uppercase small mb-3">Image Controls</h6>
-                  <dl class="row g-2 mb-3 small">
-                    <dt class="col-5"><kbd>Z</kbd>/<kbd>X</kbd></dt>
-                    <dd class="col-7">Zoom in/out</dd>
-                    <dt class="col-5"><kbd>0</kbd></dt>
-                    <dd class="col-7">Reset zoom to 100%</dd>
-                    <dt class="col-5"><kbd>Home</kbd></dt>
-                    <dd class="col-7">Fit to container</dd>
-                    <dt class="col-5"><kbd>Ctrl</kbd>+<kbd>Wheel</kbd></dt>
-                    <dd class="col-7">Zoom with mouse</dd>
-                    <dt class="col-5"><kbd>Left Click + Drag</kbd></dt>
-                    <dd class="col-7">Pan image with mouse</dd>
-                    <dt class="col-5"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
-                    <dd class="col-7">Pan base image</dd>
-                  </dl>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="text-uppercase small mb-3">Touch Controls</h6>
-                  <dl class="row g-2 mb-3 small">
-                    <dt class="col-5"><kbd>Touch</kbd></dt>
-                    <dd class="col-7">1-finger drag to pan, 2-finger drag/pan, pinch to zoom</dd>
-                  </dl>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="text-uppercase small mb-3">Loupe Controls</h6>
-                  <dl class="row g-2 mb-3 small">
-                    <dt class="col-5"><kbd>L</kbd></dt>
-                    <dd class="col-7">Toggle loupe magnifier</dd>
-                    <dt class="col-5"><kbd>[</kbd>/<kbd>]</kbd></dt>
-                    <dd class="col-7">Change loupe size</dd>
-                    <dt class="col-5"><kbd>-</kbd>/<kbd>=</kbd></dt>
-                    <dd class="col-7">Change loupe zoom</dd>
-                  </dl>
-                </div>
-                <div class="col-md-6">
-                  <h6 class="text-uppercase small mb-3">Filter & Display</h6>
-                  <dl class="row g-2 mb-3 small">
-                    <dt class="col-5"><kbd>&lt;</kbd>/<kbd>&gt;</kbd></dt>
-                    <dd class="col-7">Adjust brightness</dd>
-                    <dt class="col-5"><kbd>;</kbd>/<kbd>'</kbd></dt>
-                    <dd class="col-7">Adjust contrast</dd>
-                    <dt class="col-5"><kbd>←</kbd>/<kbd>→</kbd></dt>
-                    <dd class="col-7">Cycle filters</dd>
-                    <dt class="col-5"><kbd>F</kbd></dt>
-                    <dd class="col-7">Toggle fullscreen</dd>
-                    <dt class="col-5"><kbd>/</kbd></dt>
-                    <dd class="col-7">Reset sliders &amp; filters</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -170,10 +121,127 @@
                value="100"
                title="Adjust image zoom level">
         <button type="button"
-                class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
-                title="Fit image to container">
+                 class="btn btn-sm btn-outline-secondary imggr-zoom-fit"
+                 title="Fit image to container">
           Fit
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Modal -->
+<div class="modal fade" id="imggr-shortcuts-modal-{{ uuid }}" tabindex="-1" aria-labelledby="shortcutsModalLabel-{{ uuid }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="shortcutsModalLabel-{{ uuid }}">Image Viewer Controls</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Image Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>Z</kbd>/<kbd>X</kbd></dt>
+              <dd class="col-7">Zoom in/out</dd>
+              <dt class="col-5"><kbd>0</kbd></dt>
+              <dd class="col-7">Reset zoom to 100%</dd>
+              <dt class="col-5"><kbd>Home</kbd></dt>
+              <dd class="col-7">Fit to container</dd>
+              <dt class="col-5"><kbd>Ctrl</kbd>+<kbd>Wheel</kbd></dt>
+              <dd class="col-7">Zoom with mouse</dd>
+              <dt class="col-5"><kbd>Left Click + Drag</kbd></dt>
+              <dd class="col-7">Pan image with mouse</dd>
+              <dt class="col-5"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt>
+              <dd class="col-7">Pan base image</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Touch Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>Touch</kbd></dt>
+              <dd class="col-7">1-finger drag to pan, 2-finger drag/pan, pinch to zoom</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Presets</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>1</kbd>-<kbd>5</kbd></dt>
+              <dd class="col-7">Apply preset 1-5</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Loupe Controls</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd>L</kbd></dt>
+              <dd class="col-7">Toggle loupe magnifier</dd>
+              <dt class="col-5"><kbd>[</kbd>/<kbd>]</kbd></dt>
+              <dd class="col-7">Change loupe size</dd>
+              <dt class="col-5"><kbd>-</kbd>/<kbd>=</kbd></dt>
+              <dd class="col-7">Change loupe zoom</dd>
+            </dl>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-uppercase small mb-3">Filter & Display</h6>
+            <dl class="row g-2 mb-3 small">
+              <dt class="col-5"><kbd><</kbd>/<kbd>></kbd></dt>
+              <dd class="col-7">Adjust brightness</dd>
+              <dt class="col-5"><kbd>;</kbd>/<kbd>'</kbd></dt>
+              <dd class="col-7">Adjust contrast</dd>
+              <dt class="col-5"><kbd>←</kbd>/<kbd>→</kbd></dt>
+              <dd class="col-7">Cycle filters</dd>
+              <dt class="col-5"><kbd>F</kbd></dt>
+              <dd class="col-7">Toggle fullscreen</dd>
+              <dt class="col-5"><kbd>/</kbd></dt>
+              <dd class="col-7">Reset sliders & filters</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preset Save Modal -->
+<div class="modal fade" id="imggr-preset-modal-{{ uuid }}" tabindex="-1" aria-labelledby="presetModalLabel-{{ uuid }}" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="presetModalLabel-{{ uuid }}">Save Viewer Preset</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Select a preset slot to save current settings:</p>
+        
+        <div class="row">
+          <div class="col-12">
+            <h6 class="text-muted small mb-2">Current Settings:</h6>
+            <div class="small mb-3 p-2 bg-light rounded">
+              <div class="row g-2">
+                <div class="col-6">
+                  <strong>Filter:</strong> <span id="current-filter-display">None</span>
+                </div>
+                <div class="col-6">
+                  <strong>Brightness:</strong> <span id="current-brightness-display">1.0</span>
+                </div>
+                <div class="col-6">
+                  <strong>Contrast:</strong> <span id="current-contrast-display">1.0</span>
+                </div>
+                <div class="col-6">
+                  <strong>Zoom:</strong> <span id="current-zoom-display">100%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="row g-2" id="preset-slots">
+          <!-- Preset slots will be populated by JavaScript -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
       </div>
     </div>
   </div>

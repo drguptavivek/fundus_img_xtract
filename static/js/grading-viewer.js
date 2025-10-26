@@ -27,6 +27,7 @@
   const LOUPE_ZOOM_MAX = 4;
   const LOUPE_STORAGE_KEY = 'imggrLoupePrefs';
   const VIEWER_SETTINGS_KEY = 'imggrViewerSettings';
+  const VIEWER_PRESETS_KEY = 'imggrViewerPresets';
   const IMG_PAN_STEP = 5;
   const IMG_PAN_MIN = -600;
   const IMG_PAN_MAX = 600;
@@ -149,6 +150,16 @@
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }
       if (k === 'arrowleft') { e.preventDefault(); cycleFilter(activeRoot, -1); return; }
       if (k === 'arrowright') { e.preventDefault(); cycleFilter(activeRoot, +1); return; }
+      // Preset shortcuts (number keys 1-5)
+      if (['1','2','3','4','5'].includes(k)) {
+        e.preventDefault();
+        const presetNum = parseInt(k);
+        const state = viewerStates.get(activeRoot);
+        if (state && state.applyPreset) {
+          state.applyPreset(presetNum);
+        }
+        return;
+      }
       if (['r','g','b','y','h','c','n'].includes(k)) {
         e.preventDefault();
         if (k === 'r') selectFilter(activeRoot, 'redfree');
@@ -166,6 +177,9 @@
     const mainImg = root.querySelector('.imggr-main-img');
     const fullBtn = root.querySelector('.imggr-full');
     if (!main || !mainImg) return;
+    
+    // Get UUID from root element's data-enc-id attribute
+    const uuid = root.dataset.encId;
 
     // Single image; just wire up fullscreen and activation
     fullBtn?.addEventListener('click', () => { isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); });
@@ -210,6 +224,197 @@
       if (loupeToggle) {
         loupeToggle.setAttribute('aria-pressed', loupeEnabled ? 'true' : 'false');
         loupeToggle.classList.toggle('active', loupeEnabled);
+      }
+    }
+    
+    // Preset management functions
+    function loadViewerPresets() {
+      try {
+        const saved = window.localStorage?.getItem(VIEWER_PRESETS_KEY);
+        if (saved) {
+          const presets = JSON.parse(saved);
+          return presets || {};
+        }
+      } catch(e) {
+        console.error('Error loading viewer presets:', e);
+      }
+      return {};
+    }
+    
+    function saveViewerPresets(presets) {
+      try {
+        window.localStorage?.setItem(VIEWER_PRESETS_KEY, JSON.stringify(presets));
+      } catch(e) {
+        console.error('Error saving viewer presets:', e);
+      }
+    }
+    
+    function getCurrentSettings() {
+      return {
+        filter: currentRadio(),
+        brightness: bright ? parseFloat(bright.value) : 1,
+        contrast: contr ? parseFloat(contr.value) : 1,
+        zoom: currentZoom,
+        panX: imgPanX,
+        panY: imgPanY,
+        loupeEnabled: loupeEnabled
+      };
+    }
+    
+    function applyPreset(preset) {
+      if (!preset) return;
+      
+      isApplyingSavedSettings = true;
+      
+      // Apply filter
+      if (preset.filter) {
+        const filterInput = card.querySelector(`.imggr-filters input[value="${preset.filter}"]`);
+        if (filterInput) {
+          filterInput.checked = true;
+        }
+      }
+      
+      // Apply brightness and contrast
+      if (preset.brightness && bright) {
+        bright.value = clamp(preset.brightness, 0.5, 1.5);
+      }
+      if (preset.contrast && contr) {
+        contr.value = clamp(preset.contrast, 0.5, 1.5);
+      }
+      
+      // Apply zoom and pan
+      if (preset.zoom !== undefined) {
+        currentZoom = clamp(preset.zoom, ZOOM_MIN, ZOOM_MAX);
+      }
+      if (preset.panX !== undefined) {
+        imgPanX = clamp(preset.panX, IMG_PAN_MIN, IMG_PAN_MAX);
+      }
+      if (preset.panY !== undefined) {
+        imgPanY = clamp(preset.panY, IMG_PAN_MIN, IMG_PAN_MAX);
+      }
+      
+      // Apply loupe state
+      if (preset.loupeEnabled !== undefined) {
+        setLoupeEnabled(preset.loupeEnabled);
+      }
+      
+      // Apply all changes
+      applyFilter();
+      applyImagePan();
+      updateZoomDisplay();
+      
+      isApplyingSavedSettings = false;
+    }
+    
+    function updatePresetModal() {
+      const modal = document.getElementById(`imggr-preset-modal-${uuid}`);
+      if (!modal) return;
+      
+      const presets = loadViewerPresets();
+      const currentSettings = getCurrentSettings();
+      
+      // Update current settings display
+      const filterDisplay = modal.querySelector('#current-filter-display');
+      const brightnessDisplay = modal.querySelector('#current-brightness-display');
+      const contrastDisplay = modal.querySelector('#current-contrast-display');
+      const zoomDisplay = modal.querySelector('#current-zoom-display');
+      
+      if (filterDisplay) filterDisplay.textContent = currentSettings.filter || 'None';
+      if (brightnessDisplay) brightnessDisplay.textContent = (currentSettings.brightness || 1).toFixed(2);
+      if (contrastDisplay) contrastDisplay.textContent = (currentSettings.contrast || 1).toFixed(2);
+      if (zoomDisplay) zoomDisplay.textContent = `${currentSettings.zoom || 100}%`;
+      
+      // Update preset slots
+      const slotsContainer = modal.querySelector('#preset-slots');
+      if (slotsContainer) {
+        // Clear the slots container first
+        slotsContainer.innerHTML = '';
+        
+        for (let i = 1; i <= 5; i++) {
+          const preset = presets[i];
+          const slotDiv = document.createElement('div');
+          slotDiv.className = 'col-12 mb-2';
+          
+          let presetInfo = 'Empty';
+          if (preset) {
+            presetInfo = `
+              <strong>Filter:</strong> ${preset.filter || 'None'} |
+              <strong>Bright:</strong> ${(preset.brightness || 1).toFixed(1)} |
+              <strong>Contrast:</strong> ${(preset.contrast || 1).toFixed(1)} |
+              <strong>Zoom:</strong> ${preset.zoom || 100}%
+            `;
+          }
+          
+          slotDiv.innerHTML = `
+            <div class="card">
+              <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>Preset ${i}:</strong>
+                    <div class="small text-muted">${presetInfo}</div>
+                  </div>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary save-preset-slot" data-preset="${i}">
+                      Save
+                    </button>
+                    ${preset ? `
+                      <button type="button" class="btn btn-sm btn-success apply-preset-btn" data-preset="${i}">
+                        Apply
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+          
+          slotsContainer.appendChild(slotDiv);
+        }
+        
+        // Add click handlers for preset buttons
+        slotsContainer.querySelectorAll('.save-preset-slot').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const presetNum = parseInt(e.target.dataset.preset);
+            const presets = loadViewerPresets();
+            presets[presetNum] = getCurrentSettings();
+            saveViewerPresets(presets);
+            
+            // Update the modal to reflect the saved preset
+            updatePresetModal();
+            
+            // Show feedback
+            const presetBtn = card.querySelector(`.imggr-preset-btn[data-preset="${presetNum}"]`);
+            if (presetBtn) {
+              presetBtn.classList.add('btn-success');
+              setTimeout(() => presetBtn.classList.remove('btn-success'), 1000);
+            }
+          });
+        });
+        
+        // Add click handlers for apply buttons
+        slotsContainer.querySelectorAll('.apply-preset-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const presetNum = parseInt(e.target.dataset.preset);
+            const presets = loadViewerPresets();
+            const preset = presets[presetNum];
+            
+            if (preset) {
+              applyPreset(preset);
+              // Close modal
+              const modalInstance = bootstrap.Modal.getInstance(modal);
+              if (modalInstance) modalInstance.hide();
+              
+              // Show feedback
+              const presetBtn = card.querySelector(`.imggr-preset-btn[data-preset="${presetNum}"]`);
+              if (presetBtn) {
+                presetBtn.classList.add('btn-success');
+                setTimeout(() => presetBtn.classList.remove('btn-success'), 500);
+              }
+            }
+          });
+        });
+        
+        
       }
     }
     
@@ -525,6 +730,39 @@
       setLoupeEnabled(!loupeEnabled);
       saveViewerSettings(); // Save loupe state when toggled
     });
+    
+    // Preset button handlers
+    const presetButtons = card ? card.querySelectorAll('.imggr-preset-btn') : [];
+    presetButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const presetNum = parseInt(e.target.dataset.preset);
+        const presets = loadViewerPresets();
+        const preset = presets[presetNum];
+        
+        if (preset) {
+          applyPreset(preset);
+          // Visual feedback
+          e.target.classList.add('btn-success');
+          setTimeout(() => e.target.classList.remove('btn-success'), 500);
+        }
+      });
+    });
+    
+    // Save preset button handler
+    const savePresetBtn = card ? card.querySelector('.imggr-save-preset') : null;
+    if (savePresetBtn) {
+      savePresetBtn.addEventListener('click', () => {
+        updatePresetModal();
+      });
+    }
+    
+    // Add event listener to modal show event to update preset slots
+    const modal = document.getElementById(`imggr-preset-modal-${uuid}`);
+    if (modal) {
+      modal.addEventListener('show.bs.modal', () => {
+        updatePresetModal();
+      });
+    }
 
     main.addEventListener('pointerenter', (e) => {
       lastPointerPos = { clientX: e.clientX, clientY: e.clientY };
@@ -788,6 +1026,13 @@
       setZoomLevel,
       fitToContainer,
       currentZoom, // Expose current zoom level for keyboard shortcuts
+      applyPreset: (presetNum) => {
+        const presets = loadViewerPresets();
+        const preset = presets[presetNum];
+        if (preset) {
+          applyPreset(preset);
+        }
+      }
     });
 
     const activate = () => { activeRoot = root; };

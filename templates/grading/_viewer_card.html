@@ -83,18 +83,33 @@
   </div>
 </div>
 
-  <div class="card-body p-0">
-    <div id="imggr-view-{{ uuid }}" class="imggr-viewer-root" data-enc-id="{{ uuid }}">
-      <div class="imggr-stage position-relative">
-        <div class="imggr-main bg-black rounded position-relative">
-          <img         class="imggr-main-img" 
-          style="width:100%; height:100%; object-fit:contain; display:block;"
-          src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
-          <button class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" type="button">Fullscreen</button>
+  <div class="card-body flex p-0">
+
+    <div id="imggr-view-{{ uuid }}" 
+        class="imggr-viewer-root d-flex justify-content-center" 
+        data-enc-id="{{ uuid }}">
+      
+        <div class="imggr-stage position-relative d-flex justify-content-center">
+
+          <div class="imggr-main bg-black rounded position-relative">
+            <img       
+              class="imggr-main-img" 
+              style="width:100%; height:100%; object-fit:contain; display:block;"
+              src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" 
+              alt="Image" 
+              data-index="0" 
+            />  
+            <button 
+              class="imggr-full btn btn-sm btn-light position-absolute top-0 end-0 m-2" 
+              type="button">
+              Fullscreen
+            </button>
         </div>
+
         <div class="imggr-loupe" aria-hidden="true"></div>
+
       </div>
-      {# No thumbnails in grading view #}
+      
     </div>
   </div>
   <div class="card-footer py-2">

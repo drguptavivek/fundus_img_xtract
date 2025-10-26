@@ -144,7 +144,13 @@
       if (rawKey === '>' || rawKey === '.') { e.preventDefault(); adjustRangeInput(bright, +1); return; }
       if (rawKey === ';' || rawKey === ':') { e.preventDefault(); adjustRangeInput(contr, -1); return; }
       if (rawKey === '\'' || rawKey === '"') { e.preventDefault(); adjustRangeInput(contr, +1); return; }
-      if (rawKey === '/' || rawKey === '?') { e.preventDefault(); resetBtn?.click(); return; }
+      if (rawKey === '/' || rawKey === '?') {
+        e.preventDefault();
+        resetBtn?.click();
+        // Also explicitly reset the loupe
+        state?.resetLoupe?.();
+        return;
+      }
 
       if (k === 'f') { e.preventDefault(); isFullscreenFor(main) ? exitFullscreen() : requestFullscreen(main); return; }
       if (k === 'escape') { e.preventDefault(); exitFullscreen(); return; }
@@ -761,6 +767,15 @@
     if (modal) {
       modal.addEventListener('show.bs.modal', () => {
         updatePresetModal();
+      });
+      
+      // Fix accessibility issue by ensuring focus is removed when modal is hidden
+      modal.addEventListener('hide.bs.modal', () => {
+        // Remove focus from any focused element within the modal before it's hidden
+        const activeElement = document.activeElement;
+        if (activeElement && modal.contains(activeElement)) {
+          activeElement.blur();
+        }
       });
     }
 

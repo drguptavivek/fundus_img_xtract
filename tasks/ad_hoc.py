@@ -8,6 +8,7 @@ from flask import Blueprint, render_template, request, jsonify, abort
 from typing import Any
 from datetime import timezone
 import json
+from uuid import uuid4
 
 from models import Session, AdHocTaskCreation, GradingTask, utcnow, Disease
 from flask_login import current_user
@@ -554,9 +555,9 @@ def create():
                 try:
                     # Only enforce uniqueness: no duplicate task per image+disease
                     if src == 'direct':
-                        task = GradingTask(direct_image_upload_id=image_id, disease_id=d, lab_unit_id=lab_unit_id, state='pending', ad_hoc_id=batch.id)
+                        task = GradingTask(uuid=str(uuid4()), direct_image_upload_id=image_id, disease_id=d, lab_unit_id=lab_unit_id, state='pending', ad_hoc_id=batch.id)
                     else:
-                        task = GradingTask(encounter_file_id=image_id, disease_id=d, lab_unit_id=lab_unit_id, state='pending', ad_hoc_id=batch.id)
+                        task = GradingTask(uuid=str(uuid4()), encounter_file_id=image_id, disease_id=d, lab_unit_id=lab_unit_id, state='pending', ad_hoc_id=batch.id)
                     session.add(task)
                     session.flush()
                     created += 1

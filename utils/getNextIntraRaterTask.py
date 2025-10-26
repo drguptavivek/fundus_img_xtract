@@ -8,8 +8,6 @@ from typing import Optional
 
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
-from uuid import uuid4
-
 from models import Session, IntraRaterTask
 from services.intra_rater_service import STATE_PENDING
 
@@ -53,11 +51,6 @@ def get_next_intra_rater_task(
             .order_by(IntraRaterTask.created_at.asc(), IntraRaterTask.id.asc())
             .first()
         )
-
-        if task and not task.uuid:
-            task.uuid = str(uuid4())
-            session.add(task)
-            session.flush()
 
         if task and close_db:
             # Detach so callers can access the identity after closing the helper-owned session.

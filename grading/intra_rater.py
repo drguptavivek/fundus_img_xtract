@@ -28,6 +28,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident_task_atomic,
 )
 from utils.masterUtils import fetch_active_disease_gradings
+from utils.utils2 import is_valid_uuid
 
 
 def _build_intra_task_url(task_uuid: str, resume_slot: Optional[str], resume_disease_id: Optional[int]) -> str:
@@ -55,7 +56,7 @@ def intra_rater_task(task_uuid: str):
     if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
     task_uuid = (task_uuid or "").strip()
-    if not task_uuid:
+    if not task_uuid or not is_valid_uuid(task_uuid):
         flash("Invalid intra-rater task reference.", "danger")
         return redirect(url_for("grading.index"))
 
@@ -83,14 +84,6 @@ def intra_rater_task(task_uuid: str):
         if task.state != STATE_PENDING:
             flash("This intra-rater task is no longer available.", "info")
             return redirect(url_for("grading.index"))
-
-        if not task.uuid:
-            from uuid import uuid4
-
-            task.uuid = str(uuid4())
-            db.add(task)
-            db.flush()
-            task_uuid = task.uuid
 
         disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
         if not disease_gradings:
@@ -138,7 +131,7 @@ def intra_rater_submit():
     if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
 
-    if not task_uuid:
+    if not task_uuid or not is_valid_uuid(task_uuid):
         flash("Invalid intra-rater task identifier.", "danger")
         return redirect(url_for("grading.index"))
 
@@ -166,14 +159,6 @@ def intra_rater_submit():
         if task.state != STATE_PENDING:
             flash("This intra-rater task has already been completed.", "info")
             return redirect(url_for("grading.index"))
-
-        if not task.uuid:
-            from uuid import uuid4
-
-            task.uuid = str(uuid4())
-            db.add(task)
-            db.flush()
-            task_uuid = task.uuid
 
         time_taken = None
         start_time = None

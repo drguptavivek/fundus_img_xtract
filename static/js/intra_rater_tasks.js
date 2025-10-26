@@ -45,6 +45,14 @@
     }
   }
 
+  function isValidUuid(uuidString) {
+    if (!uuidString || typeof uuidString !== 'string') {
+      return false;
+    }
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidPattern.test(uuidString);
+  }
+
   function enhanceForms() {
     document.querySelectorAll('.js-intra-grade-form').forEach(function (form) {
       if (form.dataset.enhanced === '1') return;
@@ -63,6 +71,13 @@
     if (!select || !select.value) {
       showToast('Please select a grading impression before submitting.', 'warning');
       select && select.focus();
+      return;
+    }
+
+    // Validate task UUID from form data
+    var taskUuid = form.dataset.taskUuid || form.querySelector('input[name="task_uuid"]')?.value;
+    if (!taskUuid || !isValidUuid(taskUuid)) {
+      showToast('Invalid task identifier. Please refresh the page and try again.', 'danger');
       return;
     }
 
@@ -190,7 +205,15 @@
   function renderPendingRow(item) {
     var container = document.createElement('div');
     container.className = 'list-group-item py-3';
-    container.setAttribute('data-task-row', item.id);
+    
+    // Validate UUID before using it
+    if (!item.uuid || !isValidUuid(item.uuid)) {
+      console.error('Invalid UUID in task item:', item);
+      showToast('Invalid task identifier found in task list.', 'danger');
+      return container;
+    }
+    
+    container.setAttribute('data-task-row', item.uuid);
 
     var diseaseLabel = item.disease_name || 'Unknown disease';
     var source = item.direct_image_upload_id
@@ -205,7 +228,7 @@
       '<div class="d-flex flex-column flex-lg-row justify-content-between gap-2">' +
       '<div>' +
       '<div class="d-flex align-items-center gap-2">' +
-      '<span class="badge text-bg-info">Task #' + item.id + '</span>' +
+      '<span class="badge text-bg-info">Task #' + item.uuid + '</span>' +
       '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
       '</div>' +
       '<dl class="row small mt-2 mb-0">' +
@@ -216,20 +239,21 @@
       '</div>' +
       '<div class="flex-grow-1">' +
       '<form class="js-intra-grade-form border rounded-3 p-3 bg-body-secondary" method="post" ' +
-      'action="' + item.submit_url + '" data-task-id="' + item.id + '">' +
+      'action="' + item.submit_url + '" data-task-id="' + item.id + '" data-task-uuid="' + item.uuid + '">' +
+      '<input type="hidden" name="task_uuid" value="' + item.uuid + '">' +
       '<input type="hidden" name="csrf_token" value="' + (item.csrf_token || fallbackCsrfToken || '') + '">' +
       '<input type="hidden" name="start_time" value="">' +
       '<input type="hidden" name="time_taken" value="">' +
       '<div class="mb-2">' +
-      '<label class="form-label form-label-sm" for="grading-' + item.id + '">Select grade</label>' +
-      '<select class="form-select form-select-sm" id="grading-' + item.id + '" name="disease_grading_id" required>' +
+      '<label class="form-label form-label-sm" for="grading-' + item.uuid + '">Select grade</label>' +
+      '<select class="form-select form-select-sm" id="grading-' + item.uuid + '" name="disease_grading_id" required>' +
       '<option value="" selected disabled>Choose an impression</option>' +
       gradings +
       '</select>' +
       '</div>' +
       '<div class="mb-2">' +
-      '<label class="form-label form-label-sm" for="comment-' + item.id + '">Comment (optional)</label>' +
-      '<textarea class="form-control form-control-sm" id="comment-' + item.id + '" name="comment" rows="2" maxlength="500"></textarea>' +
+      '<label class="form-label form-label-sm" for="comment-' + item.uuid + '">Comment (optional)</label>' +
+      '<textarea class="form-control form-control-sm" id="comment-' + item.uuid + '" name="comment" rows="2" maxlength="500"></textarea>' +
       '</div>' +
       '<div class="d-flex align-items-center justify-content-between">' +
       '<button type="submit" class="btn btn-sm btn-primary">Submit grade</button>' +
@@ -245,12 +269,20 @@
   function renderCompletedRow(item) {
     var container = document.createElement('div');
     container.className = 'list-group-item py-3 d-flex flex-column flex-lg-row justify-content-between gap-2';
+    
+    // Validate UUID before using it
+    if (!item.uuid || !isValidUuid(item.uuid)) {
+      console.error('Invalid UUID in completed task item:', item);
+      showToast('Invalid task identifier found in completed tasks.', 'danger');
+      return container;
+    }
+    
     var diseaseLabel = item.disease_name || 'Unknown disease';
     var gradedAt = item.graded_at ? new Date(item.graded_at).toLocaleString() : 'unknown';
     container.innerHTML =
       '<div>' +
       '<div class="d-flex align-items-center gap-2">' +
-      '<span class="badge text-bg-secondary">Task #' + item.id + '</span>' +
+      '<span class="badge text-bg-secondary">Task #' + item.uuid + '</span>' +
       '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
       '</div>' +
       '<div class="small text-muted mt-1">Completed at ' + gradedAt + '</div>' +

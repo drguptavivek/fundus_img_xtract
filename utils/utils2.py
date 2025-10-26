@@ -108,6 +108,8 @@ def is_valid_uuid(uuid_string: str) -> bool:
     """
     Check if string is a valid UUID format.
     """
+    if not uuid_string or not isinstance(uuid_string, str):
+        return False
     import re
     uuid_pattern = re.compile(
         r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',

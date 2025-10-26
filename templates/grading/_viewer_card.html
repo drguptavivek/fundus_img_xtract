@@ -47,7 +47,7 @@
     <!-- Reset loupe Help tooltips-->
     <div class="d-flex gap-2 flex-grow-1 align-items-sm-end justify-content-end">
       <!-- Reset -->
-      <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">Reset</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
 
       <!-- Presets -->
       <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets">
@@ -60,7 +60,7 @@
       
       <!-- Save Preset -->
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ uuid }}">
-        Save Preset
+        Save
       </button>
 
       <!-- Loupe -->
@@ -68,7 +68,7 @@
               class="btn btn-outline-secondary btn-sm imggr-loupe-toggle"
               aria-pressed="false"
               aria-label="Toggle loupe magnifier">
-        Loupe
+        L
       </button>
 
       <!-- Shortcut hint -->
@@ -86,8 +86,7 @@
   <div class="card-body p-0">
     <div id="imggr-view-{{ uuid }}" class="imggr-viewer-root" data-enc-id="{{ uuid }}">
       <div class="imggr-stage position-relative">
-        <div class="imggr-main bg-black rounded position-relative" 
-        style="aspect-ratio:1/1; width:100%; height:auto; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+        <div class="imggr-main bg-black rounded position-relative">
           <img         class="imggr-main-img" 
           style="width:100%; height:100%; object-fit:contain; display:block;"
           src="{{ url_for('media._imgForGradingByUUID', uuid_str=uuid) }}" alt="Image" data-index="0" />
@@ -100,16 +99,10 @@
   </div>
   <div class="card-footer py-2">
     <div class="mb-2">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <small class="text-muted imggr-zoom-info" id="imggr-zoom-{{ uuid }}"
-              title="Current zoom level as percentage of original image size">
-          <span class="imggr-zoom-level">100%</span> zoom
-        </small>
-        <small class="text-muted imggr-dim-info" id="imggr-dim-{{ uuid }}"
-              title="Image dimensions in pixels (width × height)">
-          Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
-        </small>
-      </div>
+
+   
+
+      <!-- Zoom Slider -->
       <div class="d-flex align-items-center gap-2">
         <label class="small text-muted mb-0" for="imggr-zoom-slider-{{ uuid }}">Zoom:</label>
         <input id="imggr-zoom-slider-{{ uuid }}"
@@ -126,6 +119,19 @@
           Fit
         </button>
       </div>
+
+         <!-- Zoom Info -->
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted imggr-zoom-info" id="imggr-zoom-{{ uuid }}"
+              title="Current zoom level as percentage of original image size">
+          <span class="imggr-zoom-level">100%</span> zoom
+        </small>
+        <small class="text-muted imggr-dim-info" id="imggr-dim-{{ uuid }}"
+              title="Image dimensions in pixels (width × height)">
+          Display: <span class="imggr-display-dim">-</span> / Original: <span class="imggr-natural-dim">-</span>
+        </small>
+      </div>
+
     </div>
   </div>
 </div>

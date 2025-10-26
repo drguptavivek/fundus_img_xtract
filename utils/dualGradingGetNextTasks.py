@@ -8,6 +8,7 @@ from models import Session, GradingTask, User, UserDiseaseUnitRole, LabUnit, Gra
 from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from utils.dualGradingEligibility import (
     _get_user_eligible_lab_unit_ids,
@@ -16,6 +17,14 @@ from utils.dualGradingEligibility import (
 )
 from datetime import datetime, timedelta, timezone
 from models import Grade
+
+
+def _ensure_task_uuid(db, task: GradingTask) -> None:
+    """Assign a uuid4 to the task if it was missing (legacy rows)."""
+    if not getattr(task, "uuid", None):
+        task.uuid = str(uuid4())
+        db.add(task)
+        db.flush()
 
 
 def _has_user_graded_task_6hr(db, user_id: int, task_id: int) -> bool:
@@ -109,6 +118,7 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         if not _has_user_graded_task_2weeks(db, user_id, task.id):
             if conflicting_slots and has_user_graded_task(db, user_id, task.id, conflicting_slots):
                 continue
+            _ensure_task_uuid(db, task)
             filtered_tasks.append(task)
     
     return filtered_tasks
@@ -310,6 +320,7 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     
     # If a task was found, verify that the user hasn't graded it recently
     if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
+        _ensure_task_uuid(db, task)
         return task
     
     return None

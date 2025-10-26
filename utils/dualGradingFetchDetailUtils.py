@@ -9,7 +9,19 @@ This design allows for better transaction management and session reuse.
 from typing import List, Tuple, Optional, Dict, Any, Iterable
 from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
-from models import Grade, GradingTask, Consensus, Disease, DiseaseGrading, LabUnit, Hospital, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload
+from models import (
+    Grade,
+    GradingTask,
+    Consensus,
+    Disease,
+    DiseaseGrading,
+    LabUnit,
+    Hospital,
+    User,
+    UserDiseaseUnitRole,
+    EncounterFile,
+    DirectImageUpload,
+)
 
 def fetch_task_with_related_data(db, task_id: int):
     """
@@ -31,6 +43,23 @@ def fetch_task_with_related_data(db, task_id: int):
         selectinload(GradingTask.grades).selectinload(Grade.grader),
         selectinload(GradingTask.grades).selectinload(Grade.label)
     ).filter(GradingTask.id == task_id).first()
+
+
+def fetch_task_with_related_data_by_uuid(db, task_uuid: str):
+    """
+    Fetch a grading task with all related data using its UUID.
+
+    This mirrors fetch_task_with_related_data but filters by the new UUID column.
+    """
+    return db.query(GradingTask).options(
+        selectinload(GradingTask.disease),
+        selectinload(GradingTask.encounter_file),
+        selectinload(GradingTask.direct_image),
+        selectinload(GradingTask.consensus).selectinload(Consensus.decided_by),
+        selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
+        selectinload(GradingTask.grades).selectinload(Grade.grader),
+        selectinload(GradingTask.grades).selectinload(Grade.label)
+    ).filter(GradingTask.uuid == task_uuid).first()
 
 
 def fetch_grade_with_related_data(db, grade_id: int):

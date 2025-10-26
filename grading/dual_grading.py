@@ -37,7 +37,12 @@ from utils.dualGradingEligibility import (
     has_user_graded_task,
 )
 
-from utils.dualGradingFetchDetailUtils import fetch_grade_with_related_data, fetch_task_with_related_data, fetch_existing_grade_for_user
+from utils.dualGradingFetchDetailUtils import (
+    fetch_grade_with_related_data,
+    fetch_task_with_related_data,
+    fetch_task_with_related_data_by_uuid,
+    fetch_existing_grade_for_user,
+)
 from utils.dualGradingEligibility import check_arbitration_eligibility
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingConsensusUtils import create_or_update_consensus, update_task_state_based_on_grades
@@ -69,7 +74,7 @@ def _parse_selected_features(selected_features_json: str | None) -> list[dict[st
 
 def register_routes(bp):
     """Register dual grading routes with the blueprint."""
-    bp.add_url_rule("/task/<int:task_id>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])
+    bp.add_url_rule("/task/<string:task_uuid>/<string:slot_type>", view_func=dual_grading_task, methods=["GET"])
     bp.add_url_rule("/task/submit", view_func=dual_grading_submit, methods=["POST"])
     bp.add_url_rule("/revise/<int:grade_id>", view_func=revise_grading, methods=["GET"])
 
@@ -230,24 +235,31 @@ def revise_grading(grade_id: int):
 
 
 @roles_required("resident", "ophthalmologist", "admin")
-def dual_grading_task(task_id: int, slot_type: str):
+def dual_grading_task(task_uuid: str, slot_type: str):
     """Display a task for dual grading."""
     from flask import session as flask_session
-    
+
+    task_uuid = (task_uuid or "").strip()
+    if not task_uuid:
+        flash("Invalid task reference.", "danger")
+        return redirect(url_for("grading.index"))
+
     with transaction_scope() as db:
         try:
             # Fetch the task with related data using utility function
-            task = fetch_task_with_related_data(db, task_id)
+            task = fetch_task_with_related_data_by_uuid(db, task_uuid)
             
             if not task:
                 flash("Error: Task not found. Please contact the system administrator.", "danger")
                 # Send notification to admin about the missing task
                 send_notification_to_admins(
                     title="Missing Task Access Attempt",
-                    message=f"User {current_user.id} attempted to access non-existent task ID {task_id}. Please investigate and resolve this issue.",
+                    message=f"User {current_user.id} attempted to access non-existent task UUID {task_uuid}. Please investigate and resolve this issue.",
                     notification_type="error"
                 )
                 return redirect(url_for("grading.index"))
+
+            task_id = task.id
             
             # Validate slot_type
             if slot_type not in ['resident', 'resident2', 'arbitrator']:
@@ -412,7 +424,7 @@ def dual_grading_task(task_id: int, slot_type: str):
             is_revision = existing_grade_for_slot is not None
             
             # Store the start time in the session for fallback
-            start_time_key = f"grading_start_time_{task_id}_{slot_type}"
+            start_time_key = f"grading_start_time_{task_uuid}_{slot_type}"
             start_time_iso = datetime.now(timezone.utc).isoformat()
             flask_session[start_time_key] = start_time_iso
             
@@ -453,7 +465,7 @@ def dual_grading_submit():
     """Submit a grade for a task."""
     from flask import session as flask_session
     
-    task_id = request.form.get("task_id", type=int)
+    task_uuid = (request.form.get("task_uuid") or "").strip()
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
@@ -468,7 +480,9 @@ def dual_grading_submit():
             selected_feature_ids.append(int(raw_feature))
         except (TypeError, ValueError):
             flash("Invalid feature selection submitted.", "danger")
-            return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+            if task_uuid:
+                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
+            return redirect(url_for("grading.index"))
 
     # Deduplicate while preserving submission order
     unique_feature_ids: list[int] = []
@@ -481,8 +495,8 @@ def dual_grading_submit():
     selected_features_json: str | None = None
     
     # Validate inputs
-    if not task_id or not isinstance(task_id, int) or task_id <= 0:
-        flash("Invalid task ID.", "danger")
+    if not task_uuid:
+        flash("Invalid task reference.", "danger")
         return redirect(url_for("grading.index"))
         
     if not label_id or not isinstance(label_id, int) or label_id <= 0:
@@ -497,16 +511,18 @@ def dual_grading_submit():
     with transaction_scope() as db:
         try:
             # Use utility function to fetch the task with related data
-            task = fetch_task_with_related_data(db, task_id)
+            task = fetch_task_with_related_data_by_uuid(db, task_uuid)
             if not task:
                 flash("Error: Task not found. Please contact the system administrator.", "danger")
                 # Send notification to admin about the missing task
                 send_notification_to_admins(
                     title="Missing Task Access Attempt",
-                    message=f"User {current_user.id} attempted to access non-existent task ID {task_id}. Please investigate and resolve this issue.",
+                    message=f"User {current_user.id} attempted to access non-existent task UUID {task_uuid}. Please investigate and resolve this issue.",
                     notification_type="error"
                 )
                 return redirect(url_for("grading.index"))
+            
+            task_id = task.id
             
             # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks
             arbitrator_revision_allowed = False
@@ -518,7 +534,7 @@ def dual_grading_submit():
             
             if task.state == "final" and not arbitrator_revision_allowed:
                 flash("This task is already finalized.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
             
             # Check task state validity at submission time to prevent race conditions 
             # by revalidating the state that was expected when the task was assigned
@@ -545,7 +561,7 @@ def dual_grading_submit():
             # Eligibility check
             if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):
                 flash("You are not eligible to grade this task for the selected role.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
             
             # Additional role validation for arbitrator
             if slot == "arbitrator":
@@ -559,7 +575,7 @@ def dual_grading_submit():
                 
                 if not eligibility:
                     flash("You are not eligible to arbitrate for this task.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
             
             # Arbitrator exclusion: cannot be prior resident/resident2 grader within 2 weeks
             # However, if this is a revision of an existing arbitrator grade by the same user, skip this check
@@ -575,7 +591,7 @@ def dual_grading_submit():
                 # Only apply the exclusion check if this is not an arbitrator revising their own grade
                 if not is_arbitrator_revision and _has_user_graded_task_2weeks(db, current_user.id, task_id):
                     flash("You cannot arbitrate a task you've graded as resident or resident2 within the last 2 weeks.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
             
             # Validate label belongs to task.disease_id using utility function
             disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
@@ -586,7 +602,7 @@ def dual_grading_submit():
             label = next((dg for dg in disease_gradings if dg.id == label_id), None)
             if not label:
                 flash("Invalid label.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
 
             # Validate selected features correspond to the chosen grading
             if unique_feature_ids:
@@ -599,7 +615,7 @@ def dual_grading_submit():
                 invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
                 if invalid_features:
                     flash("One or more selected features are not valid for the chosen grade.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_id=task_id, slot_type=slot))
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
 
                 selected_feature_entities = sorted(
                     (features_by_id[fid] for fid in unique_feature_ids),
@@ -651,7 +667,11 @@ def dual_grading_submit():
             grade_id = existing_grade.id if had_existing_grade and existing_grade else "N/A"
             
             # Create log message
-            log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: {slot}] [Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
+            log_message = (
+                f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] "
+                f"[Task ID: {task_id}] [Task UUID: {task_uuid}] [Slot Type: {slot}] "
+                f"[Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
+            )
             if comment:
                 log_message += f" [Comments - {comment}]"
                 
@@ -665,7 +685,7 @@ def dual_grading_submit():
             
             # Calculate time taken
             time_taken = None
-            start_time_key = f"grading_start_time_{task_id}_{slot}"
+            start_time_key = f"grading_start_time_{task_uuid}_{slot}"
             
             # Try to get start time from form data first (to handle page refreshes)
             start_time_str = request.form.get("start_time_iso")
@@ -761,7 +781,7 @@ def dual_grading_submit():
                         return redirect(
                             url_for(
                                 "grading.intra_rater_task",
-                                task_id=intra_task.id,
+                                task_uuid=intra_task.uuid,
                                 resume_slot=slot,
                                 resume_disease_id=disease_id,
                             )
@@ -812,7 +832,7 @@ def dual_grading_submit():
                     else:
                         # It's a GradingTask object
                         flash("Grade submitted successfully.", "success")
-                        return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=next_slot_type))
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task.uuid, slot_type=next_slot_type))
                 except Exception as e:
                     grades_logger.exception("Failed to find next task: %s", e)
                     flash("Grade submitted successfully, but failed to navigate to next task.", "warning")

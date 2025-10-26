@@ -30,9 +30,9 @@ from utils.dualGradingGetNextTasks import (
 from utils.masterUtils import fetch_active_disease_gradings
 
 
-def _build_intra_task_url(task_id: int, resume_slot: Optional[str], resume_disease_id: Optional[int]) -> str:
+def _build_intra_task_url(task_uuid: str, resume_slot: Optional[str], resume_disease_id: Optional[int]) -> str:
     """Construct intra-rater task URL while preserving flow metadata."""
-    params = {"task_id": task_id}
+    params = {"task_uuid": task_uuid}
     if resume_slot:
         params["resume_slot"] = resume_slot
     if resume_disease_id:
@@ -42,18 +42,22 @@ def _build_intra_task_url(task_id: int, resume_slot: Optional[str], resume_disea
 
 def register_routes(bp) -> None:
     """Register intra-rater grading routes."""
-    bp.add_url_rule("/intra-task/<int:task_id>", view_func=intra_rater_task, methods=["GET"])
+    bp.add_url_rule("/intra-task/<string:task_uuid>", view_func=intra_rater_task, methods=["GET"])
     bp.add_url_rule("/intra-task/submit", view_func=intra_rater_submit, methods=["POST"])
 
 
 @roles_required("resident", "ophthalmologist", "admin")
-def intra_rater_task(task_id: int):
+def intra_rater_task(task_uuid: str):
     """Display a pending intra-rater reassessment."""
     resume_slot = (request.args.get("resume_slot") or "").strip().lower() or None
     resume_disease_id = request.args.get("resume_disease_id", type=int)
 
     if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
+    task_uuid = (task_uuid or "").strip()
+    if not task_uuid:
+        flash("Invalid intra-rater task reference.", "danger")
+        return redirect(url_for("grading.index"))
 
     with transaction_scope() as db:
         task: Optional[IntraRaterTask] = (
@@ -64,7 +68,7 @@ def intra_rater_task(task_id: int):
                 selectinload(IntraRaterTask.encounter_file),
                 selectinload(IntraRaterTask.direct_image_upload),
             )
-            .filter(IntraRaterTask.id == task_id)
+            .filter(IntraRaterTask.uuid == task_uuid)
             .first()
         )
 
@@ -80,6 +84,14 @@ def intra_rater_task(task_id: int):
             flash("This intra-rater task is no longer available.", "info")
             return redirect(url_for("grading.index"))
 
+        if not task.uuid:
+            from uuid import uuid4
+
+            task.uuid = str(uuid4())
+            db.add(task)
+            db.flush()
+            task_uuid = task.uuid
+
         disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
         if not disease_gradings:
             flash("No disease gradings available for this intra-rater task.", "danger")
@@ -94,7 +106,7 @@ def intra_rater_task(task_id: int):
             image_uuid = task.direct_image_upload.uuid
 
         start_time_iso = datetime.now(timezone.utc).isoformat()
-        start_time_key = f"intra_grading_start_time_{task_id}"
+        start_time_key = f"intra_grading_start_time_{task_uuid}"
         flask_session[start_time_key] = start_time_iso
 
         effective_resume_disease_id = resume_disease_id or task.disease_id
@@ -116,7 +128,7 @@ def intra_rater_task(task_id: int):
 def intra_rater_submit():
     """Persist an intra-rater grade and continue the grading flow."""
     action = (request.form.get("action") or "").strip().lower()
-    task_id = request.form.get("task_id", type=int)
+    task_uuid = (request.form.get("task_uuid") or "").strip()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
     resume_slot = (request.form.get("resume_slot") or "").strip().lower() or None
@@ -126,19 +138,19 @@ def intra_rater_submit():
     if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
 
-    if not task_id or not isinstance(task_id, int) or task_id <= 0:
+    if not task_uuid:
         flash("Invalid intra-rater task identifier.", "danger")
         return redirect(url_for("grading.index"))
 
     if not label_id or not isinstance(label_id, int) or label_id <= 0:
         flash("Select a valid grading option before submitting.", "danger")
-        return redirect(_build_intra_task_url(task_id, resume_slot, resume_disease_id))
+        return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
 
     with transaction_scope() as db:
         task: Optional[IntraRaterTask] = (
             db.query(IntraRaterTask)
             .options(selectinload(IntraRaterTask.disease))
-            .filter(IntraRaterTask.id == task_id)
+            .filter(IntraRaterTask.uuid == task_uuid)
             .with_for_update()
             .first()
         )
@@ -155,6 +167,14 @@ def intra_rater_submit():
             flash("This intra-rater task has already been completed.", "info")
             return redirect(url_for("grading.index"))
 
+        if not task.uuid:
+            from uuid import uuid4
+
+            task.uuid = str(uuid4())
+            db.add(task)
+            db.flush()
+            task_uuid = task.uuid
+
         time_taken = None
         start_time = None
         if start_time_iso:
@@ -169,7 +189,7 @@ def intra_rater_submit():
                 start_time = None
                 time_taken = None
 
-        start_time_key = f"intra_grading_start_time_{task_id}"
+        start_time_key = f"intra_grading_start_time_{task_uuid}"
         stored_start_iso = flask_session.pop(start_time_key, None)
         if stored_start_iso and time_taken is None:
             try:
@@ -199,7 +219,7 @@ def intra_rater_submit():
             service.submit_grade(params)
         except ValueError as error:
             flash(str(error), "danger")
-            return redirect(_build_intra_task_url(task_id, resume_slot, actual_resume_disease_id))
+            return redirect(_build_intra_task_url(task_uuid, resume_slot, actual_resume_disease_id))
 
     flash("Grade submitted successfully.", "success")
 
@@ -224,6 +244,6 @@ def intra_rater_submit():
             flash(next_task, "info")
             return redirect(url_for("grading.index"))
 
-        return redirect(url_for("grading.dual_grading_task", task_id=next_task.id, slot_type=resume_slot))
+        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task.uuid, slot_type=resume_slot))
 
     return redirect(url_for("grading.index"))

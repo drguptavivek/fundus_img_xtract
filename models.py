@@ -472,6 +472,13 @@ class GradingTask(Base):
     __tablename__ = 'grading_tasks'
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid4()),
+    )
 
     # Exactly one of these must be non-null
     encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id'), nullable=True, index=True)
@@ -758,6 +765,13 @@ class IntraRaterTask(Base):
     __tablename__ = "intra_rater_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(
+        String(36),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: str(uuid4()),
+    )
     batch_id: Mapped[int] = mapped_column(ForeignKey("intra_rater_batches.id", ondelete="CASCADE"), nullable=False, index=True)
     grader_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)

@@ -94,7 +94,7 @@
         {% if current_slot %}
         <form method="post" action="{{ url_for('grading.dual_grading_submit') }}" data-grading-form="true">
           {{ csrf_field() }}
-          <input type="hidden" name="task_id" value="{{ task.id }}">
+          <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
           
           <input type="hidden" name="slot" value="{{ current_slot }}">
           
@@ -223,7 +223,7 @@
 <script>
   // Pass grading guidelines and task info to JavaScript
   window.gradingGuidelines = {{ grading_guidelines | tojson }};
-  window.taskId = {{ task.id }};
+  window.taskId = "{{ task.uuid }}";
   window.imageUuid = "{{ image_uuid }}";
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "{{ current_slot or '' }}";

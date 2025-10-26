@@ -54,7 +54,7 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('grading.intra_rater_submit') }}" data-grading-form="true">
           {{ csrf_field() }}
-          <input type="hidden" name="task_id" value="{{ task.id }}">
+          <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
           <input type="hidden" name="resume_slot" value="{{ resume_slot or '' }}">
           <input type="hidden" name="resume_disease_id" value="{{ resume_disease_id or '' }}">
           {% if start_time_iso %}
@@ -114,7 +114,7 @@
 {% block page_scripts %}
 <script>
   window.gradingGuidelines = {{ grading_guidelines | tojson }};
-  window.taskId = {{ task.id }};
+  window.taskId = "{{ task.uuid }}";
   window.imageUuid = "{{ image_uuid }}";
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "intra";

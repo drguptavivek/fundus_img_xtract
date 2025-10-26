@@ -102,4 +102,4 @@ def start_grading(disease_id: int, role_slot: str):
     else:
         # It's a GradingTask object
         # Call dual_grading_task directly with slot_type as a parameter
-        return redirect(url_for("grading.dual_grading_task", task_id=task.id, slot_type=effective_slot))
+        return redirect(url_for("grading.dual_grading_task", task_uuid=task.uuid, slot_type=effective_slot))

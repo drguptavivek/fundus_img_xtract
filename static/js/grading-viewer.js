@@ -201,6 +201,18 @@
       return {};
     }
     
+    // Load saved settings at the beginning
+    const savedSettings = loadViewerSettings();
+    
+    // Apply saved loupe state
+    if (savedSettings.loupeEnabled !== undefined) {
+      loupeEnabled = savedSettings.loupeEnabled;
+      if (loupeToggle) {
+        loupeToggle.setAttribute('aria-pressed', loupeEnabled ? 'true' : 'false');
+        loupeToggle.classList.toggle('active', loupeEnabled);
+      }
+    }
+    
     function saveViewerSettings() {
       try {
         const settings = {
@@ -209,7 +221,8 @@
           panY: imgPanY,
           brightness: bright ? parseFloat(bright.value) : 1,
           contrast: contr ? parseFloat(contr.value) : 1,
-          filter: currentRadio()
+          filter: currentRadio(),
+          loupeEnabled: loupeEnabled
         };
         window.localStorage?.setItem(VIEWER_SETTINGS_KEY, JSON.stringify(settings));
       } catch(e) {
@@ -293,35 +306,46 @@
       if (loupe) loupe.style.filter = chain;
     } catch(_) {}
     
-    // Apply saved filter and brightness/contrast after image is loaded
-    mainImg.addEventListener('load', () => {
+    // Apply saved settings immediately if the image is already loaded
+    function applySavedSettings() {
       isApplyingSavedSettings = true;
+      
+      // Apply saved filter
       if (savedSettings.filter) {
         const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
         if (filterInput) {
           filterInput.checked = true;
-          // Don't trigger change event during initialization to avoid saving defaults
-          const url = svgUrlFor(savedSettings.filter);
-          const b = parseFloat((bright && bright.value) || '1') || 1;
-          const c = parseFloat((contr && contr.value) || '1') || 1;
-          const chain = `${url}${url? ' ' : ''}brightness(${b}) contrast(${c})`;
-          try {
-            mainImg.style.filter = chain;
-            if (loupe) loupe.style.filter = chain;
-          } catch(_) {}
         }
       }
+      
+      // Apply saved brightness and contrast
       if (savedSettings.brightness && bright) {
         bright.value = clamp(savedSettings.brightness, 0.5, 1.5);
       }
       if (savedSettings.contrast && contr) {
         contr.value = clamp(savedSettings.contrast, 0.5, 1.5);
       }
-      updateZoomDisplay();
+      
+      // Apply the filter with the saved values
+      applyFilter();
+      
       // Mark initialization as complete so future changes will be saved
       isInitializing = false;
       isApplyingSavedSettings = false;
+    }
+    
+    // Apply saved filter and brightness/contrast after image is loaded
+    mainImg.addEventListener('load', () => {
+      applySavedSettings();
+      updateLoupeAssets();
+      if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
+      updateZoomDisplay();
     });
+    
+    // If image is already loaded, apply settings immediately
+    if (mainImg.complete && mainImg.naturalWidth > 0) {
+      applySavedSettings();
+    }
 
     function applyLoupeDimensions(){
       if (!loupe) return;
@@ -499,6 +523,7 @@
 
     loupeToggle?.addEventListener('click', () => {
       setLoupeEnabled(!loupeEnabled);
+      saveViewerSettings(); // Save loupe state when toggled
     });
 
     main.addEventListener('pointerenter', (e) => {
@@ -585,7 +610,7 @@
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-        setZoomLevel(currentZoom + delta, e.clientX, e.clientY);
+        setZoomLevel(currentZoom + delta);
       }
     }, { passive: false });
     
@@ -704,8 +729,7 @@
       }
     }
 
-    // Load saved settings on initialization
-    const savedSettings = loadViewerSettings();
+    // Apply saved zoom and pan settings
     if (savedSettings.zoom) {
       currentZoom = clamp(savedSettings.zoom, ZOOM_MIN, ZOOM_MAX);
     }
@@ -719,12 +743,6 @@
     applyImagePan();
     applyLoupeDimensions();
     updateZoomDisplay();
-    
-    mainImg.addEventListener('load', () => {
-      updateLoupeAssets();
-      if (loupeEnabled && lastPointerPos) updateLoupePosition(lastPointerPos);
-      updateZoomDisplay();
-    });
     
     // Get zoom controls
     const zoomSlider = card ? card.querySelector('.imggr-zoom-slider') : null;

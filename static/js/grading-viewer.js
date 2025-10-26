@@ -39,6 +39,109 @@
     return Math.min(max, Math.max(min, value));
   }
 
+  // API functions for viewer settings and presets
+  async function fetchViewerSettings() {
+    try {
+      const response = await fetch('/api/viewer/settings');
+      if (response.ok) {
+        return await response.json();
+      }
+      return null;
+    } catch(_) { return null; }
+  }
+
+  async function saveViewerSettings(settings) {
+    try {
+      // Get CSRF token from the page
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add CSRF token if available
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+      }
+      
+      const response = await fetch('/api/viewer/settings', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(settings)
+      });
+      return response.ok;
+    } catch(_) { return false; }
+  }
+
+  async function fetchViewerPresets() {
+    try {
+      const response = await fetch('/api/viewer/presets');
+      if (response.ok) {
+        return await response.json();
+      }
+      return {};
+    } catch(_) { return {}; }
+  }
+
+  async function saveViewerPreset(slotNumber, preset) {
+    try {
+      // Get CSRF token from the page
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Add CSRF token if available
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+      }
+      
+      console.log('saveViewerPreset called with:', { slotNumber, preset, csrfToken: csrfToken ? 'found' : 'not found' });
+      
+      const response = await fetch(`/api/viewer/presets/${slotNumber}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(preset)
+      });
+      
+      console.log('saveViewerPreset response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('saveViewerPreset error response:', errorText);
+      }
+      
+      return response.ok;
+    } catch(error) {
+      console.error('saveViewerPreset exception:', error);
+      return false;
+    }
+  }
+
+  async function deleteViewerPreset(slotNumber) {
+    try {
+      // Get CSRF token from the page
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      const headers = {};
+      
+      // Add CSRF token if available
+      if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      
+      const response = await fetch(`/api/viewer/presets/${slotNumber}`, {
+        method: 'DELETE',
+        headers
+      });
+      return response.ok;
+    } catch(_) { return false; }
+  }
+
+  // Legacy localStorage functions for backward compatibility
   function readLoupePrefs(){
     try {
       const raw = window.localStorage?.getItem(LOUPE_STORAGE_KEY);
@@ -207,22 +310,21 @@
     let imgPanY = 0;
     let currentZoom = 100; // Store current zoom level as percentage
     
-    // Load saved viewer settings
-    function loadViewerSettings() {
+    // Load saved viewer settings from localStorage for rapid loading
+    function loadViewerSettingsFromStorage() {
       try {
-        const saved = window.localStorage?.getItem(VIEWER_SETTINGS_KEY);
-        if (saved) {
-          const settings = JSON.parse(saved);
-          return settings || {};
-        }
+        const raw = window.localStorage?.getItem(VIEWER_SETTINGS_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return parsed || {};
       } catch(e) {
-        console.error('Error loading viewer settings:', e);
+        console.error('Error loading viewer settings from localStorage:', e);
+        return {};
       }
-      return {};
     }
     
     // Load saved settings at the beginning
-    const savedSettings = loadViewerSettings();
+    const savedSettings = loadViewerSettingsFromStorage();
     
     // Apply saved loupe state
     if (savedSettings.loupeEnabled !== undefined) {
@@ -233,23 +335,46 @@
       }
     }
     
-    // Preset management functions
-    function loadViewerPresets() {
-      try {
-        const saved = window.localStorage?.getItem(VIEWER_PRESETS_KEY);
-        if (saved) {
-          const presets = JSON.parse(saved);
-          return presets || {};
-        }
-      } catch(e) {
-        console.error('Error loading viewer presets:', e);
+    // Apply other saved settings
+    if (savedSettings.zoom !== undefined) {
+      currentZoom = clamp(savedSettings.zoom, ZOOM_MIN, ZOOM_MAX);
+    }
+    if (savedSettings.panX !== undefined) {
+      imgPanX = clamp(savedSettings.panX, IMG_PAN_MIN, IMG_PAN_MAX);
+    }
+    if (savedSettings.panY !== undefined) {
+      imgPanY = clamp(savedSettings.panY, IMG_PAN_MIN, IMG_PAN_MAX);
+    }
+    if (savedSettings.brightness !== undefined && bright) {
+      bright.value = clamp(savedSettings.brightness, 0.5, 1.5);
+    }
+    if (savedSettings.contrast !== undefined && contr) {
+      contr.value = clamp(savedSettings.contrast, 0.5, 1.5);
+    }
+    if (savedSettings.filter) {
+      const filterInput = card.querySelector(`.imggr-filters input[value="${savedSettings.filter}"]`);
+      if (filterInput) {
+        filterInput.checked = true;
       }
-      return {};
     }
     
-    function saveViewerPresets(presets) {
+    // Preset management functions
+    async function loadViewerPresets() {
       try {
-        window.localStorage?.setItem(VIEWER_PRESETS_KEY, JSON.stringify(presets));
+        const presets = await fetchViewerPresets();
+        return presets || {};
+      } catch(e) {
+        console.error('Error loading viewer presets:', e);
+        return {};
+      }
+    }
+    
+    async function saveViewerPresets(presets) {
+      try {
+        // Save each preset individually
+        for (const [slotNumber, preset] of Object.entries(presets)) {
+          await saveViewerPreset(parseInt(slotNumber), preset);
+        }
       } catch(e) {
         console.error('Error saving viewer presets:', e);
       }
@@ -261,9 +386,9 @@
         brightness: bright ? parseFloat(bright.value) : 1,
         contrast: contr ? parseFloat(contr.value) : 1,
         zoom: currentZoom,
-        panX: imgPanX,
-        panY: imgPanY,
-        loupeEnabled: loupeEnabled
+        pan_x: imgPanX,
+        pan_y: imgPanY,
+        loupe_enabled: loupeEnabled
       };
     }
     
@@ -312,11 +437,11 @@
       isApplyingSavedSettings = false;
     }
     
-    function updatePresetModal() {
+    async function updatePresetModal() {
       const modal = document.getElementById(`imggr-preset-modal-${uuid}`);
       if (!modal) return;
       
-      const presets = loadViewerPresets();
+      const presets = await loadViewerPresets();
       const currentSettings = getCurrentSettings();
       
       // Update current settings display
@@ -367,6 +492,9 @@
                       <button type="button" class="btn btn-sm btn-success apply-preset-btn" data-preset="${i}">
                         Apply
                       </button>
+                      <button type="button" class="btn btn-sm btn-danger delete-preset-btn" data-preset="${i}">
+                        Delete
+                      </button>
                     ` : ''}
                   </div>
                 </div>
@@ -379,11 +507,10 @@
         
         // Add click handlers for preset buttons
         slotsContainer.querySelectorAll('.save-preset-slot').forEach(btn => {
-          btn.addEventListener('click', (e) => {
+          btn.addEventListener('click', async (e) => {
             const presetNum = parseInt(e.target.dataset.preset);
-            const presets = loadViewerPresets();
-            presets[presetNum] = getCurrentSettings();
-            saveViewerPresets(presets);
+            const currentSettings = getCurrentSettings();
+            await saveViewerPreset(presetNum, currentSettings);
             
             // Update the modal to reflect the saved preset
             updatePresetModal();
@@ -401,7 +528,6 @@
         slotsContainer.querySelectorAll('.apply-preset-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             const presetNum = parseInt(e.target.dataset.preset);
-            const presets = loadViewerPresets();
             const preset = presets[presetNum];
             
             if (preset) {
@@ -420,11 +546,30 @@
           });
         });
         
-        
+        // Add click handlers for delete buttons
+        slotsContainer.querySelectorAll('.delete-preset-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const presetNum = parseInt(e.target.dataset.preset);
+            
+            if (confirm('Are you sure you want to delete this preset?')) {
+              await deleteViewerPreset(presetNum);
+              
+              // Update the modal to reflect the deletion
+              updatePresetModal();
+              
+              // Show feedback
+              const presetBtn = card.querySelector(`.imggr-preset-btn[data-preset="${presetNum}"]`);
+              if (presetBtn) {
+                presetBtn.classList.remove('btn-success');
+                setTimeout(() => presetBtn.classList.remove('btn-success'), 500);
+              }
+            }
+          });
+        });
       }
     }
     
-    function saveViewerSettings() {
+    function saveViewerSettingsToStorage() {
       try {
         const settings = {
           zoom: currentZoom,
@@ -437,7 +582,15 @@
         };
         window.localStorage?.setItem(VIEWER_SETTINGS_KEY, JSON.stringify(settings));
       } catch(e) {
-        console.error('Error saving viewer settings:', e);
+        console.error('Error saving viewer settings to localStorage:', e);
+      }
+    }
+    
+    async function saveViewerSettingsToAPI(settings) {
+      try {
+        await saveViewerSettings(settings);
+      } catch(e) {
+        console.error('Error saving viewer settings to API:', e);
       }
     }
     
@@ -486,10 +639,8 @@
         if (loupe) loupe.style.filter = chain;
       } catch(_) {}
       updateZoomDisplay();
-      // Only save settings after initialization is complete and not during saved settings application
-      if (!isInitializing && !isApplyingSavedSettings) {
-        saveViewerSettings();
-      }
+      // Save settings to localStorage for rapid loading
+      saveViewerSettingsToStorage();
     }
     rad && rad.forEach && rad.forEach(r => r.addEventListener('change', applyFilter));
     bright && bright.addEventListener('input', applyFilter);
@@ -505,7 +656,7 @@
       // Reset both zoom and pan
       resetImagePan();
       applyFilter();
-      saveViewerSettings();
+      // Settings are saved by applyFilter()
     });
     // Initial apply without saving
     const url = svgUrlFor(currentRadio());
@@ -615,7 +766,7 @@
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
       }
       updateZoomDisplay();
-      saveViewerSettings();
+      saveViewerSettingsToStorage();
     }
 
     function resetImagePan(){
@@ -734,15 +885,17 @@
 
     loupeToggle?.addEventListener('click', () => {
       setLoupeEnabled(!loupeEnabled);
-      saveViewerSettings(); // Save loupe state when toggled
+      // Save loupe state to localStorage for rapid loading and to API for persistence
+      saveViewerSettingsToStorage();
+      saveViewerSettingsToAPI({ loupe_enabled: loupeEnabled });
     });
     
     // Preset button handlers
     const presetButtons = card ? card.querySelectorAll('.imggr-preset-btn') : [];
     presetButtons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         const presetNum = parseInt(e.target.dataset.preset);
-        const presets = loadViewerPresets();
+        const presets = await loadViewerPresets();
         const preset = presets[presetNum];
         
         if (preset) {
@@ -833,7 +986,8 @@
         
         applyImagePan();
         updateZoomDisplay();
-        saveViewerSettings();
+        // Save settings to localStorage for rapid loading
+        saveViewerSettingsToStorage();
       } else if (e.touches.length === 2) {
         // Two touches - pinch zoom
         const currentDistance = getTouchDistance(e.touches);
@@ -896,7 +1050,8 @@
         
         applyImagePan();
         updateZoomDisplay();
-        saveViewerSettings();
+        // Save settings to localStorage for rapid loading
+        saveViewerSettingsToStorage();
         e.preventDefault();
       }
     }
@@ -927,9 +1082,9 @@
       updateZoomDisplay();
     });
     
-    // Save settings when the page is unloaded or hidden
+    // Save settings to localStorage when page is unloaded for rapid loading next time
     const saveSettingsOnUnload = () => {
-      saveViewerSettings();
+      saveViewerSettingsToStorage();
     };
     
     window.addEventListener('beforeunload', saveSettingsOnUnload);
@@ -1009,9 +1164,8 @@
         updateLoupeAssets();
         if (lastPointerPos) updateLoupePosition(lastPointerPos);
       }
-      if (!isInitializing) {
-        saveViewerSettings();
-      }
+      // Save settings to localStorage for rapid loading
+      saveViewerSettingsToStorage();
     }
     
     function fitToContainer() {
@@ -1041,8 +1195,8 @@
       setZoomLevel,
       fitToContainer,
       currentZoom, // Expose current zoom level for keyboard shortcuts
-      applyPreset: (presetNum) => {
-        const presets = loadViewerPresets();
+      applyPreset: async (presetNum) => {
+        const presets = await loadViewerPresets();
         const preset = presets[presetNum];
         if (preset) {
           applyPreset(preset);

@@ -815,6 +815,97 @@ class FlaskSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user: Mapped["User"] = relationship("User", lazy="selectin")
 
+# --- Viewer Settings and Presets Models ---
+
+class ViewerSettings(Base):
+    """
+    Stores user-specific viewer settings that persist across sessions.
+    Replaces localStorage-based settings with database persistence.
+    """
+    __tablename__ = "viewer_settings"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    
+    # Loupe settings
+    loupe_size: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
+    loupe_zoom: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
+    loupe_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    # Image display settings
+    zoom: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    pan_x: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pan_y: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
+    # Filter settings
+    brightness: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    contrast: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    filter: Mapped[str] = mapped_column(String(32), default="none", nullable=False)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", lazy="selectin")
+    
+    __table_args__ = (
+        CheckConstraint("loupe_size >= 100 AND loupe_size <= 500", name="ck_viewer_settings_loupe_size"),
+        CheckConstraint("loupe_zoom >= 1.0 AND loupe_zoom <= 4.0", name="ck_viewer_settings_loupe_zoom"),
+        CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_settings_zoom"),
+        CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_settings_pan_x"),
+        CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_settings_pan_y"),
+        CheckConstraint("brightness >= 0.5 AND brightness <= 1.5", name="ck_viewer_settings_brightness"),
+        CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_settings_contrast"),
+        CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_settings_filter"),
+    )
+
+
+class ViewerPresets(Base):
+    """
+    Stores user-specific viewer presets (up to 5 per user).
+    Each preset contains a complete snapshot of viewer settings.
+    """
+    __tablename__ = "viewer_presets"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    slot_number: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-5
+    
+    # Preset name (optional, for user reference)
+    name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    
+    # All viewer settings for this preset
+    loupe_size: Mapped[int] = mapped_column(Integer, default=200, nullable=False)
+    loupe_zoom: Mapped[float] = mapped_column(Float, default=2.0, nullable=False)
+    loupe_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    zoom: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    pan_x: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pan_y: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    brightness: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    contrast: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    filter: Mapped[str] = mapped_column(String(32), default="none", nullable=False)
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    
+    # Relationships
+    user: Mapped["User"] = relationship("User", lazy="selectin")
+    
+    __table_args__ = (
+        UniqueConstraint("user_id", "slot_number", name="uq_viewer_presets_user_slot"),
+        CheckConstraint("slot_number >= 1 AND slot_number <= 5", name="ck_viewer_presets_slot_number"),
+        CheckConstraint("loupe_size >= 100 AND loupe_size <= 500", name="ck_viewer_presets_loupe_size"),
+        CheckConstraint("loupe_zoom >= 1.0 AND loupe_zoom <= 4.0", name="ck_viewer_presets_loupe_zoom"),
+        CheckConstraint("zoom >= 40 AND zoom <= 500", name="ck_viewer_presets_zoom"),
+        CheckConstraint("pan_x >= -600 AND pan_x <= 600", name="ck_viewer_presets_pan_x"),
+        CheckConstraint("pan_y >= -600 AND pan_y <= 600", name="ck_viewer_presets_pan_y"),
+        CheckConstraint("brightness >= 0.5 AND brightness <= 1.5", name="ck_viewer_presets_brightness"),
+        CheckConstraint("contrast >= 0.5 AND contrast <= 1.5", name="ck_viewer_presets_contrast"),
+        CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_presets_filter"),
+    )
+
 # --- Engine and Session Creation ---
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):

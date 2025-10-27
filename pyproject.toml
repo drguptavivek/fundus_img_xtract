@@ -31,4 +31,5 @@ dependencies = [
     "wtforms==3.2.1",
     "beautifulsoup4>=4.14.2",
     "openpyxl>=3.1.5",
+    "requests>=2.32.5",
 ]

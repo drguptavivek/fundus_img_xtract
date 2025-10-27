@@ -9,12 +9,9 @@ from typing import Any
 from flask import current_app, render_template, request, url_for
 from flask_login import current_user
 from auth.roles import roles_required
-from sqlalchemy.orm import selectinload
 
 from . import bp
 from models import (
-    Hospital,
-    LabUnit,
     PatientEncounters,
     Session,
 )
@@ -39,8 +36,6 @@ def encounter_files() -> str:
     """Render encounter files dataframe with filtering and pagination."""
     
     page = request.args.get("page", default=1, type=int) or 1
-    hospital_id = request.args.get("hospital_id", type=int)
-    lab_unit_id = request.args.get("lab_unit_id", type=int)
     start_date_str = (request.args.get("start_date") or "").strip() or None
     end_date_str = (request.args.get("end_date") or "").strip() or None
     
@@ -77,17 +72,6 @@ def encounter_files() -> str:
     if not is_admin_like and user_lab_unit_ids:
         df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
     
-    # Apply additional filters
-    if hospital_id:
-        df = df[df['hospital_id'] == hospital_id]
-        
-    if lab_unit_id:
-        # Only allow filtering by lab_unit_id if user has access to that lab unit
-        if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
-            from flask import abort
-            abort(403, description="Access denied to this lab unit")
-        df = df[df['lab_unit_id'] == lab_unit_id]
-    
     # Get total count after filtering
     total = len(df)
     
@@ -99,46 +83,17 @@ def encounter_files() -> str:
     # Convert dataframe to list of dictionaries for template
     encounter_data = df_page.to_dict('records')
     
-    # Now get hospitals and lab units for filters
-    db = Session()
-    try:
-        # Filter hospitals and lab units to only those user has access to
-        if is_admin_like:
-            hospitals = db.query(Hospital).order_by(Hospital.name).all()
-            lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
-        else:
-            lab_units = (
-                db.query(LabUnit)
-                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
-                .options(selectinload(LabUnit.hospital))
-                .order_by(LabUnit.name)
-                .all()
-            )
-            # Get hospitals for allowed lab units
-            hospital_ids = [lu.hospital_id for lu in lab_units]
-            hospitals = (
-                db.query(Hospital)
-                .filter(Hospital.id.in_(hospital_ids))
-                .order_by(Hospital.name)
-                .all()
-            )
-        
-        # Convert dataframe to HTML for display
-        df_html = df_page.to_html(
-            classes='table table-striped table-hover table-sm',
-            table_id='encounter-files-table',
-            index=False,
-            escape=False,
-            na_rep='-'
-        )
-        
-    finally:
-        db.close()
+    # Convert dataframe to HTML for display
+    df_html = df_page.to_html(
+        classes='table table-striped table-hover table-sm',
+        table_id='encounter-files-table',
+        index=False,
+        escape=False,
+        na_rep='-'
+    )
 
     total_pages = max(1, math.ceil(total / per_page)) if total else 1
     filter_params = {
-        "hospital_id": hospital_id,
-        "lab_unit_id": lab_unit_id,
         "start_date": start_date_str,
         "end_date": end_date_str,
     }
@@ -158,8 +113,6 @@ def encounter_files() -> str:
         "analytics/encounter_files.html",
         encounter_data=encounter_data,
         df_html=df_html,
-        hospitals=hospitals,
-        lab_units=lab_units,
         filters=filter_params,
         page=page,
         total_pages=total_pages,
@@ -175,8 +128,6 @@ def encounter_files() -> str:
 def encounter_files_download() -> Any:
     """Download encounter files data as Excel file."""
     
-    hospital_id = request.args.get("hospital_id", type=int)
-    lab_unit_id = request.args.get("lab_unit_id", type=int)
     start_date_str = (request.args.get("start_date") or "").strip() or None
     end_date_str = (request.args.get("end_date") or "").strip() or None
     
@@ -208,17 +159,6 @@ def encounter_files_download() -> Any:
     # Apply lab unit access control to dataframe
     if not is_admin_like and user_lab_unit_ids:
         df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
-    
-    # Apply additional filters
-    if hospital_id:
-        df = df[df['hospital_id'] == hospital_id]
-        
-    if lab_unit_id:
-        # Only allow filtering by lab_unit_id if user has access to that lab unit
-        if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
-            from flask import abort
-            abort(403, description="Access denied to this lab unit")
-        df = df[df['lab_unit_id'] == lab_unit_id]
     
     # Generate Excel file
     excel_data = export_encounter_files_to_xlsx(df)

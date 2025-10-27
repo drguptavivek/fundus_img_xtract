@@ -26,7 +26,7 @@ from utils.utils import with_session
 
 
 @with_session()
-def generate_image_upload_metrics_df(db, start_date: Optional[datetime] = None,
+def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
                                 end_date: Optional[datetime] = None) -> pd.DataFrame:
     """
     Generate image-wise upload processing metrics dataframe.
@@ -40,10 +40,7 @@ def generate_image_upload_metrics_df(db, start_date: Optional[datetime] = None,
         pandas.DataFrame with image-wise operational metrics
     """
     # Query for encounter files (images from ZIP uploads)
-    encounter_files_query = db.query(EncounterFile).options(
-        joinedload(EncounterFile.patient_encounter).joinedload(PatientEncounters.zip_file),
-        joinedload(EncounterFile.lab_unit).joinedload(LabUnit.hospital)
-    )
+
     
     # Query for direct image uploads
     direct_images_query = db.query(DirectImageUpload).options(
@@ -57,44 +54,15 @@ def generate_image_upload_metrics_df(db, start_date: Optional[datetime] = None,
     
     # Apply date filters
     if start_date:
-        encounter_files_query = encounter_files_query.filter(EncounterFile.created_at >= start_date)
         direct_images_query = direct_images_query.filter(DirectImageUpload.created_at >= start_date)
     
     if end_date:
-        encounter_files_query = encounter_files_query.filter(EncounterFile.created_at <= end_date)
         direct_images_query = direct_images_query.filter(DirectImageUpload.created_at <= end_date)
     
-    encounter_files = encounter_files_query.all()
     direct_images = direct_images_query.all()
     
     data = []
     
-    # Process encounter files (ZIP uploads)
-    for ef in encounter_files:
-        image_data = {
-            'image_id': ef.id,
-            'image_uuid': ef.uuid,
-            'upload_type': 'zip',
-            'filename': ef.filename,
-            'file_type': ef.file_type,
-            'eye_side': ef.eye_side,
-            'ocr_processed': ef.ocr_processed,
-            'encounter_id': ef.patient_encounter_id,
-            'patient_id': ef.patient_encounter.patient_id if ef.patient_encounter else None,
-            'patient_name': ef.patient_encounter.name if ef.patient_encounter else None,
-            'capture_date': ef.patient_encounter.capture_date if ef.patient_encounter else None,
-            'capture_date_dt': ef.patient_encounter.capture_date_dt if ef.patient_encounter else None,
-            'zip_file_id': ef.patient_encounter.zip_file_id if ef.patient_encounter else None,
-            'zip_filename': ef.patient_encounter.zip_file.zip_filename if ef.patient_encounter and ef.patient_encounter.zip_file else None,
-            'zip_upload_date': ef.patient_encounter.zip_file.upload_date if ef.patient_encounter and ef.patient_encounter.zip_file else None,
-            'lab_unit_id': ef.lab_unit_id,
-            'lab_unit_name': ef.lab_unit.name if ef.lab_unit else None,
-            'hospital_id': ef.lab_unit.hospital_id if ef.lab_unit and ef.lab_unit.hospital else None,
-            'hospital_name': ef.lab_unit.hospital.name if ef.lab_unit and ef.lab_unit.hospital else None,
-            'created_at': ef.created_at,
-            'upload_date': ef.patient_encounter.zip_file.upload_date.date() if ef.patient_encounter and ef.patient_encounter.zip_file else None,
-        }
-        data.append(image_data)
     
     # Process direct image uploads
     for di in direct_images:

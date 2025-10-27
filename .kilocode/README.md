@@ -5,13 +5,14 @@ This directory contains comprehensive instructions for KiloCode to work effectiv
 
 
 ## When working with code
-1. use `uv run app.py` for development
+1. The user uses `uv run app.py` and keeps app running in Visual STudio Code Terimainl. KILOCODE must not try running app ahain in chat window
 2. use `uv run` to run commands 
 3. DO MOT use python run, python compile, etc. Ass uses Virtual Environment in .venv
 4. App uses port `http://127.0.0.1:5001` 
 5. Login endpoint is /login
 6. All routes are protected  except those listed in app.py:_require_login_everywhere
 7. base.html JINJA  template exposes -   {% block extra_styles %},     {% block content %},   {% block page_scripts %}. It also imports     {% from "_forms.html" import csrf_field %}
+8. Do NOT  Apply `bg-light` class as app uses dark mode and bg-lightg makes text unreadable in dark mode
 
 ## Key Workflows
 1. **Image Upload**: Direct uploads or ZIP processing

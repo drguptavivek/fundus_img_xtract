@@ -10,7 +10,7 @@ Based on your requirements, here's the detailed structure for the encounter-wise
 encounter_upload_metrics_df = pd.DataFrame(columns=[
     'encounter_id',              # PatientEncounters.id
     'patient_id',                # Patient ID from encounter
-    'patient_name',               # Patient name from encounter
+
     'capture_date_dt',           # Processed capture date (datetime)
     'zip_file_id',              # Associated zip file ID
     'zip_filename',              # Zip file name
@@ -118,12 +118,105 @@ daily_uploads = encounter_upload_metrics_df.groupby('upload_date').size()
 weekly_processing = encounter_upload_metrics_df.groupby('week_of_year')['processing_completion_hours'].mean()
 ```
 
+## DB Context Manager Guidance
+
+When implementing dataframes for operational metrics, always follow database context manager patterns established in project:
+
+### Preferred Method: Use Context Managers
+
+**Always use context managers from `utils.utils` or `db_transaction_manager`:**
+
+```python
+from utils.utils import with_session
+# OR
+from db_transaction_manager import transaction_scope, get_db_session
+
+# Method 1: Using @with_session decorator (preferred for utility functions)
+@with_session()
+def generate_encounter_upload_metrics_df(db, start_date=None, end_date=None):
+    # Use db session here
+    encounters = db.query(PatientEncounters).all()
+    # No need to commit/close - handled automatically
+    return df
+
+# Method 2: Using context manager in routes
+@bp.route("/encounter-files")
+def encounter_files():
+    with get_db_session() as db:
+        df = generate_encounter_upload_metrics_df(db, start_date, end_date)
+        # Process and return data
+```
+
+### Key Principles
+
+1. **Never create sessions directly in utility functions**
+   - Always pass session from route to utilities (dependency injection)
+   - Context manager handles commit/rollback/cleanup automatically
+
+2. **Route handlers manage transaction context**
+   ```python
+   @bp.route("/analytics-route")
+   @roles_required("admin", "data_manager")
+   def analytics_route():
+       with transaction_scope() as db:  # For write operations
+           try:
+               df = utility_function(db, params)
+               # Transaction automatically committed on success
+               return render_template("analytics.html", data=df)
+           except Exception as e:
+               # Transaction automatically rolled back
+               flash(f"Error: {str(e)}", "error")
+   ```
+
+3. **For read-only operations, use `get_db_session()`**
+   ```python
+   with get_db_session() as db:
+       df = generate_dataframe(db, filters)
+       # No commit needed for read operations
+   ```
+
+4. **Utility functions should accept db session as first parameter**
+   ```python
+   def utility_function(db, param1, param2):
+       # Use passed session, don't create new ones
+       query = db.query(SomeModel).filter(SomeModel.field == param1)
+       return query.all()
+   ```
+
+### Benefits
+
+- **Automatic resource management**: No need to remember to close sessions
+- **Transaction safety**: Automatic rollback on errors
+- **Cleaner code**: Eliminates boilerplate session handling
+- **Consistency**: Standardized pattern across the codebase
+
+### Common Anti-Patterns to Avoid
+
+❌ **Don't do this:**
+```python
+def bad_function():
+    db = Session()  # Creating session directly
+    try:
+        data = db.query(Model).all()
+        return data
+    finally:
+        db.close()  # Manual cleanup
+```
+
+✅ **Do this instead:**
+```python
+@with_session()
+def good_function(db):
+    data = db.query(Model).all()
+    return data
+```
+
 ## Next Steps
 
 After implementing this encounter-wise dataframe, we can proceed with:
 
 1. **Image-wise Upload Processing Metrics** - Individual image level analysis
-2. **Grading Efficiency Metrics** - Grader performance analysis  
+2. **Grading Efficiency Metrics** - Grader performance analysis
 3. **Consensus Completion Metrics** - Consensus process efficiency
 4. **End-to-End Workflow Analysis** - Complete workflow visibility
 

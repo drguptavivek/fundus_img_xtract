@@ -46,22 +46,6 @@
     font-weight: 500;
   }
   
-  .metric-card {
-    background: #f8f9fa;
-    border-radius: 0.375rem;
-    padding: 1rem;
-    margin-bottom: 1rem;
-  }
-  
-  .metric-value {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-  
-  .metric-label {
-    font-size: 0.875rem;
-    color: #6c757d;
-  }
 </style>
 {% endblock %}
 
@@ -87,24 +71,6 @@
     <div class="card-body">
       <form class="row gy-2 gx-2 align-items-end" method="get">
         <div class="col-12 col-sm-6 col-lg-auto">
-          <label class="form-label mb-1" for="filter-hospital">Hospital</label>
-          <select class="form-select" id="filter-hospital" name="hospital_id">
-            <option value="">All</option>
-            {% for hospital in hospitals %}
-            <option value="{{ hospital.id }}" {% if filters.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-auto">
-          <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
-          <select class="form-select" id="filter-lab" name="lab_unit_id">
-            <option value="">All</option>
-            {% for lab_unit in lab_units %}
-            <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-12 col-sm-6 col-lg-auto">
           <label class="form-label mb-1" for="filter-start-date">Start Date</label>
           <input class="form-control" type="date" id="filter-start-date" name="start_date" value="{{ filters.start_date or '' }}">
         </div>
@@ -123,27 +89,35 @@
   {% if encounter_data %}
   <div class="row g-3 mb-4">
     <div class="col-12 col-sm-6 col-lg-3">
-      <div class="metric-card">
-        <div class="metric-value">{{ total }}</div>
-        <div class="metric-label">Total Encounters</div>
+      <div class="card kpi-card kpi--primary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Encounters</div>
+          <div class="display-6 fw-bold">{{ total }}</div>
+        </div>
       </div>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
-      <div class="metric-card">
-        <div class="metric-value">{{ encounter_data | selectattr('completely_verified') | list | length }}</div>
-        <div class="metric-label">Completely Verified</div>
+      <div class="card kpi-card kpi--success h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Completely Verified</div>
+          <div class="display-6 fw-bold">{{ encounter_data | selectattr('completely_verified') | list | length }}</div>
+        </div>
       </div>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
-      <div class="metric-card">
-        <div class="metric-value">{{ encounter_data | selectattr('has_dr_report') | list | length }}</div>
-        <div class="metric-label">With DR Reports</div>
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">With DR Reports</div>
+          <div class="display-6 fw-bold">{{ encounter_data | selectattr('has_dr_report') | list | length }}</div>
+        </div>
       </div>
     </div>
     <div class="col-12 col-sm-6 col-lg-3">
-      <div class="metric-card">
-        <div class="metric-value">{{ encounter_data | selectattr('has_glaucoma_report') | list | length }}</div>
-        <div class="metric-label">With Glaucoma Reports</div>
+      <div class="card kpi-card kpi--warning h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">With Glaucoma Reports</div>
+          <div class="display-6 fw-bold">{{ encounter_data | selectattr('has_glaucoma_report') | list | length }}</div>
+        </div>
       </div>
     </div>
   </div>

@@ -106,17 +106,30 @@ def create_intra_rater_batch() -> Response:
 def list_my_intra_rater_tasks() -> Response:
     """Return intra-rater tasks assigned to the current grader."""
     include_completed = request.args.get("include_completed", default=0, type=int) == 1
+    page = max(1, request.args.get("page", default=1, type=int))
+    per_page = min(max(1, request.args.get("per_page", default=50, type=int)), 200)
 
     with get_db_session() as db:
         service = IntraRaterService(db)
-        tasks = service.list_grader_tasks(
+        result = service.list_grader_tasks(
             grader_user_id=current_user.id,
             include_completed=include_completed,
+            page=page,
+            per_page=per_page,
         )
-        gradings_map = _load_gradings_map(db, tasks)
+        gradings_map = _load_gradings_map(db, result['tasks'])
         csrf_token = generate_csrf()
-        payload = [_task_to_payload(task, gradings_map, csrf_token, db) for task in tasks]
-        return jsonify({"items": payload, "include_completed": include_completed})
+        payload = [_task_to_payload(task, gradings_map, csrf_token, db) for task in result['tasks']]
+        return jsonify({
+            "items": payload,
+            "include_completed": include_completed,
+            "pagination": {
+                "page": result['page'],
+                "per_page": result['per_page'],
+                "total": result['total'],
+                "pages": result['pages']
+            }
+        })
 
 
 @bp.route("/intra-rater/tasks/<int:task_id>/submit", methods=["POST"])
@@ -243,10 +256,19 @@ def _task_to_payload(
     lab_unit = task.lab_unit
     gradings = (gradings_map or {}).get(task.disease_id, [])
     
+    # Get grader information
+    grader_name = None
+    grader_username = None
+    if hasattr(task, 'grader') and task.grader:
+        grader_name = task.grader.full_name or task.grader.username
+        grader_username = task.grader.username
+    
     # Get original grade from source task using denormalized data
     # The task already has grades loaded via selectinload, so we can access source task grades
     original_grade = None
     original_grading = None
+    original_grader_name = None
+    original_grader_username = None
     if task.source_task_id and hasattr(task, 'source_task') and task.source_task:
         # Find the grade from the source task for the same user
         source_grades = [grade for grade in task.source_task.grades if grade.grader_user_id == task.grader_user_id]
@@ -254,12 +276,18 @@ def _task_to_payload(
             original_grade = source_grades[0]  # Take the first/most recent grade
             # Get the disease grading from the gradings_map
             original_grading = next((g for g in gradings_map.get(task.disease_id, []) if g.id == original_grade.disease_grading_id), None)
+            # Get original grader info
+            if hasattr(task.source_task, 'grader') and task.source_task.grader:
+                original_grader_name = task.source_task.grader.full_name or task.source_task.grader.username
+                original_grader_username = task.source_task.grader.username
     
     return {
         "id": task.id,
         "uuid": task.uuid,
         "batch_id": task.batch_id,
         "grader_user_id": task.grader_user_id,
+        "grader_name": grader_name,
+        "grader_username": grader_username,
         "disease_id": task.disease_id,
         "disease_name": disease.name if disease else None,
         "lab_unit_id": task.lab_unit_id,
@@ -283,6 +311,8 @@ def _task_to_payload(
         "original_grade_id": original_grade.disease_grading_id if original_grade else None,
         "original_comment": original_grade.comment if original_grade else None,
         "original_graded_at": original_grade.created_at.isoformat() if original_grade and original_grade.created_at else None,
+        "original_grader_name": original_grader_name,
+        "original_grader_username": original_grader_username,
         "batch": _batch_to_payload(batch) if batch else None,
     }
 
@@ -417,21 +447,34 @@ def _load_gradings_map(db: Session, tasks: Sequence[IntraRaterTask]) -> dict[int
     for grading in gradings:
         gradings_map.setdefault(grading.disease_id, []).append(grading)
     return gradings_map
+
+
 @bp.route("/intra-rater", methods=["GET"])
 @roles_required("ophthalmologist", "admin", "data_manager")
 def intra_rater_dashboard() -> str:
     """Render the intra-rater task dashboard for the logged-in grader."""
+    # Get pagination parameters from query string with defaults
+    page = max(1, request.args.get("page", default=1, type=int))
+    per_page = min(max(1, request.args.get("per_page", default=50, type=int)), 200)  # Changed back to 50 to match API
+    include_completed = request.args.get("include_completed", default=1, type=int) == 1
+
     with get_db_session() as db:
         service = IntraRaterService(db)
-        tasks = service.list_grader_tasks(grader_user_id=current_user.id, include_completed=True)
+        result = service.list_grader_tasks(
+            grader_user_id=current_user.id,
+            include_completed=include_completed,
+            page=page,
+            per_page=per_page
+        )
 
-        gradings_map = _load_gradings_map(db, tasks)
+        gradings_map = _load_gradings_map(db, result['tasks'])
 
         return render_template(
             "tasks/intra_rater/queue.html",
-            tasks=tasks,
+            tasks=result['tasks'],
             gradings_map=gradings_map,
-            include_completed=True,
+            include_completed=include_completed,
+            pagination=result,
         )
 
 

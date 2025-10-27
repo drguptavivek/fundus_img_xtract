@@ -21,6 +21,8 @@ from models import (
     IntraRaterGrade,
     IntraRaterTask,
     LabUnit,
+    User,
+    UserDiseaseUnitRole,
 )
 
 
@@ -170,8 +172,14 @@ class IntraRaterService:
 
         return batch
 
-    def list_grader_tasks(self, grader_user_id: int, include_completed: bool = False) -> list[IntraRaterTask]:
-        """Return pending (or all) intra-rater tasks for a grader."""
+    def list_grader_tasks(self, grader_user_id: int, include_completed: bool = False,
+                        page: int = 1, per_page: int = 50) -> dict:
+        """Return pending (or all) intra-rater tasks for a grader with pagination."""
+        # Get user to check their role
+        user = self.db.get(User, grader_user_id)
+        is_data_manager = user and user.has_role('data_manager') and not user.has_role('admin')
+        
+        # Load grader information for display
         query = (
             self.db.query(IntraRaterTask)
             .options(
@@ -180,12 +188,50 @@ class IntraRaterService:
                 selectinload(IntraRaterTask.lab_unit),
                 selectinload(IntraRaterTask.grades),
                 selectinload(IntraRaterTask.source_task),
+                selectinload(IntraRaterTask.grader),  # Load grader info
             )
-            .filter(IntraRaterTask.grader_user_id == grader_user_id)
         )
+        
+        if is_data_manager:
+            # For data managers, show ALL tasks from their eligible lab units
+            # Get eligible lab units for this data manager
+            eligible_lab_unit_ids = (
+                self.db.query(UserDiseaseUnitRole.lab_unit_id)
+                .filter(
+                    UserDiseaseUnitRole.user_id == grader_user_id,
+                    UserDiseaseUnitRole.active.is_(True),
+                    or_(
+                        UserDiseaseUnitRole.can_grade_resident.is_(True),
+                        UserDiseaseUnitRole.can_grade_resident2.is_(True),
+                        UserDiseaseUnitRole.can_arbitrate.is_(True),
+                    ),
+                )
+                .distinct()
+                .all()
+            )
+            eligible_lab_unit_ids = [lab_id[0] for lab_id in eligible_lab_unit_ids]
+            query = query.filter(IntraRaterTask.lab_unit_id.in_(eligible_lab_unit_ids))
+        else:
+            # For ophthalmologists, only show tasks assigned to them
+            query = query.filter(IntraRaterTask.grader_user_id == grader_user_id)
+        
         if not include_completed:
             query = query.filter(IntraRaterTask.state == STATE_PENDING)
-        return query.order_by(IntraRaterTask.created_at.asc()).all()
+        
+        # Get total count for pagination
+        total = query.count()
+        
+        # Apply pagination
+        offset = (page - 1) * per_page
+        tasks = query.order_by(IntraRaterTask.created_at.asc()).offset(offset).limit(per_page).all()
+        
+        return {
+            'tasks': tasks,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page
+        }
 
     def submit_grade(self, params: "SubmitGradeParams") -> IntraRaterGrade:
         """Persist grader submission and close the intra-rater task."""

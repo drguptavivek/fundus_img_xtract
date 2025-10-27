@@ -121,7 +121,7 @@
       .then(function () {
         showToast('Grade saved.', 'success');
         form.dataset.submitting = '0';
-        refreshTasks(true); // Always refresh with completed tasks since they're shown by default
+        refreshTasks(true); // Refresh all tasks after submission
       })
       .catch(function (err) {
         console.error(err);
@@ -132,9 +132,12 @@
       });
   }
 
-  function refreshTasks(includeCompleted) {
+  function refreshTasks(includeCompleted, page = 1) {
     if (!tasksEndpoint) return;
-    var url = tasksEndpoint + (includeCompleted ? '?include_completed=1' : '');
+    var url = tasksEndpoint + '?include_completed=1'; // Always include completed tasks
+    if (page > 1) {
+      url += '&page=' + page;
+    }
     fetch(url, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
@@ -145,9 +148,13 @@
         return resp.json();
       })
       .then(function (data) {
+        console.log('API response data:', data);
+        console.log('Items count:', data.items ? data.items.length : 0);
+        console.log('Pagination data:', data.pagination);
         renderTaskLists(data.items || []);
+        updatePagination(data.pagination);
         if (includeCompleted) {
-          showToast('Loaded completed intra-rater tasks.', 'info');
+          showToast('Loaded intra-rater tasks.', 'info');
         }
       })
       .catch(function (err) {
@@ -156,47 +163,197 @@
       });
   }
 
+  function updatePagination(pagination) {
+    console.log('updatePagination called with:', pagination);
+    
+    if (!pagination) {
+      console.log('No pagination data provided');
+      // Even if no pagination object, ensure container is empty
+      var paginationContainer = document.getElementById('intra-pagination');
+      if (paginationContainer) {
+        paginationContainer.innerHTML = '';
+      }
+      return;
+    }
+    
+    var paginationContainer = document.getElementById('intra-pagination');
+    if (!paginationContainer) {
+      console.log('Pagination container not found');
+      return;
+    }
+    
+    var currentPage = pagination.page || 1;
+    var totalPages = pagination.pages || 1;
+    var totalItems = pagination.total || 0;
+    var perPage = pagination.per_page || 10;  // Default to 10 if not provided
+    
+    console.log('Pagination details:', {
+      currentPage: currentPage,
+      totalPages: totalPages,
+      totalItems: totalItems,
+      perPage: perPage
+    });
+    
+    // Always clear the container first
+    paginationContainer.innerHTML = '';
+    
+    // Calculate items range
+    var startItem = Math.min((currentPage - 1) * perPage + 1, totalItems);
+    var endItem = Math.min(currentPage * perPage, totalItems);
+    
+    // Always show the info text, even for single page
+    var infoText = '<div class="text-muted small mb-2">Showing ' + startItem +
+      ' to ' + endItem + ' of ' + totalItems + ' tasks (page ' + currentPage + ' of ' + totalPages + ')</div>';
+    
+    // Only show pagination controls if there are multiple pages
+    if (totalPages > 1) {
+      var paginationHtml = '<nav><ul class="pagination pagination-sm justify-content-center">';
+      
+      // Previous button
+      if (currentPage > 1) {
+        paginationHtml += '<li class="page-item"><a class="page-link" href="#" data-page="' + (currentPage - 1) + '">Previous</a></li>';
+      } else {
+        paginationHtml += '<li class="page-item disabled"><a class="page-link" href="#" tabindex="-1">Previous</a></li>';
+      }
+      
+      // First page
+      if (currentPage > 3) {
+        paginationHtml += '<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>';
+        if (currentPage > 4) {
+          paginationHtml += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        }
+      }
+      
+      // Page numbers around current page
+      for (var i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+        var activeClass = i === currentPage ? ' active' : ' ';
+        paginationHtml += '<li class="page-item' + activeClass + '"><a class="page-link" href="#" data-page="' + i + '">' + i + '</a></li>';
+      }
+      
+      // Last page
+      if (currentPage < totalPages - 2) {
+        if (currentPage < totalPages - 3) {
+          paginationHtml += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+        }
+        paginationHtml += '<li class="page-item"><a class="page-link" href="#" data-page="' + totalPages + '">' + totalPages + '</a></li>';
+      }
+      
+      // Next button
+      if (currentPage < totalPages) {
+        paginationHtml += '<li class="page-item"><a class="page-link" href="#" data-page="' + (currentPage + 1) + '">Next</a></li>';
+      } else {
+        paginationHtml += '<li class="page-item disabled"><a class="page-link" href="#" tabindex="-1">Next</a></li>';
+      }
+      
+      paginationHtml += '</ul></nav>';
+      
+      // Combine info text and pagination controls
+      paginationContainer.innerHTML = infoText + paginationHtml;
+    } else {
+      // For single page, just show the info text
+      paginationContainer.innerHTML = infoText;
+    }
+    
+    // Add click handlers if pagination controls exist
+    var pageLinks = paginationContainer.querySelectorAll('.page-link[data-page]');
+    if (pageLinks.length > 0) {
+      pageLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          e.preventDefault();
+          var page = parseInt(this.dataset.page);
+          if (!isNaN(page)) {
+            refreshTasks(true, page); // Always include completed tasks
+          }
+        });
+      });
+    }
+  }
+
   function renderTaskLists(items) {
     var pendingContainer = document.getElementById('intra-pending-list');
     var completedCard = document.getElementById('intra-completed-card');
     var completedList = document.getElementById('intra-completed-list');
     var completedEmpty = document.getElementById('intra-completed-empty');
 
-    if (!pendingContainer) return;
+    if (!pendingContainer) {
+      console.error('Pending container not found');
+      return;
+    }
 
+    console.log('Rendering task lists with ' + items.length + ' total items');
+
+    // Clear existing content
     pendingContainer.innerHTML = '';
-    if (completedList) completedList.innerHTML = '';
+    if (completedList) {
+      completedList.innerHTML = '';
+      console.log('Cleared completed list');
+    }
 
     var pendingCount = 0;
     var completedCount = 0;
 
     items.forEach(function (item) {
+      console.log('Processing task:', item.uuid, 'with state:', item.state);
       if (item.state === 'completed') {
         completedCount++;
+        console.log('Task', item.uuid, 'is completed');
         if (completedList) {
-          completedList.appendChild(renderCompletedRow(item));
+          try {
+            var rowElement = renderCompletedRow(item);
+            if (rowElement && rowElement.nodeType === Node.ELEMENT_NODE) {
+              completedList.appendChild(rowElement);
+              console.log('Appended completed task to list:', item.uuid);
+            } else {
+              console.error('Invalid row element returned for completed task:', item);
+            }
+          } catch (error) {
+            console.error('Error rendering completed task:', item, error);
+          }
         }
       } else {
         pendingCount++;
-        pendingContainer.appendChild(renderPendingRow(item));
+        console.log('Task', item.uuid, 'is pending');
+        var rowElement = renderPendingRow(item);
+        pendingContainer.appendChild(rowElement);
+        console.log('Appended pending task to list:', item.uuid);
       }
     });
+
+    console.log('Final counts - Completed tasks:', completedCount, ', Pending tasks:', pendingCount);
 
     if (pendingCount === 0) {
       pendingContainer.innerHTML = '<div class="p-4 text-center text-muted">No intra-rater tasks waiting for you right now.</div>';
     }
 
+    // Handle completed card visibility
     if (completedCard) {
+      console.log('Completed card element found. Completed count:', completedCount);
       if (completedCount > 0) {
+        // Show completed tasks
         completedCard.classList.remove('d-none');
         if (completedEmpty) completedEmpty.classList.add('d-none');
+        
+        // Ensure the completed card is fully visible
+        completedCard.style.maxHeight = 'none';
+        completedCard.style.overflow = 'visible';
+        
+        console.log('Showing completed card with', completedCount, 'tasks');
       } else {
         // Show empty state when there are no completed tasks
         completedCard.classList.remove('d-none');
         if (completedEmpty) completedEmpty.classList.remove('d-none');
+        
+        // For debugging - ensure card is visible even when empty
+        completedCard.style.maxHeight = 'none';
+        completedCard.style.overflow = 'visible';
+        
+        console.log('Showing completed card with empty state');
       }
+    } else {
+      console.error('Completed card element not found');
     }
 
+    // Make sure to enhance forms after all content is rendered
     enhanceForms();
   }
 
@@ -279,44 +436,59 @@
     var gradedAt = item.graded_at ? new Date(item.graded_at).toLocaleString() : 'unknown';
     var originalGradedAt = item.original_graded_at ? new Date(item.original_graded_at).toLocaleString() : 'unknown';
     
-    container.innerHTML =
-      '<div>' +
-      '<div class="d-flex align-items-center gap-2">' +
-      '<span class="badge text-bg-secondary">Task #' + item.uuid + '</span>' +
-      '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
-      '</div>' +
-      '<div class="small text-muted mt-1">Completed at ' + gradedAt + '</div>' +
-      '</div>' +
-      '<div class="row">' +
-      '<div class="col-md-6">' +
-      '<h6 class="text-success">Intra-rater Grade</h6>' +
-      '<div class="small">' +
-      (item.grade_name ? ('<strong>Grade:</strong> ' + item.grade_name) : '') +
-      (item.comment ? ('<br><strong>Comment:</strong> ' + item.comment) : '') +
-      '</div>' +
-      '</div>' +
-      '<div class="col-md-6">' +
-      '<h6 class="text-primary">Original Grade</h6>' +
-      '<div class="small">' +
-      (item.original_grade_name ? ('<strong>Grade:</strong> ' + item.original_grade_name) : '') +
-      (item.original_comment ? ('<br><strong>Comment:</strong> ' + item.original_comment) : '') +
-      '<br><span class="text-muted">Graded at ' + originalGradedAt + '</span>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
+    try {
+      container.innerHTML =
+        '<div>' +
+        '<div class="d-flex align-items-center gap-2">' +
+        '<span class="badge text-bg-secondary">Task #' + item.uuid + '</span>' +
+        '<span class="badge text-bg-light text-uppercase">' + diseaseLabel + '</span>' +
+        '</div>' +
+        '<div class="small text-muted mt-1">Completed at ' + gradedAt + '</div>' +
+        '</div>' +
+        '<div class="row">' +
+        '<div class="col-md-6">' +
+        '<h6 class="text-success">Intra-rater Grade</h6>' +
+        '<div class="small">' +
+        (item.grader_name ? ('<strong>Grader:</strong> ' + item.grader_name + ' (ID: ' + item.grader_user_id + ')<br>') : '') +
+        (item.grade_name ? ('<strong>Grade:</strong> ' + item.grade_name) : '') +
+        (item.comment ? ('<br><strong>Comment:</strong> ' + item.comment) : '') +
+        '</div>' +
+        '</div>' +
+        '<div class="col-md-6">' +
+        '<h6 class="text-primary">Original Grade</h6>' +
+        '<div class="small">' +
+        (item.original_grader_name ? ('<strong>Grader:</strong> ' + item.original_grader_name + ' (ID: ' + item.grader_user_id + ')<br>') : '') +
+        (item.original_grade_name ? ('<strong>Grade:</strong> ' + item.original_grade_name) : '') +
+        (item.original_comment ? ('<br><strong>Comment:</strong> ' + item.original_comment) : '') +
+        '<br><span class="text-muted">Graded at ' + originalGradedAt + '</span>' +
+        '</div>' +
+        '</div>' +
+        '</div>';
+      console.log('Successfully rendered completed task:', item.uuid);
+    } catch (error) {
+      console.error('Error rendering completed task:', item, error);
+      container.innerHTML = '<div class="text-danger">Error rendering task: ' + item.uuid + '</div>';
+    }
+    
     return container;
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    // Ensure we're getting the correct page root element
     pageRoot = document.getElementById('intra-page-root');
     if (pageRoot) {
       tasksEndpoint = pageRoot.dataset.tasksEndpoint || null;
       fallbackCsrfToken = pageRoot.dataset.csrfToken || null;
+      
+      console.log('Page root found, endpoint:', tasksEndpoint);
+      
+      // Only enhance forms initially if they exist on page load
+      enhanceForms();
+      
+      // Load all tasks (pending and completed) on page load
+      refreshTasks(true);
+    } else {
+      console.error('Intra-rater page root element not found');
     }
-
-    enhanceForms();
-
-    // Auto-load completed tasks on page load since we now show completed tasks by default
-    refreshTasks(true);
   });
 })();

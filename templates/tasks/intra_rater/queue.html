@@ -11,6 +11,9 @@
     <div>
       <h1 class="h3 mb-1">Completed Intra-Rater Tasks</h1>
       <p class="text-muted mb-0">Your completed intra-rater reassessments with allocated grades. These tasks are visible only to you and quality managers.</p>
+      <p class="text-muted mb-0">Data Mangers see Intra-rater grades of all images iwthin their eligible Labs / Units. </p>
+      <p class="text-muted mb-0">For each image and disease, the re-grade, anbd the original-grade by the same user for that image and disease are shown. </p>
+
     </div>
   </div>
 
@@ -20,65 +23,11 @@
       <span class="badge text-bg-info">Intra-rater</span>
     </div>
     <div class="card-body p-0">
-      {% if tasks %}
       <div id="intra-pending-list" class="list-group list-group-flush">
-        {% for task in tasks %}
-        <div class="list-group-item py-3" data-task-row="{{ task.id }}">
-          <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
-            <div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge text-bg-info">Task #{{ task.id }}</span>
-                <span class="badge text-bg-light text-uppercase">{{ task.disease.name if task.disease else 'Unknown disease' }}</span>
-              </div>
-              <dl class="row small mt-2 mb-0">
-                <dt class="col-sm-3">Batch</dt>
-                <dd class="col-sm-9">#{{ task.batch_id }}</dd>
-                <dt class="col-sm-3">Image Source</dt>
-                <dd class="col-sm-9">
-                  {% if task.direct_image_upload_id %}Direct Upload #{{ task.direct_image_upload_id }}{% elif task.encounter_file_id %}Encounter File #{{ task.encounter_file_id }}{% else %}Unknown{% endif %}
-                </dd>
-                <dt class="col-sm-3">Lab Unit</dt>
-                <dd class="col-sm-9">{{ task.lab_unit.name if task.lab_unit else 'Unassigned' }}</dd>
-              </dl>
-            </div>
-            <div class="flex-grow-1">
-              <form class="js-intra-grade-form border rounded-3 p-3 bg-body-secondary"
-                    action="{{ url_for('tasks.submit_intra_rater_grade', task_id=task.id) }}"
-                    method="post" data-task-id="{{ task.id }}">
-                {{ csrf_field() }}
-                <input type="hidden" name="start_time" value="">
-                <input type="hidden" name="time_taken" value="">
-
-                <div class="mb-2">
-                  <label class="form-label form-label-sm" for="grading-{{ task.id }}">Select grade</label>
-                  <select class="form-select form-select-sm" id="grading-{{ task.id }}" name="disease_grading_id" required>
-                    <option value="" selected disabled>Choose an impression</option>
-                    {% for grading in gradings_map.get(task.disease_id, []) %}
-                    <option value="{{ grading.id }}">{{ grading.impression }}</option>
-                    {% endfor %}
-                  </select>
-                </div>
-
-                <div class="mb-2">
-                  <label class="form-label form-label-sm" for="comment-{{ task.id }}">Comment (optional)</label>
-                  <textarea class="form-control form-control-sm" id="comment-{{ task.id }}" name="comment" rows="2" maxlength="500"></textarea>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between">
-                  <button type="submit" class="btn btn-sm btn-primary">Submit grade</button>
-                  <span class="text-muted small">Created {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'unknown' }}</span>
-                </div>
-              </form>
-            </div>
-          </div>
+        <div class="p-4 text-center text-muted">
+          Loading intra-rater tasks...
         </div>
-        {% endfor %}
       </div>
-      {% else %}
-      <div id="intra-pending-list" class="p-4 text-center text-muted">
-        No intra-rater tasks waiting for you right now.
-      </div>
-      {% endif %}
     </div>
   </div>
 
@@ -92,6 +41,9 @@
       <div id="intra-completed-empty" class="p-4 text-center text-muted d-none">No completed intra-rater tasks yet.</div>
     </div>
   </div>
+
+  <!-- Pagination container -->
+  <div id="intra-pagination" class="mt-3"></div>
 </div>
 {% endblock %}
 

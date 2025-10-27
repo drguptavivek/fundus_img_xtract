@@ -20,6 +20,7 @@ from models import (
 )
 from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
 from utils.upload_eligibility import get_user_lab_unit_ids
+from analytics.excelFileExporter import export_encounter_files_to_xlsx
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -167,3 +168,69 @@ def encounter_files() -> str:
         total=total,
         per_page=per_page,
     )
+
+
+@bp.route("/encounter-files/download", methods=["GET"])
+@roles_required("admin", "data_manager")
+def encounter_files_download() -> Any:
+    """Download encounter files data as Excel file."""
+    
+    hospital_id = request.args.get("hospital_id", type=int)
+    lab_unit_id = request.args.get("lab_unit_id", type=int)
+    start_date_str = (request.args.get("start_date") or "").strip() or None
+    end_date_str = (request.args.get("end_date") or "").strip() or None
+    
+    # Parse date filters
+    start_date = _parse_date(start_date_str)
+    end_date = _parse_date(end_date_str)
+    
+    # Check user permissions for lab unit access
+    user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+    is_admin_like = current_user.has_role("admin", "data_manager")
+    
+    # Generate dataframe using the utility function with manual session handling
+    from utils.utils import with_session
+    
+    # Create a simple wrapper that handles the session correctly
+    def get_dataframe():
+        db = Session()
+        try:
+            return generate_encounter_upload_metrics_df(
+                        db=db,
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+        finally:
+            db.close()
+    
+    df = get_dataframe()
+    
+    # Apply lab unit access control to dataframe
+    if not is_admin_like and user_lab_unit_ids:
+        df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
+    
+    # Apply additional filters
+    if hospital_id:
+        df = df[df['hospital_id'] == hospital_id]
+        
+    if lab_unit_id:
+        # Only allow filtering by lab_unit_id if user has access to that lab unit
+        if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+            from flask import abort
+            abort(403, description="Access denied to this lab unit")
+        df = df[df['lab_unit_id'] == lab_unit_id]
+    
+    # Generate Excel file
+    excel_data = export_encounter_files_to_xlsx(df)
+    
+    # Create response with Excel file
+    from flask import Response
+    response = Response(
+        excel_data,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={
+            'Content-Disposition': f'attachment; filename=encounter_files_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        }
+    )
+    
+    return response

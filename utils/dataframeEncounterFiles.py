@@ -55,7 +55,6 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         encounter_data = {
             'encounter_id': encounter.id,
             'patient_id': encounter.patient_id,
-            'patient_name': encounter.name,
             'capture_date_dt': encounter.capture_date_dt,
             'zip_file_id': encounter.zip_file_id,
             'zip_filename': encounter.zip_file.zip_filename if encounter.zip_file else None,

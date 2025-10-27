@@ -581,3 +581,95 @@ def export_encounters_summary_list_to_xlsx(encounters_data: List[Dict[str, Any]]
     buffer.seek(0)
     
     return buffer.getvalue()
+
+
+def export_encounter_files_to_xlsx(df) -> bytes:
+    """
+    Export encounter files dataframe to an XLSX file.
+    
+    Args:
+        df: pandas DataFrame containing encounter files data
+        
+    Returns:
+        bytes: XLSX file content as bytes
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Encounter Files"
+    
+    # Define styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    center_alignment = Alignment(horizontal="center", vertical="center")
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin")
+    )
+    
+    # Add title
+    ws['A1'] = 'Encounter Files Report'
+    ws['A1'].font = Font(size=16, bold=True)
+    ws.merge_cells('A1:Z1')
+    
+    # Add generation timestamp
+    ws['A2'] = f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+    ws['A2'].font = Font(size=12, italic=True)
+    ws.merge_cells('A2:Z2')
+    
+    row = 4
+    
+    # Add headers from dataframe columns
+    if not df.empty:
+        headers = list(df.columns)
+        for col, header in enumerate(headers, start=1):
+            cell = ws.cell(row=row, column=col, value=header.replace('_', ' ').title())
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_alignment
+            cell.border = thin_border
+        row += 1
+        
+        # Add data from dataframe
+        for _, encounter_row in df.iterrows():
+            for col, value in enumerate(encounter_row, start=1):
+                # Handle datetime objects, including NaT
+                if hasattr(value, 'strftime'):
+                    try:
+                        value = value.strftime("%Y-%m-%d %H:%M:%S")
+                    except (ValueError, AttributeError):
+                        # Handle NaT (Not a Time) and other datetime issues
+                        value = "N/A"
+                elif value is None or (isinstance(value, float) and (value != value)):  # Check for NaN
+                    value = "N/A"
+                else:
+                    value = str(value)
+                
+                ws.cell(row=row, column=col, value=value)
+                
+                # Apply border to all cells
+                cell = ws.cell(row=row, column=col)
+                cell.border = thin_border
+            
+            row += 1
+    
+    # Auto-adjust column widths
+    for column in ws.columns:
+        max_length = 0
+        column_letter = get_column_letter(column[0].column)
+        for cell in column:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Create a BytesIO buffer to save the workbook
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return buffer.getvalue()

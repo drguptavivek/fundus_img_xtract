@@ -39,6 +39,12 @@
     return Math.min(max, Math.max(min, value));
   }
 
+  // Helper function to get CSRF token from the save button
+  function getCsrfToken() {
+    const csrfInput = document.querySelector('#imggr-preset-save-button input[name="csrf_token"]');
+    return csrfInput ? csrfInput.value : null;
+  }
+
   // API functions for viewer settings and presets
   async function fetchViewerSettings() {
     try {
@@ -52,13 +58,12 @@
 
   async function saveViewerSettings(settings) {
     try {
-      // Get CSRF token from the page
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      const csrfToken = getCsrfToken();
+
       const headers = {
         'Content-Type': 'application/json',
       };
       
-      // Add CSRF token if available
       if (csrfToken) {
         headers['X-CSRFToken'] = csrfToken;
       }
@@ -84,8 +89,10 @@
 
   async function saveViewerPreset(slotNumber, preset) {
     try {
-      // Get CSRF token from the page
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+      // Get CSRF token using the helper function
+      const csrfToken = getCsrfToken();
+      // console.log('saveViewerPreset called with:', { slotNumber, preset, csrfToken: csrfToken ? 'found' : 'not found' });
+      
       const headers = {
         'Content-Type': 'application/json',
       };
@@ -95,20 +102,13 @@
         headers['X-CSRFToken'] = csrfToken;
       }
       
-      console.log('saveViewerPreset called with:', { slotNumber, preset, csrfToken: csrfToken ? 'found' : 'not found' });
-      
       const response = await fetch(`/api/viewer/presets/${slotNumber}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(preset)
       });
       
-      console.log('saveViewerPreset response:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-        headers: Object.fromEntries(response.headers.entries())
-      });
+     //  console.log('saveViewerPreset response:', { status: response.status,        statusText: response.statusText,        ok: response.ok,        headers: Object.fromEntries(response.headers.entries())      });
       
       if (!response.ok) {
         const errorText = await response.text();

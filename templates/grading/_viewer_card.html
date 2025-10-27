@@ -3,6 +3,8 @@
             image_uuid (optional, for dual grading tasks)
 #}
 {% set uuid = image_uuid or image.uuid %}
+{% from "_forms.html" import csrf_field %}
+
 <div class="card shadow-sm h-100">
 <div class="card-header">
   <div class="d-flex align-items-center justify-content-start flex-wrap gap-2">
@@ -50,7 +52,8 @@
       <button type="button" class="btn btn-outline-secondary btn-sm imggr-reset">/</button>
 
       <!-- Presets -->
-      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets">
+      <div class="btn-group btn-group-sm me-2" role="group" aria-label="Viewer presets" id = "imggr-presets-section">
+        
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="1">1</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="2">2</button>
         <button type="button" class="btn btn-outline-secondary imggr-preset-btn" data-preset="3">3</button>
@@ -59,8 +62,13 @@
       </div>
       
       <!-- Save Preset -->
-      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" data-bs-toggle="modal" data-bs-target="#imggr-preset-modal-{{ uuid }}">
+
+      <button type="button" class="btn btn-outline-secondary btn-sm imggr-save-preset" 
+        data-bs-toggle="modal" 
+        data-bs-target="#imggr-preset-modal-{{ uuid }}" 
+        id="imggr-preset-save-button">
         Save
+        {{csrf_field()}}
       </button>
 
       <!-- Loupe -->

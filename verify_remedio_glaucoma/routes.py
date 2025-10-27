@@ -286,6 +286,8 @@ def glaucoma_clean_workflow():
     """Clean VCDR right/left to numeric and store in glaucoma_results_cleaned.
     Also copies original fields for traceability.
     """
+    current_app.logger.info("=== GLAUCOMA CLEAN WORKFLOW STARTED ===")
+    
     def _parse_first_float(s: str | None) -> float | None:
         if not s:
             return None
@@ -307,6 +309,7 @@ def glaucoma_clean_workflow():
     before = {}
     after = {}
     try:
+        current_app.logger.info("Starting glaucoma clean workflow")
         # --- BEFORE metrics ---
         total_src_reports = db.query(func.count(GlaucomaReport.id)).scalar() or 0
         cleaned_total_before = db.query(func.count(GlaucomaResultsCleaned.id)).scalar() or 0
@@ -327,6 +330,8 @@ def glaucoma_clean_workflow():
             cleaned_missing_num=int(cleaned_missing_num_before),
             with_pdf=int(cleaned_with_pdf_before),
         )
+        
+        current_app.logger.info(f"BEFORE metrics: {before}")
 
         # --- Upsert cleaned rows ---
         reports = (
@@ -336,6 +341,8 @@ def glaucoma_clean_workflow():
               .all()
         )
         total = len(reports)
+        current_app.logger.info(f"Found {total} glaucoma reports to process")
+        
         for gr in reports:
             rnum = _parse_first_float(gr.vcdr_right)
             lnum = _parse_first_float(gr.vcdr_left)
@@ -369,6 +376,7 @@ def glaucoma_clean_workflow():
                 db.add(row)
                 inserted += 1
         db.commit()
+        current_app.logger.info(f"Committed changes: {inserted} inserted, {updated} updated")
 
         # --- AFTER metrics ---
         cleaned_total_after = db.query(func.count(GlaucomaResultsCleaned.id)).scalar() or 0
@@ -388,6 +396,9 @@ def glaucoma_clean_workflow():
             cleaned_missing_num=int(cleaned_missing_num_after),
             with_pdf=int(cleaned_with_pdf_after),
         )
+        
+        current_app.logger.info(f"AFTER metrics: {after}")
+        current_app.logger.info("=== GLAUCOMA CLEAN WORKFLOW COMPLETED ===")
     finally:
         db.close()
 
@@ -416,6 +427,7 @@ def glaucoma_detail(clean_id: int):
             .options(
                 joinedload(GlaucomaResultsCleaned.patient_encounter).joinedload(PatientEncounters.zip_file),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.encounter_files),
+                joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.encounter_file_pdfs),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.dr_reports),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
                 joinedload(GlaucomaResultsCleaned.patient_encounter).joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
@@ -502,19 +514,25 @@ def glaucoma_detail(clean_id: int):
     back_url = url_for("verify_remedio_glaucoma.glaucoma_list", page=page_idx)
     back_label = f"Date {enc.capture_date_dt.strftime('%Y-%m-%d') if enc.capture_date_dt else ''}"
 
-    # Reuse the screenings detail template for consistent UI
-    return render_template(
-        "screenings/detail.html",
-        encounter=enc,
-        images=images,
-        dr_reports=dr_reports,
-        gl_reports=gl_reports,
-        back_url=back_url,
-        prev_url=prev_url,
-        next_url=next_url,
-        gallery_id=gallery_id,
-        back_label=back_label,
-    )
+    # Re-attach the encounter to the current session before rendering to avoid detached instance error
+    db = Session()
+    try:
+        enc = db.merge(enc)  # Re-attach the encounter to the current session
+        # Reuse the screenings detail template for consistent UI
+        return render_template(
+            "screenings/detail.html",
+            encounter=enc,
+            images=images,
+            dr_reports=dr_reports,
+            gl_reports=gl_reports,
+            back_url=back_url,
+            prev_url=prev_url,
+            next_url=next_url,
+            gallery_id=gallery_id,
+            back_label=back_label,
+        )
+    finally:
+        db.close()
 
 
 @bp.route("/edit/<int:clean_id>", methods=["GET", "POST"])

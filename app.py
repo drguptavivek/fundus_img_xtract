@@ -77,11 +77,15 @@ def create_app():
     app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD")
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
 
-   # Session cookie hygiene
+   # Session cookie hygiene - updated to prevent partitioned cookie warnings in iframes
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "Lax"),
+        # Use None for SameSite to allow same-origin iframe access without partitioning
+        SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "None"),
         SESSION_COOKIE_SECURE=str(os.getenv("SESSION_COOKIE_SECURE", "false")).lower() == "true",
+        # Add additional cookie settings for iframe compatibility
+        SESSION_COOKIE_PATH="/",
+        SESSION_COOKIE_DOMAIN=None,  # Allow same-origin access
     )
     # --- Inactivity timeout (sliding) ---
     app.config["INACTIVITY_TIMEOUT_MINUTES"] = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 30))

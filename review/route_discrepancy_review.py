@@ -51,10 +51,25 @@ def discrepancy_review():
         # Apply filters
         query = db.query(GradingTask).filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
         
-        # Apply disease filter
+        # Apply disease filter (mandatory)
+        from flask import flash, redirect, url_for, request, session
         disease_id = request.args.get("disease_id", type=int)
-        if disease_id:
-            query = query.filter(GradingTask.disease_id == disease_id)
+        
+        # Check if we're already being redirected (no disease_id but error message in session)
+        if not disease_id and not session.get('_disease_error_shown'):
+            # Mark that we've shown the error to prevent infinite redirects
+            session['_disease_error_shown'] = True
+            flash("Disease selection is required for discrepancy review", "error")
+            # Preserve other query parameters when redirecting
+            query_params = request.args.to_dict()
+            query_params = {k: v for k, v in query_params.items() if k != 'disease_id'}
+            return redirect(url_for('review.discrepancy_review', **query_params))
+        
+        # Clear the error flag if disease is selected
+        if disease_id and session.get('_disease_error_shown'):
+            session.pop('_disease_error_shown', None)
+        
+        query = query.filter(GradingTask.disease_id == disease_id)
         
         # Apply lab unit filter
         lab_unit_id = request.args.get("lab_unit_id", type=int)
@@ -72,6 +87,9 @@ def discrepancy_review():
         
         # Get review grade filter
         has_review = request.args.get("has_review", type=str)
+        
+        # Get consensus filter
+        has_consensus = request.args.get("has_consensus", default="has_consensus", type=str)
         
         # Get AI model filter
         ai_model_ids = request.args.getlist("ai_model_id")
@@ -139,11 +157,21 @@ def discrepancy_review():
         if has_review == 'yes':
             # Filter for tasks that have a review grade
             review_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'review').subquery()
-            query = query.filter(GradingTask.id.in_(review_subq))
+            query = query.filter(GradingTask.id.in_(review_subq.as_scalar()))
         elif has_review == 'no':
             # Filter for tasks that don't have a review grade
             review_subq = db.query(Grade.task_id).filter(Grade.role_slot == 'review').subquery()
-            query = query.filter(~GradingTask.id.in_(review_subq))
+            query = query.filter(~GradingTask.id.in_(review_subq.as_scalar()))
+        
+        # Apply consensus filter
+        if has_consensus == 'has_consensus':
+            # Filter for tasks that have a consensus
+            consensus_subq = db.query(Consensus.task_id).subquery()
+            query = query.filter(GradingTask.id.in_(consensus_subq.as_scalar()))
+        elif has_consensus == 'no':
+            # Filter for tasks that don't have a consensus
+            consensus_subq = db.query(Consensus.task_id).subquery()
+            query = query.filter(~GradingTask.id.in_(consensus_subq.as_scalar()))
         
         # Apply AI model filter
         if ai_model_ids:
@@ -246,6 +274,7 @@ def discrepancy_review():
                 'final_grade': final_grades,
                 'has_ai_grade': has_ai_grade,
                 'has_review': has_review,
+                'has_consensus': has_consensus,
                 'ai_model_id': ai_model_ids
             }
         )

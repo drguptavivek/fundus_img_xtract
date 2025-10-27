@@ -38,31 +38,102 @@ def encounterImageByUUID(uuid: str):
 def encounterDrReportByUUID(uuid: str):
     db = Session()
     try:
+        # Log PDF access request for debugging partitioned cookie issues
+        from flask import current_app, request
+        current_app.logger.info(f"DR PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        
         result = (db.query(DiabeticRetinopathyReport, PatientEncounters, ZipFile).join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(DiabeticRetinopathyReport.uuid == uuid).first())
-        if not result or not result[0].report_file_name: 
+        if not result or not result[0].report_file_name:
+            current_app.logger.warning(f"DR PDF NOT FOUND - UUID: {uuid}")
             abort(404)
         dr_report, patient_encounter, zip_file = result
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         pdf_path_str = str(DR_PDF_DIR / upload_date_str / dr_report.report_file_name)
-        if not os.path.exists(pdf_path_str): 
+        if not os.path.exists(pdf_path_str):
+            current_app.logger.error(f"DR PDF FILE MISSING - UUID: {uuid}, Path: {pdf_path_str}")
             flash(f"Error: DR report not found with UUID: {uuid}", "danger")
             abort(404)
-        return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
+        
+        # Create response with security headers to prevent partitioned cookie warnings
+        from flask import make_response
+        response = make_response(send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf"))
+        
+        # Fix CSP header - remove conflicting directives and allow same-origin
+        response.headers['Content-Security-Policy'] = "frame-ancestors 'self' http://127.0.0.1:5001; script-src 'self' 'unsafe-inline';"
+        
+        # Add proper CORS headers for same-origin requests
+        origin = request.headers.get('Origin', 'http://127.0.0.1:5001')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        
+        # Add SameSite=None to allow cross-site access for same-origin iframes
+        response.headers['Set-Cookie'] = 'SameSite=None; Secure; HttpOnly; Path=/'
+        
+        # Add explicit header to prevent partitioned cookie warnings
+        response.headers['Sec-GPC'] = '1'  # Global Privacy Control
+        response.headers['Partitioned-Cookie'] = '0'  # Explicitly disable partitioning
+        
+        # Cache control headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        current_app.logger.info(f"DR PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
+        return response
     finally: db.close()
 
 def encounterGlaucomaReportByUUID(uuid: str):
     db = Session()
     try:
+        # Log PDF access request for debugging partitioned cookie issues
+        from flask import current_app, request
+        current_app.logger.info(f"PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        
         result = (db.query(GlaucomaReport, PatientEncounters, ZipFile).join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(GlaucomaReport.uuid == uuid).first())
         if not result or not result[0].report_file_name:
+            current_app.logger.warning(f"PDF NOT FOUND - UUID: {uuid}")
             abort(404)
         glaucoma_report, patient_encounter, zip_file = result
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         pdf_path_str = str(GLAUCOMA_PDF_DIR / upload_date_str / glaucoma_report.report_file_name)
         if not os.path.exists(pdf_path_str):
+            current_app.logger.error(f"PDF FILE MISSING - UUID: {uuid}, Path: {pdf_path_str}")
             flash(f"Error: Glaucoma report not found with UUID: {uuid}", "danger")
             abort(404)
-        return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
+        
+        # Create response with security headers to prevent partitioned cookie warnings
+        from flask import make_response
+        response = make_response(send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf"))
+        
+        # Fix CSP header - remove conflicting directives and allow same-origin
+        # Use only frame-ancestors without x-frame-options to avoid conflicts
+        response.headers['Content-Security-Policy'] = "frame-ancestors 'self' http://127.0.0.1:5001; script-src 'self' 'unsafe-inline';"
+        
+        # Add proper CORS headers for same-origin requests
+        origin = request.headers.get('Origin', 'http://127.0.0.1:5001')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        
+        # Add SameSite=None to allow cross-site access for same-origin iframes
+        # This helps prevent partitioned cookie warnings in modern browsers
+        response.headers['Set-Cookie'] = 'SameSite=None; Secure; HttpOnly; Path=/'
+        
+        # Add explicit header to prevent partitioned cookie warnings
+        # This tells browsers not to partition cookies/storage for this request
+        response.headers['Sec-GPC'] = '1'  # Global Privacy Control
+        response.headers['Partitioned-Cookie'] = '0'  # Explicitly disable partitioning
+        
+        # Cache control headers
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        current_app.logger.info(f"PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
+        return response
     finally: db.close()
 
 def encounterPDFByUUID(uuid: str):

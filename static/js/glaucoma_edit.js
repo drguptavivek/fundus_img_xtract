@@ -14,7 +14,52 @@
     });
   }
 
+  // Initialize iframe loading
+  function logIframeLoading() {
+    const iframe = document.querySelector('iframe[title="Glaucoma PDF"]');
+    if (iframe) {
+      iframe.addEventListener('load', function() {
+        // Check if PDF is actually visible despite cross-origin restrictions
+        setTimeout(() => {
+          const rect = iframe.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            // PDF is visible and functional
+          } else {
+            // PDF may not be displaying correctly
+          }
+        }, 1000);
+      });
+      
+      iframe.addEventListener('error', function() {
+        // PDF failed to load
+      });
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
+    // Initialize iframe logging for auto-loaded PDF
+    logIframeLoading();
+    
+    // Monitor the auto-loaded iframe
+    const iframe = document.getElementById('pdf-iframe');
+    if (iframe && iframe.src) {
+      // Monitor iframe loading
+      iframe.addEventListener('load', function() {
+        // Check if PDF is visible and functional
+        setTimeout(() => {
+          const rect = iframe.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            // PDF is visible and functional
+          } else {
+            // PDF may not be displaying correctly
+          }
+        }, 1000);
+      });
+      
+      iframe.addEventListener('error', function() {
+        // PDF failed to load
+      });
+    }
     // Live visual marker for Patient ID length (expected 8)
     const pid = document.getElementById('patient-id-input');
     const checkPid = () => {

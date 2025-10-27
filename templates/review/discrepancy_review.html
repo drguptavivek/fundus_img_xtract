@@ -75,9 +75,9 @@
       <form method="GET" id="filterForm">
         <div class="row g-3">
           <div class="col-md-3">
-            <label for="diseaseSelect" class="form-label">Disease</label>
-            <select class="form-select" id="diseaseSelect" name="disease_id">
-              <option value="">All Diseases</option>
+            <label for="diseaseSelect" class="form-label">Disease <span class="text-danger">*</span></label>
+            <select class="form-select" id="diseaseSelect" name="disease_id" required>
+              <option value="">Select Disease</option>
               {% for disease in diseases %}
                 <option value="{{ disease.id }}" {% if filters.disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
               {% endfor %}
@@ -93,7 +93,26 @@
               {% endfor %}
             </select>
           </div>
+
+          <div class="col-md-3">
+            <label for="hasConsensusSelect" class="form-label">Consensus</label>
+            <select class="form-select" id="hasConsensusSelect" name="has_consensus">
+              <option value="has_consensus" {% if filters.has_consensus == 'has_consensus' %}selected{% endif %}>Has Consensus</option>
+              <option value="">All Tasks</option>
+              <option value="no" {% if filters.has_consensus == 'no' %}selected{% endif %}>No Consensus yet</option>
+            </select>
+          </div>
           
+
+          <div class="col-md-3">
+            <label for="hasReviewSelect" class="form-label">Has Review</label>
+            <select class="form-select" id="hasReviewSelect" name="has_review">
+              <option value="">All Tasks</option>
+              <option value="yes" {% if filters.has_review == 'yes' %}selected{% endif %}>Has Review</option>
+              <option value="no" {% if filters.has_review == 'no' %}selected{% endif %}>No Review</option>
+            </select>
+          </div>
+
         </div>
         
         <!-- Grade Filters Row - Initially hidden until disease is selected -->
@@ -193,14 +212,7 @@
           </select>
         </div>
         
-        <div class="col-md-3">
-          <label for="hasReviewSelect" class="form-label">Has Review</label>
-          <select class="form-select" id="hasReviewSelect" name="has_review">
-            <option value="">All Tasks</option>
-            <option value="yes" {% if filters.has_review == 'yes' %}selected{% endif %}>Has Review</option>
-            <option value="no" {% if filters.has_review == 'no' %}selected{% endif %}>No Review</option>
-          </select>
-        </div>
+
         
         <div class="col-md-3">
           <label class="form-label">AI Models</label>
@@ -222,7 +234,9 @@
             </ul>
           </div>
         </div>
-          
+        
+
+        
         <div class="col-md-3 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
             <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
@@ -233,7 +247,7 @@
   </div>
 
   <!-- Results Section -->
-  <div class="card shadow-sm">
+  <div class="card shadow-sm" {% if not filters.disease_id %}style="display: none;"{% endif %}>
     <div class="card-header d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
       <div>
         <h5 class="card-title mb-0">Tasks for Review</h5>
@@ -258,6 +272,7 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_consensus=filters.has_consensus,
                   ai_model_id=filters.ai_model_id or [],
                   page=page-1) if has_prev else '#' }}">
                   Previous
@@ -278,6 +293,7 @@
                       final_grade=filters.final_grade or [],
                       has_ai_grade=filters.has_ai_grade,
                       has_review=filters.has_review,
+                      has_consensus=filters.has_consensus,
                       ai_model_id=filters.ai_model_id or [],
                       page=p) }}">
                       {{ p }}
@@ -296,6 +312,7 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
+                    has_consensus=filters.has_consensus,
                     ai_model_id=filters.ai_model_id or [],
                     page=1) }}">
                     1
@@ -320,6 +337,7 @@
                         final_grade=filters.final_grade or [],
                         has_ai_grade=filters.has_ai_grade,
                         has_review=filters.has_review,
+                        has_consensus=filters.has_consensus,
                         ai_model_id=filters.ai_model_id or [],
                         page=p) }}">
                         {{ p }}
@@ -344,6 +362,7 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
+                    has_consensus=filters.has_consensus,
                     ai_model_id=filters.ai_model_id or [],
                     page=total_pages) }}">
                     {{ total_pages }}
@@ -361,6 +380,7 @@
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
+                  has_consensus=filters.has_consensus,
                   ai_model_id=filters.ai_model_id or [],
                   page=page+1) if has_next else '#' }}">
                   Next
@@ -503,6 +523,7 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
+                    has_consensus=filters.has_consensus,
                     ai_model_id=filters.ai_model_id or [],
                     page=page-1) if has_prev else '#' }}">
                     Previous
@@ -518,6 +539,7 @@
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
+                    has_consensus=filters.has_consensus,
                     ai_model_id=filters.ai_model_id or [],
                     page=page+1) if has_next else '#' }}">
                     Next
@@ -528,7 +550,7 @@
           </div>
         {% endif %}
       {% else %}
-        <div class="text-center py-5">
+        <div class="text-center py-5" {% if not filters.disease_id %}style="display: none;"{% endif %}>
           <i class="bi bi-search fs-1 text-muted"></i>
           <p class="text-muted mt-3">No tasks found matching the selected filters.</p>
           {% if filters %}
@@ -547,6 +569,7 @@ function clearFilters() {
   document.getElementById('labUnitSelect').value = '';
   document.getElementById('hasAiGradeSelect').value = '';
   document.getElementById('hasReviewSelect').value = '';
+  document.getElementById('hasConsensusSelect').value = '';
   
   // Hide grade filters row when disease is cleared
   document.getElementById('gradeFiltersRow').style.display = 'none';
@@ -573,6 +596,13 @@ function clearFilters() {
   const currentAction = form.getAttribute('action');
   const newAction = currentAction.split('?')[0]; // Remove query parameters
   form.setAttribute('action', newAction);
+  
+  // Validate that disease is selected before submitting
+  const diseaseSelect = document.getElementById('diseaseSelect');
+  if (!diseaseSelect.value) {
+    alert('Please select a disease before applying filters.');
+    return false;
+  }
   
   form.submit();
 }

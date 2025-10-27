@@ -1,3 +1,2 @@
-"""KPIs API endpoints for operational metrics."""
-
-from . import encounter_files
+# api/kpis/__init__.py
+# KPI API endpoints for encounter files analytics

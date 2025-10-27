@@ -58,7 +58,8 @@ All endpoints return JSON with the following structure:
 **Parameters**:
 - `year` (optional): Filter by specific year
 - `start_date`, `end_date`: Date range filter
-- `hospital_id`, `lab_unit_id`: Location filters
+- `hospital_ids` (optional): Comma-separated list of hospital IDs
+- `lab_unit_ids` (optional): Comma-separated list of lab unit IDs
 
 **Response**:
 ```json
@@ -420,7 +421,7 @@ All endpoints return JSON with the following structure:
 // Load monthly upload data
 async function loadMonthlyUploadData() {
   try {
-    const response = await fetch('/api/kpis/encounter-files/year-month-wise-uploads?start_date=2024-01-01&end_date=2024-12-31');
+    const response = await fetch('/api/kpis/encounter-files/year-month-wise-uploads?start_date=2024-01-01&end_date=2024-12-31&hospital_ids=1,2,3&lab_unit_ids=1,2');
     const result = await response.json();
     
     if (result.success) {
@@ -474,7 +475,8 @@ response = requests.get(
     params={
         'start_date': '2024-01-01',
         'end_date': '2024-12-31',
-        'hospital_id': 1
+        'hospital_ids': '1,2,3',
+        'lab_unit_ids': '1,2'
     },
     headers={'Authorization': 'Bearer your-token-here'}
 )

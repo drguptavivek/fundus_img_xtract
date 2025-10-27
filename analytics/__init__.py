@@ -10,5 +10,6 @@ from . import (
     route_routes_simple,
     route_image_results,
     route_encounter_results,
-    route_images_without_tasks
+    route_images_without_tasks,
+    route_encounterFiles
 )  # noqa: E402,F401

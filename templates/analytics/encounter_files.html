@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Encounter Files Dataframe{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .dataframe-container {
+    overflow-x: auto;
+    margin-bottom: 2rem;
+  }
+  
+  .dataframe-table {
+    min-width: 100%;
+    font-size: 0.875rem;
+  }
+  
+  .dataframe-table th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .dataframe-table td, .dataframe-table th {
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    white-space: nowrap;
+  }
+  
+  .dataframe-table tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .verified-yes {
+    color: #198754;
+    font-weight: 500;
+  }
+  
+  .verified-no {
+    color: #dc3545;
+    font-weight: 500;
+  }
+  
+  .verified-pending {
+    color: #fd7e14;
+    font-weight: 500;
+  }
+  
+  .metric-card {
+    background: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+  
+  .metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Encounter Files Dataframe</h1>
+      <p class="text-muted mb-0">Comprehensive view of encounter upload metrics with hospital and lab unit information.</p>
+    </div>
+  </div>
+
+  <!-- Filters Section -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2">
+      <h3 class="h6 mb-0">Filters</h3>
+    </div>
+    <div class="card-body">
+      <form class="row gy-2 gx-2 align-items-end" method="get">
+        <div class="col-12 col-sm-6 col-lg-auto">
+          <label class="form-label mb-1" for="filter-hospital">Hospital</label>
+          <select class="form-select" id="filter-hospital" name="hospital_id">
+            <option value="">All</option>
+            {% for hospital in hospitals %}
+            <option value="{{ hospital.id }}" {% if filters.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-auto">
+          <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
+          <select class="form-select" id="filter-lab" name="lab_unit_id">
+            <option value="">All</option>
+            {% for lab_unit in lab_units %}
+            <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-12 col-sm-6 col-lg-auto">
+          <label class="form-label mb-1" for="filter-start-date">Start Date</label>
+          <input class="form-control" type="date" id="filter-start-date" name="start_date" value="{{ filters.start_date or '' }}">
+        </div>
+        <div class="col-12 col-sm-6 col-lg-auto">
+          <label class="form-label mb-1" for="filter-end-date">End Date</label>
+          <input class="form-control" type="date" id="filter-end-date" name="end_date" value="{{ filters.end_date or '' }}">
+        </div>
+        <div class="col-12 col-sm-6 col-lg-auto">
+          <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Summary Metrics -->
+  {% if encounter_data %}
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-value">{{ total }}</div>
+        <div class="metric-label">Total Encounters</div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-value">{{ encounter_data | selectattr('completely_verified') | list | length }}</div>
+        <div class="metric-label">Completely Verified</div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-value">{{ encounter_data | selectattr('has_dr_report') | list | length }}</div>
+        <div class="metric-label">With DR Reports</div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-value">{{ encounter_data | selectattr('has_glaucoma_report') | list | length }}</div>
+        <div class="metric-label">With Glaucoma Reports</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Dataframe Table -->
+  {% if not encounter_data %}
+    <div class="alert alert-info">No encounters matched the selected filters.</div>
+  {% else %}
+    <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
+      <span>Showing {{ encounter_data|length }} encounters (page {{ page }} of {{ total_pages }})</span>
+    </div>
+
+    <div class="dataframe-container">
+      {{ df_html | safe }}
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
+      <div class="btn-group" role="group" aria-label="Pagination">
+        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
+        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script>
+    // Add interactive features to the dataframe table
+    document.addEventListener('DOMContentLoaded', function() {
+      const table = document.getElementById('encounter-files-table');
+      if (!table) return;
+      
+      // Make table sortable
+      const headers = table.querySelectorAll('th');
+      headers.forEach((header, index) => {
+        header.style.cursor = 'pointer';
+        header.addEventListener('click', () => {
+          sortTable(table, index);
+        });
+      });
+      
+      // Add hover effects for verification status
+      const rows = table.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        // Check verification status columns and add appropriate classes
+        [10, 11, 12].forEach(colIndex => { // Approximate indices for verification columns
+          if (cells[colIndex]) {
+            const text = cells[colIndex].textContent.trim();
+            if (text === 'verified') {
+              cells[colIndex].classList.add('verified-yes');
+            } else if (text === 'pending') {
+              cells[colIndex].classList.add('verified-pending');
+            } else {
+              cells[colIndex].classList.add('verified-no');
+            }
+          }
+        });
+      });
+    });
+    
+    function sortTable(table, columnIndex) {
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      
+      rows.sort((a, b) => {
+        const aText = a.children[columnIndex].textContent.trim();
+        const bText = b.children[columnIndex].textContent.trim();
+        
+        // Try to sort as numbers first
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return aNum - bNum;
+        }
+        
+        // Fall back to string comparison
+        return aText.localeCompare(bText);
+      });
+      
+      // Clear and re-append sorted rows
+      rows.forEach(row => tbody.appendChild(row));
+    }
+  </script>
+{% endblock %}

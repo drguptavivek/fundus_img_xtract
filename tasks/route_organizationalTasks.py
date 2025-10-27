@@ -14,9 +14,9 @@ from models import Hospital, LabUnit
 from . import bp
 
 
-@bp.route("/organizational-tasks", methods=["GET"])
+@bp.route("/all-tasks", methods=["GET"])
 @roles_required("admin", "data_manager")
-def organizational_tasks() -> str:
+def all_tasks() -> str:
     """Page to view all tasks scoped to user's lab units with pagination."""
     # Get pagination parameters from request
     page = request.args.get('page', 1, type=int)
@@ -79,4 +79,4 @@ def organizational_tasks() -> str:
             'user_lab_unit_ids': user_lab_unit_ids
         }
         
-        return render_template("tasks/organizational_tasks.html", **context)
+        return render_template("tasks/all_tasks.html", **context)

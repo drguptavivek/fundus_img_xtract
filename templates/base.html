@@ -238,8 +238,8 @@
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
               {% if current_user_has('data_manager') or current_user_has('admin') %}
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.organizational_tasks' else '' }}"
-                  href="{{ url_for('tasks.organizational_tasks') }}">All Tasks</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.all_tasks' else '' }}"
+                  href="{{ url_for('tasks.all_tasks') }}">All Tasks</a>
               </li>
                <li>
                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">All Images</a>

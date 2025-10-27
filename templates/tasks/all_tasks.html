@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Organizational Tasks{% endblock %}
+{% block title %}All Tasks{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
   <div class="row">
     <div class="col-12">
-      <h2 class="mb-4">Organizational Tasks</h2>
+      <h2 class="mb-4">Tasks</h2>
       
       <!-- Filters -->
       <div class="card mb-4">
         <div class="card-body">
-          <form method="GET" action="{{ url_for('tasks.organizational_tasks') }}">
+          <form method="GET" action="{{ url_for('tasks.all_tasks') }}">
             <div class="row g-3">
               <div class="col-md-2">
                 <label for="statusFilter" class="form-label">Status</label>
@@ -76,7 +76,7 @@
           <!-- Previous page link -->
           {% if current_page > 1 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
           </li>
           {% else %}
           <li class="page-item disabled">
@@ -87,7 +87,7 @@
           <!-- First page -->
           {% if current_page > 3 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
           </li>
           {% if current_page > 4 %}
           <li class="page-item disabled">
@@ -104,7 +104,7 @@
           </li>
           {% else %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
           </li>
           {% endif %}
           {% endfor %}
@@ -117,14 +117,14 @@
           {% endif %}
           {% if current_page < total_pages - 2 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
           </li>
           {% endif %}
           
           <!-- Next page link -->
           {% if current_page < total_pages %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
           </li>
           {% else %}
           <li class="page-item disabled">
@@ -201,7 +201,7 @@
           <!-- Previous page link -->
           {% if current_page > 1 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Previous</a>
           </li>
           {% else %}
           <li class="page-item disabled">
@@ -212,7 +212,7 @@
           <!-- First page -->
           {% if current_page > 3 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">1</a>
           </li>
           {% if current_page > 4 %}
           <li class="page-item disabled">
@@ -229,7 +229,7 @@
           </li>
           {% else %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=page_num, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ page_num }}</a>
           </li>
           {% endif %}
           {% endfor %}
@@ -242,14 +242,14 @@
           {% endif %}
           {% if current_page < total_pages - 2 %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=total_pages, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">{{ total_pages }}</a>
           </li>
           {% endif %}
           
           <!-- Next page link -->
           {% if current_page < total_pages %}
           <li class="page-item">
-            <a class="page-link" href="{{ url_for('tasks.organizational_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
+            <a class="page-link" href="{{ url_for('tasks.all_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}">Next</a>
           </li>
           {% else %}
           <li class="page-item disabled">

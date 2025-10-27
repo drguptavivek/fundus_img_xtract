@@ -564,7 +564,7 @@ tasks
 ├── tasks.index: /tasks/
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
-├── tasks.organizational_tasks: /tasks/organizational-tasks
+├── tasks.all_tasks: /tasks/all-tasks
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── tasks.pending: /tasks/pending

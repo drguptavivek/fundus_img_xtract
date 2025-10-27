@@ -142,7 +142,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 - **Ophthalmologists** have access to tasks based on their associated lab units
 - **Optometrists** have access to tasks assigned to their associated lab units
 - All access is restricted based on lab unit associations, meaning users can only view tasks related to the lab units they are associated with
-- **Organizational tasks route** (`/tasks/organizational-tasks`) is restricted to admin and data_manager roles only
+- **All tasks route** (`/tasks/all-tasks`) is restricted to admin and data_manager roles only
 - **Navbar visibility**: The "Tasks and Images" dropdown menu in the navbar is only visible to admin, data_manager, and optometrist roles (not visible to ophthalmologists)
 
 ### Route Summary
@@ -152,7 +152,7 @@ Access to tasks routes is controlled based on user roles and lab unit associatio
 | /tasks/ | tasks.index | GET | admin, data_manager, ophthalmologist, optometrist | Main tasks page |
 | /tasks/my-tasks | tasks.my_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View and manage user's assigned tasks |
 | /tasks/pending | tasks.pending_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View pending tasks in user's lab units |
-| /tasks/organizational-tasks | tasks.organizational_tasks | GET | admin, data_manager | View all tasks scoped to user's lab units with filtering options |
+| /tasks/all-tasks | tasks.all_tasks | GET | admin, data_manager | View all tasks scoped to user's lab units with filtering options |
 
 ---
 

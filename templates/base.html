@@ -218,6 +218,13 @@
                           <li>
                             <a class="dropdown-item" href = "{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
                          </li>
+
+                          <li>
+                            <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
+                              <span>My Intra-Rater Tasks</span>
+                            </a>
+                          </li>
+
                        </ul>
                      </li>
                      {% endif %}
@@ -250,12 +257,7 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li>
-                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
-                  <span>My Intra-Rater Tasks</span>
-                  <span class="badge text-bg-info">Intra-rater</span>
-                </a>
-              </li>
+
               {% if current_user_has('admin') or current_user_has('data_manager') %}
               <li>
                 <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_admin' else '' }}" href="{{ url_for('tasks.intra_rater_admin') }}">

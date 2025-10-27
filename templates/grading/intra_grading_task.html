@@ -5,7 +5,7 @@
 {% from "_forms.html" import csrf_field %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Dual Grading Task</h3>
+  <h3 class="mb-0">Grading Task</h3>
   <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('grading.index') }}">Grading Dashboard</a>
 </div>
 
@@ -74,12 +74,19 @@
               {% endfor %}
             </div>
           </div>
-
+                  <!-- Features Section -->
+        <div class="mb-2" id="features-section" style="display: none;">
+          <label class="form-label">Relevant Features</label>
+          <div id="features-container" class="d-flex flex-column gap-2">
+            <!-- Features will be dynamically populated here -->
+          </div>
+        </div>
+        
           <div class="mb-3">
             <label for="comment-textarea" class="form-label">Comments (optional)</label>
             <textarea class="form-control" id="comment-textarea" name="comment" rows="3" maxlength="1000" placeholder="Add any relevant notes..."></textarea>
           </div>
-
+          
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">
@@ -103,6 +110,8 @@
             <h6 class="border-bottom pb-1 mb-2">Grading Instructions</h6>
             <div id="instructions-content"></div>
           </div>
+
+
         </form>
       </div>
     </div>
@@ -118,6 +127,11 @@
   window.imageUuid = "{{ image_uuid }}";
   window.currentUserId = {{ current_user_id or 'null' }};
   window.currentSlot = "intra";
+  window.featuresReadOnly = false;
+  // Pass disease gradings with features to JavaScript
+  window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
+  // Pass existing selected features if available
+  window.existingSelectedFeatures = null;
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

@@ -1,3 +1,6 @@
+'''
+Features dsiplay for dual graded added. 
+'''
 from flask import render_template, request, redirect, url_for, flash, jsonify, current_app, make_response
 from flask_login import current_user
 from sqlalchemy import and_, or_

@@ -103,6 +103,7 @@ class SubmitGradeParams:
     grader_user_id: int
     disease_grading_id: int
     comment: Optional[str] = None
+    selected_features_json: Optional[str] = None
     time_taken: Optional[float] = None
     start_time: Optional[datetime] = None
 
@@ -215,6 +216,7 @@ class IntraRaterService:
             grader_user_id=params.grader_user_id,
             disease_grading_id=params.disease_grading_id,
             comment=params.comment,
+            selected_features_json=params.selected_features_json,
             time_taken=params.time_taken,
             start_time=params.start_time,
             disease_name=disease_name,

@@ -1,9 +1,11 @@
 """
 Inline intra-rater grading routes surfaced within the dual grading flow.
+TODO- features  dsipay and saving
 """
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,7 +22,7 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope
-from models import IntraRaterTask
+from models import IntraRaterTask, GradingsFeatures
 from services.intra_rater_service import IntraRaterService, SubmitGradeParams, STATE_PENDING
 from utils.dualGradingGetNextTasks import (
     get_next_eligible_arbitrator_task_atomic,
@@ -92,6 +94,30 @@ def intra_rater_task(task_uuid: str):
 
         grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
 
+        # Build grading features data for template
+        grading_features = []
+        for grading in disease_gradings:
+            sorted_features = sorted(
+                grading.features or [],
+                key=lambda feature: ((feature.sr_no or 0), feature.id),
+            )
+            grading_features.append(
+                {
+                    "id": grading.id,
+                    "impression": grading.impression,
+                    "display_order": grading.display_order,
+                    "guidelines": grading.guidelines,
+                    "features": [
+                        {
+                            "id": feature.id,
+                            "sr_no": feature.sr_no,
+                            "label": feature.label,
+                        }
+                        for feature in sorted_features
+                    ],
+                }
+            )
+
         image_uuid = None
         if task.encounter_file:
             image_uuid = task.encounter_file.uuid
@@ -109,6 +135,7 @@ def intra_rater_task(task_uuid: str):
             task=task,
             disease_gradings=disease_gradings,
             grading_guidelines=grading_guidelines,
+            grading_features=grading_features,
             image_uuid=image_uuid,
             resume_slot=resume_slot,
             resume_disease_id=effective_resume_disease_id,
@@ -128,6 +155,59 @@ def intra_rater_submit():
     resume_disease_id = request.form.get("resume_disease_id", type=int)
     start_time_iso = (request.form.get("start_time_iso") or "").strip() or None
     actual_resume_disease_id = resume_disease_id
+    
+    # Get selected features from form
+    raw_selected_features = request.form.getlist("selected_features")
+    selected_feature_ids: list[int] = []
+    for raw_feature in raw_selected_features:
+        if raw_feature is None or raw_feature == "":
+            continue
+        try:
+            selected_feature_ids.append(int(raw_feature))
+        except (TypeError, ValueError):
+            flash("Invalid feature selection submitted.", "danger")
+            return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
+
+    # Deduplicate while preserving submission order
+    unique_feature_ids: list[int] = []
+    seen_feature_ids: set[int] = set()
+    for feature_id in selected_feature_ids:
+        if feature_id not in seen_feature_ids:
+            unique_feature_ids.append(feature_id)
+            seen_feature_ids.add(feature_id)
+
+    selected_features_json: str | None = None
+    
+    # Validate selected features if any were provided
+    if unique_feature_ids:
+        with transaction_scope() as db:
+            # Validate that features belong to the selected grading
+            available_features = (
+                db.query(GradingsFeatures)
+                .filter(GradingsFeatures.disease_grading_id == label_id)
+                .all()
+            )
+            features_by_id = {feature.id: feature for feature in available_features}
+            invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
+            if invalid_features:
+                flash("One or more selected features are not valid for the chosen grade.", "danger")
+                return redirect(_build_intra_task_url(task_uuid, resume_slot, resume_disease_id))
+
+            selected_feature_entities = sorted(
+                (features_by_id[fid] for fid in unique_feature_ids),
+                key=lambda feature: ((feature.sr_no or 0), feature.id),
+            )
+
+            selected_features_json = json.dumps(
+                [
+                    {
+                        "id": feature.id,
+                        "label": feature.label,
+                        "sr_no": feature.sr_no,
+                    }
+                    for feature in selected_feature_entities
+                ]
+            )
     if resume_slot not in {"resident", "resident2", "arbitrator"}:
         resume_slot = None
 
@@ -196,6 +276,7 @@ def intra_rater_submit():
             grader_user_id=current_user.id,
             disease_grading_id=label_id,
             comment=comment,
+            selected_features_json=selected_features_json,
             time_taken=time_taken,
             start_time=start_time,
         )

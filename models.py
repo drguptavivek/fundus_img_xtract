@@ -805,6 +805,7 @@ class IntraRaterGrade(Base):
     grader_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     disease_grading_id: Mapped[int] = mapped_column(ForeignKey("disease_gradings.id"), nullable=False, index=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selected_features_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON string storing selected feature metadata (id/label/sr_no)
     time_taken: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

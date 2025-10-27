@@ -1,6 +1,6 @@
 /**
  * Dual Grading Task JavaScript Module
- * Handles all client-side functionality for the dual grading task interface
+ * Handles all client-side functionality for the dual grading task interface including Features. 
  */
 
 // Global variables and constants

@@ -5,11 +5,14 @@ This directory contains comprehensive instructions for KiloCode to work effectiv
 
 
 ## When working with code
-1. The user uses `uv run app.py` and keeps app running in Visual STudio Code Terimainl. KILOCODE must not try running app ahain in chat window
-2. use `uv run` to run commands 
-3. DO MOT use python run, python compile, etc. Ass uses Virtual Environment in .venv
+1. The user uses `uv run app.py`  
+2. 
+    - DO NOT try tu start app yourself. 
+    - Always use `uv run` to run commands or scripts, check copile errors etc
+    - DO NOT USE `python cmd.py` or `python -c file.py` etc. 
+3. DO NOT use python run, python compile, etc. Ass uses Virtual Environment in .venv
 4. App uses port `http://127.0.0.1:5001` 
-5. Login endpoint is /login
+5. Login endpoint is `http://127.0.0.1:5001/login`. Use the script 
 6. All routes are protected  except those listed in app.py:_require_login_everywhere
 7. base.html JINJA  template exposes -   {% block extra_styles %},     {% block content %},   {% block page_scripts %}. It also imports     {% from "_forms.html" import csrf_field %}
 8. Do NOT  Apply `bg-light` class as app uses dark mode and bg-lightg makes text unreadable in dark mode
@@ -42,6 +45,47 @@ def my_function(db):
     user = db.get(User, user_id)
     # No need to commit/close - handled automatically
 ```
+
+### Database Session Management for KPI API
+**Important**: For KPI API implementation, the `@with_session()` decorator should be used as a context manager, not just as a decorator.
+
+**Correct Usage Pattern** (as seen in `api/kpis/encounter_files.py`):
+```python
+@api_bp.route('/kpis/encounter-files/example', methods=['GET'])
+@login_required
+@roles_required("admin", "data_manager")
+def example_endpoint():
+    """Example KPI endpoint with proper session management."""
+    with with_session() as db:
+        try:
+            # Database operations here
+            query = db.query(SomeModel)
+            result = query.all()
+            
+            return create_kpi_response({"data": result})
+            
+        except ValueError as e:
+            return create_error_response("Invalid parameters", str(e))
+        except Exception as e:
+            return create_error_response("Internal server error", str(e), 500)
+```
+
+**Incorrect Usage Pattern**:
+```python
+@with_session()  # WRONG: Using as decorator only
+def example_endpoint(db):
+    # This pattern is not recommended for KPI endpoints
+    # as it doesn't provide proper error handling
+    query = db.query(SomeModel)
+    return query.all()
+```
+
+**Key Points for KPI Endpoints**:
+1. Always use `with with_session() as db:` pattern for KPI endpoints
+2. This ensures proper session management and automatic cleanup
+3. Provides better error handling with try/except blocks
+4. Follows the pattern established in `api/kpis/encounter_files.py`
+5. Ensures database sessions are properly closed even when exceptions occur
 
 ### Route Protection
 **Role-based access control**:

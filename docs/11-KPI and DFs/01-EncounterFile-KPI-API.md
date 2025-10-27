@@ -33,6 +33,9 @@ All endpoints automatically apply user access control:
 - `hospital_ids` (optional): Comma-separated list of hospital IDs
 - `lab_unit_ids` (optional): Comma-separated list of lab unit IDs
 
+### Year Filter
+- `year` (optional): Integer year for filtering data
+
 ### Response Format
 
 All endpoints return JSON with the following structure:
@@ -42,6 +45,16 @@ All endpoints return JSON with the following structure:
   "data": {...},
   "message": "Data retrieved successfully",
   "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### Error Response Format
+
+```json
+{
+  "success": false,
+  "error": "Error type",
+  "message": "Detailed error message"
 }
 ```
 
@@ -131,27 +144,6 @@ All endpoints return JSON with the following structure:
 
 **Response**: Similar structure to DR reports endpoint
 
-**Endpoint**: `no-report-encounters`
-
-**Method**: `GET`
-
-**Description**: Returns encounters without any reports
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "total": 390,
-    "percentage": 24.4,
-    "by_reason": [
-      {"reason": "No DR needed", "count": 150},
-      {"reason": "Equipment issue", "count": 80},
-      {"reason": "Patient declined", "count": 160}
-    ]
-  }
-}
-```
 
 ### 3. Image Analysis Metrics
 
@@ -177,30 +169,6 @@ All endpoints return JSON with the following structure:
 }
 ```
 
-**Endpoint**: `verified-images-count`
-
-**Method**: `GET`
-
-**Description**: Returns detailed verification metrics by lab unit and disease
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "by_lab_unit_disease": [
-      {
-        "lab_unit_id": 1,
-        "lab_unit_name": "Unit A",
-        "disease": "DR",
-        "total": 200,
-        "verified": 180,
-        "verification_rate": 90.0
-      }
-    ]
-  }
-}
-```
 
 ### 4. Clinical Results Distribution
 
@@ -316,29 +284,6 @@ All endpoints return JSON with the following structure:
 }
 ```
 
-**Endpoint**: `verification-times`
-
-**Method**: `GET`
-
-**Description**: Returns verification efficiency metrics
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "verification_times": {
-      "dr_avg": 0.8,
-      "glaucoma_avg": 1.2,
-      "encounter_avg": 1.5,
-      "bottlenecks": [
-        {"stage": "DR Verification", "avg_delay": 1.2},
-        {"stage": "Glaucoma Verification", "avg_delay": 1.8}
-      ]
-    }
-  }
-}
-```
 
 ### 6. Lab Unit Performance
 
@@ -489,6 +434,21 @@ if response.status_code == 200:
         print(f"API Error: {data['message']}")
 ```
 
+## Error Handling
+
+### Parameter Validation Errors
+- Invalid date format: Returns 400 with "Invalid start_date format. Use YYYY-MM-DD"
+- Invalid hospital/lab unit IDs: Returns 400 with "Invalid hospital_ids format. Use comma-separated integers"
+- Date range validation: Returns 400 with "start_date must be before end_date"
+
+### Authentication Errors
+- Missing authentication: Returns 401 with login redirect
+- Insufficient permissions: Returns 403 with access denied message
+
+### Server Errors
+- Database connection issues: Returns 500 with "Internal server error"
+- Query execution errors: Returns 500 with detailed error message
+
 ## Rate Limiting
 
 - **Standard endpoints**: 100 requests per minute
@@ -507,3 +467,4 @@ if response.status_code == 200:
 - **v1.0**: Initial implementation with core endpoints
 - **v1.1**: Added filtering and pagination support
 - **v1.2**: Enhanced error handling and caching
+- **v1.3**: Added year filter parameter and improved response formats

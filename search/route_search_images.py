@@ -80,16 +80,17 @@ def search_images_route() -> str:
     with get_db_session() as db:
         # Check user permissions for lab unit access
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
+        is_admin = current_user.has_role("admin")
+        is_data_manager = current_user.has_role("data_manager")
         
         # Prepare filter parameters for the search_images function
         lab_unit_ids = None
         if lab_unit_id:
-            if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+            if not is_admin and lab_unit_id not in user_lab_unit_ids:
                 from flask import abort
                 abort(403, description="Access denied to this lab unit")
             lab_unit_ids = [lab_unit_id]
-        elif not is_admin_like:
+        elif not is_admin:
             lab_unit_ids = list(user_lab_unit_ids)
         
         # Convert single IDs to lists for the search function
@@ -191,13 +192,16 @@ def search_images_route() -> str:
 
         # Filter hospitals, lab units, etc. to only show those the user has access to
         # Use joinedload to eagerly load relationships to prevent DetachedInstanceError
-        if is_admin_like:
+        
+        if is_admin:
+            # Only admins see all hospitals and lab units
             hospital_objs = db.query(Hospital).options(joinedload(Hospital.lab_units)).order_by(Hospital.name).all()
             lab_unit_objs = db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.name).all()
             camera_objs = db.query(Camera).order_by(Camera.name).all()
             disease_objs = db.query(Disease).order_by(Disease.name).all()
             area_objs = db.query(Area).order_by(Area.name).all()
         else:
+            # Data managers only see their assigned lab units
             lab_unit_objs = (
                 db.query(LabUnit)
                 .options(joinedload(LabUnit.hospital))
@@ -226,12 +230,7 @@ def search_images_route() -> str:
         diseases_all = [{"id": d.id, "name": d.name} for d in disease_objs]
         areas = [{"id": a.id, "name": a.name} for a in area_objs]
 
-    # Add logging to validate the DetachedInstanceError hypothesis
-    import logging
-    runtime_logger = logging.getLogger("runtime_error")
-    runtime_logger.info(f"Database session closed, passing {len(hospitals)} hospital dictionaries to template")
-    runtime_logger.info(f"Hospital objects type: {type(hospitals[0]) if hospitals else 'No hospitals'}")
-    runtime_logger.info(f"First hospital dict: {hospitals[0] if hospitals else 'N/A'}")
+
 
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
 

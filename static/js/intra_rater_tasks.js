@@ -121,7 +121,7 @@
       .then(function () {
         showToast('Grade saved.', 'success');
         form.dataset.submitting = '0';
-        refreshTasks(document.getElementById('intra-show-completed') && document.getElementById('intra-show-completed').checked);
+        refreshTasks(true); // Always refresh with completed tasks since they're shown by default
       })
       .catch(function (err) {
         console.error(err);
@@ -191,12 +191,9 @@
         completedCard.classList.remove('d-none');
         if (completedEmpty) completedEmpty.classList.add('d-none');
       } else {
-        if (document.getElementById('intra-show-completed').checked) {
-          completedCard.classList.remove('d-none');
-          if (completedEmpty) completedEmpty.classList.remove('d-none');
-        } else {
-          completedCard.classList.add('d-none');
-        }
+        // Show empty state when there are no completed tasks
+        completedCard.classList.remove('d-none');
+        if (completedEmpty) completedEmpty.classList.remove('d-none');
       }
     }
 
@@ -321,19 +318,5 @@
 
     // Auto-load completed tasks on page load since we now show completed tasks by default
     refreshTasks(true);
-
-    var toggle = document.getElementById('intra-show-completed');
-    if (toggle) {
-      toggle.addEventListener('change', function (event) {
-        var includeCompleted = event.target.checked;
-        if (includeCompleted) {
-          refreshTasks(true);
-        } else {
-          refreshTasks(false);
-          var completedCard = document.getElementById('intra-completed-card');
-          if (completedCard) completedCard.classList.add('d-none');
-        }
-      });
-    }
   });
 })();

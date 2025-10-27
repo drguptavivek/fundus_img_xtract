@@ -27,13 +27,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            const response = await fetch(`${baseUrl}/${hospitalId}/labunits`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch lab units');
+            // First get all eligible lab units for current user
+            const eligibleResponse = await fetch('/api/eligibleLabUnit');
+            if (!eligibleResponse.ok) {
+                throw new Error('Failed to fetch eligible lab units');
             }
             
-            const labUnits = await response.json();
-            updateLabUnitDropdown(labUnits);
+            const eligibleData = await eligibleResponse.json();
+            const eligibleLabUnits = eligibleData.eligible_lab_units || [];
+            
+            // Filter eligible lab units by the selected hospital
+            const filteredLabUnits = eligibleLabUnits.filter(lu => lu.hospital_id == hospitalId);
+            
+            updateLabUnitDropdown(filteredLabUnits);
         } catch (error) {
             console.error('Error fetching lab units:', error);
             // On error, restore all lab units

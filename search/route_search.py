@@ -21,6 +21,6 @@ from models import (
 from utils.upload_eligibility import get_user_lab_unit_ids
 
 @bp.route("/", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "data_manager")
 def search_route() -> str:
     return "SEARCH IMAGES ROUTE"

@@ -173,11 +173,12 @@ class IntraRaterService:
         return batch
 
     def list_grader_tasks(self, grader_user_id: int, include_completed: bool = False,
-                        page: int = 1, per_page: int = 50) -> dict:
-        """Return pending (or all) intra-rater tasks for a grader with pagination."""
+                        page: int = 1, per_page: int = 50, completed_only: bool = False) -> dict:
+        """Return intra-rater tasks for a grader with pagination and proper scoping."""
         # Get user to check their role
         user = self.db.get(User, grader_user_id)
         is_data_manager = user and user.has_role('data_manager') and not user.has_role('admin')
+        is_admin = user and user.has_role('admin')
         
         # Load grader information for display
         query = (
@@ -192,8 +193,13 @@ class IntraRaterService:
             )
         )
         
-        if is_data_manager:
-            # For data managers, show ALL tasks from their eligible lab units
+        # Role-based filtering
+        if is_admin:
+            # Admins can see all completed tasks
+            if completed_only:
+                query = query.filter(IntraRaterTask.state == STATE_COMPLETED)
+        elif is_data_manager:
+            # For data managers, show tasks from their eligible lab units
             # Get eligible lab units for this data manager
             eligible_lab_unit_ids = (
                 self.db.query(UserDiseaseUnitRole.lab_unit_id)
@@ -211,12 +217,20 @@ class IntraRaterService:
             )
             eligible_lab_unit_ids = [lab_id[0] for lab_id in eligible_lab_unit_ids]
             query = query.filter(IntraRaterTask.lab_unit_id.in_(eligible_lab_unit_ids))
+            
+            # Only completed tasks for data managers
+            if completed_only:
+                query = query.filter(IntraRaterTask.state == STATE_COMPLETED)
         else:
             # For ophthalmologists, only show tasks assigned to them
             query = query.filter(IntraRaterTask.grader_user_id == grader_user_id)
-        
-        if not include_completed:
-            query = query.filter(IntraRaterTask.state == STATE_PENDING)
+            
+            # Only completed tasks for ophthalmologists
+            if completed_only:
+                query = query.filter(IntraRaterTask.state == STATE_COMPLETED)
+            elif not include_completed:
+                # If not completed_only and not include_completed, show only pending
+                query = query.filter(IntraRaterTask.state == STATE_PENDING)
         
         # Get total count for pagination
         total = query.count()

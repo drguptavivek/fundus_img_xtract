@@ -111,11 +111,15 @@ def list_my_intra_rater_tasks() -> Response:
 
     with get_db_session() as db:
         service = IntraRaterService(db)
+        # When include_completed is True, we only want completed tasks
+        # When include_completed is False, we only want pending tasks
+        completed_only = include_completed 
         result = service.list_grader_tasks(
             grader_user_id=current_user.id,
             include_completed=include_completed,
             page=page,
             per_page=per_page,
+            completed_only=completed_only
         )
         gradings_map = _load_gradings_map(db, result['tasks'])
         csrf_token = generate_csrf()
@@ -456,13 +460,14 @@ def intra_rater_dashboard() -> str:
     # Get pagination parameters from query string with defaults
     page = max(1, request.args.get("page", default=1, type=int))
     per_page = min(max(1, request.args.get("per_page", default=50, type=int)), 200)  # Changed back to 50 to match API
-    include_completed = request.args.get("include_completed", default=1, type=int) == 1
-
+    
     with get_db_session() as db:
         service = IntraRaterService(db)
+        # Only fetch completed tasks, with proper user scoping
         result = service.list_grader_tasks(
             grader_user_id=current_user.id,
-            include_completed=include_completed,
+            include_completed=True,  # Only completed tasks
+            completed_only=True,     # New parameter to ensure only completed tasks
             page=page,
             per_page=per_page
         )
@@ -473,7 +478,7 @@ def intra_rater_dashboard() -> str:
             "tasks/intra_rater/queue.html",
             tasks=result['tasks'],
             gradings_map=gradings_map,
-            include_completed=include_completed,
+            include_completed=True,  # Always showing completed tasks
             pagination=result,
         )
 

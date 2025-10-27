@@ -148,9 +148,9 @@
         return resp.json();
       })
       .then(function (data) {
-        console.log('API response data:', data);
-        console.log('Items count:', data.items ? data.items.length : 0);
-        console.log('Pagination data:', data.pagination);
+        // console.log('API response data:', data);
+        // console.log('Items count:', data.items ? data.items.length : 0);
+        // console.log('Pagination data:', data.pagination);
         renderTaskLists(data.items || []);
         updatePagination(data.pagination);
         if (includeCompleted) {
@@ -164,10 +164,10 @@
   }
 
   function updatePagination(pagination) {
-    console.log('updatePagination called with:', pagination);
+    // console.log('updatePagination called with:', pagination);
     
     if (!pagination) {
-      console.log('No pagination data provided');
+      // console.log('No pagination data provided');
       // Even if no pagination object, ensure container is empty
       var paginationContainer = document.getElementById('intra-pagination');
       if (paginationContainer) {
@@ -178,7 +178,7 @@
     
     var paginationContainer = document.getElementById('intra-pagination');
     if (!paginationContainer) {
-      console.log('Pagination container not found');
+      // console.log('Pagination container not found');
       return;
     }
     
@@ -187,12 +187,7 @@
     var totalItems = pagination.total || 0;
     var perPage = pagination.per_page || 10;  // Default to 10 if not provided
     
-    console.log('Pagination details:', {
-      currentPage: currentPage,
-      totalPages: totalPages,
-      totalItems: totalItems,
-      perPage: perPage
-    });
+    // console.log('Pagination details:', {      currentPage: currentPage,      totalPages: totalPages,      totalItems: totalItems,      perPage: perPage    });
     
     // Always clear the container first
     paginationContainer.innerHTML = '';
@@ -280,29 +275,29 @@
       return;
     }
 
-    console.log('Rendering task lists with ' + items.length + ' total items');
+    // console.log('Rendering task lists with ' + items.length + ' total items');
 
     // Clear existing content
     pendingContainer.innerHTML = '';
     if (completedList) {
       completedList.innerHTML = '';
-      console.log('Cleared completed list');
+      // console.log('Cleared completed list');
     }
 
     var pendingCount = 0;
     var completedCount = 0;
 
     items.forEach(function (item) {
-      console.log('Processing task:', item.uuid, 'with state:', item.state);
+      // console.log('Processing task:', item.uuid, 'with state:', item.state);
       if (item.state === 'completed') {
         completedCount++;
-        console.log('Task', item.uuid, 'is completed');
+        // console.log('Task', item.uuid, 'is completed');
         if (completedList) {
           try {
             var rowElement = renderCompletedRow(item);
             if (rowElement && rowElement.nodeType === Node.ELEMENT_NODE) {
               completedList.appendChild(rowElement);
-              console.log('Appended completed task to list:', item.uuid);
+              // console.log('Appended completed task to list:', item.uuid);
             } else {
               console.error('Invalid row element returned for completed task:', item);
             }
@@ -312,14 +307,14 @@
         }
       } else {
         pendingCount++;
-        console.log('Task', item.uuid, 'is pending');
+        // console.log('Task', item.uuid, 'is pending');
         var rowElement = renderPendingRow(item);
         pendingContainer.appendChild(rowElement);
-        console.log('Appended pending task to list:', item.uuid);
+        // console.log('Appended pending task to list:', item.uuid);
       }
     });
 
-    console.log('Final counts - Completed tasks:', completedCount, ', Pending tasks:', pendingCount);
+    // console.log('Final counts - Completed tasks:', completedCount, ', Pending tasks:', pendingCount);
 
     if (pendingCount === 0) {
       pendingContainer.innerHTML = '<div class="p-4 text-center text-muted">No intra-rater tasks waiting for you right now.</div>';
@@ -327,7 +322,7 @@
 
     // Handle completed card visibility
     if (completedCard) {
-      console.log('Completed card element found. Completed count:', completedCount);
+      // console.log('Completed card element found. Completed count:', completedCount);
       if (completedCount > 0) {
         // Show completed tasks
         completedCard.classList.remove('d-none');
@@ -337,7 +332,7 @@
         completedCard.style.maxHeight = 'none';
         completedCard.style.overflow = 'visible';
         
-        console.log('Showing completed card with', completedCount, 'tasks');
+        // console.log('Showing completed card with', completedCount, 'tasks');
       } else {
         // Show empty state when there are no completed tasks
         completedCard.classList.remove('d-none');
@@ -347,7 +342,7 @@
         completedCard.style.maxHeight = 'none';
         completedCard.style.overflow = 'visible';
         
-        console.log('Showing completed card with empty state');
+        // console.log('Showing completed card with empty state');
       }
     } else {
       console.error('Completed card element not found');
@@ -464,7 +459,7 @@
         '</div>' +
         '</div>' +
         '</div>';
-      console.log('Successfully rendered completed task:', item.uuid);
+      // console.log('Successfully rendered completed task:', item.uuid);
     } catch (error) {
       console.error('Error rendering completed task:', item, error);
       container.innerHTML = '<div class="text-danger">Error rendering task: ' + item.uuid + '</div>';
@@ -480,7 +475,7 @@
       tasksEndpoint = pageRoot.dataset.tasksEndpoint || null;
       fallbackCsrfToken = pageRoot.dataset.csrfToken || null;
       
-      console.log('Page root found, endpoint:', tasksEndpoint);
+      // console.log('Page root found, endpoint:', tasksEndpoint);
       
       // Only enhance forms initially if they exist on page load
       enhanceForms();

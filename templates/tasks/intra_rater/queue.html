@@ -17,6 +17,28 @@
     </div>
   </div>
 
+  <!-- KPI Section -->
+  <div class="card mt-4">
+    <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
+      <span class="fw-semibold">Intra-rater Reliability KPIs</span>
+      <span class="badge text-bg-info">Analytics</span>
+    </div>
+    <div class="card-body">
+      <div id="intra-kpi-container"></div>
+    </div>
+  </div>
+
+  <!-- Cross-tabulation Section -->
+  <div class="card mt-4">
+    <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
+      <span class="fw-semibold">Grade Cross-tabulation</span>
+      <span class="badge text-bg-info">Comparison</span>
+    </div>
+    <div class="card-body">
+      <div id="intra-crosstab-container"></div>
+    </div>
+  </div>
+
   <div class="card mt-4 d-none" id="intra-pending-card">
     <div class="card-header bg-body-tertiary d-flex align-items-center justify-content-between">
       <span class="fw-semibold">Pending reassessments</span>
@@ -49,5 +71,6 @@
 
 {% block page_scripts %}
 {{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{{ url_for('static', filename='js/intra_rater_tasks.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 {% endblock %}

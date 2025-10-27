@@ -31,6 +31,7 @@ from services.intra_rater_service import (
 )
 from services.intra_rater_service import get_default_cooldown_days
 from flask_wtf.csrf import generate_csrf
+from utils.intraraterKPIs import get_disease_summary, generate_cross_tabulation
 
 from . import bp
 
@@ -163,6 +164,40 @@ def submit_intra_rater_grade(task_id: int) -> Response:
         return jsonify(response), HTTPStatus.CREATED.value
 
 
+@bp.route("/intra-rater/kpi-data", methods=["GET"])
+@roles_required("ophthalmologist", "admin", "data_manager")
+def get_intra_rater_kpi_data() -> Response:
+    """Return KPI data for intra-rater reliability analysis."""
+    with get_db_session() as db:
+        service = IntraRaterService(db)
+        # Get all completed tasks for KPI calculation
+        result = service.list_grader_tasks(
+            grader_user_id=current_user.id,
+            include_completed=True,
+            completed_only=True,  # Only completed tasks
+            page=1,
+            per_page=1000  # Get all completed tasks for KPI calculation
+        )
+        
+        # Convert tasks to the format expected by our KPI functions
+        tasks_data = [_task_to_payload(task, _load_gradings_map(db, result['tasks']), generate_csrf(), db) 
+                      for task in result['tasks']]
+        
+        # Calculate KPIs
+        disease_summary = get_disease_summary(tasks_data)
+        
+        # Also get cross-tabulation for each disease
+        cross_tabs = {}
+        for disease_name in disease_summary['diseases'].keys():
+            cross_tabs[disease_name] = generate_cross_tabulation(tasks_data, disease_name, grade_ordering='id')
+        
+        return jsonify({
+            "disease_summary": disease_summary,
+            "cross_tabs": cross_tabs,
+            "total_tasks_count": len(tasks_data)
+        })
+
+
 def _parse_create_payload(payload: dict) -> BatchCreateParams:
     """Validate and coerce incoming payload into BatchCreateParams."""
     disease_id = _require_positive_int(payload.get("disease_id"), "disease_id")
@@ -285,6 +320,11 @@ def _task_to_payload(
                 original_grader_name = task.source_task.grader.full_name or task.source_task.grader.username
                 original_grader_username = task.source_task.grader.username
     
+    # Get the disease grading ID for the repeated grade
+    repeated_grade_id = None
+    if task.grades and len(task.grades) > 0:
+        repeated_grade_id = task.grades[0].disease_grading_id
+    
     return {
         "id": task.id,
         "uuid": task.uuid,
@@ -309,6 +349,7 @@ def _task_to_payload(
             for grading in gradings
         ],
         "grade_name": task.grades[0].grade_name if task.grades else None,
+        "disease_grading_id": repeated_grade_id,  # Added for proper grade ordering
         "comment": task.grades[0].comment if task.grades else None,
         "graded_at": task.grades[0].created_at.isoformat() if task.grades and task.grades[0].created_at else None,
         "original_grade_name": original_grading.impression if original_grading else None,

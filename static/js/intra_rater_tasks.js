@@ -4,7 +4,9 @@
 
   var pageRoot = null;
   var tasksEndpoint = null;
+  var kpiEndpoint = null;
   var fallbackCsrfToken = null;
+  var charts = []; // Track Chart instances to destroy when updating
 
   function showToast(message, level) {
     var container = document.getElementById('flash-toasts');
@@ -122,6 +124,7 @@
         showToast('Grade saved.', 'success');
         form.dataset.submitting = '0';
         refreshTasks(true); // Refresh all tasks after submission
+        refreshKPIs(); // Refresh KPI data after submission
       })
       .catch(function (err) {
         console.error(err);
@@ -161,6 +164,288 @@
         console.error(err);
         showToast(err.message, 'danger');
       });
+  }
+
+  function refreshKPIs() {
+    if (!kpiEndpoint) return;
+    
+    fetch(kpiEndpoint, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    })
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('Unable to load intra-rater KPIs.');
+        return resp.json();
+      })
+      .then(function (data) {
+        renderKPIData(data);
+      })
+      .catch(function (err) {
+        console.error(err);
+        showToast('Unable to load KPI data: ' + err.message, 'danger');
+      });
+  }
+
+  function renderKPIData(data) {
+    // Destroy existing charts to prevent memory leaks
+    charts.forEach(chart => chart.destroy());
+    charts = [];
+
+    // Render disease-wise KPIs
+    if (data.disease_summary) {
+      renderDiseaseSummary(data.disease_summary);
+    }
+
+    // Render cross-tabulation charts
+    if (data.cross_tabs) {
+      renderCrossTabulation(data.cross_tabs);
+    }
+  }
+
+  function renderDiseaseSummary(summary) {
+    var container = document.getElementById('intra-kpi-container');
+    if (!container) return;
+
+    // Create a row for charts
+    container.innerHTML = '<div id="disease-charts-row" class="row mb-4"></div><div id="kappa-charts-row" class="row mb-4"></div>';
+
+    // Prepare data for consistency rate chart
+    var diseases = Object.keys(summary.diseases);
+    var consistencyRates = diseases.map(disease => summary.diseases[disease].consistency_rate);
+    var totalTasks = diseases.map(disease => summary.diseases[disease].total_tasks);
+
+    // Create consistency rate chart
+    if (diseases.length > 0) {
+      var consistencyCtx = document.createElement('canvas');
+      consistencyCtx.id = 'consistency-rate-chart';
+      consistencyCtx.height = '200';
+      var consistencyChartContainer = document.createElement('div');
+      consistencyChartContainer.className = 'col-md-6';
+      consistencyChartContainer.appendChild(consistencyCtx);
+      document.getElementById('disease-charts-row').appendChild(consistencyChartContainer);
+
+      var consistencyChart = new Chart(consistencyCtx, {
+        type: 'bar',
+        data: {
+          labels: diseases,
+          datasets: [{
+            label: 'Consistency Rate (%)',
+            data: consistencyRates,
+            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              title: {
+                display: true,
+                text: 'Percentage'
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: 'Intra-rater Consistency Rate by Disease'
+            }
+          }
+        }
+      });
+      charts.push(consistencyChart);
+
+      // Create total tasks chart
+      var tasksCtx = document.createElement('canvas');
+      tasksCtx.id = 'total-tasks-chart';
+      tasksCtx.height = '200';
+      var tasksChartContainer = document.createElement('div');
+      tasksChartContainer.className = 'col-md-6';
+      tasksChartContainer.appendChild(tasksCtx);
+      document.getElementById('disease-charts-row').appendChild(tasksChartContainer);
+
+      var tasksChart = new Chart(tasksCtx, {
+        type: 'bar',
+        data: {
+          labels: diseases,
+          datasets: [{
+            label: 'Total Tasks',
+            data: totalTasks,
+            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Number of Tasks'
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: 'Total Completed Tasks by Disease'
+            }
+          }
+        }
+      });
+      charts.push(tasksChart);
+    }
+
+    // Create Kappa statistics chart with both Cohen's and Weighted Kappa
+    var kappaDiseases = [];
+    var cohensKappaValues = [];
+    var weightedKappaValues = [];
+    for (var disease in summary.diseases) {
+      kappaDiseases.push(disease);
+      cohensKappaValues.push(summary.diseases[disease].cohens_kappa);
+      weightedKappaValues.push(summary.diseases[disease].weighted_kappa);
+    }
+
+    if (kappaDiseases.length > 0) {
+      var kappaCtx = document.createElement('canvas');
+      kappaCtx.id = 'kappa-chart';
+      kappaCtx.height = '200';
+      var kappaChartContainer = document.createElement('div');
+      kappaChartContainer.className = 'col-md-12';
+      kappaChartContainer.appendChild(kappaCtx);
+      document.getElementById('kappa-charts-row').appendChild(kappaChartContainer);
+
+      var kappaChart = new Chart(kappaCtx, {
+        type: 'bar',
+        data: {
+          labels: kappaDiseases,
+          datasets: [
+            {
+              label: "Cohen's Kappa",
+              data: cohensKappaValues,
+              backgroundColor: 'rgba(75, 192, 192, 0.2)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Weighted Kappa',
+              data: weightedKappaValues,
+              backgroundColor: 'rgba(153, 102, 255, 0.2)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 1.0,
+              title: {
+                display: true,
+                text: 'Kappa Value'
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: "Cohen's Kappa vs Weighted Kappa by Disease"
+            }
+          }
+        }
+      });
+      charts.push(kappaChart);
+    }
+
+    // Create summary table as well
+    var summaryTable = document.createElement('div');
+    summaryTable.className = 'row mt-4';
+    summaryTable.innerHTML = '<div class="col-12"><h5>Summary Table</h5><div id="summary-table-container"></div></div>';
+    container.appendChild(summaryTable);
+
+    var tableHtml = '<table class="table table-striped"><thead><tr><th>Disease</th><th>Total Tasks</th><th>Consistent</th><th>Inconsistent</th><th>Consistency Rate (%)</th><th>Cohen\'s Kappa</th><th>Weighted Kappa</th></tr></thead><tbody>';
+    for (var disease in summary.diseases) {
+      var stats = summary.diseases[disease];
+      tableHtml += '<tr>' +
+        '<td>' + disease + '</td>' +
+        '<td>' + stats.total_tasks + '</td>' +
+        '<td>' + stats.consistent_grades + '</td>' +
+        '<td>' + stats.inconsistent_grades + '</td>' +
+        '<td>' + stats.consistency_rate + '</td>' +
+        '<td>' + stats.cohens_kappa + '</td>' +
+        '<td>' + stats.weighted_kappa + '</td>' +
+        '</tr>';
+    }
+    tableHtml += '</tbody></table>';
+    document.getElementById('summary-table-container').innerHTML = tableHtml;
+  }
+
+  function renderCrossTabulation(crossTabs) {
+    var container = document.getElementById('intra-crosstab-container');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    for (var disease in crossTabs) {
+      var diseaseCrossTab = crossTabs[disease];
+      if (!diseaseCrossTab.matrix || diseaseCrossTab.rows.length === 0) continue;
+
+      var card = document.createElement('div');
+      card.className = 'card mb-4';
+      card.innerHTML = 
+        '<div class="card-header">' +
+        '<h5 class="mb-0">Cross-tabulation for ' + disease + ' (Original vs Repeated Grades)</h5>' +
+        '</div>' +
+        '<div class="card-body">' +
+        '<div id="crosstab-' + disease.replace(/\s+/g, '-').toLowerCase() + '-container">' +
+        '<canvas id="crosstab-' + disease.replace(/\s+/g, '-').toLowerCase() + '"></canvas>' +
+        '</div>' +
+        '</div>';
+      
+      container.appendChild(card);
+
+      // Target the container div, not the non-existent canvas
+      var containerId = 'crosstab-' + disease.replace(/\s+/g, '-').toLowerCase() + '-container';
+      var tableContainer = document.getElementById(containerId);
+      if (tableContainer) {
+        // Create an HTML table for the cross-tabulation
+        var tableHtml = '<table class="table table-bordered table-sm">';
+        
+        // Header row
+        tableHtml += '<thead><tr><th class="text-center">Original \\ Repeated</th>';
+        for (var j = 0; j < diseaseCrossTab.columns.length; j++) {
+          tableHtml += '<th class="text-center">' + diseaseCrossTab.columns[j] + '</th>';
+        }
+        tableHtml += '</tr></thead><tbody>';
+        
+        // Data rows
+        for (var i = 0; i < diseaseCrossTab.rows.length; i++) {
+          tableHtml += '<tr>';
+          tableHtml += '<th class="text-center align-middle">' + diseaseCrossTab.rows[i] + '</th>';
+          for (var j = 0; j < diseaseCrossTab.columns.length; j++) {
+            var count = diseaseCrossTab.matrix[diseaseCrossTab.rows[i]][diseaseCrossTab.columns[j]] || 0;
+            // Calculate relative intensity for background color
+            var rowValues = Object.values(diseaseCrossTab.matrix[diseaseCrossTab.rows[i]]);
+            var maxInRow = Math.max(...rowValues);
+            var intensity = maxInRow > 0 ? count / maxInRow : 0;
+            var bgColor = 'rgba(54, 162, 235, ' + intensity + ')';
+            tableHtml += '<td class="text-center" style="background-color: ' + bgColor + '">' + count + '</td>';
+          }
+          tableHtml += '</tr>';
+        }
+        
+        tableHtml += '</tbody></table>';
+        tableContainer.innerHTML = tableHtml;
+      }
+    }
   }
 
   function updatePagination(pagination) {
@@ -473,6 +758,7 @@
     pageRoot = document.getElementById('intra-page-root');
     if (pageRoot) {
       tasksEndpoint = pageRoot.dataset.tasksEndpoint || null;
+      kpiEndpoint = '/tasks/intra-rater/kpi-data'; // Set the KPI endpoint
       fallbackCsrfToken = pageRoot.dataset.csrfToken || null;
       
       // console.log('Page root found, endpoint:', tasksEndpoint);
@@ -482,6 +768,9 @@
       
       // Load all tasks (pending and completed) on page load
       refreshTasks(true);
+      
+      // Load KPI data on page load
+      refreshKPIs();
     } else {
       console.error('Intra-rater page root element not found');
     }

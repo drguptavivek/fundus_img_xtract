@@ -5,27 +5,39 @@ Test script for KPI API endpoints with authentication
 import requests
 import json
 from bs4 import BeautifulSoup
+import os
+import sys
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Add the parent directory to the path to import test_auth_helpers
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_auth_helpers import login_as_test_admin, make_authenticated_request
 
 # Base URL for API
-BASE_URL = "http://127.0.0.1:5001/api/kpis/encounter-files"
+BASE_URL = f"{os.getenv('BASE_URL', 'http://127.0.0.1:5001')}/api/kpis/encounter-files"
 
 def login_and_get_session():
-    """Login to get session cookie."""
-    # Use existing session cookie from previous login
-    session_cookie = "d48a3fe7fb2fc37d6f8fc0b24e81c94ce06e5ee5cea0a322c980c4dd65d9fdd2"
-    print(f"✅ Using existing session cookie: {session_cookie}")
-    return session_cookie
+    """Login to get session cookie using authentication helper."""
+    try:
+        cookies = login_as_test_admin()
+        print("✅ Successfully logged in as test_admin")
+        return cookies
+    except Exception as e:
+        print(f"❌ Login failed: {e}")
+        return None
 
-def test_endpoint(endpoint_name, session_cookie):
+def test_endpoint(endpoint_name, cookies):
     """Test a specific endpoint and return response."""
     url = f"{BASE_URL}/{endpoint_name}"
-    headers = {"Cookie": f"session={session_cookie}"}
     
     print(f"\n=== Testing {endpoint_name} ===")
     print(f"URL: {url}")
     
     try:
-        response = requests.get(url, headers=headers)
+        response = make_authenticated_request(url, cookies)
         print(f"Status Code: {response.status_code}")
         
         if response.status_code == 200:
@@ -46,8 +58,8 @@ def test_endpoint(endpoint_name, session_cookie):
 def main():
     """Test all KPI endpoints."""
     # Login first
-    session_cookie = login_and_get_session()
-    if not session_cookie:
+    cookies = login_and_get_session()
+    if not cookies:
         print("❌ Cannot proceed without login")
         return
     
@@ -65,7 +77,7 @@ def main():
     
     results = {}
     for endpoint in endpoints:
-        results[endpoint] = test_endpoint(endpoint, session_cookie)
+        results[endpoint] = test_endpoint(endpoint, cookies)
     
     print("\n=== SUMMARY ===")
     for endpoint, success in results.items():

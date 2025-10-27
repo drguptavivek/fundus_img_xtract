@@ -36,6 +36,11 @@ def all_tasks() -> str:
         # Get user's lab unit IDs for scoping
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         
+        # DEBUG: Log user lab unit IDs
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"User {current_user.id} has access to lab units: {user_lab_unit_ids}")
+        
         # Get paginated tasks using the utility function
         tasks, total_count = get_task_summary(
             db_session=db,
@@ -55,11 +60,32 @@ def all_tasks() -> str:
         # Get all diseases for the disease filter dropdown
         diseases = get_all_diseases()
         
-        # Get all hospitals for the hospital filter dropdown
-        hospitals = db.query(Hospital).order_by(Hospital.name).all()
+        # DEBUG: Log total hospitals and lab units before filtering
+        all_hospitals = db.query(Hospital).order_by(Hospital.id).all()
+        all_lab_units = db.query(LabUnit).order_by(LabUnit.id).all()
+        logger.info(f"Total hospitals in DB: {len(all_hospitals)}")
+        logger.info(f"Total lab units in DB: {len(all_lab_units)}")
         
-        # Get all lab units for initial load (will be filtered by JS)
-        all_lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
+        # Filter hospitals to only include those with lab units the user has access to
+        if user_lab_unit_ids:
+            # Get lab units that user has access to
+            user_lab_units = db.query(LabUnit).filter(LabUnit.id.in_(user_lab_unit_ids)).all()
+            # Extract unique hospital IDs from user's lab units
+            user_hospital_ids = list(set(lu.hospital_id for lu in user_lab_units if lu.hospital_id))
+            # Filter hospitals to only those the user has access to (sorted by ID)
+            hospitals = [h for h in all_hospitals if h.id in user_hospital_ids]
+            # Filter lab units to only those the user has access to (sorted by ID)
+            lab_units = [lu for lu in all_lab_units if lu.id in user_lab_unit_ids]
+            
+            # DEBUG: Log filtered counts
+            logger.info(f"Filtered hospitals for user: {len(hospitals)}")
+            logger.info(f"Filtered lab units for user: {len(lab_units)}")
+            logger.info(f"User hospital IDs: {user_hospital_ids}")
+        else:
+            # User has no lab unit access, show empty lists
+            hospitals = []
+            lab_units = []
+            logger.warning(f"User {current_user.id} has no lab unit access")
         
         # Prepare context for template
         context = {
@@ -75,7 +101,7 @@ def all_tasks() -> str:
             'search_query': search_query,
             'diseases': diseases,
             'hospitals': hospitals,
-            'all_lab_units': all_lab_units,  # Pass all lab units to template
+            'all_lab_units': lab_units,  # Pass filtered lab units to template
             'user_lab_unit_ids': user_lab_unit_ids
         }
         

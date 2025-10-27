@@ -73,7 +73,7 @@ function scrollToImageCard() {
                 window.scrollTo(0, offsetTop);
             }
             
-            console.log('Scrolled to image card');
+            // console.log('Scrolled to image card');
         }
     }, 50); // Reduced delay for quicker response
 }

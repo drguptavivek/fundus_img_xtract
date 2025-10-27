@@ -45,37 +45,7 @@
     return csrfInput ? csrfInput.value : null;
   }
 
-  // API functions for viewer settings and presets
-  async function fetchViewerSettings() {
-    try {
-      const response = await fetch('/api/viewer/settings');
-      if (response.ok) {
-        return await response.json();
-      }
-      return null;
-    } catch(_) { return null; }
-  }
-
-  async function saveViewerSettings(settings) {
-    try {
-      const csrfToken = getCsrfToken();
-
-      const headers = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (csrfToken) {
-        headers['X-CSRFToken'] = csrfToken;
-      }
-      
-      const response = await fetch('/api/viewer/settings', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(settings)
-      });
-      return response.ok;
-    } catch(_) { return false; }
-  }
+  // API functions for viewer presets only
 
   async function fetchViewerPresets() {
     try {
@@ -586,14 +556,6 @@
       }
     }
     
-    async function saveViewerSettingsToAPI(settings) {
-      try {
-        await saveViewerSettings(settings);
-      } catch(e) {
-        console.error('Error saving viewer settings to API:', e);
-      }
-    }
-    
     // Touch/gesture state
     let touchStartDistance = 0;
     let touchStartZoom = 100;
@@ -885,9 +847,8 @@
 
     loupeToggle?.addEventListener('click', () => {
       setLoupeEnabled(!loupeEnabled);
-      // Save loupe state to localStorage for rapid loading and to API for persistence
+      // Save loupe state to localStorage for rapid loading
       saveViewerSettingsToStorage();
-      saveViewerSettingsToAPI({ loupe_enabled: loupeEnabled });
     });
     
     // Preset button handlers

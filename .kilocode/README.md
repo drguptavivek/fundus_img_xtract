@@ -5,8 +5,8 @@ This directory contains comprehensive instructions for KiloCode to work effectiv
 
 
 ## When working with code
-1. The user uses `uv run app.py`  
-2. 
+1. The user uses `uv run app.py`  in VS Code terminal that blcoks the port
+2. NEVER do `uv run app.py` as the port is blocked.
     - DO NOT try tu start app yourself. 
     - Always use `uv run` to run commands or scripts, check copile errors etc
     - DO NOT USE `python cmd.py` or `python -c file.py` etc. 

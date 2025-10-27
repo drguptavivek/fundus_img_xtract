@@ -15,7 +15,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 from models import (
     ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
     DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
-    LabUnit, Hospital, DiseaseGrading, Disease
+    LabUnit, Hospital, DiseaseGrading, Disease, ZipFile
 )
 
 
@@ -143,21 +143,15 @@ def year_month_wise_uploads():
             if 'year' in params:
                 query = query.filter(extract('year', PatientEncounters.capture_date_dt) == params['year'])
             
-            # Get monthly aggregated data
-            monthly_data = query.with_entities(
+            # Get monthly aggregated data for captures (by capture date)
+            captures_by_month = query.with_entities(
                 extract('year', PatientEncounters.capture_date_dt).label('year'),
                 extract('month', PatientEncounters.capture_date_dt).label('month'),
                 func.count(PatientEncounters.id).label('captures'),
-                func.count(func.distinct(EncounterFile.id)).label('uploads'),
-                func.avg(
-                    func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600
-                ).label('processing_completion_avg'),
                 LabUnit.id.label('lab_unit_id'),
                 LabUnit.name.label('lab_unit_name'),
                 Hospital.id.label('hospital_id'),
                 Hospital.name.label('hospital_name')
-            ).join(
-                EncounterFile, PatientEncounters.id == EncounterFile.patient_encounter_id
             ).join(
                 LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
             ).join(
@@ -167,10 +161,90 @@ def year_month_wise_uploads():
                 extract('month', PatientEncounters.capture_date_dt),
                 LabUnit.id,
                 Hospital.id
-            ).order_by(
-                extract('year', PatientEncounters.capture_date_dt),
-                extract('month', PatientEncounters.capture_date_dt)
             ).all()
+            
+            # Get monthly aggregated data for uploads (by upload date)
+            uploads_by_month = query.join(
+                ZipFile, PatientEncounters.zip_file_id == ZipFile.id
+            ).join(
+                EncounterFile, PatientEncounters.id == EncounterFile.patient_encounter_id
+            ).join(
+                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
+            ).join(
+                Hospital, LabUnit.hospital_id == Hospital.id
+            ).filter(
+                ZipFile.upload_date.isnot(None)
+            ).with_entities(
+                extract('year', ZipFile.upload_date).label('year'),
+                extract('month', ZipFile.upload_date).label('month'),
+                func.count(func.distinct(EncounterFile.id)).label('uploads'),
+                func.avg(
+                    func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600
+                ).label('processing_completion_avg'),
+                LabUnit.id.label('lab_unit_id'),
+                LabUnit.name.label('lab_unit_name'),
+                Hospital.id.label('hospital_id'),
+                Hospital.name.label('hospital_name')
+            ).group_by(
+                extract('year', ZipFile.upload_date),
+                extract('month', ZipFile.upload_date),
+                LabUnit.id,
+                Hospital.id
+            ).all()
+            
+            # Combine captures and uploads data
+            # Create dictionaries for easier lookup
+            captures_dict = {}
+            for row in captures_by_month:
+                key = (row.year, row.month, row.lab_unit_id, row.hospital_id)
+                captures_dict[key] = row.captures
+            
+            uploads_dict = {}
+            processing_avg_dict = {}
+            for row in uploads_by_month:
+                key = (row.year, row.month, row.lab_unit_id, row.hospital_id)
+                uploads_dict[key] = row.uploads
+                processing_avg_dict[key] = float(row.processing_completion_avg or 0)
+            
+            # Get all unique month/year/lab_unit/hospital combinations
+            all_keys = set(captures_dict.keys()).union(set(uploads_dict.keys()))
+            
+            # Format combined data
+            monthly_data = []
+            for key in all_keys:
+                year, month, lab_unit_id, hospital_id = key
+                # Find the corresponding lab unit and hospital names
+                lab_unit_name = None
+                hospital_name = None
+                
+                # Look up names from either captures or uploads data
+                for row in captures_by_month:
+                    if row.year == year and row.month == month and row.lab_unit_id == lab_unit_id and row.hospital_id == hospital_id:
+                        lab_unit_name = row.lab_unit_name
+                        hospital_name = row.hospital_name
+                        break
+                
+                if not lab_unit_name:  # If not found in captures, check uploads
+                    for row in uploads_by_month:
+                        if row.year == year and row.month == month and row.lab_unit_id == lab_unit_id and row.hospital_id == hospital_id:
+                            lab_unit_name = row.lab_unit_name
+                            hospital_name = row.hospital_name
+                            break
+                
+                monthly_data.append(type('MonthlyData', (), {
+                    'year': year,
+                    'month': month,
+                    'captures': captures_dict.get(key, 0),
+                    'uploads': uploads_dict.get(key, 0),
+                    'processing_completion_avg': processing_avg_dict.get(key, 0),
+                    'lab_unit_id': lab_unit_id,
+                    'lab_unit_name': lab_unit_name,
+                    'hospital_id': hospital_id,
+                    'hospital_name': hospital_name
+                })())
+            
+            # Sort by year and month
+            monthly_data.sort(key=lambda x: (x.year, x.month))
             
             # Format monthly data
             month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',

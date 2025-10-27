@@ -220,7 +220,7 @@
       if (rawKey === '/' || rawKey === '?') {
         e.preventDefault();
         resetBtn?.click();
-        // Also explicitly reset the loupe
+        // Reset loupe values but don't disable it
         state?.resetLoupe?.();
         return;
       }
@@ -836,17 +836,22 @@
     }
 
     function resetLoupe(){
+      // Reset loupe values to defaults but don't disable it
       loupeSize = DEFAULT_LOUPE_SIZE;
       loupeZoom = DEFAULT_LOUPE_ZOOM;
       lastPointerPos = null;
       applyLoupeDimensions();
       updateLoupeAssets();
-      setLoupeEnabled(false);
+      // If loupe is currently enabled, update it with new values
+      if (loupeEnabled && lastPointerPos) {
+        updateLoupePosition(lastPointerPos);
+      }
       resetImagePan();
     }
 
     loupeToggle?.addEventListener('click', () => {
-      setLoupeEnabled(!loupeEnabled);
+      const newState = !loupeEnabled;
+      setLoupeEnabled(newState);
       // Save loupe state to localStorage for rapid loading
       saveViewerSettingsToStorage();
     });
@@ -1147,7 +1152,10 @@
     });
     
     viewerStates.set(root, {
-      toggleLoupe: () => setLoupeEnabled(!loupeEnabled),
+      toggleLoupe: () => {
+        const currentState = loupeEnabled;
+        setLoupeEnabled(!currentState);
+      },
       adjustLoupeSize,
       adjustLoupeZoom,
       adjustImagePan,
@@ -1156,6 +1164,7 @@
       setZoomLevel,
       fitToContainer,
       currentZoom, // Expose current zoom level for keyboard shortcuts
+      getCurrentLoupeEnabled: () => loupeEnabled, // Expose current loupe state as getter
       applyPreset: async (presetNum) => {
         const presets = await loadViewerPresets();
         const preset = presets[presetNum];

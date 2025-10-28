@@ -4,33 +4,6 @@
 
 {% block extra_styles %}
 <style>
-  .dataframe-container {
-    overflow-x: auto;
-    margin-bottom: 2rem;
-  }
-  
-  .dataframe-table {
-    min-width: 100%;
-    font-size: 0.875rem;
-  }
-  
-  .dataframe-table th {
-    background-color: #f8f9fa;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  
-  .dataframe-table td, .dataframe-table th {
-    padding: 0.5rem;
-    border: 1px solid #dee2e6;
-    white-space: nowrap;
-  }
-  
-  .dataframe-table tr:hover {
-    background-color: #f8f9fa;
-  }
-  
   .verified-yes {
     color: #198754;
     font-weight: 500;
@@ -44,6 +17,77 @@
   .verified-pending {
     color: #fd7e14;
     font-weight: 500;
+  }
+  
+  /* DataTable Layout Customization */
+  .dataTables_wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .dataTables_top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #dee2e6;
+  }
+  
+  .dataTables_length {
+    float: none !important;
+  }
+  
+  .dataTables_filter {
+    float: none !important;
+    text-align: right;
+  }
+  
+  .dataTables_scroll {
+    overflow-x: auto;
+    border: 1px solid #dee2e6;
+  }
+  
+  .dataTables_scrollHead {
+    background-color: #f8f9fa;
+  }
+  
+  .dataTables_scrollBody {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  
+  .dataTables_bottom {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-top: 1px solid #dee2e6;
+  }
+  
+  .dataTables_info {
+    float: none !important;
+    margin-right: 1rem;
+  }
+  
+  .dataTables_paginate {
+    float: none !important;
+  }
+  
+  /* Hide default DataTables layout elements */
+  .dataTables_wrapper .dataTables_length,
+  .dataTables_wrapper .dataTables_filter,
+  .dataTables_wrapper .dataTables_info,
+  .dataTables_wrapper .dataTables_paginate {
+    display: none;
+  }
+  
+  /* Show only our custom layout elements */
+  .dataTables_top .dataTables_length,
+  .dataTables_top .dataTables_filter,
+  .dataTables_bottom .dataTables_info,
+  .dataTables_bottom .dataTables_paginate {
+    display: block;
   }
   
   /* KPI Chart Styles */
@@ -261,16 +305,70 @@
   <!-- Data Table Section -->
   <div class="dataframe-container" id="data-table-section" style="display: none;">
     <h2 class="h4 mb-3">Direct Files Data</h2>
-    <table id="direct-files-table" class="display dataframe-table" style="width: 100%;">
-      <thead>
-        <tr>
-          <!-- Table headers will be populated dynamically from dataframe columns -->
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Data will be populated via JavaScript -->
-      </tbody>
-    </table>
+    
+    <!-- Custom DataTable Layout -->
+    <div class="dataTables_wrapper">
+      <!-- Top Section: Length and Search -->
+      <div class="dataTables_top">
+        <div class="dataTables_length" id="direct-files-table_length">
+          <label>
+            Show
+            <select name="direct-files-table_length" aria-controls="direct-files-table" class="form-select form-select-sm">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            entries
+          </label>
+        </div>
+        <div class="dataTables_filter" id="direct-files-table_filter">
+          <label>
+            Search:
+            <input type="search" class="form-control form-control-sm" placeholder="" aria-controls="direct-files-table">
+          </label>
+        </div>
+      </div>
+      
+      <!-- Middle Section: Horizontally Scrollable Table -->
+      <div class="dataTables_scroll">
+        <div class="dataTables_scrollHead">
+          <table id="direct-files-table" class="display" style="width: 100%;">
+            <thead>
+              <tr id="table-headers-row">
+                <!-- Table headers will be populated dynamically from dataframe columns -->
+              </tr>
+            </thead>
+          </table>
+        </div>
+        <div class="dataTables_scrollBody">
+          <table id="direct-files-table-body" class="display" style="width: 100%;">
+            <thead style="visibility: hidden; height: 0;">
+              <tr id="table-headers-row-hidden">
+                <!-- Hidden headers for body table alignment -->
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Data will be populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Bottom Section: Info and Left-Aligned Pagination -->
+      <div class="dataTables_bottom">
+        <div class="dataTables_info" id="direct-files-table_info" role="status" aria-live="polite">
+          Showing 0 to 0 of 0 entries
+        </div>
+        <div class="dataTables_paginate paging_simple_numbers" id="direct-files-table_paginate">
+          <a class="paginate_button previous disabled" aria-controls="direct-files-table" data-dt-idx="0" tabindex="0" id="direct-files-table_previous">Previous</a>
+          <span>
+            <a class="paginate_button current" aria-controls="direct-files-table" data-dt-idx="1" tabindex="0">1</a>
+          </span>
+          <a class="paginate_button next disabled" aria-controls="direct-files-table" data-dt-idx="2" tabindex="0" id="direct-files-table_next">Next</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -302,6 +400,7 @@
         this.dataTable = null;
         this.directFilesData = [];
         this.uploadMetrics = {};
+        this.columnOrder = [];
         this.init();
       }
       
@@ -309,6 +408,7 @@
         // Wait for CommonFilters and DirectFilesKPIs to be ready
         setTimeout(async () => {
           if (typeof window.commonFilters !== 'undefined' && typeof window.directFilesKPIs !== 'undefined') {
+            // Load data first, then initialize UI components
             await this.loadDirectFilesData();
             await this.loadUploadMetrics();
             this.initializeDataTable();
@@ -322,14 +422,19 @@
       
       async loadDirectFilesData() {
         try {
+          console.log('Loading direct files data...');
           const queryString = window.commonFilters.buildQueryParams();
+          console.log('Query string:', queryString);
+          
           const response = await fetch(`/api/kpis/direct-files/filtered-dataframe?${queryString}`);
+          console.log('Response status:', response.status);
           
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           
           const result = await response.json();
+          console.log('API response:', result);
           
           if (!result.success) {
             throw new Error(result.message || 'API request failed');
@@ -337,6 +442,54 @@
           
           // The API returns data wrapped in an object, extract the actual array
           this.directFilesData = result.data.data || [];
+          console.log('Direct files data loaded:', this.directFilesData.length, 'records');
+          
+          if (this.directFilesData.length > 0) {
+            console.log('Sample record:', this.directFilesData[0]);
+            // Store column order from the first record to maintain JSON field order
+            this.columnOrder = [
+              "image_id",
+              "image_uuid",
+              "filename",
+              "original_filename",
+              "edited_filename",
+              "folder_rel",
+              "file_hash",
+              "content_hash",
+              "upload_date",
+              "upload_datetime",
+              "uploader_id",
+              "uploader_username",
+              "uploader_full_name",
+              "hospital_id",
+              "hospital_name",
+              "lab_unit_id",
+              "lab_unit_name",
+              "camera_id",
+              "camera_name",
+              "disease_id",
+              "disease_name",
+              "area_id",
+              "area_name",
+              "is_mydriatic",
+              "is_pregraded",
+              "verification_status",
+              "verification_remarks",
+              "verified_by_id",
+              "verified_by_username",
+              "verified_at",
+              "has_verification",
+              "has_grading",
+              "grading_count",
+              "latest_grading_date",
+              "grading_roles",
+              "has_task",
+              "task_count",
+              "task_states",
+              "latest_task_date"
+            ];
+            console.log('Available columns:', this.columnOrder);
+          }
         } catch (error) {
           console.error('Error loading direct files data:', error);
           this.showFlashToast('Failed to load direct files data', 'error');
@@ -345,20 +498,26 @@
       
       async loadUploadMetrics() {
         try {
+          console.log('Loading upload metrics...');
           const queryString = window.commonFilters.buildQueryParams();
+          console.log('Query string for metrics:', queryString);
+          
           const response = await fetch(`/api/kpis/direct-files/upload-metrics?${queryString}`);
+          console.log('Metrics response status:', response.status);
           
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
           
           const result = await response.json();
+          console.log('Upload metrics response:', result);
           
           if (!result.success) {
             throw new Error(result.message || 'API request failed');
           }
           
           this.uploadMetrics = result.data || {};
+          console.log('Upload metrics loaded:', this.uploadMetrics);
         } catch (error) {
           console.error('Error loading upload metrics:', error);
           this.showFlashToast('Failed to load upload metrics', 'error');
@@ -370,8 +529,8 @@
           this.dataTable.destroy();
         }
         
-        // Get all column names from first data item
-        const allColumns = this.directFilesData.length > 0 ? Object.keys(this.directFilesData[0]) : [];
+        // Get all column names in JSON order (stored during data loading)
+        const allColumns = this.columnOrder || [];
         
         // Create column definitions dynamically
         const columnDefs = allColumns.map(col => ({
@@ -383,14 +542,24 @@
               return '-';
             }
             
-            // Format date columns for display
-            if (col.includes('date') || col.includes('at')) {
-              return data ? new Date(data).toLocaleString() : '-';
+            // Format specific date columns only
+            if (col.includes('capture_date') || col.includes('upload_date') || col.includes('created_at') || col.includes('updated_at')) {
+              try {
+                return data ? new Date(data).toLocaleString() : '-';
+              } catch (e) {
+                return data; // Return as-is if date parsing fails
+              }
             } else if (typeof data === 'boolean') {
               return data ? 'Yes' : 'No';
+            } else if (Array.isArray(data)) {
+              // Handle arrays (like task_states, grading_roles)
+              return data.join(', ');
+            } else if (typeof data === 'object' && data !== null) {
+              // Handle objects by converting to JSON string
+              return JSON.stringify(data);
             }
             
-            // Return data as-is for all columns to see raw values
+            // Return data as-is for all other columns
             return data;
           }
         }));
@@ -398,14 +567,125 @@
         // Initialize DataTable directly with the data
         console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
         console.log('Column definitions:', columnDefs.length, 'columns');
+        console.log('Sample data:', this.directFilesData.slice(0, 2));
         
-        this.dataTable = $('#direct-files-table').DataTable({
-          data: this.directFilesData,
-          columns: columnDefs,
+        // Check if jQuery and DataTables are available
+        if (typeof $ === 'undefined') {
+          console.error('jQuery is not loaded!');
+          return;
+        }
+        
+        if (typeof $.fn.DataTable === 'undefined') {
+          console.error('DataTables is not loaded!');
+          return;
+        }
+        
+        // Check if table element exists
+        const tableElement = $('#direct-files-table');
+        if (tableElement.length === 0) {
+          console.error('Table element #direct-files-table not found!');
+          return;
+        }
+        
+        try {
+          this.dataTable = $('#direct-files-table').DataTable({
+            data: this.directFilesData,
+            columns: columnDefs,
+            dom: 'rt<"bottom">',
+            scrollX: true,
+            ordering: true,
+            searching: true,
+            info: true,
+            lengthChange: true,
+            pageLength: 25,
+            language: {
+              lengthMenu: "Show _MENU_ entries",
+              info: "Showing _START_ to _END_ of _TOTAL_ entries",
+              paginate: {
+                first: "First",
+                last: "Last",
+                next: "Next",
+                previous: "Previous"
+              }
+            }
+          });
           
+          // Update the custom layout elements
+          this.updateCustomLayout();
+          
+          console.log('DataTable initialized successfully:', this.dataTable);
+          console.log('Table info:', this.dataTable.page.info());
+        } catch (error) {
+          console.error('Error initializing DataTable:', error);
+        }
+      }
+      
+      updateCustomLayout() {
+        // Update the info display
+        const info = this.dataTable.page.info();
+        document.getElementById('direct-files-table_info').textContent =
+          `Showing ${info.start + 1} to ${info.end} of ${info.recordsDisplay} entries`;
+        
+        // Update pagination
+        this.updatePagination();
+        
+        // Set up event listeners for custom controls
+        this.setupCustomControls();
+      }
+      
+      updatePagination() {
+        const paginate = document.getElementById('direct-files-table_paginate');
+        const info = this.dataTable.page.info();
+        
+        // Clear existing pagination
+        const span = paginate.querySelector('span');
+        span.innerHTML = '';
+        
+        // Add page numbers
+        for (let i = 0; i < info.pages; i++) {
+          const a = document.createElement('a');
+          a.className = `paginate_button ${i === info.page ? 'current' : ''}`;
+          a.setAttribute('aria-controls', 'direct-files-table');
+          a.setAttribute('data-dt-idx', i);
+          a.setAttribute('tabindex', '0');
+          a.textContent = i + 1;
+          
+          a.addEventListener('click', () => {
+            this.dataTable.page(i).draw('page');
+          });
+          
+          span.appendChild(a);
+        }
+        
+        // Update previous/next buttons
+        const prevBtn = document.getElementById('direct-files-table_previous');
+        const nextBtn = document.getElementById('direct-files-table_next');
+        
+        prevBtn.className = `paginate_button previous ${info.page === 0 ? 'disabled' : ''}`;
+        nextBtn.className = `paginate_button next ${info.page === info.pages - 1 ? 'disabled' : ''}`;
+      }
+      
+      setupCustomControls() {
+        // Length selector
+        const lengthSelect = document.querySelector('select[name="direct-files-table_length"]');
+        lengthSelect.addEventListener('change', (e) => {
+          this.dataTable.page.len(parseInt(e.target.value)).draw();
         });
         
-        console.log('DataTable initialized:', this.dataTable ? 'success' : 'failed');
+        // Search input
+        const searchInput = document.querySelector('#direct-files-table_filter input');
+        searchInput.addEventListener('keyup', () => {
+          this.dataTable.search(searchInput.value).draw();
+        });
+        
+        // Previous/Next buttons
+        document.getElementById('direct-files-table_previous').addEventListener('click', () => {
+          this.dataTable.page('previous').draw('page');
+        });
+        
+        document.getElementById('direct-files-table_next').addEventListener('click', () => {
+          this.dataTable.page('next').draw('page');
+        });
       }
       
       updateSummaryMetrics() {
@@ -464,6 +744,7 @@
       
       // Initialize the enhanced analytics
       window.directFilesKPIs = new DirectFilesKPIs();
+      window.directFilesAnalytics = new DirectFilesAnalytics();
       
       // Set up refresh button
       const refreshBtn = document.getElementById('refresh-kpis-btn');

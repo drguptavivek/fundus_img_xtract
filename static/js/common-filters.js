@@ -16,9 +16,13 @@ class CommonFilters {
     }
 
     init() {
+        this.loadFiltersFromURL();
         this.loadFiltersFromStorage();
         this.setupEventListeners();
-        this.loadUserEligibility();
+        this.loadUserPermissions().then(() => {
+            // Update UI after dropdowns are populated
+            this.updateFilterUI();
+        });
     }
 
     setupEventListeners() {
@@ -31,7 +35,7 @@ class CommonFilters {
                 this.filters.start_date = startDateInput.value;
                 this.validateDateRange();
                 this.saveFiltersToStorage();
-                this.notifyFiltersChanged();
+                // No need to notify - filters are only applied on button click
             });
         }
         
@@ -40,7 +44,7 @@ class CommonFilters {
                 this.filters.end_date = endDateInput.value;
                 this.validateDateRange();
                 this.saveFiltersToStorage();
-                this.notifyFiltersChanged();
+                // No need to notify - filters are only applied on button click
             });
         }
 
@@ -53,7 +57,7 @@ class CommonFilters {
                     .filter(value => value);
                 this.updateLabUnitOptions();
                 this.saveFiltersToStorage();
-                this.notifyFiltersChanged();
+                // No need to notify - filters are only applied on button click
             });
         }
 
@@ -65,68 +69,108 @@ class CommonFilters {
                     .map(option => option.value)
                     .filter(value => value);
                 this.saveFiltersToStorage();
-                this.notifyFiltersChanged();
+                // No need to notify - filters are only applied on button click
+            });
+        }
+
+        // Apply Filters button listener
+        const applyFiltersBtn = document.querySelector('button[type="submit"]');
+        if (applyFiltersBtn) {
+            applyFiltersBtn.addEventListener('click', (e) => {
+                e.preventDefault(); // Prevent form submission
+                this.handleApplyFilters();
+            });
+        }
+
+        // Clear Filters button listener
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                this.handleClearFilters();
             });
         }
     }
 
-    async loadUserEligibility() {
+    async loadUserPermissions() {
         try {
+            // Use eligibleLabUnitCurrentUser endpoint - no need for user ID
+            //console.log('Loading user permissions for current user');
+            
+            // Fetch user's eligible hospitals and lab units
             const response = await fetch('/api/eligibleLabUnitCurrentUser');
+            //console.log('API response status:', response.status);
+            
             if (response.ok) {
                 const data = await response.json();
-                this.hospitals = this.groupLabUnitsByHospital(data.eligible_lab_units);
-                this.populateFilterDropdowns();
-                // Apply stored filters after populating dropdowns
-                this.updateFilterUI();
+                //console.log('API response data:', data);
+                this.populateFilterDropdownsFromAPI(data);
+            } else {
+                console.error('API response not ok:', response.status, response.statusText);
             }
         } catch (error) {
-            console.error('Error loading user eligibility:', error);
-            this.showFlashToast('Failed to load user permissions', 'error');
+            console.error('Error loading user permissions:', error);
         }
     }
 
-    groupLabUnitsByHospital(labUnits) {
-        const hospitalsMap = new Map();
+    getCurrentUserId() {
+        // Try to get user ID from global variable or meta tag
+        if (typeof current_user_id !== 'undefined') {
+            return current_user_id;
+        }
         
-        labUnits.forEach(labUnit => {
-            const hospitalId = labUnit.hospital_id;
-            const hospitalName = labUnit.hospital_name || 'Unknown Hospital';
-            
-            if (!hospitalsMap.has(hospitalId)) {
-                hospitalsMap.set(hospitalId, {
-                    hospital_id: hospitalId,
-                    hospital_name: hospitalName,
-                    lab_units: []
-                });
-            }
-            
-            hospitalsMap.get(hospitalId).lab_units.push({
-                lab_unit_id: labUnit.id,
-                lab_unit_name: labUnit.name
-            });
-        });
+        // Fallback: try to get from meta tag or other global
+        const userMeta = document.querySelector('meta[name="user-id"]');
+        if (userMeta) {
+            return userMeta.getAttribute('content');
+        }
         
-        return Array.from(hospitalsMap.values());
+        // Final fallback: try to extract from URL or use default
+        const pathParts = window.location.pathname.split('/');
+        const userIndex = pathParts.indexOf('users');
+        if (userIndex !== -1 && pathParts.length > userIndex + 1) {
+            return pathParts[userIndex + 1];
+        }
+        
+        return null;
     }
 
-    populateFilterDropdowns() {
+    populateFilterDropdownsFromAPI(data) {
         const hospitalSelect = document.getElementById('filter-hospital-ids');
         const labUnitSelect = document.getElementById('filter-lab-unit-ids');
         
-        if (hospitalSelect) {
+        //console.log('Populating dropdowns with data:', data);
+        
+        // Store data for later use
+        this.hospitals = data.eligible_hospitals || [];
+        this.labUnits = data.eligible_lab_units || [];
+        
+        // Populate hospitals dropdown
+        if (hospitalSelect && this.hospitals) {
             hospitalSelect.innerHTML = '';
             this.hospitals.forEach(hospital => {
                 const option = document.createElement('option');
-                option.value = hospital.hospital_id;
-                option.textContent = hospital.hospital_name;
+                option.value = hospital.id;
+                option.textContent = hospital.name;
                 hospitalSelect.appendChild(option);
             });
+            //console.log('Populated hospitals dropdown with', this.hospitals.length, 'hospitals');
         }
         
-        if (labUnitSelect) {
-            this.updateLabUnitOptions();
+        // Populate lab units dropdown
+        if (labUnitSelect && this.labUnits) {
+            labUnitSelect.innerHTML = '';
+            this.labUnits.forEach(labUnit => {
+                const option = document.createElement('option');
+                option.value = labUnit.id;
+                option.textContent = labUnit.hospital_name ? 
+                    `${labUnit.hospital_name} - ${labUnit.name}` : 
+                    labUnit.name;
+                labUnitSelect.appendChild(option);
+            });
+            //console.log('Populated lab units dropdown with', this.labUnits.length, 'lab units');
         }
+        
+        // Don't call updateFilterUI here - it will be called after loadUserPermissions completes
     }
 
     updateLabUnitOptions() {
@@ -137,26 +181,27 @@ class CommonFilters {
         
         if (this.filters.hospital_ids.length === 0) {
             // Show all lab units
-            this.hospitals.forEach(hospital => {
-                hospital.lab_units.forEach(labUnit => {
-                    const option = document.createElement('option');
-                    option.value = labUnit.lab_unit_id;
-                    option.textContent = `${hospital.hospital_name} - ${labUnit.lab_unit_name}`;
-                    labUnitSelect.appendChild(option);
-                });
+            this.labUnits.forEach(labUnit => {
+                const option = document.createElement('option');
+                option.value = labUnit.id;
+                option.textContent = labUnit.hospital_name ? 
+                    `${labUnit.hospital_name} - ${labUnit.name}` : 
+                    labUnit.name;
+                labUnitSelect.appendChild(option);
             });
         } else {
             // Show only lab units from selected hospitals
-            this.filters.hospital_ids.forEach(hospitalId => {
-                const hospital = this.hospitals.find(h => h.hospital_id == hospitalId);
-                if (hospital) {
-                    hospital.lab_units.forEach(labUnit => {
-                        const option = document.createElement('option');
-                        option.value = labUnit.lab_unit_id;
-                        option.textContent = `${hospital.hospital_name} - ${labUnit.lab_unit_name}`;
-                        labUnitSelect.appendChild(option);
-                    });
-                }
+            const filteredLabUnits = this.labUnits.filter(labUnit => 
+                this.filters.hospital_ids.includes(labUnit.hospital_id.toString())
+            );
+            
+            filteredLabUnits.forEach(labUnit => {
+                const option = document.createElement('option');
+                option.value = labUnit.id;
+                option.textContent = labUnit.hospital_name ? 
+                    `${labUnit.hospital_name} - ${labUnit.name}` : 
+                    labUnit.name;
+                labUnitSelect.appendChild(option);
             });
         }
     }
@@ -213,9 +258,9 @@ class CommonFilters {
             });
         }
         
-        // Update lab unit select
-        this.updateLabUnitOptions();
+        // Update lab unit select - call after updating hospital selection
         const labUnitSelect = document.getElementById('filter-lab-unit-ids');
+        this.updateLabUnitOptions();
         if (labUnitSelect) {
             Array.from(labUnitSelect.options).forEach(option => {
                 option.selected = this.filters.lab_unit_ids.includes(option.value);
@@ -223,7 +268,21 @@ class CommonFilters {
         }
     }
 
-    clearFilters() {
+    handleApplyFilters() {
+        // Update filter values from form
+        this.updateFilterValues();
+        this.saveFiltersToStorage();
+        
+        // Show toast notification
+        this.showFlashToast('Filters applied successfully', 'success');
+        
+        // Dispatch custom event for other components to listen to
+        document.dispatchEvent(new CustomEvent('filtersApplied', {
+            detail: { filters: this.getFilters() }
+        }));
+    }
+
+    handleClearFilters() {
         this.filters = {
             start_date: null,
             end_date: null,
@@ -232,16 +291,35 @@ class CommonFilters {
         };
         this.saveFiltersToStorage();
         this.updateFilterUI();
-        this.notifyFiltersChanged();
-        // Toast will be shown by implementing class if needed
+        
+        // Show toast notification
+        this.showFlashToast('Filters cleared', 'info');
+        
+        // Dispatch custom event for other components to listen to
+        document.dispatchEvent(new CustomEvent('filtersCleared', {
+            detail: { filters: this.getFilters() }
+        }));
     }
 
-    // Callback for when filters change - to be overridden by implementing classes
-    notifyFiltersChanged() {
-        // This will be overridden by classes that extend CommonFilters
-        console.log('Filters changed:', this.filters);
-        // Show toast for filter changes (optional - can be disabled if too noisy)
-        // this.showFlashToast('Filters updated', 'info');
+    updateFilterValues() {
+        // Update filter values from form elements
+        const startDateInput = document.getElementById('filter-start-date');
+        const endDateInput = document.getElementById('filter-end-date');
+        const hospitalSelect = document.getElementById('filter-hospital-ids');
+        const labUnitSelect = document.getElementById('filter-lab-unit-ids');
+
+        if (startDateInput) this.filters.start_date = startDateInput.value || null;
+        if (endDateInput) this.filters.end_date = endDateInput.value || null;
+        if (hospitalSelect) {
+            this.filters.hospital_ids = Array.from(hospitalSelect.selectedOptions)
+                .map(option => option.value)
+                .filter(value => value);
+        }
+        if (labUnitSelect) {
+            this.filters.lab_unit_ids = Array.from(labUnitSelect.selectedOptions)
+                .map(option => option.value)
+                .filter(value => value);
+        }
     }
 
     showFlashToast(message, type = 'info') {
@@ -250,7 +328,7 @@ class CommonFilters {
             showFlashToast(message, type);
         } else {
             // Fallback to console if flash-toasts.js is not loaded
-            console.log(`[${type.toUpperCase()}] ${message}`);
+            //console.log(`[${type.toUpperCase()}] ${message}`);
         }
     }
 
@@ -267,7 +345,24 @@ class CommonFilters {
         try {
             const stored = localStorage.getItem(this.storageKey);
             if (stored) {
-                this.filters = JSON.parse(stored);
+                const storedFilters = JSON.parse(stored);
+                // Only load from localStorage if URL parameters are not present
+                const urlParams = new URLSearchParams(window.location.search);
+                
+                if (!urlParams.has('start_date') && storedFilters.start_date) {
+                    this.filters.start_date = storedFilters.start_date;
+                }
+                if (!urlParams.has('end_date') && storedFilters.end_date) {
+                    this.filters.end_date = storedFilters.end_date;
+                }
+                if (!urlParams.has('hospital_ids') && storedFilters.hospital_ids.length > 0) {
+                    this.filters.hospital_ids = storedFilters.hospital_ids;
+                }
+                if (!urlParams.has('lab_unit_ids') && storedFilters.lab_unit_ids.length > 0) {
+                    this.filters.lab_unit_ids = storedFilters.lab_unit_ids;
+                }
+                
+                //console.log('Loaded filters from localStorage (URL params take precedence):', this.filters);
             }
         } catch (error) {
             console.error('Error loading filters from localStorage:', error);
@@ -280,6 +375,37 @@ class CommonFilters {
             };
         }
     }
+
+    loadFiltersFromURL() {
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Parse URL parameters and update filter state
+            if (urlParams.has('start_date')) {
+                this.filters.start_date = urlParams.get('start_date');
+            }
+            if (urlParams.has('end_date')) {
+                this.filters.end_date = urlParams.get('end_date');
+            }
+            if (urlParams.has('hospital_ids')) {
+                const hospitalIds = urlParams.get('hospital_ids');
+                this.filters.hospital_ids = hospitalIds ? hospitalIds.split(',').filter(id => id.trim()) : [];
+            }
+            if (urlParams.has('lab_unit_ids')) {
+                const labUnitIds = urlParams.get('lab_unit_ids');
+                this.filters.lab_unit_ids = labUnitIds ? labUnitIds.split(',').filter(id => id.trim()) : [];
+            }
+            
+            //console.log('Loaded filters from URL:', this.filters);
+        } catch (error) {
+            console.error('Error loading filters from URL:', error);
+        }
+    }
+}
+
+// Create global instance immediately when script loads
+if (typeof CommonFilters !== 'undefined' && !window.commonFilters) {
+    window.commonFilters = new CommonFilters();
 }
 
 // Export for use in other modules

@@ -1,8 +1,11 @@
 # api/kpis/encounter_files.py
 import json
+import pandas as pd
+import logging
+import io
 from datetime import datetime, date, timezone
 from typing import Dict, List, Optional, Set
-from flask import jsonify, request
+from flask import jsonify, request, send_file
 from flask_login import login_required, current_user
 from sqlalchemy import func, extract, and_, or_, case, cast, Float
 from sqlalchemy.orm import joinedload, selectinload
@@ -12,6 +15,7 @@ from .. import api_bp
 from auth.roles import roles_required
 from utils.utils import with_session
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
 from models import (
     ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
     DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
@@ -19,14 +23,19 @@ from models import (
 )
 
 
-def create_kpi_response(data: Dict, message: str = "Data retrieved successfully") -> Dict:
+def create_kpi_response(data: Dict, message: str = "Data retrieved successfully", filters_applied: Dict = None) -> Dict:
     """Create standardized KPI API response."""
-    return {
+    response = {
         "success": True,
         "data": data,
         "message": message,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+    
+    if filters_applied:
+        response["filters_applied"] = filters_applied
+        
+    return response
 
 
 def create_error_response(error: str, message: str, status_code: int = 400) -> tuple:
@@ -38,67 +47,282 @@ def create_error_response(error: str, message: str, status_code: int = 400) -> t
     }), status_code
 
 
+def create_combined_response(kpi_data: Dict, message: str = "Combined KPI data retrieved successfully") -> Dict:
+    """
+    Create standardized combined response for multiple KPI data sources.
+    
+    Args:
+        kpi_data: Dictionary containing data from multiple KPI endpoints
+        message: Success message
+        
+    Returns:
+        Standardized response with combined data
+    """
+    return {
+        "success": True,
+        "data": kpi_data,
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
 def parse_filter_params() -> Dict:
     """Parse and validate common filter parameters."""
     params = {}
     
-    # Date filters
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    if start_date:
-        try:
-            params['start_date'] = datetime.strptime(start_date, '%Y-%m-%d').date()
-        except ValueError:
-            raise ValueError("Invalid start_date format. Use YYYY-MM-DD")
-    
-    if end_date:
-        try:
-            params['end_date'] = datetime.strptime(end_date, '%Y-%m-%d').date()
-        except ValueError:
-            raise ValueError("Invalid end_date format. Use YYYY-MM-DD")
-    
-    if start_date and end_date and params['start_date'] > params['end_date']:
-        raise ValueError("start_date must be before end_date")
-    
-    # Location filters - support multiple IDs
-    hospital_ids = request.args.get('hospital_ids')
-    if hospital_ids:
-        try:
-            params['hospital_ids'] = [int(id.strip()) for id in hospital_ids.split(',') if id.strip()]
-        except ValueError:
-            raise ValueError("Invalid hospital_ids format. Use comma-separated integers")
-    
-    lab_unit_ids = request.args.get('lab_unit_ids')
-    if lab_unit_ids:
-        try:
-            params['lab_unit_ids'] = [int(id.strip()) for id in lab_unit_ids.split(',') if id.strip()]
-        except ValueError:
-            raise ValueError("Invalid lab_unit_ids format. Use comma-separated integers")
-    
-    
-    return params
+    try:
+        # Date filters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        if start_date:
+            try:
+                params['start_date'] = datetime.strptime(start_date, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValueError("Invalid start_date format. Use YYYY-MM-DD")
+        
+        if end_date:
+            try:
+                params['end_date'] = datetime.strptime(end_date, '%Y-%m-%d').date()
+            except ValueError:
+                raise ValueError("Invalid end_date format. Use YYYY-MM-DD")
+        
+        if start_date and end_date and params['start_date'] > params['end_date']:
+            raise ValueError("start_date must be before end_date")
+        
+        # Location filters - support multiple IDs
+        hospital_ids = request.args.get('hospital_ids')
+        if hospital_ids:
+            try:
+                params['hospital_ids'] = [int(id.strip()) for id in hospital_ids.split(',') if id.strip()]
+            except ValueError:
+                raise ValueError("Invalid hospital_ids format. Use comma-separated integers")
+        
+        lab_unit_ids = request.args.get('lab_unit_ids')
+        if lab_unit_ids:
+            try:
+                params['lab_unit_ids'] = [int(id.strip()) for id in lab_unit_ids.split(',') if id.strip()]
+            except ValueError:
+                raise ValueError("Invalid lab_unit_ids format. Use comma-separated integers")
+        
+        # Log successful parameter parsing
+        param_logger = logging.getLogger('runtime_error')
+        param_logger.info(f"Successfully parsed filter params: {params}")
+        
+        return params
+        
+    except Exception as e:
+        # Log parameter parsing errors
+        param_logger = logging.getLogger('runtime_error')
+        param_logger.error(f"Error parsing filter params: {str(e)}")
+        param_logger.error(f"Raw request args: {dict(request.args)}")
+        raise
 
 
-def apply_user_permissions(query, user_lab_unit_ids: Set[int], is_admin: bool):
-    """Apply user permissions to query based on lab unit access."""
-    if not is_admin:
-        return query.filter(PatientEncounters.lab_unit_id.in_(user_lab_unit_ids))
-    return query
 
 
-def apply_location_filters(query, params: Dict):
-    """Apply location filters to query."""
-    if 'hospital_ids' in params:
-        query = query.join(LabUnit).filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+def get_filtered_encounter_dataframe(params: Dict, user_lab_unit_ids: Set[int]) -> tuple[pd.DataFrame, Dict]:
+    """
+    Generate and filter encounter dataframe based on user permissions and filter parameters.
     
-    if 'lab_unit_ids' in params:
-        query = query.filter(PatientEncounters.lab_unit_id.in_(params['lab_unit_ids']))
-    
-    return query
+    Args:
+        params: Dictionary containing filter parameters
+        user_lab_unit_ids: Set of lab unit IDs user has access to
+        
+    Returns:
+        Tuple of (filtered pandas DataFrame, filters_applied dictionary)
+    """
+    try:
+        # Generate the complete dataframe using utility function
+        df = generate_encounter_upload_metrics_df(
+            start_date=params.get('start_date'),
+            end_date=params.get('end_date')
+        )
+        
+        # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
+        df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
+        
+        # Apply location filters
+        if 'hospital_ids' in params:
+            df = df[df['hospital_id'].isin(params['hospital_ids'])]
+        
+        if 'lab_unit_ids' in params:
+            df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
+        
+        # Apply date filters through upload_date (from ZipFile)
+        if 'start_date' in params:
+            df = df[df['upload_date'] >= params['start_date']]
+        if 'end_date' in params:
+            df = df[df['upload_date'] <= params['end_date']]
+        
+        # Create filters_applied dictionary for response
+        filters_applied = {
+            "start_date": params.get('start_date'),
+            "end_date": params.get('end_date'),
+            "hospital_ids": params.get('hospital_ids'),
+            "lab_unit_ids": params.get('lab_unit_ids'),
+            "user_lab_unit_ids": list(user_lab_unit_ids)
+        }
+        
+        return df, filters_applied
+        
+    except Exception as e:
+        app_logger = logging.getLogger(__name__)
+        app_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
+        app_logger.error(f"Params: {params}")
+        app_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        
+        # Log to runtime_error.log
+        error_logger = logging.getLogger('runtime_error')
+        error_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
+        error_logger.error(f"Params: {params}")
+        error_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        raise
 
 
  
+
+
+# -------------------
+# Utility Endpoints
+# -------------------
+
+@api_bp.route('/kpis/encounter-files/filtered-dataframe', methods=['GET'])
+@login_required
+@roles_required("admin", "data_manager")
+def get_filtered_dataframe():
+    """
+    Returns the filtered encounter dataframe as JSON for use in app templates.
+    
+    This endpoint provides access to the same filtered data used by KPI endpoints,
+    allowing frontend components to perform custom analysis and visualizations.
+    
+    Query Parameters:
+    - start_date: Filter uploads from this date (YYYY-MM-DD format)
+    - end_date: Filter uploads until this date (YYYY-MM-DD format)
+    - hospital_ids: Comma-separated hospital IDs to filter by
+    - lab_unit_ids: Comma-separated lab unit IDs to filter by
+    
+    Returns:
+        JSON response with filtered dataframe data and metadata
+    """
+    with with_session() as db:
+        try:
+            params = parse_filter_params()
+            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+            
+            # Get filtered dataframe using common function
+            df, filters_applied = get_filtered_encounter_dataframe(params, user_lab_unit_ids)
+            
+            # Convert dataframe to JSON-serializable format
+            df_json = df.to_dict('records')
+            
+            # Determine period for metadata
+            period = "All time"
+            if 'start_date' in params and 'end_date' in params:
+                period = f"{params['start_date']} to {params['end_date']}"
+            elif 'start_date' in params:
+                period = f"From {params['start_date']}"
+            elif 'end_date' in params:
+                period = f"Until {params['end_date']}"
+            
+            # Prepare response data
+            response_data = {
+                "period": period,
+                "total_records": len(df_json),
+                "data": df_json,
+                "columns": list(df.columns)
+            }
+            response_message = "Data retrieved successfully"
+            
+            return create_kpi_response(response_data, response_message, filters_applied=filters_applied)
+                
+        except ValueError as e:
+            return create_error_response("Invalid parameters", str(e))
+        except Exception as e:
+            return create_error_response("Internal server error", str(e), 500)
+
+
+@api_bp.route('/kpis/encounter-files/filtered-dataframe-excel', methods=['GET'])
+@login_required
+@roles_required("admin", "data_manager")
+def get_filtered_dataframe_excel():
+    """
+    Returns the filtered encounter dataframe as Excel file for download.
+    
+    This endpoint provides the same filtered data used by KPI endpoints
+    in Excel format for offline analysis and reporting.
+    
+    Query Parameters:
+    - start_date: Filter uploads from this date (YYYY-MM-DD format)
+    - end_date: Filter uploads until this date (YYYY-MM-DD format)
+    - hospital_ids: Comma-separated hospital IDs to filter by
+    - lab_unit_ids: Comma-separated lab unit IDs to filter by
+    
+    Returns:
+        Excel file download with filtered encounter data
+    """
+    with with_session() as db:
+        try:
+            params = parse_filter_params()
+            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+            
+            # Get filtered dataframe using common function
+            df, filters_applied = get_filtered_encounter_dataframe(params, user_lab_unit_ids)
+            
+            # Create Excel file in memory
+            output = io.BytesIO()
+            
+            # Generate filename with timestamp and filter info
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename_parts = ['encounter_data', timestamp]
+            
+            if 'start_date' in params:
+                filename_parts.append(f"from_{params['start_date']}")
+            if 'end_date' in params:
+                filename_parts.append(f"to_{params['end_date']}")
+                
+            filename = '_'.join(filename_parts) + '.xlsx'
+            
+            # Write to Excel
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Encounter Data', index=False)
+                
+                # Add metadata sheet
+                metadata = {
+                    'Parameter': ['Generated at', 'Total Records', 'Start Date', 'End Date',
+                               'Hospital IDs', 'Lab Unit IDs', 'User Lab Unit IDs'],
+                    'Value': [
+                        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        len(df),
+                        params.get('start_date', 'All'),
+                        params.get('end_date', 'All'),
+                        params.get('hospital_ids', 'All'),
+                        params.get('lab_unit_ids', 'All'),
+                        ', '.join(map(str, user_lab_unit_ids))
+                    ]
+                }
+                metadata_df = pd.DataFrame(metadata)
+                metadata_df.to_excel(writer, sheet_name='Filters Applied', index=False)
+            
+            output.seek(0)
+            
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            
+        except ValueError as e:
+            return create_error_response("Invalid parameters", str(e))
+        except Exception as e:
+            return create_error_response("Internal server error", str(e), 500)
+            
+        except ValueError as e:
+            return create_error_response("Invalid parameters", str(e))
+        except Exception as e:
+            return create_error_response("Internal server error", str(e), 500)
 
 
 # -------------------
@@ -125,56 +349,50 @@ def year_month_wise_uploads():
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            is_admin = current_user.has_role('admin')
             
-            # Base query with ZipFile for upload date filtering
-            base_query = db.query(ZipFile).join(
-                PatientEncounters, ZipFile.id == PatientEncounters.zip_file_id
-            ).join(
-                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
-            ).join(
-                Hospital, LabUnit.hospital_id == Hospital.id
-            ).filter(ZipFile.upload_date.isnot(None))
+            # Get filtered dataframe using common function
+            df, filters_applied = get_filtered_encounter_dataframe(params, user_lab_unit_ids)
             
-            # Apply user permissions
-            if not is_admin:
-                base_query = base_query.filter(PatientEncounters.lab_unit_id.in_(user_lab_unit_ids))
+            # Skip if dataframe is empty
+            if df.empty:
+                # Prepare response data
+                response_data = {
+                    "period": "All time",
+                    "summary": {
+                        "total_uploads": 0,
+                        "total_captures": 0,
+                        "total_dr_reports": 0,
+                        "total_glaucoma_reports": 0,
+                        "total_no_reports": 0
+                    },
+                    "monthly_data": []
+                }
+                response_message = "Data retrieved successfully"
+                
+                return create_kpi_response(response_data, response_message, filters_applied=filters_applied)
             
-            # Apply location filters
-            if 'hospital_ids' in params:
-                base_query = base_query.filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+            # Group by year, month, hospital, and lab unit for monthly aggregation
+            monthly_groups = df.groupby([
+                pd.Grouper(key='upload_date', freq='M'),  # Group by month
+                'hospital_id', 'hospital_name',
+                'lab_unit_id', 'lab_unit_name'
+            ]).agg({
+                'encounter_id': 'nunique',  # Number of captures
+                'zip_file_id': 'nunique',  # Number of uploads
+                'has_dr_report': 'sum',  # Number with DR reports
+                'has_glaucoma_report': 'sum'  # Number with glaucoma reports
+            }).reset_index()
             
-            if 'lab_unit_ids' in params:
-                base_query = base_query.filter(PatientEncounters.lab_unit_id.in_(params['lab_unit_ids']))
+            # Extract year and month from upload_date
+            monthly_groups['year'] = monthly_groups['upload_date'].dt.year
+            monthly_groups['month'] = monthly_groups['upload_date'].dt.month
             
-            # Apply date filters through upload_date
-            if 'start_date' in params:
-                base_query = base_query.filter(ZipFile.upload_date >= params['start_date'])
-            if 'end_date' in params:
-                base_query = base_query.filter(ZipFile.upload_date <= params['end_date'])
-            
-            # Get monthly aggregated data
-            monthly_data = base_query.with_entities(
-                extract('year', ZipFile.upload_date).label('year'),
-                extract('month', ZipFile.upload_date).label('month'),
-                func.count(func.distinct(ZipFile.id)).label('uploads'),
-                func.count(func.distinct(PatientEncounters.id)).label('captures'),
-                func.count(func.distinct(DiabeticRetinopathyReport.id)).label('dr_reports'),
-                func.count(func.distinct(GlaucomaReport.id)).label('glaucoma_reports'),
-                LabUnit.id.label('lab_unit_id'),
-                LabUnit.name.label('lab_unit_name'),
-                Hospital.id.label('hospital_id'),
-                Hospital.name.label('hospital_name')
-            ).outerjoin(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            ).outerjoin(
-                GlaucomaReport, PatientEncounters.id == GlaucomaReport.patient_encounter_id
-            ).group_by(
-                extract('year', ZipFile.upload_date),
-                extract('month', ZipFile.upload_date),
-                LabUnit.id,
-                Hospital.id
-            ).all()
+            # Calculate encounters with no reports
+            monthly_groups['no_reports'] = (
+                monthly_groups['encounter_id'] -
+                monthly_groups['has_dr_report'] -
+                monthly_groups['has_glaucoma_report']
+            )
             
             # Format the results
             month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -187,32 +405,29 @@ def year_month_wise_uploads():
             total_glaucoma_reports = 0
             total_no_reports = 0
             
-            for row in monthly_data:
-                # Calculate encounters with no reports
-                no_reports = row.captures - row.dr_reports - row.glaucoma_reports
-                
-                month_name = month_names[row.month] if row.month else "Unknown"
+            for _, row in monthly_groups.iterrows():
+                month_name = month_names[row['month']] if row['month'] else "Unknown"
                 
                 # Update totals
-                total_uploads += row.uploads
-                total_captures += row.captures
-                total_dr_reports += row.dr_reports
-                total_glaucoma_reports += row.glaucoma_reports
-                total_no_reports += no_reports
+                total_uploads += row['zip_file_id']
+                total_captures += row['encounter_id']
+                total_dr_reports += row['has_dr_report']
+                total_glaucoma_reports += row['has_glaucoma_report']
+                total_no_reports += row['no_reports']
                 
                 formatted_data.append({
-                    "year": row.year,
-                    "month": row.month,
+                    "year": int(row['year']),
+                    "month": int(row['month']),
                     "month_name": month_name,
-                    "uploads": row.uploads,
-                    "captures": row.captures,
-                    "dr_reports": row.dr_reports,
-                    "glaucoma_reports": row.glaucoma_reports,
-                    "no_reports": no_reports,
-                    "hospital_id": row.hospital_id,
-                    "hospital_name": row.hospital_name,
-                    "lab_unit_id": row.lab_unit_id,
-                    "lab_unit_name": row.lab_unit_name
+                    "uploads": int(row['zip_file_id']),
+                    "captures": int(row['encounter_id']),
+                    "dr_reports": int(row['has_dr_report']),
+                    "glaucoma_reports": int(row['has_glaucoma_report']),
+                    "no_reports": int(row['no_reports']),
+                    "hospital_id": int(row['hospital_id']),
+                    "hospital_name": row['hospital_name'],
+                    "lab_unit_id": int(row['lab_unit_id']),
+                    "lab_unit_name": row['lab_unit_name']
                 })
             
             # Sort by year and month
@@ -236,11 +451,15 @@ def year_month_wise_uploads():
             elif 'end_date' in params:
                 period = f"Until {params['end_date']}"
             
-            return create_kpi_response({
+            # Prepare response data
+            response_data = {
                 "period": period,
                 "summary": summary,
                 "monthly_data": formatted_data
-            })
+            }
+            response_message = "Data retrieved successfully"
+            
+            return create_kpi_response(response_data, response_message, filters_applied=filters_applied)
             
         except ValueError as e:
             return create_error_response("Invalid parameters", str(e))
@@ -262,99 +481,39 @@ def dr_reports_count():
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            is_admin = current_user.has_role('admin')
             
-            # Base query with permissions
-            query = db.query(PatientEncounters).options(
-                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
-            )
-            query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
-            query = apply_location_filters(query, params)
-            # Apply date filters through upload_date (from ZipFile)
-            if 'start_date' in params or 'end_date' in params:
-                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
-                if 'start_date' in params:
-                    query = query.filter(ZipFile.upload_date >= params['start_date'])
-                if 'end_date' in params:
-                    query = query.filter(ZipFile.upload_date <= params['end_date'])
+            # Get filtered dataframe using common function
+            df, filters_applied = get_filtered_encounter_dataframe(params, user_lab_unit_ids)
             
-            # Total encounters with DR reports
-            encounters_with_dr = query.join(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            )
-            
-            total_encounters = query.count()
-            dr_reports_count = encounters_with_dr.count()
+            # Calculate DR reports metrics using pandas
+            dr_reports_df = df[df['has_dr_report'] == True]
+            dr_reports_count = len(dr_reports_df)
+            total_encounters = len(df)
             dr_percentage = (dr_reports_count / total_encounters * 100) if total_encounters > 0 else 0
             
-            # Monthly breakdown
-            monthly_breakdown = query.with_entities(
-                extract('month', PatientEncounters.capture_date_dt).label('month'),
-                func.count(DiabeticRetinopathyReport.id).label('count')
-            ).join(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            ).group_by(
-                extract('month', PatientEncounters.capture_date_dt)
-            ).order_by(extract('month', PatientEncounters.capture_date_dt)).all()
+            # Group by hospital using pandas
+            by_hospital_df = dr_reports_df.groupby(['hospital_id', 'hospital_name']).size().reset_index(name='count')
+            by_hospital = by_hospital_df.to_dict('records')
             
-            # By hospital
-            by_hospital = db.query(PatientEncounters).join(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            ).join(
-                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
-            ).join(
-                Hospital, LabUnit.hospital_id == Hospital.id
-            ).filter(
-                PatientEncounters.id.in_(
-                    db.query(PatientEncounters.id).join(
-                        DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-                    )
-                )
-            ).with_entities(
-                Hospital.id.label('hospital_id'),
-                Hospital.name.label('hospital_name'),
-                func.count(DiabeticRetinopathyReport.id).label('count')
-            ).group_by(
-                Hospital.id, Hospital.name
-            ).all()
-            
-            # By lab unit
-            by_lab_unit = db.query(PatientEncounters).join(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            ).join(
-                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
-            )
-            
-            # Apply permissions and filters
-            by_lab_unit = apply_user_permissions(by_lab_unit, user_lab_unit_ids, is_admin)
-            by_lab_unit = apply_location_filters(by_lab_unit, params)
-            # Apply date filters through upload_date (from ZipFile)
-            if 'start_date' in params or 'end_date' in params:
-                by_lab_unit = by_lab_unit.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
-                if 'start_date' in params:
-                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date >= params['start_date'])
-                if 'end_date' in params:
-                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date <= params['end_date'])
-            
-            by_lab_unit = by_lab_unit.with_entities(
-                LabUnit.id.label('lab_unit_id'),
-                LabUnit.name.label('lab_unit_name'),
-                func.count(DiabeticRetinopathyReport.id).label('count')
-            ).group_by(
-                LabUnit.id, LabUnit.name
-            ).all()
+            # Group by lab unit using pandas
+            by_lab_unit_df = dr_reports_df.groupby(['lab_unit_id', 'lab_unit_name']).size().reset_index(name='count')
+            by_lab_unit = by_lab_unit_df.to_dict('records')
             
             # Determine period
             period = "All time"
             if 'start_date' in params and 'end_date' in params:
                 period = f"{params['start_date']} to {params['end_date']}"
+            elif 'start_date' in params:
+                period = f"From {params['start_date']}"
+            elif 'end_date' in params:
+                period = f"Until {params['end_date']}"
             
-            return create_kpi_response({
+            # Prepare response data
+            response_data = {
                 "period": period,
                 "dr_reports": {
                     "total": dr_reports_count,
                     "percentage": round(dr_percentage, 1),
-                    "monthly_breakdown": [int(row.count) for row in monthly_breakdown],
                     "by_hospital": [
                         {"hospital_id": row.hospital_id, "hospital_name": row.hospital_name, "count": row.count}
                         for row in by_hospital
@@ -364,7 +523,10 @@ def dr_reports_count():
                         for row in by_lab_unit
                     ]
                 }
-            })
+            }
+            response_message = "Data retrieved successfully"
+            
+            return create_kpi_response(response_data, response_message, filters_applied=filters_applied)
             
         except ValueError as e:
             return create_error_response("Invalid parameters", str(e))

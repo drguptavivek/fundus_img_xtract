@@ -111,6 +111,8 @@
 {% endblock %}
 
 {% block content %}
+<!-- User ID meta tag for JavaScript access -->
+<meta name="user-id" content="{{ current_user.id }}">
 <div class="container py-4">
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
     <div>
@@ -290,31 +292,26 @@
 {% block page_scripts %}
   {{ super() }}
   
-  <!-- Chart.js Library -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
-  <!-- Flash Toasts Component -->
-  <script src="{{ url_for('static', filename='js/flash-toasts.js') }}"></script>
-  
+ 
+
   <!-- Common Filters JavaScript -->
   <script src="{{ url_for('static', filename='js/common-filters.js') }}"></script>
   
   <!-- Encounter KPIs JavaScript -->
   <script src="{{ url_for('static', filename='js/encounter-kpis.js') }}"></script>
+
+    <!-- Encounter KPIs JavaScript -->
+  <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
   
   <script>
-    // Load user permissions and populate filter dropdowns
-    document.addEventListener('DOMContentLoaded', async function() {
-      try {
-        // Fetch user's eligible hospitals and lab units
-        const response = await fetch('/api/users/{{ current_user.id }}/lab-units');
-        if (response.ok) {
-          const data = await response.json();
-          populateFilterDropdowns(data);
+    // Minimal template script - only handle UI initialization
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize EncounterKPIs charts after CommonFilters is ready
+      setTimeout(() => {
+        if (typeof window.encounterKPIs !== 'undefined') {
+          window.encounterKPIs.initializeCharts();
         }
-      } catch (error) {
-        console.error('Error loading user permissions:', error);
-      }
+      }, 100);
       
       // Hide loading spinner once page is ready
       const loadingSpinner = document.getElementById('loading-spinner');
@@ -328,35 +325,6 @@
         kpiSection.style.display = 'block';
       }
     });
-    
-    function populateFilterDropdowns(data) {
-      const hospitalSelect = document.getElementById('filter-hospital-ids');
-      const labUnitSelect = document.getElementById('filter-lab-unit-ids');
-      
-      if (hospitalSelect && data.hospitals) {
-        hospitalSelect.innerHTML = '';
-        data.hospitals.forEach(hospital => {
-          const option = document.createElement('option');
-          option.value = hospital.hospital_id;
-          option.textContent = hospital.hospital_name;
-          hospitalSelect.appendChild(option);
-        });
-      }
-      
-      if (labUnitSelect && data.hospitals) {
-        labUnitSelect.innerHTML = '';
-        data.hospitals.forEach(hospital => {
-          if (hospital.lab_units) {
-            hospital.lab_units.forEach(labUnit => {
-              const option = document.createElement('option');
-              option.value = labUnit.lab_unit_id;
-              option.textContent = `${hospital.hospital_name} - ${labUnit.lab_unit_name}`;
-              labUnitSelect.appendChild(option);
-            });
-          }
-        });
-      }
-    }
     
     // Add interactive features to dataframe table
     document.addEventListener('DOMContentLoaded', function() {

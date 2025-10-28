@@ -1,67 +1,74 @@
 // encounter-kpis.js
 // Frontend JavaScript for consuming encounter files KPI APIs
 
-class EncounterKPIs extends CommonFilters {
-    constructor() {
-        super();
+class EncounterKPIs {
+    constructor(commonFiltersInstance = null) {
         this.baseURL = '/api/kpis/encounter-files';
         this.charts = {};
+        this.commonFilters = commonFiltersInstance;
+        this.initialized = false;
+        this.initialLoadComplete = false;
         this.init();
     }
 
     init() {
-        super.init();
+        if (this.initialized) return;
+        
+        this.setupEventListeners();
+        this.initialized = true;
+    }
+
+    initializeCharts() {
+        this.initialLoadComplete = false;
         // Load initial data after a short delay to ensure filters are applied
         setTimeout(() => {
-            this.loadInitialData();
+            this.loadInitialData().then(() => {
+                this.initialLoadComplete = true;
+            });
         }, 100);
     }
 
-    // Override notifyFiltersChanged to not automatically refresh charts
-    notifyFiltersChanged() {
-        // Filters changed but don't refresh automatically
-        // User must click "Apply Filters" button to refresh data
-        // No console logging to avoid noise
-    }
-
-    // Override clearFilters to show toast
-    clearFilters() {
-        super.clearFilters();
-        // Use global showFlashToast function directly
-        if (typeof showFlashToast === 'function') {
-            showFlashToast('Filters cleared', 'info');
-        }
-    }
-
-    // Refresh button and Apply Filters button
     setupEventListeners() {
-        super.setupEventListeners();
-        
+        // Listen for filter events from CommonFilters
+        document.addEventListener('filtersApplied', (event) => {
+            this.handleFiltersApplied(event.detail.filters);
+        });
+
+        document.addEventListener('filtersCleared', (event) => {
+            this.handleFiltersCleared(event.detail.filters);
+        });
+
+        // Refresh button
         const refreshBtn = document.getElementById('refresh-kpis-btn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshAllCharts());
         }
-        
-        // Add event listener for Apply Filters button
-        const applyFiltersBtn = document.querySelector('button[type="submit"]');
-        if (applyFiltersBtn) {
-            applyFiltersBtn.addEventListener('click', (e) => {
-                e.preventDefault(); // Prevent form submission
-                this.refreshAllCharts();
-            });
+    }
+
+    handleFiltersApplied(filters) {
+        console.log('EncounterKPIs: Filters applied', filters);
+        // Only refresh charts if this isn't initial load
+        if (this.initialLoadComplete) {
+            this.refreshAllCharts();
         }
-        
-        // Add event listener for Clear Filters button
-        const clearFiltersBtn = document.getElementById('clear-filters-btn');
-        if (clearFiltersBtn) {
-            clearFiltersBtn.addEventListener('click', () => {
-                this.clearFilters();
-            });
+    }
+
+    handleFiltersCleared(filters) {
+        console.log('EncounterKPIs: Filters cleared', filters);
+        // Only refresh charts if this isn't initial load
+        if (this.initialLoadComplete) {
+            this.refreshAllCharts();
         }
     }
 
     buildQueryParams() {
-        return super.buildQueryParams();
+        if (this.commonFilters) {
+            return this.commonFilters.buildQueryParams();
+        }
+        
+        // Fallback if no CommonFilters instance
+        const params = new URLSearchParams();
+        return params.toString();
     }
 
     async loadInitialData() {
@@ -83,8 +90,6 @@ class EncounterKPIs extends CommonFilters {
 
     async refreshAllCharts() {
         try {
-            // Save current filters to localStorage before refreshing
-            this.saveFiltersToStorage();
             await this.loadInitialData();
         } catch (error) {
             console.error('Error refreshing KPI data:', error);
@@ -464,12 +469,29 @@ class EncounterKPIs extends CommonFilters {
             }
         };
     }
+
+    showFlashToast(message, type = 'info') {
+        // Use existing flash toast functionality if available
+        if (typeof showFlashToast === 'function') {
+            showFlashToast(message, type);
+        } else {
+            // Fallback to console
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+    }
 }
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     if (typeof Chart !== 'undefined') {
-        window.encounterKPIs = new EncounterKPIs();
+        // Wait a bit for CommonFilters to be available, then initialize EncounterKPIs
+        setTimeout(() => {
+            if (typeof window.commonFilters !== 'undefined') {
+                window.encounterKPIs = new EncounterKPIs(window.commonFilters);
+            } else {
+                console.error('CommonFilters is not available. Please include common-filters.js before encounter-kpis.js');
+            }
+        }, 50);
     } else {
         console.error('Chart.js is not loaded. Please include Chart.js library.');
     }

@@ -145,7 +145,7 @@ from api.kpis.kpiutils import (
 5. **Data Processing**
    - `group_by_location()` - Group DataFrame by location columns
    - `format_month_name()` - Convert month number to name
-   - `handle_nat_values_for_json()` - Handles `NaT` and `NaN` values before converting a DataFrame to JSON.
+   - `handle_nat_values_for_json()` - Handles `NaT`, `NaN`, and empty array values before converting a DataFrame to JSON.
 
 6. **Logging & Monitoring**
    - `log_endpoint_usage()` - Log endpoint usage for monitoring
@@ -171,6 +171,7 @@ This utility ensures that:
 - `NaT` values in datetime columns are converted to `None`.
 - `NaN` values in other columns are converted to `None`.
 - Datetime objects are converted to ISO format strings.
+- **Empty arrays/lists** are properly handled to avoid "ambiguous truth value" errors by checking array length and size before boolean evaluation.
 
 #### Common Aggregations
 

@@ -97,6 +97,10 @@ def parse_filter_params() -> Dict:
     params = {}
     
     try:
+        # Log raw request args for debugging
+        param_logger = logging.getLogger('runtime_error')
+        param_logger.info(f"Raw request args: {dict(request.args)}")
+        
         # Date filters
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
@@ -219,7 +223,7 @@ def validate_dataframe_not_empty(df: pd.DataFrame, endpoint_name: str) -> bool:
     Returns:
         True if DataFrame is not empty, False otherwise
     """
-    if df.empty:
+    if len(df) == 0:
         logger = logging.getLogger('runtime_error')
         logger.warning(f"Empty DataFrame returned for {endpoint_name}")
         return False
@@ -359,32 +363,59 @@ def handle_nat_values_for_json(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with NaT/NaN values replaced with None and datetimes properly formatted
     """
-    if df.empty:
+    if len(df) == 0:
         return df
     
     # Create a copy to avoid modifying the original
     df_clean = df.copy()
     
     # Handle all columns comprehensively
-    for col in df_clean.columns:
-        # Check if column contains datetime data
-        if pd.api.types.is_datetime64_any_dtype(df_clean[col]):
-            # Convert to ISO format strings and replace NaT with None
-            df_clean[col] = df_clean[col].apply(
-                lambda x: x.isoformat() if pd.notna(x) else None
-            )
-        else:
-            # For all other columns, replace NaN/NaT with None
-            # First, convert to object type to handle mixed types properly
-            df_clean[col] = df_clean[col].astype('object')
-            
-            # Replace all NaN values (including float NaN, np.nan, etc.) with None
-            df_clean[col] = df_clean[col].apply(
-                lambda x: None if (
-                    pd.isna(x) or
-                    (isinstance(x, float) and (x != x)) or  # NaN check
-                    (isinstance(x, (int, np.integer)) and pd.isna(x))  # Handle np.nan in int columns
-                ) else x
-            )
+    try:
+        for col in df_clean.columns:
+            # Check if column contains datetime data
+            if hasattr(pd.api.types, 'is_datetime64_any_dtype') and pd.api.types.is_datetime64_any_dtype(df_clean[col]):
+                # Convert to ISO format strings and replace NaT with None
+                df_clean[col] = df_clean[col].apply(
+                    lambda x: x.isoformat() if pd.notna(x) else None
+                )
+            else:
+                # For all other columns, replace NaN/NaT with None
+                # First, convert to object type to handle mixed types properly
+                df_clean[col] = df_clean[col].astype('object')
+                
+                # Replace all NaN values (including float NaN, np.nan, etc.) with None
+                def clean_value(x):
+                    # Check for empty lists/arrays first (before pd.isna which can cause the error)
+                    if isinstance(x, (list, np.ndarray)):
+                        if hasattr(x, '__len__') and len(x) == 0:
+                            return None
+                        elif hasattr(x, 'size') and x.size == 0:
+                            return None
+                    # Check for NaN/NaT values
+                    try:
+                        if pd.isna(x):
+                            return None
+                    except (ValueError, TypeError):
+                        # pd.isna() can fail on certain types
+                        pass
+                    # Check for float NaN
+                    if isinstance(x, float) and (x != x):
+                        return None
+                    # Check for np.nan in int columns
+                    if isinstance(x, (int, np.integer)):
+                        try:
+                            if pd.isna(x):
+                                return None
+                        except (ValueError, TypeError):
+                            pass
+                    return x
+                
+                df_clean[col] = df_clean[col].apply(clean_value)
+    except Exception as e:
+        error_logger = logging.getLogger('runtime_error')
+        error_logger.error(f"Error in handle_nat_values_for_json: {str(e)}")
+        error_logger.error(f"DataFrame shape: {df.shape}")
+        error_logger.error(f"DataFrame columns: {list(df.columns)}")
+        raise
     
     return df_clean

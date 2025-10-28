@@ -123,7 +123,7 @@
       <button id="refresh-kpis-btn" class="btn btn-primary">
         <i class="bi bi-arrow-clockwise me-1"></i> Refresh
       </button>
-      <a href="{{ url_for('analytics.encounter_files_download', **filters) }}" class="btn btn-success">
+      <a href="{{ url_for('fundus_api.get_filtered_dataframe_excel', **filters) }}" class="btn btn-success">
         <i class="bi bi-download me-1"></i> Download Excel
       </a>
     </div>

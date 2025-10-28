@@ -1,4 +1,4 @@
-# api/kpis/encounter_files.py
+# api/kpis/encounter_files_kpis.py
 import json
 import pandas as pd
 import logging
@@ -9,6 +9,7 @@ from flask import jsonify, request, send_file
 from flask_login import login_required, current_user
 from sqlalchemy import func, extract, and_, or_, case, cast, Float
 from sqlalchemy.orm import joinedload, selectinload
+import numpy as np
 
 # Import blueprint and utilities
 from .. import api_bp
@@ -24,12 +25,13 @@ from models import (
 
 # Import KPI utilities
 from .kpiutils import (
-    create_kpi_response, create_error_response, create_combined_response,
+    create_kpi_response, create_error_response, create_combined_response, handle_nat_values_for_json,
     parse_filter_params, get_user_permissions, determine_period,
     create_filters_applied_dict, validate_dataframe_not_empty,
     safe_divide, calculate_percentage, group_by_location,
     format_month_name, log_endpoint_usage
 )
+
 
 
 
@@ -130,8 +132,17 @@ def get_filtered_dataframe():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Convert dataframe to JSON-serializable format
             df_json = df.to_dict('records')
+            
+            # Additional NaN handling for JSON serialization
+            for record in df_json:
+                for key, value in record.items():
+                    if isinstance(value, float) and (value != value):  # Check for NaN
+                        record[key] = None
             
             # Determine period for metadata
             period = "All time"
@@ -186,6 +197,9 @@ def get_filtered_dataframe_excel():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Create Excel file in memory
             output = io.BytesIO()
             
@@ -235,10 +249,6 @@ def get_filtered_dataframe_excel():
         except Exception as e:
             return create_error_response("Internal server error", str(e), 500)
             
-        except ValueError as e:
-            return create_error_response("Invalid parameters", str(e))
-        except Exception as e:
-            return create_error_response("Internal server error", str(e), 500)
 
 
 # -------------------
@@ -287,6 +297,9 @@ def year_month_wise_uploads():
                 
                 return create_kpi_response(response_data, response_message, filters_applied=filters_applied)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Ensure upload_date is datetime for proper grouping
             df['upload_date'] = pd.to_datetime(df['upload_date'])
             
@@ -301,10 +314,6 @@ def year_month_wise_uploads():
                 'has_dr_report': 'sum',  # Number with DR reports
                 'has_glaucoma_report': 'sum'  # Number with glaucoma reports
             }).reset_index()
-            
-            # Extract year and month from upload_date
-            monthly_groups['year'] = monthly_groups['upload_date'].dt.year
-            monthly_groups['month'] = monthly_groups['upload_date'].dt.month
             
             # Extract year and month from upload_date
             monthly_groups['year'] = monthly_groups['upload_date'].dt.year
@@ -408,6 +417,9 @@ def dr_reports_count():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Calculate DR reports metrics using pandas
             dr_reports_df = df[df['has_dr_report'] == True]
             dr_reports_count = len(dr_reports_df)
@@ -462,6 +474,9 @@ def glaucoma_reports_count():
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
             
             # Calculate glaucoma reports metrics using pandas
             glaucoma_reports_df = df[df['has_glaucoma_report'] == True]
@@ -528,6 +543,9 @@ def images_count():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Calculate image metrics using pandas
             total_images = len(df)
             verified_images = df['verified_images'].sum() if 'verified_images' in df.columns else 0
@@ -587,6 +605,9 @@ def dr_results_distribution():
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
             
             # Filter for encounters with DR reports
             dr_df = df[df['has_dr_report'] == True]
@@ -688,6 +709,9 @@ def glaucoma_results_distribution():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
             
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
+            
             # Filter for encounters with glaucoma reports
             glaucoma_df = df[df['has_glaucoma_report'] == True]
             
@@ -746,6 +770,9 @@ def vcdr_distribution():
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            
+            # Handle NaT values to prevent JSON serialization errors
+            df = handle_nat_values_for_json(df)
             
             # Filter for encounters with glaucoma reports (since VCDR is part of glaucoma analysis)
             glaucoma_df = df[df['has_glaucoma_report'] == True]

@@ -7,6 +7,7 @@ and common patterns used across all KPI endpoints.
 """
 
 import json
+import numpy as np
 import pandas as pd
 import logging
 from datetime import datetime, date, timezone
@@ -347,3 +348,43 @@ COMMON_AGGREGATIONS = {
 }
 
 
+
+def handle_nat_values_for_json(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Handle NaT (Not a Time) and NaN values in DataFrame to prevent JSON serialization errors.
+    
+    Args:
+        df: pandas DataFrame that may contain NaT/NaN values
+        
+    Returns:
+        DataFrame with NaT/NaN values replaced with None and datetimes properly formatted
+    """
+    if df.empty:
+        return df
+    
+    # Create a copy to avoid modifying the original
+    df_clean = df.copy()
+    
+    # Handle all columns comprehensively
+    for col in df_clean.columns:
+        # Check if column contains datetime data
+        if pd.api.types.is_datetime64_any_dtype(df_clean[col]):
+            # Convert to ISO format strings and replace NaT with None
+            df_clean[col] = df_clean[col].apply(
+                lambda x: x.isoformat() if pd.notna(x) else None
+            )
+        else:
+            # For all other columns, replace NaN/NaT with None
+            # First, convert to object type to handle mixed types properly
+            df_clean[col] = df_clean[col].astype('object')
+            
+            # Replace all NaN values (including float NaN, np.nan, etc.) with None
+            df_clean[col] = df_clean[col].apply(
+                lambda x: None if (
+                    pd.isna(x) or
+                    (isinstance(x, float) and (x != x)) or  # NaN check
+                    (isinstance(x, (int, np.integer)) and pd.isna(x))  # Handle np.nan in int columns
+                ) else x
+            )
+    
+    return df_clean

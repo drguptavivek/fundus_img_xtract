@@ -19,6 +19,7 @@ This document provides comprehensive guidance for developing KPI APIs in the Fun
    - Common parameter parsing and validation
    - User permission handling utilities
    - Helper functions for common operations
+   - Handle NaT and naN values for JSON output
 
 3. **DataFrame Utilities** (`utils/dataframeXXXXXX.py`)
    - Centralized DataFrame generation functions based on KPI being develoepd
@@ -119,7 +120,7 @@ from api.kpis.kpiutils import (
     log_endpoint_usage,
     handle_common_exceptions
 )
-```
+``` 
 
 #### Available Functions
 
@@ -144,10 +145,32 @@ from api.kpis.kpiutils import (
 5. **Data Processing**
    - `group_by_location()` - Group DataFrame by location columns
    - `format_month_name()` - Convert month number to name
+   - `handle_nat_values_for_json()` - Handles `NaT` and `NaN` values before converting a DataFrame to JSON.
 
 6. **Logging & Monitoring**
    - `log_endpoint_usage()` - Log endpoint usage for monitoring
    - `handle_common_exceptions()` - Decorator for exception handling
+
+#### JSON Serialization
+
+When converting a pandas DataFrame to a JSON object (e.g., using `to_dict('records')`), `NaT` (Not a Time) and `NaN` (Not a Number) values can cause serialization errors. The `handle_nat_values_for_json` function should be used to clean the DataFrame before serialization.
+
+**Usage:**
+
+```python
+from api.kpis.kpiutils import handle_nat_values_for_json
+
+# Assume `df` is a pandas DataFrame with potential NaT/NaN values
+clean_df = handle_nat_values_for_json(df)
+
+# Now it's safe to convert to dictionary
+json_data = clean_df.to_dict('records')
+```
+
+This utility ensures that:
+- `NaT` values in datetime columns are converted to `None`.
+- `NaN` values in other columns are converted to `None`.
+- Datetime objects are converted to ISO format strings.
 
 #### Common Aggregations
 

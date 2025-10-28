@@ -51,7 +51,7 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
             joinedload(DirectImageUpload.area),
             joinedload(DirectImageUpload.uploader),
             joinedload(DirectImageUpload.verifications).joinedload(DirectImageVerify.verified_by),
-            selectinload(DirectImageUpload.gradings).joinedload(ImageGrading.grader)
+            joinedload(DirectImageUpload.gradings).joinedload(ImageGrading.grader)
         )
         
         # Apply date filters based on upload_date (created_at field)
@@ -62,6 +62,28 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
             direct_images_query = direct_images_query.filter(DirectImageUpload.created_at <= end_date)
         
         direct_images = direct_images_query.all()
+        
+        # Pre-load all tasks and grades in batch queries for performance
+        if direct_images:
+            direct_image_ids = [di.id for di in direct_images]
+            
+            # Batch query for all tasks related to these direct images
+            all_tasks_query = db.query(GradingTask).filter(
+                GradingTask.direct_image_upload_id.in_(direct_image_ids)
+            ).options(joinedload(GradingTask.grades).joinedload(Grade.grader))
+            all_tasks = all_tasks_query.all()
+            
+            # Organize tasks by direct_image_id for quick lookup
+            tasks_by_image = {}
+            grades_by_task = {}
+            for task in all_tasks:
+                if task.direct_image_upload_id not in tasks_by_image:
+                    tasks_by_image[task.direct_image_upload_id] = []
+                tasks_by_image[task.direct_image_upload_id].append(task)
+                
+                # Organize grades by task_id
+                if task.grades:
+                    grades_by_task[task.id] = task.grades
         
         logger.info(f"Retrieved {len(direct_images)} direct images from database")
         if start_date or end_date:
@@ -130,26 +152,24 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
                     'has_verification': False,
                 })
             
-            # Task Information - query actual grading tasks for this direct image
-            tasks_query = db.query(GradingTask).filter(GradingTask.direct_image_upload_id == di.id)
-            tasks = tasks_query.all()
+            # Task Information - use pre-loaded tasks for performance
+            tasks = tasks_by_image.get(di.id, [])
             
             if tasks:
                 task_count = len(tasks)
                 latest_task_date = max(t.updated_at for t in tasks)
                 task_states = list(set(t.state for t in tasks))
                 
-                # Get grades for these tasks
-                task_ids = [t.id for t in tasks]
-                grades_query = db.query(Grade).filter(Grade.task_id.in_(task_ids)).options(
-                    joinedload(Grade.grader)
-                )
-                grades = grades_query.all()
+                # Get grades from pre-loaded grades
+                all_grades_for_image = []
+                for task in tasks:
+                    task_grades = grades_by_task.get(task.id, [])
+                    all_grades_for_image.extend(task_grades)
                 
-                if grades:
-                    grading_count = len(grades)
-                    latest_grading_date = max(g.created_at for g in grades)
-                    grading_roles = list(set(g.role_slot for g in grades if g.role_slot))
+                if all_grades_for_image:
+                    grading_count = len(all_grades_for_image)
+                    latest_grading_date = max(g.created_at for g in all_grades_for_image)
+                    grading_roles = list(set(g.role_slot for g in all_grades_for_image if g.role_slot))
                     
                     image_data.update({
                         'has_grading': True,

@@ -415,11 +415,92 @@ log_endpoint_usage("upload_metrics", len(df), current_user.id)
 **Solution**: Enhanced DataTable initialization with proper destruction and cleanup
 - **Implementation**: Added comprehensive DataTable cleanup in `initializeDataTable()` method
 - **Key Features**:
-  - Proper destruction of existing DataTable instances with `destroy(true)`
+  - Proper destruction of existing DataTable instances with `destroy(false)` to preserve table markup
   - jQuery DataTable instance detection and cleanup
   - Table content clearing before reinitialization
   - Dual table synchronization for scrollable layout
-- **Code Location**: `templates/analytics/direct_files_kpi_display.html` lines 527-650
+- **Code Location**: `static/js/direct-files-kpis.js` lines 705-796 and 1012-1050
+
+#### 6. Table Element Not Found Error
+**Symptom**: "Table element #direct-files-table not found!"
+**Cause**: DataTable destruction with `destroy(true)` removes table markup from DOM, making it unavailable for reinitialization
+**Solution**: Modified DataTable destruction to preserve table markup
+- **Implementation**: Changed from `destroy(true)` to `destroy(false)` in all DataTable operations
+- **Key Changes**:
+  - `destroyDataTable()` method: Uses `destroy(false)` to preserve table HTML structure
+  - `initializeDataTable()` method: Uses `destroy(false)` to preserve table markup
+  - DataTable initialization option: Changed `destroy: true` to `destroy: false`
+- **Benefits**:
+  - Table element remains available in DOM throughout refresh cycle
+  - Eliminates "Table element not found" errors
+  - Maintains proper DOM structure for custom layout
+- **Code Location**: `static/js/direct-files-kpis.js` lines 705-724, 876, 1012-1050
+
+## 🎨 Frontend JavaScript Architecture
+
+### JavaScript Code Extraction
+
+#### Issue: Inline JavaScript in HTML Template
+**Problem**: Large JavaScript code blocks embedded in HTML template causing maintenance issues
+**Location**: `templates/analytics/direct_files_kpi_display.html` lines 396-822
+
+**Solution**: Extracted JavaScript to dedicated file for better maintainability
+
+#### Implementation Details
+
+**Extracted Components**:
+1. **DirectFilesKPIs Class** - Chart management and data visualization
+2. **DirectFilesAnalytics Class** - DataTable management and data processing
+3. **Event Handlers** - Refresh button and filter change listeners
+4. **Initialization Logic** - DOM ready and component setup
+
+**New File Structure**:
+```
+static/js/direct-files-kpis.js
+├── DirectFilesKPIs Class (lines 4-492)
+│   ├── Chart lifecycle management
+│   ├── Data loading and rendering
+│   ├── Event handling for filters
+│   └── Chart destruction and cleanup
+├── DirectFilesAnalytics Class (lines 575-1051)
+│   ├── DataTable initialization and management
+│   ├── Data loading and processing
+│   ├── Custom layout controls
+│   └── Destruction and cleanup methods
+└── DOM Ready Event Handlers (lines 494-573)
+    ├── Component initialization
+    ├── Event listener setup
+    └── Error handling
+```
+
+**Benefits of Extraction**:
+- **Maintainability**: Separate JavaScript file for easier editing and debugging
+- **Reusability**: JavaScript can be included in other templates
+- **Performance**: Browser can cache JavaScript file separately
+- **Code Organization**: Clear separation of concerns between HTML and JavaScript
+- **Version Control**: Better diff tracking for JavaScript changes
+
+**Updated HTML Template**:
+- **Removed**: Lines 396-822 (426 lines of inline JavaScript)
+- **Added**: Script tag to include external JavaScript file
+```html
+<!-- Direct Files KPIs JavaScript -->
+<script src="{{ url_for('static', filename='js/direct-files-kpis.js') }}"></script>
+```
+
+**Initialization Flow**:
+1. **DOM Ready**: Both classes initialize when DOM is ready
+2. **Dependency Management**: Waits for CommonFilters to be available
+3. **Sequential Loading**: Data loads first, then UI components initialize
+4. **Event Binding**: Refresh and filter events properly bound
+5. **Error Handling**: Comprehensive error handling throughout initialization
+
+**Key Features Maintained**:
+- **Chart Management**: All 6 charts (Upload Trends, Hospital Distribution, Camera Type, Verification Status, Disease Distribution, Mydriatic)
+- **DataTable Functionality**: Custom layout with horizontal scrolling, pagination, search, and length controls
+- **Filter Integration**: Seamless integration with CommonFilters system
+- **Refresh Capability**: Complete data and chart refresh functionality
+- **Error Handling**: Flash toast notifications and console logging
 
 ## 📚 Additional Resources
 

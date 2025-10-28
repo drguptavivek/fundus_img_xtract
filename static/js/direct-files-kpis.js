@@ -38,11 +38,8 @@ class DirectFilesKPIs {
             this.handleFiltersCleared(event.detail.filters);
         });
 
-        // Refresh button
-        const refreshBtn = document.getElementById('refresh-kpis-btn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.refreshAllCharts());
-        }
+        // Refresh button - Note: DirectFilesAnalytics handles the actual refresh logic
+        // This listener is removed to prevent duplicate event handling
     }
 
     handleFiltersApplied(filters) {
@@ -90,11 +87,38 @@ class DirectFilesKPIs {
 
     async refreshAllCharts() {
         try {
-            await this.loadInitialData();
+            // Destroy all existing charts before refreshing
+            this.destroyAllCharts();
+            
+            // Add a small delay to ensure canvas cleanup is complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Only reload metrics, reuse data for charts
+            await this.loadUploadMetrics();
+            await this.loadUploadTrends();
+            await this.loadHospitalDistribution();
+            await this.loadCameraTypeDistribution();
+            await this.loadVerificationStatus();
+            await this.loadDiseaseDistribution();
+            await this.loadMydriaticDistribution();
         } catch (error) {
             console.error('Error refreshing KPI data:', error);
             this.showFlashToast('Failed to refresh KPI data', 'error');
         }
+    }
+
+    destroyAllCharts() {
+        // Destroy all chart instances to prevent canvas reuse errors
+        Object.keys(this.charts).forEach(chartKey => {
+            if (this.charts[chartKey]) {
+                try {
+                    this.charts[chartKey].destroy();
+                } catch (error) {
+                    console.warn(`Error destroying chart ${chartKey}:`, error);
+                }
+                delete this.charts[chartKey];
+            }
+        });
     }
 
     async fetchKPI(endpoint) {
@@ -181,6 +205,12 @@ class DirectFilesKPIs {
         const ctx = document.getElementById('uploadTrendsChart');
         if (!ctx) return;
 
+        // Destroy existing chart if it exists
+        if (this.charts.uploadTrends) {
+            this.charts.uploadTrends.destroy();
+            this.charts.uploadTrends = null;
+        }
+
         const chartData = {
             labels: data.daily_uploads.map(d => d.date),
             datasets: [
@@ -196,21 +226,22 @@ class DirectFilesKPIs {
             ]
         };
 
-        if (this.charts.uploadTrends) {
-            this.charts.uploadTrends.data = chartData;
-            this.charts.uploadTrends.update();
-        } else {
-            this.charts.uploadTrends = new Chart(ctx, {
-                type: 'line',
-                data: chartData,
-                options: this.getLineChartOptions('Upload Trends Over Time')
-            });
-        }
+        this.charts.uploadTrends = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: this.getLineChartOptions('Upload Trends Over Time')
+        });
     }
 
     renderHospitalDistributionChart(data) {
         const ctx = document.getElementById('hospitalDistributionChart');
         if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.hospitalDistribution) {
+            this.charts.hospitalDistribution.destroy();
+            this.charts.hospitalDistribution = null;
+        }
 
         const chartData = {
             labels: data.by_hospital.map(h => h.hospital_name),
@@ -237,21 +268,22 @@ class DirectFilesKPIs {
             }]
         };
 
-        if (this.charts.hospitalDistribution) {
-            this.charts.hospitalDistribution.data = chartData;
-            this.charts.hospitalDistribution.update();
-        } else {
-            this.charts.hospitalDistribution = new Chart(ctx, {
-                type: 'pie',
-                data: chartData,
-                options: this.getPieChartOptions('Uploads by Hospital')
-            });
-        }
+        this.charts.hospitalDistribution = new Chart(ctx, {
+            type: 'pie',
+            data: chartData,
+            options: this.getPieChartOptions('Uploads by Hospital')
+        });
     }
 
     renderCameraTypeChart(data) {
         const ctx = document.getElementById('cameraTypeChart');
         if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.cameraType) {
+            this.charts.cameraType.destroy();
+            this.charts.cameraType = null;
+        }
 
         const chartData = {
             labels: data.by_camera.map(c => c.camera_name),
@@ -264,16 +296,11 @@ class DirectFilesKPIs {
             }]
         };
 
-        if (this.charts.cameraType) {
-            this.charts.cameraType.data = chartData;
-            this.charts.cameraType.update();
-        } else {
-            this.charts.cameraType = new Chart(ctx, {
-                type: 'bar',
-                data: chartData,
-                options: this.getChartOptions('Uploads by Camera Type')
-            });
-        }
+        this.charts.cameraType = new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: this.getChartOptions('Uploads by Camera Type')
+        });
     }
 
     renderVerificationStatusChart(data) {
@@ -302,21 +329,22 @@ class DirectFilesKPIs {
             }]
         };
 
-        if (this.charts.verificationStatus) {
-            this.charts.verificationStatus.data = chartData;
-            this.charts.verificationStatus.update();
-        } else {
-            this.charts.verificationStatus = new Chart(ctx, {
-                type: 'doughnut',
-                data: chartData,
-                options: this.getPieChartOptions('Verification Status')
-            });
-        }
+        this.charts.verificationStatus = new Chart(ctx, {
+            type: 'doughnut',
+            data: chartData,
+            options: this.getPieChartOptions('Verification Status')
+        });
     }
 
     renderDiseaseDistributionChart(data) {
         const ctx = document.getElementById('diseaseDistributionChart');
         if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.diseaseDistribution) {
+            this.charts.diseaseDistribution.destroy();
+            this.charts.diseaseDistribution = null;
+        }
 
         const chartData = {
             labels: data.by_disease.map(d => d.disease_name),
@@ -339,21 +367,22 @@ class DirectFilesKPIs {
             }]
         };
 
-        if (this.charts.diseaseDistribution) {
-            this.charts.diseaseDistribution.data = chartData;
-            this.charts.diseaseDistribution.update();
-        } else {
-            this.charts.diseaseDistribution = new Chart(ctx, {
-                type: 'pie',
-                data: chartData,
-                options: this.getPieChartOptions('Disease Distribution')
-            });
-        }
+        this.charts.diseaseDistribution = new Chart(ctx, {
+            type: 'pie',
+            data: chartData,
+            options: this.getPieChartOptions('Disease Distribution')
+        });
     }
 
     renderMydriaticChart(data) {
         const ctx = document.getElementById('mydriaticChart');
         if (!ctx) return;
+
+        // Destroy existing chart if it exists
+        if (this.charts.mydriatic) {
+            this.charts.mydriatic.destroy();
+            this.charts.mydriatic = null;
+        }
 
         const chartData = {
             labels: ['Mydriatic', 'Non-Mydriatic'],
@@ -372,16 +401,11 @@ class DirectFilesKPIs {
             }]
         };
 
-        if (this.charts.mydriatic) {
-            this.charts.mydriatic.data = chartData;
-            this.charts.mydriatic.update();
-        } else {
-            this.charts.mydriatic = new Chart(ctx, {
-                type: 'doughnut',
-                data: chartData,
-                options: this.getPieChartOptions('Mydriatic vs Non-Mydriatic')
-            });
-        }
+        this.charts.mydriatic = new Chart(ctx, {
+            type: 'doughnut',
+            data: chartData,
+            options: this.getPieChartOptions('Mydriatic vs Non-Mydriatic')
+        });
     }
 
     getChartOptions(title) {
@@ -474,6 +498,8 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             if (typeof window.commonFilters !== 'undefined') {
                 window.directFilesKPIs = new DirectFilesKPIs(window.commonFilters);
+                // Initialize charts after creating the instance
+                window.directFilesKPIs.initializeCharts();
             } else {
                 console.error('CommonFilters is not available. Please include common-filters.js before direct-files-kpis.js');
             }
@@ -481,4 +507,545 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.error('Chart.js is not loaded. Please include Chart.js library.');
     }
+    
+    // Hide loading spinner once page is ready
+    const loadingSpinner = document.getElementById('loading-spinner');
+    if (loadingSpinner) {
+        loadingSpinner.style.display = 'none';
+    }
+    
+    // Show KPI charts section
+    const kpiSection = document.getElementById('kpi-charts-section');
+    if (kpiSection) {
+        kpiSection.style.display = 'block';
+    }
+    
+    // Initialize the enhanced analytics
+    window.directFilesAnalytics = new DirectFilesAnalytics();
+    
+    // Set up refresh button
+    const refreshBtn = document.getElementById('refresh-kpis-btn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Refreshing...';
+            
+            try {
+                // Destroy charts first before refreshing data
+                if (typeof window.directFilesKPIs !== 'undefined') {
+                    window.directFilesKPIs.destroyAllCharts();
+                }
+                
+                // Destroy DataTable before refreshing data
+                if (typeof window.directFilesAnalytics !== 'undefined') {
+                    window.directFilesAnalytics.destroyDataTable();
+                }
+                
+                await window.directFilesAnalytics.refreshData();
+                
+                // Reinitialize charts after data is loaded
+                if (typeof window.directFilesKPIs !== 'undefined') {
+                    await window.directFilesKPIs.refreshAllCharts();
+                }
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Refresh';
+            }
+        });
+    }
+    
+    // Listen for filter changes
+    document.addEventListener('filtersApplied', async () => {
+        // Destroy DataTable before refreshing data with new filters
+        if (typeof window.directFilesAnalytics !== 'undefined') {
+            window.directFilesAnalytics.destroyDataTable();
+        }
+        await window.directFilesAnalytics.refreshData();
+    });
+    
+    document.addEventListener('filtersCleared', async () => {
+        // Destroy DataTable before refreshing data with cleared filters
+        if (typeof window.directFilesAnalytics !== 'undefined') {
+            window.directFilesAnalytics.destroyDataTable();
+        }
+        await window.directFilesAnalytics.refreshData();
+    });
 });
+
+// Enhanced Direct Files Analytics with DataTables
+class DirectFilesAnalytics {
+    constructor() {
+        this.dataTable = null;
+        this.directFilesData = [];
+        this.uploadMetrics = {};
+        this.columnOrder = [];
+        this.init();
+    }
+    
+    async init() {
+        // Wait for CommonFilters and DirectFilesKPIs to be ready
+        setTimeout(async () => {
+            if (typeof window.commonFilters !== 'undefined' && typeof window.directFilesKPIs !== 'undefined') {
+                // Load data first, then initialize UI components
+                await this.loadDirectFilesData();
+                await this.loadUploadMetrics();
+                this.initializeDataTable();
+                this.updateSummaryMetrics();
+                this.showDataSection();
+            } else {
+                console.error('Required dependencies not available');
+            }
+        }, 200);
+    }
+    
+    async loadDirectFilesData() {
+        try {
+            console.log('Loading direct files data...');
+            const queryString = window.commonFilters.buildQueryParams();
+            console.log('Query string:', queryString);
+            
+            const response = await fetch(`/api/kpis/direct-files/filtered-dataframe?${queryString}`);
+            console.log('Response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('API response:', result);
+            
+            if (!result.success) {
+                throw new Error(result.message || 'API request failed');
+            }
+            
+            // The API returns data wrapped in an object, extract the actual array
+            this.directFilesData = result.data.data || [];
+            console.log('Direct files data loaded:', this.directFilesData.length, 'records');
+            
+            if (this.directFilesData.length > 0) {
+                console.log('Sample record:', this.directFilesData[0]);
+                // Store column order from the first record to maintain JSON field order
+                this.columnOrder = [
+                    "image_id",
+                    "image_uuid",
+                    "filename",
+                    "original_filename",
+                    "edited_filename",
+                    "folder_rel",
+                    "file_hash",
+                    "content_hash",
+                    "upload_date",
+                    "upload_datetime",
+                    "uploader_id",
+                    "uploader_username",
+                    "uploader_full_name",
+                    "hospital_id",
+                    "hospital_name",
+                    "lab_unit_id",
+                    "lab_unit_name",
+                    "camera_id",
+                    "camera_name",
+                    "disease_id",
+                    "disease_name",
+                    "area_id",
+                    "area_name",
+                    "is_mydriatic",
+                    "is_pregraded",
+                    "verification_status",
+                    "verification_remarks",
+                    "verified_by_id",
+                    "verified_by_username",
+                    "verified_at",
+                    "has_verification",
+                    "has_grading",
+                    "grading_count",
+                    "latest_grading_date",
+                    "grading_roles",
+                    "has_task",
+                    "task_count",
+                    "task_states",
+                    "latest_task_date"
+                ];
+                console.log('Available columns:', this.columnOrder);
+            }
+        } catch (error) {
+            console.error('Error loading direct files data:', error);
+            this.showFlashToast('Failed to load direct files data', 'error');
+        }
+    }
+    
+    async loadUploadMetrics() {
+        try {
+            console.log('Loading upload metrics...');
+            const queryString = window.commonFilters.buildQueryParams();
+            console.log('Query string for metrics:', queryString);
+            
+            const response = await fetch(`/api/kpis/direct-files/upload-metrics?${queryString}`);
+            console.log('Metrics response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('Upload metrics response:', result);
+            
+            if (!result.success) {
+                throw new Error(result.message || 'API request failed');
+            }
+            
+            this.uploadMetrics = result.data || {};
+            console.log('Upload metrics loaded:', this.uploadMetrics);
+        } catch (error) {
+            console.error('Error loading upload metrics:', error);
+            this.showFlashToast('Failed to load upload metrics', 'error');
+        }
+    }
+    
+    initializeDataTable() {
+        // Check if DataTable already exists and destroy it properly
+        if (this.dataTable) {
+            try {
+                this.dataTable.destroy(false); // false parameter preserves table markup
+                this.dataTable = null;
+            } catch (error) {
+                console.warn('Error destroying DataTable:', error);
+            }
+        }
+        
+        // Also check if jQuery DataTable instance exists and destroy it
+        try {
+            const existingTable = $('#direct-files-table');
+            if (existingTable.length && $.fn.DataTable.isDataTable(existingTable)) {
+                existingTable.DataTable().destroy(false); // false parameter preserves table markup
+            }
+        } catch (error) {
+            console.warn('Error destroying existing jQuery DataTable:', error);
+        }
+        
+        // Get all column names in JSON order (stored during data loading)
+        const allColumns = this.columnOrder || [];
+        
+        // Create column definitions dynamically
+        const columnDefs = allColumns.map(col => ({
+            data: col,
+            title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Convert snake_case to Title Case
+            render: function(data, type, row) {
+                // Handle null/undefined data
+                if (data === null || data === undefined) {
+                    return '-';
+                }
+                
+                // Format specific date columns only
+                if (col.includes('capture_date') || col.includes('upload_date') || col.includes('created_at') || col.includes('updated_at')) {
+                    try {
+                        return data ? new Date(data).toLocaleString() : '-';
+                    } catch (e) {
+                        return data; // Return as-is if date parsing fails
+                    }
+                } else if (typeof data === 'boolean') {
+                    return data ? 'Yes' : 'No';
+                } else if (Array.isArray(data)) {
+                    // Handle arrays (like task_states, grading_roles)
+                    return data.join(', ');
+                } else if (typeof data === 'object' && data !== null) {
+                    // Handle objects by converting to JSON string
+                    return JSON.stringify(data);
+                }
+                
+                // Return data as-is for all other columns
+                return data;
+            }
+        }));
+        
+        // Initialize DataTable directly with the data
+        console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
+        console.log('Column definitions:', columnDefs.length, 'columns');
+        console.log('Sample data:', this.directFilesData.slice(0, 2));
+        
+        // Check if jQuery and DataTables are available
+        if (typeof $ === 'undefined') {
+            console.error('jQuery is not loaded!');
+            return;
+        }
+        
+        if (typeof $.fn.DataTable === 'undefined') {
+            console.error('DataTables is not loaded!');
+            return;
+        }
+        
+        // Check if table element exists
+        const tableElement = $('#direct-files-table');
+        if (tableElement.length === 0) {
+            console.error('Table element #direct-files-table not found!');
+            return;
+        }
+        
+        // Wait a bit for DOM to be ready after destruction
+        setTimeout(() => {
+            // Check again after delay to ensure DOM is stable
+            const tableElementAfterDelay = $('#direct-files-table');
+            if (tableElementAfterDelay.length === 0) {
+                console.error('Table element #direct-files-table still not found after delay!');
+                return;
+            }
+            
+            // Now proceed with DataTable initialization
+            this.initializeDataTableInstance();
+        }, 50);
+    }
+    
+    initializeDataTableInstance() {
+        // Get all column names in JSON order (stored during data loading)
+        const allColumns = this.columnOrder || [];
+        
+        // Create column definitions dynamically
+        const columnDefs = allColumns.map(col => ({
+            data: col,
+            title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Convert snake_case to Title Case
+            render: function(data, type, row) {
+                // Handle null/undefined data
+                if (data === null || data === undefined) {
+                    return '-';
+                }
+                
+                // Format specific date columns only
+                if (col.includes('capture_date') || col.includes('upload_date') || col.includes('created_at') || col.includes('updated_at')) {
+                    try {
+                        return data ? new Date(data).toLocaleString() : '-';
+                    } catch (e) {
+                        return data; // Return as-is if date parsing fails
+                    }
+                } else if (typeof data === 'boolean') {
+                    return data ? 'Yes' : 'No';
+                } else if (Array.isArray(data)) {
+                    // Handle arrays (like task_states, grading_roles)
+                    return data.join(', ');
+                } else if (typeof data === 'object' && data !== null) {
+                    // Handle objects by converting to JSON string
+                    return JSON.stringify(data);
+                }
+                
+                // Return data as-is for all other columns
+                return data;
+            }
+        }));
+        
+        // Initialize DataTable directly with the data
+        console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
+        console.log('Column definitions:', columnDefs.length, 'columns');
+        console.log('Sample data:', this.directFilesData.slice(0, 2));
+        
+        // Check if jQuery and DataTables are available
+        if (typeof $ === 'undefined') {
+            console.error('jQuery is not loaded!');
+            return;
+        }
+        
+        if (typeof $.fn.DataTable === 'undefined') {
+            console.error('DataTables is not loaded!');
+            return;
+        }
+        
+        // Check if table element exists (should exist now)
+        const tableElementNow = $('#direct-files-table');
+        if (tableElementNow.length === 0) {
+            console.error('Table element #direct-files-table not found during initialization!');
+            return;
+        }
+        
+        try {
+            // Clear any existing table content to prevent duplication
+            $('#direct-files-table thead tr').empty();
+            
+            // Make sure the body table has the same structure
+            $('#direct-files-table-body thead tr').empty();
+            $('#direct-files-table-body tbody').empty();
+            
+            this.dataTable = $('#direct-files-table').DataTable({
+                data: this.directFilesData,
+                columns: columnDefs,
+                dom: 'rt<"bottom">',
+                scrollX: true,
+                ordering: true,
+                searching: true,
+                info: true,
+                lengthChange: true,
+                pageLength: 25,
+                retrieve: false, // Don't retrieve existing instance
+                destroy: false,  // Don't destroy table markup, just the DataTable instance
+                language: {
+                    lengthMenu: "Show _MENU_ entries",
+                    info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                    paginate: {
+                        first: "First",
+                        last: "Last",
+                        next: "Next",
+                        previous: "Previous"
+                    }
+                }
+            });
+            
+            // Update the custom layout elements
+            this.updateCustomLayout();
+            
+            // Copy the table structure to the body table for scrolling
+            this.updateBodyTable();
+            
+            console.log('DataTable initialized successfully:', this.dataTable);
+            console.log('Table info:', this.dataTable.page.info());
+        } catch (error) {
+            console.error('Error initializing DataTable:', error);
+        }
+    }
+    
+    updateBodyTable() {
+        // Copy headers from main table to body table for alignment
+        const mainHeaders = $('#direct-files-table thead tr').html();
+        $('#direct-files-table-body thead tr').html(mainHeaders);
+        
+        // Copy the tbody content to the body table
+        const mainBody = $('#direct-files-table tbody').html();
+        $('#direct-files-table-body tbody').html(mainBody);
+    }
+    
+    updateCustomLayout() {
+        // Update the info display
+        const info = this.dataTable.page.info();
+        document.getElementById('direct-files-table_info').textContent =
+            `Showing ${info.start + 1} to ${info.end} of ${info.recordsDisplay} entries`;
+        
+        // Update pagination
+        this.updatePagination();
+        
+        // Set up event listeners for custom controls
+        this.setupCustomControls();
+    }
+    
+    updatePagination() {
+        const paginate = document.getElementById('direct-files-table_paginate');
+        const info = this.dataTable.page.info();
+        
+        // Clear existing pagination
+        const span = paginate.querySelector('span');
+        span.innerHTML = '';
+        
+        // Add page numbers
+        for (let i = 0; i < info.pages; i++) {
+            const a = document.createElement('a');
+            a.className = `paginate_button ${i === info.page ? 'current' : ''}`;
+            a.setAttribute('aria-controls', 'direct-files-table');
+            a.setAttribute('data-dt-idx', i);
+            a.setAttribute('tabindex', '0');
+            a.textContent = i + 1;
+            
+            a.addEventListener('click', () => {
+                this.dataTable.page(i).draw('page');
+            });
+            
+            span.appendChild(a);
+        }
+        
+        // Update previous/next buttons
+        const prevBtn = document.getElementById('direct-files-table_previous');
+        const nextBtn = document.getElementById('direct-files-table_next');
+        
+        prevBtn.className = `paginate_button previous ${info.page === 0 ? 'disabled' : ''}`;
+        nextBtn.className = `paginate_button next ${info.page === info.pages - 1 ? 'disabled' : ''}`;
+    }
+    
+    setupCustomControls() {
+        // Length selector
+        const lengthSelect = document.querySelector('select[name="direct-files-table_length"]');
+        lengthSelect.addEventListener('change', (e) => {
+            this.dataTable.page.len(parseInt(e.target.value)).draw();
+        });
+        
+        // Search input
+        const searchInput = document.querySelector('#direct-files-table_filter input');
+        searchInput.addEventListener('keyup', () => {
+            this.dataTable.search(searchInput.value).draw();
+        });
+        
+        // Previous/Next buttons
+        document.getElementById('direct-files-table_previous').addEventListener('click', () => {
+            this.dataTable.page('previous').draw('page');
+        });
+        
+        document.getElementById('direct-files-table_next').addEventListener('click', () => {
+            this.dataTable.page('next').draw('page');
+        });
+    }
+    
+    updateSummaryMetrics() {
+        const total = this.uploadMetrics.total_uploads || 0;
+        const verified = this.directFilesData.filter(item => item.has_verification === true).length;
+        const pregraded = this.directFilesData.filter(item => item.is_pregraded === true).length;
+        const mydriatic = this.directFilesData.filter(item => item.is_mydriatic === true).length;
+        
+        document.getElementById('total-uploads').textContent = total;
+        document.getElementById('verified-images').textContent = verified;
+        document.getElementById('pregraded-images').textContent = pregraded;
+        document.getElementById('mydriatic-images').textContent = mydriatic;
+    }
+    
+    showDataSection() {
+        document.getElementById('data-table-section').style.display = 'block';
+        document.getElementById('summary-metrics').style.display = 'flex';
+    }
+    
+    showFlashToast(message, type = 'info') {
+        if (typeof showFlashToast === 'function') {
+            showFlashToast(message, type);
+        } else {
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+    }
+    
+    async refreshData() {
+        await this.loadDirectFilesData();
+        await this.loadUploadMetrics();
+        this.initializeDataTable();
+        this.updateSummaryMetrics();
+    }
+    
+    destroyDataTable() {
+        // Check if DataTable exists and destroy it properly
+        if (this.dataTable) {
+            try {
+                this.dataTable.destroy(false); // false parameter preserves table markup
+                this.dataTable = null;
+                console.log('DataTable destroyed successfully');
+            } catch (error) {
+                console.warn('Error destroying DataTable:', error);
+            }
+        }
+        
+        // Also check if jQuery DataTable instance exists and destroy it
+        try {
+            const existingTable = $('#direct-files-table');
+            if (existingTable.length && $.fn.DataTable.isDataTable(existingTable)) {
+                existingTable.DataTable().destroy(false); // false parameter preserves table markup
+                console.log('jQuery DataTable destroyed successfully');
+            }
+        } catch (error) {
+            console.warn('Error destroying existing jQuery DataTable:', error);
+        }
+        
+        // Clear table content to ensure clean state
+        try {
+            // Only clear if elements exist to avoid "not found" errors
+            const headElement = $('#direct-files-table thead tr');
+            const bodyHeadElement = $('#direct-files-table-body thead tr');
+            const bodyElement = $('#direct-files-table-body tbody');
+            
+            if (headElement.length) headElement.empty();
+            if (bodyHeadElement.length) bodyHeadElement.empty();
+            if (bodyElement.length) bodyElement.empty();
+            
+            console.log('Table content cleared');
+        } catch (error) {
+            console.warn('Error clearing table content:', error);
+        }
+    }
+}

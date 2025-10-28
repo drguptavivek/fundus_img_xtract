@@ -187,15 +187,17 @@ for task in all_tasks:
 - Grading Information (count, roles, dates)
 - Task Information (count, states, dates)
 
-### Critical Bug Fix
+### Critical Bug Fixes
 
-#### Issue: "The truth value of an empty array is ambiguous"
-#### Location: `api/kpis/kpiutils.py` - `handle_nat_values_for_json()` function
+##### 1. Empty Array JSON Serialization Error
 
-#### Root Cause:
+**Issue**: "The truth value of an empty array is ambiguous"
+**Location**: `api/kpis/kpiutils.py` - `handle_nat_values_for_json()` function
+
+**Root Cause**:
 The `pd.isna()` function was being called on empty arrays/lists, causing pandas to evaluate them in a boolean context, which triggers the "ambiguous truth value" error.
 
-#### Solution Implemented:
+**Solution Implemented**:
 ```python
 def clean_value(x):
     # Check for empty lists/arrays first (before pd.isna which can cause the error)
@@ -215,10 +217,75 @@ def clean_value(x):
     return x
 ```
 
-#### Benefits:
+**Benefits**:
 - **Robust Error Handling**: Prevents crashes on empty arrays
 - **Backward Compatibility**: Maintains functionality for existing data
 - **Comprehensive Coverage**: Handles all edge cases for JSON serialization
+
+##### 2. Enhanced Filtering with Column Validation
+
+**Issue**: Filtering errors when expected columns don't exist in dataframe
+**Location**: `api/kpis/direct_files_kpis.py` - `get_filtered_direct_image_dataframe()` function
+
+**Root Cause**:
+The filtering logic assumed certain columns would always exist in dataframe, but column availability could vary based on data or query conditions.
+
+**Solution Implemented**:
+```python
+# Apply location filters with column validation
+if 'hospital_ids' in params and params['hospital_ids']:
+    if 'hospital_id' in df.columns:
+        df = df[df['hospital_id'].isin(params['hospital_ids'])]
+    else:
+        error_logger.error(f"Column 'hospital_id' not found in dataframe. Available columns: {list(df.columns)}")
+
+if 'lab_unit_ids' in params and params['lab_unit_ids']:
+    if 'lab_unit_id' in df.columns:
+        df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
+    else:
+        error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
+
+# Date filtering with validation
+if 'start_date' in params:
+    if 'upload_date' in df.columns:
+        df = df[df['upload_date'] >= params['start_date']]
+    else:
+        error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
+```
+
+**Benefits**:
+- **Defensive Programming**: Prevents KeyError exceptions when columns don't exist
+- **Enhanced Debugging**: Comprehensive logging for troubleshooting
+- **Graceful Degradation**: System continues to function even with missing columns
+- **Better Error Messages**: Clear indication of what went wrong and what columns are available
+
+##### 3. User Permission Filtering Enhancement
+
+**Issue**: "Ambiguous truth value" error when checking empty user_lab_unit_ids
+**Location**: `api/kpis/direct_files_kpis.py` - User permissions filtering
+
+**Root Cause**:
+Empty sets/arrays were being used in boolean contexts without proper validation.
+
+**Solution Implemented**:
+```python
+# Check if user_lab_unit_ids is not empty to avoid "ambiguous truth value" error
+if user_lab_unit_ids and len(user_lab_unit_ids) > 0:
+    # Check if lab_unit_id column exists
+    if 'lab_unit_id' in df.columns:
+        df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
+    else:
+        error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
+        df = df.iloc[0:0]  # Empty dataframe with same columns
+else:
+    # If user has no lab unit permissions, return empty dataframe
+    df = df.iloc[0:0]  # Empty dataframe with same columns
+```
+
+**Benefits**:
+- **Security**: Properly handles users with no lab unit permissions
+- **Error Prevention**: Eliminates ambiguous truth value errors
+- **Consistent Behavior**: Predictable results for all permission scenarios
 
 ## 🔒 Security & Permissions
 
@@ -342,7 +409,31 @@ log_endpoint_usage("upload_metrics", len(df), current_user.id)
 **Cause**: Large dataset or special characters in data
 **Solution**: Use enhanced JSON cleaning and proper Excel formatting
 
+#### 5. DataTable Reinitialization Error
+**Symptom**: "DataTables warning: table id=direct-files-table - Cannot reinitialise DataTable"
+**Cause**: Multiple DataTable initialization attempts without proper cleanup
+**Solution**: Enhanced DataTable initialization with proper destruction and cleanup
+- **Implementation**: Added comprehensive DataTable cleanup in `initializeDataTable()` method
+- **Key Features**:
+  - Proper destruction of existing DataTable instances with `destroy(true)`
+  - jQuery DataTable instance detection and cleanup
+  - Table content clearing before reinitialization
+  - Dual table synchronization for scrollable layout
+- **Code Location**: `templates/analytics/direct_files_kpi_display.html` lines 527-650
+
 ## 📚 Additional Resources
+
+#### 6. Chart.js Canvas Reuse Error
+**Symptom**: "Canvas is already in use. Chart with ID '2' must be destroyed before canvas with ID 'verificationStatusChart' can be reused"
+**Cause**: Chart.js instances being recreated without destroying existing instances, causing canvas conflicts
+**Solution**: Enhanced chart lifecycle management with proper destruction
+- **Implementation**: Added `destroyAllCharts()` method and individual chart destruction in each render method
+- **Key Features**:
+  - Global chart destruction on refresh to prevent canvas conflicts
+  - Individual chart destruction before recreation in each render method
+  - Proper null assignment after destruction
+  - Error handling for destruction failures
+- **Code Location**: `static/js/direct-files-kpis.js` lines 91-105 and all render methods
 
 ### Related Documentation
 - [KPI API Development Guidance](kpiApiGuidance.md)

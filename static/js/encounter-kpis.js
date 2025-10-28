@@ -1,80 +1,67 @@
 // encounter-kpis.js
 // Frontend JavaScript for consuming encounter files KPI APIs
 
-class EncounterKPIs {
+class EncounterKPIs extends CommonFilters {
     constructor() {
+        super();
         this.baseURL = '/api/kpis/encounter-files';
         this.charts = {};
-        this.filters = {
-            start_date: null,
-            end_date: null,
-            hospital_ids: [],
-            lab_unit_ids: [],
-            year: null
-        };
         this.init();
     }
 
     init() {
-        this.setupEventListeners();
-        this.loadInitialData();
+        super.init();
+        // Load initial data after a short delay to ensure filters are applied
+        setTimeout(() => {
+            this.loadInitialData();
+        }, 100);
     }
 
+    // Override notifyFiltersChanged to not automatically refresh charts
+    notifyFiltersChanged() {
+        // Filters changed but don't refresh automatically
+        // User must click "Apply Filters" button to refresh data
+        // No console logging to avoid noise
+    }
+
+    // Override clearFilters to show toast
+    clearFilters() {
+        super.clearFilters();
+        // Use global showFlashToast function directly
+        if (typeof showFlashToast === 'function') {
+            showFlashToast('Filters cleared', 'info');
+        }
+    }
+
+    // Refresh button and Apply Filters button
     setupEventListeners() {
-        // Date filter listeners
-        const startDateInput = document.getElementById('filter-start-date');
-        const endDateInput = document.getElementById('filter-end-date');
+        super.setupEventListeners();
         
-        if (startDateInput) {
-            startDateInput.addEventListener('change', () => {
-                this.filters.start_date = startDateInput.value;
-                this.refreshAllCharts();
-            });
-        }
-        
-        if (endDateInput) {
-            endDateInput.addEventListener('change', () => {
-                this.filters.end_date = endDateInput.value;
-                this.refreshAllCharts();
-            });
-        }
-
-        // Hospital filter listener
-        const hospitalSelect = document.getElementById('filter-hospital-ids');
-        if (hospitalSelect) {
-            hospitalSelect.addEventListener('change', () => {
-                this.filters.hospital_ids = Array.from(hospitalSelect.selectedOptions)
-                    .map(option => option.value)
-                    .filter(value => value);
-                this.refreshAllCharts();
-            });
-        }
-
-        // Lab unit filter listener
-        const labUnitSelect = document.getElementById('filter-lab-unit-ids');
-        if (labUnitSelect) {
-            labUnitSelect.addEventListener('change', () => {
-                this.filters.lab_unit_ids = Array.from(labUnitSelect.selectedOptions)
-                    .map(option => option.value)
-                    .filter(value => value);
-                this.refreshAllCharts();
-            });
-        }
-
-        // Year filter listener
-        const yearSelect = document.getElementById('filter-year');
-        if (yearSelect) {
-            yearSelect.addEventListener('change', () => {
-                this.filters.year = yearSelect.value ? parseInt(yearSelect.value) : null;
-                this.refreshAllCharts();
-            });
-        }
-
-        // Refresh button
         const refreshBtn = document.getElementById('refresh-kpis-btn');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this.refreshAllCharts());
         }
+        
+        // Add event listener for Apply Filters button
+        const applyFiltersBtn = document.querySelector('button[type="submit"]');
+        if (applyFiltersBtn) {
+            applyFiltersBtn.addEventListener('click', (e) => {
+                e.preventDefault(); // Prevent form submission
+                this.refreshAllCharts();
+            });
+        }
+        
+        // Add event listener for Clear Filters button
+        const clearFiltersBtn = document.getElementById('clear-filters-btn');
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', () => {
+                this.clearFilters();
+            });
+        }
+    }
+
+    buildQueryParams() {
+        return super.buildQueryParams();
     }
 
     async loadInitialData() {
@@ -86,9 +73,7 @@ class EncounterKPIs {
                 this.loadImagesCount(),
                 this.loadDRResultsDistribution(),
                 this.loadGlaucomaResultsDistribution(),
-                this.loadVCDRDistribution(),
-                this.loadProcessingTimes(),
-                this.loadLabUnitPerformance()
+                this.loadVCDRDistribution()
             ]);
         } catch (error) {
             console.error('Error loading initial KPI data:', error);
@@ -98,23 +83,13 @@ class EncounterKPIs {
 
     async refreshAllCharts() {
         try {
+            // Save current filters to localStorage before refreshing
+            this.saveFiltersToStorage();
             await this.loadInitialData();
         } catch (error) {
             console.error('Error refreshing KPI data:', error);
             this.showFlashToast('Failed to refresh KPI data', 'error');
         }
-    }
-
-    buildQueryParams() {
-        const params = new URLSearchParams();
-        
-        if (this.filters.start_date) params.append('start_date', this.filters.start_date);
-        if (this.filters.end_date) params.append('end_date', this.filters.end_date);
-        if (this.filters.year) params.append('year', this.filters.year);
-        if (this.filters.hospital_ids.length > 0) params.append('hospital_ids', this.filters.hospital_ids.join(','));
-        if (this.filters.lab_unit_ids.length > 0) params.append('lab_unit_ids', this.filters.lab_unit_ids.join(','));
-        
-        return params.toString();
     }
 
     async fetchKPI(endpoint) {
@@ -197,23 +172,6 @@ class EncounterKPIs {
         }
     }
 
-    async loadProcessingTimes() {
-        try {
-            const data = await this.fetchKPI('processing-times');
-            this.renderProcessingTimesChart(data);
-        } catch (error) {
-            console.error('Error loading processing times:', error);
-        }
-    }
-
-    async loadLabUnitPerformance() {
-        try {
-            const data = await this.fetchKPI('lab-unit-performance');
-            this.renderLabUnitPerformanceChart(data);
-        } catch (error) {
-            console.error('Error loading lab unit performance:', error);
-        }
-    }
 
     renderMonthlyUploadChart(data) {
         const ctx = document.getElementById('monthlyUploadChart');
@@ -223,17 +181,31 @@ class EncounterKPIs {
             labels: data.monthly_data.map(d => `${d.year}-${String(d.month).padStart(2, '0')}`),
             datasets: [
                 {
-                    label: 'Captures',
-                    data: data.monthly_data.map(d => d.captures),
+                    label: 'Uploads',
+                    data: data.monthly_data.map(d => d.uploads),
                     backgroundColor: 'rgba(54, 162, 235, 0.6)',
                     borderColor: 'rgba(54, 162, 235, 1)',
                     borderWidth: 1
                 },
                 {
-                    label: 'Uploads',
-                    data: data.monthly_data.map(d => d.uploads),
-                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
+                    label: 'DR Reports',
+                    data: data.monthly_data.map(d => d.dr_reports),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Glaucoma Reports',
+                    data: data.monthly_data.map(d => d.glaucoma_reports),
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'No Reports',
+                    data: data.monthly_data.map(d => d.no_reports),
+                    backgroundColor: 'rgba(255, 159, 64, 0.6)',
+                    borderColor: 'rgba(255, 159, 64, 1)',
                     borderWidth: 1
                 }
             ]
@@ -452,108 +424,6 @@ class EncounterKPIs {
         }
     }
 
-    renderProcessingTimesChart(data) {
-        const ctx = document.getElementById('processingTimesChart');
-        if (!ctx) return;
-
-        const labels = Object.keys(data.processing_times.distribution);
-        const chartData = {
-            labels: labels,
-            datasets: [{
-                label: 'Processing Time Distribution',
-                data: labels.map(label => data.processing_times.distribution[label]),
-                backgroundColor: 'rgba(255, 159, 64, 0.6)',
-                borderColor: 'rgba(255, 159, 64, 1)',
-                borderWidth: 1
-            }]
-        };
-
-        if (this.charts.processingTimes) {
-            this.charts.processingTimes.data = chartData;
-            this.charts.processingTimes.update();
-        } else {
-            this.charts.processingTimes = new Chart(ctx, {
-                type: 'bar',
-                data: chartData,
-                options: this.getChartOptions('Processing Time Distribution')
-            });
-        }
-    }
-
-    renderLabUnitPerformanceChart(data) {
-        const ctx = document.getElementById('labUnitPerformanceChart');
-        if (!ctx) return;
-
-        const chartData = {
-            labels: data.performance_data.map(p => p.lab_unit_name),
-            datasets: [
-                {
-                    label: 'Quality Score',
-                    data: data.performance_data.map(p => p.metrics.quality_score),
-                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Processing Time (hours)',
-                    data: data.performance_data.map(p => p.metrics.avg_processing_time),
-                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1,
-                    yAxisID: 'y1'
-                }
-            ]
-        };
-
-        if (this.charts.labUnitPerformance) {
-            this.charts.labUnitPerformance.data = chartData;
-            this.charts.labUnitPerformance.update();
-        } else {
-            this.charts.labUnitPerformance = new Chart(ctx, {
-                type: 'bar',
-                data: chartData,
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: 'Lab Unit Performance'
-                        },
-                        legend: {
-                            display: true
-                        }
-                    },
-                    scales: {
-                        x: {
-                            display: true
-                        },
-                        y: {
-                            type: 'linear',
-                            display: true,
-                            position: 'left',
-                            title: {
-                                display: true,
-                                text: 'Quality Score'
-                            }
-                        },
-                        y1: {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            title: {
-                                display: true,
-                                text: 'Processing Time (hours)'
-                            },
-                            grid: {
-                                drawOnChartArea: false
-                            }
-                        }
-                    }
-                }
-            });
-        }
-    }
 
     getChartOptions(title) {
         return {
@@ -593,16 +463,6 @@ class EncounterKPIs {
                 }
             }
         };
-    }
-
-    showFlashToast(message, type = 'info') {
-        // Use existing flash toast functionality if available
-        if (typeof showFlashToast === 'function') {
-            showFlashToast(message, type);
-        } else {
-            // Fallback to console
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
     }
 }
 

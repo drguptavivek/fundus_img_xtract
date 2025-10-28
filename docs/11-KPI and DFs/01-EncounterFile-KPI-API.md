@@ -33,8 +33,6 @@ All endpoints automatically apply user access control:
 - `hospital_ids` (optional): Comma-separated list of hospital IDs
 - `lab_unit_ids` (optional): Comma-separated list of lab unit IDs
 
-### Year Filter
-- `year` (optional): Integer year for filtering data
 
 ### Response Format
 
@@ -66,11 +64,10 @@ All endpoints return JSON with the following structure:
 
 **Method**: `GET`
 
-**Description**: Returns monthly aggregated upload and capture metrics
+**Description**: Returns monthly aggregated upload metrics grouped by upload year-month. For each upload year-month, counts number of uploads, captures, DR reports, glaucoma reports, and encounters with no reports.
 
 **Parameters**:
-- `year` (optional): Filter by specific year
-- `start_date`, `end_date`: Date range filter
+- `start_date`, `end_date`: Date range filter (applied to upload dates)
 - `hospital_ids` (optional): Comma-separated list of hospital IDs
 - `lab_unit_ids` (optional): Comma-separated list of lab unit IDs
 
@@ -81,20 +78,22 @@ All endpoints return JSON with the following structure:
   "data": {
     "period": "2024-01 to 2024-12",
     "summary": {
-      "total_captures": 1800,
       "total_uploads": 1750,
-      "avg_processing_time": 2.1,
-      "peak_month": "March",
-      "peak_volume": 210
+      "total_captures": 1800,
+      "total_dr_reports": 1200,
+      "total_glaucoma_reports": 900,
+      "total_no_reports": 300
     },
     "monthly_data": [
       {
         "year": 2024,
         "month": 1,
         "month_name": "January",
-        "captures": 150,
         "uploads": 142,
-        "processing_completion_avg": 2.4,
+        "captures": 150,
+        "dr_reports": 95,
+        "glaucoma_reports": 72,
+        "no_reports": 33,
         "hospital_id": 1,
         "hospital_name": "Main Hospital",
         "lab_unit_id": 1,
@@ -104,6 +103,8 @@ All endpoints return JSON with the following structure:
   }
 }
 ```
+
+**Note**: Date filters apply to upload dates (when files were uploaded to system), not capture dates (when images were taken).
 
 ### 2. Report Generation Metrics
 
@@ -468,3 +469,4 @@ if response.status_code == 200:
 - **v1.1**: Added filtering and pagination support
 - **v1.2**: Enhanced error handling and caching
 - **v1.3**: Added year filter parameter and improved response formats
+- **v1.4**: Simplified year-month-wise-uploads endpoint to group by upload year-month and count DR/glaucoma reports; removed year filter parameter

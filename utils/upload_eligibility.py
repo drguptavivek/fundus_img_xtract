@@ -118,4 +118,33 @@ def get_user_lab_unit_ids(user_id: int) -> Set[int]:
         db.close()
 
 
-__all__ = ["get_user_uploadVerify_eligibility", "get_user_lab_unit_ids"]
+def get_user_lab_unit_ids_no_admin_override(user_id: int) -> Set[int]:
+    """Return the set of lab unit IDs the user is explicitly assigned to, without admin override.
+    
+    This function only returns lab units that are directly associated with the user,
+    regardless of their admin status. This is useful when you want to filter
+    based on the current user's actual assignments rather than giving admins
+    access to everything.
+    """
+    db = Session()
+    try:
+        user = (
+            db.query(User)
+            .options(
+                selectinload(User.lab_units),
+                selectinload(User.roles),
+            )
+            .filter(User.id == user_id)
+            .one_or_none()
+        )
+        if not user:
+            return set()
+
+        if not user.lab_units:
+            return set()
+        return {lu.id for lu in user.lab_units}
+    finally:
+        db.close()
+
+
+__all__ = ["get_user_uploadVerify_eligibility", "get_user_lab_unit_ids", "get_user_lab_unit_ids_no_admin_override"]

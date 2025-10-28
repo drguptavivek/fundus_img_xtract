@@ -76,13 +76,6 @@ def parse_filter_params() -> Dict:
         except ValueError:
             raise ValueError("Invalid lab_unit_ids format. Use comma-separated integers")
     
-    # Year filter
-    year = request.args.get('year')
-    if year:
-        try:
-            params['year'] = int(year)
-        except ValueError:
-            raise ValueError("Invalid year format. Use integer")
     
     return params
 
@@ -105,15 +98,7 @@ def apply_location_filters(query, params: Dict):
     return query
 
 
-def apply_date_filters(query, params: Dict):
-    """Apply date filters to query."""
-    if 'start_date' in params:
-        query = query.filter(PatientEncounters.capture_date_dt >= params['start_date'])
-    
-    if 'end_date' in params:
-        query = query.filter(PatientEncounters.capture_date_dt <= params['end_date'])
-    
-    return query
+ 
 
 
 # -------------------
@@ -124,67 +109,66 @@ def apply_date_filters(query, params: Dict):
 @login_required
 @roles_required("admin", "data_manager")
 def year_month_wise_uploads():
-    """Returns monthly aggregated upload and capture metrics."""
+    """
+    Returns monthly aggregated upload metrics grouped by upload year-month.
+    
+    For each upload year-month, counts:
+    - Number of uploads
+    - Number of captures (encounters)
+    - Number with DR reports
+    - Number with glaucoma reports
+    - Number with no DR or glaucoma reports
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
             is_admin = current_user.has_role('admin')
             
-            # Base query with permissions
-            query = db.query(PatientEncounters).options(
-                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
-            )
-            query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
-            query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
-            
-            # Apply year filter if provided
-            if 'year' in params:
-                query = query.filter(extract('year', PatientEncounters.capture_date_dt) == params['year'])
-            
-            # Get monthly aggregated data for captures (by capture date)
-            captures_by_month = query.with_entities(
-                extract('year', PatientEncounters.capture_date_dt).label('year'),
-                extract('month', PatientEncounters.capture_date_dt).label('month'),
-                func.count(PatientEncounters.id).label('captures'),
-                LabUnit.id.label('lab_unit_id'),
-                LabUnit.name.label('lab_unit_name'),
-                Hospital.id.label('hospital_id'),
-                Hospital.name.label('hospital_name')
+            # Base query with ZipFile for upload date filtering
+            base_query = db.query(ZipFile).join(
+                PatientEncounters, ZipFile.id == PatientEncounters.zip_file_id
             ).join(
                 LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
             ).join(
                 Hospital, LabUnit.hospital_id == Hospital.id
-            ).group_by(
-                extract('year', PatientEncounters.capture_date_dt),
-                extract('month', PatientEncounters.capture_date_dt),
-                LabUnit.id,
-                Hospital.id
-            ).all()
+            ).filter(ZipFile.upload_date.isnot(None))
             
-            # Get monthly aggregated data for uploads (by upload date)
-            uploads_by_month = query.join(
-                ZipFile, PatientEncounters.zip_file_id == ZipFile.id
-            ).join(
-                EncounterFile, PatientEncounters.id == EncounterFile.patient_encounter_id
-            ).join(
-                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
-            ).join(
-                Hospital, LabUnit.hospital_id == Hospital.id
-            ).filter(
-                ZipFile.upload_date.isnot(None)
-            ).with_entities(
+            # Apply user permissions
+            if not is_admin:
+                base_query = base_query.filter(PatientEncounters.lab_unit_id.in_(user_lab_unit_ids))
+            
+            # Apply location filters
+            if 'hospital_ids' in params:
+                base_query = base_query.filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+            
+            if 'lab_unit_ids' in params:
+                base_query = base_query.filter(PatientEncounters.lab_unit_id.in_(params['lab_unit_ids']))
+            
+            # Apply date filters through upload_date
+            if 'start_date' in params:
+                base_query = base_query.filter(ZipFile.upload_date >= params['start_date'])
+            if 'end_date' in params:
+                base_query = base_query.filter(ZipFile.upload_date <= params['end_date'])
+            
+            # Get monthly aggregated data
+            monthly_data = base_query.with_entities(
                 extract('year', ZipFile.upload_date).label('year'),
                 extract('month', ZipFile.upload_date).label('month'),
-                func.count(func.distinct(EncounterFile.id)).label('uploads'),
-                func.avg(
-                    func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600
-                ).label('processing_completion_avg'),
+                func.count(func.distinct(ZipFile.id)).label('uploads'),
+                func.count(func.distinct(PatientEncounters.id)).label('captures'),
+                func.count(func.distinct(DiabeticRetinopathyReport.id)).label('dr_reports'),
+                func.count(func.distinct(GlaucomaReport.id)).label('glaucoma_reports'),
                 LabUnit.id.label('lab_unit_id'),
                 LabUnit.name.label('lab_unit_name'),
                 Hospital.id.label('hospital_id'),
                 Hospital.name.label('hospital_name')
+            ).outerjoin(
+                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
+            ).outerjoin(
+                GlaucomaReport, PatientEncounters.id == GlaucomaReport.patient_encounter_id
             ).group_by(
                 extract('year', ZipFile.upload_date),
                 extract('month', ZipFile.upload_date),
@@ -192,108 +176,60 @@ def year_month_wise_uploads():
                 Hospital.id
             ).all()
             
-            # Combine captures and uploads data
-            # Create dictionaries for easier lookup
-            captures_dict = {}
-            for row in captures_by_month:
-                key = (row.year, row.month, row.lab_unit_id, row.hospital_id)
-                captures_dict[key] = row.captures
-            
-            uploads_dict = {}
-            processing_avg_dict = {}
-            for row in uploads_by_month:
-                key = (row.year, row.month, row.lab_unit_id, row.hospital_id)
-                uploads_dict[key] = row.uploads
-                processing_avg_dict[key] = float(row.processing_completion_avg or 0)
-            
-            # Get all unique month/year/lab_unit/hospital combinations
-            all_keys = set(captures_dict.keys()).union(set(uploads_dict.keys()))
-            
-            # Format combined data
-            monthly_data = []
-            for key in all_keys:
-                year, month, lab_unit_id, hospital_id = key
-                # Find the corresponding lab unit and hospital names
-                lab_unit_name = None
-                hospital_name = None
-                
-                # Look up names from either captures or uploads data
-                for row in captures_by_month:
-                    if row.year == year and row.month == month and row.lab_unit_id == lab_unit_id and row.hospital_id == hospital_id:
-                        lab_unit_name = row.lab_unit_name
-                        hospital_name = row.hospital_name
-                        break
-                
-                if not lab_unit_name:  # If not found in captures, check uploads
-                    for row in uploads_by_month:
-                        if row.year == year and row.month == month and row.lab_unit_id == lab_unit_id and row.hospital_id == hospital_id:
-                            lab_unit_name = row.lab_unit_name
-                            hospital_name = row.hospital_name
-                            break
-                
-                monthly_data.append(type('MonthlyData', (), {
-                    'year': year,
-                    'month': month,
-                    'captures': captures_dict.get(key, 0),
-                    'uploads': uploads_dict.get(key, 0),
-                    'processing_completion_avg': processing_avg_dict.get(key, 0),
-                    'lab_unit_id': lab_unit_id,
-                    'lab_unit_name': lab_unit_name,
-                    'hospital_id': hospital_id,
-                    'hospital_name': hospital_name
-                })())
-            
-            # Sort by year and month
-            monthly_data.sort(key=lambda x: (x.year, x.month))
-            
-            # Format monthly data
+            # Format the results
             month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June',
                          'July', 'August', 'September', 'October', 'November', 'December']
             
             formatted_data = []
-            total_captures = 0
             total_uploads = 0
-            peak_volume = 0
-            peak_month = ""
+            total_captures = 0
+            total_dr_reports = 0
+            total_glaucoma_reports = 0
+            total_no_reports = 0
             
             for row in monthly_data:
-                month_name = month_names[row.month] if row.month else "Unknown"
-                total_captures += row.captures
-                total_uploads += row.uploads
+                # Calculate encounters with no reports
+                no_reports = row.captures - row.dr_reports - row.glaucoma_reports
                 
-                if row.captures > peak_volume:
-                    peak_volume = row.captures
-                    peak_month = month_name
+                month_name = month_names[row.month] if row.month else "Unknown"
+                
+                # Update totals
+                total_uploads += row.uploads
+                total_captures += row.captures
+                total_dr_reports += row.dr_reports
+                total_glaucoma_reports += row.glaucoma_reports
+                total_no_reports += no_reports
                 
                 formatted_data.append({
                     "year": row.year,
                     "month": row.month,
                     "month_name": month_name,
-                    "captures": row.captures,
                     "uploads": row.uploads,
-                    "processing_completion_avg": float(row.processing_completion_avg or 0),
+                    "captures": row.captures,
+                    "dr_reports": row.dr_reports,
+                    "glaucoma_reports": row.glaucoma_reports,
+                    "no_reports": no_reports,
                     "hospital_id": row.hospital_id,
                     "hospital_name": row.hospital_name,
                     "lab_unit_id": row.lab_unit_id,
                     "lab_unit_name": row.lab_unit_name
                 })
             
-            # Calculate summary
-            avg_processing_time = sum(d["processing_completion_avg"] for d in formatted_data) / len(formatted_data) if formatted_data else 0
+            # Sort by year and month
+            formatted_data.sort(key=lambda x: (x['year'], x['month']))
             
+            # Calculate summary
             summary = {
-                "total_captures": total_captures,
                 "total_uploads": total_uploads,
-                "avg_processing_time": round(avg_processing_time, 2),
-                "peak_month": peak_month,
-                "peak_volume": peak_volume
+                "total_captures": total_captures,
+                "total_dr_reports": total_dr_reports,
+                "total_glaucoma_reports": total_glaucoma_reports,
+                "total_no_reports": total_no_reports
             }
             
             # Determine period
             period = "All time"
-            if 'year' in params:
-                period = str(params['year'])
-            elif 'start_date' in params and 'end_date' in params:
+            if 'start_date' in params and 'end_date' in params:
                 period = f"{params['start_date']} to {params['end_date']}"
             elif 'start_date' in params:
                 period = f"From {params['start_date']}"
@@ -316,7 +252,12 @@ def year_month_wise_uploads():
 @login_required
 @roles_required("admin", "data_manager")
 def dr_reports_count():
-    """Returns DR report generation statistics."""
+    """
+    Returns DR report generation statistics.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
@@ -329,7 +270,13 @@ def dr_reports_count():
             )
             query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
             query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    query = query.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    query = query.filter(ZipFile.upload_date <= params['end_date'])
             
             # Total encounters with DR reports
             encounters_with_dr = query.join(
@@ -381,7 +328,13 @@ def dr_reports_count():
             # Apply permissions and filters
             by_lab_unit = apply_user_permissions(by_lab_unit, user_lab_unit_ids, is_admin)
             by_lab_unit = apply_location_filters(by_lab_unit, params)
-            by_lab_unit = apply_date_filters(by_lab_unit, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                by_lab_unit = by_lab_unit.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date <= params['end_date'])
             
             by_lab_unit = by_lab_unit.with_entities(
                 LabUnit.id.label('lab_unit_id'),
@@ -393,9 +346,7 @@ def dr_reports_count():
             
             # Determine period
             period = "All time"
-            if 'year' in params:
-                period = str(params['year'])
-            elif 'start_date' in params and 'end_date' in params:
+            if 'start_date' in params and 'end_date' in params:
                 period = f"{params['start_date']} to {params['end_date']}"
             
             return create_kpi_response({
@@ -425,7 +376,12 @@ def dr_reports_count():
 @login_required
 @roles_required("admin", "data_manager")
 def glaucoma_reports_count():
-    """Returns glaucoma report generation statistics."""
+    """
+    Returns glaucoma report generation statistics.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
@@ -438,7 +394,13 @@ def glaucoma_reports_count():
             )
             query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
             query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    query = query.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    query = query.filter(ZipFile.upload_date <= params['end_date'])
             
             # Total encounters with glaucoma reports
             encounters_with_glaucoma = query.join(
@@ -490,7 +452,13 @@ def glaucoma_reports_count():
             # Apply permissions and filters
             by_lab_unit = apply_user_permissions(by_lab_unit, user_lab_unit_ids, is_admin)
             by_lab_unit = apply_location_filters(by_lab_unit, params)
-            by_lab_unit = apply_date_filters(by_lab_unit, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                by_lab_unit = by_lab_unit.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    by_lab_unit = by_lab_unit.filter(ZipFile.upload_date <= params['end_date'])
             
             by_lab_unit = by_lab_unit.with_entities(
                 LabUnit.id.label('lab_unit_id'),
@@ -502,9 +470,7 @@ def glaucoma_reports_count():
             
             # Determine period
             period = "All time"
-            if 'year' in params:
-                period = str(params['year'])
-            elif 'start_date' in params and 'end_date' in params:
+            if 'start_date' in params and 'end_date' in params:
                 period = f"{params['start_date']} to {params['end_date']}"
             
             return create_kpi_response({
@@ -534,49 +500,120 @@ def glaucoma_reports_count():
 @login_required
 @roles_required("admin", "data_manager")
 def images_count():
-    """Returns image volume and verification metrics."""
+    """
+    Returns image volume and verification metrics.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
             is_admin = current_user.has_role('admin')
             
-            # Base query with permissions
-            query = db.query(EncounterFile).options(
-                joinedload(EncounterFile.lab_unit).joinedload(LabUnit.hospital)
-            )
+            # Base query with permissions - start with EncounterFile and join as needed
+            if 'start_date' in params or 'end_date' in params:
+                # If date filters are present, we need to join with PatientEncounters and ZipFile from the start
+                query = db.query(EncounterFile).join(PatientEncounters).join(ZipFile)
+            else:
+                # No date filters, simpler query
+                query = db.query(EncounterFile)
             
+            # Apply user permissions for EncounterFile queries
             if not is_admin:
                 query = query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids))
             
             # Apply location filters
             if 'hospital_ids' in params:
                 query = query.join(LabUnit).filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+            elif 'start_date' in params or 'end_date' in params:
+                # If we already joined PatientEncounters and ZipFile, we still need LabUnit for hospital filters
+                query = query.join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
             
             if 'lab_unit_ids' in params:
                 query = query.filter(EncounterFile.lab_unit_id.in_(params['lab_unit_ids']))
             
-            # Apply date filters through patient encounter
-            if 'start_date' in params or 'end_date' in params:
-                query = query.join(PatientEncounters)
-                query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params:
+                query = query.filter(ZipFile.upload_date >= params['start_date'])
+            if 'end_date' in params:
+                query = query.filter(ZipFile.upload_date <= params['end_date'])
             
             total_images = query.count()
             
-            # Verified images (those with gradings)
-            verified_images = query.join(ImageGrading).filter(
+            # Verified images (those with gradings) - create separate query to avoid conflicts
+            if 'start_date' in params or 'end_date' in params:
+                # If date filters are present, we need to join with PatientEncounters and ZipFile from start
+                verified_query = db.query(EncounterFile).join(PatientEncounters).join(ZipFile)
+            else:
+                # No date filters, simpler query
+                verified_query = db.query(EncounterFile)
+            
+            # Apply same permissions to verified query
+            if not is_admin:
+                verified_query = verified_query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids))
+            
+            # Apply same location filters to verified query
+            if 'hospital_ids' in params:
+                verified_query = verified_query.join(LabUnit).filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+            elif 'start_date' in params or 'end_date' in params:
+                # If we already joined PatientEncounters and ZipFile, we still need LabUnit for hospital filters
+                verified_query = verified_query.join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
+            
+            if 'lab_unit_ids' in params:
+                verified_query = verified_query.filter(EncounterFile.lab_unit_id.in_(params['lab_unit_ids']))
+            
+            # Apply same date filters to verified query (using upload_date)
+            if 'start_date' in params:
+                verified_query = verified_query.filter(ZipFile.upload_date >= params['start_date'])
+            if 'end_date' in params:
+                verified_query = verified_query.filter(ZipFile.upload_date <= params['end_date'])
+            
+            verified_images = verified_query.join(ImageGrading).filter(
                 ImageGrading.encounter_file_id == EncounterFile.id
             ).count()
             
             verification_rate = (verified_images / total_images * 100) if total_images > 0 else 0
             
-            # By lab unit
-            by_lab_unit = query.with_entities(
+            # By lab unit - create a fresh query to avoid conflicts
+            if 'start_date' in params or 'end_date' in params:
+                # If date filters are present, we need to join with PatientEncounters and ZipFile from start
+                by_lab_unit_query = db.query(EncounterFile).join(PatientEncounters).join(ZipFile)
+            else:
+                # No date filters, simpler query
+                by_lab_unit_query = db.query(EncounterFile)
+            
+            # Apply permissions to by_lab_unit query
+            if not is_admin:
+                by_lab_unit_query = by_lab_unit_query.filter(EncounterFile.lab_unit_id.in_(user_lab_unit_ids))
+            
+            # Apply location filters to by_lab_unit query
+            if 'hospital_ids' in params:
+                by_lab_unit_query = by_lab_unit_query.join(LabUnit).filter(LabUnit.hospital_id.in_(params['hospital_ids']))
+            elif 'start_date' in params or 'end_date' in params:
+                # If we already joined PatientEncounters and ZipFile, we still need LabUnit for hospital filters
+                by_lab_unit_query = by_lab_unit_query.join(LabUnit, EncounterFile.lab_unit_id == LabUnit.id)
+            
+            if 'lab_unit_ids' in params:
+                by_lab_unit_query = by_lab_unit_query.filter(EncounterFile.lab_unit_id.in_(params['lab_unit_ids']))
+            
+            # Apply date filters to by_lab_unit query (using upload_date)
+            if 'start_date' in params:
+                by_lab_unit_query = by_lab_unit_query.filter(ZipFile.upload_date >= params['start_date'])
+            if 'end_date' in params:
+                by_lab_unit_query = by_lab_unit_query.filter(ZipFile.upload_date <= params['end_date'])
+            
+            by_lab_unit = by_lab_unit_query.with_entities(
                 LabUnit.id.label('lab_unit_id'),
                 LabUnit.name.label('lab_unit_name'),
                 func.count(EncounterFile.id).label('total'),
                 func.count(func.distinct(ImageGrading.id)).label('verified')
-            ).outerjoin(ImageGrading).join(LabUnit).group_by(
+            ).outerjoin(
+                ImageGrading, ImageGrading.encounter_file_id == EncounterFile.id
+            ).join(
+                LabUnit, EncounterFile.lab_unit_id == LabUnit.id
+            ).group_by(
                 LabUnit.id, LabUnit.name
             ).all()
             
@@ -608,7 +645,12 @@ def images_count():
 @login_required
 @roles_required("admin", "data_manager")
 def dr_results_distribution():
-    """Returns distribution of DR qualitative results."""
+    """
+    Returns distribution of DR results.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
@@ -621,15 +663,21 @@ def dr_results_distribution():
             )
             query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
             query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    query = query.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    query = query.filter(ZipFile.upload_date <= params['end_date'])
             
-            # Get distribution by qualitative result
+            # Get distribution by result
             distribution = query.with_entities(
-                DiabeticRetinopathyReport.qualitative_result,
+                DiabeticRetinopathyReport.result,
                 func.count(DiabeticRetinopathyReport.id).label('count')
             ).filter(
-                DiabeticRetinopathyReport.qualitative_result.isnot(None)
-            ).group_by(DiabeticRetinopathyReport.qualitative_result).all()
+                DiabeticRetinopathyReport.result.isnot(None)
+            ).group_by(DiabeticRetinopathyReport.result).all()
             
             total_reports = sum(row.count for row in distribution)
             
@@ -638,15 +686,15 @@ def dr_results_distribution():
             percentages = {}
             
             for row in distribution:
-                dist_dict[row.qualitative_result or "Unknown"] = row.count
-                percentages[row.qualitative_result or "Unknown"] = round((row.count / total_reports * 100), 1) if total_reports > 0 else 0
+                dist_dict[row.result or "Unknown"] = row.count
+                percentages[row.result or "Unknown"] = round((row.count / total_reports * 100), 1) if total_reports > 0 else 0
             
             # Monthly trends for mild percentage
             monthly_trends = query.with_entities(
                 extract('year', PatientEncounters.capture_date_dt).label('year'),
                 extract('month', PatientEncounters.capture_date_dt).label('month'),
                 func.sum(case(
-                    (DiabeticRetinopathyReport.qualitative_result == 'Mild', 1),
+                    (DiabeticRetinopathyReport.result == 'Mild', 1),
                     else_=0
                 )).label('mild_count'),
                 func.count(DiabeticRetinopathyReport.id).label('total_count')
@@ -682,7 +730,12 @@ def dr_results_distribution():
 @login_required
 @roles_required("admin", "data_manager")
 def glaucoma_results_distribution():
-    """Returns distribution of glaucoma results."""
+    """
+    Returns distribution of glaucoma results.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
@@ -695,15 +748,21 @@ def glaucoma_results_distribution():
             )
             query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
             query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    query = query.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    query = query.filter(ZipFile.upload_date <= params['end_date'])
             
-            # Get distribution by qualitative result
+            # Get distribution by result
             distribution = query.with_entities(
-                GlaucomaReport.qualitative_result,
+                GlaucomaReport.result,
                 func.count(GlaucomaReport.id).label('count')
             ).filter(
-                GlaucomaReport.qualitative_result.isnot(None)
-            ).group_by(GlaucomaReport.qualitative_result).all()
+                GlaucomaReport.result.isnot(None)
+            ).group_by(GlaucomaReport.result).all()
             
             total_reports = sum(row.count for row in distribution)
             
@@ -712,8 +771,8 @@ def glaucoma_results_distribution():
             percentages = {}
             
             for row in distribution:
-                dist_dict[row.qualitative_result or "Unknown"] = row.count
-                percentages[row.qualitative_result or "Unknown"] = round((row.count / total_reports * 100), 1) if total_reports > 0 else 0
+                dist_dict[row.result or "Unknown"] = row.count
+                percentages[row.result or "Unknown"] = round((row.count / total_reports * 100), 1) if total_reports > 0 else 0
             
             return create_kpi_response({
                 "distribution": dist_dict,
@@ -730,7 +789,12 @@ def glaucoma_results_distribution():
 @login_required
 @roles_required("admin", "data_manager")
 def vcdr_distribution():
-    """Returns VCDR value distribution for both eyes."""
+    """
+    Returns VCDR value distribution for both eyes.
+    
+    Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
+    not capture dates (when images were taken).
+    """
     with with_session() as db:
         try:
             params = parse_filter_params()
@@ -743,7 +807,13 @@ def vcdr_distribution():
             )
             query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
             query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
+            # Apply date filters through upload_date (from ZipFile)
+            if 'start_date' in params or 'end_date' in params:
+                query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                if 'start_date' in params:
+                    query = query.filter(ZipFile.upload_date >= params['start_date'])
+                if 'end_date' in params:
+                    query = query.filter(ZipFile.upload_date <= params['end_date'])
             
             # Filter for valid VCDR values
             query = query.filter(
@@ -855,218 +925,3 @@ def vcdr_distribution():
         except Exception as e:
             return create_error_response("Internal server error", str(e), 500)
 
-
-@api_bp.route('/kpis/encounter-files/processing-times', methods=['GET'])
-@login_required
-@roles_required("admin", "data_manager")
-def processing_times():
-    """Returns processing time analysis and bottlenecks."""
-    with with_session() as db:
-        try:
-            params = parse_filter_params()
-            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            is_admin = current_user.has_role('admin')
-            
-            # Base query with permissions
-            query = db.query(PatientEncounters)
-            query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
-            query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
-            
-            # Filter for encounters with verification timestamps
-            query = query.filter(
-                PatientEncounters.encounter_verified_at.isnot(None),
-                PatientEncounters.capture_date_dt.isnot(None)
-            )
-            
-            # Calculate processing time in hours
-            processing_times = query.with_entities(
-                func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600.0
-            ).all()
-            
-            times = [float(row[0]) for row in processing_times if row[0] is not None]
-            
-            if not times:
-                return create_kpi_response({
-                    "processing_times": {
-                        "avg_hours": 0,
-                        "median_hours": 0,
-                        "p95_hours": 0,
-                        "p99_hours": 0,
-                        "distribution": {}
-                    },
-                    "trend": []
-                })
-            
-            # Calculate statistics
-            times.sort()
-            avg_hours = sum(times) / len(times)
-            median_hours = times[len(times) // 2]
-            p95_hours = times[int(len(times) * 0.95)] if len(times) > 20 else times[-1]
-            p99_hours = times[int(len(times) * 0.99)] if len(times) > 100 else times[-1]
-            
-            # Distribution buckets
-            distribution = {
-                "0-1h": sum(1 for t in times if t <= 1),
-                "1-2h": sum(1 for t in times if 1 < t <= 2),
-                "2-4h": sum(1 for t in times if 2 < t <= 4),
-                "4-8h": sum(1 for t in times if 4 < t <= 8),
-                ">8h": sum(1 for t in times if t > 8)
-            }
-            
-            # Daily trend
-            daily_trend = query.with_entities(
-                PatientEncounters.capture_date_dt.label('date'),
-                func.avg(func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600.0).label('avg_time')
-            ).group_by(PatientEncounters.capture_date_dt).order_by(
-                PatientEncounters.capture_date_dt
-            ).limit(30).all()  # Last 30 days
-            
-            formatted_trend = [
-                {
-                    "date": row.date.strftime('%Y-%m-%d') if row.date else "",
-                    "avg_time": round(float(row.avg_time), 2) if row.avg_time else 0
-                }
-                for row in daily_trend
-            ]
-            
-            return create_kpi_response({
-                "processing_times": {
-                    "avg_hours": round(avg_hours, 2),
-                    "median_hours": round(median_hours, 2),
-                    "p95_hours": round(p95_hours, 2),
-                    "p99_hours": round(p99_hours, 2),
-                    "distribution": distribution
-                },
-                "trend": formatted_trend
-            })
-            
-        except ValueError as e:
-            return create_error_response("Invalid parameters", str(e))
-        except Exception as e:
-            return create_error_response("Internal server error", str(e), 500)
-
-
-@api_bp.route('/kpis/encounter-files/lab-unit-performance', methods=['GET'])
-@login_required
-@roles_required("admin", "data_manager")
-def lab_unit_performance():
-    """Returns comparative performance metrics by lab unit."""
-    with with_session() as db:
-        try:
-            params = parse_filter_params()
-            user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-            is_admin = current_user.has_role('admin')
-            
-            # Base query with permissions
-            query = db.query(PatientEncounters).options(
-                joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital)
-            )
-            query = apply_user_permissions(query, user_lab_unit_ids, is_admin)
-            query = apply_location_filters(query, params)
-            query = apply_date_filters(query, params)
-            
-            # Get performance data by lab unit
-            lab_unit_data = query.with_entities(
-                LabUnit.id.label('lab_unit_id'),
-                LabUnit.name.label('lab_unit_name'),
-                Hospital.name.label('hospital_name'),
-                func.count(PatientEncounters.id).label('total_encounters'),
-                func.sum(case(
-                    (PatientEncounters.encounter_verified_status == 'verified', 1),
-                    else_=0
-                )).label('completely_verified'),
-                func.avg(func.extract('epoch', PatientEncounters.encounter_verified_at - PatientEncounters.capture_date_dt) / 3600.0).label('avg_processing_time'),
-                func.count(func.distinct(DiabeticRetinopathyReport.id)).label('dr_reports'),
-                func.count(func.distinct(GlaucomaReport.id)).label('glaucoma_reports')
-            ).outerjoin(
-                DiabeticRetinopathyReport, PatientEncounters.id == DiabeticRetinopathyReport.patient_encounter_id
-            ).outerjoin(
-                GlaucomaReport, PatientEncounters.id == GlaucomaReport.patient_encounter_id
-            ).join(
-                LabUnit, PatientEncounters.lab_unit_id == LabUnit.id
-            ).join(
-                Hospital, LabUnit.hospital_id == Hospital.id
-            ).group_by(
-                LabUnit.id, LabUnit.name, Hospital.name
-            ).all()
-            
-            formatted_performance = []
-            total_encounters_all = sum(row.total_encounters for row in lab_unit_data)
-            
-            for row in lab_unit_data:
-                completely_verified_rate = (row.completely_verified / row.total_encounters * 100) if row.total_encounters > 0 else 0
-                dr_report_rate = (row.dr_reports / row.total_encounters * 100) if row.total_encounters > 0 else 0
-                glaucoma_report_rate = (row.glaucoma_reports / row.total_encounters * 100) if row.total_encounters > 0 else 0
-                
-                # Calculate verification efficiency (images with gradings)
-                verification_query = db.query(EncounterFile).filter(
-                    EncounterFile.lab_unit_id == row.lab_unit_id
-                )
-                total_images = verification_query.count()
-                verified_images = verification_query.join(ImageGrading).count()
-                verification_efficiency = (verified_images / total_images * 100) if total_images > 0 else 0
-                
-                # Calculate quality score (weighted combination of metrics)
-                quality_score = (
-                    completely_verified_rate * 0.4 +
-                    verification_efficiency * 0.3 +
-                    (100 - (row.avg_processing_time or 0)) * 0.3  # Inverse processing time
-                )
-                
-                formatted_performance.append({
-                    "lab_unit_id": row.lab_unit_id,
-                    "lab_unit_name": row.lab_unit_name,
-                    "hospital_name": row.hospital_name,
-                    "metrics": {
-                        "total_encounters": row.total_encounters,
-                        "completely_verified_rate": round(completely_verified_rate, 1),
-                        "avg_processing_time": round(float(row.avg_processing_time or 0), 2),
-                        "dr_report_rate": round(dr_report_rate, 1),
-                        "glaucoma_report_rate": round(glaucoma_report_rate, 1),
-                        "verification_efficiency": round(verification_efficiency, 1),
-                        "quality_score": round(quality_score, 1)
-                    }
-                })
-            
-            # Calculate rankings
-            if formatted_performance:
-                # Sort by different metrics for ranking
-                by_overall = sorted(formatted_performance, key=lambda x: x["metrics"]["quality_score"], reverse=True)
-                by_speed = sorted(formatted_performance, key=lambda x: x["metrics"]["avg_processing_time"])
-                by_verification = sorted(formatted_performance, key=lambda x: x["metrics"]["verification_efficiency"], reverse=True)
-                by_quality = sorted(formatted_performance, key=lambda x: x["metrics"]["quality_score"], reverse=True)
-                
-                # Add rankings
-                for i, item in enumerate(by_overall):
-                    item["ranking"] = item.get("ranking", {})
-                    item["ranking"]["overall"] = i + 1
-                
-                for i, item in enumerate(by_speed):
-                    item["ranking"] = item.get("ranking", {})
-                    item["ranking"]["processing_speed"] = i + 1
-                
-                for i, item in enumerate(by_verification):
-                    item["ranking"] = item.get("ranking", {})
-                    item["ranking"]["verification_rate"] = i + 1
-                
-                for i, item in enumerate(by_quality):
-                    item["ranking"] = item.get("ranking", {})
-                    item["ranking"]["quality"] = i + 1
-            
-            # Calculate benchmarks
-            benchmarks = {
-                "avg_processing_time": round(sum(item["metrics"]["avg_processing_time"] for item in formatted_performance) / len(formatted_performance), 2) if formatted_performance else 0,
-                "avg_verification_rate": round(sum(item["metrics"]["verification_efficiency"] for item in formatted_performance) / len(formatted_performance), 1) if formatted_performance else 0,
-                "avg_quality_score": round(sum(item["metrics"]["quality_score"] for item in formatted_performance) / len(formatted_performance), 1) if formatted_performance else 0
-            }
-            
-            return create_kpi_response({
-                "performance_data": formatted_performance,
-                "benchmarks": benchmarks
-            })
-            
-        except ValueError as e:
-            return create_error_response("Invalid parameters", str(e))
-        except Exception as e:
-            return create_error_response("Internal server error", str(e), 500)

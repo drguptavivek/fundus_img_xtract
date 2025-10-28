@@ -11,7 +11,7 @@ This guide outlines the key patterns for integrating analytics routes with the c
   - `from api.kpis.kpiutils import parse_filter_params, get_user_permissions`
   - `from utils.utils import with_session`
 - **Structure**:
-  - Use `@with_session()` for database operations.
+  - Use `@with_session()` for database operations. It is a Context manager and not a decorator
   - Fetch filter parameters: `params = parse_filter_params()`
   - Get user permissions: `user_lab_unit_ids = get_user_permissions(current_user.id)`
   - Retrieve data: `df, _ = get_filtered_..._dataframe(db, params, user_lab_unit_ids)`

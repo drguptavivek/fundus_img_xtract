@@ -39,10 +39,11 @@ from utils.utils import with_session
 
 
 @with_session()
-def generate_tasks_dataframe(db, start_date: Optional[datetime] = None,
-                          end_date: Optional[datetime] = None) -> pd.DataFrame:
+def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None,
+                                   end_date: Optional[datetime] = None) -> pd.DataFrame:
     """
-    Generate comprehensive Tasks KPI dataframe with grading, consensus, and workflow information.
+    Approach 1: Multiple joinedload approach.
+    Simple to understand but may have performance issues with large datasets.
     
     Args:
         db: Database session (handled by context manager)
@@ -217,7 +218,7 @@ def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set) -> tu
     """
     try:
         # Generate the complete dataframe using utility function
-        df = generate_tasks_dataframe(
+        df = generate_tasks_dataframe_approach1(
             db,
             start_date=params.get('start_date'),
             end_date=params.get('end_date')
@@ -301,7 +302,12 @@ import numpy as np
 from .. import api_bp
 from auth.roles import roles_required
 from utils.utils import with_session
-from utils.dataFrameTasks import generate_tasks_dataframe, get_filtered_tasks_dataframe
+from utils.dataFrameTasks import (
+    generate_tasks_dataframe_approach1,
+    generate_tasks_dataframe_approach2,
+    generate_tasks_dataframe_approach3,
+    get_filtered_tasks_dataframe
+)
 from models import (
     GradingTask, Grade, Consensus, Disease, LabUnit, Hospital
 )

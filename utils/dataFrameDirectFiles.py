@@ -207,6 +207,12 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
         
         df = pd.DataFrame(data)
         
+        # Debug: Log the columns being generated
+        import logging
+        logger = logging.getLogger(__name__)
+        if not df.empty:
+            logger.info(f"DEBUG DATAFRAME: Generated columns: {list(df.columns)}")
+        
         # Convert date columns to proper datetime objects
         if not df.empty:
             date_columns = ['upload_datetime', 'verified_at', 'latest_grading_date', 'latest_task_date']

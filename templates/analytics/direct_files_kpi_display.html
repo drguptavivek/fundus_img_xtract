@@ -525,8 +525,24 @@
       }
       
       initializeDataTable() {
+        // Check if DataTable already exists and destroy it properly
         if (this.dataTable) {
-          this.dataTable.destroy();
+          try {
+            this.dataTable.destroy(true); // true parameter removes the table markup
+            this.dataTable = null;
+          } catch (error) {
+            console.warn('Error destroying DataTable:', error);
+          }
+        }
+        
+        // Also check if jQuery DataTable instance exists and destroy it
+        try {
+          const existingTable = $('#direct-files-table');
+          if (existingTable.length && $.fn.DataTable.isDataTable(existingTable)) {
+            existingTable.DataTable().destroy(true);
+          }
+        } catch (error) {
+          console.warn('Error destroying existing jQuery DataTable:', error);
         }
         
         // Get all column names in JSON order (stored during data loading)
@@ -588,6 +604,13 @@
         }
         
         try {
+          // Clear any existing table content to prevent duplication
+          $('#direct-files-table thead tr').empty();
+          
+          // Make sure the body table has the same structure
+          $('#direct-files-table-body thead tr').empty();
+          $('#direct-files-table-body tbody').empty();
+          
           this.dataTable = $('#direct-files-table').DataTable({
             data: this.directFilesData,
             columns: columnDefs,
@@ -598,6 +621,8 @@
             info: true,
             lengthChange: true,
             pageLength: 25,
+            retrieve: false, // Don't retrieve existing instance
+            destroy: true,  // Destroy any existing instance
             language: {
               lengthMenu: "Show _MENU_ entries",
               info: "Showing _START_ to _END_ of _TOTAL_ entries",
@@ -613,11 +638,24 @@
           // Update the custom layout elements
           this.updateCustomLayout();
           
+          // Copy the table structure to the body table for scrolling
+          this.updateBodyTable();
+          
           console.log('DataTable initialized successfully:', this.dataTable);
           console.log('Table info:', this.dataTable.page.info());
         } catch (error) {
           console.error('Error initializing DataTable:', error);
         }
+      }
+      
+      updateBodyTable() {
+        // Copy headers from main table to body table for alignment
+        const mainHeaders = $('#direct-files-table thead tr').html();
+        $('#direct-files-table-body thead tr').html(mainHeaders);
+        
+        // Copy the tbody content to the body table
+        const mainBody = $('#direct-files-table tbody').html();
+        $('#direct-files-table-body tbody').html(mainBody);
       }
       
       updateCustomLayout() {

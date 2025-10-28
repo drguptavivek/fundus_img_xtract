@@ -130,33 +130,58 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
                     'has_verification': False,
                 })
             
-            # Grading Information (one-to-many relationship)
-            if di.gradings:
-                grading_count = len(di.gradings)
-                latest_grading_date = max(g.created_at for g in di.gradings)
-                grading_roles = list(set(g.grader_role for g in di.gradings if g.grader_role))
+            # Task Information - query actual grading tasks for this direct image
+            tasks_query = db.query(GradingTask).filter(GradingTask.direct_image_upload_id == di.id)
+            tasks = tasks_query.all()
+            
+            if tasks:
+                task_count = len(tasks)
+                latest_task_date = max(t.updated_at for t in tasks)
+                task_states = list(set(t.state for t in tasks))
+                
+                # Get grades for these tasks
+                task_ids = [t.id for t in tasks]
+                grades_query = db.query(Grade).filter(Grade.task_id.in_(task_ids)).options(
+                    joinedload(Grade.grader)
+                )
+                grades = grades_query.all()
+                
+                if grades:
+                    grading_count = len(grades)
+                    latest_grading_date = max(g.created_at for g in grades)
+                    grading_roles = list(set(g.role_slot for g in grades if g.role_slot))
+                    
+                    image_data.update({
+                        'has_grading': True,
+                        'grading_count': grading_count,
+                        'latest_grading_date': latest_grading_date,
+                        'grading_roles': grading_roles,
+                    })
+                else:
+                    image_data.update({
+                        'has_grading': False,
+                        'grading_count': 0,
+                        'latest_grading_date': None,
+                        'grading_roles': [],
+                    })
                 
                 image_data.update({
-                    'has_grading': True,
-                    'grading_count': grading_count,
-                    'latest_grading_date': latest_grading_date,
-                    'grading_roles': grading_roles,
+                    'has_task': True,
+                    'task_count': task_count,
+                    'task_states': task_states,
+                    'latest_task_date': latest_task_date,
                 })
             else:
                 image_data.update({
+                    'has_task': False,
+                    'task_count': 0,
+                    'task_states': [],
+                    'latest_task_date': None,
                     'has_grading': False,
                     'grading_count': 0,
                     'latest_grading_date': None,
                     'grading_roles': [],
                 })
-            
-            # Task Information - simplified since we can't easily access task info from gradings
-            image_data.update({
-                'has_task': False,  # Will be updated when we implement proper task joining
-                'task_count': 0,
-                'task_states': [],
-                'latest_task_date': None,
-            })
             
             data.append(image_data)
         

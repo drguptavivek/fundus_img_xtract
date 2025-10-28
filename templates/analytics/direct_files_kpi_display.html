@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+
+{% block title %}Direct Files Analytics{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .dataframe-container {
+    overflow-x: auto;
+    margin-bottom: 2rem;
+  }
+  
+  .dataframe-table {
+    min-width: 100%;
+    font-size: 0.875rem;
+  }
+  
+  .dataframe-table th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  .dataframe-table td, .dataframe-table th {
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    white-space: nowrap;
+  }
+  
+  .dataframe-table tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .verified-yes {
+    color: #198754;
+    font-weight: 500;
+  }
+  
+  .verified-no {
+    color: #dc3545;
+    font-weight: 500;
+  }
+  
+  .verified-pending {
+    color: #fd7e14;
+    font-weight: 500;
+  }
+  
+  /* KPI Chart Styles */
+  .kpi-charts-section {
+    margin-bottom: 3rem;
+    display: none; /* Hidden initially, shown after loading */
+  }
+  
+  .chart-container {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    height: 400px;
+    position: relative;
+  }
+  
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+  
+  .chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #495057;
+  }
+  
+  .filters-section {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  
+  .filter-group {
+    margin-bottom: 1rem;
+  }
+  
+  .filter-label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #495057;
+  }
+  
+  select[multiple] {
+    min-height: 80px;
+  }
+  
+  .loading-spinner {
+    text-align: center;
+    padding: 2rem;
+  }
+  
+  .loading-spinner .spinner-border {
+    width: 3rem;
+    height: 3rem;
+  }
+  
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- User ID meta tag for JavaScript access -->
+<meta name="user-id" content="{{ current_user.id }}">
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">Direct Files Analytics</h1>
+      <p class="text-muted mb-0">Comprehensive KPI dashboard for direct image uploads with interactive charts and filtering.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button id="refresh-kpis-btn" class="btn btn-primary">
+        <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+      </button>
+      <a href="{{ url_for('fundus_api.get_filtered_direct_dataframe_excel', **filters) }}" class="btn btn-success">
+        <i class="bi bi-download me-1"></i> Download Excel
+      </a>
+    </div>
+  </div>
+
+  <!-- Enhanced Filters Section -->
+  <div class="filters-section">
+    <h3 class="h6 mb-3">Filters</h3>
+    <form class="row gy-2 gx-2 align-items-end" method="get">
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-start-date">Upload Start Date</label>
+        <input class="form-control" type="date" id="filter-start-date" name="start_date" value="{{ filters.start_date or '' }}">
+        
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-end-date">Upload End Date</label>
+        <input class="form-control" type="date" id="filter-end-date" name="end_date" value="{{ filters.end_date or '' }}">
+        
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-hospital-ids">Hospitals</label>
+        <select class="form-select" id="filter-hospital-ids" name="hospital_ids" multiple>
+          <!-- Hospitals will be populated via JavaScript based on user permissions -->
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-lab-unit-ids">Lab Units</label>
+        <select class="form-select" id="filter-lab-unit-ids" name="lab_unit_ids" multiple>
+          <!-- Lab units will be populated via JavaScript based on user permissions -->
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button id="clear-filters-btn" class="btn btn-outline-secondary w-100" type="button">Clear Filters</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div class="loading-spinner" id="loading-spinner">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-2">Loading KPI data...</p>
+  </div>
+
+  <!-- KPI Charts Section -->
+  <div class="kpi-charts-section" id="kpi-charts-section">
+    <h2 class="h4 mb-3">Key Performance Indicators</h2>
+    
+    <!-- Upload Metrics Chart -->
+    <div class="chart-grid">
+      <div class="chart-container">
+        <h3 class="chart-title">Upload Trends</h3>
+        <canvas id="uploadTrendsChart"></canvas>
+      </div>
+      
+      <!-- Hospital Distribution Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Uploads by Hospital</h3>
+        <canvas id="hospitalDistributionChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Second Row of Charts -->
+    <div class="chart-grid">
+      <!-- Camera Type Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Camera Type Distribution</h3>
+        <canvas id="cameraTypeChart"></canvas>
+      </div>
+      
+      <!-- Verification Status Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Verification Status</h3>
+        <canvas id="verificationStatusChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Third Row of Charts -->
+    <div class="chart-grid">
+      <!-- Disease Distribution Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Disease Distribution</h3>
+        <canvas id="diseaseDistributionChart"></canvas>
+      </div>
+      
+      <!-- Mydriatic vs Non-Mydriatic Chart -->
+      <div class="chart-container">
+        <h3 class="chart-title">Mydriatic vs Non-Mydriatic</h3>
+        <canvas id="mydriaticChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Metrics -->
+  <div class="row g-3 mb-4" id="summary-metrics" style="display: none;">
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card kpi-card kpi--primary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Total Uploads</div>
+          <div class="display-6 fw-bold" id="total-uploads">0</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card kpi-card kpi--success h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Verified Images</div>
+          <div class="display-6 fw-bold" id="verified-images">0</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Pregraded Images</div>
+          <div class="display-6 fw-bold" id="pregraded-images">0</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card kpi-card kpi--warning h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Mydriatic Images</div>
+          <div class="display-6 fw-bold" id="mydriatic-images">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Table Section -->
+  <div class="dataframe-container" id="data-table-section" style="display: none;">
+    <h2 class="h4 mb-3">Direct Files Data</h2>
+    <table id="direct-files-table" class="display dataframe-table" style="width: 100%;">
+      <thead>
+        <tr>
+          <!-- Table headers will be populated dynamically from dataframe columns -->
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Data will be populated via JavaScript -->
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  
+  <!-- jQuery (required for DataTables) -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  
+  <!-- DataTables CSS and JS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+  
+  <!-- Common Filters JavaScript -->
+  <script src="{{ url_for('static', filename='js/common-filters.js') }}"></script>
+  
+  <!-- Direct Files KPIs JavaScript -->
+  <script src="{{ url_for('static', filename='js/direct-files-kpis.js') }}"></script>
+  
+  <!-- Chart.js -->
+  <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+  
+  <script>
+    // Enhanced Direct Files Analytics with DataTables
+    class DirectFilesAnalytics {
+      constructor() {
+        this.dataTable = null;
+        this.directFilesData = [];
+        this.uploadMetrics = {};
+        this.init();
+      }
+      
+      async init() {
+        // Wait for CommonFilters and DirectFilesKPIs to be ready
+        setTimeout(async () => {
+          if (typeof window.commonFilters !== 'undefined' && typeof window.directFilesKPIs !== 'undefined') {
+            await this.loadDirectFilesData();
+            await this.loadUploadMetrics();
+            this.initializeDataTable();
+            this.updateSummaryMetrics();
+            this.showDataSection();
+          } else {
+            console.error('Required dependencies not available');
+          }
+        }, 200);
+      }
+      
+      async loadDirectFilesData() {
+        try {
+          const queryString = window.commonFilters.buildQueryParams();
+          const response = await fetch(`/api/kpis/direct-files/filtered-dataframe?${queryString}`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (!result.success) {
+            throw new Error(result.message || 'API request failed');
+          }
+          
+          // The API returns data wrapped in an object, extract the actual array
+          this.directFilesData = result.data.data || [];
+        } catch (error) {
+          console.error('Error loading direct files data:', error);
+          this.showFlashToast('Failed to load direct files data', 'error');
+        }
+      }
+      
+      async loadUploadMetrics() {
+        try {
+          const queryString = window.commonFilters.buildQueryParams();
+          const response = await fetch(`/api/kpis/direct-files/upload-metrics?${queryString}`);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (!result.success) {
+            throw new Error(result.message || 'API request failed');
+          }
+          
+          this.uploadMetrics = result.data || {};
+        } catch (error) {
+          console.error('Error loading upload metrics:', error);
+          this.showFlashToast('Failed to load upload metrics', 'error');
+        }
+      }
+      
+      initializeDataTable() {
+        if (this.dataTable) {
+          this.dataTable.destroy();
+        }
+        
+        // Get all column names from first data item
+        const allColumns = this.directFilesData.length > 0 ? Object.keys(this.directFilesData[0]) : [];
+        
+        // Create column definitions dynamically
+        const columnDefs = allColumns.map(col => ({
+          data: col,
+          title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Convert snake_case to Title Case
+          render: function(data, type, row) {
+            // Handle null/undefined data
+            if (data === null || data === undefined) {
+              return '-';
+            }
+            
+            // Format date columns for display
+            if (col.includes('date') || col.includes('at')) {
+              return data ? new Date(data).toLocaleString() : '-';
+            } else if (typeof data === 'boolean') {
+              return data ? 'Yes' : 'No';
+            }
+            
+            // Return data as-is for all columns to see raw values
+            return data;
+          }
+        }));
+        
+        // Initialize DataTable directly with the data
+        console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
+        console.log('Column definitions:', columnDefs.length, 'columns');
+        
+        this.dataTable = $('#direct-files-table').DataTable({
+          data: this.directFilesData,
+          columns: columnDefs,
+          
+        });
+        
+        console.log('DataTable initialized:', this.dataTable ? 'success' : 'failed');
+      }
+      
+      updateSummaryMetrics() {
+        const total = this.uploadMetrics.total_uploads || 0;
+        const verified = this.directFilesData.filter(item => item.has_verification === true).length;
+        const pregraded = this.directFilesData.filter(item => item.is_pregraded === true).length;
+        const mydriatic = this.directFilesData.filter(item => item.is_mydriatic === true).length;
+        
+        document.getElementById('total-uploads').textContent = total;
+        document.getElementById('verified-images').textContent = verified;
+        document.getElementById('pregraded-images').textContent = pregraded;
+        document.getElementById('mydriatic-images').textContent = mydriatic;
+      }
+      
+      showDataSection() {
+        document.getElementById('data-table-section').style.display = 'block';
+        document.getElementById('summary-metrics').style.display = 'flex';
+      }
+      
+      showFlashToast(message, type = 'info') {
+        if (typeof showFlashToast === 'function') {
+          showFlashToast(message, type);
+        } else {
+          console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+      }
+      
+      async refreshData() {
+        await this.loadDirectFilesData();
+        await this.loadUploadMetrics();
+        this.initializeDataTable();
+        this.updateSummaryMetrics();
+      }
+    }
+    
+    // Initialize everything when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize DirectFilesKPIs charts after CommonFilters is ready
+      setTimeout(() => {
+        if (typeof window.directFilesKPIs !== 'undefined') {
+          window.directFilesKPIs.initializeCharts();
+        }
+      }, 100);
+      
+      // Hide loading spinner once page is ready
+      const loadingSpinner = document.getElementById('loading-spinner');
+      if (loadingSpinner) {
+        loadingSpinner.style.display = 'none';
+      }
+      
+      // Show KPI charts section
+      const kpiSection = document.getElementById('kpi-charts-section');
+      if (kpiSection) {
+        kpiSection.style.display = 'block';
+      }
+      
+      // Initialize the enhanced analytics
+      window.directFilesKPIs = new DirectFilesKPIs();
+      
+      // Set up refresh button
+      const refreshBtn = document.getElementById('refresh-kpis-btn');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+          refreshBtn.disabled = true;
+          refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Refreshing...';
+          
+          try {
+            await window.directFilesAnalytics.refreshData();
+            if (typeof window.directFilesKPIs !== 'undefined') {
+              await window.directFilesKPIs.refreshAllCharts();
+            }
+          } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Refresh';
+          }
+        });
+      }
+      
+      // Listen for filter changes
+      document.addEventListener('filtersApplied', async () => {
+        await window.directFilesAnalytics.refreshData();
+      });
+      
+      document.addEventListener('filtersCleared', async () => {
+        await window.directFilesAnalytics.refreshData();
+      });
+    });
+  </script>
+{% endblock %}

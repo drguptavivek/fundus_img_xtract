@@ -286,6 +286,8 @@ def get_upload_metrics():
         - Mydriatic vs non-mydriatic breakdown
         - Pregraded uploads percentage
         - Upload trends over time
+        - Task completion metrics
+        - Grading completion metrics
         
         Query Parameters:
         - start_date: Filter uploads from this date (YYYY-MM-DD format)
@@ -308,6 +310,9 @@ def get_upload_metrics():
                 if not validate_dataframe_not_empty(df, "upload_metrics"):
                     response_data = {
                         "total_uploads": 0,
+                        "verified_count": 0,
+                        "task_count": 0,
+                        "grading_count": 0,
                         "by_hospital": [],
                         "by_lab_unit": [],
                         "by_uploader": [],
@@ -315,7 +320,13 @@ def get_upload_metrics():
                         "by_disease": [],
                         "by_area": [],
                         "mydriatic_breakdown": {"mydriatic": 0, "non_mydriatic": 0},
+                        "pregraded_breakdown": {"pregraded": 0, "non_pregraded": 0},
+                        "task_status_breakdown": {},
+                        "grading_role_breakdown": {},
                         "pregraded_percentage": 0.0,
+                        "verification_percentage": 0.0,
+                        "task_completion_percentage": 0.0,
+                        "grading_completion_percentage": 0.0,
                         "daily_uploads": [],
                         "period": determine_period(params)
                     }
@@ -377,9 +388,63 @@ def get_upload_metrics():
                     else:
                         mydriatic_dict["non_mydriatic"] = row['image_id']
                 
+                # Pregraded uploads breakdown
+                pregraded_breakdown = df.groupby('is_pregraded').agg({
+                    'image_id': 'count'
+                }).reset_index()
+                pregraded_dict = {"pregraded": 0, "non_pregraded": 0}
+                for _, row in pregraded_breakdown.iterrows():
+                    if row['is_pregraded']:
+                        pregraded_dict["pregraded"] = row['image_id']
+                    else:
+                        pregraded_dict["non_pregraded"] = row['image_id']
+                
                 # Pregraded uploads percentage
                 pregraded_count = df['is_pregraded'].sum()
                 pregraded_percentage = calculate_percentage(pregraded_count, total_uploads)
+                
+                # Verification metrics
+                verified_count = df['has_verification'].sum()
+                verification_percentage = calculate_percentage(verified_count, total_uploads)
+                
+                # Task completion metrics
+                task_count = df['has_task'].sum()
+                task_completion_percentage = calculate_percentage(task_count, total_uploads)
+                
+                # Task status breakdown
+                task_status_breakdown = {}
+                if 'task_states' in df.columns:
+                    # Flatten all task states from lists
+                    all_task_states = []
+                    for states in df['task_states'].dropna():
+                        if isinstance(states, list):
+                            all_task_states.extend(states)
+                        else:
+                            all_task_states.append(states)
+                    
+                    # Count occurrences of each state
+                    from collections import Counter
+                    state_counts = Counter(all_task_states)
+                    task_status_breakdown = dict(state_counts)
+                
+                # Grading completion metrics
+                grading_count = df['has_grading'].sum()
+                grading_completion_percentage = calculate_percentage(grading_count, total_uploads)
+                
+                # Grading role breakdown
+                grading_role_breakdown = {}
+                if 'grading_roles' in df.columns:
+                    # Flatten all grading roles from lists
+                    all_grading_roles = []
+                    for roles in df['grading_roles'].dropna():
+                        if isinstance(roles, list):
+                            all_grading_roles.extend(roles)
+                        else:
+                            all_grading_roles.append(roles)
+                    
+                    # Count occurrences of each role
+                    role_counts = Counter(all_grading_roles)
+                    grading_role_breakdown = dict(role_counts)
                 
                 # Daily upload trends
                 daily_uploads = df.groupby(df['upload_date']).agg({
@@ -393,6 +458,9 @@ def get_upload_metrics():
                 # Prepare response data
                 response_data = {
                     "total_uploads": total_uploads,
+                    "verified_count": int(verified_count),
+                    "task_count": int(task_count),
+                    "grading_count": int(grading_count),
                     "by_hospital": by_hospital,
                     "by_lab_unit": by_lab_unit,
                     "by_uploader": by_uploader,
@@ -400,7 +468,13 @@ def get_upload_metrics():
                     "by_disease": by_disease,
                     "by_area": by_area,
                     "mydriatic_breakdown": mydriatic_dict,
+                    "pregraded_breakdown": pregraded_dict,
+                    "task_status_breakdown": task_status_breakdown,
+                    "grading_role_breakdown": grading_role_breakdown,
                     "pregraded_percentage": pregraded_percentage,
+                    "verification_percentage": verification_percentage,
+                    "task_completion_percentage": task_completion_percentage,
+                    "grading_completion_percentage": grading_completion_percentage,
                     "daily_uploads": daily_uploads,
                     "period": determine_period(params)
                 }

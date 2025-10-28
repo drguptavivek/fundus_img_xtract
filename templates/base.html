@@ -290,6 +290,9 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_files' else '' }}" href="{{ url_for('analytics.encounter_files') }}">Encounters</a>
               </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.direct_files' else '' }}" href="{{ url_for('analytics.direct_files') }}">Direct Files</a>
+              </li>
             
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}" href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>

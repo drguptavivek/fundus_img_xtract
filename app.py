@@ -119,9 +119,10 @@ def create_app():
         }
     }, supports_credentials=True)
 
-    # Ensure folders + schema (idempotent)
+    # Ensure folders (idempotent)
     setup_environment()
-    Base.metadata.create_all(engine)
+    # Tables are now managed by Alembic migrations, not created automatically
+    # Base.metadata.create_all(engine)
 
     # --- RBAC: seed core roles once ---
     from sqlalchemy.orm import sessionmaker

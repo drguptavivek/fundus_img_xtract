@@ -1,77 +1,187 @@
-# Migration Scripts
+# Database Migration Scripts
 
-## 2024-11-22 — Add User Timezone Preference
+## Overview
 
-- **Script:** `scripts/migrations/20241122_add_user_timezone.py`
-- **Purpose:** Adds the `timezone` column to the `users` table and backfills existing records with the default display timezone.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241122_add_user_timezone.py
-  ```
-- **Notes:**
-  - Safe to run multiple times; the script exits early if the column already exists.
-  - Update the `.env` variable `DEFAULT_DISPLAY_TIMEZONE` if you need a different default before running.
+This directory contains scripts for database management and migration. The Fundus Image Manager project has transitioned from custom migration scripts to using **Alembic** for database schema management.
 
-## 2024-11-29 — Track Lab Unit on Jobs
+## Current Migration System
 
-- **Script:** `scripts/migrations/20241129_add_job_lab_unit_id.py`
-- **Purpose:** Adds a nullable `lab_unit_id` column (indexed) to the `jobs` table so uploads can be tied back to a specific lab unit.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241129_add_job_lab_unit_id.py
-  ```
-- **Notes:**
-  - Safe to run repeatedly; the script will no-op if the column already exists.
+### Alembic (Primary System)
 
-## 2024-11-29 — Add Notification Sender Tracking
+The project now uses **Alembic** as the primary database migration system. All new database schema changes should be made using Alembic.
 
-- **Script:** `scripts/migrations/20241129_add_notification_sender.py`
-- **Purpose:** Adds a `sender_user_id` column (with index) to the `notifications` table so “sent” messages retain author attribution.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241129_add_notification_sender.py
-  ```
-- **Notes:**
-  - Safe to rerun; the script exits early if the column already exists.
+**Key Documentation**: [Alembic Database Migrations](../docs/alembic-migrations.md)
 
-## 2024-11-29 — Enable Server-side Sessions
+#### Quick Start with Alembic
 
-- **Script:** `scripts/migrations/20241129_add_flask_sessions.py`
-- **Purpose:** Creates the `flask_sessions` table used to persist session data between server restarts.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241129_add_flask_sessions.py
-  ```
-- **Notes:**
-  - Safe to run multiple times; it no-ops when the table already exists.
+```bash
+# Create a new migration
+uv run alembic revision --autogenerate -m "Description of changes"
 
-- **Script:** `scripts/migrations/20241129_add_flask_session_user_id.py`
-- **Purpose:** Adds a nullable `user_id` column (indexed) to `flask_sessions` to track session owners.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241129_add_flask_session_user_id.py
-  ```
-- **Notes:**
-  - Safe to rerun; it exits early if the column already exists.
+# Apply migrations
+uv run alembic upgrade head
 
-## 2024-11-30 — Track Session Lifetimes
+# Check current status
+uv run alembic current
+```
 
-- **Script:** `scripts/migrations/20241130_add_flask_session_timestamps.py`
-- **Purpose:** Adds `started_at` (UTC, non-null) and `ended_at` (nullable) columns to `flask_sessions` so the app can record session lifetimes.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241130_add_flask_session_timestamps.py
-  ```
-- **Notes:**
-  - Requires the earlier `flask_sessions` migrations. Safe to rerun; it skips work if the columns already exist.
+#### Alembic Configuration Files
 
-## 2024-10-01 — Per-user Notification Read Tracking
+- [`alembic.ini`](../alembic.ini) - Main configuration
+- [`migrations/env.py`](../migrations/env.py) - Environment setup
+- [`migrations/versions/`](../migrations/versions/) - Migration files
 
-- **Script:** `scripts/migrations/20241001_add_notification_reads.py`
-- **Purpose:** Adds `notification_reads` table to record which users have read broadcast notifications.
-- **Run:**
-  ```bash
-  uv run scripts/migrations/20241001_add_notification_reads.py
-  ```
-- **Notes:**
-  - Creates indices and a uniqueness constraint. Safe to rerun; it no-ops if the table exists.
+## Legacy Migration Scripts
+
+The following scripts are maintained for backward compatibility and special operations:
+
+### Database Setup Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| [`setup_db.py`](setup_db.py) | Initialize database with basic schema | `python -m scripts.setup_db` |
+| [`clear_db.py`](clear_db.py) | Clear all data from database | `python -m scripts.clear_db` |
+| [`backup_db.py`](backup_db.py) | Create database backup | `python -m scripts.backup_db` |
+| [`restore_db.py`](restore_db.py) | Restore database from backup | `python -m scripts.restore_db` |
+
+### Data Management Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| [`initial_setup.py`](initial_setup.py) | Populate initial master data | `python -m scripts.initial_setup` |
+| [`setup_core_entities.py`](setup_core_entities.py) | Setup core entities (diseases, hospitals) | `python -m scripts.setup_core_entities` |
+
+## Migration Best Practices
+
+### 1. Use Alembic for Schema Changes
+
+All database schema changes should use Alembic:
+
+```bash
+# 1. Modify models.py
+# 2. Generate migration
+uv run alembic revision --autogenerate -m "Add new field to users table"
+
+# 3. Review and edit the migration if needed
+# 4. Apply migration
+uv run alembic upgrade head
+```
+
+### 2. Use Scripts for Data Operations
+
+For data population or bulk operations:
+
+```bash
+# Use existing scripts or create new ones in this directory
+python -m scripts.your_data_script
+```
+
+### 3. Testing Migrations
+
+Always test migrations before production:
+
+1. Test on development database
+2. Verify both upgrade and downgrade paths
+3. Test with realistic data volumes
+
+## Migration Workflow
+
+### New Project Setup
+
+```bash
+# 1. Set up database (if using PostgreSQL)
+createdb fundus_image_manager
+
+# 2. Run Alembic migrations
+uv run alembic upgrade head
+
+# 3. Populate initial data
+python -m scripts.initial_setup
+python -m scripts.setup_core_entities
+
+# 4. Create admin user
+python -m scripts.create_user
+python -m scripts.assign_roles admin --roles admin
+```
+
+### Existing Project Upgrade
+
+```bash
+# 1. Backup current database
+python -m scripts.backup_db
+
+# 2. Apply any pending Alembic migrations
+uv run alembic upgrade head
+
+# 3. Run any data migration scripts if needed
+```
+
+## Troubleshooting
+
+### Migration Conflicts
+
+If you encounter migration conflicts:
+
+1. Identify the current revision: `uv run alembic current`
+2. Check migration history: `uv run alembic history`
+3. Resolve conflicts by manually editing migration files
+4. Use `alembic stamp` if needed to mark database state
+
+### Database State Issues
+
+If database state doesn't match migration history:
+
+```bash
+# Mark database as current (use with caution)
+uv run alembic stamp head
+
+# Or mark at specific revision
+uv run alembic stamp <revision_id>
+```
+
+## Creating New Migration Scripts
+
+When creating custom data migration scripts:
+
+1. Follow the existing naming convention
+2. Include proper error handling
+3. Add logging for debugging
+4. Test with small datasets first
+5. Document the script's purpose and usage
+
+Example script structure:
+
+```python
+#!/usr/bin/env python3
+"""
+Description of what this script does
+"""
+
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from utils.utils import with_session
+from models import YourModel
+
+@with_session()
+def migrate_data(db):
+    """Main migration function"""
+    try:
+        # Your migration logic here
+        db.commit()
+        print("Migration completed successfully")
+    except Exception as e:
+        db.rollback()
+        print(f"Migration failed: {e}")
+        raise
+
+if __name__ == "__main__":
+    migrate_data()
+```
+
+## References
+
+- [Alembic Documentation](../docs/alembic-migrations.md)
+- [Database Models](../docs/00-Core/models.md)
+- [Development Conventions](../docs/10-DEVELOP/CONVENTIONS.md)

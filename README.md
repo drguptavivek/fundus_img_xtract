@@ -2,6 +2,70 @@
 
 A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
 
+## Package Management
+
+This project uses **uv** as the primary package manager for faster dependency installation and better virtual environment management. All commands in this documentation assume you're using uv unless otherwise specified.
+
+### Installing uv
+
+#### macOS and Linux
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+#### Windows (PowerShell)
+```bash
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+#### Using pip
+```bash
+pip install uv
+```
+
+### Package Management with uv
+
+#### Installing Dependencies
+```bash
+# Install all dependencies from requirements.txt
+uv pip install -r requirements.txt
+
+```
+
+#### Managing Dependencies
+```bash
+# Remove a package
+uv remove package_name
+
+# Update a package to latest version
+uv add package_name@latest
+
+# Update all packages
+uv pip compile requirements.in -o requirements.txt
+
+# List installed packages
+uv pip list
+
+# Check for outdated packages
+uv pip list --outdated
+```
+
+#### Virtual Environment Management
+```bash
+# Create a new virtual environment
+uv venv
+
+# Create with specific Python version
+uv venv --python 3.11
+
+# Activate virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Run commands without activating
+uv run python script.py
+uv run flask run
+```
+
 ## Development Guidelines
 
 When adding features to the application, please follow the conventions outlined in [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) for consistency with the existing codebase. This document includes essential patterns for database operations, CSRF protection, datetime handling, logging, security practices, and more.
@@ -16,50 +80,133 @@ git clone https://github.com/drguptavivek/fundus_img_xtract.git
 
 ### PYTHON PACKAGES SETUP
 
-```bash
-# Create venv in .venv and install packages listed in uv.lock
-uv init
-uv add -r requirements.txt
+This project uses **uv** as the primary package manager for faster dependency installation and better virtual environment management.
 
-# OR if you do not prefer / have uv
+#### Recommended Method: Using uv
+
+```bash
+# Install uv if you haven't already (macOS/Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+uv pip install -r requirements.txt
+
+# Activate the virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+#### Alternative Method: Traditional pip
+
+```bash
+# Only if you prefer not to use uv
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+#### Common uv Commands
+
+```bash
+# Run commands in the virtual environment
+uv run python app.py
 ```
 
 ### DATABASE SETUP AND FIRST USER CREATION
 
-
 ```bash
-# Activate virtual environment
-
-source .venv/bin/activate
-
-# Set up database
-python -m scripts.setup_db
+# Set up database using Alembic migrations
+uv run alembic upgrade head
 
 # Create initial user and assign roles
-python -m scripts.create_user
-python -m scripts.assign_roles admin --roles admin
-
-
+uv run python -m scripts.create_user
+uv run python -m scripts.assign_roles admin --roles admin
 ```
+
+## Database Reset
+
+### Reverting Database to Empty State
+
+If you need to reset your database to an empty state while using Alembic migrations:
+
+#### Recommended Method: Using Alembic Downgrade
+```bash
+# Downgrade to base state (removes all tables)
+uv run alembic downgrade base
+
+# Verify you're at base state
+uv run alembic current
+
+# Upgrade back to latest if needed
+uv run alembic upgrade head
+```
+
+#### Alternative Methods
+
+**Method 2: Clear Data and Reset Alembic**
+```bash
+# Clear all data using existing script
+uv run python scripts/clear_db.py
+
+# Reset Alembic version tracking
+uv run alembic stamp base
+```
+
+**Method 3: Complete Fresh Start (Development Only)**
+```bash
+# Delete database file (SQLite)
+rm image_manager.db
+
+# Recreate from migrations
+uv run alembic upgrade head
+
+# Run initial data setup
+uv run python scripts/initial_setup.py
+```
+
+#### Recommended Workflow for Clean Reset
+```bash
+# 1. Backup first (optional but recommended)
+uv run python scripts/backup_db.py
+
+# 2. Downgrade to base
+uv run alembic downgrade base
+
+# 3. Upgrade back to latest
+uv run alembic upgrade head
+
+# 4. Run initial data setup
+uv run python scripts/initial_setup.py
+```
+
+**Important Notes:**
+- All methods will permanently delete your data
+- Always backup before performing a reset
+- The first method (`alembic downgrade base`) is recommended as it properly maintains migration history
 
 ## Running the Application
 
+### Recommended Method: Using uv
+
 ```bash
+# Run the application
 uv run app.py
 
-# OR if you do not prefer / have uv
-source .venv/bin/activate
-source .venv/Scripts/activate
+# Check which process is using port 5001
+lsof -i :5001
+
+# Stop the application if running in background
+kill -9 PID
+```
+
+### Alternative Method: Traditional virtual environment
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Run the application
 python app.py
-
-
-# Check Port
-lsof -i :5001 
-kill -9 PID to stop if app running in background
-
 ```
 
 ## Documentation
@@ -195,6 +342,7 @@ kill -9 PID to stop if app running in background
 
 ### Scripts & Migrations (`scripts/`)
 - [User Management Scripts](scripts/USERS.md) - User creation and management
+- [Alembic Database Migrations](docs/alembic-migrations.md) - Database schema migrations using Alembic
 - [Script Migrations](scripts/migrations.md) - Database migration scripts
 
 ## Application Workflow Flowchart

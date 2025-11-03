@@ -26,7 +26,34 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
-from models import DATABASE_URL, BASE_DIR, Session, Base
+from models import BASE_DIR, Session, Base
+
+def get_expanded_database_url():
+    """Get DATABASE_URL with proper environment variable expansion."""
+    load_dotenv()
+    
+    # Get the raw DATABASE_URL
+    database_url = os.getenv("DATABASE_URL")
+    print(f"DEBUG: Raw DATABASE_URL = {database_url}")
+    
+    if not database_url:
+        return None
+    
+    # Handle environment variable expansion for PostgreSQL URLs
+    if "${" in database_url:
+        print("DEBUG: Found ${} in DATABASE_URL, expanding variables...")
+        # Expand environment variables manually
+        database_url = database_url.replace("${POSTGRES_APP_USER}", os.getenv("POSTGRES_APP_USER", ""))
+        database_url = database_url.replace("${POSTGRES_APP_PASSWORD}", os.getenv("POSTGRES_APP_PASSWORD", ""))
+        database_url = database_url.replace("${POSTGRES_HOST}", os.getenv("POSTGRES_HOST", ""))
+        database_url = database_url.replace("${POSTGRES_PORT}", os.getenv("POSTGRES_PORT", "5432"))
+        database_url = database_url.replace("${POSTGRES_APP_DB}", os.getenv("POSTGRES_APP_DB", ""))
+        print(f"DEBUG: Expanded DATABASE_URL = {database_url}")
+    
+    return database_url
+
+# Import DATABASE_URL at module level for backward compatibility
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")
 
 def get_table_record_counts():
     """Get record counts for all tables in the database."""
@@ -76,30 +103,38 @@ def print_table_counts(counts):
 
 def get_database_info():
     """Extract database information from DATABASE_URL."""
-    load_dotenv()
+    # Import DATABASE_URL for backward compatibility
+    from models import DATABASE_URL
+    
+    # Use the expanded DATABASE_URL
+    database_url = get_expanded_database_url()
+    
+    if not database_url:
+        return None
     
     # Parse the DATABASE_URL to get database type and file path
-    if DATABASE_URL.startswith("sqlite"):
+    if database_url.startswith("sqlite"):
         # Extract the database file path from sqlite:///path/to/db
         db_path = DATABASE_URL.replace("sqlite:///", "")
         if not os.path.isabs(db_path):
             # If relative path, make it absolute from BASE_DIR
             db_path = BASE_DIR / db_path
         return {"type": "sqlite", "path": db_path}
-    elif DATABASE_URL.startswith("postgresql"):
+    elif database_url.startswith("postgresql"):
         # For PostgreSQL, we need to extract connection details
-        # Format: postgresql+psycopg2://user:pass@host:5432/db
+        # Format: postgresql://user:pass@host:5432/db or postgresql+psycopg2://user:pass@host:5432/db
         import re
-        pattern = r"postgresql\+psycopg2://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)"
-        match = re.match(pattern, DATABASE_URL)
+        # Pattern that matches both postgresql:// and postgresql+psycopg2://
+        pattern = r"postgresql(\+psycopg2)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)"
+        match = re.match(pattern, database_url)
         if match:
             return {
                 "type": "postgresql",
-                "user": match.group(1),
-                "password": match.group(2),
-                "host": match.group(3),
-                "port": match.group(4),
-                "database": match.group(5)
+                "user": match.group(2),
+                "password": match.group(3),
+                "host": match.group(4),
+                "port": match.group(5),
+                "database": match.group(6)
             }
     return None
 
@@ -160,25 +195,132 @@ def create_postgresql_backup(db_info, backup_dir):
     tar_path = backup_dir / tar_filename
     
     try:
-        # Set PGPASSWORD environment variable for pg_dump
-        env = os.environ.copy()
-        env["PGPASSWORD"] = db_info["password"]
+        # First try to use docker exec to run pg_dump in container
+        docker_available = False
+        try:
+            # Check if docker is available and pgdb container is running
+            result = subprocess.run(["docker", "ps", "--filter", "name=pgdb", "--format", "{{.Names}}"], 
+                                  capture_output=True, text=True, check=True)
+            if "pgdb" in result.stdout:
+                docker_available = True
+                print("Found PostgreSQL Docker container 'pgdb'")
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("Docker not available or pgdb container not found, trying local pg_dump...")
         
-        # Use pg_dump to create the SQL dump
-        print(f"Creating SQL dump for PostgreSQL database {db_info['database']}...")
-        with open(sql_path, 'w') as f:
-            subprocess.run([
-                "pg_dump",
-                "-h", db_info["host"],
-                "-p", str(db_info["port"]),
-                "-U", db_info["user"],
-                "-d", db_info["database"],
-                "--no-password",
-                "--verbose",
-                "--clean",
-                "--no-acl",
-                "--no-owner"
-            ], stdout=f, env=env, check=True)
+        if docker_available:
+            # Use docker exec to run pg_dump inside the container
+            print(f"Creating SQL dump for PostgreSQL database {db_info['database']} using Docker...")
+            # Set environment variables for docker exec
+            env = os.environ.copy()
+            env["PGPASSWORD"] = db_info["password"]
+            
+            with open(sql_path, 'w') as f:
+                subprocess.run([
+                    "docker", "exec", "-e", "PGPASSWORD=" + db_info["password"], "pgdb",
+                    "pg_dump",
+                    "-U", db_info["user"],
+                    "-d", db_info["database"],
+                    "--verbose",
+                    "--clean",
+                    "--no-acl",
+                    "--no-owner"
+                ], stdout=f, check=True)
+        else:
+            # Try local pg_dump
+            pg_dump_available = False
+            try:
+                subprocess.run(["pg_dump", "--version"], capture_output=True, check=True)
+                pg_dump_available = True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("Local pg_dump not found, falling back to SQLAlchemy backup...")
+            
+            if pg_dump_available:
+                # Set PGPASSWORD environment variable for pg_dump
+                env = os.environ.copy()
+                env["PGPASSWORD"] = db_info["password"]
+                
+                # Use pg_dump to create SQL dump
+                print(f"Creating SQL dump for PostgreSQL database {db_info['database']} using local pg_dump...")
+                with open(sql_path, 'w') as f:
+                    subprocess.run([
+                        "pg_dump",
+                        "-h", db_info["host"],
+                        "-p", str(db_info["port"]),
+                        "-U", db_info["user"],
+                        "-d", db_info["database"],
+                        "--no-password",
+                        "--verbose",
+                        "--clean",
+                        "--no-acl",
+                        "--no-owner"
+                    ], stdout=f, env=env, check=True)
+            else:
+                # Fallback to SQLAlchemy backup
+                print(f"Creating SQL dump for PostgreSQL database {db_info['database']} using SQLAlchemy...")
+                
+                # Create a direct database connection
+                from sqlalchemy import create_engine, text
+                
+                # Construct the database URL
+                db_url = f"postgresql://{db_info['user']}:{db_info['password']}@{db_info['host']}:{db_info['port']}/{db_info['database']}"
+                engine = create_engine(db_url)
+                
+                with engine.connect() as conn:
+                    # Get all table names
+                    result = conn.execute(text("""
+                        SELECT tablename 
+                        FROM pg_tables 
+                        WHERE schemaname = 'public'
+                        ORDER BY tablename
+                    """))
+                    tables = [row[0] for row in result]
+                    
+                    # Write SQL dump
+                    with open(sql_path, 'w') as f:
+                        f.write(f"-- PostgreSQL database dump\n")
+                        f.write(f"-- Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(f"-- Database: {db_info['database']}\n\n")
+                        
+                        # Add DROP statements
+                        f.write("-- Drop statements\n")
+                        for table in tables:
+                            f.write(f"DROP TABLE IF EXISTS {table} CASCADE;\n")
+                        f.write("\n")
+                        
+                        # Dump each table
+                        for table in tables:
+                            f.write(f"-- Data for table: {table}\n")
+                            result = conn.execute(text(f"SELECT * FROM {table}"))
+                            rows = result.fetchall()
+                            
+                            if rows:
+                                # Get column names
+                                columns = list(result.keys())
+                                f.write(f"INSERT INTO {table} ({', '.join(columns)}) VALUES\n")
+                                
+                                for i, row in enumerate(rows):
+                                    values = []
+                                    for value in row:
+                                        if value is None:
+                                            values.append("NULL")
+                                        elif isinstance(value, str):
+                                            # Escape single quotes in strings
+                                            escaped_value = value.replace("'", "''")
+                                            values.append(f"'{escaped_value}'")
+                                        elif isinstance(value, bool):
+                                            values.append("TRUE" if value else "FALSE")
+                                        else:
+                                            values.append(str(value))
+                                    
+                                    f.write(f"  ({', '.join(values)})")
+                                    if i < len(rows) - 1:
+                                        f.write(",\n")
+                                    else:
+                                        f.write(";\n")
+                            else:
+                                f.write(f"-- Table {table} is empty\n")
+                            
+                            f.write("\n")
         
         print(f"SQL dump created: {sql_filename}")
         
@@ -220,7 +362,7 @@ def main():
     db_info = get_database_info()
     if not db_info:
         print("ERROR: Could not parse DATABASE_URL")
-        print(f"Current DATABASE_URL: {DATABASE_URL}")
+        print(f"Current DATABASE_URL: {get_expanded_database_url()}")
         sys.exit(1)
     
     print(f"Database type: {db_info['type']}")

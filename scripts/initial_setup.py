@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Initial setup script for the Fundus Image Manager.
 
-This script deletes existing database, sets up core entities (hospitals, lab units, cameras, areas),
+This script helps with setting up the initial data for the Fundus Image Manager.
+It backs up the existing database, sets up core entities (hospitals, lab units, cameras, areas),
 creates core diseases and their gradings, adds test users, and populates sample features
 for disease gradings.
+
+Note: This script no longer creates database tables directly. All database schema management
+is now handled through Alembic migrations. See the Alembic documentation for more details.
 """
 
 from __future__ import annotations
@@ -104,7 +108,11 @@ def backup_database() -> bool:
         return False
 
 def remove_database() -> None:
-    """Remove the existing database after backup."""
+    """Remove the existing database file after backup (SQLite only).
+    
+    For PostgreSQL, this function does not remove the database as it's handled
+    by Alembic migrations. Users should use Alembic commands to reset the schema.
+    """
     from models import DATABASE_URL
     
     if DATABASE_URL.startswith("sqlite"):
@@ -126,10 +134,10 @@ def remove_database() -> None:
         else:
             print(f"No database file found at {db_path}; skipping removal.")
     elif DATABASE_URL.startswith("postgresql"):
-        # For PostgreSQL, drop all tables
-        print("Dropping all tables in PostgreSQL database...")
-        Base.metadata.drop_all(engine)
-        print("  All tables dropped.")
+        # For PostgreSQL, we don't drop the database directly
+        # Users should use Alembic to manage the schema
+        print("PostgreSQL detected. Database schema should be managed using Alembic commands.")
+        print("  Use 'uv run alembic downgrade base' to drop all tables if needed.")
     else:
         print(f"Unsupported database type for removal: {DATABASE_URL}")
 
@@ -166,31 +174,30 @@ def create_directories() -> None:
         directory.mkdir(parents=True, exist_ok=True)
         print(f"  Ready: {directory}")
 
-def create_database():
-    """Create a new blank database with all tables."""
-    print("Creating database tables...")
-    
-    # For PostgreSQL, tables were already dropped in remove_database()
-    # For SQLite, the file was already removed, so no need to drop tables
-    # But we'll check and drop if they exist to be safe
-    from models import DATABASE_URL
-    
-    if DATABASE_URL.startswith("postgresql"):
-        # Tables were already dropped in remove_database()
-        pass
-    else:
-        # For SQLite or other databases, drop tables if they exist
-        Base.metadata.drop_all(engine)
-    
-    # Create all tables
-    Base.metadata.create_all(engine)
-    print("  Database tables created successfully!")
+def setup_database_schema():
+    """Provide instructions for setting up the database schema using Alembic."""
+    print("Setting up database schema...")
+    print()
+    print("⚠️  IMPORTANT: Database schema is now managed using Alembic migrations!")
+    print("  Please run the following commands to set up the database schema:")
+    print()
+    print("  # For a fresh installation:")
+    print("  uv run alembic upgrade head")
+    print()
+    print("  # To check current migration status:")
+    print("  uv run alembic current")
+    print()
+    print("  # To view migration history:")
+    print("  uv run alembic history")
+    print()
+    print("  For more information, see docs/alembic-migrations.md")
 
 def confirm_database_reset():
     """Ask for user confirmation before resetting the database."""
-    print("⚠️  WARNING: This will completely reset the database!")
+    print("⚠️  WARNING: This will reset the database!")
     print("   - All existing data will be permanently deleted")
     print("   - A backup will be created before deletion")
+    print("   - You will need to run Alembic commands to recreate the schema")
     print()
     
     response = input("Do you want to continue? (yes/no): ").strip().lower()
@@ -231,8 +238,8 @@ def main():
         backup_and_remove_database()
         print()
         
-        # Create database
-        create_database()
+        # Provide instructions for setting up database schema
+        setup_database_schema()
         print()
         
         # Setup core data
@@ -275,10 +282,14 @@ def main():
 
         print()
         print("Next steps:")
-        print("1. Create users: python scripts/create_user.py <username>")
-        print("2. Assign roles: python scripts/assign_roles.py <username> --roles <role1> <role2>")
-        print("3. Start the application: python app.py")
-        print("4. Review the populated sample features in the admin interface")
+        print("1. Set up database schema: uv run alembic upgrade head")
+        print("2. Create users: uv run scripts/create_user.py <username>")
+        print("     First Admin users: uv run scripts/create_user.py admin")
+        print("3. Assign roles: uv run scripts/assign_roles.py <username> --roles <role1> <role2>")
+        print(".       Assign Admin roles: uv run scripts/assign_roles.py admin --roles admin")
+        print(".       Assign TEST roles: uv run scripts/add_test_users.py") 
+        print("4. Start the application: uv run app.py")
+        print("5. Review the populated sample features in the admin interface")
         
     except Exception as e:
         print(f"\n❌ Error during initial setup: {e}")

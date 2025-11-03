@@ -15,8 +15,8 @@ This will delete ALL data including:
 - Application settings and viewer preferences
 - AI models and intra-rater reliability data
 
-It also deletes all files in the /files directory and recreates essential directories
-based on environment variables defined in .env file.
+It also deletes all files in the /files directory, clears all log files in the /logs directory,
+and recreates essential directories based on environment variables defined in .env file.
 
 WARNING: This is a complete database reset. All data will be permanently lost.
 Make sure you have backups if needed before running this script.
@@ -87,6 +87,29 @@ def clear_files():
     else:
         print("Files directory does not exist, creating it...")
         os.makedirs(files_dir)
+
+
+def clear_logs():
+    """Clear all log files in the logs directory."""
+    from pathlib import Path
+    
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    logs_dir = BASE_DIR / "logs"
+    
+    if os.path.exists(logs_dir):
+        print(f"Clearing log files from {logs_dir}...")
+        for item in os.listdir(logs_dir):
+            item_path = logs_dir / item
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path)
+                print(f"  Deleted log directory: {item}")
+            else:
+                os.remove(item_path)
+                print(f"  Deleted log file: {item}")
+        print("Log files cleared successfully!")
+    else:
+        print("Logs directory does not exist, creating it...")
+        os.makedirs(logs_dir)
 
 
 def recreate_directories():
@@ -302,6 +325,7 @@ def reset_all():
     print("  - ALL database records (users, images, gradings, etc.)")
     print("  - ALL uploaded files and directories")
     print("  - ALL application settings and preferences")
+    print("  - ALL log files and directories")
     print("=" * 60)
     
     # Get user confirmation
@@ -317,9 +341,10 @@ def reset_all():
     try:
         clear_database()
         clear_files()
+        clear_logs()
         recreate_directories()
         print("=" * 60)
-        print("SUCCESS: Database and file system reset completed!")
+        print("SUCCESS: Database, file system, and logs reset completed!")
         print("=" * 60)
     except Exception as e:
         print("=" * 60)

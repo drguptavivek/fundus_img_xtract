@@ -28,7 +28,8 @@ pip install uv
 #### Installing Dependencies
 ```bash
 # Install all dependencies from requirements.txt
-uv pip install -r requirements.txt
+uv sync
+
 
 ```
 
@@ -41,13 +42,17 @@ uv remove package_name
 uv add package_name@latest
 
 # Update all packages
-uv pip compile requirements.in -o requirements.txt
+uv lock --upgrade
+uv sync
+
 
 # List installed packages
 uv pip list
 
 # Check for outdated packages
 uv pip list --outdated
+
+uv pip freeze > requirements.txt
 ```
 
 #### Virtual Environment Management

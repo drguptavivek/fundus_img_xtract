@@ -4,7 +4,7 @@ import pandas as pd
 import logging
 import io
 from datetime import datetime, date, timezone
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 from flask import jsonify, request, send_file
 from flask_login import login_required, current_user
 from sqlalchemy import func, extract, and_, or_, case, cast, Float
@@ -16,6 +16,7 @@ from .. import api_bp
 from auth.roles import roles_required
 from utils.utils import with_session
 from utils.upload_eligibility import get_user_lab_unit_ids
+
 from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
 from models import (
     ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
@@ -24,19 +25,19 @@ from models import (
 )
 
 # Import KPI utilities
-from .kpiutils import (
-    create_kpi_response, create_error_response, create_combined_response, handle_nat_values_for_json,
-    parse_filter_params, get_user_permissions, determine_period,
+from api.kpis.kpiutils import (
+    create_kpi_response, create_error_response, handle_nat_values_for_json,
+    parse_filter_params, determine_period,
     create_filters_applied_dict, validate_dataframe_not_empty,
     safe_divide, calculate_percentage, group_by_location,
-    format_month_name, log_endpoint_usage
+    format_month_name, log_endpoint_usage, get_user_permissions
 )
 
 
 
 
 
-def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[int]) -> tuple[pd.DataFrame, Dict]:
+def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[int]) -> Tuple[pd.DataFrame, Dict]:
     """
     Generate and filter encounter dataframe based on user permissions and filter parameters.
     
@@ -58,6 +59,8 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
         )
         
         # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
+        if not user_lab_unit_ids:
+            raise ValueError("User has no lab unit permissions. Please contact administrator.")
         df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
         
         # Apply location filters
@@ -85,11 +88,6 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
         return df, filters_applied
         
     except Exception as e:
-        app_logger = logging.getLogger(__name__)
-        app_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
-        app_logger.error(f"Params: {params}")
-        app_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
-        
         # Log to runtime_error.log
         error_logger = logging.getLogger('runtime_error')
         error_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
@@ -145,13 +143,7 @@ def get_filtered_dataframe():
                         record[key] = None
             
             # Determine period for metadata
-            period = "All time"
-            if 'start_date' in params and 'end_date' in params:
-                period = f"{params['start_date']} to {params['end_date']}"
-            elif 'start_date' in params:
-                period = f"From {params['start_date']}"
-            elif 'end_date' in params:
-                period = f"Until {params['end_date']}"
+            period = determine_period(params)
             
             # Prepare response data
             response_data = {
@@ -375,13 +367,7 @@ def year_month_wise_uploads():
             }
             
             # Determine period
-            period = "All time"
-            if 'start_date' in params and 'end_date' in params:
-                period = f"{params['start_date']} to {params['end_date']}"
-            elif 'start_date' in params:
-                period = f"From {params['start_date']}"
-            elif 'end_date' in params:
-                period = f"Until {params['end_date']}"
+            period = determine_period(params)
             
             # Prepare response data
             response_data = {
@@ -552,7 +538,7 @@ def images_count():
             verification_rate = (verified_images / total_images * 100) if total_images > 0 else 0
             
             # Group by lab unit using pandas
-            if not df.empty and 'lab_unit_id' in df.columns:
+            if not df.empty and 'lab_unit_id' in df.columns and 'lab_unit_name' in df.columns and 'verified_images' in df.columns:
                 by_lab_unit_df = df.groupby(['lab_unit_id', 'lab_unit_name']).agg({
                     'encounter_id': 'count',  # Total encounters
                     'verified_images': 'sum'  # Verified images
@@ -808,7 +794,13 @@ def vcdr_distribution():
                     right_eye_values.sort()
                     n = len(right_eye_values)
                     right_eye_stats['mean'] = sum(right_eye_values) / n
-                    right_eye_stats['median'] = (right_eye_values[n//2 - 1] + right_eye_values[n//2]) / 2 if n % 2 == 0 else right_eye_values[n//2]
+                    # Fix potential division by zero when accessing list elements
+                    if n == 1:
+                        right_eye_stats['median'] = right_eye_values[0]
+                    elif n > 1:
+                        right_eye_stats['median'] = (right_eye_values[n//2 - 1] + right_eye_values[n//2]) / 2 if n % 2 == 0 else right_eye_values[n//2]
+                    else:
+                        right_eye_stats['median'] = 0
                     variance = sum((x - right_eye_stats['mean']) ** 2 for x in right_eye_values) / n
                     right_eye_stats['std_dev'] = variance ** 0.5
                 else:
@@ -822,7 +814,13 @@ def vcdr_distribution():
                     left_eye_values.sort()
                     n = len(left_eye_values)
                     left_eye_stats['mean'] = sum(left_eye_values) / n
-                    left_eye_stats['median'] = (left_eye_values[n//2 - 1] + left_eye_values[n//2]) / 2 if n % 2 == 0 else left_eye_values[n//2]
+                    # Fix potential division by zero when accessing list elements
+                    if n == 1:
+                        left_eye_stats['median'] = left_eye_values[0]
+                    elif n > 1:
+                        left_eye_stats['median'] = (left_eye_values[n//2 - 1] + left_eye_values[n//2]) / 2 if n % 2 == 0 else left_eye_values[n//2]
+                    else:
+                        left_eye_stats['median'] = 0
                     variance = sum((x - left_eye_stats['mean']) ** 2 for x in left_eye_values) / n
                     left_eye_stats['std_dev'] = variance ** 0.5
                 else:

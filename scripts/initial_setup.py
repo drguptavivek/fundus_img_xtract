@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Initial setup script for the Fundus Image Manager.
 
-This script creates the database, sets up core entities (hospitals, lab units, cameras, areas),
+This script deletes existing database, sets up core entities (hospitals, lab units, cameras, areas),
 creates core diseases and their gradings, adds test users, and populates sample features
 for disease gradings.
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import sys
-import json
 from pathlib import Path
 import shutil
 from datetime import datetime
@@ -19,207 +18,19 @@ from datetime import datetime
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from models import Base, engine, Session, Hospital, LabUnit, Camera, Area, Disease, DiseaseGrading, GradingsFeatures, User
 from models import UPLOAD_DIR, PROCESSED_DIR, PROCESSING_ERROR_DIR, IMAGE_DIR
 from models import DIRECT_UPLOAD_DIR, PDF_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR
 from models import SUCCESS_LOG, ERROR_LOG
-from scripts.add_test_users import add_test_users
-from scripts.create_test_admin import create_test_admin
+from dotenv import load_dotenv
 
-# Core data that must always exist
-
-# Core hospitals
-CORE_HOSPITALS = [
-    {"id": 1, "name": "RPC AIIMS"},
-    {"id": 2, "name": "UCMS GTB Hosp"}
-]
-
-# Core lab units (associated with hospitals)
-CORE_LAB_UNITS = [
-    {"id": 1, "name": "Community Ophthalmology", "hospital_id": 1},
-    {"id": 2, "name": "Retina Lab", "hospital_id": 1},
-    {"id": 3, "name": "Glaucoma Lab", "hospital_id": 1},
-    {"id": 4, "name": "Glaucoma-GTBH", "hospital_id": 2}
-]
-
-# Core cameras
-CORE_CAMERAS = [
-    {"id": 1, "name": "Remedio FOP"},
-    {"id": 2, "name": "Zeiss Cirrus HD-OCT"},
-    {"id": 3, "name": "Heidelberg Spectralis"},
-    {"id": 4, "name": "Optos Daytona"},
-    {"id": 5, "name": "Nidek RS-3000 Advance"},
-    {"id": 6, "name": "Kowa VX-10"},
-    {"id": 7, "name": "Canon CR-2 AF"},
-    {"id": 8, "name": "Carl Zeiss Meditec VISUCAM 500"},
-    {"id": 9, "name": "Topcon Maestro2"}
-]
-
-# Core areas
-CORE_AREAS = [
-    {"id": 1, "name": "Retina Macular Focus"},
-    {"id": 2, "name": "Retina Disc Focus"},
-    {"id": 3, "name": "Cornea"},
-    {"id": 4, "name": "Both Eyes"}
-]
-
-# Core diseases
-CORE_DISEASES = {
-    1: "Glaucoma",
-    2: "DR",  # Diabetic Retinopathy
-    3: "AMD"  # Age-related Macular Degeneration
-}
-
-# Standard gradings for each core disease
-STANDARD_GRADINGS = {
-    # Glaucoma gradings
-    "Glaucoma": [
-        {"impression": "Normal", "display_order": 1, "is_active": True, "guidelines": "No signs of glaucomatous changes. No Other Referrable disease"},
-        {"impression": "Suspect", "display_order": 2, "is_active": True, "guidelines": "<ul><li>Vertical CDR &gt;= 0.8&nbsp;</li><li>ISNT Rule &nbsp;violated&nbsp;</li><li>Baring of Circulminear vessels&nbsp;</li><li>Bayonet Sign&nbsp;</li><li>Beta Zone PPA &nbsp;</li><li>OD haemmorhages</li></ul>"},
-        {"impression": "Glaucoma", "display_order": 3, "is_active": True, "guidelines": "<p><strong>Hard Signs of Glaucoma&nbsp;</strong></p><ul><li>RNFL Loss&nbsp;</li><li>Focal NRR defects&nbsp;</li><li>Total cupping.</li></ul>"},
-        {"impression": "Other Retinal", "display_order": 4, "is_active": True, "guidelines": "If  No Glaucoma/ Not Glaucoma suspect BUT Any other retinal or disc pathology. Note disease in remarks"},
-        {"impression": "Not Gradable", "display_order": 5, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable.&nbsp;</p><p>Note reason not gradable in remarks.</p>"},
-    ],
-    
-    # Diabetic Retinopathy (DR) gradings
-    "DR": [
-        {"impression": "No DR", "display_order": 1, "is_active": True, "guidelines": "No signs of diabetic retinopathy."},
-        {"impression": "Mild DR", "display_order": 2, "is_active": True, "guidelines": "Few microaneurysms only."},
-        {"impression": "Moderate NPDR", "display_order": 3, "is_active": True, "guidelines": "Microaneurysms and other signs (such as dot and blot haemorrhages, hard exudates,cotton wool spots), but less than severe nonproliferative diabetic retinopathy."},
-        {"impression": "Severe NPDR", "display_order": 4, "is_active": True, "guidelines": "Moderate NPDR with Any of the following: <ul> <li> >20 hemorrhages in each of 4 quadrants,</li> <li> definite venous beading in 2+ quadrants, </li> <li>  prominent IRMA in 1+ quadrant.</li> </ul> "},
-        {"impression": "PDR", "display_order": 5, "is_active": True, "guidelines": "Severe nonproliferative diabetic retinopathy and one or more of the following:<ul><li> Neovascularization </li> <li> Vitreous / Preretinal Haemmorhage </li> </ul>"},
-        {"impression": "Other Retinal", "display_order": 6, "is_active": True, "guidelines": "<p>If No DR / DME , <strong>BUT Any other retinal or disc pathology</strong>. Note disease in remarks.</p>"},
-        {"impression": "Not Gradable", "display_order": 7, "is_active": True, "guidelines": " If cannot grade, mark as not gradable. Note signs in remarks."}
-    ],
-    
-    # Age-related Macular Degeneration (AMD) gradings
-    "AMD": [
-        {"impression": "No AMD", "display_order": 1, "is_active": True, "guidelines": "No signs of age-related macular degeneration."},
-        {"impression": "Early AMD", "display_order": 2, "is_active": True, "guidelines": "Few small drusen, pigmentary changes in the macula."},
-        {"impression": "Intermediate AMD", "display_order": 3, "is_active": True, "guidelines": "Many medium-sized drusen, one or more large drusen, pigmentary changes."},
-        {"impression": "Late AMD", "display_order": 4, "is_active": True, "guidelines": "Geographic atrophy (dry) or neovascular AMD (wet)."},
-        {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No AMD , <strong>BUT Any other retinal or disc pathology.</strong> Note disease in remarks.</p>"},
-        {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable. Note reasons in remarks.</p>"}
-    ]
-}
-
-# Sample features for each disease grading - using simplified sr_no and label structure
-SAMPLE_FEATURES = {
-    "Glaucoma": {
-        "Normal": {
-            "features": [],
-            "remarks": "No signs of glaucomatous changes. No Other Referrable disease"
-        },
-        "Suspect": {
-            "features": [
-                {"sr_no": 1, "label": "Vertical CDR >= 0.8"},
-                {"sr_no": 2, "label": "ISNT Rule violated"},
-                {"sr_no": 3, "label": "Baring of Circumlinear vessels"},
-                {"sr_no": 4, "label": "Bayonet Sign"},
-                {"sr_no": 5, "label": "Beta Zone PPA"},
-                {"sr_no": 6, "label": "Optic disc hemorrhages"}
-            ],
-            "remarks": "Suspect glaucoma based on clinical signs"
-        },
-        "Glaucoma": {
-            "features": [
-                {"sr_no": 1, "label": "RNFL Loss"},
-                {"sr_no": 2, "label": "Focal NRR defects"},
-                {"sr_no": 3, "label": "Total cupping"}
-            ],
-            "remarks": "Definite glaucoma with hard signs"
-        },
-        "Other Retinal": {
-            "features": [],
-            "remarks": "No Glaucoma/Not Glaucoma suspect BUT Any other retinal or disc pathology. Note disease in remarks"
-        },
-        "Not Gradable": {
-            "features": [],
-            "remarks": "Cannot grade due to poor image quality or other factors"
-        }
-    },
-    "DR": {
-        "No DR": {
-            "features": [],
-            "remarks": "No signs of diabetic retinopathy"
-        },
-        "Mild DR": {
-            "features": [
-                {"sr_no": 1, "label": "Microaneurysms"}
-            ],
-            "remarks": "Mild non-proliferative diabetic retinopathy"
-        },
-        "Moderate NPDR": {
-            "features": [
-                {"sr_no": 1, "label": "Microaneurysms"},
-                {"sr_no": 2, "label": "Dot and blot hemorrhages"},
-                {"sr_no": 3, "label": "Hard exudates"},
-                {"sr_no": 4, "label": "Cotton wool spots"}
-            ],
-            "remarks": "Moderate non-proliferative diabetic retinopathy"
-        },
-        "Severe NPDR": {
-            "features": [
-                {"sr_no": 1, "label": ">20 hemorrhages in each of 4 quadrants"},
-                {"sr_no": 2, "label": "Definite venous beading in 2+ quadrants"},
-                {"sr_no": 3, "label": "Prominent IRMA in 1+ quadrant"}
-            ],
-            "remarks": "Severe non-proliferative diabetic retinopathy"
-        },
-        "PDR": {
-            "features": [
-                {"sr_no": 1, "label": "Neovascularization"},
-                {"sr_no": 2, "label": "Vitreous/Preretinal Hemorrhage"}
-            ],
-            "remarks": "Proliferative diabetic retinopathy"
-        },
-        "Other Retinal": {
-            "features": [],
-            "remarks": "No DR/DME BUT Any other retinal or disc pathology. Note disease in remarks"
-        },
-        "Not Gradable": {
-            "features": [],
-            "remarks": "Cannot grade due to poor image quality or other factors"
-        }
-    },
-    "AMD": {
-        "No AMD": {
-            "features": [],
-            "remarks": "No signs of age-related macular degeneration"
-        },
-        "Early AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Few small drusen"},
-                {"sr_no": 2, "label": "Pigmentary changes"}
-            ],
-            "remarks": "Early age-related macular degeneration"
-        },
-        "Intermediate AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Many medium-sized drusen"},
-                {"sr_no": 2, "label": "One or more large drusen"},
-                {"sr_no": 3, "label": "Pigmentary changes"}
-            ],
-            "remarks": "Intermediate age-related macular degeneration"
-        },
-        "Late AMD": {
-            "features": [
-                {"sr_no": 1, "label": "Geographic atrophy"},
-                {"sr_no": 2, "label": "Neovascular AMD"}
-            ],
-            "remarks": "Late age-related macular degeneration"
-        },
-        "Other Retinal": {
-            "features": [],
-            "remarks": "No AMD BUT Any other retinal or disc pathology. Note disease in remarks"
-        },
-        "Not Gradable": {
-            "features": [],
-            "remarks": "Cannot grade due to poor image quality or other factors"
-        }
-    }
-}
+# Import all core entity definitions and setup functions
+from scripts.setup_core_entities import (
+    CORE_HOSPITALS, CORE_LAB_UNITS, CORE_CAMERAS, CORE_AREAS, CORE_DISEASES,
+    STANDARD_GRADINGS, SAMPLE_FEATURES,
+    setup_all_core_entities, populate_sample_features
+)
 
 def reset_files_directory() -> None:
     """Clear the files directory and recreate required sub-directories."""
@@ -237,34 +48,100 @@ def reset_files_directory() -> None:
     create_directories()
 
 
-def backup_and_remove_database() -> None:
-    """Create a timestamped backup of the current database, then delete it."""
-    db_path_str = engine.url.database
-    if not db_path_str:
+def backup_database() -> bool:
+    """Create a timestamped backup of the current database using backup_db.py functionality.
+    
+    Returns:
+        bool: True if backup was successful, False otherwise
+    """
+    # Import backup functions from backup_db.py
+    from scripts.backup_db import get_database_info, create_sqlite_backup, create_postgresql_backup
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Get database information
+    db_info = get_database_info()
+    if not db_info:
         print("No database path configured; skipping database backup.")
-        return
-
-    db_path = Path(db_path_str)
-    if not db_path.is_absolute():
-        db_path = project_root / db_path
-
-    if not db_path.exists():
-        print(f"No database file found at {db_path}; skipping backup.")
-        return
-
+        return False
+    
+    print(f"Database type: {db_info['type']}")
+    
+    # Ensure backups directory exists
     backups_dir = project_root / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Backup directory: {backups_dir}")
+    
+    # Create backup based on database type
+    if db_info["type"] == "sqlite":
+        if not os.path.exists(db_info["path"]):
+            print(f"No database file found at {db_info['path']}; skipping backup.")
+            return False
+        
+        backup_file = create_sqlite_backup(db_info["path"], backups_dir)
+        
+    elif db_info["type"] == "postgresql":
+        backup_file = create_postgresql_backup(db_info, backups_dir)
+        
+    else:
+        print(f"Unsupported database type: {db_info['type']}")
+        return False
+    
+    if backup_file:
+        # Get file size for reporting
+        file_size = backup_file.stat().st_size
+        file_size_mb = file_size / (1024 * 1024)
+        
+        print(f"SUCCESS: Backup created!")
+        print(f"File: {backup_file.name}")
+        print(f"Size: {file_size_mb:.2f} MB")
+        print(f"Location: {backup_file}")
+        return True
+    else:
+        print("ERROR: Backup failed!")
+        return False
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"{db_path.stem}_{timestamp}{db_path.suffix or '.db'}"
-    backup_path = backups_dir / backup_name
+def remove_database() -> None:
+    """Remove the existing database after backup."""
+    from models import DATABASE_URL
+    
+    if DATABASE_URL.startswith("sqlite"):
+        # For SQLite, remove the database file
+        db_path_str = engine.url.database
+        if not db_path_str:
+            print("No database path configured; skipping database removal.")
+            return
 
-    print(f"Backing up database to {backup_path}...")
-    engine.dispose()
-    shutil.copy2(db_path, backup_path)
-    print("  Backup complete. Removing original database file...")
-    db_path.unlink()
-    print("  Database file removed.")
+        db_path = Path(db_path_str)
+        if not db_path.is_absolute():
+            db_path = project_root / db_path
+
+        if db_path.exists():
+            print("Removing original database file...")
+            engine.dispose()
+            db_path.unlink()
+            print("  Database file removed.")
+        else:
+            print(f"No database file found at {db_path}; skipping removal.")
+    elif DATABASE_URL.startswith("postgresql"):
+        # For PostgreSQL, drop all tables
+        print("Dropping all tables in PostgreSQL database...")
+        Base.metadata.drop_all(engine)
+        print("  All tables dropped.")
+    else:
+        print(f"Unsupported database type for removal: {DATABASE_URL}")
+
+def backup_and_remove_database() -> None:
+    """Create a timestamped backup of the current database, then delete it."""
+    # First create backup
+    backup_success = backup_database()
+    
+    if backup_success:
+        # Then remove the database
+        remove_database()
+    else:
+        print("Skipping database removal due to backup failure.")
 
 
 def create_directories() -> None:
@@ -292,169 +169,59 @@ def create_database():
     """Create a new blank database with all tables."""
     print("Creating database tables...")
     
-    # Drop all tables first (if they exist)
-    Base.metadata.drop_all(engine)
+    # For PostgreSQL, tables were already dropped in remove_database()
+    # For SQLite, the file was already removed, so no need to drop tables
+    # But we'll check and drop if they exist to be safe
+    from models import DATABASE_URL
+    
+    if DATABASE_URL.startswith("postgresql"):
+        # Tables were already dropped in remove_database()
+        pass
+    else:
+        # For SQLite or other databases, drop tables if they exist
+        Base.metadata.drop_all(engine)
     
     # Create all tables
     Base.metadata.create_all(engine)
     print("  Database tables created successfully!")
 
-def setup_core_entities(db):
-    """Setup core hospitals, lab units, cameras, and areas."""
-    print("Setting up core entities...")
+def confirm_database_reset():
+    """Ask for user confirmation before resetting the database."""
+    print("⚠️  WARNING: This will completely reset the database!")
+    print("   - All existing data will be permanently deleted")
+    print("   - A backup will be created before deletion")
+    print()
     
-    # Setup hospitals
-    for hospital_data in CORE_HOSPITALS:
-        hospital = Hospital(id=hospital_data["id"], name=hospital_data["name"])
-        db.add(hospital)
-        print(f"  Created hospital: {hospital_data['name']}")
+    response = input("Do you want to continue? (yes/no): ").strip().lower()
+    if response not in ['yes', 'y']:
+        print("Database reset cancelled by user.")
+        return False
     
-    # Setup areas
-    for area_data in CORE_AREAS:
-        area = Area(id=area_data["id"], name=area_data["name"])
-        db.add(area)
-        print(f"  Created area: {area_data['name']}")
-    
-    # Setup cameras
-    for camera_data in CORE_CAMERAS:
-        camera = Camera(id=camera_data["id"], name=camera_data["name"])
-        db.add(camera)
-        print(f"  Created camera: {camera_data['name']}")
-    
-    # Setup lab units
-    for lab_unit_data in CORE_LAB_UNITS:
-        lab_unit = LabUnit(id=lab_unit_data["id"], name=lab_unit_data["name"], hospital_id=lab_unit_data["hospital_id"])
-        db.add(lab_unit)
-        print(f"  Created lab unit: {lab_unit_data['name']}")
-
-def setup_core_diseases(db):
-    """Setup core diseases (Glaucoma, DR, AMD)."""
-    print("Setting up core diseases...")
-    
-    for disease_id, disease_name in CORE_DISEASES.items():
-        disease = Disease(id=disease_id, name=disease_name)
-        db.add(disease)
-        print(f"  Created disease: {disease_name}")
-
-def setup_core_disease_gradings(db):
-    """Setup standard gradings for core diseases."""
-    print("Setting up core disease gradings...")
-    
-    # Get core diseases from database
-    core_diseases = {}
-    for disease_id, disease_name in CORE_DISEASES.items():
-        disease = db.get(Disease, disease_id)
-        if disease:
-            core_diseases[disease_name] = disease
-    
-    total_gradings_added = 0
-    
-    for disease_name, disease in core_diseases.items():
-        if disease_name not in STANDARD_GRADINGS:
-            print(f"  No standard gradings defined for disease: {disease_name}")
-            continue
-        
-        standard_gradings = STANDARD_GRADINGS[disease_name]
-        print(f"  Setting up gradings for {disease_name}...")
-        
-        for grading_data in standard_gradings:
-            new_grading = DiseaseGrading(
-                disease_id=disease.id,
-                impression=grading_data["impression"],
-                display_order=grading_data["display_order"],
-                is_active=grading_data["is_active"],
-                guidelines=grading_data["guidelines"] or None
-            )
-            db.add(new_grading)
-            print(f"    Created grading: {grading_data['impression']}")
-            total_gradings_added += 1
-    
-    print(f"  Created {total_gradings_added} disease gradings")
-
-def populate_sample_features():
-    """Populate sample features for all existing disease gradings."""
-    print("🚀 Starting to populate sample features for disease gradings...")
-    print("=" * 60)
-    
-    try:
-        with Session() as db:
-            # Get all diseases
-            diseases = db.execute(select(Disease)).scalars().all()
-            print(f"Found {len(diseases)} diseases in the database")
-            
-            total_updated = 0
-            total_skipped = 0
-            
-            for disease in diseases:
-                print(f"\nProcessing disease: {disease.name}")
-                
-                # Get all gradings for this disease
-                gradings = db.execute(
-                    select(DiseaseGrading).where(DiseaseGrading.disease_id == disease.id)
-                ).scalars().all()
-                
-                print(f"  Found {len(gradings)} gradings for {disease.name}")
-                
-                for grading in gradings:
-                    # Check if we have sample features for this disease and impression
-                    if disease.name in SAMPLE_FEATURES and grading.impression in SAMPLE_FEATURES[disease.name]:
-                        sample_data = SAMPLE_FEATURES[disease.name][grading.impression]
-                        
-                        # Create the JSON structure
-                        features_json = json.dumps({
-                            "features": sample_data["features"],
-                            "remarks": sample_data["remarks"]
-                        }, indent=2)
-                        
-                        # Update the grading with new features structure
-                        # Delete existing features and create new ones
-                        db.execute(
-                            delete(GradingsFeatures).where(GradingsFeatures.disease_grading_id == grading.id)
-                        )
-                        
-                        # Add new features from sample data
-                        for i, feature_data in enumerate(sample_data["features"], 1):
-                            feature = GradingsFeatures(
-                                disease_grading_id=grading.id,
-                                sr_no=feature_data["sr_no"],
-                                label=feature_data["label"]
-                            )
-                            db.add(feature)
-                        
-                        # Note: We're not setting features_json anymore as it's deprecated
-                        total_updated += 1
-                        print(f"    ✓ Updated: {grading.impression}")
-                    else:
-                        total_skipped += 1
-                        print(f"    ⚠ Skipped: {grading.impression} (no sample features defined)")
-            
-            # Commit all changes
-            db.commit()
-            
-            print("\n" + "=" * 60)
-            print("✅ Sample features population completed!")
-            print(f"Total gradings updated: {total_updated}")
-            print(f"Total gradings skipped: {total_skipped}")
-            
-            # Show summary of what was updated
-            print("\nSummary of updated gradings:")
-            for disease_name in SAMPLE_FEATURES:
-                print(f"\n{disease_name}:")
-                for impression_name in SAMPLE_FEATURES[disease_name]:
-                    sample_data = SAMPLE_FEATURES[disease_name][impression_name]
-                    features_count = len(sample_data["features"])
-                    print(f"  - {impression_name}: {features_count} features")
-            
-    except Exception as e:
-        print(f"\n❌ Error during sample features population: {e}")
-        sys.exit(1)
+    print("Proceeding with database reset...")
+    return True
 
 def main():
     """Main function to run the initial setup."""
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Initial setup for Fundus Image Manager')
+    parser.add_argument('--force', action='store_true',
+                       help='Skip confirmation prompt and proceed with database reset')
+    args = parser.parse_args()
+    
     print("🚀 Starting initial setup for Fundus Image Manager...")
     print("=" * 50)
     
     try:
+        # Confirm database reset (unless --force is specified)
+        if not args.force and not confirm_database_reset():
+            print("Setup cancelled.")
+            return
+        
+        if args.force:
+            print("Proceeding with database reset (force mode)...")
+        
         # Reset storage directories
         reset_files_directory()
         print()
@@ -469,19 +236,14 @@ def main():
         
         # Setup core data
         with Session() as db:
-            setup_core_entities(db)
-            setup_core_diseases(db)
-            setup_core_disease_gradings(db)
+            setup_all_core_entities(db)
             db.commit()
         print()
 
-        print("Seeding default admin user...")
-        create_test_admin()
-        print()
-
-        print("Seeding development test users...")
-        add_test_users()
-        print()
+#
+#        print("Seeding development test users...")
+#        add_test_users()
+#        print()
         
         print("Populating sample features for disease gradings...")
         populate_sample_features()
@@ -510,8 +272,7 @@ def main():
             print(f"  Users: {len(users)}")
         
         print()
-        print("Default admin credentials -> username: admin / password: Vivek@2026")
-        print("All seeded test users share the password: Vivek@2026")
+
         print()
         print("Next steps:")
         print("1. Create users: python scripts/create_user.py <username>")

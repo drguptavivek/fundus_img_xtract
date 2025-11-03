@@ -70,4 +70,5 @@ dependencies = [
     "urllib3==2.5.0",
     "wrapt==2.0.0",
     "pyyaml>=6.0.3",
+    "redis>=7.0.1",
 ]

@@ -50,6 +50,10 @@ class DatabaseSessionInterface(SessionInterface):
         return dt.astimezone(timezone.utc)
 
     def open_session(self, app, request):
+        # Skip session handling for static files to improve performance and avoid database issues
+        if request.path and request.path.startswith('/static/'):
+            return None
+            
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = request.cookies.get(cookie_name)
         db = DbSession()
@@ -87,6 +91,10 @@ class DatabaseSessionInterface(SessionInterface):
             db.close()
 
     def save_session(self, app, session, response):
+        # Skip session handling for static files
+        if session is None:
+            return
+            
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
 
         # If the session is empty, stamp it as ended and remove the browser cookie

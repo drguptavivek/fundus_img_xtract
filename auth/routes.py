@@ -39,7 +39,8 @@ login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    with SessionLocal() as db:
+    from utils.utils import with_session
+    with with_session() as db:
         return db.get(User, int(user_id))
 
 # ----- Helpers -----

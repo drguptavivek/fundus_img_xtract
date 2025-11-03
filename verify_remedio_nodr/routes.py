@@ -127,6 +127,7 @@ def nodr_list():
             recent_verified_url = url_for("verify_remedio_nodr.nodr_list", page=rv_idx, ver="yes")
 
         items: list[PatientEncounters] = []
+        items_with_unverify_status: list[dict[str, Any]] = []
         if focus_date is not None:
             items_query = (
                 base_query
@@ -188,7 +189,7 @@ def nodr_list():
         "verify_remedio_nodr/list.html",
         items=items_with_unverify_status,
         page=page,
-        total=len(items),
+        total=len(items) if items else 0,
         total_pages=total_pages,
         has_prev=has_prev,
         has_next=has_next,

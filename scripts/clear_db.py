@@ -11,10 +11,10 @@ import shutil
 # Add the project root directory to the path so we can import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Session, JobItem, Job, ZipFile, PatientEncounters, EncounterFile, EncounterFilePDF
-from models import DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned, ImageGrading
-from models import DirectImageUpload, DirectImageVerify, GradingTask, Grade, Consensus
-from models import AIGrade
+from models import (Session, JobItem, Job, ZipFile, 
+                    PatientEncounters, EncounterFile, EncounterFilePDF, DiabeticRetinopathyReport, 
+                    GlaucomaReport, GlaucomaResultsCleaned, ImageGrading, 
+                    DirectImageUpload, DirectImageVerify, GradingTask, Grade, Consensus)
 
 
 def clear_files():
@@ -78,10 +78,6 @@ def clear_database():
     
     try:
         print("Starting to clear the database...")
-        
-        # Delete from tables with foreign key dependencies first
-        print("Deleting AI Grades...")
-        db.query(AIGrade).delete()
         
         print("Deleting Consensus...")
         db.query(Consensus).delete()

@@ -58,22 +58,42 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
             end_date=params.get('end_date')
         )
         
+        # Check if dataframe is empty
+        if df.empty:
+            return df, {
+                "start_date": params.get('start_date'),
+                "end_date": params.get('end_date'),
+                "hospital_ids": params.get('hospital_ids'),
+                "lab_unit_ids": params.get('lab_unit_ids'),
+                "user_lab_unit_ids": list(user_lab_unit_ids),
+                "warning": "No data found for the specified criteria"
+            }
+        
+        # Check if required columns exist
+        required_columns = ['lab_unit_id', 'hospital_id']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            error_msg = f"DataFrame is missing required columns: {missing_columns}. Available columns: {list(df.columns)}"
+            error_logger = logging.getLogger('runtime_error')
+            error_logger.error(error_msg)
+            raise ValueError(error_msg)
+        
         # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
         if not user_lab_unit_ids:
             raise ValueError("User has no lab unit permissions. Please contact administrator.")
         df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
         
         # Apply location filters
-        if 'hospital_ids' in params:
+        if 'hospital_ids' in params and 'hospital_id' in df.columns:
             df = df[df['hospital_id'].isin(params['hospital_ids'])]
         
-        if 'lab_unit_ids' in params:
+        if 'lab_unit_ids' in params and 'lab_unit_id' in df.columns:
             df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
         
         # Apply date filters through upload_date (from ZipFile)
-        if 'start_date' in params:
+        if 'start_date' in params and 'upload_date' in df.columns:
             df = df[df['upload_date'] >= params['start_date']]
-        if 'end_date' in params:
+        if 'end_date' in params and 'upload_date' in df.columns:
             df = df[df['upload_date'] <= params['end_date']]
         
         # Create filters_applied dictionary for response
@@ -293,14 +313,21 @@ def year_month_wise_uploads():
             df = handle_nat_values_for_json(df)
             
             # Ensure upload_date is datetime for proper grouping
-            df['upload_date'] = pd.to_datetime(df['upload_date'])
+            if 'upload_date' in df.columns:
+                df['upload_date'] = pd.to_datetime(df['upload_date'])
+                # Check if required columns exist for grouping
+                groupby_columns = [pd.Grouper(key='upload_date', freq='ME')]
+            else:
+                # If no upload_date column, we can't group by month
+                monthly_groups = pd.DataFrame()
+                groupby_columns = []
+            if 'hospital_id' in df.columns and 'hospital_name' in df.columns:
+                groupby_columns.extend(['hospital_id', 'hospital_name'])
+            if 'lab_unit_id' in df.columns and 'lab_unit_name' in df.columns:
+                groupby_columns.extend(['lab_unit_id', 'lab_unit_name'])
             
             # Group by year, month, hospital, and lab unit for monthly aggregation
-            monthly_groups = df.groupby([
-                pd.Grouper(key='upload_date', freq='ME'),  # Group by month
-                'hospital_id', 'hospital_name',
-                'lab_unit_id', 'lab_unit_name'
-            ]).agg({
+            monthly_groups = df.groupby(groupby_columns).agg({
                 'encounter_id': 'nunique',  # Number of captures
                 'zip_file_id': 'nunique',  # Number of uploads
                 'has_dr_report': 'sum',  # Number with DR reports
@@ -308,8 +335,9 @@ def year_month_wise_uploads():
             }).reset_index()
             
             # Extract year and month from upload_date
-            monthly_groups['year'] = monthly_groups['upload_date'].dt.year
-            monthly_groups['month'] = monthly_groups['upload_date'].dt.month
+            if 'upload_date' in monthly_groups.columns:
+                monthly_groups['year'] = monthly_groups['upload_date'].dt.year
+                monthly_groups['month'] = monthly_groups['upload_date'].dt.month
             
             # Calculate encounters with no reports
             monthly_groups['no_reports'] = (
@@ -339,7 +367,8 @@ def year_month_wise_uploads():
                 total_glaucoma_reports += row['has_glaucoma_report']
                 total_no_reports += row['no_reports']
                 
-                formatted_data.append({
+                # Build the formatted data record with available columns
+                record = {
                     "year": int(row['year']),
                     "month": int(row['month']),
                     "month_name": month_name,
@@ -347,12 +376,24 @@ def year_month_wise_uploads():
                     "captures": int(row['encounter_id']),
                     "dr_reports": int(row['has_dr_report']),
                     "glaucoma_reports": int(row['has_glaucoma_report']),
-                    "no_reports": int(row['no_reports']),
-                    "hospital_id": int(row['hospital_id']),
-                    "hospital_name": row['hospital_name'],
-                    "lab_unit_id": int(row['lab_unit_id']),
-                    "lab_unit_name": row['lab_unit_name']
-                })
+                    "no_reports": int(row['no_reports'])
+                }
+                
+                # Add hospital data if available
+                if 'hospital_id' in row and 'hospital_name' in row:
+                    record.update({
+                        "hospital_id": int(row['hospital_id']),
+                        "hospital_name": row['hospital_name']
+                    })
+                
+                # Add lab unit data if available
+                if 'lab_unit_id' in row and 'lab_unit_name' in row:
+                    record.update({
+                        "lab_unit_id": int(row['lab_unit_id']),
+                        "lab_unit_name": row['lab_unit_name']
+                    })
+                
+                formatted_data.append(record)
             
             # Sort by year and month
             formatted_data.sort(key=lambda x: (x['year'], x['month']))
@@ -407,18 +448,27 @@ def dr_reports_count():
             df = handle_nat_values_for_json(df)
             
             # Calculate DR reports metrics using pandas
-            dr_reports_df = df[df['has_dr_report'] == True]
+            if 'has_dr_report' in df.columns:
+                dr_reports_df = df[df['has_dr_report'] == True]
+            else:
+                dr_reports_df = pd.DataFrame()  # Empty dataframe if column doesn't exist
             dr_reports_count = len(dr_reports_df)
             total_encounters = len(df)
             dr_percentage = (dr_reports_count / total_encounters * 100) if total_encounters > 0 else 0
             
             # Group by hospital using pandas
-            by_hospital_df = dr_reports_df.groupby(['hospital_id', 'hospital_name']).size().reset_index(name='count')
-            by_hospital = by_hospital_df.to_dict('records')
+            if not dr_reports_df.empty and 'hospital_id' in dr_reports_df.columns and 'hospital_name' in dr_reports_df.columns:
+                by_hospital_df = dr_reports_df.groupby(['hospital_id', 'hospital_name']).size().reset_index(name='count')
+                by_hospital = by_hospital_df.to_dict('records')
+            else:
+                by_hospital = []
             
             # Group by lab unit using pandas
-            by_lab_unit_df = dr_reports_df.groupby(['lab_unit_id', 'lab_unit_name']).size().reset_index(name='count')
-            by_lab_unit = by_lab_unit_df.to_dict('records')
+            if not dr_reports_df.empty and 'lab_unit_id' in dr_reports_df.columns and 'lab_unit_name' in dr_reports_df.columns:
+                by_lab_unit_df = dr_reports_df.groupby(['lab_unit_id', 'lab_unit_name']).size().reset_index(name='count')
+                by_lab_unit = by_lab_unit_df.to_dict('records')
+            else:
+                by_lab_unit = []
             
             # Determine period
             period = determine_period(params)
@@ -465,18 +515,27 @@ def glaucoma_reports_count():
             df = handle_nat_values_for_json(df)
             
             # Calculate glaucoma reports metrics using pandas
-            glaucoma_reports_df = df[df['has_glaucoma_report'] == True]
+            if 'has_glaucoma_report' in df.columns:
+                glaucoma_reports_df = df[df['has_glaucoma_report'] == True]
+            else:
+                glaucoma_reports_df = pd.DataFrame()  # Empty dataframe if column doesn't exist
             glaucoma_reports_count = len(glaucoma_reports_df)
             total_encounters = len(df)
             glaucoma_percentage = (glaucoma_reports_count / total_encounters * 100) if total_encounters > 0 else 0
             
             # Group by hospital using pandas
-            by_hospital_df = glaucoma_reports_df.groupby(['hospital_id', 'hospital_name']).size().reset_index(name='count')
-            by_hospital = by_hospital_df.to_dict('records')
+            if not glaucoma_reports_df.empty and 'hospital_id' in glaucoma_reports_df.columns and 'hospital_name' in glaucoma_reports_df.columns:
+                by_hospital_df = glaucoma_reports_df.groupby(['hospital_id', 'hospital_name']).size().reset_index(name='count')
+                by_hospital = by_hospital_df.to_dict('records')
+            else:
+                by_hospital = []
             
             # Group by lab unit using pandas
-            by_lab_unit_df = glaucoma_reports_df.groupby(['lab_unit_id', 'lab_unit_name']).size().reset_index(name='count')
-            by_lab_unit = by_lab_unit_df.to_dict('records')
+            if not glaucoma_reports_df.empty and 'lab_unit_id' in glaucoma_reports_df.columns and 'lab_unit_name' in glaucoma_reports_df.columns:
+                by_lab_unit_df = glaucoma_reports_df.groupby(['lab_unit_id', 'lab_unit_name']).size().reset_index(name='count')
+                by_lab_unit = by_lab_unit_df.to_dict('records')
+            else:
+                by_lab_unit = []
             
             # Monthly breakdown using capture_date (not upload_date)
             if not glaucoma_reports_df.empty and 'capture_date' in glaucoma_reports_df.columns:
@@ -596,7 +655,10 @@ def dr_results_distribution():
             df = handle_nat_values_for_json(df)
             
             # Filter for encounters with DR reports
-            dr_df = df[df['has_dr_report'] == True]
+            if 'has_dr_report' in df.columns:
+                dr_df = df[df['has_dr_report'] == True]
+            else:
+                dr_df = pd.DataFrame()  # Empty dataframe if column doesn't exist
             
             # Get distribution by result - we need to join with DR reports
             if not dr_df.empty:
@@ -699,7 +761,10 @@ def glaucoma_results_distribution():
             df = handle_nat_values_for_json(df)
             
             # Filter for encounters with glaucoma reports
-            glaucoma_df = df[df['has_glaucoma_report'] == True]
+            if 'has_glaucoma_report' in df.columns:
+                glaucoma_df = df[df['has_glaucoma_report'] == True]
+            else:
+                glaucoma_df = pd.DataFrame()  # Empty dataframe if column doesn't exist
             
             # Get distribution by result - we need to join with glaucoma reports
             if not glaucoma_df.empty:
@@ -761,7 +826,10 @@ def vcdr_distribution():
             df = handle_nat_values_for_json(df)
             
             # Filter for encounters with glaucoma reports (since VCDR is part of glaucoma analysis)
-            glaucoma_df = df[df['has_glaucoma_report'] == True]
+            if 'has_glaucoma_report' in df.columns:
+                glaucoma_df = df[df['has_glaucoma_report'] == True]
+            else:
+                glaucoma_df = pd.DataFrame()  # Empty dataframe if column doesn't exist
             
             if not glaucoma_df.empty:
                 # Get encounter IDs from filtered dataframe

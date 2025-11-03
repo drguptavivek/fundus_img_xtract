@@ -191,10 +191,12 @@ uv run python scripts/initial_setup.py
 
 ## Running the Application
 
-### Recommended Method: Using uv
+### Development Mode
+
+For development with auto-reloading and debugging features:
 
 ```bash
-# Run the application
+# Run the application with Flask development server
 uv run app.py
 
 # Check which process is using port 5001
@@ -203,6 +205,74 @@ lsof -i :5001
 # Stop the application if running in background
 kill -9 PID
 ```
+
+### Production Mode with Gunicorn (Recommended for Production)
+
+For production deployment, use Gunicorn which provides better performance, stability, and process management.
+
+#### Option 1: Using systemd Service (Recommended)
+
+For production deployment, using systemd is the recommended approach for process management:
+
+```bash
+# Navigate to the systemd directory
+cd systemd
+
+# Run the installation script (requires sudo)
+sudo ./install_service.sh
+```
+
+This will install and enable the application as a systemd service with:
+- Automatic start on boot
+- Automatic restart on failure
+- Proper logging
+- Security hardening
+
+Service management commands:
+```bash
+# Start the service
+sudo systemctl start fundus-img-xtract
+
+# Stop the service
+sudo systemctl stop fundus-img-xtract
+
+# Restart the service
+sudo systemctl restart fundus-img-xtract
+
+# Check service status
+sudo systemctl status fundus-img-xtract
+
+# View real-time logs
+sudo journalctl -u fundus-img-xtract -f
+```
+
+#### Option 2: Using Startup Script
+
+For manual or testing deployment:
+
+```bash
+# Using the provided startup script
+./run_with_gunicorn.sh
+
+# Or run Gunicorn directly
+uv run gunicorn -c gunicorn_config.py wsgi:application
+```
+
+#### Gunicorn Configuration
+
+The application includes a comprehensive Gunicorn configuration in `gunicorn_config.py`. You can customize settings using environment variables in your `.env` file:
+
+```bash
+# Example .env configuration for production
+FLASK_ENV=production
+FLASK_SECRET_KEY=your-very-secret-key-here
+GUNICORN_BIND=0.0.0.0:5001
+GUNICORN_WORKERS=4
+GUNICORN_TIMEOUT=120
+GUNICORN_LOG_LEVEL=info
+```
+
+For detailed information about running with Gunicorn, see [Gunicorn Documentation](docs/10-DEVELOP/GUNICORN.md).
 
 ### Alternative Method: Traditional virtual environment
 
@@ -232,6 +302,7 @@ python app.py
 - [Security](docs/10-DEVELOP/Security.md) -  authentication, authorization, and security features
 - [JavaScript Guidance](docs/10-DEVELOP/JavaScript_Guidance.md) - Authentication, CSRF protection, file organization, and template integration
 - [Logging System](docs/10-DEVELOP/logging.md) - Complete logging infrastructure with dedicated loggers, debug mode, and configuration
+- [Gunicorn Deployment](docs/10-DEVELOP/GUNICORN.md) - Running the application with Gunicorn in production
 - [Playwright Testing](docs/10-DEVELOP/playwright.md) - End-to-end testing setup, configuration, and best practices
 - [Build Themes](docs/10-DEVELOP/BUILD_THEMES.md)
 

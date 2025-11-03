@@ -9,6 +9,17 @@ from uuid import uuid4
  
 load_dotenv()
 
+# Expand environment variables that reference other variables
+# This handles cases like DATABASE_URL=${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@...
+for key, value in os.environ.items():
+    if isinstance(value, str) and '${' in value:
+        # Expand environment variable references
+        try:
+            expanded = os.path.expandvars(value)
+            os.environ[key] = expanded
+        except Exception as e:
+            print(f"Warning: Could not expand {key}: {e}")
+
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/zip_upload_zips")

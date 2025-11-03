@@ -60,14 +60,17 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
             error_logger = logging.getLogger('runtime_error')
             error_logger.info(f"DEBUG: Available columns in dataframe: {list(df.columns)}")
             
-            if user_lab_unit_ids and len(user_lab_unit_ids) > 0:
+            # Handle empty dataframe case
+            if df.empty:
+                error_logger.info("Dataframe is empty, skipping user permissions filtering")
+            elif user_lab_unit_ids and len(user_lab_unit_ids) > 0:
                 # Check if lab_unit_id column exists
                 if 'lab_unit_id' in df.columns:
                     df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
                 else:
                     error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
-                    # If user has no lab unit permissions, return empty dataframe
-                    df = df.iloc[0:0]  # Empty dataframe with same columns
+                    # Return empty dataframe with same structure
+                    df = df.iloc[0:0]
             else:
                 # If user has no lab unit permissions, return empty dataframe
                 df = df.iloc[0:0]  # Empty dataframe with same columns
@@ -83,37 +86,45 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
             error_logger = logging.getLogger('runtime_error')
             error_logger.info(f"DEBUG LOCATION FILTER: Available columns in dataframe: {list(df.columns)}")
             
-            if 'hospital_ids' in params and params['hospital_ids']:
-                if 'hospital_id' in df.columns:
-                    df = df[df['hospital_id'].isin(params['hospital_ids'])]
-                else:
-                    error_logger.error(f"Column 'hospital_id' not found in dataframe. Available columns: {list(df.columns)}")
-            
-            if 'lab_unit_ids' in params and params['lab_unit_ids']:
-                if 'lab_unit_id' in df.columns:
-                    df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
-                else:
-                    error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
+            # Handle empty dataframe case
+            if df.empty:
+                error_logger.info("Dataframe is empty, skipping location filtering")
+            else:
+                if 'hospital_ids' in params and params['hospital_ids']:
+                    if 'hospital_id' in df.columns:
+                        df = df[df['hospital_id'].isin(params['hospital_ids'])]
+                    else:
+                        error_logger.error(f"Column 'hospital_id' not found in dataframe. Available columns: {list(df.columns)}")
+                
+                if 'lab_unit_ids' in params and params['lab_unit_ids']:
+                    if 'lab_unit_id' in df.columns:
+                        df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
+                    else:
+                        error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
         except Exception as e:
             error_logger = logging.getLogger('runtime_error')
             error_logger.error(f"Error in location filtering: {str(e)}")
             error_logger.error(f"params: {params}")
             raise
         
-        # Apply date filters through upload_date (from ZipFile)
+        # Apply date filters through upload_date (from DirectImageUpload)
         # Debug: Check what columns are actually available in dataframe
         error_logger.info(f"DEBUG DATE FILTER: Available columns in dataframe: {list(df.columns)}")
         
-        if 'start_date' in params:
-            if 'upload_date' in df.columns:
-                df = df[df['upload_date'] >= params['start_date']]
-            else:
-                error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
-        if 'end_date' in params:
-            if 'upload_date' in df.columns:
-                df = df[df['upload_date'] <= params['end_date']]
-            else:
-                error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
+        # Handle empty dataframe case
+        if df.empty:
+            error_logger.info("Dataframe is empty, skipping date filtering")
+        else:
+            if 'start_date' in params:
+                if 'upload_date' in df.columns:
+                    df = df[df['upload_date'] >= params['start_date']]
+                else:
+                    error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
+            if 'end_date' in params:
+                if 'upload_date' in df.columns:
+                    df = df[df['upload_date'] <= params['end_date']]
+                else:
+                    error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
         
         # Create filters_applied dictionary for response
         filters_applied = {

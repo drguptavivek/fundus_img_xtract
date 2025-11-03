@@ -213,6 +213,41 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
         if not df.empty:
             logger.info(f"DEBUG DATAFRAME: Generated columns: {list(df.columns)}")
         
+        # Ensure dataframe always has the expected columns, even when empty
+        if df.empty:
+            # Define all expected columns to ensure consistent structure
+            expected_columns = [
+                # Core Image Information
+                'image_id', 'image_uuid', 'filename', 'original_filename', 'edited_filename',
+                'folder_rel', 'file_hash', 'content_hash',
+                
+                # Upload Information
+                'upload_date', 'upload_datetime', 'uploader_id', 'uploader_username', 'uploader_full_name',
+                
+                # Location Information
+                'hospital_id', 'hospital_name', 'lab_unit_id', 'lab_unit_name',
+                
+                # Camera & Disease Information
+                'camera_id', 'camera_name', 'disease_id', 'disease_name', 'area_id', 'area_name',
+                
+                # Image Properties
+                'is_mydriatic', 'is_pregraded',
+                
+                # Verification Information
+                'verification_status', 'verification_remarks', 'verified_by_id',
+                'verified_by_username', 'verified_at', 'has_verification',
+                
+                # Task Information
+                'has_task', 'task_count', 'task_states', 'latest_task_date',
+                
+                # Grading Information
+                'has_grading', 'grading_count', 'latest_grading_date', 'grading_roles'
+            ]
+            
+            # Create empty dataframe with expected columns
+            df = pd.DataFrame(columns=expected_columns)
+            logger.info(f"DEBUG DATAFRAME: Created empty dataframe with columns: {list(df.columns)}")
+        
         # Convert date columns to proper datetime objects
         if not df.empty:
             date_columns = ['upload_datetime', 'verified_at', 'latest_grading_date', 'latest_task_date']

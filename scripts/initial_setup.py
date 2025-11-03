@@ -31,6 +31,7 @@ from scripts.setup_core_entities import (
     STANDARD_GRADINGS, SAMPLE_FEATURES,
     setup_all_core_entities, populate_sample_features
 )
+from scripts.remove_test_users import remove_test_users
 
 def reset_files_directory() -> None:
     """Clear the files directory and recreate required sub-directories."""
@@ -240,10 +241,9 @@ def main():
             db.commit()
         print()
 
-#
-#        print("Seeding development test users...")
-#        add_test_users()
-#        print()
+        print("Removing any existing test users...")
+        remove_test_users()
+        print()
         
         print("Populating sample features for disease gradings...")
         populate_sample_features()

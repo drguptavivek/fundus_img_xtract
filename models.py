@@ -411,15 +411,15 @@ class DirectImageUpload(Base):
     area: Mapped["Area"] = relationship()
 
     __table_args__ = (
-        # Basename only (no slashes)
-        CheckConstraint("instr(filename, '/') = 0", name="ck_diu_filename_no_slash"),
+        # Basename only (no slashes) - use PostgreSQL compatible functions
+        CheckConstraint("position('/' in filename) = 0", name="ck_diu_filename_no_slash"),
         CheckConstraint(
-            "edited_filename IS NULL OR instr(edited_filename, '/') = 0",
+            "edited_filename IS NULL OR position('/' in edited_filename) = 0",
             name="ck_diu_edited_filename_no_slash",
         ),
         # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
-        CheckConstraint("substr(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
-        CheckConstraint("instr(folder_rel, '\\\\') = 0", name="ck_diu_folder_no_backslash"),
+        CheckConstraint("substring(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),
+        CheckConstraint("position('\\\\' in folder_rel) = 0", name="ck_diu_folder_no_backslash"),
         # Helpful composite indexes
         Index("ix_diu_uploader_created", "uploader_id", "created_at"),
         Index("ix_diu_folder_created", "folder_rel", "created_at"),
@@ -614,7 +614,7 @@ class UserDiseaseUnitRole(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'disease_id', 'lab_unit_id', name='uq_user_disease_unit_role'),
-        CheckConstraint('(can_grade_resident = 1) OR (can_grade_resident2 = 1) OR (can_arbitrate = 1)', name='ck_user_dur_has_any_permission'),
+        CheckConstraint('(can_grade_resident = true) OR (can_grade_resident2 = true) OR (can_arbitrate = true)', name='ck_user_dur_has_any_permission'),
         Index('ix_user_dur_unit_disease', 'lab_unit_id', 'disease_id'),
         Index('ix_user_dur_user_active', 'user_id', 'active'),
     )

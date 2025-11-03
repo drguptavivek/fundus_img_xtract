@@ -56,6 +56,7 @@ class TestUserConfig:
     full_name: str
     role_names: Sequence[str]
     slot_permissions: Sequence[SlotPermission] = ()
+    all_lab_units: bool = False  # If True, assign to all lab units of the hospital
 
 
 TEST_USER_CONFIGS: List[TestUserConfig] = [
@@ -105,6 +106,12 @@ TEST_USER_CONFIGS: List[TestUserConfig] = [
         username="testManager",
         full_name="Test Community Ophthalmology Manager",
         role_names=("data_manager",),
+    ),
+    TestUserConfig(
+        username="admin",
+        full_name="System Administrator",
+        role_names=("admin",),
+        all_lab_units=True,  # Assign to all lab units of hospital ID 1
     ),
 ]
 
@@ -238,9 +245,21 @@ def add_test_users() -> None:
                     raise RuntimeError(f"Role '{role_name}' missing when configuring '{user.username}'.")
                 user.roles.append(role)
 
-            # Ensure lab unit association (exclusive to the target lab unit)
+            # Ensure lab unit association
             user.lab_units.clear()
-            user.lab_units.append(lab_unit)
+            
+            if config.all_lab_units:
+                # Get all lab units for the hospital
+                all_lab_units = db.execute(
+                    select(LabUnit).where(LabUnit.hospital_id == hospital.id)
+                ).scalars().all()
+                
+                for lab_unit_item in all_lab_units:
+                    user.lab_units.append(lab_unit_item)
+                print(f"  Assigned to all {len(all_lab_units)} lab units of hospital '{hospital.name}'")
+            else:
+                # Assign only to the target lab unit
+                user.lab_units.append(lab_unit)
 
             _apply_slot_permissions(db, user, lab_unit, disease_map, config.slot_permissions)
             db.commit()

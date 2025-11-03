@@ -34,6 +34,8 @@ TEST_USERNAMES: List[str] = [
     "testUploader",
     "testOptometrist",
     "testManager",
+    "test_user",
+    "admin",
 ]
 
 

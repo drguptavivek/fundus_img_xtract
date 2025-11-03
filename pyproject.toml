@@ -33,4 +33,5 @@ dependencies = [
     "openpyxl>=3.1.5",
     "requests>=2.32.5",
     "psutil>=7.1.2",
+    "psycopg2-binary>=2.9.9",
 ]

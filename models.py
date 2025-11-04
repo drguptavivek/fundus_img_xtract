@@ -932,7 +932,7 @@ class ViewerPresets(Base):
         CheckConstraint("filter IN ('none','redfree','greenboost','bluemono','gray','contrast')", name="ck_viewer_presets_filter"),
     )
 
-# --- Engine and Session Creation ---
+ 
 # --- Engine and Session Creation ---
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

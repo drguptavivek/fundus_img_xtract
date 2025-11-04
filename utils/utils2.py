@@ -6,12 +6,8 @@ This module contains miscellaneous helper functions that don't fit in other util
 import os
 import hashlib
 from pathlib import Path
-from typing import Union, Optional, Any
+from typing import Union,  Any
 from datetime import datetime, timezone
-from flask import flash, current_app
-from werkzeug.exceptions import NotFound
-from models import Session, DIRECT_UPLOAD_DIR
-
 
 def calculate_file_hash(filepath: Union[str, Path]) -> str:
     hash_md5 = hashlib.md5()

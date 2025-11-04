@@ -18,6 +18,8 @@ from utils.security_middleware import protect_form_submission, validate_payload_
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
 from server_side_session import mark_session_ended
+from utils.utils import with_session
+
 
 # Get the auth logger
 auth_logger = logging.getLogger("auth")
@@ -39,7 +41,6 @@ login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    from utils.utils import with_session
     with with_session() as db:
         return db.get(User, int(user_id))
 

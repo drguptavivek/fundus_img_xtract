@@ -240,3 +240,13 @@ When documenting issues found, use this format:
 4. When in doubt, prefer `transaction_scope()` for write operations and `get_db_session()` for reads
 5. Never modify session management without testing the functionality
 6. Some legacy files may be grandfathered in, but new code should always use the recommended patterns
+
+
+## FIXING AND TESTING
+- Chrerate a /TODO/blueprintname_db_session_fix.md for each blueprint or utility
+- Check and Fix each route in blueprint one by one. Document all routes checked and fixed briefly in /TODO/blueprintname_db_session_fix.md
+- After each route fix, create a test in @tests. use @test_auth_helpers.py 
+- App is already running in VS Code terminal. Do not try to restart. 
+- Create tests in ./tests/ directory
+- All app routes excepy /login are protected. See ./tests/test_auth_helpers.py  and ./tests/example_auth_usage.py  
+- Use `uv run tests/*.py` to run a test

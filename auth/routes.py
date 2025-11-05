@@ -18,13 +18,12 @@ from utils.security_middleware import protect_form_submission, validate_payload_
 # Pull your shared SQLAlchemy engine & Base session factory from models
 from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
 from server_side_session import mark_session_ended
-from utils.utils import with_session
+from db_transaction_manager import get_db_session, transaction_scope
 
 
 # Get the auth logger
 auth_logger = logging.getLogger("auth")
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 # ----- Configurable thresholds -----
 MAX_FAILS_PER_USERNAME = 5
@@ -41,8 +40,19 @@ login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    with with_session() as db:
-        return db.get(User, int(user_id))
+    # Use a fresh session that won't be closed immediately
+    # Flask-Login needs to user object to remain bound to a session
+    from models import Session as DbSession
+    db = DbSession()
+    try:
+        user = db.get(User, int(user_id))
+        # Expunge the user from session to prevent detached instance issues
+        # but keep it as a persistent object with identity
+        if user:
+            db.expunge(user)
+        return user
+    finally:
+        db.close()
 
 # ----- Helpers -----
 def _is_ip_locked(db, ip: str):
@@ -70,12 +80,11 @@ def _lock_ip(db, ip: str):
         rec.locked_until = until
     else:
         db.add(IpLock(ip_address=ip, locked_until=until))
-    db.commit()
     return until
 
 def _lock_user(db, user: User):
     user.is_locked_until = utcnow() + timedelta(hours=LOCKOUT_HOURS)
-    db.add(user); db.commit()
+    db.add(user)
     return user.is_locked_until
 
 def _recent_failed_by_username(db, username_input: str):
@@ -98,7 +107,6 @@ def _recent_failed_by_ip(db, ip: str):
 
 def _record_attempt(db, username_input: str, ip: str, success: bool):
     db.add(LoginAttempt(username_input=username_input, ip_address=ip, success=success))
-    db.commit()
 
 def _recent_password_reset_attempts_by_email(db, email: str):
     """Check how many password reset attempts were made for the email today."""
@@ -112,7 +120,6 @@ def _recent_password_reset_attempts_by_email(db, email: str):
 def _record_password_reset_attempt(db, email: str, ip: str):
     """Record a password reset attempt."""
     db.add(PasswordResetAttempt(email=email, ip_address=ip))
-    db.commit()
 
 # Global storage for user-specific events (in production, use Redis or similar)
 # This is a simple in-memory storage for demo purposes
@@ -149,7 +156,7 @@ def login():
         return redirect(url_for("homepage"))
     
     ip = get_client_ip()
-    with SessionLocal() as db:
+    with transaction_scope() as db:
         # Block if IP locked
         ip_locked, ip_until = _is_ip_locked(db, ip)
         if ip_locked:
@@ -306,7 +313,6 @@ def forgot_password():
     """
     from datetime import datetime, timedelta, timezone
     import secrets
-    from models import Session
     from utils.emails import send_otp_email
     from sqlalchemy import and_
     
@@ -336,8 +342,7 @@ def forgot_password():
             flash("Please enter a valid email address.", "error")
             return render_template("auth/forgot_password.html")
         
-        db = Session()
-        try:
+        with transaction_scope() as db:
             # Find user by email
             user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
             
@@ -363,7 +368,7 @@ def forgot_password():
                 session['password_reset_user_id'] = user.id  # Store user ID for verification
                 
                 # Send email with OTP asynchronously
-                send_otp_email(email, user.username, otp, 
+                send_otp_email(email, user.username, otp,
                               callback=email_callback)
                 
                 # To prevent user enumeration, always show the same initial message regardless of email sending result
@@ -374,9 +379,6 @@ def forgot_password():
                 # To prevent user enumeration, we still show the same message
                 flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
                 return redirect(url_for("auth.reset_password"))
-        
-        finally:
-            db.close()
     
     # GET request
     return render_template("auth/forgot_password.html")
@@ -391,7 +393,6 @@ def reset_password():
     Route to handle password reset with OTP verification.
     """
     from datetime import datetime, timezone
-    from models import Session
     
     if request.method == "POST":
         # Flask-WTF CSRF protection is automatically applied
@@ -447,7 +448,7 @@ def reset_password():
             flash("Invalid OTP. Please try again.", "error")
             return render_template("auth/reset_password.html")
 
-        with Session() as db:
+        with transaction_scope() as db:
             user = db.get(User, session_user_id)
             if user is None or (user.email or "").lower() != session_email.lower():
                 flash("Unable to reset password for this account. Please request a new OTP.", "error")
@@ -460,7 +461,6 @@ def reset_password():
             user.password_hash = hash_password(new_password)
             user.updated_at = datetime.now(timezone.utc)
             db.add(user)
-            db.commit()
 
         session.pop('password_reset_otp', None)
         session.pop('password_reset_email', None)

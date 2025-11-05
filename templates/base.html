@@ -77,10 +77,7 @@
           {% if current_user.is_authenticated %}
           
           {% if current_user_has('admin') %}
-          <li class="nav-item">
-            <a class="nav-link {{ 'active' if (request.blueprint == 'dashboard' or (request.endpoint|default('', true)).startswith('dashboard.')) else '' }}"
-              href="{{ url_for('dashboard.hospital_dashboard') }}">Dashboard</a>
-          </li>
+          
           {% endif %}
 
           {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
@@ -311,6 +308,7 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
               <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
+              <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Dashboard</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.log_viewer') }}">Logs</a></li>
               <li><a class="dropdown-item" href="{{ url_for('rate_limit_admin.index') }}">Rate Limits</a></li>

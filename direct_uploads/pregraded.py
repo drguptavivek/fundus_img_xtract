@@ -18,7 +18,7 @@ from sqlalchemy import select, func
 
 from . import bp
 from auth.roles import roles_required
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.utils2 import uniquify
@@ -52,7 +52,7 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def pregraded_upload():
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         if request.method == "POST":
             hospital_id = _to_int(request.form.get("hospital_id"))
             lab_unit_id = _to_int(request.form.get("lab_unit_id"))

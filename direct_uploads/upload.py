@@ -12,7 +12,7 @@ from utils.utils2 import uniquify
 from utils.env_loader import load_environment
 
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from utils.rate_limiter import upload_rate_limit
 from models import (
@@ -46,7 +46,7 @@ def upload_index():
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 @upload_rate_limit("60 per minute")  # Reduced to prevent abuse while allowing reasonable uploads
 def upload():
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         if request.method == "POST":
             # ---- form fields ----
             hospital_id = _to_int(request.form.get("hospital_id"))

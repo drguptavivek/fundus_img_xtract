@@ -14,7 +14,7 @@ import numpy as np
 # Import blueprint and utilities
 from .. import api_bp
 from auth.roles import roles_required
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids
 
 from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
@@ -142,7 +142,7 @@ def get_filtered_dataframe():
     Returns:
         JSON response with filtered dataframe data and metadata
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -201,7 +201,7 @@ def get_filtered_dataframe_excel():
     Returns:
         Excel file download with filtered encounter data
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -283,7 +283,7 @@ def year_month_wise_uploads():
     
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -436,7 +436,7 @@ def dr_reports_count():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -503,7 +503,7 @@ def glaucoma_reports_count():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -580,7 +580,7 @@ def images_count():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -643,7 +643,7 @@ def dr_results_distribution():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -749,7 +749,7 @@ def glaucoma_results_distribution():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -814,7 +814,7 @@ def vcdr_distribution():
     Date filters (start_date, end_date) apply to upload dates (when files were uploaded to system),
     not capture dates (when images were taken).
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)

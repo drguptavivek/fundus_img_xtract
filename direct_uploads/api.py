@@ -2,7 +2,7 @@ from flask import jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from utils.rate_limiter import api_rate_limit
 from models import User, LabUnit
 
@@ -10,7 +10,7 @@ from models import User, LabUnit
 @login_required
 @api_rate_limit("120 per minute")
 def get_lab_units(user_id):
-    with with_session() as db:
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -22,7 +22,7 @@ def get_lab_units(user_id):
 @login_required
 @api_rate_limit("120 per minute")
 def get_hospital(lab_unit_id):
-    with with_session() as db:
+    with get_db_session() as db:
         lu = db.get(LabUnit, lab_unit_id)
         if not lu:
             return jsonify({"error": "Lab unit not found"}), 404

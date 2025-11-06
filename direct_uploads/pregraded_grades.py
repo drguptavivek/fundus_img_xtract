@@ -30,7 +30,7 @@ from models import (
     utcnow,
 )
 from services.taskCreationServices import ensure_task
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.jobUtils import get_recent_zip_uploads
 from utils.dualGradingConsensusUtils import (
@@ -647,7 +647,7 @@ def _render_page(
 @bp.route("/direct/pregraded/grades", methods=["GET", "POST"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def pregraded_grades():
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
         resident2_graders = _eligible_graders(db_session, ["ophthalmologist"])
         ai_models = (
@@ -1037,7 +1037,7 @@ def pregraded_grades():
 @roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def recent_pregraded_grades():
     """Display a list of recent Excel grading files that were uploaded."""
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         # Query recent jobs that are pre-graded grade imports
         # Filter by upload_type ending with "excel"
         recent_jobs = (

@@ -1,0 +1,33 @@
+================================================================================
+FLASK APPLICATION ROUTE TEST REPORT
+================================================================================
+Generated: 2025-11-06 13:49:30.312351
+Test Duration: 1.11 seconds
+
+SUMMARY
+----------------------------------------
+Total Routes Tested: 3
+Total Tests Run: 8
+Successful Tests: 7
+Failed Tests: 1
+Success Rate: 87.5%
+Public Routes: 0
+Protected Routes: 3
+Average Response Time: 18.6ms
+
+ROLE-BASED FAILURES
+----------------------------------------
+
+DETAILED RESULTS
+----------------------------------------
+
+BLUEPRINT: MAIN
+----------------------------------------
+✗ GET / (no auth) - 200 (86.1ms)
+✓ GET / (as admin) - 200 (21.4ms)
+✓ GET /logout (no auth) - 302 (4.2ms) -> /login
+✓ GET /logout (as admin) - 302 (10.9ms) -> /login
+✓ GET /change_password (no auth) - 302 (3.2ms) -> /login
+✓ POST /change_password (no auth) - 302 (3.9ms) -> /login
+✓ GET /change_password (as admin) - 302 (10.3ms) -> /login
+✓ POST /change_password (as admin) - 302 (8.4ms) -> /login

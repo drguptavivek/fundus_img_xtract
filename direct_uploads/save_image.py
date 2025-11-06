@@ -5,7 +5,7 @@ from flask import request, jsonify, current_app
 from flask_login import current_user
 from sqlalchemy import select
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from models import DirectImageUpload, BASE_DIR, GradingTask
 from utils.fileUtils import abs_from_parts
@@ -24,7 +24,7 @@ def _normalize_task_state(state):
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def save_edited_image(upload_id: int):
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             editing_logger.info("Save image request for upload_id=%s", upload_id)
             editing_logger.info("Content-Type: %s", request.content_type)

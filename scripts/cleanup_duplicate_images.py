@@ -36,7 +36,7 @@ from models import (
     TaskTracker,
     ImageGrading,
 )
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 
 
 def find_duplicates(db_session: Session) -> List[Dict]:
@@ -262,7 +262,7 @@ def main(dry_run: bool = True, cleanup_files_flag: bool = False):
     print(f"{'[DRY RUN] ' if dry_run else ''}Starting duplicate cleanup process...")
     print(f"Timestamp: {datetime.now()}")
     
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         # Find all duplicates
         print("\n1. Finding duplicate records...")
         duplicate_groups = find_duplicates(db_session)

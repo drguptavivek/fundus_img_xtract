@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from utils.fileUtils import abs_from_parts
 
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from models import (
     DirectImageUpload,
@@ -123,7 +123,7 @@ def _require_entity(db, model, pk: int | None, label: str):
 @bp.route("/direct/upload/edit/<int:upload_id>", methods=["GET", "POST"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin")
 def edit_upload(upload_id):
-    with with_session() as db:
+    with get_db_session() as db:
         upload = db.get(DirectImageUpload, upload_id)
         if not upload:
             flash("Upload not found.", "danger")

@@ -20,10 +20,10 @@ from models import (
     LabUnit, Hospital, User, GradingTask, Grade, 
     DirectImageUpload, DirectImageVerify, ImageGrading,  
 )
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 
 
-@with_session()
+@get_db_session()
 def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
                                 end_date: Optional[datetime] = None) -> pd.DataFrame:
     """

@@ -159,10 +159,16 @@ def images_without_tasks() -> str:
         # Filter hospitals and lab units to only those the user has access to
         if is_admin_like:
             hospitals = db.query(Hospital).order_by(Hospital.name).all()
-            lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
+            lab_units = (
+                db.query(LabUnit)
+                .options(selectinload(LabUnit.hospital))
+                .order_by(LabUnit.name)
+                .all()
+            )
         else:
             lab_units = (
                 db.query(LabUnit)
+                .options(selectinload(LabUnit.hospital))
                 .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
                 .order_by(LabUnit.name)
                 .all()
@@ -172,9 +178,31 @@ def images_without_tasks() -> str:
             hospitals = (
                 db.query(Hospital)
                 .filter(Hospital.id.in_(hospital_ids))
+                .options(selectinload(Hospital.lab_units))
                 .order_by(Hospital.name)
                 .all()
             )
+            
+        # Extract hospital and lab unit data before session closes
+        hospitals_data = [
+            {
+                "id": hospital.id,
+                "name": hospital.name,
+            }
+            for hospital in hospitals
+        ]
+        
+        lab_units_data = [
+            {
+                "id": lu.id,
+                "name": lu.name,
+                "hospital": {
+                    "id": lu.hospital.id if lu.hospital else None,
+                    "name": lu.hospital.name if lu.hospital else None,
+                } if lu.hospital else None,
+            }
+            for lu in lab_units
+        ]
 
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
     filter_params = {
@@ -202,6 +230,6 @@ def images_without_tasks() -> str:
         prev_url=prev_url,
         next_url=next_url,
         filters=filter_params,
-        hospitals=hospitals,
-        lab_units=lab_units,
+        hospitals=hospitals_data,
+        lab_units=lab_units_data,
     )

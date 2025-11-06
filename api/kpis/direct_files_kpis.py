@@ -14,7 +14,7 @@ import numpy as np
 # Import blueprint and utilities
 from .. import api_bp
 from auth.roles import roles_required
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from utils.dataFrameDirectFiles import generate_direct_image_upload_df
 from models import (
     ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
@@ -176,7 +176,7 @@ def get_filtered_direct_dataframe():
     Returns:
         JSON response with filtered dataframe data and metadata
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -245,7 +245,7 @@ def get_filtered_direct_dataframe_excel():
     Returns:
         Excel file download with filtered direct data
     """
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             params = parse_filter_params()
             user_lab_unit_ids = get_user_permissions(current_user.id)
@@ -338,7 +338,7 @@ def get_upload_metrics():
         Returns:
             JSON response with upload metrics and breakdowns
         """
-        with with_session() as db:
+        with get_db_session() as db:
             try:
                 params = parse_filter_params()
                 user_lab_unit_ids = get_user_permissions(current_user.id)

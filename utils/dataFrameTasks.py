@@ -23,10 +23,10 @@ from models import (
     DirectImageUpload, EncounterFile, AdHocTaskCreation, DiseaseGrading,
     PatientEncounters, ZipFile
 )
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 
 
-@with_session()
+@get_db_session()
 def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None,
                                      end_date: Optional[datetime] = None) -> pd.DataFrame:
     """
@@ -184,7 +184,7 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
         raise
 
 
-@with_session()
+@get_db_session()
 def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None,
                                      end_date: Optional[datetime] = None) -> pd.DataFrame:
     """
@@ -374,7 +374,7 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
         raise
 
 
-@with_session()
+@get_db_session()
 def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None,
                                      end_date: Optional[datetime] = None) -> pd.DataFrame:
     """

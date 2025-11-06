@@ -13,10 +13,10 @@ from models import (
     DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
     LabUnit, Hospital, User, GradingTask, Grade, Consensus, Job, JobItem
 )
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 
 
-@with_session()
+@get_db_session()
 def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = None, 
                                      end_date: Optional[datetime] = None) -> pd.DataFrame:
     """

@@ -2,14 +2,14 @@ from flask import render_template, jsonify, redirect, url_for, flash
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from models import Job, JobItem
 
 @bp.route("/api/direct/upload/status/<job_token>", methods=["GET"])
 @login_required
 def api_upload_status(job_token):
-    with with_session() as db:
+    with get_db_session() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job or job.uploader_user_id != current_user.id:
             return jsonify({"error": "Upload job not found or unauthorized access."}), 404

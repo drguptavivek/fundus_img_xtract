@@ -20,7 +20,7 @@ from models import (
 )
 
 from . import bp
-from utils.utils import with_session
+from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids
@@ -107,7 +107,7 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def dashboard():
-    with with_session() as db_session:
+    with get_db_session() as db_session:
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         allowed_lab_unit_ids_list = list(allowed_lab_unit_ids)
         is_admin_like = current_user.has_role("admin", "data_manager")

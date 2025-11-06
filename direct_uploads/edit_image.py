@@ -6,7 +6,8 @@ from flask import render_template, redirect, url_for, flash, current_app, url_fo
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
 from . import bp
-from utils.utils import with_session, require_owner_or_roles
+from db_transaction_manager import get_db_session
+from utils.utils import require_owner_or_roles
 from auth.roles import roles_required
 from sqlalchemy import select
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
@@ -86,7 +87,7 @@ def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def edit_image(upload_id: int):
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             upload = db.get(DirectImageUpload, upload_id)
             if not upload:
@@ -152,7 +153,7 @@ def edit_image(upload_id: int):
 @bp.route("/direct/upload/restore_original/<int:upload_id>", methods=["POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def restore_original(upload_id: int):
-    with with_session() as db:
+    with get_db_session() as db:
         try:
             upload = db.get(DirectImageUpload, upload_id)
             if not upload:

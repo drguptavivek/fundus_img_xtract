@@ -85,7 +85,7 @@
                   </div>
                   {% if captcha_data.audio_available and captcha_data.audio %}
                   <div class="d-flex align-items-center gap-2">
-                    <audio id="captcha-audio" controls class="form-control" style="width: auto;">
+                    <audio id="captcha-audio" controls class="" style="width: auto; min-width: 300px;">
                       <source src="{{ url_for('auth.captcha_audio') }}" type="audio/wav">
                       Your browser does not support the audio element.
                     </audio>

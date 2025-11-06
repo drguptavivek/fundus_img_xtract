@@ -1292,3 +1292,76 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   visibility: visible;
   transform: translate(-50%, -50%) scale(1);
 }
+
+/* ================================
+   Audio Player Cross-Browser Fix
+   ================================ */
+
+/* Reset audio element styling when used with form-control class */
+audio.form-control {
+  /* Remove Bootstrap form-control styling that conflicts with audio player */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  height: auto;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+  /* Ensure proper audio player display */
+  display: inline-block;
+  width: auto;
+  min-width: 300px; /* Ensure minimum width for controls */
+  max-width: 100%;
+}
+
+/* Chrome-specific audio player fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  audio.form-control {
+    /* Chrome-specific fixes */
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+  }
+  
+  /* Ensure audio controls are visible in Chrome */
+  audio.form-control::-webkit-media-controls-panel {
+    display: flex !important;
+  }
+  
+  /* Fix play button icon visibility in Chrome */
+  audio.form-control::-webkit-media-controls-play-button {
+    display: inherit !important;
+    -webkit-appearance: media-play-button !important;
+  }
+}
+
+/* Firefox-specific fixes */
+@-moz-document url-prefix() {
+  audio.form-control {
+    /* Firefox-specific fixes */
+    min-height: 40px; /* Ensure adequate height for controls */
+  }
+}
+
+/* Safari-specific fixes */
+_::-webkit-full-page-media, _:future, :root audio.form-control {
+  /* Safari-specific fixes */
+  min-height: 40px; /* Ensure adequate height for controls */
+}
+
+/* General audio player styling for consistency */
+audio {
+  outline: none;
+  border: none;
+  background: transparent;
+}
+
+/* Ensure audio player is visible in all themes */
+[data-bs-theme="light"] audio.form-control {
+  filter: none;
+}
+
+[data-bs-theme="dark"] audio.form-control {
+  filter: none;
+}

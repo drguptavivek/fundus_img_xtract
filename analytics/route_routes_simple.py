@@ -3,7 +3,6 @@ from flask_login import current_user
 from sqlalchemy import func
 
 from auth.roles import roles_required
-from models import Session
 from .encounterUtils import get_encounters_with_non_pending_tasks
 from utils.upload_eligibility import get_user_lab_unit_ids
 from . import bp

@@ -3,18 +3,18 @@ from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
-from models import GradingTask, LabUnit, Session
+from models import GradingTask, LabUnit
 from utils.upload_eligibility import get_user_lab_unit_ids
-from .taskUtils import get_task_summary
+from utils.taskUtils import get_task_summary
 from . import bp
+from db_transaction_manager import get_db_session
 
 
 @bp.route("/viewTaskDetails/<int:task_id>", methods=["GET"])
 @roles_required("admin", "data_manager", "optometrist")
 def view_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Get user's eligible lab units
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         
@@ -53,6 +53,3 @@ def view_task_details(task_id: int):
             original_task=task,  # For additional properties not in summary
             image_object=image_object
         )
-    
-    finally:
-        db.close()

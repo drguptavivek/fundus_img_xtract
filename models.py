@@ -1,6 +1,7 @@
+import logging
 import os
 from pathlib import Path
-from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float)
+from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
@@ -928,5 +929,26 @@ if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
     engine = create_engine(DATABASE_URL)
+
+@event.listens_for(engine, "handle_error")
+def _log_sqlalchemy_error(exc_context) -> None:  # pragma: no cover - defensive logging
+    """Log uncaught SQLAlchemy exceptions with context for troubleshooting."""
+
+    statement = exc_context.statement or "<no statement>"
+    params = exc_context.parameters
+    if params:
+        params_str = str(params)
+        if len(params_str) > 512:
+            params_str = params_str[:509] + "..."
+    else:
+        params_str = "<no parameters>"
+
+    logging.getLogger("sqlalchemy.failure").error(
+        "SQLAlchemy failure: statement=%s; params=%s; is_disconnect=%s",
+        statement,
+        params_str,
+        exc_context.is_disconnect,
+        exc_info=exc_context.original_exception,
+    )
 
 Session = sessionmaker(bind=engine)

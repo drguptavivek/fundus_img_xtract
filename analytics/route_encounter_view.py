@@ -8,9 +8,10 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
-from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters, Session
+from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters
 from utils.upload_eligibility import get_user_lab_unit_ids
 from .encounterUtils import get_encounter_summary
+from db_transaction_manager import get_db_session
 
 from . import bp
 
@@ -20,8 +21,7 @@ from . import bp
 def view_encounter(encounter_id: int):
     image_exts = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Get the encounter with all necessary relationships loaded for the template
         encounter = (
             db.query(PatientEncounters)
@@ -97,9 +97,6 @@ def view_encounter(encounter_id: int):
                 full_task = next((t for t in summary['tasks'] if t['id'] == task['id']), None)
                 if full_task:
                     tasks_map[img_with_task['id']].append(full_task)
-
-    finally:
-        db.close()
 
     gallery_id = f"pswp-gallery-analytics-enc-{encounter.id}"
 

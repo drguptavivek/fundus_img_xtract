@@ -23,8 +23,8 @@ from models import (
     Hospital,
     LabUnit,
     PatientEncounters,
-    Session,
 )
+from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
 from utils.upload_eligibility import get_user_lab_unit_ids
 
@@ -44,13 +44,13 @@ def images_without_tasks() -> str:
     per_page = current_app.config.get("RESULTS_NO_TASK_PAGE_SIZE", 50)
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
-    db = Session()
-    hospitals: list[Hospital] = []
-    lab_units: list[LabUnit] = []
-    cameras: list[Camera] = []
-    diseases_all: list[Disease] = []
-    areas: list[Area] = []
-    try:
+    with get_db_session() as db:
+        hospitals: list[Hospital] = []
+        lab_units: list[LabUnit] = []
+        cameras: list[Camera] = []
+        diseases_all: list[Disease] = []
+        areas: list[Area] = []
+        
         # Check user permissions for lab unit access
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
@@ -175,9 +175,6 @@ def images_without_tasks() -> str:
                 .order_by(Hospital.name)
                 .all()
             )
-
-    finally:
-        db.close()
 
     total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
     filter_params = {

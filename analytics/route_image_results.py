@@ -25,8 +25,8 @@ from models import (
     Hospital,
     LabUnit,
     PatientEncounters,
-    Session,
 )
+from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
 from utils.upload_eligibility import get_user_lab_unit_ids
 
@@ -64,8 +64,7 @@ def image_results() -> str:
     per_page = current_app.config.get("REPORT_IMAGE_RESULTS_PAGE_SIZE", 50)
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Check user permissions for lab unit access
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         is_admin_like = current_user.has_role("admin", "data_manager")
@@ -103,7 +102,7 @@ def image_results() -> str:
         if has_ai_grade is not None:
             from sqlalchemy import exists
             # Check for AIGrade records linked to the image (via encounter_file_id or direct_image_upload_id) and disease
-  
+   
             # Check for Grade records with role_slot='ai' linked to the task
             ai_grade_from_grade_exists_subq = exists().where(
                 Grade.task_id == GradingTask.id,
@@ -150,9 +149,6 @@ def image_results() -> str:
         diseases = db.query(Disease).order_by(Disease.name).all()
         hospitals = db.query(Hospital).order_by(Hospital.name).all()
         rows = fetch_image_task_details(db, tasks)
-
-    finally:
-        db.close()
 
     total_pages = max(1, math.ceil(total / per_page)) if total else 1
     filter_params = {

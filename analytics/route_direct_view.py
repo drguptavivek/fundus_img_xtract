@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import render_template
 from flask_login import current_user
 from auth.roles import roles_required
-from models import DirectImageUpload, Session
+from models import DirectImageUpload
 from .encounterUtils import get_direct_image_summary
 from utils.upload_eligibility import get_user_lab_unit_ids
 

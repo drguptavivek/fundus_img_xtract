@@ -171,7 +171,7 @@ def delete_lookup(model_name, item_id):
             # Check if the item has related records that would prevent deletion
             from models import (
                 DiseaseGrading, LabUnit, DirectImageUpload, 
-                GradingTask, Grade, Consensus, AIGrade,
+                GradingTask, Grade, Consensus,
                 UserDiseaseUnitRole
             )
             
@@ -214,14 +214,7 @@ def delete_lookup(model_name, item_id):
                     flash(f"Cannot delete disease '{item.name}' because it has associated grades. Remove all related grades first.", "danger")
                     return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
                 
-                # Check if any AIGrade records reference this disease
-                related_ai_grades = db.execute(
-                    select(AIGrade).where(AIGrade.disease_id == item_id)
-                ).scalars().all()
-                
-                if related_ai_grades:
-                    flash(f"Cannot delete disease '{item.name}' because it has associated AI grades. Remove all related AI grades first.", "danger")
-                    return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+
                 
                 # Check if any UserDiseaseUnitRole records reference this disease
                 related_user_roles = db.execute(

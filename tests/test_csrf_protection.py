@@ -9,10 +9,9 @@ import requests
 import re
 from pathlib import Path
 import subprocess
-from dotenv import load_dotenv
-
 # Load environment variables
-load_dotenv()
+from utils.env_loader import load_environment
+load_environment()
 
 # Add the project directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))

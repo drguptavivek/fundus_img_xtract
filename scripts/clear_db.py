@@ -115,7 +115,6 @@ def clear_logs():
 
 def recreate_directories():
     """Recreate essential directories based on environment variables."""
-    from dotenv import load_dotenv
     from pathlib import Path
     
     # Load environment variables

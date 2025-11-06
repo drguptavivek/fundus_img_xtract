@@ -28,7 +28,7 @@ load_environment()
 # Add project root directory to path so we can import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dotenv import load_dotenv
+# Environment is already loaded by utils.env_loader imported at the top
 from models import BASE_DIR, Session, Base
 
 def get_expanded_database_url():

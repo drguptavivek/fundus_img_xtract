@@ -6,15 +6,15 @@ This document provides comprehensive guidelines for development practices in the
 
 ### Loading and Using Environment Variables:
 ```python
-from dotenv import load_dotenv
+from utils.env_loader import load_environment, get_env
 import os
 
 # Load environment variables from .env file
-load_dotenv()
+load_environment()
 
 # Access environment variables with defaults
-secret_key = os.getenv("FLASK_SECRET_KEY", "default-value")
-max_content_length = int(os.getenv("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
+secret_key = get_env("FLASK_SECRET_KEY", "default-value")
+max_content_length = int(get_env("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
 ```
 
 ### Environment Variable Categories:

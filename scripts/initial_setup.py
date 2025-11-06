@@ -27,7 +27,7 @@ from models import Base, engine, Session, Hospital, LabUnit, Camera, Area, Disea
 from models import UPLOAD_DIR, PROCESSED_DIR, PROCESSING_ERROR_DIR, IMAGE_DIR
 from models import DIRECT_UPLOAD_DIR, PDF_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR
 from models import SUCCESS_LOG, ERROR_LOG
-from dotenv import load_dotenv
+# Environment is already loaded by utils.env_loader imported in models
 
 # Import all core entity definitions and setup functions
 from scripts.setup_core_entities import (
@@ -62,8 +62,7 @@ def backup_database() -> bool:
     # Import backup functions from backup_db.py
     from scripts.backup_db import get_database_info, create_sqlite_backup, create_postgresql_backup
     
-    # Load environment variables
-    load_dotenv()
+    # Environment variables are already loaded by utils.env_loader
     
     # Get database information
     db_info = get_database_info()

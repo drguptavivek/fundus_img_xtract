@@ -97,7 +97,7 @@ def check_app_running():
     import requests
     from dotenv import load_dotenv
     
-    load_dotenv()
+    # Environment is already loaded by utils.env_loader
     
     base_url = os.getenv("BASE_URL", "http://127.0.0.1")
     flask_port = os.getenv("FLASK_PORT", "5001")

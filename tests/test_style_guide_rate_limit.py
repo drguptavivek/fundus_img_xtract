@@ -7,10 +7,9 @@ import os
 import requests
 import time
 import sys
-from dotenv import load_dotenv
-
 # Load environment variables
-load_dotenv()
+from utils.env_loader import load_environment
+load_environment()
 
 # Base URL of the application from environment variable
 BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5001")

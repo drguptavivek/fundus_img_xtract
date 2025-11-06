@@ -25,12 +25,11 @@ from pathlib import Path
 # Add project root directory to path so we can import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dotenv import load_dotenv
 from models import DATABASE_URL, BASE_DIR
 
 def get_database_info():
     """Extract database information from DATABASE_URL."""
-    load_dotenv()
+    # Environment is already loaded by utils.env_loader imported in models
     
     # Parse DATABASE_URL to get database type and file path
     if DATABASE_URL.startswith("sqlite"):

@@ -7,10 +7,9 @@ import json
 from bs4 import BeautifulSoup
 import os
 import sys
-from dotenv import load_dotenv
-
 # Load environment variables
-load_dotenv()
+from utils.env_loader import load_environment
+load_environment()
 
 # Add the parent directory to the path to import test_auth_helpers
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -12,14 +12,13 @@ import time
 import json
 import subprocess
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-
 # Add the project root directory to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load environment variables
-load_dotenv()
+from utils.env_loader import load_environment
+load_environment()
 
 # Base URL from environment variables
 # Note: BASE_URL already includes the port from .env

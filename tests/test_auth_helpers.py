@@ -9,14 +9,12 @@ the application endpoints during testing.
 import os
 import re
 import requests
-from dotenv import load_dotenv
 from typing import Dict, Optional
 
 # Load environment variables from .env.testing for test credentials
 # Use absolute path from project root
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env.testing'))
-# Also load .env for BASE_URL
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
+from utils.env_loader import load_environment
+load_environment()
 
 
 def get_csrf_token(session: requests.Session, base_url: str) -> Optional[str]:

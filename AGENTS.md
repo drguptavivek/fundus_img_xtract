@@ -70,12 +70,12 @@ Base.html already imports   csrf_field macro from   _forms.html
 ### Environment Variables
 **Loading and usage pattern**:
 ```python
-from dotenv import load_dotenv
+from utils.env_loader import load_environment, get_env
 import os
 
-load_dotenv()
-secret_key = os.getenv("FLASK_SECRET_KEY", "default-value")
-is_debug = str(os.getenv("DEBUG", "false")).lower() in ("1", "true", "yes")
+load_environment()
+secret_key = get_env("FLASK_SECRET_KEY", "default-value")
+is_debug = str(get_env("DEBUG", "false")).lower() in ("1", "true", "yes")
 ```
 
 ## Getting Started

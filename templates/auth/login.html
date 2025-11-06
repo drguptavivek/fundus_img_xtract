@@ -68,7 +68,7 @@
             <div class="mb-3">
               <label class="form-label" for="captcha">CAPTCHA</label>
               <div class="d-flex align-items-center gap-2">
-                <img src="{{ captcha_image }}" alt="CAPTCHA" class="captcha-image border rounded" style="height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh">
+                <img src="{{ captcha_image }}" alt="CAPTCHA" class="captcha-image border rounded" style="height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh" data-captcha-id="{{ captcha_data.captcha_id }}" data-timestamp="{{ captcha_data.timestamp }}">
                 <input
                   class="form-control"
                   name="captcha"
@@ -77,14 +77,11 @@
                   required
                   placeholder="Enter CAPTCHA code"
                 >
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="audio-captcha-btn" title="Play CAPTCHA audio">
-                  🔊 Audio
-                </button>
                 <button type="button" class="btn btn-outline-info btn-sm" id="refresh-captcha-btn" title="Refresh CAPTCHA">
                   🔄 Refresh
                 </button>
               </div>
-              <div class="form-text">Click on CAPTCHA image or refresh button to get a new code. Audio option available for accessibility.</div>
+              <div class="form-text">Click on CAPTCHA image or refresh button to get a new code.</div>
             </div>
 
             {# Optional remember-me; uncomment if you wire it in your route #}

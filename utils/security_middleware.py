@@ -278,6 +278,8 @@ def protect_form_submission(max_fields: int = 100, max_field_length: int = 1024)
             if request.method == "POST":
                 # Check number of fields
                 form_data = request.form.to_dict()
+                security_logger.info(f"Form submission - IP: {request.remote_addr}, Path: {request.path}, Fields: {list(form_data.keys())}, Count: {len(form_data)}")
+                
                 if len(form_data) > max_fields:
                     client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
                     client_ip = client_ip or request.remote_addr or "-"

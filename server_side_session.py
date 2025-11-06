@@ -56,14 +56,17 @@ class DatabaseSessionInterface(SessionInterface):
             
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = request.cookies.get(cookie_name)
+        
         db = DbSession()
         try:
             if not session_id:
-                return self.session_class(session_id=self._generate_sid(), new=True)
+                new_sid = self._generate_sid()
+                return self.session_class(session_id=new_sid, new=True)
 
             stored = db.get(FlaskSession, session_id)
             if not stored:
-                return self.session_class(session_id=self._generate_sid(), new=True)
+                new_sid = self._generate_sid()
+                return self.session_class(session_id=new_sid, new=True)
 
             updated = False
             stored.expiry = self._ensure_utc(stored.expiry)
@@ -96,6 +99,12 @@ class DatabaseSessionInterface(SessionInterface):
             return
             
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+        session_id = getattr(session, "session_id", None)
+        
+        # Add logging for debugging Safari issues
+        import logging
+        session_logger = logging.getLogger("session")
+        session_logger.info(f"Save session called - Session ID: {session_id}, Modified: {getattr(session, 'modified', False)}, New: {getattr(session, 'new', False)}, Session data: {dict(session) if session else 'None'}")
 
         # If the session is empty, stamp it as ended and remove the browser cookie
         if not session:
@@ -160,16 +169,24 @@ class DatabaseSessionInterface(SessionInterface):
         finally:
             db.close()
 
+        cookie_settings = {
+            'expires': expires,
+            'httponly': app.config.get("SESSION_COOKIE_HTTPONLY", True),
+            'secure': app.config.get("SESSION_COOKIE_SECURE", False),
+            'samesite': app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
+            'path': self.get_cookie_path(app),
+            'domain': self.get_cookie_domain(app),
+        }
+        
+        session_logger.info(f"Setting cookie - Name: {cookie_name}, Value: {session.session_id}, Settings: {cookie_settings}")
+        
         response.set_cookie(
             cookie_name,
             session.session_id,
-            expires=expires,
-            httponly=app.config.get("SESSION_COOKIE_HTTPONLY", True),
-            secure=app.config.get("SESSION_COOKIE_SECURE", False),
-            samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
-            path=self.get_cookie_path(app),
-            domain=self.get_cookie_domain(app),
+            **cookie_settings
         )
+        
+        session_logger.info(f"Cookie set successfully - Response headers: {dict(response.headers)}")
 
 
 def mark_session_ended(session_id: str, user_id: int | None = None) -> None:

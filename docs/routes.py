@@ -1,7 +1,7 @@
 # docs/routes.py
 import os
 import markdown
-from markdown_mermaid import makeExtension
+# from markdown_mermaid import makeExtension
 from flask import send_from_directory, abort, render_template_string, current_app
 from . import docs_bp
 from utils.rate_limiter import rate_limit
@@ -71,7 +71,7 @@ def api_docs_html():
     docs_dir = os.path.join(BASE_DIR, 'docs')
     try:
         with open(os.path.join(docs_dir, 'api.md'), 'r', encoding='utf-8') as f:
-            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables', makeExtension()])
+            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables'])
         
         return render_template_string(MARKDOWN_TEMPLATE, 
                                     title="API Documentation", 
@@ -106,7 +106,7 @@ def docs_index():
     docs_dir = os.path.join(BASE_DIR, 'docs')
     try:
         with open(os.path.join(docs_dir, 'README.md'), 'r', encoding='utf-8') as f:
-            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables', makeExtension()])
+            content = markdown.markdown(f.read(), extensions=['fenced_code', 'tables'])
         current_app.logger.info("--- DEBUG: Markdown Content ---")
         current_app.logger.info(content)
         current_app.logger.info("--- END DEBUG ---")

@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from urllib.parse import quote
 from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
@@ -12,7 +13,43 @@ from utils.env_loader import load_environment
 load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")
+_LOGGER = logging.getLogger(__name__)
+
+
+def _build_database_url(base_dir: Path) -> str:
+    """Construct a database URL from available environment variables."""
+
+    explicit_url = os.getenv("DATABASE_URL")
+    if explicit_url:
+        return explicit_url
+
+    postgres_db = (os.getenv("POSTGRES_APP_DB") or "").strip()
+    postgres_user = (os.getenv("POSTGRES_APP_USER") or "").strip()
+    host_override = os.getenv("POSTGRES_HOST_OVERRIDE") or os.getenv("POSTGRES_HOST_LOCAL")
+    postgres_host_raw = host_override if host_override and host_override.strip() else os.getenv("POSTGRES_HOST")
+    postgres_host = (postgres_host_raw or "127.0.0.1").strip()
+    postgres_password = os.getenv("POSTGRES_APP_PASSWORD")
+    raw_port = os.getenv("POSTGRES_PORT")
+    postgres_port = raw_port.strip() if raw_port else "5432"
+
+    if postgres_db and postgres_user:
+        user_part = quote(postgres_user, safe="")
+        password_part = ""
+        if postgres_password and postgres_password.strip():
+            password_part = f":{quote(postgres_password.strip(), safe='')}"
+
+        host_part = postgres_host or "127.0.0.1"
+        port_part = f":{postgres_port}" if postgres_port else ""
+        print(f"postgresql://{user_part}{password_part}@{host_part}{port_part}/{postgres_db} ")
+        return f"postgresql://{user_part}{password_part}@{host_part}{port_part}/{postgres_db}"
+
+    sqlite_path = base_dir / "image_manager.db"
+    _LOGGER.warning("DATABASE_URL not configured; defaulting to SQLite at %s", sqlite_path)
+    return f"sqlite:///{sqlite_path}"
+
+
+DATABASE_URL = _build_database_url(BASE_DIR)
+print(f"DATABASE_URL = {DATABASE_URL}")
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/zip_upload_zips")
 PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/zips_upload_processed")
 PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/zip_upload_processing_error")

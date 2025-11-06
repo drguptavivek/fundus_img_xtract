@@ -147,6 +147,10 @@ def login():
     from flask_login import current_user
     from utils.captcha import captcha_manager
     
+    # Log at the very beginning to catch all requests
+    ip = get_client_ip()
+    auth_logger.info(f"Login route accessed - Method: {request.method}, IP: {ip}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+    
     # If user is already logged in, redirect to homepage
     if current_user.is_authenticated:
         flash("You are already Logged In.", "info")
@@ -165,23 +169,33 @@ def login():
             # Convert to user's timezone for display
             from utils.datetime_filters import format_user_datetime
             formatted_time = format_user_datetime(ip_until)
-            captcha_data = captcha_manager.generate_captcha()
             return render_template("auth/login.html",
-                                   error=f"This IP is temporarily locked until {formatted_time}.",
-                                   captcha_image=captcha_data['image'],
-                                   captcha_data=captcha_data)
+                                   error=f"This IP is temporarily locked until {formatted_time}.")
+        
         if request.method == "POST":
             # Flask-WTF CSRF protection is automatically applied
             # No need for manual validation here
+            
+            # Log POST request details for debugging
+            auth_logger.info(f"POST request received - Form data: {dict(request.form)}")
+            auth_logger.info(f"POST request headers - Content-Type: {request.content_type}, Content-Length: {request.content_length}")
+            
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
             captcha_input = (request.form.get("captcha") or "").strip()
             
+            # Log login attempt
+            auth_logger.info(f"Login attempt - User: {username}, IP: {ip}")
+            
             # Validate CAPTCHA first
+            auth_logger.info(f"CAPTCHA validation attempt - Input: '{captcha_input}'")
             captcha_valid, captcha_message = captcha_manager.validate_captcha(captcha_input)
+            auth_logger.info(f"CAPTCHA validation result - Valid: {captcha_valid}, Message: {captcha_message}")
+            
             if not captcha_valid:
-                # Generate new CAPTCHA after failed validation
+                # Generate new CAPTCHA only when validation fails
                 captcha_data = captcha_manager.generate_captcha()
+                auth_logger.info(f"CAPTCHA validation failed - New CAPTCHA generated: {captcha_data['id']}")
                 return render_template("auth/login.html",
                                        error=captcha_message,
                                        captcha_image=captcha_data['image'],
@@ -198,6 +212,7 @@ def login():
                     # Convert to user's timezone for display
                     from utils.datetime_filters import format_user_datetime
                     formatted_time = format_user_datetime(until)
+                    # Generate new CAPTCHA for error response
                     captcha_data = captcha_manager.generate_captcha()
                     return render_template("auth/login.html",
                                            error=f"User locked due to repeated failures until {formatted_time}.",
@@ -214,6 +229,7 @@ def login():
                 # Convert to user's timezone for display
                 from utils.datetime_filters import format_user_datetime
                 formatted_time = format_user_datetime(until)
+                # Generate new CAPTCHA for error response
                 captcha_data = captcha_manager.generate_captcha()
                 return render_template("auth/login.html",
                                        error=f"This IP is locked due to repeated failures until {formatted_time}.",
@@ -239,6 +255,7 @@ def login():
                     # Convert to user's timezone for display
                     from utils.datetime_filters import format_user_datetime
                     formatted_time = format_user_datetime(user.is_locked_until)
+                    # Generate new CAPTCHA for error response
                     captcha_data = captcha_manager.generate_captcha()
                     return render_template("auth/login.html",
                                            error=f"User is locked until {formatted_time}.",
@@ -248,9 +265,8 @@ def login():
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
+                auth_logger.info(f"User login successful - User: {username}, IP: {ip}")
                 login_user(user)
-                # Log successful login
-                auth_logger.info(f"Successful login - User: {username}, IP: {ip}")
                 # Start sliding inactivity window
                 session.permanent = True  # enable cookie expiration control
                 session["last_active"] = int(time.time())
@@ -267,37 +283,48 @@ def login():
 
             # Failure path
             _record_attempt(db, username, ip, success=False)
-            # Log failed login attempt
-            auth_logger.warning(f"Failed login attempt - User: {username}, IP: {ip}")
 
             # Re-check windows after this failure to possibly trigger locks
             if _recent_failed_by_username(db, username) >= MAX_FAILS_PER_USERNAME and user:
                 until = _lock_user(db, user)
-                auth_logger.warning(f"User locked due to repeated failures - User: {username}, IP: {ip}, Until: {until.isoformat()}")
                 # Convert to user's timezone for display
                 from utils.datetime_filters import format_user_datetime
                 formatted_time = format_user_datetime(until)
+                # Generate new CAPTCHA for error response
+                captcha_data = captcha_manager.generate_captcha()
                 return render_template("auth/login.html",
-                                       error=f"User locked due to repeated failures until {formatted_time}.")
+                                       error=f"User locked due to repeated failures until {formatted_time}.",
+                                       captcha_image=captcha_data['image'],
+                                       captcha_data=captcha_data)
             if _recent_failed_by_ip(db, ip) >= MAX_FAILS_PER_IP:
                 until = _lock_ip(db, ip)
-                auth_logger.warning(f"IP locked due to repeated failures - IP: {ip}, Until: {until.isoformat()}")
                 # Convert to user's timezone for display
                 from utils.datetime_filters import format_user_datetime
                 formatted_time = format_user_datetime(until)
+                # Generate new CAPTCHA for error response
+                captcha_data = captcha_manager.generate_captcha()
                 return render_template("auth/login.html",
-                                       error=f"This IP is locked due to repeated failures until {formatted_time}.")
+                                       error=f"This IP is locked due to repeated failures until {formatted_time}.",
+                                       captcha_image=captcha_data['image'],
+                                       captcha_data=captcha_data)
 
             # Generic error (avoid username enumeration)
-            # Generate new CAPTCHA after failed login
+            # Generate new CAPTCHA for error response
             captcha_data = captcha_manager.generate_captcha()
             return render_template("auth/login.html",
                                    error="Invalid username or password.",
                                    captcha_image=captcha_data['image'],
                                    captcha_data=captcha_data)
 
-        # GET - Generate CAPTCHA for display
+        # GET - Generate and display the CAPTCHA
+        # Force session modification to ensure cookie is set
+        session["_session_initialized"] = True
+        session.modified = True
+        
         captcha_data = captcha_manager.generate_captcha()
+        auth_logger.info(f"GET request - Session initialized, keys: {list(session.keys())}")
+        auth_logger.info(f"GET request - Session cookie will be set")
+        
         return render_template("auth/login.html",
                                    captcha_image=captcha_data['image'],
                                    captcha_data=captcha_data)
@@ -309,36 +336,24 @@ def refresh_captcha():
     from utils.captcha import captcha_manager
     from flask import jsonify
     
+    # Log refresh request for debugging
+    ip = get_client_ip()
+    auth_logger.info(f"CAPTCHA refresh request - IP: {ip}")
+    
     captcha_data = captcha_manager.generate_captcha()
-    return jsonify(captcha_data)
+    auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['id']}")
+    
+    # Create JSON response
+    response = jsonify(captcha_data)
+    
+    # Add headers to prevent caching
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
-@auth_bp.route("/captcha-audio")
-@rate_limit("10 per minute")
-def captcha_audio():
-    """Return audio for the current CAPTCHA without changing it."""
-    from utils.captcha import captcha_manager, AUDIO_ENABLED
-    from flask import jsonify
-    
-    # Get the current captcha text from session
-    from flask import session
-    current_text = session.get(captcha_manager.session_key)
-    
-    if not current_text:
-        # If no captcha in session, generate a new one
-        captcha_data = captcha_manager.generate_captcha()
-        return jsonify(captcha_data)
-    
-    # Generate audio only for the current captcha text
-    audio_data = captcha_manager.generate_captcha_audio(current_text)
-    
-    result = {
-        'audio_available': AUDIO_ENABLED
-    }
-    
-    if audio_data:
-        result['audio'] = audio_data
-    
-    return jsonify(result)
+# Audio captcha functionality has been removed to simplify the system
 
 @auth_bp.route("/logout", methods=["POST", "GET"])
 @login_required
@@ -423,7 +438,7 @@ def forgot_password():
                 flash("Too many password reset attempts. Please try again tomorrow.", "error")
                 return render_template("auth/forgot_password.html")
             
-            # Record the password reset attempt
+            # Record password reset attempt
             _record_password_reset_attempt(db, email, ip)
             
             # If user exists, proceed with OTP generation and sending
@@ -432,7 +447,7 @@ def forgot_password():
                 otp = ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
                 
                 # Store OTP and expiry time temporarily (in a real app, you'd use a cache like Redis)
-                # For now, I'll store it in the session, but this is not ideal for production
+                # For now, I'll store it in session, but this is not ideal for production
                 session['password_reset_otp'] = otp
                 session['password_reset_email'] = email
                 session['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()

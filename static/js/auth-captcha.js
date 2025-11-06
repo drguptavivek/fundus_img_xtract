@@ -5,9 +5,8 @@
 document.addEventListener('DOMContentLoaded', function() {
     const captchaImg = document.getElementById('captcha-img');
     const captchaInput = document.getElementById('captcha');
-    const audioBtn = document.getElementById('audio-captcha-btn');
     const refreshBtn = document.getElementById('refresh-captcha-btn');
-    let currentAudio = null;
+    let refreshRequestInProgress = false;  // Prevent multiple refresh requests
     
     if (captchaImg) {
         // Add click event to refresh CAPTCHA
@@ -27,62 +26,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Audio CAPTCHA functionality
-    if (audioBtn) {
-        audioBtn.addEventListener('click', function() {
-            playCaptchaAudio();
-        });
-    }
-    
     /**
-     * Play audio CAPTCHA
-     */
-    function playCaptchaAudio() {
-        // Stop any currently playing audio
-        if (currentAudio) {
-            currentAudio.pause();
-            currentAudio = null;
-        }
-        
-        fetch('/captcha-audio')
-            .then(response => response.json())
-            .then(data => {
-                if (data.audio) {
-                    // Create audio element and play
-                    const audio = new Audio(data.audio);
-                    currentAudio = audio;
-                    audio.play().catch(error => {
-                        console.error('Error playing audio CAPTCHA:', error);
-                    });
-                    
-                    // Clean up after audio finishes
-                    audio.addEventListener('ended', function() {
-                        currentAudio = null;
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching audio CAPTCHA:', error);
-            });
-    }
-    
-    /**
-     * Refresh CAPTCHA image and audio availability
+     * Refresh CAPTCHA image
      */
     function refreshCaptcha() {
+        // Prevent multiple refresh requests
+        if (refreshRequestInProgress) {
+            return;
+        }
+        
+        refreshRequestInProgress = true;
+        
         fetch('/refresh-captcha')
             .then(response => response.json())
             .then(data => {
-                if (data.image) {
+                if (data && data.image) {
                     captchaImg.src = data.image;
                     // Clear CAPTCHA input field
                     if (captchaInput) {
                         captchaInput.value = '';
                         captchaInput.focus();
-                    }
-                    // Update audio button visibility
-                    if (audioBtn) {
-                        audioBtn.style.display = data.audio_available ? 'inline-block' : 'none';
                     }
                 }
             })
@@ -90,6 +53,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error refreshing CAPTCHA:', error);
                 // Fallback: reload the page if fetch fails
                 window.location.reload();
+            })
+            .finally(() => {
+                refreshRequestInProgress = false;
             });
     }
     

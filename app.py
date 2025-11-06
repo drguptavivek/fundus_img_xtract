@@ -81,12 +81,14 @@ def create_app():
    # Session cookie hygiene - updated to prevent partitioned cookie warnings in iframes
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
-        # Use None for SameSite to allow same-origin iframe access without partitioning
-        SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "None"),
+        # Use Lax for SameSite by default (more secure and compatible with all browsers)
+        SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "Lax"),
         SESSION_COOKIE_SECURE=str(os.getenv("SESSION_COOKIE_SECURE", "false")).lower() == "true",
         # Add additional cookie settings for iframe compatibility
         SESSION_COOKIE_PATH="/",
         SESSION_COOKIE_DOMAIN=None,  # Allow same-origin access
+        # Add explicit session cookie name for consistency
+        SESSION_COOKIE_NAME="session",
     )
     # --- Inactivity timeout (sliding) ---
     app.config["INACTIVITY_TIMEOUT_MINUTES"] = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 30))
@@ -102,6 +104,53 @@ def create_app():
     app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60  # 1 hour
     # app.config["WTF_CSRF_CHECK_DEFAULT"] = True  # default True
 
+    # Add CSRF logging
+    @csrf.exempt
+    def csrf_logging():
+        """Log CSRF token information for debugging"""
+        pass
+    
+    # Hook into CSRF validation
+    def csrf_protect():
+        auth_logger = logging.getLogger("auth")
+        if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
+            auth_logger.info(f"CSRF Check - Method: {request.method}, Path: {request.path}")
+            auth_logger.info(f"CSRF Check - Form has CSRF token: {'csrf_token' in request.form}")
+            auth_logger.info(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
+            
+            # Log session information
+            try:
+                session_keys = list(session.keys()) if session else []
+                auth_logger.info(f"CSRF Check - Session keys: {session_keys}")
+                if 'csrf_token' in session:
+                    auth_logger.info(f"CSRF Check - Session CSRF token exists: True")
+                else:
+                    auth_logger.info(f"CSRF Check - Session CSRF token exists: False")
+                
+                # Log session ID if available
+                if hasattr(session, 'session_id'):
+                    auth_logger.info(f"CSRF Check - Session ID: {session.session_id}")
+                
+                # Log cookie information
+                cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+                session_cookie = request.cookies.get(cookie_name)
+                auth_logger.info(f"CSRF Check - Session cookie exists: {session_cookie is not None}")
+                if session_cookie:
+                    auth_logger.info(f"CSRF Check - Session cookie value: {session_cookie[:50]}...")
+                    
+            except Exception as e:
+                auth_logger.error(f"CSRF Check - Error checking session: {e}")
+            
+            if request.form:
+                auth_logger.info(f"CSRF Check - Form keys: {list(request.form.keys())}")
+                if 'csrf_token' in request.form:
+                    auth_logger.info(f"CSRF Check - Form CSRF token value: {request.form['csrf_token'][:50]}...")
+            if request.headers:
+                csrf_headers = {k: v for k, v in request.headers.items() if 'csrf' in k.lower()}
+                auth_logger.info(f"CSRF Check - CSRF Headers: {csrf_headers}")
+    
+    # Register the CSRF protection with logging
+    app.before_request(csrf_protect)
     csrf.init_app(app)
     app.session_interface = DatabaseSessionInterface()
     
@@ -352,6 +401,15 @@ def create_app():
         # Full URL
         full_url = request.url
 
+        # Log cookie setting for login page
+        if request.path == "/login" and response.status_code == 200:
+            if hasattr(response, 'headers'):
+                set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
+                if set_cookie_headers:
+                    auth_logger.info(f"Login response - Setting cookies: {set_cookie_headers}")
+                else:
+                    auth_logger.info(f"Login response - No cookies being set")
+        
         # Build log line
         line = (
             f"{client_ip} {request.method} {full_url} "
@@ -639,6 +697,15 @@ def create_app():
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
+        # Log detailed CSRF error information
+        auth_logger = logging.getLogger("auth")
+        auth_logger.error(f"CSRF Error - Message: {e.description or 'Unknown CSRF error'}")
+        auth_logger.error(f"CSRF Error - Request: {request.method} {request.url}")
+        auth_logger.error(f"CSRF Error - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        auth_logger.error(f"CSRF Error - Referer: {request.headers.get('Referer', 'None')}")
+        auth_logger.error(f"CSRF Error - Form data keys: {list(request.form.keys()) if request.form else 'None'}")
+        auth_logger.error(f"CSRF Error - Headers: {dict(request.headers)}")
+        
         flash(e.description or "Security check failed. Please try again.", "danger")
         # send them back or home
         return redirect(request.referrer or url_for("homepage")), 400

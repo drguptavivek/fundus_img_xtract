@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const captchaImg = document.getElementById('captcha-img');
     const captchaInput = document.getElementById('captcha');
     const refreshBtn = document.getElementById('refresh-captcha-btn');
+    const playAudioBtn = document.getElementById('play-audio-btn');
+    const captchaAudio = document.getElementById('captcha-audio');
     let refreshRequestInProgress = false;  // Prevent multiple refresh requests
     
     if (captchaImg) {
@@ -23,6 +25,18 @@ document.addEventListener('DOMContentLoaded', function() {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', function() {
             refreshCaptcha();
+        });
+    }
+    
+    // Audio button functionality
+    if (playAudioBtn) {
+        playAudioBtn.addEventListener('click', function() {
+            if (captchaAudio) {
+                captchaAudio.play();
+            } else {
+                // Fallback: try to load audio
+                loadCaptchaAudio();
+            }
         });
     }
     
@@ -47,6 +61,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         captchaInput.value = '';
                         captchaInput.focus();
                     }
+                    // Refresh audio source to get new CAPTCHA audio
+                    if (captchaAudio) {
+                        // Add cache-busting parameter to force reload of new audio
+                        const timestamp = new Date().getTime();
+                        captchaAudio.src = '/captcha-audio?t=' + timestamp;
+                        captchaAudio.load(); // Reload the audio with new source
+                    }
                 }
             })
             .catch(error => {
@@ -56,6 +77,35 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .finally(() => {
                 refreshRequestInProgress = false;
+            });
+    }
+    
+    /**
+     * Load CAPTCHA audio
+     */
+    function loadCaptchaAudio() {
+        fetch('/captcha-audio')
+            .then(response => {
+                if (response.ok) {
+                    return response.blob();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to load audio');
+                    });
+                }
+            })
+            .then(audioBlob => {
+                if (captchaAudio) {
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    captchaAudio.src = audioUrl;
+                    captchaAudio.load(); // Preload the audio
+                    captchaAudio.play();
+                }
+            })
+            .catch(error => {
+                console.error('Error loading CAPTCHA audio:', error);
+                // Show user-friendly error
+                alert('Unable to load CAPTCHA audio. Please try refreshing the CAPTCHA.');
             });
     }
     

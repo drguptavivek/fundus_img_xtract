@@ -2,6 +2,7 @@
 CAPTCHA utility module for generating and validating CAPTCHAs. 
 """
 
+import logging
 import os
 import io
 import base64
@@ -14,8 +15,9 @@ from flask import session
 from piper import PiperVoice, SynthesisConfig
 import hashlib
 
-AUDIO_ENABLED = False  # Disabled - focusing on visual captcha
+AUDIO_ENABLED = True  # Enabled - audio captcha available
 
+auth_logger = logging.getLogger("auth")
 
 class CaptchaManager:
     """Manages CAPTCHA generation and validation."""
@@ -26,6 +28,25 @@ class CaptchaManager:
         self.session_expiry_key = 'captcha_expiry'
         self.captcha_length = 5
         self.expiry_minutes = 5
+        
+        # Initialize Piper TTS for audio CAPTCHA
+        self.piper_voice = None
+        if AUDIO_ENABLED:
+            try:
+                # Path to Piper model files
+                model_path = "en_US-lessac-medium.onnx"
+                config_path = "en_US-lessac-medium.onnx.json"
+                
+                if os.path.exists(model_path) and os.path.exists(config_path):
+                    self.piper_voice = PiperVoice.load(model_path, config_path)
+                else:
+                    import logging
+                    logging.getLogger("auth").warning(f"Piper model files not found: {model_path}, {config_path}")
+            except Exception as e:
+                import logging
+                logging.getLogger("auth").error(f"Failed to initialize Piper TTS: {e}")
+                # Disable audio for this instance if initialization fails
+                self.audio_enabled = False
     
     
     def generate_captcha_text(self):
@@ -74,6 +95,72 @@ class CaptchaManager:
         
         return f"data:image/png;base64,{image_str}"
     
+    def generate_captcha_audio(self, text):
+        """Generate CAPTCHA audio as base64 string using Piper TTS."""
+        if not AUDIO_ENABLED or not self.piper_voice:
+            return None
+        
+        try:
+            # Convert CAPTCHA text to spoken format
+            # Spell out characters clearly for better comprehension
+            spoken_text = " ".join(list(text.upper()))
+            
+            # Generate audio using Piper with basic config
+            syn_config = SynthesisConfig(
+                volume=0.5,  # half as loud
+                length_scale=2.0,  # twice as slow
+                noise_scale=1.0,  # more audio variation
+                noise_w_scale=1.0,  # more speaking variation
+                normalize_audio=False, # use raw audio from voice
+            )
+            
+            # Generate audio data
+            audio_generator = self.piper_voice.synthesize(
+                spoken_text,
+                syn_config
+            )
+            
+            # Convert AudioChunk objects to bytes
+            # AudioChunk has an audio_int16_bytes property that contains the raw audio data
+            audio_chunks = []
+            for audio_chunk in audio_generator:
+                # Use the audio_int16_bytes property which contains the raw audio data
+                if hasattr(audio_chunk, 'audio_int16_bytes') and audio_chunk.audio_int16_bytes:
+                    audio_chunks.append(audio_chunk.audio_int16_bytes)
+                else:
+                    # Fallback: convert to int16 array then to bytes
+                    if hasattr(audio_chunk, 'audio_int16_array') and audio_chunk.audio_int16_array is not None:
+                        audio_chunks.append(audio_chunk.audio_int16_array.tobytes())
+                    else:
+                        # Last resort: convert float array to int16 then to bytes
+                        if hasattr(audio_chunk, 'audio_float_array') and audio_chunk.audio_float_array is not None:
+                            import numpy as np
+                            int16_array = (audio_chunk.audio_float_array * 32767).astype(np.int16)
+                            audio_chunks.append(int16_array.tobytes())
+                        else:
+                            auth_logger.warning(f"AudioChunk has no audio data: {audio_chunk}")
+            
+            # Combine all audio data
+            audio_data = b''.join(audio_chunks)
+            
+            # Convert to WAV format in memory
+            audio_buffer = io.BytesIO()
+            with wave.open(audio_buffer, 'wb') as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(22050)  # Piper sample rate
+                wav_file.writeframes(audio_data)
+            
+            # Convert to base64 for web delivery
+            audio_buffer.seek(0)
+            audio_str = base64.b64encode(audio_buffer.getvalue()).decode()
+            return f"data:audio/wav;base64,{audio_str}"
+            
+        except Exception as e:
+            import logging
+            logging.getLogger("auth").error(f"Failed to generate CAPTCHA audio: {e}")
+            return None
+    
     
     def generate_captcha(self):
         """Generate a new CAPTCHA and store it in session."""
@@ -98,8 +185,12 @@ class CaptchaManager:
         auth_logger = logging.getLogger("auth")
         auth_logger.info(f"Generated CAPTCHA - ID: {captcha_id}, Code: {text}")
         
+        # Generate audio if available
+        audio_data = self.generate_captcha_audio(text) if AUDIO_ENABLED else None
+        
         result = {
             'image': image_data,
+            'audio': audio_data,
             'audio_available': AUDIO_ENABLED,
             'captcha_id': captcha_id,
             'timestamp': timestamp

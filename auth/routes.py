@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import time
 import logging
+import base64
 from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response
 from flask_login import login_user, logout_user, LoginManager, login_required, current_user
 from sqlalchemy import func, select
@@ -341,7 +342,7 @@ def refresh_captcha():
     auth_logger.info(f"CAPTCHA refresh request - IP: {ip}")
     
     captcha_data = captcha_manager.generate_captcha()
-    auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['id']}")
+    auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['captcha_id']}")
     
     # Create JSON response
     response = jsonify(captcha_data)
@@ -353,7 +354,63 @@ def refresh_captcha():
     
     return response
 
-# Audio captcha functionality has been removed to simplify the system
+@auth_bp.route("/captcha-audio")
+@rate_limit("10 per minute")
+def captcha_audio():
+    """Return CAPTCHA audio as WAV file."""
+    from utils.captcha import captcha_manager
+    from flask import session, Response
+    
+    # Check if CAPTCHA exists in session
+    if 'captcha_text' not in session:
+        return Response("No CAPTCHA found", status=404)
+    
+    # Check if CAPTCHA has expired
+    captcha_expiry = session.get('captcha_expiry', 0)
+    # Handle both ISO string and float timestamp formats
+    try:
+        if isinstance(captcha_expiry, str):
+            # Parse ISO format datetime string
+            from datetime import datetime, timezone
+            expiry_time = datetime.fromisoformat(captcha_expiry)
+            # Ensure timezone-aware comparison
+            if expiry_time.tzinfo is None:
+                expiry_time = expiry_time.replace(tzinfo=timezone.utc)
+            current_time = datetime.now(timezone.utc)
+            is_expired = current_time > expiry_time
+        else:
+            # Handle as timestamp (legacy format)
+            expiry_time = float(captcha_expiry)
+            is_expired = expiry_time < time.time()
+    except (ValueError, TypeError):
+        return Response("Invalid CAPTCHA expiry format", status=400)
+    
+    if is_expired:
+        return Response("CAPTCHA expired", status=410)
+    
+    # Generate audio for current CAPTCHA
+    captcha_text = session.get('captcha_text', '')
+    audio_data = captcha_manager.generate_captcha_audio(captcha_text)
+    
+    if not audio_data:
+        return Response("Audio generation failed", status=500)
+    
+    # Extract base64 data from data URL
+    if audio_data.startswith('data:audio/wav;base64,'):
+        audio_bytes = base64.b64decode(audio_data.split(',')[1])
+        
+        # Return as WAV file
+        return Response(
+            audio_bytes,
+            mimetype='audio/wav',
+            headers={
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        )
+    
+    return Response("Audio format error", status=500)
 
 @auth_bp.route("/logout", methods=["POST", "GET"])
 @login_required

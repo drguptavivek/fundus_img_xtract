@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
+from db_transaction_manager import get_db_session
 from models import Session, Disease, DiseaseGrading, Hospital, LabUnit, Area, Camera
 
 
@@ -16,9 +17,8 @@ def get_all_diseases() -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing disease information
     """
-    session = Session()
-    try:
-        diseases = session.query(Disease).all()
+    with get_db_session() as db:
+        diseases = db.query(Disease).all()
         return [
             {
                 'id': disease.id,
@@ -26,8 +26,6 @@ def get_all_diseases() -> List[Dict[str, Any]]:
             }
             for disease in diseases
         ]
-    finally:
-        session.close()
 
 
 def get_disease_gradings(disease_id: int) -> List[Dict[str, Any]]:
@@ -40,9 +38,8 @@ def get_disease_gradings(disease_id: int) -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing disease grading information
     """
-    session = Session()
-    try:
-        gradings = session.query(DiseaseGrading).filter(
+    with get_db_session() as db:
+        gradings = db.query(DiseaseGrading).filter(
             DiseaseGrading.disease_id == disease_id,
             DiseaseGrading.is_active == True
         ).order_by(DiseaseGrading.display_order).all()
@@ -58,8 +55,6 @@ def get_disease_gradings(disease_id: int) -> List[Dict[str, Any]]:
             }
             for grading in gradings
         ]
-    finally:
-        session.close()
 
 
 def fetch_active_disease_gradings(db, disease_id: int):
@@ -92,9 +87,8 @@ def get_all_hospitals() -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing hospital information
     """
-    session = Session()
-    try:
-        hospitals = session.query(Hospital).all()
+    with get_db_session() as db:
+        hospitals = db.query(Hospital).all()
         return [
             {
                 'id': hospital.id,
@@ -102,8 +96,6 @@ def get_all_hospitals() -> List[Dict[str, Any]]:
             }
             for hospital in hospitals
         ]
-    finally:
-        session.close()
 
 
 def get_all_lab_units() -> List[Dict[str, Any]]:
@@ -113,9 +105,8 @@ def get_all_lab_units() -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing lab unit information
     """
-    session = Session()
-    try:
-        lab_units = session.query(LabUnit).options(selectinload(LabUnit.hospital)).all()
+    with get_db_session() as db:
+        lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).all()
         return [
             {
                 'id': lab_unit.id,
@@ -125,8 +116,6 @@ def get_all_lab_units() -> List[Dict[str, Any]]:
             }
             for lab_unit in lab_units
         ]
-    finally:
-        session.close()
 
 
 def get_hosp_lab_units(hospital_id: int) -> List[Dict[str, Any]]:
@@ -139,9 +128,8 @@ def get_hosp_lab_units(hospital_id: int) -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing lab unit information
     """
-    session = Session()
-    try:
-        lab_units = session.query(LabUnit).filter(
+    with get_db_session() as db:
+        lab_units = db.query(LabUnit).filter(
             LabUnit.hospital_id == hospital_id
         ).all()
         return [
@@ -152,8 +140,6 @@ def get_hosp_lab_units(hospital_id: int) -> List[Dict[str, Any]]:
             }
             for lab_unit in lab_units
         ]
-    finally:
-        session.close()
 
 
 def get_all_areas() -> List[Dict[str, Any]]:
@@ -163,9 +149,8 @@ def get_all_areas() -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing area information
     """
-    session = Session()
-    try:
-        areas = session.query(Area).all()
+    with get_db_session() as db:
+        areas = db.query(Area).all()
         return [
             {
                 'id': area.id,
@@ -173,8 +158,6 @@ def get_all_areas() -> List[Dict[str, Any]]:
             }
             for area in areas
         ]
-    finally:
-        session.close()
 
 
 def get_all_cameras() -> List[Dict[str, Any]]:
@@ -184,9 +167,8 @@ def get_all_cameras() -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries containing camera information
     """
-    session = Session()
-    try:
-        cameras = session.query(Camera).all()
+    with get_db_session() as db:
+        cameras = db.query(Camera).all()
         return [
             {
                 'id': camera.id,
@@ -194,5 +176,3 @@ def get_all_cameras() -> List[Dict[str, Any]]:
             }
             for camera in cameras
         ]
-    finally:
-        session.close()

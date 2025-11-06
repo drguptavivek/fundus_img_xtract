@@ -1,6 +1,7 @@
 from flask import render_template, request, current_app, url_for, Response
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
+from db_transaction_manager import get_db_session
 from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, ImageGrading, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
 from auth.roles import roles_required
 import pandas as pd
@@ -9,7 +10,7 @@ import io
 
 def hospital_dashboard():
     """Show overview of all hospitals with user counts and image contributions"""
-    with Session() as db:
+    with get_db_session() as db:
         # Get all hospitals
         hospitals = db.execute(
             select(Hospital).order_by(Hospital.name.asc())
@@ -41,17 +42,18 @@ def hospital_dashboard():
             # For now, we'll just use direct uploads
             image_counts[hospital.id] = direct_image_count
 
-    return render_template(
-        "dashboard/hospitals.html", 
-        hospitals=hospitals, 
-        user_counts=user_counts, 
-        image_counts=image_counts
-    )
+        # Render template within the same session to avoid detached instance errors
+        return render_template(
+            "dashboard/hospitals.html",
+            hospitals=hospitals,
+            user_counts=user_counts,
+            image_counts=image_counts
+        )
 
 
 def hospital_detail(hospital_id):
     """Show detailed information for a specific hospital."""
-    with Session() as db:
+    with get_db_session() as db:
         hospital = db.get(Hospital, hospital_id)
         if not hospital:
             # Handle hospital not found
@@ -84,13 +86,14 @@ def hospital_detail(hospital_id):
             for user in users:
                 user_roles[user.id] = [role.name for role in user.roles]
 
-    return render_template(
-        "dashboard/hospital_detail.html",
-        hospital=hospital,
-        lab_units=lab_units,
-        users_by_lab_unit=users_by_lab_unit,
-        user_roles=user_roles
-    )
+        # Render template within the same session to avoid detached instance errors
+        return render_template(
+            "dashboard/hospital_detail.html",
+            hospital=hospital,
+            lab_units=lab_units,
+            users_by_lab_unit=users_by_lab_unit,
+            user_roles=user_roles
+        )
 
 
 from flask import render_template, request, current_app, url_for, Response
@@ -112,7 +115,7 @@ def image_list():
     export_format = request.args.get('export', None)
     search_query = request.args.get('search', '').strip()
     
-    with Session() as db:
+    with get_db_session() as db:
         # Build base queries for both image types
         direct_query = select(DirectImageUpload).options(
                 selectinload(DirectImageUpload.hospital),

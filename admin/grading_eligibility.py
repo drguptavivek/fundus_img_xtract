@@ -11,6 +11,7 @@ def manage_eligibility_users():
         users = db.execute(
             select(User).order_by(User.username.asc())
         ).scalars().all()
+        
         return render_template("admin/grading_eligibility_users.html", users=users)
 
 @roles_required('admin')
@@ -27,6 +28,7 @@ def edit_eligibility(user_id):
             diseases = db.execute(select(Disease).order_by(Disease.name.asc())).scalars().all()
             lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
             
+            # Render template within the same session to avoid detached instance errors
             return render_template(
                 "admin/edit_grading_eligibility.html",
                 user=user,

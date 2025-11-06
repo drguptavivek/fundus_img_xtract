@@ -3,6 +3,8 @@ from flask import jsonify, request
 from flask_login import login_required, current_user
 from sqlalchemy import select
 
+from db_transaction_manager import get_db_session
+
 # Import the blueprint
 from . import api_bp
 
@@ -19,7 +21,7 @@ from models import Session, User, LabUnit, Job, JobItem
 @login_required
 def get_lab_units(user_id):
     """Get lab units for a user."""
-    with Session() as db:
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -32,7 +34,7 @@ def get_lab_units(user_id):
 @login_required
 def get_hospital(lab_unit_id):
     """Get hospital for a lab unit."""
-    with Session() as db:
+    with get_db_session() as db:
         lu = db.get(LabUnit, lab_unit_id)
         if not lu:
             return jsonify({"error": "Lab unit not found"}), 404
@@ -43,7 +45,7 @@ def get_hospital(lab_unit_id):
 @login_required
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
-    with Session() as db:
+    with get_db_session() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job or job.uploader_user_id != current_user.id:
             return jsonify({"error": "Upload job not found or unauthorized access."}), 404

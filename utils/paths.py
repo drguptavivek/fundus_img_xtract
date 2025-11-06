@@ -7,8 +7,9 @@ from typing import Optional, Literal
 from flask import Response, abort, send_file
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import NotFound
-from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, Session, EncounterFile, PatientEncounters, ZipFile, DirectImageUpload
+from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, EncounterFile, PatientEncounters, ZipFile, DirectImageUpload
 from utils.fileUtils import abs_from_parts, _ensure_under_root
+from utils.utils import get_db_session
 
 
 # Type aliases for better readability
@@ -28,8 +29,7 @@ def get_image_path_by_uuid(image_uuid: str) -> Optional[str]:
     Returns:
         Optional[str]: The full path to the image file, or None if not found
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # First try to find in EncounterFile (ZIP uploads)
         result = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -72,8 +72,6 @@ def get_image_path_by_uuid(image_uuid: str) -> Optional[str]:
                 return None
             
         return None
-    finally:
-        db.close()
 
 
 def get_encounter_image_path_by_uuid(image_uuid: str) -> Optional[str]:
@@ -86,8 +84,7 @@ def get_encounter_image_path_by_uuid(image_uuid: str) -> Optional[str]:
     Returns:
         Optional[str]: The full path to the image file, or None if not found
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Join with PatientEncounters and ZipFile to get the upload date
         result = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -114,8 +111,6 @@ def get_encounter_image_path_by_uuid(image_uuid: str) -> Optional[str]:
         image_path = dated_dir / encounter_file.filename
         
         return str(image_path)
-    finally:
-        db.close()
 
 
 def get_direct_image_path_by_uuid(image_uuid: str, prefer_edited: bool = True) -> Optional[str]:
@@ -129,8 +124,7 @@ def get_direct_image_path_by_uuid(image_uuid: str, prefer_edited: bool = True) -
     Returns:
         Optional[str]: The full path to the image file, or None if not found
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == image_uuid).first()
         if not direct_image or not direct_image.filename:
             return None
@@ -149,8 +143,6 @@ def get_direct_image_path_by_uuid(image_uuid: str, prefer_edited: bool = True) -
             return str(image_path)
         except Exception:
             return None
-    finally:
-        db.close()
 
 
 def get_image_folder_path_by_uuid(image_uuid: str) -> Optional[str]:
@@ -163,8 +155,7 @@ def get_image_folder_path_by_uuid(image_uuid: str) -> Optional[str]:
     Returns:
         Optional[str]: The folder path where the image is stored, or None if not found
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # First try to find in EncounterFile (ZIP uploads)
         result = (
             db.query(EncounterFile, PatientEncounters, ZipFile)
@@ -198,8 +189,6 @@ def get_image_folder_path_by_uuid(image_uuid: str) -> Optional[str]:
                 return None
             
         return None
-    finally:
-        db.close()
 
 
 def get_base_directory(image_type: ImageType, file_type: FileType = "image") -> Path:

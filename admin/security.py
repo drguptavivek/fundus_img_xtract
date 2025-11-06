@@ -77,6 +77,8 @@ def manage_roles():
     # GET: show current roles
     with get_db_session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+        
+        # Render template within the same session to avoid detached instance errors
         return render_template("admin/roles.html", roles=roles)
 
 
@@ -94,16 +96,17 @@ def role_usage():
     # Get all roles from database
     with get_db_session() as db:
         all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
-    
-    # Sort routes by file and function name
-    routes_info.sort(key=lambda x: (x['file'], x['function']))
-    
-    return render_template(
-        "admin/role_usage.html",
-        routes_info=routes_info,
-        role_stats=role_stats,
-        all_roles=all_roles
-    )
+        
+        # Sort routes by file and function name
+        routes_info.sort(key=lambda x: (x['file'], x['function']))
+        
+        # Render template within the same session to avoid detached instance errors
+        return render_template(
+            "admin/role_usage.html",
+            routes_info=routes_info,
+            role_stats=role_stats,
+            all_roles=all_roles
+        )
 
 
 @roles_required("admin")
@@ -123,10 +126,11 @@ def routes_by_role(role_name):
     # Get all roles from database
     with get_db_session() as db:
         all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
-    
-    return render_template(
-        "admin/routes_by_role.html",
-        role_name=role_name,
-        routes_info=matching_routes,
-        all_roles=all_roles
-    )
+        
+        # Render template within the same session to avoid detached instance errors
+        return render_template(
+            "admin/routes_by_role.html",
+            role_name=role_name,
+            routes_info=matching_routes,
+            all_roles=all_roles
+        )

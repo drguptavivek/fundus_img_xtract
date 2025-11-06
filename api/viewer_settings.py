@@ -8,8 +8,8 @@ from . import api_bp
 @login_required
 def get_viewer_settings():
     """Get current user's viewer settings."""
-    from utils.utils import with_session
-    with with_session() as db:
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
         return get_viewer_settings_impl(db)
 
 def get_viewer_settings_impl(db):
@@ -50,8 +50,8 @@ def get_viewer_settings_impl(db):
 @login_required
 def save_viewer_settings():
     """Save current user's viewer settings."""
-    from utils.utils import with_session
-    with with_session() as db:
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
         return save_viewer_settings_impl(db)
 
 def save_viewer_settings_impl(db):
@@ -100,8 +100,8 @@ def save_viewer_settings_impl(db):
 @login_required
 def get_viewer_presets():
     """Get current user's viewer presets."""
-    from utils.utils import with_session
-    with with_session() as db:
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
         return get_viewer_presets_impl(db)
 
 def get_viewer_presets_impl(db):
@@ -135,8 +135,8 @@ def get_viewer_presets_impl(db):
 @login_required
 def save_viewer_preset(slot_number):
     """Save a viewer preset for the current user in the specified slot (1-5)."""
-    from utils.utils import with_session
-    with with_session() as db:
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
         return save_viewer_preset_impl(db, slot_number)
 
 def save_viewer_preset_impl(db, slot_number):
@@ -186,8 +186,8 @@ def save_viewer_preset_impl(db, slot_number):
 @login_required
 def delete_viewer_preset(slot_number):
     """Delete a viewer preset for the current user in the specified slot (1-5)."""
-    from utils.utils import with_session
-    with with_session() as db:
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
         return delete_viewer_preset_impl(db, slot_number)
 
 def delete_viewer_preset_impl(db, slot_number):

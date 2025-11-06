@@ -1,16 +1,16 @@
 from flask import jsonify, request
 from flask_login import current_user, login_required
-from models import LabUnit, Session, User, Hospital
+from models import LabUnit, User, Hospital
 from auth.roles import roles_required, login_required
 from utils.upload_eligibility import get_user_lab_unit_ids, get_user_lab_unit_ids_no_admin_override
+from utils.utils import get_db_session
 from . import api_bp
 
 @api_bp.route("/eligibleLabUnit", methods=["GET"])
 @login_required
 def get_eligible_lab_units():
     """API endpoint to get eligible lab units for the current user or a specified user ID."""
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Check if a specific user ID is provided in the query parameters
         user_id_param = request.args.get("user_id", type=int)
         
@@ -42,15 +42,13 @@ def get_eligible_lab_units():
             'user_id': user_id,
             'eligible_lab_units': eligible_lab_units
         })
-    finally:
-        db.close()
+    
 
 @api_bp.route("/eligibleLabUnitCurrentUser", methods=["GET"])
 @login_required
 def get_eligible_lab_units_currentUser():
     """API endpoint to get eligible lab units for the current user only (regardless of admin status)."""
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Always use the current user's ID, regardless of admin status
         user_id = current_user.id
         
@@ -95,5 +93,3 @@ def get_eligible_lab_units_currentUser():
             'eligible_lab_units': eligible_lab_units,
             'eligible_hospitals': eligible_hospitals
         })
-    finally:
-        db.close()

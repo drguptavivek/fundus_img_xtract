@@ -38,12 +38,12 @@ def list_and_create_ai_model():
     with get_db_session() as db:
         stmt = select(AIModel).order_by(AIModel.id)
         items = db.scalars(stmt).all()
-
-    return render_template(
-        "admin/ai_model_list.html",
-        items=items,
-        title="AI Models",
-    )
+        
+        return render_template(
+            "admin/ai_model_list.html",
+            items=items,
+            title="AI Models",
+        )
 
 
 @roles_required("admin")
@@ -83,6 +83,7 @@ def edit_ai_model(item_id):
                     flash(f"AI Model '{name}' updated.", "success")
                     return redirect(url_for("admin.list_and_create_ai_model"))
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "admin/ai_model_edit.html",
             item=item,

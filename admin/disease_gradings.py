@@ -125,6 +125,7 @@ def list_disease_gradings():
         
         diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
         
+        # Render template within the same session to avoid detached instance errors
         return render_template("admin/disease_gradings.html", gradings=gradings, diseases=diseases)
 
 

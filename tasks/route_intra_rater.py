@@ -515,6 +515,7 @@ def intra_rater_dashboard() -> str:
 
         gradings_map = _load_gradings_map(db, result['tasks'])
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "tasks/intra_rater/queue.html",
             tasks=result['tasks'],
@@ -652,6 +653,7 @@ def intra_rater_admin() -> str:
 
         default_cooldown = get_default_cooldown_days(db)
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "tasks/intra_rater/admin_dashboard.html",
             diseases=disease_list,

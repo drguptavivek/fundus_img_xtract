@@ -2,23 +2,23 @@ import os
 from pathlib import Path
 from typing import Tuple
 from flask import send_file, abort, flash, make_response
-from models import DirectImageVerify, Disease, Session, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from sqlalchemy import  and_, select
+from db_transaction_manager import get_db_session
 
 
 
 
 def encounterImageByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         result = (db.query(EncounterFile, PatientEncounters, ZipFile).join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(EncounterFile.uuid == uuid).first())
-        if not result or not result[0].filename: 
+        if not result or not result[0].filename:
             flash(f"Error: Encounter image not found with UUID: {uuid}", "danger")
             abort(404)
         encounter_file, patient_encounter, zip_file = result
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         image_path_str = str(IMAGE_DIR / upload_date_str / encounter_file.filename)
-        if not os.path.exists(image_path_str): 
+        if not os.path.exists(image_path_str):
             flash(f"Error: Image file not found on disk: {uuid}", "danger")
             abort(404)
         file_extension = Path(encounter_file.filename).suffix.lower()
@@ -33,11 +33,9 @@ def encounterImageByUUID(uuid: str):
         response.headers['Expires'] = '0'
         
         return response
-    finally: db.close()
 
 def encounterDrReportByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(f"DR PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
@@ -82,11 +80,9 @@ def encounterDrReportByUUID(uuid: str):
         
         current_app.logger.info(f"DR PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
         return response
-    finally: db.close()
 
 def encounterGlaucomaReportByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(f"PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
@@ -134,14 +130,12 @@ def encounterGlaucomaReportByUUID(uuid: str):
         
         current_app.logger.info(f"PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
         return response
-    finally: db.close()
 
 def encounterPDFByUUID(uuid: str):
     """
     Serve the original PDF file from an encounter by UUID.
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         result = (
             db.query(EncounterFilePDF, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
@@ -162,17 +156,14 @@ def encounterPDFByUUID(uuid: str):
             abort(404)
         
         return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
-    finally:
-        db.close()
 
 def directImgOrigByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
-        if not direct_image or not direct_image.filename: 
+        if not direct_image or not direct_image.filename:
             abort(404)
         image_path_str = str(DIRECT_UPLOAD_DIR / direct_image.folder_rel / direct_image.filename)
-        if not os.path.exists(image_path_str): 
+        if not os.path.exists(image_path_str):
             flash(f"Error: Original Image not found with UUID: {uuid}", "danger")
             abort(404)
         file_extension = Path(direct_image.filename).suffix.lower()
@@ -187,17 +178,15 @@ def directImgOrigByUUID(uuid: str):
         response.headers['Expires'] = '0'
         
         return response
-    finally: db.close()
 
 def directImgEdByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
-        if not direct_image or not direct_image.edited_filename: 
+        if not direct_image or not direct_image.edited_filename:
             flash(f"Error: No Edited Image for UUID: {uuid}", "danger")
             abort(404)
         image_path_str = str(DIRECT_UPLOAD_DIR / direct_image.folder_rel / "edited" / direct_image.edited_filename)
-        if not os.path.exists(image_path_str): 
+        if not os.path.exists(image_path_str):
             flash(f"Error: Edited Image not found with UUID: {uuid}", "danger")
             abort(404)
         file_extension = Path(direct_image.edited_filename).suffix.lower()
@@ -212,13 +201,11 @@ def directImgEdByUUID(uuid: str):
         response.headers['Expires'] = '0'
         
         return response
-    finally: db.close()
 
 def directImgFinalByUUID(uuid: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
-        if not direct_image or (not direct_image.filename and not direct_image.edited_filename): 
+        if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             flash(f"Error: Image not found with UUID: {uuid}", "danger")
             abort(404)
         if direct_image.edited_filename:
@@ -227,7 +214,7 @@ def directImgFinalByUUID(uuid: str):
         else:
             image_path_str = str(DIRECT_UPLOAD_DIR / direct_image.folder_rel / direct_image.filename)
             filename = direct_image.filename
-        if not os.path.exists(image_path_str): 
+        if not os.path.exists(image_path_str):
             flash(f"Error: Image not found with UUID: {uuid}", "danger")
             abort(404)
         file_extension = Path(filename).suffix.lower()
@@ -243,7 +230,6 @@ def directImgFinalByUUID(uuid: str):
         response.headers['Expires'] = '0'
         
         return response
-    finally: db.close()
 
 
 def imgForGradingByUUID(uuid: str):
@@ -254,8 +240,7 @@ def imgForGradingByUUID(uuid: str):
     Shows appropriate error messages using flash if issues occur.
     Only one match is returned - encounter images have priority.
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Check if both encounter image and direct upload image exist with the same UUID
         encounter_image = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
@@ -267,16 +252,12 @@ def imgForGradingByUUID(uuid: str):
         
         # If only encounter image exists, serve it
         if encounter_image:
-            db.close()  # Close the session before calling the function
             return encounterImageByUUID(uuid)
         
         # If only direct image exists, serve it
         if direct_image:
-            db.close()  # Close the session before calling the function
             return directImgFinalByUUID(uuid)
         
         # If neither exists, show error message
         flash(f"Error: Image not found with UUID: {uuid}", "danger")
         abort(404)
-    finally:
-        db.close()

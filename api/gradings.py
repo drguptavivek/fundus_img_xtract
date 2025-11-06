@@ -2,8 +2,9 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
-from models import Session, ImageGrading, EncounterFile, DirectImageUpload
+from models import ImageGrading, EncounterFile, DirectImageUpload
 from auth.roles import roles_required
+from utils.utils import get_db_session
 
 bp = Blueprint('api_gradings', __name__, url_prefix='/api')
 
@@ -12,8 +13,7 @@ bp = Blueprint('api_gradings', __name__, url_prefix='/api')
 @roles_required("admin", "resident", "ophthalmologist")
 def get_gradings():
     """API endpoint to fetch filtered and paginated gradings data"""
-    db = Session()
-    try:
+    with get_db_session() as db:
         page = request.args.get('page', default=1, type=int) or 1
         page = max(1, page)
         per_page = 20
@@ -84,9 +84,6 @@ def get_gradings():
         }
         
         return jsonify(response_data)
-        
-    finally:
-        db.close()
 
 def get_revise_url(grading):
     """Helper function to generate revise URL for a grading"""

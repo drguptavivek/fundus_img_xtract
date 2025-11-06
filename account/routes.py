@@ -5,6 +5,7 @@ from flask import render_template, request, redirect, url_for, flash, current_ap
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from db_transaction_manager import get_db_session
 from models import Session, User
 from utils.timezone_choices import (
     TIMEZONE_CHOICES,
@@ -41,11 +42,12 @@ def profile():
         if not ok:
             flash(msg, "danger")
             # include roles on error
-            with Session() as db:
+            with get_db_session() as db:
                 roles = db.execute(
                     select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
                 ).scalar_one().roles or []
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            # Render template within the same session to avoid detached instance errors
             return render_template("account/profile.html",
                                    full_name=full_name, designation=designation, email=email, phone=phone,
                                    timezone=timezone_pref,
@@ -58,11 +60,12 @@ def profile():
         ok, msg = validate_phone(phone)
         if not ok:
             flash(msg, "danger")
-            with Session() as db:
+            with get_db_session() as db:
                 roles = db.execute(
                     select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
                 ).scalar_one().roles or []
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            # Render template within the same session to avoid detached instance errors
             return render_template("account/profile.html",
                                    full_name=full_name, designation=designation, email=email, phone=phone,
                                    timezone=timezone_pref,
@@ -74,11 +77,12 @@ def profile():
 
         if timezone_pref and timezone_pref not in TIMEZONE_VALUES:
             flash("Please select a valid timezone.", "danger")
-            with Session() as db:
+            with get_db_session() as db:
                 roles = db.execute(
                     select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
                 ).scalar_one().roles or []
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            # Render template within the same session to avoid detached instance errors
             return render_template("account/profile.html",
                                    full_name=full_name, designation=designation, email=email, phone=phone,
                                    timezone=timezone_pref,
@@ -89,7 +93,7 @@ def profile():
                                    roles=[r.name for r in roles])
 
         stored_timezone = None
-        with Session() as db:
+        with get_db_session() as db:
             # Reload your user to update
             user = db.get(User, current_user.id)
             if not user:
@@ -116,12 +120,13 @@ def profile():
         return redirect(url_for("account.profile"))
 
     # GET — prefill with current data + roles
-    with Session() as db:
+    with get_db_session() as db:
         user = db.execute(
             select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
         ).scalar_one()
         roles = [r.name for r in (user.roles or [])]
     default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+    # Render template within the same session to avoid detached instance errors
     return render_template(
         "account/profile.html",
         roles=roles,
@@ -145,7 +150,7 @@ def change_password_self():
         confirm_pw = request.form.get("confirm_password") or ""
 
         # Verify current password
-        with Session() as db:
+        with get_db_session() as db:
             user = db.get(User, current_user.id)
             if not user:
                 flash("User not found.", "danger")
@@ -153,6 +158,7 @@ def change_password_self():
 
             if not verify_password(user.password_hash, current_pw):
                 flash("Current password is incorrect.", "danger")
+                # Render template within the same session to avoid detached instance errors
                 return render_template("account/change_password.html")
 
             ok, msg = check_password_strength(new_pw, min_len=10)

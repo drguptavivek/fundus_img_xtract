@@ -43,7 +43,7 @@ def direct_files() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
     # Use the API module to get filtered dataframe
-    from utils.utils import with_session
+    from db_transaction_manager import get_db_session
     
     with with_session() as db:
         # Parse filter parameters using API utility

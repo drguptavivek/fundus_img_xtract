@@ -242,6 +242,7 @@ def review_task_details(task_id: int):
         # Determine which image object to use for the viewer
         image_object = task.encounter_file if task.encounter_file else task.direct_image
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "review/task_detail_review.html",
             task=task_details,

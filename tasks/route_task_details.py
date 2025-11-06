@@ -47,6 +47,7 @@ def view_task_details(task_id: int):
         # Determine which image object to use for the viewer
         image_object = task.encounter_file if task.encounter_file else task.direct_image
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "tasks/task_details.html",
             task=task_details,

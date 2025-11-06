@@ -1,5 +1,6 @@
 from flask import render_template
 from sqlalchemy import select, func, or_, distinct, case, and_
+from db_transaction_manager import get_db_session
 from models import (
     Session, EncounterFile, PatientEncounters, ImageGrading,
     GlaucomaReport, GlaucomaResultsCleaned, DiabeticRetinopathyReport,
@@ -11,7 +12,7 @@ def homepage():
     # Compute counts for the public home (unauthenticated visitors)
     img_exts = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"]  # same set the app serves
     
-    with Session() as db:
+    with get_db_session() as db:
         # Basic counts
         img_filters = [func.lower(EncounterFile.filename).like(f"%{ext}") for ext in img_exts]
         images_count = db.execute(

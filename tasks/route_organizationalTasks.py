@@ -93,4 +93,5 @@ def all_tasks() -> str:
             'user_lab_unit_ids': user_lab_unit_ids
         }
         
+        # Render template within the same session to avoid detached instance errors
         return render_template("tasks/all_tasks.html", **context)

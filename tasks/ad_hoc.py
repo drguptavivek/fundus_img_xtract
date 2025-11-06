@@ -59,6 +59,7 @@ def index():
         'camera_id': '', 'disease_id': '', 'area_id': '', 'is_mydriatic': None,
         'has_dr_report': None, 'has_glaucoma_report': None, 'capture_start': '', 'capture_end': ''
     }
+    # Render template within the same session to avoid detached instance errors
     return render_template('tasks/ad_hoc/index.html', diseases=diseases, hospitals=hospitals, lab_units=lab_units, cameras=cameras, areas=areas, filters=default_filters)
 
 
@@ -103,6 +104,7 @@ def list_batches():
                 'disease_names': disease_names,
                 'summary': summary,
             })
+    # Render template within the same session to avoid detached instance errors
     return render_template('tasks/ad_hoc/list.html', rows=rows, focus_id=ad_hoc_id)
 
 
@@ -172,6 +174,7 @@ def detail(ad_hoc_id: int):
                 'lab_unit': lab_name_by_id.get(t.lab_unit_id, str(t.lab_unit_id)),
                 'state': t.state,
             })
+    # Render template within the same session to avoid detached instance errors
     return render_template('tasks/ad_hoc/detail.html', batch=batch_dict, disease_names=disease_names, filters=pretty_filters, summary=summary, task_rows=task_rows)
 
 

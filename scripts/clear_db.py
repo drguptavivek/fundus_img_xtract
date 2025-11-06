@@ -29,7 +29,6 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import (
-    Session,
     # Import all models for complete database clearing
     # Viewer settings and presets
     ViewerPresets, ViewerSettings,
@@ -159,9 +158,10 @@ def recreate_directories():
 
 def clear_database():
     """Clear all data from the database in the correct order."""
-    db = Session()
+    from utils.utils import get_db_session
     
-    try:
+    with get_db_session() as db:
+        try:
         print("Starting to clear the database...")
         
         # Clear viewer settings and presets (user-specific data)
@@ -308,11 +308,9 @@ def clear_database():
         print("Database cleared successfully!")
         
     except Exception as e:
-        print(f"Error clearing database: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
+            print(f"Error clearing database: {e}")
+            db.rollback()
+            raise
 
 
 def reset_all():

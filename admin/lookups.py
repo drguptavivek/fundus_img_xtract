@@ -77,6 +77,7 @@ def list_and_create_lookup(model_name):
         items = db.scalars(stmt).all()
         hospitals = db.scalars(select(Hospital).order_by(Hospital.id)).all() if model_name == "lab_unit" else None
 
+        # Render template within the same session to avoid detached instance errors
         return render_template(
             "admin/lookup_list.html",
             items=items,
@@ -108,6 +109,7 @@ def edit_lookup(model_name, item_id):
         if request.method == "GET":
             hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all() if model_name == "lab_unit" else None
             
+            # Render template within the same session to avoid detached instance errors
             return render_template(
                 "admin/lookup_edit.html",
                 item=item,
@@ -159,7 +161,7 @@ def delete_lookup(model_name, item_id):
             flash("Core diseases (Glaucoma, DR, AMD) cannot be deleted.", "danger")
             return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
     
-    with Session() as db:
+    with transaction_scope() as db:
         item = db.get(Model, item_id)
         if not item:
             flash("Item not found.", "danger")

@@ -9,8 +9,9 @@ import logging
 
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
-from models import Session, IntraRaterTask
+from models import IntraRaterTask
 from services.intra_rater_service import STATE_PENDING
+from utils.utils import get_db_session
 
 # Set up logger for intra-rater task debugging
 intra_rater_logger = logging.getLogger("intra_rater_debug")
@@ -36,8 +37,9 @@ def get_next_intra_rater_task(
     close_db = False
     session = db
     if session is None:
-        session = Session()
-        close_db = True
+        # Use get_db_session context manager when no session provided
+        with get_db_session() as new_session:
+            return get_next_intra_rater_task(user_id, disease_id, db=new_session)
 
     try:
         intra_rater_logger.info(f"Searching for intra-rater task - user_id: {user_id}, disease_id: {disease_id}")

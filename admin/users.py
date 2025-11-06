@@ -23,6 +23,8 @@ def users_list():
             .options(selectinload(User.roles), selectinload(User.lab_units).selectinload(LabUnit.hospital))
             .order_by(User.username.asc())
         ).scalars().all()
+        
+        # Render template within the same session to avoid detached instance errors
         return render_template("admin/users.html", users=users)
 
 

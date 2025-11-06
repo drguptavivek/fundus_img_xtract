@@ -4,7 +4,8 @@ Utility functions for handling job data, particularly for ZIP uploads
 """
 from typing import List, Dict, Any
 from sqlalchemy.orm import selectinload
-from models import Session, Job, LabUnit
+from models import Job, LabUnit
+from utils.utils import get_db_session
 
 
 def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> List[Dict[str, Any]]:
@@ -18,8 +19,7 @@ def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> Li
     Returns:
         List of dictionaries containing job information and status counts
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Query for jobs of specified type
         query = (
             db.query(Job)
@@ -68,5 +68,3 @@ def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> Li
             })
         
         return result
-    finally:
-        db.close()

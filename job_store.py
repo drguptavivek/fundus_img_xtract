@@ -3,7 +3,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy.orm import Session as DBSession, selectinload
-from models import Session, Job, JobItem, LabUnit
+from models import Job, JobItem, LabUnit
+from db_transaction_manager import transaction_scope
 
 def db_create_job(
     filenames: List[str],
@@ -15,8 +16,7 @@ def db_create_job(
     lab_unit_id: Optional[int] = None,
     upload_type: Optional[str] = None,
 ) -> str:
-    db: DBSession = Session()
-    try:
+    with transaction_scope() as db:
         job = Job(
             token=uuid.uuid4().hex,
             status="queued",
@@ -41,14 +41,10 @@ def db_create_job(
             for fn in filenames
         ]
         db.add_all(items)
-        db.commit()
         return job.token
-    finally:
-        db.close()
 
 def db_set_job_status(job_token: str, status: str, error: str | None = None) -> None:
-    db = Session()
-    try:
+    with transaction_scope() as db:
         job = (
             db.query(Job)
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
@@ -61,13 +57,9 @@ def db_set_job_status(job_token: str, status: str, error: str | None = None) -> 
         if error:
             job.error = error
         db.add(job)
-        db.commit()
-    finally:
-        db.close()
 
 def db_set_item_state(job_token: str, filename: str, state: str, detail: str | None = None) -> None:
-    db = Session()
-    try:
+    with transaction_scope() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job:
             return
@@ -83,23 +75,16 @@ def db_set_item_state(job_token: str, filename: str, state: str, detail: str | N
         if detail:
             item.detail = detail
         db.add(item)
-        db.commit()
-    finally:
-        db.close()
 
 def db_any_item_error(job_token: str) -> bool:
-    db = Session()
-    try:
+    with transaction_scope() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job:
             return True
         return any(it.state == "error" for it in job.items)
-    finally:
-        db.close()
 
 def db_get_job_payload(job_token: str) -> dict | None:
-    db = Session()
-    try:
+    with transaction_scope() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job:
             return None
@@ -132,5 +117,3 @@ def db_get_job_payload(job_token: str) -> dict | None:
                 for it in job.items
             ],
         }
-    finally:
-        db.close()

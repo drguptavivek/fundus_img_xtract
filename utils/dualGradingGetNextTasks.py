@@ -4,12 +4,13 @@ Utility functions for getting the next eligible dual grading tasks.
 
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_, func
-from models import Session, GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
+from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
 from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
 from uuid import uuid4
 from utils.env_loader import load_environment
+from db_transaction_manager import transaction_scope
 
 load_environment()
 
@@ -138,41 +139,55 @@ def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: 
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for resident role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_resident_task_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_resident_task_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_resident_task_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible resident task using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be a resident or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for resident role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task
+    for attempt in range(3):
+        # Get filtered tasks
+        tasks = _get_filtered_tasks(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
         
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task
-        for attempt in range(3):
-            # Get filtered tasks
-            tasks = _get_filtered_tasks(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
-            
-            # If we have tasks, return a random one
-            if tasks:
-                return random.choice(tasks)
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # If we have tasks, return a random one
+        if tasks:
+            return random.choice(tasks)
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
 
 
 def get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
@@ -186,41 +201,55 @@ def get_next_eligible_resident2_task(user_id: int, disease_id: int, lab_unit_id:
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for resident2 role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_resident2_task_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_resident2_task_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_resident2_task_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible resident2 task using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for resident2 role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task
+    for attempt in range(3):
+        # Get filtered tasks
+        tasks = _get_filtered_tasks(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
         
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task
-        for attempt in range(3):
-            # Get filtered tasks
-            tasks = _get_filtered_tasks(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
-            
-            # If we have tasks, return a random one
-            if tasks:
-                return random.choice(tasks)
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # If we have tasks, return a random one
+        if tasks:
+            return random.choice(tasks)
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
 
 
 def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
@@ -234,41 +263,55 @@ def get_next_eligible_arbitrator_task(user_id: int, disease_id: int, lab_unit_id
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for arbitrator role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_arbitrator_task_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_arbitrator_task_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_arbitrator_task_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible arbitrator task using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for arbitrator role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task
+    for attempt in range(3):
+        # Get filtered tasks
+        tasks = _get_filtered_tasks(db, user_id, disease_id, "arbitrator", eligible_lab_unit_ids)
         
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task
-        for attempt in range(3):
-            # Get filtered tasks
-            tasks = _get_filtered_tasks(db, user_id, disease_id, "arbitrator", eligible_lab_unit_ids)
-            
-            # If we have tasks, return a random one
-            if tasks:
-                return random.choice(tasks)
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # If we have tasks, return a random one
+        if tasks:
+            return random.choice(tasks)
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
 
 
 def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: str, eligible_lab_unit_ids: list):
@@ -340,38 +383,52 @@ def get_next_eligible_resident_task_atomic(user_id: int, disease_id: int, lab_un
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for resident role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_resident_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_resident_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_resident_task_atomic_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible resident task with atomic locking using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be a resident or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for resident role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
-        
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task with atomic locking
-        for attempt in range(3):
-            task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
-            if task:
-                return task
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task with atomic locking
+    for attempt in range(3):
+        task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
+        if task:
+            return task
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
 
 
 def get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
@@ -385,38 +442,52 @@ def get_next_eligible_resident2_task_atomic(user_id: int, disease_id: int, lab_u
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for resident2 role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_resident2_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_resident2_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_resident2_task_atomic_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible resident2 task with atomic locking using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for resident2 role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "resident2")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
-        
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task with atomic locking
-        for attempt in range(3):
-            task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
-            if task:
-                return task
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task with atomic locking
+    for attempt in range(3):
+        task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident2", eligible_lab_unit_ids)
+        if task:
+            return task
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
 
 
 def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
@@ -430,35 +501,49 @@ def get_next_eligible_arbitrator_task_atomic(user_id: int, disease_id: int, lab_
         db: Optional database session (if not provided, a new session will be created)
         
     Returns:
-        The next eligible GradingTask, None if no tasks are available, 
+        The next eligible GradingTask, None if no tasks are available,
         or a helpful message if no suitable tasks are found after 3 tries
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
-    try:
-        # Get user's eligible lab unit IDs for arbitrator role and specified disease
-        eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
-        if eligible_lab_unit_ids is None:
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_next_eligible_arbitrator_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_next_eligible_arbitrator_task_atomic_with_session(user_id, disease_id, lab_unit_id, db)
+
+
+def _get_next_eligible_arbitrator_task_atomic_with_session(user_id: int, disease_id: int, lab_unit_id: Optional[int], db) -> Optional[Union[GradingTask, str]]:
+    """
+    Internal function that gets the next eligible arbitrator task with atomic locking using an existing session.
+    
+    Args:
+        user_id: The ID of the user (must be an ophthalmologist or admin)
+        disease_id: The disease ID (required)
+        lab_unit_id: Optional lab unit ID to filter by
+        db: Database session
+        
+    Returns:
+        The next eligible GradingTask, None if no tasks are available,
+        or a helpful message if no suitable tasks are found after 3 tries
+    """
+    # Get user's eligible lab unit IDs for arbitrator role and specified disease
+    eligible_lab_unit_ids = _get_user_eligible_lab_unit_ids(db, user_id, disease_id, "arbitrator")
+    if eligible_lab_unit_ids is None:
+        return None
+    
+    # If a specific lab unit is requested, check if user is eligible for it
+    if lab_unit_id:
+        if lab_unit_id not in eligible_lab_unit_ids:
             return None
-        
-        # If a specific lab unit is requested, check if user is eligible for it
-        if lab_unit_id:
-            if lab_unit_id not in eligible_lab_unit_ids:
-                return None
-            # Filter to only the specified lab unit
-            eligible_lab_unit_ids = [lab_unit_id]
-        
-        # Try up to 3 times to find a suitable task with atomic locking
-        for attempt in range(3):
-            task = _atomically_get_and_lock_task(db, user_id, disease_id, "arbitrator", eligible_lab_unit_ids)
-            if task:
-                return task
-        
-        # If we've tried 3 times and still don't have tasks, return a helpful message
-        return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."
-        
-    finally:
-        if close_db:
-            db.close()
+        # Filter to only the specified lab unit
+        eligible_lab_unit_ids = [lab_unit_id]
+    
+    # Try up to 3 times to find a suitable task with atomic locking
+    for attempt in range(3):
+        task = _atomically_get_and_lock_task(db, user_id, disease_id, "arbitrator", eligible_lab_unit_ids)
+        if task:
+            return task
+    
+    # If we've tried 3 times and still don't have tasks, return a helpful message
+    return "No suitable tasks available at this time. All tasks have been recently graded by you or no tasks match your criteria."

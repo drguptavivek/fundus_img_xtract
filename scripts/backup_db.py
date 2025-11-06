@@ -29,7 +29,8 @@ load_environment()
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Environment is already loaded by utils.env_loader imported at the top
-from models import BASE_DIR, Session, Base
+from models import BASE_DIR, Base
+from db_transaction_manager import get_db_session
 
 def get_expanded_database_url():
     """Get DATABASE_URL with proper environment variable expansion."""
@@ -59,33 +60,31 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.
 
 def get_table_record_counts():
     """Get record counts for all tables in the database."""
-    db = Session()
     try:
-        counts = {}
-        
-        # Get all table names from the metadata
-        from sqlalchemy import inspect, text
-        inspector = inspect(db.bind)
-        table_names = inspector.get_table_names()
-        
-        for table_name in table_names:
-            try:
-                # Use raw SQL to get count for each table
-                sql = text(f"SELECT COUNT(*) FROM {table_name}")
-                result = db.execute(sql)
-                count = result.scalar()
-                if count > 0:  # Only show tables with records
-                    counts[table_name] = count
-            except Exception as e:
-                # Skip tables that can't be counted (e.g., system tables)
-                continue
-        
-        return counts
+        with get_db_session() as db:
+            counts = {}
+            
+            # Get all table names from the metadata
+            from sqlalchemy import inspect, text
+            inspector = inspect(db.bind)
+            table_names = inspector.get_table_names()
+            
+            for table_name in table_names:
+                try:
+                    # Use raw SQL to get count for each table
+                    sql = text(f"SELECT COUNT(*) FROM {table_name}")
+                    result = db.execute(sql)
+                    count = result.scalar()
+                    if count > 0:  # Only show tables with records
+                        counts[table_name] = count
+                except Exception as e:
+                    # Skip tables that can't be counted (e.g., system tables)
+                    continue
+            
+            return counts
     except Exception as e:
         print(f"Warning: Could not get table counts: {e}")
         return {}
-    finally:
-        db.close()
 
 def print_table_counts(counts):
     """Print table record counts in a formatted way."""

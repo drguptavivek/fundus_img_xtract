@@ -18,10 +18,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models import (
-    Session, ZipFile, PatientEncounters, EncounterFile, EncounterFilePDF,
+    ZipFile, PatientEncounters, EncounterFile, EncounterFilePDF,
     DiabeticRetinopathyReport, GlaucomaReport,
     IMAGE_DIR, PDF_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR
 )
+from db_transaction_manager import get_db_session
 import logging
 
 # Setup logging
@@ -219,7 +220,6 @@ def cleanup_all_orphaned_records(dry_run=True):
     """
     from datetime import datetime, timedelta
     
-    db = Session()
     total_stats = {
         'zip_files': {'found': 0, 'deleted': 0, 'details': []},
         'encounter_files': {'found': 0, 'deleted': 0, 'details': []},
@@ -227,7 +227,7 @@ def cleanup_all_orphaned_records(dry_run=True):
         'reports': {'found': 0, 'deleted': 0, 'details': []}
     }
     
-    try:
+    with get_db_session() as db:
         logger.info("Starting comprehensive orphaned record cleanup...")
         
         # Clean up each type of orphaned record
@@ -237,15 +237,7 @@ def cleanup_all_orphaned_records(dry_run=True):
         total_stats['reports'] = cleanup_orphaned_reports(db, dry_run)
         
         if not dry_run:
-            db.commit()
             logger.info("Successfully committed all deletions")
-        
-    except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
     
     return total_stats
 

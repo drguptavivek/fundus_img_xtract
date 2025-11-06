@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
 from flask import send_from_directory
+from flask import message_flashed
 from flask_cors import CORS
 from models import Base, Job, Session, engine
 from zip_processor import setup_environment
@@ -197,6 +198,7 @@ def create_app():
     flask_limiter_handler = make_handler("flask_limiter.log", logging.INFO, base_format)
     intra_rater_debug_handler = make_handler("intra_rater_debug.log", logging.INFO, base_format)
     sqlalchemy_failure_handler = make_handler("sqlalchemy_failure.log", logging.ERROR, detailed_format)
+    flash_handler = make_handler("flash_messages.log", logging.INFO, base_format)
 
     debug_handler = None
     console_handler = None
@@ -219,6 +221,7 @@ def create_app():
     flask_limiter_logger = configure_logger("flask-limiter", logging.INFO, flask_limiter_handler)
     intra_rater_debug_logger = configure_logger("intra_rater_debug", logging.INFO, intra_rater_debug_handler)
     sqlalchemy_failure_logger = configure_logger("sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler)
+    flash_logger = configure_logger("flash.messages", logging.INFO, flash_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
@@ -261,6 +264,18 @@ def create_app():
     flask_limiter_logger.info("Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log"))
     intra_rater_debug_logger.info("Intra-rater debug logger initialized at %s", str(log_dir / "intra_rater_debug.log"))
     sqlalchemy_failure_logger.info("SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log"))
+    flash_logger.info("Flash message logger initialized at %s", str(log_dir / "flash_messages.log"))
+
+    def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
+        level = logging.INFO
+        normalized = (category or "").lower()
+        if normalized in {"error", "danger"}:
+            level = logging.ERROR
+        elif normalized in {"warning", "warn"}:
+            level = logging.WARNING
+        flash_logger.log(level, "Flash[%s]: %s", category or "message", message)
+
+    message_flashed.connect(_log_flash_message, app)
 
     # Expose a template helper: {{ current_user_has('admin') }}
     @app.context_processor

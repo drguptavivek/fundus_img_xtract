@@ -7,21 +7,16 @@ This should be used with caution as it will permanently delete data.
 import os
 import sys
 from pathlib import Path
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-
 # Add parent directory to path to import models
 sys.path.append(str(Path(__file__).parent.parent))
 
 from models import (
-    Base, 
-    GradingTask, 
+    GradingTask,
     IntraRaterTask,
     Grade,
-    IntraRaterGrade,
-    Session as DBSession,
-    DATABASE_URL
+    IntraRaterGrade
 )
+from db_transaction_manager import get_db_session
 
 def delete_grading_task_and_grades(task_id, db_session):
     """Delete a grading task and all its associated grades."""
@@ -67,12 +62,7 @@ def main():
         {'task_type': 'IntraRaterTask', 'task_id': 11, 'reason': 'No image reference (both encounter_file_id and direct_image_upload_id are None)'},
     ]
     
-    # Create database session
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(bind=engine)
-    db_session = SessionLocal()
-    
-    try:
+    with get_db_session() as db_session:
         # Ask for confirmation
         print("\nTasks to be deleted:")
         for task in missing_tasks:
@@ -96,18 +86,7 @@ def main():
                 if delete_intra_rater_task_and_grades(task['task_id'], db_session):
                     total_deleted += 1
         
-        # Commit all deletions
-        db_session.commit()
-        
         print(f"\nDeletion complete. Total tasks deleted: {total_deleted}")
-        
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        db_session.rollback()
-    finally:
-        db_session.close()
 
 if __name__ == "__main__":
     main()

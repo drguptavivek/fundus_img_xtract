@@ -10,12 +10,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
     
     import argparse
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from models import engine, User, Role
+from models import User, Role
 from auth.roles import ensure_roles, DEFAULT_ROLES
-
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+from db_transaction_manager import get_db_session
 
 def main():
     p = argparse.ArgumentParser()
@@ -23,7 +21,7 @@ def main():
     p.add_argument("--roles", nargs="+", default=["fileUploader"])
     args = p.parse_args()
 
-    with SessionLocal() as db:
+    with get_db_session() as db:
         ensure_roles(db, DEFAULT_ROLES)
         user = db.execute(select(User).where(User.username.ilike(args.username))).scalar_one_or_none()
         if not user:

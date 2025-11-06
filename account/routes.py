@@ -108,7 +108,7 @@ def profile():
             user.timezone  = timezone_pref or default_tz
             stored_timezone = user.timezone
 
-            db.add(user); db.commit()
+            db.add(user)
 
         # Ensure the session knows about the updated preference immediately
         try:
@@ -173,7 +173,7 @@ def change_password_self():
             # Set new password + clear any lock
             user.password_hash = hash_password(new_pw)
             user.is_locked_until = None
-            db.add(user); db.commit()
+            db.add(user)
 
         try:
             current_app.logger.info("User '%s' changed their password", getattr(current_user, "username", "unknown"))

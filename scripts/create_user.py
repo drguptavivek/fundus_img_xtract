@@ -17,19 +17,17 @@ sys.path.insert(0, str(project_root))
 
 # Now we can import the modules
 try:
-    from sqlalchemy.orm import sessionmaker
     from sqlalchemy.exc import SQLAlchemyError
-    from models import engine, User
+    from models import User
     from auth.security import hash_password
     from utils.timezone_choices import DEFAULT_TIMEZONE
+    from db_transaction_manager import get_db_session
 except ModuleNotFoundError as e:
     print(f"Error importing modules: {e}", file=sys.stderr)
     print(f"Current working directory: {os.getcwd()}", file=sys.stderr)
     print(f"Project root: {project_root}", file=sys.stderr)
     print(f"Python path: {sys.path[:5]}", file=sys.stderr)  # Show first 5 paths
     sys.exit(1)
-
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 MIN_LEN = 8
 
@@ -65,7 +63,7 @@ def create_user(username, password=None):
         print("Username cannot be empty.", file=sys.stderr)
         sys.exit(1)
 
-    with SessionLocal() as db:
+    with get_db_session() as db:
         # Case-insensitive exact match
         user = db.query(User).filter(User.username.ilike(username)).first()
 

@@ -8,14 +8,13 @@ import os
 # Add the project root directory to the path so we can import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import Session, GradingTask, Grade, Consensus, EncounterFile, Job, JobItem
+from models import GradingTask, Grade, Consensus, EncounterFile, Job, JobItem
+from db_transaction_manager import get_db_session
 
 
 def verify_empty():
     """Verify that the database tables are empty and essential directories exist and are empty."""
-    db = Session()
-    
-    try:
+    with get_db_session() as db:
         # Check database tables
         task_count = db.query(GradingTask).count()
         grade_count = db.query(Grade).count()
@@ -68,9 +67,6 @@ def verify_empty():
             print(f"\nDatabase empty: {db_empty}")
             print(f"Directories empty: {all_dirs_empty}")
             print("Verification failed!")
-            
-    finally:
-        db.close()
 
 
 if __name__ == "__main__":

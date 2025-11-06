@@ -11,7 +11,8 @@ from pathlib import Path
 # Add the parent directory to the path so we can import our modules
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from models import Session, ZipFile, PatientEncounters
+from models import ZipFile, PatientEncounters
+from db_transaction_manager import get_db_session
 import logging
 
 # Setup logging
@@ -31,7 +32,6 @@ def cleanup_orphaned_zip_files(dry_run=True):
     Returns:
         dict: Statistics about the cleanup operation
     """
-    db = Session()
     stats = {
         'total_zip_files': 0,
         'orphaned_zip_files': 0,
@@ -39,7 +39,7 @@ def cleanup_orphaned_zip_files(dry_run=True):
         'orphaned_details': []
     }
     
-    try:
+    with get_db_session() as db:
         # Get all ZIP files
         all_zip_files = db.query(ZipFile).all()
         stats['total_zip_files'] = len(all_zip_files)
@@ -78,19 +78,11 @@ def cleanup_orphaned_zip_files(dry_run=True):
                     db.delete(zip_file)
                     stats['deleted_zip_files'] += 1
                 
-                db.commit()
                 logger.info(f"Successfully deleted {stats['deleted_zip_files']} orphaned ZIP file records")
             else:
                 logger.info("DRY RUN: Use --execute to actually delete the orphaned records")
         else:
             logger.info("No orphaned ZIP file records found")
-    
-    except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
     
     return stats
 

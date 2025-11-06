@@ -7,23 +7,18 @@ Checks both GradingTask and IntraRaterTask tables for missing image files.
 import os
 import sys
 from pathlib import Path
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-
 # Add the parent directory to the path to import models
 sys.path.append(str(Path(__file__).parent.parent))
 
 from models import (
-    Base, 
-    GradingTask, 
+    GradingTask,
     IntraRaterTask,
     EncounterFile,
     DirectImageUpload,
-    Session as DBSession,
     IMAGE_DIR,
-    DIRECT_UPLOAD_DIR,
-    DATABASE_URL
+    DIRECT_UPLOAD_DIR
 )
+from db_transaction_manager import get_db_session
 
 def check_encounter_file_exists(encounter_file, db_session):
     """Check if an encounter file exists on disk."""
@@ -182,12 +177,7 @@ def main():
     print(f"IMAGE_DIR: {IMAGE_DIR}")
     print(f"DIRECT_UPLOAD_DIR: {DIRECT_UPLOAD_DIR}")
     
-    # Create database session
-    engine = create_engine(DATABASE_URL)
-    SessionLocal = sessionmaker(bind=engine)
-    db_session = SessionLocal()
-    
-    try:
+    with get_db_session() as db_session:
         # Check grading tasks
         grading_missing = check_grading_tasks(db_session)
         
@@ -240,14 +230,6 @@ def main():
                 print(f"{i+1}. Task {task['task_id']} ({task['task_type']}) - {task['error_reason']}")
         
         return all_missing
-        
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        db_session.close()
 
 if __name__ == "__main__":
     main()

@@ -10,9 +10,10 @@ This module provides functions for:
 from typing import Optional, Tuple
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_
-from models import Session, GradingTask, Grade, Consensus, User, DiseaseGrading, Disease
+from models import GradingTask, Grade, Consensus, User, DiseaseGrading, Disease
 import logging
 from datetime import datetime
+from db_transaction_manager import transaction_scope
 
 
 consensus_logger = logging.getLogger("consensus")
@@ -29,11 +30,26 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
     Returns:
         Consensus object if created/updated, None otherwise
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _create_or_update_consensus_with_session(task_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _create_or_update_consensus_with_session(task_id, db)
+
+
+def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Consensus]:
+    """
+    Internal function that creates or updates consensus using an existing session.
+    
+    Args:
+        task_id: The ID of the task to create/update consensus for
+        db: Database session
         
+    Returns:
+        Consensus object if created/updated, None otherwise
+    """
     try:
         task = db.query(GradingTask).options(
             selectinload(GradingTask.grades).selectinload(Grade.grader)
@@ -126,11 +142,8 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
             
             db.add(consensus)
             db.flush()  # Ensure the consensus gets an ID without committing transaction
-            if close_db:
-                db.commit()
-                db.refresh(consensus)  # Refresh to get fresh data when managing our own session
-            # For shared sessions, we don't refresh since the calling function will commit later
-            # The consensus object with its ID is still valid to return
+            # Refresh to get fresh data
+            db.refresh(consensus)
         else:
             # If no consensus was created, still return None
             pass
@@ -138,12 +151,7 @@ def create_or_update_consensus(task_id: int, db=None) -> Optional[Consensus]:
         return consensus
     except Exception as e:
         consensus_logger.exception(f"Failed to create/update consensus for task {task_id}: {e}")
-        if db and close_db:
-            db.rollback()
-        return None
-    finally:
-        if close_db:
-            db.close()
+        raise
 
 
 def get_task_consensus_status(task_id: int, db=None) -> dict:
@@ -157,11 +165,26 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
     Returns:
         Dictionary with consensus status information
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_task_consensus_status_with_session(task_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_task_consensus_status_with_session(task_id, db)
+
+
+def _get_task_consensus_status_with_session(task_id: int, db) -> dict:
+    """
+    Internal function that gets consensus status using an existing session.
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Database session
         
+    Returns:
+        Dictionary with consensus status information
+    """
     try:
         task = db.query(GradingTask).options(
             selectinload(GradingTask.grades).selectinload(Grade.grader),
@@ -224,9 +247,6 @@ def get_task_consensus_status(task_id: int, db=None) -> dict:
     except Exception as e:
         consensus_logger.exception(f"Failed to get consensus status for task {task_id}: {e}")
         return {"error": f"Failed to get consensus status: {e}"}
-    finally:
-        if close_db:
-            db.close()
 
 
 def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[GradingTask]:
@@ -240,11 +260,26 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
     Returns:
         Updated GradingTask object or None if task not found
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _update_task_state_based_on_grades_with_session(task_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _update_task_state_based_on_grades_with_session(task_id, db)
+
+
+def _update_task_state_based_on_grades_with_session(task_id: int, db) -> Optional[GradingTask]:
+    """
+    Internal function that updates task state using an existing session.
+    
+    Args:
+        task_id: The ID of the task to update
+        db: Database session
         
+    Returns:
+        Updated GradingTask object or None if task not found
+    """
     try:
         task = db.query(GradingTask).filter(GradingTask.id == task_id).first()
         if not task:
@@ -290,25 +325,14 @@ def update_task_state_based_on_grades(task_id: int, db=None) -> Optional[Grading
             from sqlalchemy import inspect
             db.add(task)  # Re-add to session to ensure changes are tracked
         
-        # Always commit if this function is managing its own session
-        if close_db:
-            db.commit()
-        else:
-            # If using shared session, rely on calling function to commit,
-            # but still make sure changes are flushed to be visible to following operations
-            db.flush()
-            
+        # Flush changes to make them visible to following operations
+        db.flush()
         db.refresh(task)
         
         return task
     except Exception as e:
         consensus_logger.exception(f"Failed to update task state for task {task_id}: {e}")
-        if db and close_db:
-            db.rollback()
-        return None
-    finally:
-        if close_db:
-            db.close()
+        raise
 
 
 def has_consensus(task_id: int, db=None) -> bool:
@@ -322,20 +346,32 @@ def has_consensus(task_id: int, db=None) -> bool:
     Returns:
         True if the task has consensus, False otherwise
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _has_consensus_with_session(task_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _has_consensus_with_session(task_id, db)
+
+
+def _has_consensus_with_session(task_id: int, db) -> bool:
+    """
+    Internal function that checks consensus using an existing session.
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Database session
         
+    Returns:
+        True if the task has consensus, False otherwise
+    """
     try:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus is not None
     except Exception as e:
         consensus_logger.exception(f"Failed to check consensus for task {task_id}: {e}")
         return False
-    finally:
-        if close_db:
-            db.close()
 
 
 def get_consensus_method(task_id: int, db=None) -> Optional[str]:
@@ -349,17 +385,29 @@ def get_consensus_method(task_id: int, db=None) -> Optional[str]:
     Returns:
         Method string ('match' or 'adjudication') or None if no consensus
     """
-    close_db = False
-    if db is None:
-        db = Session()
-        close_db = True
+    # If db is provided, use it directly (dependency injection pattern)
+    if db is not None:
+        return _get_consensus_method_with_session(task_id, db)
+    
+    # Otherwise, use the context manager pattern
+    with transaction_scope() as db:
+        return _get_consensus_method_with_session(task_id, db)
+
+
+def _get_consensus_method_with_session(task_id: int, db) -> Optional[str]:
+    """
+    Internal function that gets consensus method using an existing session.
+    
+    Args:
+        task_id: The ID of the task to check
+        db: Database session
         
+    Returns:
+        Method string ('match' or 'adjudication') or None if no consensus
+    """
     try:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus.method if consensus else None
     except Exception as e:
         consensus_logger.exception(f"Failed to get consensus method for task {task_id}: {e}")
         return None
-    finally:
-        if close_db:
-            db.close()

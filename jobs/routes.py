@@ -5,8 +5,8 @@ from auth.roles import roles_required
 from job_store import db_get_job_payload
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
-from models import Session, Job, JobItem, LabUnit
-
+from models import Job, JobItem, LabUnit
+from db_transaction_manager import get_db_session
 
 from . import jobs_bp
 
@@ -14,8 +14,7 @@ from . import jobs_bp
 def list_recent_jobs():
     from flask import request
     
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Get filter and pagination parameters
         job_type_filter = request.args.get('job_type', '')
         page = request.args.get('page', 1, type=int)
@@ -112,16 +111,13 @@ def list_recent_jobs():
             selected_job_type=job_type_filter,
             pagination=pagination
         )
-    finally:
-        db.close()
 
 
 
 @jobs_bp.route("/<job_token>", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def job_status_json(job_token: str):
-    db = Session()
-    try:
+    with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
         if not job:
             return jsonify({"error": "job not found"}), 404
@@ -133,8 +129,6 @@ def job_status_json(job_token: str):
         # Add upload_type to the payload
         payload["upload_type"] = job.upload_type
         return jsonify(payload)
-    finally:
-        db.close()
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
@@ -145,8 +139,7 @@ def job_status_page(job_token: str):
 @jobs_bp.route("/results/details/<job_token>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
 def upload_results(job_token):
-    db = Session()
-    try:
+    with get_db_session() as db:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job or (job.uploader_user_id != current_user.id and not current_user.has_role('admin', 'data_manager')):
             flash("Upload job not found or unauthorized access.", "danger")
@@ -159,8 +152,6 @@ def upload_results(job_token):
         return render_template("jobs/upload_results.html",
                                results={"uploaded_count": uploaded, "failed_count": failed, "failed_uploads": failures},
                                job=job)
-    finally:
-        db.close()
 
 @jobs_bp.route("/processing/<job_id>", methods=["GET"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')

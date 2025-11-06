@@ -16,21 +16,19 @@ from models import (
     EncounterFile,
     PatientEncounters,
     ZipFile,
-    Session,
     DIRECT_UPLOAD_DIR,
     IMAGE_DIR,
     BASE_DIR
 )
+from db_transaction_manager import get_db_session
 import os
 
 def check_image_uuid(uuid_str: str):
     """Check the database for a UUID and show the expected file path."""
-    db = Session()
-    
     print(f"Checking UUID: {uuid_str}")
     print("=" * 60)
     
-    try:
+    with get_db_session() as db:
         # Check DirectImageUpload table
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid_str).first()
         if direct_image:
@@ -108,9 +106,6 @@ def check_image_uuid(uuid_str: str):
         print("  1. Check if the UUID is correct")
         print("  2. The image might have been deleted from the database")
         print("  3. There might be a database integrity issue")
-        
-    finally:
-        db.close()
 
 def check_media_directories():
     """Check if media directories exist and are accessible."""

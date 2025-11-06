@@ -10,6 +10,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const captchaAudio = document.getElementById('captcha-audio');
     let refreshRequestInProgress = false;  // Prevent multiple refresh requests
     
+    // Initialize audio element on page load to fix Firefox caching issue
+    if (captchaAudio) {
+        const timestamp = new Date().getTime();
+        captchaAudio.src = '/captcha-audio?t=' + timestamp;
+        captchaAudio.load();
+    }
+    
     if (captchaImg) {
         // Add click event to refresh CAPTCHA
         captchaImg.addEventListener('click', function() {

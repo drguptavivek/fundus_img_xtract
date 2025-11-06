@@ -25,10 +25,13 @@ print_error() {
 }
 
 # Configuration
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVICE_NAME="fundus-img-xtract"
-SERVICE_FILE="fundus-img-xtract.service"
+SERVICE_TEMPLATE="$SCRIPT_DIR/fundus-img-xtract.service"
 INSTALL_DIR="/opt/fundus_img_xtract"
 LOG_DIR="/var/log/fundus-img-xtract"
+LOGROTATE_TEMPLATE="$SCRIPT_DIR/fundus_app_logRotate"
+LOGROTATE_DEST="/etc/logrotate.d/fundus-img-xtract"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -52,18 +55,29 @@ if [ ! -d "$INSTALL_DIR" ]; then
 fi
 
 # Update service file with actual installation path
-print_info "Updating service file with installation path..."
-sed -i "s|/opt/fundus_img_xtract|$INSTALL_DIR|g" "$SERVICE_FILE"
+# Prepare a temporary service file with the correct paths
+print_info "Preparing systemd service unit..."
+if [ ! -f "$SERVICE_TEMPLATE" ]; then
+    print_error "Service template $SERVICE_TEMPLATE not found"
+    exit 1
+fi
 
-# Also update the virtual environment path in the service file
+if [ ! -f "$LOGROTATE_TEMPLATE" ]; then
+    print_error "Logrotate template $LOGROTATE_TEMPLATE not found"
+    exit 1
+fi
+
+TEMP_SERVICE_FILE="/tmp/${SERVICE_NAME}.$$"
+cp "$SERVICE_TEMPLATE" "$TEMP_SERVICE_FILE"
+
+sed -i "s|/opt/fundus_img_xtract|$INSTALL_DIR|g" "$TEMP_SERVICE_FILE"
+
 VENV_PATH="$INSTALL_DIR/.venv"
 if [ ! -d "$VENV_PATH" ]; then
     print_warn "Virtual environment not found at $VENV_PATH"
-    print_info "The service file will use uv from system PATH"
+    print_info "The service file will keep the default virtual environment path"
 else
-    print_info "Virtual environment found at $VENV_PATH"
-    # Update the service file to use the virtual environment
-    sed -i "s|/opt/fundus_img_xtract/.venv|$VENV_PATH|g" "$SERVICE_FILE"
+    sed -i "s|/opt/fundus_img_xtract/.venv|$VENV_PATH|g" "$TEMP_SERVICE_FILE"
 fi
 
 # Create log directory
@@ -74,7 +88,15 @@ chmod 755 "$LOG_DIR"
 
 # Copy service file to systemd
 print_info "Installing systemd service file..."
-cp "$SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
+cp "$TEMP_SERVICE_FILE" "/etc/systemd/system/$SERVICE_NAME.service"
+
+# Remove the temporary file
+rm -f "$TEMP_SERVICE_FILE"
+
+# Install logrotate configuration
+print_info "Installing logrotate configuration..."
+cp "$LOGROTATE_TEMPLATE" "$LOGROTATE_DEST"
+chmod 644 "$LOGROTATE_DEST"
 
 # Set proper permissions
 chmod 644 "/etc/systemd/system/$SERVICE_NAME.service"

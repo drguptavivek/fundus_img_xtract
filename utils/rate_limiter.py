@@ -23,6 +23,9 @@ from flask_limiter import Limiter, ExemptionScope
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from models import Session
+from utils.env_loader import load_environment
+
+load_environment()
 
 # Logger will be configured in app.py
 rate_limit_logger = logging.getLogger("rate_limit")

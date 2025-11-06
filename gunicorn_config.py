@@ -1,75 +1,77 @@
-"""
-Gunicorn configuration file for the Fundus Image Manager application.
+"""Gunicorn configuration for the Fundus Image Manager application."""
 
-This file contains all the Gunicorn settings for running the application
-in production. Use this configuration with: gunicorn -c gunicorn_config.py wsgi:application
-"""
+from __future__ import annotations
 
-import os
 import multiprocessing
-from dotenv import load_dotenv
+import os
+from pathlib import Path
 
-# Load environment variables from .env file
-# This ensures all application configuration is loaded before Gunicorn starts
-load_dotenv()
+from utils.env_loader import load_environment
+
+
+def _int_from_env(var_name: str, default: int, *, minimum: int | None = None) -> int:
+    """Parse integer env vars safely, falling back to a default."""
+
+    value = os.getenv(var_name)
+    if value is None:
+        return default if minimum is None else max(default, minimum)
+    try:
+        result = int(value)
+    except ValueError:
+        return default if minimum is None else max(default, minimum)
+    if minimum is not None:
+        return max(result, minimum)
+    return result
+
+
+load_environment()
 
 # Server socket
 bind = os.getenv("GUNICORN_BIND", "127.0.0.1:5001")
-backlog = 2048
+backlog = _int_from_env("GUNICORN_BACKLOG", 2048, minimum=1024)
 
 # Worker processes
-workers = int(os.getenv("GUNICORN_WORKERS", multiprocessing.cpu_count() * 2 + 1))
+default_workers = multiprocessing.cpu_count() * 2 + 1
+workers = _int_from_env("GUNICORN_WORKERS", default_workers, minimum=2)
 worker_class = os.getenv("GUNICORN_WORKER_CLASS", "sync")
-worker_connections = 1000
-max_requests = 1000
-max_requests_jitter = 100
-preload_app = True
-timeout = int(os.getenv("GUNICORN_TIMEOUT", 120))
-keepalive = 2
+max_requests = _int_from_env("GUNICORN_MAX_REQUESTS", 1000, minimum=100)
+max_requests_jitter = _int_from_env("GUNICORN_MAX_REQUESTS_JITTER", 100, minimum=0)
+preload_app = os.getenv("GUNICORN_PRELOAD", "true").lower() in {"1", "true", "yes"}
+timeout = _int_from_env("GUNICORN_TIMEOUT", 120, minimum=30)
+keepalive = _int_from_env("GUNICORN_KEEPALIVE", 2, minimum=1)
 
 # Logging
-accesslog = os.getenv("GUNICORN_ACCESS_LOG", "logs/gunicorn_access.log")
-errorlog = os.getenv("GUNICORN_ERROR_LOG", "logs/gunicorn_error.log")
+log_dir = Path(os.getenv("GUNICORN_LOG_DIR", "/var/log/fundus-img-xtract"))
+accesslog = os.getenv("GUNICORN_ACCESS_LOG", str(log_dir / "gunicorn_access.log"))
+errorlog = os.getenv("GUNICORN_ERROR_LOG", str(log_dir / "gunicorn_error.log"))
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
 # Process naming
-proc_name = 'fundus_img_xtract'
+proc_name = "fundus_img_xtract"
 
 # Server mechanics
 daemon = False
-pidfile = os.getenv("GUNICORN_PID_FILE", "logs/gunicorn.pid")
-user = None
-group = None
-tmp_upload_dir = None
+pidfile = os.getenv("GUNICORN_PID_FILE", str(Path(os.getenv("RUNTIME_DIR", "/var/run/fundus-img-xtract")) / "gunicorn.pid"))
+user = os.getenv("GUNICORN_USER")
+group = os.getenv("GUNICORN_GROUP")
+tmp_upload_dir = os.getenv("GUNICORN_TMP_UPLOAD_DIR")
 
 # SSL (if needed)
-keyfile = None
-certfile = None
+keyfile = os.getenv("GUNICORN_SSL_KEYFILE")
+certfile = os.getenv("GUNICORN_SSL_CERTFILE")
 
-# Worker process settings
-max_requests = 1000
-max_requests_jitter = 50
-preload_app = True
-worker_tmp_dir = None
+worker_tmp_dir = os.getenv("GUNICORN_WORKER_TMP_DIR")
 
 # Graceful shutdown timeout
-graceful_timeout = 30
-
-# Keep alive timeout
-keepalive = 2
+graceful_timeout = _int_from_env("GUNICORN_GRACEFUL_TIMEOUT", 30, minimum=10)
 
 # Limit request line and header field sizes
-limit_request_line = 4094
-limit_request_fields = 100
-limit_request_field_size = 8190
+limit_request_line = _int_from_env("GUNICORN_LIMIT_REQUEST_LINE", 4094, minimum=1024)
+limit_request_fields = _int_from_env("GUNICORN_LIMIT_REQUEST_FIELDS", 100, minimum=10)
+limit_request_field_size = _int_from_env("GUNICORN_LIMIT_REQUEST_FIELD_SIZE", 8190, minimum=1024)
 
-# Security
-limit_request_line = 4094
-limit_request_fields = 100
-limit_request_field_size = 8190
 
-# Hooks
 def on_starting(server):
     """
     Called just before the master process is initialized.
@@ -117,9 +119,3 @@ def worker_abort(worker):
     Called when a worker received the SIGABRT signal.
     """
     worker.log.info("Worker aborted (pid: %s)", worker.pid)
-
-# Environment variables
-raw_env = [
-    f'FLASK_ENV={os.getenv("FLASK_ENV", "production")}',
-    f'FLASK_SECRET_KEY={os.getenv("FLASK_SECRET_KEY", "change-me-in-production")}',
-]

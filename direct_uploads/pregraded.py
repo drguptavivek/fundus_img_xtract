@@ -36,6 +36,10 @@ from models import (
 )
 from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
+from utils.env_loader import load_environment
+
+
+load_environment()
 
 
 def _to_int(value: Optional[str]) -> Optional[int]:

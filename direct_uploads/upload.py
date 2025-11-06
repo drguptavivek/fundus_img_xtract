@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from utils.utils2 import uniquify
+from utils.env_loader import load_environment
 
 from . import bp
 from utils.utils import with_session
@@ -22,6 +23,9 @@ from models import (
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids
 from utils.jobUtils import get_recent_zip_uploads
+
+
+load_environment()
 
 
 def _to_int(v):
@@ -246,5 +250,4 @@ def upload():
                                hospitals=hospitals, lab_units=lab_units,
                                cameras=cameras, diseases=diseases, areas=areas,
                                recent_uploads=recent_uploads)
-
 

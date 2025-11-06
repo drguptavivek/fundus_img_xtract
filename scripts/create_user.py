@@ -6,6 +6,9 @@ from pathlib import Path
 import os
 import argparse
 
+from utils.env_loader import load_environment
+load_environment()
+
 # Add the project root to the path so we can import models
 # This approach is more robust and handles different execution contexts
 file_path = Path(__file__).resolve()

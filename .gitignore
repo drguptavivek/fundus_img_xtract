@@ -79,3 +79,9 @@ process_log.txt
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+
+# DOCKEER
+deploy.env
+deploy.config.env
+deploy.secrets.env

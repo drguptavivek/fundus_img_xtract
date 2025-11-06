@@ -8,7 +8,6 @@ from flask import send_from_directory
 from flask_cors import CORS
 from models import Base, Job, Session, engine
 from zip_processor import setup_environment
-from dotenv import load_dotenv  
 import time
 from datetime import timedelta
 import threading
@@ -23,12 +22,13 @@ from utils.timezone_choices import DEFAULT_TIMEZONE
 from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
 from utils.security_middleware import PayloadSizeValidator
+from utils.env_loader import load_environment
 
 
 csrf = CSRFProtect()
 
 def create_app():
-    load_dotenv()
+    load_environment()
     app = Flask(
         __name__,
         static_folder="static",         # default, explicit for clarity

@@ -11,10 +11,9 @@ import fitz # Import PyMuPDF for PDF splitting
 from datetime import datetime
 import time
 
-from dotenv import load_dotenv
+from utils.env_loader import load_environment
 
-
-load_dotenv()
+load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent
 

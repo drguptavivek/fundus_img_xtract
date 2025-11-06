@@ -9,6 +9,9 @@ from typing import Optional, Union, List
 import random
 from datetime import datetime, timedelta
 from uuid import uuid4
+from utils.env_loader import load_environment
+
+load_environment()
 
 from utils.dualGradingEligibility import (
     _get_user_eligible_lab_unit_ids,

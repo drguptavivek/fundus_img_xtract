@@ -6,8 +6,10 @@ import re
 import shutil
 from pathlib import Path
 from datetime import datetime, date as _date
-from dotenv import load_dotenv  
-load_dotenv()
+
+from utils.env_loader import load_environment
+
+load_environment()
 
 
 # --- Model and DB Imports ---

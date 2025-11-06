@@ -1,54 +1,21 @@
 [Unit]
-Description=Fundus Image Manager - Gunicorn instance to serve the Flask application
-Documentation=https://github.com/drguptavivek/fundus_img_xtract
+Description=Fundus Image Manager - Gunicorn instance
 After=network.target
-Wants=network.target
 
 [Service]
-# User and group that will run the service
-# Change these to match your system's web server user
 User=www-data
 Group=www-data
-
-# Working directory - update this to your actual project path
 WorkingDirectory=/opt/fundus_img_xtract
-
-# Environment file containing all configuration variables
-EnvironmentFile=/opt/fundus_img_xtract/.env
-
-# Path to the virtual environment
-Environment=PATH=/opt/fundus_img_xtract/.venv/bin
-
-# Main command to start Gunicorn
-# Using uv run to ensure proper dependency management
+Environment="PATH=/opt/fundus_img_xtract/.venv/bin:$PATH"
+EnvironmentFile=-/opt/fundus_img_xtract/.env
+ExecStartPre=/usr/bin/install -d -o www-data -g www-data -m 0750 /var/log/fundus-img-xtract
+ExecStartPre=/usr/bin/install -d -o www-data -g www-data -m 0750 /var/run/fundus-img-xtract
 ExecStart=/opt/fundus_img_xtract/.venv/bin/uv run gunicorn -c gunicorn_config.py wsgi:application
-
-# Command to reload the service (graceful restart)
 ExecReload=/bin/kill -s HUP $MAINPID
-
-# Restart policy
 Restart=always
 RestartSec=10
-StartLimitInterval=60
-StartLimitBurst=3
-
-# Process management
-KillMode=mixed
-KillSignal=SIGTERM
-TimeoutStopSec=30
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/fundus_img_xtract/logs
-ReadWritePaths=/opt/fundus_img_xtract/files
-
-# Logging
-StandardOutput=append:/var/log/fundus-img-xtract/access.log
-StandardError=append:/var/log/fundus-img-xtract/error.log
-SyslogIdentifier=fundus-img-xtract
+StandardOutput=append:/var/log/fundus-img-xtract/systemd_access.log
+StandardError=append:/var/log/fundus-img-xtract/systemd_error.log
 
 [Install]
 WantedBy=multi-user.target

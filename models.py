@@ -4,21 +4,11 @@ from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, F
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
-from dotenv import load_dotenv
 from uuid import uuid4
- 
-load_dotenv()
 
-# Expand environment variables that reference other variables
-# This handles cases like DATABASE_URL=${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@...
-for key, value in os.environ.items():
-    if isinstance(value, str) and '${' in value:
-        # Expand environment variable references
-        try:
-            expanded = os.path.expandvars(value)
-            os.environ[key] = expanded
-        except Exception as e:
-            print(f"Warning: Could not expand {key}: {e}")
+from utils.env_loader import load_environment
+
+load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")

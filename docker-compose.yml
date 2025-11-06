@@ -1,0 +1,66 @@
+services:
+  web:
+    build: .
+    image: fundus-img-xtract:web
+    container_name: fundus-img-xtract-web
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    env_file:
+      - deploy.config.env
+      - deploy.secrets.env
+    environment:
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_APP_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@cache:6379/0
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./files:/app/files
+      - ./logs:/app/logs
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: fundus-img-xtract-db
+    env_file:
+      - deploy.config.env
+      - deploy.secrets.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_APP_DB}
+      POSTGRES_USER: ${POSTGRES_APP_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_APP_USER} -d ${POSTGRES_APP_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  cache:
+    image: redis:7-alpine
+    container_name: fundus-img-xtract-cache
+    env_file:
+      - deploy.config.env
+      - deploy.secrets.env
+    command: ["sh", "-c", "exec redis-server --save 60 1 --loglevel warning --requirepass '$${REDIS_PASSWORD}'"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

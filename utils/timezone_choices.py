@@ -7,6 +7,10 @@ from typing import Iterable, List, Tuple
 
 from zoneinfo import available_timezones
 
+from utils.env_loader import load_environment
+
+load_environment()
+
 DEFAULT_TIMEZONE = os.getenv("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
 
 

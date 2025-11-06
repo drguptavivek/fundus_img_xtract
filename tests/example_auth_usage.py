@@ -7,6 +7,9 @@ as test users and make authenticated requests to the application.
 
 from test_auth_helpers import login_as_test_admin, login_as_test_manager, make_authenticated_request
 import os
+from utils.env_loader import load_environment
+load_environment()
+
 
 def main():
     """Example usage of authentication helpers."""

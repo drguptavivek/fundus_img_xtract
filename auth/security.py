@@ -5,6 +5,10 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 import re
 
+from utils.env_loader import load_environment
+
+load_environment()
+
 
 _ph = PasswordHasher(  # sensible defaults; tune if needed
     time_cost=2,       # iterations

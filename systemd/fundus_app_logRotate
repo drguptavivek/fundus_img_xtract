@@ -1,0 +1,15 @@
+# /etc/logrotate.d/fundus-img-xtract
+
+/var/log/fundus-img-xtract/*.log {
+    daily
+    rotate 180                # keep ~180 archives (1 per day)
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 www-data www-data
+    sharedscripts
+    postrotate
+        systemctl kill -s HUP fundus-img-xtract.service
+    endscript
+}

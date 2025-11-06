@@ -9,10 +9,10 @@ from alembic import context
 
 # Import the Base metadata from models.py
 from models import Base
+from utils.env_loader import load_environment
 
 # Load environment variables (same as in models.py and app.py)
-from dotenv import load_dotenv
-load_dotenv()
+load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")

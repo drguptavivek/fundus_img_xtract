@@ -21,6 +21,9 @@ import subprocess
 import tarfile
 from datetime import datetime
 from pathlib import Path
+from utils.env_loader import load_environment
+load_environment()
+
 
 # Add project root directory to path so we can import models
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,7 +33,6 @@ from models import BASE_DIR, Session, Base
 
 def get_expanded_database_url():
     """Get DATABASE_URL with proper environment variable expansion."""
-    load_dotenv()
     
     # Get the raw DATABASE_URL
     database_url = os.getenv("DATABASE_URL")

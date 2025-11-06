@@ -1,37 +1,41 @@
-"""
-WSGI entry point for Gunicorn server.
+"""WSGI entry point for Gunicorn server."""
 
-This module provides the WSGI application interface that Gunicorn uses
-to serve the Flask application in production.
-"""
+from __future__ import annotations
 
+import logging
 import os
+
 from app import create_app
+from utils.env_loader import load_environment
 
-# Load environment variables from .env file
-# This ensures all configuration is available before the app is created
-from dotenv import load_dotenv
-load_dotenv()
+logger = logging.getLogger(__name__)
 
-# Expand environment variables that reference other variables
-# This handles cases like DATABASE_URL=${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@...
-for key, value in os.environ.items():
-    if isinstance(value, str) and '${' in value:
-        # Expand environment variable references
+# Load configuration files before expanding env references
+load_environment()
+
+for key, value in list(os.environ.items()):
+    if isinstance(value, str) and "${" in value:
         try:
-            expanded = os.path.expandvars(value)
-            os.environ[key] = expanded
-        except Exception as e:
-            print(f"Warning: Could not expand {key}: {e}")
+            os.environ[key] = os.path.expandvars(value)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Unable to expand environment variable %s", key, exc_info=exc)
 
-# Create the Flask application instance
-# The app will use the environment variables loaded above
-app = create_app()
-
-# Expose the WSGI application
-# Gunicorn will look for this 'application' variable by default
-application = app
+application = create_app()
 
 if __name__ == "__main__":
-    # This block allows running the WSGI file directly for testing
-    app.run(debug=True, host="127.0.0.1", port=5001)
+    # Allow running via `python wsgi.py` for local troubleshooting only.
+    debug_flag = any(
+        value.lower() in {"1", "true", "yes"}
+        for value in (
+            os.getenv("FLASK_DEBUG", "false"),
+            os.getenv("DEBUG", "false"),
+            os.getenv("ENABLE_DEBUG_LOGGING", "false"),
+        )
+    )
+    host = os.getenv("FLASK_HOST", os.getenv("FLASK_RUN_HOST", "127.0.0.1"))
+    try:
+        port = int(os.getenv("FLASK_PORT", os.getenv("FLASK_RUN_PORT", "5001")))
+    except ValueError:
+        port = 5001
+
+    application.run(debug=debug_flag, host=host, port=port)

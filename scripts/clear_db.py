@@ -62,6 +62,8 @@ from models import (
     JobItem, Job
 )
 
+from utils.env_loader import load_environment
+load_environment()
 
 def clear_files():
     """Clear all files in the files directory."""
@@ -69,7 +71,6 @@ def clear_files():
     from pathlib import Path
     
     # Load environment variables and get BASE_DIR like in models.py
-    load_dotenv()
     BASE_DIR = Path(__file__).resolve().parent.parent
     files_dir = BASE_DIR / "files"
     
@@ -118,7 +119,6 @@ def recreate_directories():
     from pathlib import Path
     
     # Load environment variables
-    load_dotenv()
     BASE_DIR = Path(__file__).resolve().parent.parent
     
     # Define essential directories based on environment variables from models.py

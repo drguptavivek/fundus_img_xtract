@@ -9,10 +9,8 @@ import requests
 from pathlib import Path
 import argparse
 import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from utils.env_loader import load_environment
+load_environment()
 
 # Add the project root to the path
 file_path = Path(__file__).resolve()

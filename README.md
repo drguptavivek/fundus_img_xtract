@@ -2,6 +2,11 @@
 
 A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
 
+## DOCKER Containerized Deployment
+
+For a Docker-based stack (Flask app, PostgreSQL, Redis) review [Docker Compose Deployment](docs/deployment/docker-compose.md). It covers the two-file environment setup (`deploy.config.env` for non-sensitive settings, `deploy.secrets.env` for credentials), persistent bind mounts for `./files`, `./logs`, and reverse-proxy integration.
+
+
 ## Package Management
 
 This project uses **uv** as the primary package manager for faster dependency installation and better virtual environment management. All commands in this documentation assume you're using uv unless otherwise specified.
@@ -74,6 +79,7 @@ uv run flask run
 ## Development Guidelines
 
 When adding features to the application, please follow the conventions outlined in [Development Conventions](docs/10-DEVELOP/CONVENTIONS.md) for consistency with the existing codebase. This document includes essential patterns for database operations, CSRF protection, datetime handling, logging, security practices, and more.
+
 
 ## Setup
 

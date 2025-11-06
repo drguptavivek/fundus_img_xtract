@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from test_auth_helpers import login_as_test_admin, login_as_test_manager, make_authenticated_request
 import json
+from utils.env_loader import load_environment
+load_environment()
 
 def test_admin_endpoints():
     """Test admin-specific endpoints using authentication helpers."""

@@ -517,6 +517,8 @@ def create_app():
             or path == "/check-email-status"
             or path == "/email-sse"
             or path=="/test-rate-limit"
+            or path=="/refresh-captcha"
+            or path=="/captcha-audio"
             or path.startswith("/docs/")
             or path.startswith("/help/")
         ):

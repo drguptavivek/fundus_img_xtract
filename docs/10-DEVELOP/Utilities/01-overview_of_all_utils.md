@@ -27,6 +27,7 @@ These modules handle file operations, image serving, and path management:
 ### 3. System Utilities
 These provide general system functionality:
 
+- **captcha.py**: CAPTCHA generation and validation with audio support using PiperTTS
 - **emails.py**: Email sending and notification system
 - **notifications.py**: In-app notification management
 - **rate_limiter.py**: Rate limiting for security and abuse prevention

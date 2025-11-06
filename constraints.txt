@@ -1,0 +1,4 @@
+# constraints.txt
+pyobjc-core==10.3
+pyobjc-framework-Cocoa==10.3
+pyobjc==10.3

@@ -13,7 +13,7 @@
       <div class="card shadow-sm">
         <div class="card-header d-flex align-items-center justify-content-between">
           <h1 class="h5 mb-0">Sign in</h1>
-          {# Optional: icon/branding could go here #}
+          
         </div>
         <div class="card-body">
 
@@ -38,7 +38,7 @@
           {% endif %}
 
           <form method="post" action="{{ url_for('auth.login') }}" novalidate>
-            {# CSRF token (works if CSRFProtect/Flask-WTF is configured) #}
+            
             {{ csrf_field() }}
 
             <div class="mb-3">
@@ -65,6 +65,28 @@
               >
             </div>
 
+            <div class="mb-3">
+              <label class="form-label" for="captcha">CAPTCHA</label>
+              <div class="d-flex align-items-center gap-2">
+                <img src="{{ captcha_image }}" alt="CAPTCHA" class="captcha-image border rounded" style="height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh">
+                <input
+                  class="form-control"
+                  name="captcha"
+                  id="captcha"
+                  autocomplete="off"
+                  required
+                  placeholder="Enter CAPTCHA code"
+                >
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="audio-captcha-btn" title="Play CAPTCHA audio">
+                  🔊 Audio
+                </button>
+                <button type="button" class="btn btn-outline-info btn-sm" id="refresh-captcha-btn" title="Refresh CAPTCHA">
+                  🔄 Refresh
+                </button>
+              </div>
+              <div class="form-text">Click on CAPTCHA image or refresh button to get a new code. Audio option available for accessibility.</div>
+            </div>
+
             {# Optional remember-me; uncomment if you wire it in your route #}
             {#
             <div class="form-check mb-3">
@@ -87,9 +109,13 @@
 
       {# Optional: space for any page-specific notes #}
       <p class="text-center text-muted small mt-3 mb-0">
-        You’ll be locked out for 4 hours after repeated failures (username or IP).
+        You'll be locked out for 4 hours after repeated failures (username or IP).
       </p>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/auth-captcha.js') }}?v={{ config['VERSION'] | default('1.0.0') }}"></script>
 {% endblock %}

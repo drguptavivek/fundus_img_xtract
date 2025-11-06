@@ -117,6 +117,9 @@ Look for sessions that are created but not properly closed in finally blocks.
 ### 4. Nested Sessions
 Check if routes create sessions while calling utilities that also create sessions.
 
+### 5. Detached sessions
+Prevent "DetachedInstanceError" by ensuring the database session remains open while the template is being rendered. 
+
 ## File-by-File Checking Priority
 
 ### High Priority (Route Files)

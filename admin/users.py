@@ -5,7 +5,8 @@ from sqlalchemy.orm import selectinload
 from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password, check_password_strength, validate_username, validate_email, validate_phone, parse_iso_date
-from models import User, Role, Hospital, LabUnit, Session
+from models import User, Role, Hospital, LabUnit
+from db_transaction_manager import transaction_scope, get_db_session
 from utils.timezone_choices import (
     TIMEZONE_CHOICES,
     TIMEZONE_VALUES,
@@ -16,14 +17,13 @@ from utils.timezone_choices import (
 
 def users_list():
     """List all users with roles, hospitals, and lab units."""
-    with Session() as db:
+    with get_db_session() as db:
         users = db.execute(
             select(User)
             .options(selectinload(User.roles), selectinload(User.lab_units).selectinload(LabUnit.hospital))
             .order_by(User.username.asc())
         ).scalars().all()
-
-    return render_template("admin/users.html", users=users)
+        return render_template("admin/users.html", users=users)
 
 
 def add_user():
@@ -42,7 +42,7 @@ def add_user():
     pre_file_upload_quota = int(request.form.get("file_upload_quota") or 0) if request.method == "POST" else 0
     pre_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units")) if request.method == "POST" else set()
 
-    with Session() as db:
+    with get_db_session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
         hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
@@ -103,7 +103,7 @@ def add_user():
                                  pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
-        with Session() as db:
+        with transaction_scope() as db:
             exists = db.execute(
                 select(User).where(func.lower(User.username) == username.lower())
             ).scalar_one_or_none()
@@ -135,7 +135,7 @@ def add_user():
                 lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
                 for lu in lab_unit_objs: user.lab_units.append(lu)
 
-            db.add(user); db.commit()
+            db.add(user)
 
         flash(f"User '{username}' created.", "success")
         return redirect(url_for("admin.users_list"))
@@ -169,7 +169,8 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
 
 
 def edit_user(user_id: int):
-    with Session() as db:
+    # Handle GET request (display the form)
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
@@ -177,8 +178,32 @@ def edit_user(user_id: int):
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
         hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
+        
+        if request.method == "GET":
+            default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+            return render_template(
+                "admin/edit_user.html",
+                user=user,
+                roles=roles,
+                hospitals=hospitals,
+                lab_units=lab_units,
+                selected_lab_units={lu.id for lu in user.lab_units},
+                timezone_choices=TIMEZONE_CHOICES,
+                timezone_labels=TIMEZONE_LABELS,
+                selected_timezone=user.timezone or default_tz,
+                default_timezone=default_tz,
+            )
+    
+    # Handle POST requests
+    if request.method == "POST":
+        with transaction_scope() as db:
+            user = db.get(User, user_id)
+            if not user:
+                flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
-        if request.method == "POST":
+            roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
+            hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+            lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
             # Handle role assignments
             if "save_roles" in request.form:
                 selected_roles = set(request.form.getlist("roles"))
@@ -225,7 +250,6 @@ def edit_user(user_id: int):
                         user.roles.append(r)
 
                 db.add(user)
-                db.commit()
                 flash("Roles updated.", "success")
                 return redirect(url_for("admin.edit_user", user_id=user_id))
 
@@ -315,24 +339,8 @@ def edit_user(user_id: int):
                     user.lab_units.append(lu)
 
             db.add(user)
-            db.commit()
             flash("Profile updated.", "success")
             return redirect(url_for("admin.users_list"))
-
-        # GET
-        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
-        return render_template(
-            "admin/edit_user.html",
-            user=user,
-            roles=roles,
-            hospitals=hospitals,
-            lab_units=lab_units,
-            selected_lab_units={lu.id for lu in user.lab_units},
-            timezone_choices=TIMEZONE_CHOICES,
-            timezone_labels=TIMEZONE_LABELS,
-            selected_timezone=user.timezone or default_tz,
-            default_timezone=default_tz,
-        )
 
 
 def users_update(user_id: int):
@@ -342,7 +350,7 @@ def users_update(user_id: int):
     """
     new_active = bool(request.form.get("active"))             # checkbox present -> True
 
-    with Session() as db:
+    with transaction_scope() as db:
         user = db.get(User, user_id)
         if not user:
             flash("User not found.", "danger")
@@ -372,7 +380,6 @@ def users_update(user_id: int):
         user.is_active = new_active
 
         db.add(user)
-        db.commit()
 
         try:
             current_app.logger.info(

@@ -1,28 +1,42 @@
 from flask import render_template, request, flash, redirect, url_for, jsonify
 from sqlalchemy import select
-from models import User, Disease, LabUnit, UserDiseaseUnitRole, Session
+from models import User, Disease, LabUnit, UserDiseaseUnitRole
+from db_transaction_manager import transaction_scope, get_db_session
 from auth.roles import roles_required
 
 @roles_required('admin')
 def manage_eligibility_users():
     """List all users to manage their grading eligibility."""
-    with Session() as db:
+    with get_db_session() as db:
         users = db.execute(
             select(User).order_by(User.username.asc())
         ).scalars().all()
-    return render_template("admin/grading_eligibility_users.html", users=users)
+        return render_template("admin/grading_eligibility_users.html", users=users)
 
 @roles_required('admin')
 def edit_eligibility(user_id):
     """Display and manage grading eligibility for a single user."""
-    with Session() as db:
+    # Handle GET request (display the form)
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             flash("User not found.", "danger")
             return redirect(url_for("admin.manage_eligibility_users"))
         
-        # Handle form submission
-        if request.method == 'POST':
+        if request.method == 'GET':
+            diseases = db.execute(select(Disease).order_by(Disease.name.asc())).scalars().all()
+            lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
+            
+            return render_template(
+                "admin/edit_grading_eligibility.html",
+                user=user,
+                diseases=diseases,
+                lab_units=lab_units
+            )
+    
+    # Handle form submission (POST)
+    if request.method == 'POST':
+        with transaction_scope() as db:
             try:
                 # Get the items from form data
                 items_data = request.form.get('items')
@@ -51,7 +65,7 @@ def edit_eligibility(user_id):
                 
                 # Create a map of existing records for quick lookup
                 existing_map = {
-                    (r.disease_id, r.lab_unit_id): r 
+                    (r.disease_id, r.lab_unit_id): r
                     for r in existing_records
                 }
                 
@@ -111,25 +125,10 @@ def edit_eligibility(user_id):
                         db.delete(row)
                         deleted.append(row.id)
                 
-                db.commit()
                 flash(f"Grading eligibility updated successfully. {len(created)} created, {len(updated)} updated, {len(deleted)} deleted.", "success")
                 return redirect(url_for("admin.edit_eligibility", user_id=user_id))
                 
             except json.JSONDecodeError as e:
                 flash(f"Invalid JSON data: {str(e)}", "danger")
                 return redirect(url_for("admin.edit_eligibility", user_id=user_id))
-            except Exception as e:
-                db.rollback()
-                flash(f"Error updating eligibility: {str(e)}", "danger")
-                return redirect(url_for("admin.edit_eligibility", user_id=user_id))
-        
-        # Handle GET request (display the form)
-        diseases = db.execute(select(Disease).order_by(Disease.name.asc())).scalars().all()
-        lab_units = db.execute(select(LabUnit).order_by(LabUnit.hospital_id.asc())).scalars().all()
-
-    return render_template(
-        "admin/edit_grading_eligibility.html",
-        user=user,
-        diseases=diseases,
-        lab_units=lab_units
-    )
+            # Exception handling is now automatic with transaction_scope

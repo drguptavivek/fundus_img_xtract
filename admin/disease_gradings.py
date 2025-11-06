@@ -7,14 +7,15 @@ from flask import render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from models import Disease, DiseaseGrading, GradingsFeatures, Session
+from models import Disease, DiseaseGrading, GradingsFeatures
+from db_transaction_manager import transaction_scope, get_db_session
 import json
 
 @roles_required('admin')
 def list_disease_gradings():
     """List all disease gradings and handle creation/update."""
     if request.method == "POST":
-        with Session() as db:
+        with transaction_scope() as db:
             grading_id = request.form.get("grading_id")
             disease_id = request.form.get("disease_id")
             impression = request.form.get("impression", "").strip()
@@ -111,11 +112,10 @@ def list_disease_gradings():
                     
                     flash(f"{disease_name}': '{impression}' - Created successfully.", "success")
                 
-                db.commit()
                 return redirect(url_for('admin.list_disease_gradings'))
     
     # GET request - show the form and list
-    with Session() as db:
+    with get_db_session() as db:
         gradings = db.execute(
             select(DiseaseGrading)
             .join(Disease)
@@ -124,14 +124,14 @@ def list_disease_gradings():
         ).scalars().all()
         
         diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
-
-    return render_template("admin/disease_gradings.html", gradings=gradings, diseases=diseases)
+        
+        return render_template("admin/disease_gradings.html", gradings=gradings, diseases=diseases)
 
 
 @roles_required('admin')
 def get_grading_features(grading_id):
     """Get features for a specific grading as JSON."""
-    with Session() as db:
+    with get_db_session() as db:
         grading = db.execute(
             select(DiseaseGrading)
             .options(selectinload(DiseaseGrading.features))
@@ -151,7 +151,7 @@ def get_grading_features(grading_id):
 @roles_required('admin')
 def delete_disease_grading(grading_id):
     """Delete a disease grading."""
-    with Session() as db:
+    with transaction_scope() as db:
         grading = db.execute(
             select(DiseaseGrading)
             .options(selectinload(DiseaseGrading.disease))
@@ -164,7 +164,6 @@ def delete_disease_grading(grading_id):
             disease_name = grading.disease.name if grading.disease else "Unknown"
             impression = grading.impression
             db.delete(grading)
-            db.commit()
             flash(f"{disease_name}': '{impression}' - Deleted successfully.", "success")
         
         return redirect(url_for('admin.list_disease_gradings'))

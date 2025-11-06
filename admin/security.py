@@ -6,7 +6,8 @@ from flask_login import current_user
 from auth.roles import roles_required
 from auth.security import hash_password, check_password_strength
 from auth.route_analyzer import analyze_all_routes, get_role_usage_statistics, get_routes_by_role
-from models import User, Role, Session
+from models import User, Role
+from db_transaction_manager import transaction_scope, get_db_session
 
 
 def change_password():
@@ -38,7 +39,7 @@ def change_password():
             return render_template("admin/change_password.html", username=username)
 
         # Update in DB
-        with Session() as db:
+        with transaction_scope() as db:
             user = db.execute(
                 select(User).where(func.lower(User.username) == username.lower())
             ).scalar_one_or_none()
@@ -50,7 +51,6 @@ def change_password():
             user.password_hash = hash_password(new_pw)
             user.is_locked_until = None  # optional: clear any lockouts
             db.add(user)
-            db.commit()
 
         # Audit (no secrets)
         try:
@@ -75,10 +75,9 @@ def manage_roles():
     Note: Roles cannot be created through the UI as they must be defined in code.
     """
     # GET: show current roles
-    with Session() as db:
+    with get_db_session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
-
-    return render_template("admin/roles.html", roles=roles)
+        return render_template("admin/roles.html", roles=roles)
 
 
 @roles_required("admin")
@@ -93,7 +92,7 @@ def role_usage():
     role_stats = get_role_usage_statistics(routes_info)
     
     # Get all roles from database
-    with Session() as db:
+    with get_db_session() as db:
         all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
     
     # Sort routes by file and function name
@@ -122,7 +121,7 @@ def routes_by_role(role_name):
     matching_routes.sort(key=lambda x: (x['file'], x['function']))
     
     # Get all roles from database
-    with Session() as db:
+    with get_db_session() as db:
         all_roles = [role.name for role in db.execute(select(Role)).scalars().all()]
     
     return render_template(

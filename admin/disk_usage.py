@@ -10,7 +10,8 @@ from typing import Dict, List
 from flask import current_app, render_template, request, jsonify, flash, redirect, url_for
 
 from auth.roles import roles_required
-from models import Session, ZipFile
+from models import ZipFile
+from db_transaction_manager import get_db_session
 
 @roles_required('admin')
 def _get_directories_to_analyze() -> List[Path]:
@@ -386,9 +387,7 @@ def delete_old_processed_zips():
             deleted_dirs = []
             
             # Get database session to check ZIP file dates
-            db_session = Session()
-            
-            try:
+            with get_db_session() as db_session:
                 # Iterate through all date subdirectories in the processed directory
                 for date_dir in processed_dir.iterdir():
                     if not date_dir.is_dir():
@@ -441,9 +440,6 @@ def delete_old_processed_zips():
                         current_app.logger.info(f"Cleaned directories: {', '.join(deleted_dirs)}")
                 else:
                     flash("No processed ZIP files older than 1 month found to delete.", "info")
-                    
-            finally:
-                db_session.close()
                 
         except Exception as e:
             current_app.logger.error(f"Error deleting old processed ZIP files: {e}")

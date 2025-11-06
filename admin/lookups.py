@@ -2,7 +2,8 @@ from flask import render_template, request, redirect, url_for, flash
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from models import Area, Camera, Disease, Hospital, LabUnit, Session, DiseaseGrading
+from models import Area, Camera, Disease, Hospital, LabUnit, DiseaseGrading
+from db_transaction_manager import transaction_scope, get_db_session
 
 
 def _get_model_by_name(name):
@@ -28,7 +29,7 @@ def list_and_create_lookup(model_name):
             flash("Name is required.", "danger")
             return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
 
-        with Session() as db:
+        with transaction_scope() as db:
             if model_name == "lab_unit":
                 hospital_id = request.form.get("hospital_id")
                 if not hospital_id:
@@ -48,7 +49,6 @@ def list_and_create_lookup(model_name):
                     flash(f"Lab Unit '{name}' already exists for this hospital.", "warning")
                 else:
                     db.add(LabUnit(name=name, hospital_id=hospital_id))
-                    db.commit()
                     flash(f"Lab Unit '{name}' added successfully.", "success")
 
             else:
@@ -62,13 +62,12 @@ def list_and_create_lookup(model_name):
                     flash(f"{model_name.replace('_', ' ').title()} '{name}' already exists.", "warning")
                 else:
                     db.add(Model(name=name))
-                    db.commit()
                     flash(f"{model_name.replace('_', ' ').title()} '{name}' added successfully.", "success")
 
         return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
 
     # --- Handle listing ---
-    with Session() as db:
+    with get_db_session() as db:
         stmt = select(Model).order_by(Model.id)
 
         # Eager-load hospital relationship if model is LabUnit
@@ -78,13 +77,13 @@ def list_and_create_lookup(model_name):
         items = db.scalars(stmt).all()
         hospitals = db.scalars(select(Hospital).order_by(Hospital.id)).all() if model_name == "lab_unit" else None
 
-    return render_template(
-        "admin/lookup_list.html",
-        items=items,
-        model_name=model_name,
-        title=model_name.replace("_", " ").title(),
-        hospitals=hospitals
-    )
+        return render_template(
+            "admin/lookup_list.html",
+            items=items,
+            model_name=model_name,
+            title=model_name.replace("_", " ").title(),
+            hospitals=hospitals
+        )
 
 
 def edit_lookup(model_name, item_id):
@@ -93,7 +92,8 @@ def edit_lookup(model_name, item_id):
         flash(f"Invalid master list: {model_name}", "danger")
         return redirect(url_for("admin.users_list"))
 
-    with Session() as db:
+    # Handle GET request (display the form)
+    with get_db_session() as db:
         item = db.get(Model, item_id)
         if not item:
             flash("Item not found.", "danger")
@@ -105,23 +105,35 @@ def edit_lookup(model_name, item_id):
             if item_id in [1,2,3]:
                 core_disease_names = {v.lower(): k for k, v in Disease.items()}
 
-        if request.method == "POST":
+        if request.method == "GET":
+            hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all() if model_name == "lab_unit" else None
+            
+            return render_template(
+                "admin/lookup_edit.html",
+                item=item,
+                model_name=model_name,
+                title=f"Edit {model_name.replace('_', ' ').title()}",
+                hospitals=hospitals
+            )
+    
+    # Handle POST request (update the item)
+    if request.method == "POST":
+        with transaction_scope() as db:
+            item = db.get(Model, item_id)
+            if not item:
+                flash("Item not found.", "danger")
+                return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
+            
             name = request.form.get("name", "").strip()
             if not name:
                 flash("Name is required.", "danger")
             else:
                 # Check if trying to change a core disease name
-                if model_name == "disease" and core_disease_names is not None:
+                if model_name == "disease" and item_id in [1,2,3]:
                     original_name = item.name
-                    if original_name.lower() in core_disease_names and name.lower() != original_name.lower():
+                    if original_name.lower() != name.lower():
                         flash(f"Core disease '{original_name}' cannot be renamed. The name must remain '{original_name}'.", "danger")
-                        return render_template(
-                            "admin/lookup_edit.html",
-                            item=item,
-                            model_name=model_name,
-                            title=f"Edit {model_name.replace('_', ' ').title()}",
-                            hospitals=None
-                        )
+                        return redirect(url_for("admin.edit_lookup", model_name=model_name, item_id=item_id))
 
                 item.name = name
                 if model_name == "lab_unit":
@@ -131,19 +143,8 @@ def edit_lookup(model_name, item_id):
                         return redirect(url_for("admin.edit_lookup", model_name=model_name, item_id=item_id))
                     item.hospital_id = int(hospital_id)
 
-                db.commit()
                 flash(f"{model_name.replace('_', ' ').title()} updated.", "success")
                 return redirect(url_for("admin.list_and_create_lookup", model_name=model_name))
-
-        hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all() if model_name == "lab_unit" else None
-
-    return render_template(
-        "admin/lookup_edit.html",
-        item=item,
-        model_name=model_name,
-        title=f"Edit {model_name.replace('_', ' ').title()}",
-        hospitals=hospitals
-    )
 
 
 def delete_lookup(model_name, item_id):

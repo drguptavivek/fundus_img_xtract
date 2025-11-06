@@ -2,7 +2,8 @@ from flask import render_template, request, redirect, url_for, flash
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
-from models import AIModel, Session
+from models import AIModel
+from db_transaction_manager import transaction_scope, get_db_session
 
 
 @roles_required("admin")
@@ -17,7 +18,7 @@ def list_and_create_ai_model():
         if not name or not version:
             flash("Name and version are required.", "danger")
         else:
-            with Session() as db:
+            with transaction_scope() as db:
                 # Check for duplicate name and version
                 exists = db.execute(
                     select(AIModel)
@@ -29,13 +30,12 @@ def list_and_create_ai_model():
                     flash(f"AI Model '{name}' version '{version}' already exists.", "warning")
                 else:
                     db.add(AIModel(name=name, version=version, description=description))
-                    db.commit()
                     flash(f"AI Model '{name}' version '{version}' added successfully.", "success")
 
         return redirect(url_for("admin.list_and_create_ai_model"))
 
     # --- Handle listing ---
-    with Session() as db:
+    with get_db_session() as db:
         stmt = select(AIModel).order_by(AIModel.id)
         items = db.scalars(stmt).all()
 
@@ -49,7 +49,7 @@ def list_and_create_ai_model():
 @roles_required("admin")
 def edit_ai_model(item_id):
     """Edit an existing AI model."""
-    with Session() as db:
+    with get_db_session() as db:
         item = db.get(AIModel, item_id)
         if not item:
             flash("AI Model not found.", "danger")
@@ -74,10 +74,12 @@ def edit_ai_model(item_id):
                 if exists:
                     flash(f"AI Model '{name}' version '{version}' already exists.", "warning")
                 else:
-                    item.name = name
-                    item.version = version
-                    item.description = description
-                    db.commit()
+                    # Use transaction_scope for write operations
+                    with transaction_scope() as write_db:
+                        item_to_update = write_db.get(AIModel, item_id)
+                        item_to_update.name = name
+                        item_to_update.version = version
+                        item_to_update.description = description
                     flash(f"AI Model '{name}' updated.", "success")
                     return redirect(url_for("admin.list_and_create_ai_model"))
 
@@ -91,7 +93,7 @@ def edit_ai_model(item_id):
 @roles_required("admin")
 def delete_ai_model(item_id):
     """Delete an AI model."""
-    with Session() as db:
+    with get_db_session() as db:
         item = db.get(AIModel, item_id)
         if not item:
             flash("AI Model not found.", "danger")
@@ -109,13 +111,13 @@ def delete_ai_model(item_id):
             return redirect(url_for("admin.list_and_create_ai_model"))
 
         try:
-            # Try to delete the item
-            db.delete(item)
-            db.commit()
+            # Use transaction_scope for delete operations
+            with transaction_scope() as write_db:
+                item_to_delete = write_db.get(AIModel, item_id)
+                write_db.delete(item_to_delete)
             flash(f"AI Model '{item.name}' deleted successfully.", "success")
         except Exception as e:
             # Handle any database errors gracefully and show a user-friendly message
-            db.rollback()
             flash(f"Error deleting AI Model: {str(e)}", "danger")
 
     return redirect(url_for("admin.list_and_create_ai_model"))

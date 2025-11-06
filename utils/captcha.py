@@ -32,17 +32,17 @@ class CaptchaManager:
         """Generate a random CAPTCHA text with improved readability."""
         # Use characters that are less likely to be confused
         # Avoid: 0/O, 1/l/I, 2/Z, 5/S, etc.
-        readable_chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+        readable_chars = 'ACDEFGHJKLMNPQRSTUVWXY23456789'
         
         # Ensure we have a good mix of character types
         text_parts = []
         for i in range(self.captcha_length):
             if i < 2:  # First 2 characters: uppercase letters
-                text_parts.append(random.choice('ABCDEFGHJKLMNPQRSTUVWXYZ'))
+                text_parts.append(random.choice('ACDEFGHJKLMNPQRSTUVWXY23456789'))
             elif i < 4:  # Next 2 characters: lowercase letters
-                text_parts.append(random.choice('abcdefghijkmnpqrstuvwxyz'))
-            else:  # Last character: digit
                 text_parts.append(random.choice('23456789'))
+            else:  # Last character: digit
+                text_parts.append(random.choice('ACDEFGHJKLMNPQRSTUVWXY23456789'))
         
         # Shuffle the positions to make it less predictable
         random.shuffle(text_parts)

@@ -46,7 +46,7 @@ def reset_files_directory() -> None:
 
     if resolved_root.exists():
         print(f"Clearing files directory at {resolved_root}...")
-        shutil.rmtree(resolved_root)
+        # shutil.rmtree(resolved_root)
     resolved_root.mkdir(parents=True, exist_ok=True)
     print(f"  Recreated files directory: {resolved_root}")
 

@@ -212,6 +212,59 @@ lsof -i :5001
 kill -9 PID
 ```
 
+#### Docker-Based Iteration
+
+For containerized development with live-reload:
+
+1. Ensure `docker-compose.override.yml` is present (checked in). It bind-mounts the project into the `web` container and runs `flask --reload`.
+2. Start the dependencies and the reload-enabled web service:
+
+```bash
+# DBa nd CaACHE
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+
+# MIGRATIONS
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+
+# User
+docker compose exec web /bin/bash
+uv run python -m scripts.create_user admin
+uv run python -m scripts.assign_roles admin --roles admin
+
+
+# WEB Container
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web
+
+```
+3. Edit source code locally; the container sees changes immediately and the Flask reloader restarts automatically.
+4. When switching back to production settings, stop the dev stack (`docker compose down`) so subsequent `docker compose up` runs use the Gunicorn configuration without the override.
+
+#### Docker Production Deployment
+
+To run the production container stack with Gunicorn:
+
+```bash
+# Build fresh images (if needed)
+docker compose build --pull
+
+# Copy env templates and fill in secrets if not already done
+cp deploy.config.env.example deploy.config.env
+cp deploy.secrets.env.example deploy.secrets.env  # edit values!
+
+# Launch services (uses Gunicorn via docker-compose.yml)
+docker compose up -d
+
+# Run database migrations
+docker compose run --rm web uv run alembic upgrade head
+
+# Check service status
+docker compose ps
+docker compose logs web
+```
+
+When done, shut down cleanly with `docker compose down`.
+
+
 ### Production Mode with Gunicorn (Recommended for Production)
 
 For production deployment, use Gunicorn which provides better performance, stability, and process management.
@@ -266,16 +319,18 @@ uv run gunicorn -c gunicorn_config.py wsgi:application
 
 #### Gunicorn Configuration
 
-The application includes a comprehensive Gunicorn configuration in `gunicorn_config.py`. You can customize settings using environment variables in your `.env` file:
+The application includes a comprehensive Gunicorn configuration in `gunicorn_config.py`. Customize settings by editing `deploy.config.env` (non-secret values) or `deploy.secrets.env` (secrets). Example entries:
 
 ```bash
-# Example .env configuration for production
+# deploy.config.env
 FLASK_ENV=production
-FLASK_SECRET_KEY=your-very-secret-key-here
 GUNICORN_BIND=0.0.0.0:5001
 GUNICORN_WORKERS=4
 GUNICORN_TIMEOUT=120
 GUNICORN_LOG_LEVEL=info
+
+# deploy.secrets.env
+FLASK_SECRET_KEY=your-very-secret-key-here
 ```
 
 For detailed information about running with Gunicorn, see [Gunicorn Documentation](docs/10-DEVELOP/GUNICORN.md).

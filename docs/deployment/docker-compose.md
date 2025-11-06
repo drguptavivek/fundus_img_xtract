@@ -8,11 +8,21 @@ This stack runs the Fundus Image Manager, PostgreSQL, and Redis in containers. T
 2. Copy `deploy.secrets.env.example` to `deploy.secrets.env` and fill in strong credentials.
 3. Keep `deploy.secrets.env` restricted (permissions 600) and out of version control.
 
+
+
 ## 2. Build and launch
 
 ```bash
-docker compose build
+
+
+docker compose --env-file deploy.secrets.env build
 docker compose up -d
+```
+#### DATABASE
+
+
+``bash
+docker compose exec web uv run alembic upgrade head
 ```
 
 The application is available on `http://localhost:5001` by default. The Postgres service exposes `${POSTGRES_PORT}` on the host so tools such as pgAdmin can connect using the credentials defined in `deploy.secrets.env`.

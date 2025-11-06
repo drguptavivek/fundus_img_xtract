@@ -289,7 +289,18 @@ class RouteTester:
         """Test a specific route with the given role."""
         results = []
         
+        if role is None:
+            role_str = "no auth"
+        else:
+            role_str = role
+        
+        if role is not None:
+            print(f"DEBUG: Testing {route_info['route']} with role {role_str}")
+        else:
+            print(f"DEBUG: Testing {route_info['route']} without authentication")
+        
         for method in route_info["methods"]:
+            print(f"DEBUG: Testing method {method}")
             # Prepare route URL (replace parameters with test values)
             route_url = route_info["route"]
             if "<int:" in route_url:
@@ -372,7 +383,7 @@ class RouteTester:
                         method=method,
                         blueprint=route_info["blueprint"],
                         roles_required=route_info["roles"],
-                        tested_with_role=role,
+                        tested_with_role=role_str,
                         status_code=0,
                         response_time_ms=response_time_ms,
                         success=False,
@@ -410,25 +421,45 @@ class RouteTester:
             print(f"Testing {len(self.routes_data)} routes...")
         
         # Filter routes if specified
-        filtered_routes = self.routes_data
+        routes_to_test = self.routes_data
         if blueprint_filter:
-            filtered_routes = [r for r in filtered_routes if r["blueprint"] == blueprint_filter]
+            routes_to_test = [r for r in routes_to_test if r["blueprint"] == blueprint_filter]
         if method_filter:
-            filtered_routes = [r for r in filtered_routes if method_filter in r["methods"]]
+            routes_to_test = [r for r in routes_to_test if method_filter in r["methods"]]
         
         total_tests = 0
-        for route_info in filtered_routes:
+        for route_info in routes_to_test:
             total_tests += len(route_info["methods"])
         
         if verbose:
             print(f"Total tests to run: {total_tests}")
         
         # Test each route
-    for i, route_info in enumerate(filtered_routes):
-        if verbose:
-            print(f"\nTesting {i+1}/{len(filtered_routes)}: {route_info['route']} ({route_info['blueprint']})")
+        for i, route_info in enumerate(routes_to_test):
+            if verbose:
+                print(f"\nTesting {i+1}/{len(routes_to_test)}: {route_info['route']} ({route_info['blueprint']})")
         
-        # Test without authentication first for protected routes
+        # Test with appropriate roles
+        roles_to_test = []
+        if role_filter:
+            if role_filter in route_info["roles"] or (route_info["public"] and role_filter == "anonymous"):
+                roles_to_test = [role_filter]
+        else:
+            # Test with all relevant roles
+            if route_info["public"]:
+                roles_to_test = ["anonymous"]
+            else:
+                # Test with one role that should have access
+                if route_info["roles"]:
+                    if "authenticated" in route_info["roles"]:
+                        roles_to_test = ["admin"]  # Use admin as representative authenticated user
+                    else:
+                        roles_to_test = [route_info["roles"][0]]
+        
+        if verbose:
+            print(f"  Roles to test: {roles_to_test}")
+        
+        # Test without authentication for protected routes
         if not route_info["public"]:
             results = self._test_route(route_info, role=None)
             if verbose:
@@ -437,24 +468,7 @@ class RouteTester:
             
             if fail_fast and any(not r.success for r in results):
                 print(f"Failed testing {route_info['route']} without authentication")
-                break
-            
-            # Test with appropriate roles
-            roles_to_test = []
-            if role_filter:
-                if role_filter in route_info["roles"] or (route_info["public"] and role_filter == "anonymous"):
-                    roles_to_test = [role_filter]
-            else:
-                # Test with all relevant roles
-                if route_info["public"]:
-                    roles_to_test = ["anonymous"]
-                else:
-                    # Test with one role that should have access
-                    if route_info["roles"]:
-                        if "authenticated" in route_info["roles"]:
-                            roles_to_test = ["admin"]  # Use admin as representative authenticated user
-                        else:
-                            roles_to_test = [route_info["roles"][0]]
+                return
             
             for role in roles_to_test:
                 if role == "anonymous":
@@ -472,12 +486,20 @@ class RouteTester:
                 
                 if fail_fast and any(not r.success for r in results):
                     print(f"Failed testing {route_info['route']} with role {role}")
-                    break
+                    return
+        
+        # If no roles were tested, still test the route (for public routes)
+        if not roles_to_test and route_info["public"]:
+            results = self._test_route(route_info, role=None)
+            if verbose:
+                print(f"  Public route test results: {len(results)} results")
+            self.test_results.extend(results)
         
         self.end_time = datetime.now()
         
         if verbose:
             print(f"\nTesting completed at {self.end_time}")
+            print(f"Total test results collected: {len(self.test_results)}")
     
     def generate_report(self, output_file: Optional[str] = None) -> TestSummary:
         """Generate a comprehensive test report."""

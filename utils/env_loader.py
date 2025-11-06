@@ -15,7 +15,6 @@ _ENV_LOADED = False
 _DEFAULT_FILES = (
     "deploy.config.env",
     "deploy.secrets.env",
-    ".env",
 )
 
 

@@ -141,7 +141,7 @@ def _get_email_results(user_id: str):
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
 @rate_limit_with_feedback("20 per minute", show_warning=True)
-@protect_form_submission(max_fields=10, max_field_length=100)
+@protect_form_submission(max_fields=10, max_field_length=500)
 @validate_payload_size(max_size=1024)  # 1KB limit for login form
 def login():
     from flask_login import current_user

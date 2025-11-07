@@ -218,8 +218,10 @@ def _build_database_url(base_dir: Path) -> str:
 - `_build_database_url()` returns: `postgresql://fundus_user:password@custom-host:5432/fundus_app`
 
 
+## Network
+The docker compose file will connect all containers to a Docker network titled `fundus_img_xtract_default`
 
-## Applciation Availability
+## Application Availability
 
 The application is available on `http://localhost:5001` by default. 
 

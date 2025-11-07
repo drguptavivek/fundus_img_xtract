@@ -125,16 +125,20 @@ def profile():
             select(User).options(selectinload(User.roles)).where(User.id == current_user.id)
         ).scalar_one()
         roles = [r.name for r in (user.roles or [])]
-    default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
-    # Render template within the same session to avoid detached instance errors
-    return render_template(
-        "account/profile.html",
-        roles=roles,
-        timezone_choices=TIMEZONE_CHOICES,
-        timezone_labels=TIMEZONE_LABELS,
-        selected_timezone=user.timezone or default_tz,
-        default_timezone=default_tz,
-    )
+        default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+        
+        # Access user.timezone while still in session context to avoid detached instance errors
+        selected_timezone = user.timezone or default_tz
+        
+        # Render template within the same session to avoid detached instance errors
+        return render_template(
+            "account/profile.html",
+            roles=roles,
+            timezone_choices=TIMEZONE_CHOICES,
+            timezone_labels=TIMEZONE_LABELS,
+            selected_timezone=selected_timezone,
+            default_timezone=default_tz,
+        )
 
 
 @account_bp.route("/change-password", methods=["GET", "POST"])

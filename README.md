@@ -29,6 +29,17 @@ rm docker-compose.override.yml
 # BUILD MAIN APP Container
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
 
+# docker-compose down cache && docker volume rm fundus_img_xtract_redis_data
+# docker-compose down db && docker volume rm fundus_img_xtract_postgres_data
+
+
+
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d cache
+
+
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db
+
+
 # DB and CaACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 

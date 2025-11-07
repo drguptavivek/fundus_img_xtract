@@ -54,7 +54,12 @@ services:
     env_file:
       - deploy.config.env
       - deploy.secrets.env
-    command: ["sh", "-c", "exec redis-server --save 60 1 --loglevel warning --requirepass '$${REDIS_PASSWORD}'"]
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_DB: ${REDIS_DB}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --save 60 1 --loglevel warning --requirepass \"$REDIS_PASSWORD\""]
     volumes:
       - redis_data:/data
     healthcheck:

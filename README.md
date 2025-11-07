@@ -125,6 +125,16 @@ cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS ORESENT this for development so that 127.0.0.1 is used to resolve the db container 
 
+# REDIS_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS ORESENT this for development so that 127.0.0.1 is used to resolve the db container 
+
+nano docker-compose.yml
+#  Ensure REDIS PORT is exposed to host and bound to 127.0.0.1 and not an open relay
+#     ports:
+#      -  "127.0.0.1:${REDIS_PORT:-6379}:6379"
+
+# PREVENT REDIS OPEN RELAY
+# 
+
 # DBa nd CaACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 

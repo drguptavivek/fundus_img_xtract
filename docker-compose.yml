@@ -52,7 +52,7 @@ services:
     image: redis:7-alpine
     container_name: fundus-img-xtract-cache
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379" # REDIS PORT is exposed to host and bound to 127.0.0.1 and not an open relay
     env_file:
       - deploy.config.env
       - deploy.secrets.env

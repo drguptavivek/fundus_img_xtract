@@ -51,6 +51,8 @@ services:
   cache:
     image: redis:7-alpine
     container_name: fundus-img-xtract-cache
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
     env_file:
       - deploy.config.env
       - deploy.secrets.env

@@ -24,6 +24,7 @@ from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from models import Session
 from utils.env_loader import load_environment
+from utils.redis_connection import build_redis_url
 
 load_environment()
 
@@ -774,12 +775,7 @@ def init_rate_limiting(app):
     app.config['RATELIMIT_MEMCACHED_MAX_POOL_SIZE'] = os.getenv('RATELIMIT_MEMCACHED_MAX_POOL_SIZE', '10')
     
     # Read Redis configuration
-    app.config['RATELIMIT_REDIS_URL'] = os.getenv('RATELIMIT_REDIS_URL') or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    app.config['RATELIMIT_REDIS_HOST'] = os.getenv('RATELIMIT_REDIS_HOST', 'localhost')
-    app.config['RATELIMIT_REDIS_PORT'] = int(os.getenv('RATELIMIT_REDIS_PORT', '6379'))
-    app.config['RATELIMIT_REDIS_DB'] = int(os.getenv('RATELIMIT_REDIS_DB', '0'))
-    app.config['RATELIMIT_REDIS_PASSWORD'] = os.getenv('RATELIMIT_REDIS_PASSWORD')
-    app.config['RATELIMIT_REDIS_USERNAME'] = os.getenv('RATELIMIT_REDIS_USERNAME')
+    app.config['RATELIMIT_REDIS_URL'] = os.getenv('RATELIMIT_REDIS_URL') or os.getenv('REDIS_URL') or build_redis_url()
     app.config['RATELIMIT_REDIS_SSL'] = os.getenv('RATELIMIT_REDIS_SSL', 'false').lower() in ('true', '1', 'yes')
     app.config['RATELIMIT_REDIS_SSL_CERT_REQS'] = os.getenv('RATELIMIT_REDIS_SSL_CERT_REQS', 'required')
     app.config['RATELIMIT_REDIS_CONNECTION_POOL_KWARGS'] = os.getenv('RATELIMIT_REDIS_CONNECTION_POOL_KWARGS', '{}')
@@ -839,27 +835,8 @@ def init_rate_limiting(app):
     
     # Check for Redis configuration
     elif app.config.get('REDIS_URL') or app.config.get('RATELIMIT_REDIS_URL'):
-        # Build Redis URL from components if full URL not provided
-        redis_url = app.config.get('RATELIMIT_REDIS_URL') or app.config.get('REDIS_URL')
-        
-        if not redis_url and app.config.get('RATELIMIT_REDIS_HOST'):
-            # Build Redis URL from individual components
-            redis_host = app.config.get('RATELIMIT_REDIS_HOST', 'localhost')
-            redis_port = app.config.get('RATELIMIT_REDIS_PORT', 6379)
-            redis_db = app.config.get('RATELIMIT_REDIS_DB', 0)
-            redis_password = app.config.get('RATELIMIT_REDIS_PASSWORD')
-            redis_username = app.config.get('RATELIMIT_REDIS_USERNAME')
-            redis_ssl = app.config.get('RATELIMIT_REDIS_SSL', False)
-            
-            if redis_username:
-                redis_url = f"redis://{redis_username}:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
-            elif redis_password:
-                redis_url = f"redis://:{redis_password}@{redis_host}:{redis_port}/{redis_db}"
-            else:
-                redis_url = f"redis://{redis_host}:{redis_port}/{redis_db}"
-            
-            if redis_ssl:
-                redis_url = redis_url.replace('redis://', 'rediss://')
+        # Use the centralized Redis URL builder if no explicit URL is provided
+        redis_url = app.config.get('RATELIMIT_REDIS_URL') or app.config.get('REDIS_URL') or build_redis_url()
         
         if redis_url:
             storage_uri = redis_url

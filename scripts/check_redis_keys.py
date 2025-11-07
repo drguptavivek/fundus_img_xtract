@@ -6,11 +6,11 @@ Check the actual Redis keys for rate limiting.
 import os
 import sys
 import redis
-from dotenv import load_dotenv
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.env_loader import load_environment
+from utils.redis_connection import build_redis_url
 
 
 load_environment()
@@ -18,8 +18,8 @@ load_environment()
 def check_redis_keys():
     """Check the actual Redis keys for rate limiting."""
     
-    # Get Redis configuration from environment
-    redis_url = os.getenv('REDIS_URL') or os.getenv('RATELIMIT_REDIS_URL', 'redis://localhost:6379/10')
+    # Get Redis configuration using the centralized function
+    redis_url = build_redis_url()
     
     print(f"Connecting to Redis: {redis_url}")
     

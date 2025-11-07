@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, request, jsonify, flash, redirect,
 from flask_login import login_required, current_user
 
 from utils.rate_limiter import clear_rate_limit, get_rate_limit_status, get_rate_limit_key, limiter
+from utils.redis_connection import build_redis_url
 from auth.roles import roles_required
 
 # Create blueprint
@@ -12,6 +13,10 @@ rate_limit_admin_bp = Blueprint("rate_limit_admin", __name__, url_prefix="/admin
 
 # Logger
 rate_limit_logger = logging.getLogger("rate_limit")
+
+# Note: Redis connection is managed centrally through the rate limiter in utils/rate_limiter.py
+# The limiter uses build_redis_url() from utils.redis_connection.py for consistent
+# environment switching between Docker and local development.
 
 
 @rate_limit_admin_bp.route("/")

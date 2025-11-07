@@ -17,6 +17,9 @@ sys.path.insert(0, str(project_root))
 from utils.env_loader import load_environment
 load_environment()
 
+# Import the centralized Redis URL builder
+from utils.redis_connection import build_redis_url
+
 
 def init_app():
     """Initialize the Flask app to access rate limiter."""

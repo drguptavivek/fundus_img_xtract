@@ -40,16 +40,15 @@ def _build_database_url(base_dir: Path) -> str:
 
         host_part = postgres_host or "127.0.0.1"
         port_part = f":{postgres_port}" if postgres_port else ""
-        print(f"postgresql://{user_part}{password_part}@{host_part}{port_part}/{postgres_db} ")
+        # print(f"postgresql://{user_part}{password_part}@{host_part}{port_part}/{postgres_db} ")
         return f"postgresql://{user_part}{password_part}@{host_part}{port_part}/{postgres_db}"
 
-    sqlite_path = base_dir / "image_manager.db"
-    _LOGGER.warning("DATABASE_URL not configured; defaulting to SQLite at %s", sqlite_path)
-    return f"sqlite:///{sqlite_path}"
-
+ 
+    _LOGGER.warning("DATABASE_URL not configured")
+ 
 
 DATABASE_URL = _build_database_url(BASE_DIR)
-print(f"DATABASE_URL = {DATABASE_URL}")
+# print(f"DATABASE_URL = {DATABASE_URL}")
 UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "files/zip_upload_zips")
 PROCESSED_DIR = BASE_DIR / os.getenv("PROCESSED_DIR", "files/zips_upload_processed")
 PROCESSING_ERROR_DIR = BASE_DIR / os.getenv("PROCESSING_ERROR_DIR", "files/zip_upload_processing_error")

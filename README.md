@@ -39,7 +39,8 @@ docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   r
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up -d
 
 # User Creation
-docker compose exec web /bin/bash
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
+
 uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin
 
@@ -72,24 +73,28 @@ cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS REMOVED this for development so that docker hostname can be used to resolve the db container 
 
+# BUILD App
+docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env  build web
+
+
 # DBa nd CaACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
 # MIGRATIONS
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
 
-# User
-docker compose exec web /bin/bash
-uv run python -m scripts/create_user admin
-uv run python -m scripts/assign_roles admin --roles admin
-
-
-# Base data
-uv run  scripts/initial_setup.py
 
 # WEB Container
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web
 
+# User
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
+uv run python -m scripts.create_user admin
+uv run python -m scripts.assign_roles admin --roles admin
+uv run scripts/initial_setup.py 
+uv run scripts/add_test_users.py
+
+ 
 ```
 3. Edit source code locally; the container sees changes immediately and the Flask reloader restarts automatically.
 4. When switching back to production settings, stop the dev stack (`docker compose down`) so subsequent `docker compose up` runs use the Gunicorn configuration without the override.
@@ -116,8 +121,15 @@ docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up
 uv run alembic upgrade head
 
 # User
+uv run scripts/initial_setup.py 
+uv run scripts/add_test_users.py
+
+
 uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin
+
+
+
 
 # APp
 uv run app.py

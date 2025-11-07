@@ -17,6 +17,7 @@ This stack runs the Fundus Image Manager, PostgreSQL, and Redis in containers. T
 
 docker compose --env-file deploy.secrets.env build
 docker compose up -d
+
 ```
 #### DATABASE
 

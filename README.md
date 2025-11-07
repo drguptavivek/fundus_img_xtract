@@ -4,7 +4,125 @@ A comprehensive system for an eye hospital to manage eye images. It facilitates 
 
 ## DOCKER Containerized Deployment
 
-For a Docker-based stack (Flask app, PostgreSQL, Redis) review [Docker Compose Deployment](docs/deployment/docker-compose.md). It covers the two-file environment setup (`deploy.config.env` for non-sensitive settings, `deploy.secrets.env` for credentials), persistent bind mounts for `./files`, `./logs`, and reverse-proxy integration.
+For a Docker-based stack (Flask app, PostgreSQL, Redis) review [Docker Compose Deployment](docs/deployment/docker-compose.md). It covers the two-file environment setup 
+- `deploy.config.env` for non-sensitive settings
+- `deploy.secrets.env` for credentials)
+
+It persistent bind mounts for `./files`, `./logs`.
+It also allows for reverse-proxy integration.
+
+
+#### Docker Production Deployment
+To run the production container stack with Gunicorn:
+
+```bash
+# Copy env templates and fill in secrets if not already done
+cp deploy.config.env.example deploy.config.env
+cp deploy.secrets.env.example deploy.secrets.env  # edit values!
+
+nano  deploy.secrets.env
+# POSTGRES_HOST_LOCAL=127.0.0.1 <-- remove this in production 
+
+# Enure overdide file is not present
+rm docker-compose.override.yml
+
+# BUILD MAIN APP Container
+docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
+
+# DB and CaACHE
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+
+# MIGRATIONS - using a temporary APP container
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+
+# Launch services (uses Gunicorn via docker-compose.yml)
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up -d
+
+# User Creation
+docker compose exec web /bin/bash
+uv run python -m scripts.create_user admin
+uv run python -m scripts.assign_roles admin --roles admin
+
+
+# Check service status
+docker compose ps
+docker compose logs web
+```
+
+When done, shut down cleanly with `docker compose down`.
+- Database and REDIS data persists in volumes
+- Uploaded files are bind mounted in ./files/ directory
+
+
+#### Docker based Development
+
+For containerized development with live-reload:
+
+1. Ensure `docker-compose.override.yml` is present (checked in). It bind-mounts the project into the `web` container and runs `flask --reload`.
+2. Start the dependencies and the reload-enabled web service:
+
+```bash
+# Create docker-compose.override.yml
+cp docker-compose.override.yml.example docker-compose.override.yml 
+
+# Copy env templates and fill in secrets if not already done
+cp deploy.config.env.example deploy.config.env
+cp deploy.secrets.env.example deploy.secrets.env  # edit values!
+
+nano  deploy.secrets.env
+# POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS REMOVED this for development so that docker hostname can be used to resolve the db container 
+
+# DBa nd CaACHE
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+
+# MIGRATIONS
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+
+# User
+docker compose exec web /bin/bash
+uv run python -m scripts/create_user admin
+uv run python -m scripts/assign_roles admin --roles admin
+
+
+# Base data
+uv run  scripts/initial_setup.py
+
+# WEB Container
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web
+
+```
+3. Edit source code locally; the container sees changes immediately and the Flask reloader restarts automatically.
+4. When switching back to production settings, stop the dev stack (`docker compose down`) so subsequent `docker compose up` runs use the Gunicorn configuration without the override.
+
+
+
+## NON-DOCKER DEVELROPMNENT
+Only DB and Redis run in docker. The app runs in terminal via `uv run app.py`
+
+
+```bash
+
+# Copy env templates and fill in secrets if not already done
+cp deploy.config.env.example deploy.config.env
+cp deploy.secrets.env.example deploy.secrets.env  # edit values!
+
+nano  deploy.secrets.env
+# POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS ORESENT this for development so that 127.0.0.1 is used to resolve the db container 
+
+# DBa nd CaACHE
+docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+
+# MIGRATIONS
+uv run alembic upgrade head
+
+# User
+uv run python -m scripts.create_user admin
+uv run python -m scripts.assign_roles admin --roles admin
+
+# APp
+uv run app.py
+
+```
 
 
 ## Package Management
@@ -211,59 +329,6 @@ lsof -i :5001
 # Stop the application if running in background
 kill -9 PID
 ```
-
-#### Docker-Based Iteration
-
-For containerized development with live-reload:
-
-1. Ensure `docker-compose.override.yml` is present (checked in). It bind-mounts the project into the `web` container and runs `flask --reload`.
-2. Start the dependencies and the reload-enabled web service:
-
-```bash
-# DBa nd CaACHE
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
-
-# MIGRATIONS
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
-
-# User
-docker compose exec web /bin/bash
-uv run python -m scripts.create_user admin
-uv run python -m scripts.assign_roles admin --roles admin
-
-
-# WEB Container
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web
-
-```
-3. Edit source code locally; the container sees changes immediately and the Flask reloader restarts automatically.
-4. When switching back to production settings, stop the dev stack (`docker compose down`) so subsequent `docker compose up` runs use the Gunicorn configuration without the override.
-
-#### Docker Production Deployment
-
-To run the production container stack with Gunicorn:
-
-```bash
-# Build fresh images (if needed)
-docker compose build --pull
-
-# Copy env templates and fill in secrets if not already done
-cp deploy.config.env.example deploy.config.env
-cp deploy.secrets.env.example deploy.secrets.env  # edit values!
-
-# Launch services (uses Gunicorn via docker-compose.yml)
-docker compose up -d
-
-# Run database migrations
-docker compose run --rm web uv run alembic upgrade head
-
-# Check service status
-docker compose ps
-docker compose logs web
-```
-
-When done, shut down cleanly with `docker compose down`.
-
 
 ### Production Mode with Gunicorn (Recommended for Production)
 

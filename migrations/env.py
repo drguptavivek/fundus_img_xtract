@@ -7,15 +7,15 @@ from sqlalchemy import pool
 
 from alembic import context
 
-# Import the Base metadata from models.py
-from models import Base
+# Import the Base metadata and database URL builder from models.py
+from models import Base, _build_database_url
 from utils.env_loader import load_environment
 
 # Load environment variables (same as in models.py and app.py)
 load_environment()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'image_manager.db'}")
+DATABASE_URL = _build_database_url(BASE_DIR)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

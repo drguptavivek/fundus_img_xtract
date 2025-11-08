@@ -28,8 +28,14 @@ def load_environment(*, force: bool = False, extra_files: Iterable[str] | None =
     project_root = Path(__file__).resolve().parent.parent
     env_files: list[Path] = []
 
+    # Load default configuration files first
     for name in _DEFAULT_FILES:
         env_files.append(project_root / name)
+
+    # Load development overrides if present (after defaults to override them)
+    dev_config_path = project_root / "develop.config.env"
+    if dev_config_path.exists():
+        env_files.append(dev_config_path)
 
     env_from_envvar = os.getenv("FUNDUS_ENV_FILES")
     if env_from_envvar:

@@ -29,7 +29,9 @@ from utils.env_loader import load_environment
 csrf = CSRFProtect()
 
 def create_app():
+    # Always load environment configuration
     load_environment()
+    
     app = Flask(
         __name__,
         static_folder="static",         # default, explicit for clarity

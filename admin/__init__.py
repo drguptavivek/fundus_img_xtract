@@ -11,6 +11,7 @@ from .logs import log_viewer
 from .disk_usage import disk_usage, delete_duplicates, delete_old_processed_zips
 from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
 from .database_dump import database_dump, get_database_info
+from .database_excel_export import database_excel_export, get_database_tables
 
 
 # Register routes with the blueprint
@@ -64,3 +65,7 @@ admin_bp.add_url_rule("/ai-models/<int:item_id>/delete", view_func=delete_ai_mod
 # Database dump routes
 admin_bp.add_url_rule("/database-dump", view_func=database_dump, methods=["GET", "POST"])
 admin_bp.add_url_rule("/database-info", view_func=get_database_info, methods=["GET"])
+
+# Database Excel export routes
+admin_bp.add_url_rule("/database-excel-export", view_func=database_excel_export, methods=["GET", "POST"])
+admin_bp.add_url_rule("/database-tables", view_func=get_database_tables, methods=["GET"])

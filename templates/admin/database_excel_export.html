@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block extra_styles %}
+<style>
+.export-card {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+.export-info {
+    background-color: var(--bs-secondary-bg);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+.export-warning {
+    background-color: var(--bs-warning-bg-subtle);
+    border: 1px solid var(--bs-warning-border);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+.table-selection {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+    padding: 1rem;
+}
+.table-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+.table-item:last-child {
+    border-bottom: none;
+}
+.table-checkbox {
+    margin-right: 0.5rem;
+}
+.table-name {
+    font-weight: 500;
+}
+.table-count {
+    color: var(--bs-secondary-color);
+    font-size: 0.9em;
+}
+.btn-export {
+    min-width: 200px;
+}
+.loading-spinner {
+    display: none;
+}
+.select-all-container {
+    padding: 0.5rem;
+    background-color: var(--bs-light-bg-subtle);
+    border-bottom: 2px solid var(--bs-primary);
+    margin-bottom: 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card export-card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="bi bi-file-earmark-excel me-2"></i>
+                        Database Excel Export
+                    </h4>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    
+                    <div class="export-warning">
+                        <h5><i class="bi bi-exclamation-triangle me-2"></i>Important Notice</h5>
+                        <ul class="mb-0">
+                            <li>Excel exports contain sensitive patient and user information</li>
+                            <li>Ensure export files are stored securely and deleted when no longer needed</li>
+                            <li>Large tables may take several minutes to export</li>
+                            <li>Each selected table will be exported as a separate Excel file in a ZIP archive</li>
+                            <li>Exports include all data from selected tables</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="export-info" id="tablesInfo">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span>Loading database tables...</span>
+                        </div>
+                    </div>
+                    
+                    <form method="POST" id="exportForm">
+                        {{ csrf_field() }}
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">
+                                <i class="bi bi-table me-2"></i>
+                                Select Tables to Export
+                            </label>
+                            <div class="table-selection" id="tableSelection">
+                                <div class="select-all-container">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAllTables">
+                                        <label class="form-check-label" for="selectAllTables">
+                                            <strong>Select All Tables</strong>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div id="tablesList">
+                                    <!-- Tables will be loaded here via JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-success btn-export" id="exportButton" disabled>
+                                <i class="bi bi-download me-2"></i>
+                                <span class="button-text">Export Selected Tables</span>
+                                <span class="loading-spinner spinner-border spinner-border-sm ms-2" role="status">
+                                    <span class="visually-hidden">Exporting...</span>
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load database tables
+    fetchDatabaseTables();
+    
+    // Handle form submission
+    const exportForm = document.getElementById('exportForm');
+    const exportButton = document.getElementById('exportButton');
+    const buttonText = exportButton.querySelector('.button-text');
+    const loadingSpinner = exportButton.querySelector('.loading-spinner');
+    
+    exportForm.addEventListener('submit', function(e) {
+        // Check if any tables are selected
+        const selectedTables = document.querySelectorAll('input[name="tables"]:checked');
+        if (selectedTables.length === 0) {
+            e.preventDefault();
+            alert('Please select at least one table to export.');
+            return;
+        }
+        
+        // Show loading state
+        exportButton.disabled = true;
+        buttonText.textContent = 'Exporting...';
+        loadingSpinner.style.display = 'inline-block';
+        
+        // Note: The form will submit normally and file will be downloaded
+        // This is just for UI feedback
+    });
+    
+    // Handle select all checkbox
+    const selectAllCheckbox = document.getElementById('selectAllTables');
+    selectAllCheckbox.addEventListener('change', function() {
+        const tableCheckboxes = document.querySelectorAll('input[name="tables"]');
+        tableCheckboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+        updateExportButton();
+    });
+});
+
+function fetchDatabaseTables() {
+    fetch('/admin/database-tables')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch database tables');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const infoDiv = document.getElementById('tablesInfo');
+            const tablesList = document.getElementById('tablesList');
+            
+            if (data.error) {
+                infoDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        ${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            // Update info
+            infoDiv.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Total Tables:</strong> ${data.total_tables}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Selected Tables:</strong> <span id="selectedCount">0</span>
+                    </div>
+                </div>
+            `;
+            
+            // Populate tables list
+            let tablesHtml = '';
+            data.tables.forEach(table => {
+                tablesHtml += `
+                    <div class="table-item">
+                        <div class="form-check">
+                            <input class="form-check-input table-checkbox" type="checkbox" 
+                                   name="tables" value="${table.name}" id="table_${table.name}"
+                                   onchange="updateExportButton()">
+                            <label class="form-check-label" for="table_${table.name}">
+                                <span class="table-name">${table.name}</span>
+                                <span class="table-count">(${table.row_count.toLocaleString()} rows)</span>
+                            </label>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            tablesList.innerHTML = tablesHtml;
+            
+        })
+        .catch(error => {
+            console.error('Error fetching database tables:', error);
+            const infoDiv = document.getElementById('tablesInfo');
+            infoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Failed to load database tables: ${error.message}
+                </div>
+            `;
+        });
+}
+
+function updateExportButton() {
+    const selectedTables = document.querySelectorAll('input[name="tables"]:checked');
+    const exportButton = document.getElementById('exportButton');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    // Update selected count
+    if (selectedCount) {
+        selectedCount.textContent = selectedTables.length;
+    }
+    
+    // Enable/disable export button
+    exportButton.disabled = selectedTables.length === 0;
+    
+    // Update button text
+    const buttonText = exportButton.querySelector('.button-text');
+    if (selectedTables.length === 0) {
+        buttonText.textContent = 'Select Tables to Export';
+    } else if (selectedTables.length === 1) {
+        buttonText.textContent = 'Export 1 Table';
+    } else {
+        buttonText.textContent = `Export ${selectedTables.length} Tables`;
+    }
+}
+</script>
+{% endblock %}

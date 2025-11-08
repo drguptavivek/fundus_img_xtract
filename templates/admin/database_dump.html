@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block extra_styles %}
+<style>
+.dump-card {
+    max-width: 800px;
+    margin: 0 auto;
+}
+.dump-info {
+    background-color: var(--bs-secondary-bg);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+.dump-warning {
+    background-color: var(--bs-warning-bg-subtle);
+    border: 1px solid var(--bs-warning-border);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+.btn-dump {
+    min-width: 200px;
+}
+.loading-spinner {
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card dump-card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="bi bi-database-down me-2"></i>
+                        Database Dump
+                    </h4>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    
+                    <div class="dump-warning">
+                        <h5><i class="bi bi-exclamation-triangle me-2"></i>Important Notice</h5>
+                        <ul class="mb-0">
+                            <li>Database dumps contain sensitive patient and user information</li>
+                            <li>Ensure the dump file is stored securely and deleted when no longer needed</li>
+                            <li>Large databases may take several minutes to dump</li>
+                            <li>The dump will include all tables, data, and structure</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="dump-info" id="databaseInfo">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <span>Loading database information...</span>
+                        </div>
+                    </div>
+                    
+                    <form method="POST" id="dumpForm">
+                        {{ csrf_field() }}
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary btn-dump" id="dumpButton">
+                                <i class="bi bi-download me-2"></i>
+                                <span class="button-text">Create Database Dump</span>
+                                <span class="loading-spinner spinner-border spinner-border-sm ms-2" role="status">
+                                    <span class="visually-hidden">Creating dump...</span>
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load database information
+    fetchDatabaseInfo();
+    
+    // Handle form submission
+    const dumpForm = document.getElementById('dumpForm');
+    const dumpButton = document.getElementById('dumpButton');
+    const buttonText = dumpButton.querySelector('.button-text');
+    const loadingSpinner = dumpButton.querySelector('.loading-spinner');
+    
+    dumpForm.addEventListener('submit', function(e) {
+        // Show loading state
+        dumpButton.disabled = true;
+        buttonText.textContent = 'Creating Dump...';
+        loadingSpinner.style.display = 'inline-block';
+        
+        // Note: The form will submit normally and the file will be downloaded
+        // This is just for UI feedback
+    });
+});
+
+function fetchDatabaseInfo() {
+    fetch('/admin/database-info')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch database information');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const infoDiv = document.getElementById('databaseInfo');
+            
+            if (data.error) {
+                infoDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        ${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            let infoHtml = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Database Type:</strong> ${data.database_type}
+                    </div>
+            `;
+            
+            if (data.database_size) {
+                infoHtml += `
+                    <div class="col-md-6">
+                        <strong>Database Size:</strong> ${data.database_size}
+                    </div>
+                `;
+            }
+            
+            infoHtml += '</div>';
+            
+            if (!data.supports_dump) {
+                infoHtml += `
+                    <div class="alert alert-warning mt-3">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Database dumps are not supported for ${data.database_type} databases.
+                    </div>
+                `;
+                
+                // Disable the dump button
+                const dumpButton = document.getElementById('dumpButton');
+                dumpButton.disabled = true;
+                dumpButton.innerHTML = '<i class="bi bi-x-circle me-2"></i>Dump Not Supported';
+            }
+            
+            infoDiv.innerHTML = infoHtml;
+        })
+        .catch(error => {
+            console.error('Error fetching database info:', error);
+            const infoDiv = document.getElementById('databaseInfo');
+            infoDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Failed to load database information: ${error.message}
+                </div>
+            `;
+        });
+}
+</script>
+{% endblock %}

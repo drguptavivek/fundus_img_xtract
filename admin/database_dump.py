@@ -1,0 +1,284 @@
+"""Admin database dump routes."""
+
+import os
+import subprocess
+import tempfile
+from datetime import datetime
+from pathlib import Path
+from flask import current_app, render_template, request, flash, redirect, url_for, send_file, jsonify
+from auth.roles import roles_required
+from utils.env_loader import get_env
+from db_transaction_manager import get_db_session
+
+
+@roles_required("admin")
+def database_dump():
+    """Handle database dump functionality."""
+    if request.method == "POST":
+        try:
+            # Import DATABASE_URL from models to ensure it's properly loaded
+            from models import DATABASE_URL
+            database_url = DATABASE_URL
+            
+            if not database_url:
+                flash("Database URL not configured.", "danger")
+                return redirect(url_for("admin.database_dump"))
+            
+            # Create a temporary file for the dump
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"database_dump_{timestamp}.sql"
+            
+            # Determine database type and create appropriate dump command
+            if database_url.startswith("postgresql://"):
+                # PostgreSQL dump
+                dump_content = _create_postgresql_dump(database_url)
+                # Fallback to SQLAlchemy dump if pg_dump fails
+                if not dump_content:
+                    current_app.logger.info("pg_dump failed, trying SQLAlchemy fallback")
+                    dump_content = _create_sqlalchemy_dump(database_url)
+            elif database_url.startswith("sqlite://"):
+                # SQLite dump
+                dump_content = _create_sqlite_dump(database_url)
+            else:
+                flash("Unsupported database type for dump.", "danger")
+                return redirect(url_for("admin.database_dump"))
+            
+            if dump_content:
+                # Create a temporary file
+                temp_dir = Path(tempfile.gettempdir())
+                temp_file = temp_dir / filename
+                
+                try:
+                    # Write dump to file
+                    with open(temp_file, 'w', encoding='utf-8') as f:
+                        f.write(dump_content)
+                    
+                    # Log the dump operation
+                    current_app.logger.info(f"Database dump created: {filename}")
+                    
+                    # Send file to user
+                    return send_file(
+                        temp_file,
+                        as_attachment=True,
+                        download_name=filename,
+                        mimetype='application/sql'
+                    )
+                finally:
+                    # Clean up temporary file after sending
+                    if temp_file.exists():
+                        try:
+                            temp_file.unlink()
+                        except Exception as e:
+                            current_app.logger.warning(f"Failed to clean up temporary file {temp_file}: {e}")
+            else:
+                # Check if this is a version mismatch issue
+                if database_url.startswith("postgresql://"):
+                    import subprocess
+                    try:
+                        # Check pg_dump version
+                        version_result = subprocess.run(['pg_dump', '--version'], capture_output=True, text=True)
+                        if "pg_dump (PostgreSQL)" in version_result.stdout:
+                            flash("Database dump failed due to pg_dump version mismatch. Please ensure pg_dump version matches PostgreSQL server version.", "danger")
+                        else:
+                            flash("Failed to create database dump. Please check pg_dump installation.", "danger")
+                    except Exception:
+                        flash("Failed to create database dump. Please check database configuration.", "danger")
+                else:
+                    flash("Failed to create database dump.", "danger")
+                
+        except Exception as e:
+            current_app.logger.error(f"Error creating database dump: {str(e)}")
+            flash(f"Error creating database dump: {str(e)}", "danger")
+    
+    # GET request - show the dump page
+    return render_template("admin/database_dump.html")
+
+
+def _create_postgresql_dump(database_url):
+    """Create a PostgreSQL database dump using pg_dump."""
+    try:
+        # Parse database URL to extract connection parameters
+        from urllib.parse import urlparse
+        parsed = urlparse(database_url)
+        
+        # Build pg_dump command
+        cmd = [
+            'pg_dump',
+            '--no-owner',
+            '--no-privileges',
+            '--verbose',
+            '--clean',
+            '--if-exists',
+            '--format=plain',
+            f'--dbname={database_url}'
+        ]
+        
+        # Execute pg_dump
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes timeout
+        )
+        
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            error_msg = result.stderr
+            if "server version" in error_msg and "pg_dump version" in error_msg:
+                current_app.logger.error(f"pg_dump version mismatch: {error_msg}")
+                return None
+            else:
+                current_app.logger.error(f"pg_dump failed: {error_msg}")
+                return None
+            
+    except subprocess.TimeoutExpired:
+        current_app.logger.error("Database dump timed out after 5 minutes")
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Error running pg_dump: {str(e)}")
+        return None
+
+
+def _create_sqlite_dump(database_url):
+    """Create a SQLite database dump using .dump command."""
+    try:
+        # Extract database file path from URL
+        db_path = database_url.replace("sqlite:///", "").replace("sqlite://", "")
+        
+        if not os.path.exists(db_path):
+            current_app.logger.error(f"SQLite database file not found: {db_path}")
+            return None
+        
+        # Use sqlite3 .dump command
+        cmd = ['sqlite3', db_path, '.dump']
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes timeout
+        )
+        
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            current_app.logger.error(f"sqlite3 dump failed: {result.stderr}")
+            return None
+            
+    except subprocess.TimeoutExpired:
+        current_app.logger.error("Database dump timed out after 5 minutes")
+        return None
+    except Exception as e:
+        current_app.logger.error(f"Error running sqlite3 dump: {str(e)}")
+        return None
+
+
+@roles_required("admin")
+def get_database_info():
+    """Get database information as JSON for AJAX requests."""
+    try:
+        # Import DATABASE_URL from models to ensure it's properly loaded
+        from models import DATABASE_URL
+        database_url = DATABASE_URL
+        
+        if not database_url:
+            return jsonify({"error": "Database URL not configured"}), 500
+        
+        # Determine database type
+        if database_url.startswith("postgresql://"):
+            db_type = "PostgreSQL"
+        elif database_url.startswith("sqlite://"):
+            db_type = "SQLite"
+        else:
+            db_type = "Unknown"
+        
+        # Get database size (for PostgreSQL)
+        db_size = None
+        if database_url.startswith("postgresql://"):
+            try:
+                with get_db_session() as db:
+                    from sqlalchemy import text
+                    result = db.execute(text("SELECT pg_size_pretty(pg_database_size(current_database())) as size"))
+                    row = result.first()
+                    db_size = row[0] if row else None
+            except Exception as e:
+                current_app.logger.warning(f"Could not get database size: {str(e)}")
+        
+        return jsonify({
+            "database_type": db_type,
+            "database_size": db_size,
+            "supports_dump": db_type in ["PostgreSQL", "SQLite"]
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Error getting database info: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+def _create_sqlalchemy_dump(database_url):
+    """Create a database dump using SQLAlchemy as fallback when pg_dump fails."""
+    try:
+        from models import engine
+        from sqlalchemy import text
+        
+        dump_lines = []
+        dump_lines.append("-- Database dump created using SQLAlchemy")
+        dump_lines.append(f"-- Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        dump_lines.append(f"-- Database URL: {database_url.split('@')[0]}@***")
+        dump_lines.append("")
+        
+        with engine.connect() as conn:
+            # Get all table names
+            result = conn.execute(text("""
+                SELECT tablename FROM pg_tables
+                WHERE schemaname = 'public'
+                ORDER BY tablename
+            """))
+            tables = [row[0] for row in result]
+            
+            for table in tables:
+                dump_lines.append(f"-- Data for table: {table}")
+                
+                # Get data and column names in one query
+                try:
+                    data_result = conn.execute(text(f"SELECT * FROM {table}"))
+                    rows = data_result.fetchall()
+                    
+                    if rows:
+                        # Get column names from the result
+                        columns = list(data_result.keys())
+                        
+                        # Generate INSERT statements
+                        for row in rows:
+                            values = []
+                            for value in row:
+                                if value is None:
+                                    values.append('NULL')
+                                elif isinstance(value, str):
+                                    # Escape single quotes and backslashes
+                                    escaped_value = value.replace("'", "''").replace('\\', '\\\\')
+                                    values.append(f"'{escaped_value}'")
+                                elif isinstance(value, (int, float)):
+                                    values.append(str(value))
+                                else:
+                                    # Convert other types to string and escape
+                                    str_value = str(value).replace("'", "''").replace('\\', '\\\\')
+                                    values.append(f"'{str_value}'")
+                            
+                            insert_stmt = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(values)});"
+                            dump_lines.append(insert_stmt)
+                    else:
+                        dump_lines.append(f"-- No data found in table {table}")
+                        
+                except Exception as e:
+                    current_app.logger.warning(f"Could not dump data for {table}: {e}")
+                
+                dump_lines.append("")
+                dump_lines.append("")
+        
+        return '\n'.join(dump_lines)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error creating SQLAlchemy dump: {str(e)}")
+        return None

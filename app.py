@@ -442,6 +442,18 @@ def create_app():
             rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
 
         return response
+    @app.after_request
+    def prevent_duplicate_headers(response):
+        """Remove headers that nginx-proxy-manager will add to prevent duplicates."""
+        # Remove Date header to let nginx handle it
+        if 'Date' in response.headers:
+            del response.headers['Date']
+        
+        # Also remove Server header to prevent conflicts
+        if 'Server' in response.headers:
+            del response.headers['Server']
+        
+        return response
 
     @app.after_request
     def add_rate_limit_headers(response):
@@ -909,4 +921,4 @@ if __name__ == "__main__":
     
     # dev server; for prod use gunicorn/uwsgi
     flask_port = int(os.getenv("FLASK_PORT", 5001))
-    app.run(debug=True, host="127.0.0.1", port=flask_port)
+    app.run(debug=True, host="0.0.0.0", port=flask_port)

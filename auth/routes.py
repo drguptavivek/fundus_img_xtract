@@ -196,7 +196,7 @@ def login():
             if not captcha_valid:
                 # Generate new CAPTCHA only when validation fails
                 captcha_data = captcha_manager.generate_captcha()
-                auth_logger.info(f"CAPTCHA validation failed - New CAPTCHA generated: {captcha_data['id']}")
+                auth_logger.info(f"CAPTCHA validation failed - New CAPTCHA generated: {captcha_data['captcha_id']}")
                 return render_template("auth/login.html",
                                        error=captcha_message,
                                        captcha_image=captcha_data['image'],

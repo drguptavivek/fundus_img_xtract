@@ -31,8 +31,8 @@ RUN pip install --no-cache-dir uv && \
 COPY . .
 
 # Ensure runtime directories exist
-RUN mkdir -p /app/logs /app/files && \
-    chmod 755 /app/logs /app/files
+RUN mkdir -p /app/logs /app/files  /var/log/fundus-img-xtract && \
+    chmod 755 /app/logs /app/files  /var/log/fundus-img-xtract
 
 EXPOSE 5001
 

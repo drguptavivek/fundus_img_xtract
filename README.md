@@ -98,7 +98,8 @@ Build Time (docker compose build):  uses the `dockerfile`
  - Copies the `entrypoint.sh` script into the container image
  - Sets `entrypoint.sh` as the ENTRYPOINT for the container. No execution happens during build
 
-
+** In case of code chanmge, rebuild is needed to copy fresh code top the container**
+`docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build `
 
 Runtime (docker compose up):
  - Container starts and executes the ENTRYPOINT script

@@ -921,4 +921,6 @@ if __name__ == "__main__":
     
     # dev server; for prod use gunicorn/uwsgi
     flask_port = int(os.getenv("FLASK_PORT", 5001))
-    app.run(debug=True, host="0.0.0.0", port=flask_port)
+    # Use debug mode from environment configuration, default to False
+    debug_mode = str(os.getenv("DEBUG", "false")).lower() in ("1", "true", "yes")
+    app.run(debug=debug_mode, host="0.0.0.0", port=flask_port)

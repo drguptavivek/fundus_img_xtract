@@ -147,8 +147,8 @@ docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env  bui
 # DBa nd CaACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
-# MIGRATIONS
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+# MIGRATIONS - Now Automatic
+# docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
 
 
 # WEB Container

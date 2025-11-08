@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import gzip
 from datetime import datetime
 from pathlib import Path
 from flask import current_app, render_template, request, flash, redirect, url_for, send_file, jsonify
@@ -26,7 +27,7 @@ def database_dump():
             
             # Create a temporary file for the dump
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"database_dump_{timestamp}.sql"
+            filename = f"database_dump_{timestamp}.sql.gz"
             
             # Determine database type and create appropriate dump command
             if database_url.startswith("postgresql://"):
@@ -49,8 +50,8 @@ def database_dump():
                 temp_file = temp_dir / filename
                 
                 try:
-                    # Write dump to file
-                    with open(temp_file, 'w', encoding='utf-8') as f:
+                    # Write dump to gzipped file
+                    with gzip.open(temp_file, 'wt', encoding='utf-8') as f:
                         f.write(dump_content)
                     
                     # Log the dump operation
@@ -61,7 +62,7 @@ def database_dump():
                         temp_file,
                         as_attachment=True,
                         download_name=filename,
-                        mimetype='application/sql'
+                        mimetype='application/gzip'
                     )
                 finally:
                     # Clean up temporary file after sending
@@ -101,7 +102,7 @@ def _create_postgresql_dump(database_url):
         from urllib.parse import urlparse
         parsed = urlparse(database_url)
         
-        # Build pg_dump command
+        # Build pg_dump command (without compression, we'll compress in Python)
         cmd = [
             'pg_dump',
             '--no-owner',

@@ -1,6 +1,24 @@
 # Fundus Image Manager
 
-A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
+A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). 
+It is extensible
+
+## DISEASES
+ - Users can add more diseases. 
+ - For each diseases, gradings can be added. 
+ - For each grade, features can be optionally defined which users may select. [multiple features can be selected per grade]]
+
+## Hospital and Labs/Units
+ - Hospitals and Laboratory/Units can be added
+ - User can be mapped to specific Laboratpry / Units within hospitals
+ - This scopes their access (except for grading that has a slot based access system) to images/ data for these Labs/Units
+
+## Users and roles
+ - Multiple users can be added
+ - Each user can get allocated various roles - 
+
+
+Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
 
 ## DOCKER Containerized Deployment
 
@@ -44,7 +62,12 @@ docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
 # MIGRATIONS - using a temporary APP container
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+# docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   run --rm web uv run alembic upgrade head
+# Now migrations are handled during App docker container start
+# This includes autom
+# docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
+# docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env up
+
 
 # Launch services (uses Gunicorn via docker-compose.yml)
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up -d
@@ -60,6 +83,34 @@ uv run python -m scripts.assign_roles admin --roles admin
 docker compose ps
 docker compose logs web
 ```
+
+Build Time (docker compose build):  uses the `dockerfile`
+ - python:3.12-slim AS base
+ - Installs System Dependencies - tesseract, libmagic, pq, uv etc
+ - Copy Dependency files - `pyprroject.toml`.
+ - Copy Application Code in /app in container
+ - Sets .venv location - ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+ - Python packages installed using `uv sync`. Packages are installed in /app/.venv inside the container.
+ - Copies the `entrypoint.sh` script into the container image
+ - Sets `entrypoint.sh` as the ENTRYPOINT for the container. No execution happens during build
+
+
+
+Runtime (docker compose up):
+ - Container starts and executes the ENTRYPOINT script
+ - The script runs all migration and setup logic
+    - Directory Setup → Creates /app/logs, /app/files
+    - Environment Setup → Sets secure cookie defaults
+    - Database Wait → Waits for PostgreSQL readiness
+    - Migration Execution → Runs `uv run alembic upgrade head`. All pending migrations get executed. 
+    - Core Data Check. → Determines if seeding needed -  Hospitals, Labs/Units, Diseases, gradings, features
+    - Conditional Seeding → Only seeds if core data missing
+ - Finally executes the CMD (gunicorn server)
+
+The First time, application is started, following migratiosn are done
+1. **Initial Migration** (`5a49784f68f1`): Creates all database tables
+2. **Data Seeding Migration** (`691d42ba3fff`): Safely populates core reference data. Uses @scripts/setup_core_entities.py
+
 
 When done, shut down cleanly with `docker compose down`.
 - Database and REDIS data persists in volumes

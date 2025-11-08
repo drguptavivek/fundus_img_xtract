@@ -50,7 +50,7 @@ def build_redis_url() -> str:
         password_part = ""
     
     redis_url = f"redis://{password_part}{redis_host}:{redis_port}/{redis_db}"
-    print(f"redis_url = redis://{password_part}{redis_host}:{redis_port}/{redis_db}")
+    # print(f"redis_url = redis://{password_part}{redis_host}:{redis_port}/{redis_db}")
     _LOGGER.debug(f"Built Redis URL: redis://{'*' * len(password_part) if password_part else ''}{redis_host}:{redis_port}/{redis_db}")
     
     return redis_url

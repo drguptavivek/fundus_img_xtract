@@ -359,9 +359,97 @@ def setup_core_disease_gradings(db):
     
     print(f"  Created {total_gradings_added} disease gradings")
 
-def populate_sample_features():
-    """Populate sample features for all existing disease gradings."""
+def populate_sample_features(db=None):
+    """Populate sample features for all existing disease gradings.
+    
+    Args:
+        db: Database session to use. If None, creates a new session.
+    """
     print("🚀 Starting to populate sample features for disease gradings...")
+    print("=" * 60)
+    
+    # Create session if not provided
+    close_session = False
+    if db is None:
+        db = Session()
+        close_session = True
+    
+    try:
+        # Get all diseases
+        diseases = db.execute(select(Disease)).scalars().all()
+        print(f"Found {len(diseases)} diseases in the database")
+        
+        total_updated = 0
+        total_skipped = 0
+        
+        for disease in diseases:
+            print(f"\nProcessing disease: {disease.name}")
+            
+            # Get all gradings for this disease
+            gradings = db.execute(
+                select(DiseaseGrading).where(DiseaseGrading.disease_id == disease.id)
+            ).scalars().all()
+            
+            print(f"  Found {len(gradings)} gradings for {disease.name}")
+            
+            for grading in gradings:
+                # Check if we have sample features for this disease and impression
+                if disease.name in SAMPLE_FEATURES and grading.impression in SAMPLE_FEATURES[disease.name]:
+                    sample_data = SAMPLE_FEATURES[disease.name][grading.impression]
+                    
+                    # Check if features already exist for this grading
+                    existing_features = db.execute(
+                        select(GradingsFeatures).where(GradingsFeatures.disease_grading_id == grading.id)
+                    ).scalars().all()
+                    
+                    if len(existing_features) == 0:
+                        # Only add features if none exist
+                        # Add new features from sample data
+                        for i, feature_data in enumerate(sample_data["features"], 1):
+                            feature = GradingsFeatures(
+                                disease_grading_id=grading.id,
+                                sr_no=feature_data["sr_no"],
+                                label=feature_data["label"]
+                            )
+                            db.add(feature)
+                        
+                        total_updated += 1
+                        print(f"    ✓ Added features for: {grading.impression}")
+                    else:
+                        total_skipped += 1
+                        print(f"    ⚠ Skipped: {grading.impression} (features already exist)")
+                else:
+                    total_skipped += 1
+                    print(f"    ⚠ Skipped: {grading.impression} (no sample features defined)")
+        
+        # Commit all changes
+        db.commit()
+        
+        print("\n" + "=" * 60)
+        print("✅ Sample features population completed!")
+        print(f"Total gradings updated: {total_updated}")
+        print(f"Total gradings skipped: {total_skipped}")
+        
+        # Show summary of what was updated
+        print("\nSummary of updated gradings:")
+        for disease_name in SAMPLE_FEATURES:
+            print(f"\n{disease_name}:")
+            for impression_name in SAMPLE_FEATURES[disease_name]:
+                sample_data = SAMPLE_FEATURES[disease_name][impression_name]
+                features_count = len(sample_data["features"])
+                print(f"  - {impression_name}: {features_count} features")
+        
+    except Exception as e:
+        print(f"\n❌ Error during sample features population: {e}")
+        sys.exit(1)
+    finally:
+        # Close session if we created it
+        if close_session:
+            db.close()
+
+def populate_sample_features_force():
+    """Force populate sample features (deletes existing features)."""
+    print("🚀 Starting to FORCE populate sample features for disease gradings...")
     print("=" * 60)
     
     try:
@@ -371,7 +459,6 @@ def populate_sample_features():
             print(f"Found {len(diseases)} diseases in the database")
             
             total_updated = 0
-            total_skipped = 0
             
             for disease in diseases:
                 print(f"\nProcessing disease: {disease.name}")
@@ -388,13 +475,6 @@ def populate_sample_features():
                     if disease.name in SAMPLE_FEATURES and grading.impression in SAMPLE_FEATURES[disease.name]:
                         sample_data = SAMPLE_FEATURES[disease.name][grading.impression]
                         
-                        # Create the JSON structure
-                        features_json = json.dumps({
-                            "features": sample_data["features"],
-                            "remarks": sample_data["remarks"]
-                        }, indent=2)
-                        
-                        # Update the grading with new features structure
                         # Delete existing features and create new ones
                         db.execute(
                             delete(GradingsFeatures).where(GradingsFeatures.disease_grading_id == grading.id)
@@ -409,29 +489,17 @@ def populate_sample_features():
                             )
                             db.add(feature)
                         
-                        # Note: We're not setting features_json anymore as it's deprecated
                         total_updated += 1
-                        print(f"    ✓ Updated: {grading.impression}")
+                        print(f"    ✓ Force updated: {grading.impression}")
                     else:
-                        total_skipped += 1
                         print(f"    ⚠ Skipped: {grading.impression} (no sample features defined)")
             
             # Commit all changes
             db.commit()
             
             print("\n" + "=" * 60)
-            print("✅ Sample features population completed!")
+            print("✅ Force sample features population completed!")
             print(f"Total gradings updated: {total_updated}")
-            print(f"Total gradings skipped: {total_skipped}")
-            
-            # Show summary of what was updated
-            print("\nSummary of updated gradings:")
-            for disease_name in SAMPLE_FEATURES:
-                print(f"\n{disease_name}:")
-                for impression_name in SAMPLE_FEATURES[disease_name]:
-                    sample_data = SAMPLE_FEATURES[disease_name][impression_name]
-                    features_count = len(sample_data["features"])
-                    print(f"  - {impression_name}: {features_count} features")
             
     except Exception as e:
         print(f"\n❌ Error during sample features population: {e}")
@@ -450,6 +518,8 @@ def setup_all_core_entities(db):
     # Setup diseases and gradings
     setup_core_diseases(db)
     setup_core_disease_gradings(db)
+
+    populate_sample_features()
 
 def main():
     """Main function to setup all core data."""

@@ -5,10 +5,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
+# Add PostgreSQL repository for PostgreSQL 18
 RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt/ $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
+        postgresql-client-18 \
         tesseract-ocr \
         libtesseract-dev \
         poppler-utils \

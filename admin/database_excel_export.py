@@ -76,8 +76,17 @@ def _export_table_to_excel(table_name):
     """Export a single table to Excel format."""
     try:
         with get_db_session() as db:
-            # Get table data
-            query = text(f"SELECT * FROM {table_name}")
+            # Get table data, excluding sensitive columns
+            if table_name == 'users':
+                # Exclude password_hash from users table
+                query = text("""
+                    SELECT id, username, is_active, is_locked_until, full_name, phone, designation,
+                           email, year_of_joining, last_date_of_service, created_at, updated_at,
+                           file_upload_quota, file_upload_count, timezone
+                    FROM users
+                """)
+            else:
+                query = text(f"SELECT * FROM {table_name}")
             result = db.execute(query)
             rows = result.fetchall()
             
@@ -91,7 +100,6 @@ def _export_table_to_excel(table_name):
             # Create Excel workbook
             wb = Workbook()
             ws = wb.active
-            ws.title = table_name
             
             # Define styles
             header_font = Font(bold=True, color="FFFFFF")
@@ -104,18 +112,8 @@ def _export_table_to_excel(table_name):
                 bottom=Side(style="thin")
             )
             
-            # Add title
-            ws['A1'] = f'{table_name} Data Export'
-            ws['A1'].font = Font(size=16, bold=True)
-            ws.merge_cells(f'A1:{get_column_letter(len(columns))}1')
-            
-            # Add generation timestamp
-            ws['A2'] = f'Generated on: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-            ws['A2'].font = Font(size=12, italic=True)
-            ws.merge_cells(f'A2:{get_column_letter(len(columns))}2')
-            
-            # Add headers
-            row = 4
+            # Add headers (start from row 1)
+            row = 1
             for col, header in enumerate(columns, start=1):
                 cell = ws.cell(row=row, column=col, value=header.replace('_', ' ').title())
                 cell.font = header_font

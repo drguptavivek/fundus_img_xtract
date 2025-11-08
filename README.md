@@ -38,11 +38,15 @@ To run the production container stack with Gunicorn:
 cp deploy.config.env.example deploy.config.env
 cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 
+
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- remove this in production 
 
 # Enure overdide file is not present
 rm docker-compose.override.yml
+
+# Ensure Local development config is removed
+rm develop.config.env
 
 # BUILD MAIN APP Container
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 

@@ -647,6 +647,10 @@ flowchart TD
         C --> D2[Assign UUIDs to PDFs];
 
         E[Direct Image Upload] --> F[Assign UUID & Metadata];
+
+        GG[Pre-Graded Upload with Excel] --> HH[Parse Grades Excel];
+        HH --> II[Map Images to Pre-Grades];
+        II --> F;
     end
 
     subgraph Processing & Anonymization
@@ -678,6 +682,18 @@ flowchart TD
         K4 --> L;
         L --> M[Assign Tasks Based on User Roles & Lab Units];
         M --> N[Task Queue Management];
+
+        L --> AA[Ad_Hoc Task Creation];
+        AA --> N;
+
+        II --> JJ[Create Review Tasks for Pre-Graded Images];
+        JJ --> M;
+    end
+
+    subgraph AI Grade Ingestion & Processing
+        BB[AI Grade Ingestion] --> CC[Validate AI Grades];
+        CC --> DD[Create Dual Grading Tasks for AI Graded Images];
+        DD --> N;
     end
 
     subgraph Dual Grading System
@@ -687,6 +703,10 @@ flowchart TD
         Q -->|Yes| R[Arbitrator Review];
         Q -->|No| S[Final Grade Established];
         R --> S;
+
+        O --> EE[Intra-Rater Agreement Tasks];
+        EE --> FF[Self-Comparison & Reconciliation];
+        FF --> S;
     end
 
     subgraph Quality Control & AI Integration
@@ -697,6 +717,10 @@ flowchart TD
 
     style A fill:#f9f,stroke:#333,stroke-width:2px;
     style E fill:#f9f,stroke:#333,stroke-width:2px;
+    style BB fill:#bbf,stroke:#333,stroke-width:2px;
+    style AA fill:#fbb,stroke:#333,stroke-width:2px;
+    style EE fill:#bfb,stroke:#333,stroke-width:2px;
+    style GG fill:#ffb,stroke:#333,stroke-width:2px;
     style V fill:#bbf,stroke:#333,stroke-width:2px;
     style Q fill:#ff9,stroke:#333,stroke-width:2px;
 ```

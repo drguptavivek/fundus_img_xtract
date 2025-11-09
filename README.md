@@ -690,10 +690,6 @@ flowchart TD
 
         II --> JJ[Create Review Tasks for Pre-Graded Images];
         JJ --> M;
-
-        O --> KK["Create Intra-Rater Agreement Batches"];
-        KK --> LL["Generate Self-Comparison Tasks"];
-        LL --> N;
     end
 
     subgraph AI Grade Processing via Excel Import
@@ -711,15 +707,6 @@ flowchart TD
         R --> S;
     end
 
-    subgraph Intra-Rater Agreement System
-        MM["Intra-Rater Admin Dashboard"] --> NN["Batch Configuration"];
-        NN --> OO["Select Images for Self-Comparison"];
-        OO --> PP["Generate Intra-Rater Tasks"];
-        PP --> QQ["Grader Self-Comparison"];
-        QQ --> RR["Original vs New Grade Analysis"];
-        RR --> SS["KPI Calculation & Reporting"];
-    end
-
     subgraph Quality Control & AI Integration
         S --> T[Quality Assurance Checks];
         T --> U[AI Model Comparison];
@@ -731,10 +718,98 @@ flowchart TD
     style BB fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style AA fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
     style GG fill:#B8860B,stroke:#000,stroke-width:2px,color:#fff;
-    style MM fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
-    style SS fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style V fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style Q fill:#FF8C00,stroke:#000,stroke-width:2px,color:#fff;
+```
+
+## Intra-Rater Agreement System Flowchart
+
+This dedicated flowchart shows the complete Intra-Rater Agreement workflow for quality assurance and grader consistency monitoring. Note that Discrepancy Review is an independent collaborative workflow for team meetings, not individual task-based reviews.
+
+```mermaid
+flowchart TD
+    subgraph Administrative Setup
+        A["Admin Dashboard"] --> B["Batch Configuration"];
+        B --> C["Select Graders"];
+        C --> D["Set Batch Parameters"];
+        D --> E["Define Image Selection Criteria"];
+    end
+
+    subgraph Batch Creation & Management
+        E --> F["Image Pool Selection"];
+        F --> G["Apply Time-based Filters"];
+        G --> H["Random Sample Generation"];
+        H --> I["Create Intra-Rater Tasks"];
+        I --> J["Batch Approval"];
+    end
+
+    subgraph Grader Workflow
+        J --> K["Task Assignment to Graders"];
+        K --> L["Grader Notification"];
+        L --> M["Access Intra-Rater Queue"];
+        M --> N["View Original Grade"];
+        N --> O["Provide New Grade"];
+        O --> P["Submit Self-Comparison"];
+    end
+
+    subgraph Analysis & Reporting
+        P --> Q["Grade Comparison Analysis"];
+        Q --> R["Agreement Calculation"];
+        R --> S["KPI Metrics Generation"];
+        S --> T["Cross-tabulation Reports"];
+        T --> U["Trend Analysis"];
+        U --> V["Quality Assurance Dashboard"];
+    end
+
+    subgraph Discrepancy Review Workflow
+        V --> W["Identify Grade Discrepancies"];
+        W --> X["Schedule Team Review Meeting"];
+        X --> Y["Group Discussion & Analysis"];
+        Y --> Z["Consensus Building"];
+        Z --> AA["Update Reference Standards"];
+        AA --> BB["Documentation of Decisions"];
+    end
+
+    subgraph Quality Assurance Integration
+        BB --> CC["Flag for Additional Training"];
+        CC --> DD["Performance Feedback"];
+        DD --> EE["Process Improvement"];
+        EE --> FF["Update Grading Guidelines"];
+    end
+
+    %% Style definitions for dark mode compatibility
+    style A fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style B fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style C fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style D fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style E fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style F fill:#2E8B57,stroke:#000,stroke-width:2px,color:#fff;
+    style G fill:#2E8B57,stroke:#000,stroke-width:2px,color:#fff;
+    style H fill:#2E8B57,stroke:#000,stroke-width:2px,color:#fff;
+    style I fill:#2E8B57,stroke:#000,stroke-width:2px,color:#fff;
+    style J fill:#2E8B57,stroke:#000,stroke-width:2px,color:#fff;
+    style K fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style L fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style M fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style N fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style O fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style P fill:#3CB371,stroke:#000,stroke-width:2px,color:#fff;
+    style Q fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style R fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style S fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style T fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style U fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style V fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
+    style W fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style X fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style Y fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style Z fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style AA fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style BB fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style CC fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style DD fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style EE fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style FF fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
 ```
 
 ## API Documentation

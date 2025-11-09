@@ -5,6 +5,7 @@ This handles ALL materialized views including:
 - mvw_grading_data_all (general grading data)
 - mvw_diabetic_retinopathy_grading_pivot (DR-specific pivoted data)
 - mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
+- mvw_amd_grading_pivot (AMD-specific pivoted data)
 """
 
 from flask import jsonify, request, current_app

@@ -12,6 +12,7 @@ from .disk_usage import disk_usage, delete_duplicates, delete_old_processed_zips
 from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
 from .database_dump import database_dump, get_database_info
 from .database_excel_export import database_excel_export, get_database_tables
+from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 
 
 # Register routes with the blueprint
@@ -69,3 +70,10 @@ admin_bp.add_url_rule("/database-info", view_func=get_database_info, methods=["G
 # Database Excel export routes
 admin_bp.add_url_rule("/database-excel-export", view_func=database_excel_export, methods=["GET", "POST"])
 admin_bp.add_url_rule("/database-tables", view_func=get_database_tables, methods=["GET"])
+
+# Materialized View routes
+admin_bp.add_url_rule("/materialized-view", view_func=materialized_view_status, methods=["GET"])
+admin_bp.add_url_rule("/api/materialized-view/status", view_func=api_materialized_view_status, methods=["GET"])
+admin_bp.add_url_rule("/api/materialized-view/last-refresh", view_func=api_last_refresh, methods=["GET"])
+admin_bp.add_url_rule("/api/materialized-view/refresh", view_func=manual_refresh, methods=["POST"])
+admin_bp.add_url_rule("/api/materialized-view/schedule", view_func=api_schedule_status, methods=["GET"])

@@ -19,7 +19,7 @@ logger = logging.getLogger("materialized_view")
 
 
 def refresh_materialized_view(app, schedule_time="manual"):
-    """Execute materialized view refresh with proper timezone logging.
+    """Execute materialized view refresh with proper timezone logging and timestamp tracking.
 
     Args:
         app: Flask application instance
@@ -28,30 +28,94 @@ def refresh_materialized_view(app, schedule_time="manual"):
     Returns:
         bool: True if refresh successful, False otherwise
     """
+    from datetime import datetime as dt
+
+    timezone_str = app.config.get("MATERIALIZED_VIEW_TIMEZONE", app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata"))
+    tz = pytz.timezone(timezone_str)
+    start_time = datetime.now(pytz.UTC)
+    ist_time = datetime.now(tz)
+
+    # Create log entry for refresh start
+    log_id = None
     try:
         from db_transaction_manager import transaction_scope
 
-        timezone_str = app.config.get("MATERIALIZED_VIEW_TIMEZONE", app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata"))
-        tz = pytz.timezone(timezone_str)
-
         with app.app_context():
             with transaction_scope() as db:
-                start_time = datetime.now(pytz.UTC)
-                ist_time = datetime.now(tz)
-
                 logger.info(f"Starting materialized view refresh - Schedule: {schedule_time}")
                 logger.info(f"IST Time: {ist_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
                 logger.info(f"UTC Time: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
-                # Execute the refresh using non-concurrent approach (CONCURRENTLY requires unique index)
+                # Insert log entry for refresh start
+                result = db.execute(
+                    text("""
+                        INSERT INTO materialized_view_refresh_log
+                        (refresh_type, refresh_started_at, success)
+                        VALUES (:refresh_type, :started_at, FALSE)
+                        RETURNING id
+                    """),
+                    {
+                        "refresh_type": schedule_time,
+                        "started_at": start_time
+                    }
+                )
+                log_id = result.scalar()
+
+                # Execute the refresh
                 db.execute(text("REFRESH MATERIALIZED VIEW mvw_grading_data_all"))
 
                 duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
+
+                # Update log entry with success
+                db.execute(
+                    text("""
+                        UPDATE materialized_view_refresh_log
+                        SET refresh_completed_at = :completed_at,
+                            refresh_duration_seconds = :duration,
+                            success = TRUE,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = :log_id
+                    """),
+                    {
+                        "completed_at": datetime.now(pytz.UTC),
+                        "duration": duration,
+                        "log_id": log_id
+                    }
+                )
+
                 logger.info(f"Materialized view refreshed successfully in {duration:.2f} seconds - Schedule: {schedule_time}")
                 return True
 
     except Exception as e:
         logger.error(f"Failed to refresh materialized view - Schedule: {schedule_time}, Error: {str(e)}")
+
+        # Update log entry with failure if we have a log_id
+        if log_id:
+            try:
+                from db_transaction_manager import transaction_scope
+
+                with app.app_context():
+                    with transaction_scope() as db:
+                        db.execute(
+                            text("""
+                                UPDATE materialized_view_refresh_log
+                                SET refresh_completed_at = :completed_at,
+                                    refresh_duration_seconds = :duration,
+                                    success = FALSE,
+                                    error_message = :error_message,
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE id = :log_id
+                            """),
+                            {
+                                "completed_at": datetime.now(pytz.UTC),
+                                "duration": (datetime.now(pytz.UTC) - start_time).total_seconds(),
+                                "error_message": str(e),
+                                "log_id": log_id
+                            }
+                        )
+            except Exception as log_error:
+                logger.error(f"Failed to update refresh log: {str(log_error)}")
+
         return False
 
 
@@ -199,6 +263,9 @@ def get_scheduler_status(app):
     # Sort by next run time
     next_runs.sort(key=lambda x: x['hours_from_now'])
 
+    # Get last refresh information
+    last_refresh_info = get_last_refresh_info(app)
+
     return {
         'current_ist': current_ist.strftime('%Y-%m-%d %H:%M:%S IST'),
         'current_utc': current_utc.strftime('%Y-%m-%d %H:%M:%S UTC'),
@@ -206,5 +273,84 @@ def get_scheduler_status(app):
         'enabled': app.config.get("MATERIALIZED_VIEW_SCHEDULE_ENABLED", False),
         'schedule_times': schedule_times,
         'next_runs': next_runs,
-        'frequency': '4 times daily, 7 days a week'
+        'frequency': '4 times daily, 7 days a week',
+        'last_refresh': last_refresh_info
     }
+
+
+def get_last_refresh_info(app):
+    """Get the most recent refresh information.
+
+    Args:
+        app: Flask application instance
+
+    Returns:
+        dict: Last refresh information
+    """
+    try:
+        from db_transaction_manager import transaction_scope
+
+        with app.app_context():
+            with transaction_scope() as db:
+                # Query the most recent successful refresh
+                result = db.execute(
+                    text("""
+                        SELECT
+                            refresh_type,
+                            refresh_started_at,
+                            refresh_completed_at,
+                            refresh_duration_seconds,
+                            success,
+                            error_message,
+                            created_at,
+                            updated_at
+                        FROM materialized_view_refresh_log
+                        WHERE materialized_view_name = 'mvw_grading_data_all'
+                        ORDER BY refresh_started_at DESC
+                        LIMIT 1
+                    """)
+                ).fetchone()
+
+                if result:
+                    # Parse timestamps
+                    timezone_str = app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
+                    tz = pytz.timezone(timezone_str)
+
+                    refresh_started_utc = result['refresh_started_at']
+                    if refresh_started_utc:
+                        if hasattr(refresh_started_utc, 'astimezone'):
+                            refresh_started_utc = refresh_started_utc.astimezone(tz)
+                        else:
+                            refresh_started_utc = pytz.utc.localize(refresh_started_utc).astimezone(tz)
+
+                    refresh_completed_utc = result['refresh_completed_at']
+                    if refresh_completed_utc:
+                        if hasattr(refresh_completed_utc, 'astimezone'):
+                            refresh_completed_utc = refresh_completed_utc.astimezone(tz)
+                        else:
+                            refresh_completed_utc = pytz.utc.localize(refresh_completed_utc).astimezone(tz)
+
+                    return {
+                        'has_data': True,
+                        'refresh_type': result['refresh_type'],
+                        'refresh_started_at': refresh_started_utc.strftime('%Y-%m-%d %H:%M:%S %Z') if refresh_started_utc else None,
+                        'refresh_completed_at': refresh_completed_utc.strftime('%Y-%m-%d %H:%M:%S %Z') if refresh_completed_utc else None,
+                        'refresh_duration_seconds': result['refresh_duration_seconds'],
+                        'success': result['success'],
+                        'error_message': result['error_message'],
+                        'ist_time': refresh_completed_utc.strftime('%Y-%m-%d %H:%M:%S IST') if refresh_completed_utc else None,
+                        'utc_time': result['refresh_completed_at'].strftime('%Y-%m-%d %H:%M:%S UTC') if result['refresh_completed_at'] else None,
+                        'data_freshness_minutes': round((datetime.utcnow() - result['refresh_completed_at']).total_seconds() / 60, 1) if result['refresh_completed_at'] else None
+                    }
+                else:
+                    return {
+                        'has_data': False,
+                        'message': 'No refresh history found'
+                    }
+
+    except Exception as e:
+        logger.error(f"Failed to get last refresh info: {str(e)}")
+        return {
+            'has_data': False,
+            'error': str(e)
+        }

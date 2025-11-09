@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">Materialized View Status</h1>
+                <div>
+                    <button type="button" class="btn btn-success" id="manual-refresh-btn" data-bs-toggle="modal" data-bs-target="#refreshModal">
+                        <i class="bi bi-arrow-clockwise"></i> Manual Refresh
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="refresh-status-btn">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scheduler Status Cards -->
+    <div class="row mb-4">
+        <div class="col-md-6 col-lg-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Scheduler Status</h5>
+                    <h3 class="card-text" id="scheduler-enabled">
+                        {% if scheduler_status.enabled %}
+                            <i class="bi bi-check-circle-fill"></i> Enabled
+                        {% else %}
+                            <i class="bi bi-x-circle-fill"></i> Disabled
+                        {% endif %}
+                    </h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Current Time</h5>
+                    <h6 class="card-text">
+                        <small>IST: {{ scheduler_status.current_ist }}</small><br>
+                        <small>UTC: {{ scheduler_status.current_utc }}</small>
+                    </h6>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Last Refresh</h5>
+                    <h6 class="card-text" id="last-refresh-time">
+                        {% if last_refresh_info.has_data %}
+                            {% if last_refresh_info.success %}
+                                <span class="text-success">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                    {{ last_refresh_info.ist_time }}
+                                </span>
+                            {% else %}
+                                <span class="text-warning">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                    Failed
+                                </span>
+                            {% endif %}
+                            <br><small>Data age: {{ last_refresh_info.data_freshness_minutes }} min</small>
+                        {% else %}
+                            <span class="text-muted">
+                                <i class="bi bi-dash-circle"></i>
+                                No history
+                            </span>
+                        {% endif %}
+                    </h6>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Next Refresh</h5>
+                    <h6 class="card-text" id="next-refresh-time">
+                        {% if scheduler_status.next_runs %}
+                            {% set next_run = scheduler_status.next_runs[0] %}
+                            {{ next_run.next_run_ist }}<br>
+                            <small>In {{ next_run.hours_from_now }} hours</small>
+                        {% else %}
+                            <span class="text-muted">Not scheduled</span>
+                        {% endif %}
+                    </h6>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Information -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Schedule Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Frequency:</th>
+                            <td>{{ scheduler_status.frequency }}</td>
+                        </tr>
+                        <tr>
+                            <th>Timezone:</th>
+                            <td>{{ scheduler_status.timezone }}</td>
+                        </tr>
+                        <tr>
+                            <th>Schedule Times:</th>
+                            <td>
+                                {% for time in scheduler_status.schedule_times %}
+                                    <span class="badge bg-secondary me-1">{{ time }}</span>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Refresh Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Total Refreshes:</th>
+                            <td>{{ refresh_stats.total_refreshes }}</td>
+                        </tr>
+                        <tr>
+                            <th>Success Rate:</th>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar bg-success" style="width: {{ refresh_stats.success_rate }}%">
+                                        {{ refresh_stats.success_rate }}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Avg Duration:</th>
+                            <td>{{ refresh_stats.avg_duration }} sec</td>
+                        </tr>
+                        <tr>
+                            <th>Success/Fail:</th>
+                            <td>
+                                <span class="text-success">{{ refresh_stats.successful_refreshes }}</span> /
+                                <span class="text-danger">{{ refresh_stats.failed_refreshes }}</span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh History -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Recent Refresh History</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Refresh Type</th>
+                                    <th>Started</th>
+                                    <th>Completed</th>
+                                    <th>Duration</th>
+                                    <th>Success</th>
+                                    <th>Data Freshness</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for refresh in refresh_history %}
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-{{ 'primary' if refresh.refresh_type == 'manual' else 'secondary' }}">
+                                            {{ refresh.refresh_type.title() }}
+                                        </span>
+                                    </td>
+                                    <td>{{ refresh.started_at if refresh.started_at else '-' }}</td>
+                                    <td>{{ refresh.completed_at if refresh.completed_at else '-' }}</td>
+                                    <td>{{ "%.2f"|format(refresh.duration_seconds) if refresh.duration_seconds else '-' }} sec</td>
+                                    <td>
+                                        {% if refresh.success %}
+                                            <span class="text-success">
+                                                <i class="bi bi-check-circle-fill"></i> Success
+                                            </span>
+                                        {% else %}
+                                            <span class="text-danger">
+                                                <i class="bi bi-x-circle-fill"></i> Failed
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ refresh.data_freshness_minutes }} min ago</td>
+                                    <td>
+                                        {% if refresh.error_message %}
+                                            <small class="text-danger">{{ refresh.error_message[:50] }}{% if refresh.error_message|length > 50 %}...{% endif %}</small>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">No refresh history found</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Refresh Modal -->
+<div class="modal fade" id="refreshModal" tabindex="-1" aria-labelledby="refreshModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="refreshModalLabel">Manual Materialized View Refresh</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to manually refresh the materialized view? This may take a few minutes.</p>
+                <div id="refresh-status" class="alert" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirm-refresh-btn">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh Now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshStatusBtn = document.getElementById('refresh-status-btn');
+    const manualRefreshBtn = document.getElementById('manual-refresh-btn');
+    const confirmRefreshBtn = document.getElementById('confirm-refresh-btn');
+    const refreshStatus = document.getElementById('refresh-status');
+
+    // Refresh page status
+    refreshStatusBtn.addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-arrow-clockwise rotating"></i> Loading...';
+
+        setTimeout(() => {
+            window.location.reload();
+        }, 1000);
+    });
+
+    // Manual refresh
+    confirmRefreshBtn.addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-arrow-clockwise rotating"></i> Refreshing...';
+        refreshStatus.style.display = 'block';
+        refreshStatus.className = 'alert alert-info';
+        refreshStatus.innerHTML = '<i class="bi bi-arrow-clockwise rotating"></i> Starting refresh...';
+
+        fetch('/admin/api/materialized-view/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                refreshStatus.className = 'alert alert-success';
+                refreshStatus.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + data.message;
+
+                // Reload page after delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            } else {
+                refreshStatus.className = 'alert alert-danger';
+                refreshStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> Error: ' + data.error;
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh Now';
+            }
+        })
+        .catch(error => {
+            refreshStatus.className = 'alert alert-danger';
+            refreshStatus.innerHTML = '<i class="bi bi-x-circle-fill"></i> Network error: ' + error.message;
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh Now';
+        });
+    });
+
+    // Add CSS for rotating icon
+    const style = document.createElement('style');
+    style.textContent = `
+        .rotating {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+});
+</script>
+{% endblock %}

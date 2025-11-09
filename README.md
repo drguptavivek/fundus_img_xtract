@@ -638,7 +638,7 @@ python app.py
 
 ## Application Workflow Flowchart
 
-**Note:** This flowchart reflects the actual implemented functionality in the application. Three major workflow components are fully implemented: Ad-Hoc Task Creation, Pre-Graded Excel Upload, and Intra-Rater Agreement Tasks. AI Grade Processing is implemented through Excel import functionality.
+**Note:** This flowchart reflects the actual implemented functionality in the application. Three major workflow components are fully implemented: Ad-Hoc Task Creation (for cross-disease grading of Direct Upload images), Pre-Graded Excel Upload, and Intra-Rater Agreement Tasks. AI Grade Processing is implemented through Excel import functionality.
 
 ```mermaid
 flowchart TD
@@ -685,17 +685,23 @@ flowchart TD
         L --> M[Assign Tasks Based on User Roles & Lab Units];
         M --> N[Task Queue Management];
 
-        L --> AA["Ad-Hoc Task Creation - Search & Select"];
-        AA --> N;
-
         II --> JJ[Create Review Tasks for Pre-Graded Images];
         JJ --> M;
     end
 
+    subgraph Ad-Hoc Task Creation for Cross-Disease Grading
+        F --> AA["Direct Upload Images Available"];
+        AA --> BB["Identify Cross-Disease Grading Opportunities"];
+        BB --> CC["Select Images for Alternative Disease Grading"];
+        CC --> DD["Create Ad-Hoc Tasks for Different Disease"];
+        DD --> EE["Assign Based on Grader Expertise"];
+        EE --> N;
+    end
+
     subgraph AI Grade Processing via Excel Import
-        BB["AI Grades via Pre-Graded Excel"] --> CC["Validate AI Grades & Models"];
-        CC --> DD[Create Review Tasks for AI Graded Images];
-        DD --> M;
+        FF["AI Grades via Pre-Graded Excel"] --> GG["Validate AI Grades & Models"];
+        GG --> HH["Create Review Tasks for AI Graded Images"];
+        HH --> M;
     end
 
     subgraph Dual Grading System
@@ -715,16 +721,21 @@ flowchart TD
 
     style A fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
     style E fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style BB fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
-    style AA fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
-    style GG fill:#B8860B,stroke:#000,stroke-width:2px,color:#fff;
+    style FF fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style GG fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style HH fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style V fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style Q fill:#FF8C00,stroke:#000,stroke-width:2px,color:#fff;
+    style AA fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
+    style BB fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
+    style CC fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
+    style DD fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
+    style EE fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
 ```
 
 ## Intra-Rater Agreement System Flowchart
 
-This dedicated flowchart shows the complete Intra-Rater Agreement workflow for quality assurance and grader consistency monitoring. Note that Discrepancy Review is an independent collaborative workflow for team meetings, not individual task-based reviews.
+This dedicated flowchart shows the complete Intra-Rater Agreement workflow for quality assurance and grader consistency monitoring. Note that Discrepancy Review is an independent workflow where teams review automatically generated consensus decisions, not build consensus through discussion.
 
 ```mermaid
 flowchart TD
@@ -761,23 +772,7 @@ flowchart TD
         U --> V["Quality Assurance Dashboard"];
     end
 
-    subgraph Discrepancy Review Workflow
-        V --> W["Identify Grade Discrepancies"];
-        W --> X["Schedule Team Review Meeting"];
-        X --> Y["Group Discussion & Analysis"];
-        Y --> Z["Consensus Building"];
-        Z --> AA["Update Reference Standards"];
-        AA --> BB["Documentation of Decisions"];
-    end
-
-    subgraph Quality Assurance Integration
-        BB --> CC["Flag for Additional Training"];
-        CC --> DD["Performance Feedback"];
-        DD --> EE["Process Improvement"];
-        EE --> FF["Update Grading Guidelines"];
-    end
-
-    %% Style definitions for dark mode compatibility
+      %% Style definitions for dark mode compatibility
     style A fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
     style B fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
     style C fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
@@ -800,16 +795,85 @@ flowchart TD
     style T fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
     style U fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
     style V fill:#228B22,stroke:#000,stroke-width:2px,color:#fff;
-    style W fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style X fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style Y fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style Z fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style AA fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style BB fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style CC fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style DD fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style EE fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style FF fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+```
+
+## Discrepancy Review Workflow
+
+This independent flowchart shows the Discrepancy Review process where teams validate automated consensus decisions rather than building consensus through discussion. This is a separate quality assurance workflow that complements the Intra-Rater Agreement system.
+
+```mermaid
+flowchart TD
+    subgraph Discrepancy Detection
+        A["Quality Assurance Dashboard"] --> B["Automated Discrepancy Identification"];
+        B --> C["Flag High-Priority Cases"];
+        C --> D["Generate Discrepancy Report"];
+    end
+
+    subgraph Team Review Preparation
+        D --> E["Schedule Review Meeting"];
+        E --> F["Prepare Case Materials"];
+        F --> G["Gather Automated Consensus Data"];
+        G --> H["Compile Review Package"];
+    end
+
+    subgraph Collaborative Review Session
+        H --> I["Team Meeting Begins"];
+        I --> J["Present Case & Images"];
+        J --> K["Review Automated Consensus Logic"];
+        K --> L["Discuss System Decision Rules"];
+        L --> M["Validate Consensus Outcome"];
+    end
+
+    subgraph Consensus Validation
+        M --> N{"Consensus Logic Valid?"};
+        N -->|Yes| O["Approve Automated Decision"];
+        N -->|No| P["Identify Logic Issues"];
+        P --> Q["Recommend Rule Adjustments"];
+        Q --> R["Document Validation Findings"];
+        O --> R;
+    end
+
+    subgraph System Improvement
+        R --> S["Update Consensus Rules"];
+        S --> T["Modify Reference Standards"];
+        T --> U["Implement Changes"];
+        U --> V["Monitor Impact"];
+    end
+
+    subgraph Quality Assurance Actions
+        V --> W["Identify Training Needs"];
+        W --> X["Update Grading Guidelines"];
+        X --> Y["Provide Team Feedback"];
+        Y --> Z["Process Improvement Documentation"];
+    end
+
+    %% Style definitions for dark mode compatibility
+    style A fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style B fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style C fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style D fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style E fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
+    style F fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
+    style G fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
+    style H fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
+    style I fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style J fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style K fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style L fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style M fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style N fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style O fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style P fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style Q fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style R fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style S fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style T fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style U fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style V fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style W fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style X fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style Y fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style Z fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
 ```
 
 ## API Documentation

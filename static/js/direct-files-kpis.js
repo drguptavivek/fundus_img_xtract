@@ -621,52 +621,53 @@ class DirectFilesAnalytics {
             // The API returns data wrapped in an object, extract the actual array
             this.directFilesData = result.data.data || [];
             console.log('Direct files data loaded:', this.directFilesData.length, 'records');
-            
+
+            // Always set column order, even when there's no data, to prevent DataTable initialization errors
+            this.columnOrder = [
+                "image_id",
+                "image_uuid",
+                "filename",
+                "original_filename",
+                "edited_filename",
+                "folder_rel",
+                "file_hash",
+                "content_hash",
+                "upload_date",
+                "upload_datetime",
+                "uploader_id",
+                "uploader_username",
+                "uploader_full_name",
+                "hospital_id",
+                "hospital_name",
+                "lab_unit_id",
+                "lab_unit_name",
+                "camera_id",
+                "camera_name",
+                "disease_id",
+                "disease_name",
+                "area_id",
+                "area_name",
+                "is_mydriatic",
+                "is_pregraded",
+                "verification_status",
+                "verification_remarks",
+                "verified_by_id",
+                "verified_by_username",
+                "verified_at",
+                "has_verification",
+                "has_grading",
+                "grading_count",
+                "latest_grading_date",
+                "grading_roles",
+                "has_task",
+                "task_count",
+                "task_states",
+                "latest_task_date"
+            ];
+            console.log('Available columns:', this.columnOrder);
+
             if (this.directFilesData.length > 0) {
                 console.log('Sample record:', this.directFilesData[0]);
-                // Store column order from the first record to maintain JSON field order
-                this.columnOrder = [
-                    "image_id",
-                    "image_uuid",
-                    "filename",
-                    "original_filename",
-                    "edited_filename",
-                    "folder_rel",
-                    "file_hash",
-                    "content_hash",
-                    "upload_date",
-                    "upload_datetime",
-                    "uploader_id",
-                    "uploader_username",
-                    "uploader_full_name",
-                    "hospital_id",
-                    "hospital_name",
-                    "lab_unit_id",
-                    "lab_unit_name",
-                    "camera_id",
-                    "camera_name",
-                    "disease_id",
-                    "disease_name",
-                    "area_id",
-                    "area_name",
-                    "is_mydriatic",
-                    "is_pregraded",
-                    "verification_status",
-                    "verification_remarks",
-                    "verified_by_id",
-                    "verified_by_username",
-                    "verified_at",
-                    "has_verification",
-                    "has_grading",
-                    "grading_count",
-                    "latest_grading_date",
-                    "grading_roles",
-                    "has_task",
-                    "task_count",
-                    "task_states",
-                    "latest_task_date"
-                ];
-                console.log('Available columns:', this.columnOrder);
             }
         } catch (error) {
             console.error('Error loading direct files data:', error);
@@ -798,7 +799,14 @@ class DirectFilesAnalytics {
     initializeDataTableInstance() {
         // Get all column names in JSON order (stored during data loading)
         const allColumns = this.columnOrder || [];
-        
+
+        // If we have no columns, don't initialize the DataTable to prevent errors
+        if (allColumns.length === 0) {
+            console.warn('No columns defined for DataTable initialization');
+            this.showEmptyState();
+            return;
+        }
+
         // Create column definitions dynamically
         const columnDefs = allColumns.map(col => ({
             data: col,
@@ -855,13 +863,20 @@ class DirectFilesAnalytics {
         }
         
         try {
+            // Check if we have data to display
+            if (this.directFilesData.length === 0) {
+                console.log('No data available for DataTable, showing empty state');
+                this.showEmptyState();
+                return;
+            }
+
             // Clear any existing table content to prevent duplication
             $('#direct-files-table thead tr').empty();
-            
+
             // Make sure the body table has the same structure
             $('#direct-files-table-body thead tr').empty();
             $('#direct-files-table-body tbody').empty();
-            
+
             this.dataTable = $('#direct-files-table').DataTable({
                 data: this.directFilesData,
                 columns: columnDefs,
@@ -1046,6 +1061,37 @@ class DirectFilesAnalytics {
             console.log('Table content cleared');
         } catch (error) {
             console.warn('Error clearing table content:', error);
+        }
+    }
+
+    showEmptyState() {
+        try {
+            const tableElement = $('#direct-files-table');
+            const tableBodyElement = $('#direct-files-table-body tbody');
+
+            // Clear any existing content
+            if (tableElement.length) {
+                tableElement.find('thead tr').empty();
+                tableElement.find('tbody').empty();
+            }
+
+            // Show empty state message
+            if (tableBodyElement.length) {
+                tableBodyElement.html(`
+                    <tr>
+                        <td colspan="100%" class="text-center py-4">
+                            <div class="text-muted">
+                                <i class="fas fa-inbox fa-2x mb-2"></i>
+                                <p>No direct files data available for the selected filters.</p>
+                            </div>
+                        </td>
+                    </tr>
+                `);
+            }
+
+            console.log('Empty state displayed for Direct Files Analytics');
+        } catch (error) {
+            console.warn('Error showing empty state:', error);
         }
     }
 }

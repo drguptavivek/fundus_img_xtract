@@ -126,8 +126,7 @@ def image_list():
         
         encounter_query = select(EncounterFile).options(
                 selectinload(EncounterFile.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
-                selectinload(EncounterFile.patient_encounter).selectinload(PatientEncounters.glaucoma_results_cleaned),
-                selectinload(EncounterFile.gradings)
+                selectinload(EncounterFile.patient_encounter).selectinload(PatientEncounters.glaucoma_results_cleaned)
             )
         
         # Apply search filter if provided

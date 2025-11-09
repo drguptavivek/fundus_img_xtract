@@ -709,8 +709,7 @@ flowchart TD
     end
 
     subgraph AI Grade Processing via Excel Import
-        FF["AI Grades via Pre-Graded Excel"] --> GG["Validate AI Grades & Models"];
-        GG --> HH["Create Review Tasks for AI Graded Images"];
+        FF["AI Grades via Pre-Graded Excel"] --> HH["Create  Tasks for AI Graded Images"];
         HH --> M;
     end
 

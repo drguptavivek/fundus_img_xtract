@@ -638,6 +638,8 @@ python app.py
 
 ## Application Workflow Flowchart
 
+**Note:** This flowchart reflects the actual implemented functionality in the application. Three major workflow components are fully implemented: Ad-Hoc Task Creation, Pre-Graded Excel Upload, and Intra-Rater Agreement Tasks. AI Grade Processing is implemented through Excel import functionality.
+
 ```mermaid
 flowchart TD
     subgraph Ingestion & Initial Processing
@@ -683,17 +685,21 @@ flowchart TD
         L --> M[Assign Tasks Based on User Roles & Lab Units];
         M --> N[Task Queue Management];
 
-        L --> AA[Ad_Hoc Task Creation];
+        L --> AA[Ad_Hoc Task Creation - Search & Select];
         AA --> N;
 
         II --> JJ[Create Review Tasks for Pre-Graded Images];
         JJ --> M;
+
+        O --> KK[Create Intra-Rater Agreement Batches];
+        KK --> LL[Generate Self-Comparison Tasks];
+        LL --> N;
     end
 
-    subgraph AI Grade Ingestion & Processing
-        BB[AI Grade Ingestion] --> CC[Validate AI Grades];
-        CC --> DD[Create Dual Grading Tasks for AI Graded Images];
-        DD --> N;
+    subgraph AI Grade Processing (via Excel Import)
+        BB[AI Grades via Pre-Graded Excel] --> CC[Validate AI Grades & Models];
+        CC --> DD[Create Review Tasks for AI Graded Images];
+        DD --> M;
     end
 
     subgraph Dual Grading System
@@ -703,10 +709,15 @@ flowchart TD
         Q -->|Yes| R[Arbitrator Review];
         Q -->|No| S[Final Grade Established];
         R --> S;
+    end
 
-        O --> EE[Intra-Rater Agreement Tasks];
-        EE --> FF[Self-Comparison & Reconciliation];
-        FF --> S;
+    subgraph Intra-Rater Agreement System
+        MM[Intra-Rater Admin Dashboard] --> NN[Batch Configuration];
+        NN --> OO[Select Images for Self-Comparison];
+        OO --> PP[Generate Intra-Rater Tasks];
+        PP --> QQ[Grader Self-Comparison];
+        QQ --> RR[Original vs New Grade Analysis];
+        RR --> SS[KPI Calculation & Reporting];
     end
 
     subgraph Quality Control & AI Integration
@@ -719,8 +730,9 @@ flowchart TD
     style E fill:#f9f,stroke:#333,stroke-width:2px;
     style BB fill:#bbf,stroke:#333,stroke-width:2px;
     style AA fill:#fbb,stroke:#333,stroke-width:2px;
-    style EE fill:#bfb,stroke:#333,stroke-width:2px;
     style GG fill:#ffb,stroke:#333,stroke-width:2px;
+    style MM fill:#bfb,stroke:#333,stroke-width:2px;
+    style SS fill:#bbf,stroke:#333,stroke-width:2px;
     style V fill:#bbf,stroke:#333,stroke-width:2px;
     style Q fill:#ff9,stroke:#333,stroke-width:2px;
 ```

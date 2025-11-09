@@ -18,14 +18,18 @@ erDiagram
     User ||--o{ UserDiseaseUnitRole : permissions
     User ||--o{ Job : uploads
     User ||--o{ JobItem : uploads
-    User ||--o{ ImageGrading : grades
     User ||--o{ Grade : submits
     User ||--o{ Consensus : decides
     User ||--o{ DirectImageUpload : uploads
     User ||--o{ DirectImageVerify : verifies
+    User ||--o{ AdHocTaskCreation : creates
+    User ||--o{ IntraRaterBatch : creates
+    User ||--o{ IntraRaterTask : is
+    User ||--o{ IntraRaterGrade : submits
+    User ||--o{ ViewerSettings : has
+    User ||--o{ ViewerPresets : has
     
     Role ||--o{ UserRole : assigned_to
-    Role ||--o{ UserDiseaseUnitRole : permissions
     
     %% Organizational Structure
     Hospital ||--o{ LabUnit : contains
@@ -37,17 +41,22 @@ erDiagram
     LabUnit ||--o{ GradingTask : assigned_to
     LabUnit ||--o{ UserDiseaseUnitRole : permissions
     LabUnit ||--o{ DirectImageUpload : location
+    LabUnit ||--o{ IntraRaterBatch : for
+    LabUnit ||--o{ IntraRaterTask : for
     
     %% Disease and Grading Reference Data
     Disease ||--o{ DiseaseGrading : has_grades
     Disease ||--o{ GradingTask : for_disease
     Disease ||--o{ UserDiseaseUnitRole : permissions
-    Disease ||--o{ AIGrade : for_disease
     Disease ||--o{ DirectImageUpload : for_disease
+    Disease ||--o{ IntraRaterBatch : for
+    Disease ||--o{ IntraRaterTask : for
     
+    DiseaseGrading ||--o{ GradingsFeatures : has
     DiseaseGrading ||--o{ Grade : used_in
     DiseaseGrading ||--o{ Consensus : final_decision
-    DiseaseGrading ||--o{ AIGrade : predicts
+    DiseaseGrading ||--o{ IntraRaterBatch : normal_grade
+    DiseaseGrading ||--o{ IntraRaterGrade : is
     
     %% Camera and Area Reference Data
     Camera ||--o{ DirectImageUpload : used
@@ -55,7 +64,6 @@ erDiagram
     
     %% ZIP File Processing
     ZipFile ||--|| PatientEncounters : contains
-    ZipFile ||--o{ Job : processes
     
     %% Patient Encounter Data
     PatientEncounters ||--o{ EncounterFile : contains
@@ -68,28 +76,44 @@ erDiagram
     GlaucomaReport ||--|| GlaucomaResultsCleaned : cleaned_from
     
     %% Image Files
-    EncounterFile ||--o{ ImageGrading : graded
     EncounterFile ||--o{ GradingTask : for_image
-    EncounterFile ||--o{ AIGrade : analyzed
+    EncounterFile ||--o{ IntraRaterTask : for_image
     
-    DirectImageUpload ||--o{ ImageGrading : graded
     DirectImageUpload ||--o{ GradingTask : for_image
-    DirectImageUpload ||--o{ AIGrade : analyzed
     DirectImageUpload ||--o{ DirectImageVerify : verified
+    DirectImageUpload ||--o{ IntraRaterTask : for_image
     
     %% Dual Grading System
     GradingTask ||--o{ Grade : has_grades
     GradingTask ||--o| Consensus : has_consensus
     GradingTask ||--o{ TaskTracker : tracked_by
-    GradingTask ||--o{ AIGrade : ai_analysis
+    GradingTask ||--o{ AdHocTaskCreation : created_by
+    GradingTask ||--o{ IntraRaterTask : source_task
     
-    Grade ||--o{ TaskTracker : tracks
+    Grade ||--o{ AIModel : from
+    
+    Consensus ||--o{ User : decided_by
+    
+    %% AI Models
+    AIModel ||--o{ Grade : generates
     
     %% Jobs and Processing
     Job ||--o{ JobItem : contains
     
     %% Notifications
     Notification ||--o{ NotificationRead : tracked
+    
+    %% Ad-hoc Task Creation
+    AdHocTaskCreation ||--o{ GradingTask : creates
+    
+    %% Intra-rater Reliability
+    IntraRaterBatch ||--o{ IntraRaterTask : contains
+    IntraRaterBatch ||--o{ IntraRaterGrade : contains
+    IntraRaterTask ||--o{ IntraRaterGrade : has
+    
+    %% Viewer Settings
+    User ||--o{ ViewerSettings : has
+    User ||--o{ ViewerPresets : has
     
     %% Entity Definitions
     User {
@@ -154,6 +178,13 @@ erDiagram
         int display_order
         boolean is_active
         text guidelines
+    }
+    
+    GradingsFeatures {
+        int id PK
+        int disease_grading_id FK
+        int sr_no
+        string label
     }
     
     ZipFile {
@@ -240,20 +271,6 @@ erDiagram
         datetime updated_at
     }
     
-    ImageGrading {
-        int id PK
-        int encounter_file_id FK
-        int direct_image_upload_id FK
-        int grader_user_id FK
-        string grader_username
-        string grader_role
-        string graded_for
-        string impression
-        text remarks
-        datetime created_at
-        datetime updated_at
-    }
-    
     Job {
         int id PK
         string token UK
@@ -311,7 +328,7 @@ erDiagram
         string filename
         string edited_filename
         string folder_rel
-        string file_hash UK
+        string file_hash
         string content_hash
         int uploader_id FK
         int hospital_id FK
@@ -333,8 +350,17 @@ erDiagram
         datetime verified_at
     }
     
+    AIModel {
+        int id PK
+        string name
+        string version
+        text description
+        datetime created_at
+    }
+    
     GradingTask {
         int id PK
+        string uuid UK
         int encounter_file_id FK
         int direct_image_upload_id FK
         int disease_id FK
@@ -342,6 +368,7 @@ erDiagram
         string state
         datetime created_at
         datetime updated_at
+        int ad_hoc_id FK
     }
     
     Grade {
@@ -351,6 +378,7 @@ erDiagram
         string role_slot
         int disease_grading_id FK
         text comment
+        text selected_features_json
         float time_taken
         datetime start_time
         datetime created_at
@@ -358,6 +386,9 @@ erDiagram
         string disease_name
         string grade_name
         text grade_description
+        int ai_model_id FK
+        string ai_model_name
+        string ai_model_version
     }
     
     Consensus {
@@ -381,21 +412,6 @@ erDiagram
         boolean can_grade_resident2
         boolean can_arbitrate
         boolean active
-        datetime created_at
-    }
-    
-    AIGrade {
-        int id PK
-        int encounter_file_id FK
-        int direct_image_upload_id FK
-        int disease_id FK
-        string model_name
-        string model_version
-        int label_disease_grading_id FK
-        float confidence
-        text probabilities_json
-        string run_id
-        int inference_time_ms
         datetime created_at
     }
     
@@ -428,6 +444,73 @@ erDiagram
         datetime read_at
     }
     
+    AdHocTaskCreation {
+        int id PK
+        int created_by_id FK
+        datetime created_at
+        text diseases_json
+        int max_images
+        text filters_json
+        text selected_image_refs_json
+        text summary_json
+        boolean randomized
+        text remarks
+    }
+    
+    AppSetting {
+        string key PK
+        text value
+        string value_type
+        datetime created_at
+        datetime updated_at
+    }
+    
+    IntraRaterBatch {
+        int id PK
+        int disease_id FK
+        int lab_unit_id FK
+        int created_by_user_id FK
+        int cooldown_days_override
+        int target_images_per_grader
+        int normal_grade_id FK
+        text selection_snapshot_json
+        text remarks
+        datetime created_at
+        datetime updated_at
+    }
+    
+    IntraRaterTask {
+        int id PK
+        string uuid UK
+        int batch_id FK
+        int grader_user_id FK
+        int disease_id FK
+        int lab_unit_id FK
+        int encounter_file_id FK
+        int direct_image_upload_id FK
+        int source_task_id FK
+        string state
+        datetime created_at
+        datetime updated_at
+    }
+    
+    IntraRaterGrade {
+        int id PK
+        int task_id FK
+        int batch_id FK
+        int grader_user_id FK
+        int disease_grading_id FK
+        text comment
+        text selected_features_json
+        float time_taken
+        datetime start_time
+        datetime created_at
+        datetime updated_at
+        string disease_name
+        string grade_name
+        text grade_description
+    }
+    
     FlaskSession {
         string session_id PK
         text data
@@ -435,6 +518,41 @@ erDiagram
         int user_id FK
         datetime started_at
         datetime ended_at
+        string ip_address
+    }
+    
+    ViewerSettings {
+        int id PK
+        int user_id FK,UK
+        int loupe_size
+        float loupe_zoom
+        boolean loupe_enabled
+        int zoom
+        int pan_x
+        int pan_y
+        float brightness
+        float contrast
+        string filter
+        datetime created_at
+        datetime updated_at
+    }
+    
+    ViewerPresets {
+        int id PK
+        int user_id FK
+        int slot_number
+        string name
+        int loupe_size
+        float loupe_zoom
+        boolean loupe_enabled
+        int zoom
+        int pan_x
+        int pan_y
+        float brightness
+        float contrast
+        string filter
+        datetime created_at
+        datetime updated_at
     }
 ```
 
@@ -467,13 +585,22 @@ erDiagram
     GradingTask ||--o| Consensus : has_consensus
     GradingTask ||--o{ TaskTracker : tracked_by
     
-    Grade ||--o{ TaskTracker : tracks
-    
     User ||--o{ Grade : submits
     User ||--o{ Consensus : decides
 ```
 
-### 4. Image Processing Pipeline
+### 4. Intra-rater Reliability
+```mermaid
+erDiagram
+    IntraRaterBatch ||--o{ IntraRaterTask : contains
+    IntraRaterTask ||--o{ IntraRaterGrade : has
+    IntraRaterBatch ||--o{ IntraRaterGrade : contains
+    User ||--o{ IntraRaterBatch : creates
+    User ||--o{ IntraRaterTask : is
+    User ||--o{ IntraRaterGrade : submits
+```
+
+### 5. Image Processing Pipeline
 ```mermaid
 erDiagram
     ZipFile ||--|| PatientEncounters : contains
@@ -484,7 +611,7 @@ erDiagram
     GlaucomaReport ||--|| GlaucomaResultsCleaned : cleaned_from
 ```
 
-### 5. Direct Upload Workflow
+### 6. Direct Upload Workflow
 ```mermaid
 erDiagram
     DirectImageUpload ||--o{ DirectImageVerify : verified
@@ -492,6 +619,13 @@ erDiagram
     
     User ||--o{ DirectImageUpload : uploads
     User ||--o{ DirectImageVerify : verifies
+```
+
+### 7. Viewer Settings
+```mermaid
+erDiagram
+    User ||--o{ ViewerSettings : has
+    User ||--o{ ViewerPresets : has
 ```
 
 ## Important Constraints and Notes
@@ -506,7 +640,7 @@ erDiagram
 ### Check Constraints
 - Image grading tables enforce that either `encounter_file_id` OR `direct_image_upload_id` is set, but not both
 - Task states are limited to specific values: 'pending', 'resident_done', 'resident2_done', 'arbitration', 'final'
-- Role slots are limited to: 'resident', 'resident2', 'arbitrator'
+- Role slots are limited to: 'resident', 'resident2', 'arbitrator', 'ai', 'review'
 - Consensus methods are limited to: 'match', 'adjudication'
 
 ### Cascade Deletes

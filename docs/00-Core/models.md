@@ -43,6 +43,9 @@ The database manages medical imaging data, specifically retinal fundus images, f
   - **Key Fields**: `id`, `disease_id`, `impression`, `display_order`, `is_active`, `guidelines`
   - **Purpose**: Master list of grading labels used across the system
 
+- **`GradingsFeatures`**: Features associated with a disease grading.
+    - **Key Fields**: `id`, `disease_grading_id`, `sr_no`, `label`
+
 - **`Camera`**: Types of cameras used for image capture.
   - **Key Fields**: `id`, `name` (unique)
 
@@ -135,21 +138,12 @@ These models track the raw data as it is uploaded and processed.
   - **Key Fields**: `id`, `task_id`, `user_id`, `role_slot`, `started_at`
   - **Purpose**: Identifies and cleans up stuck tasks
 
-### 8. Legacy Image Grading
+### 8. AI Model Integration
 
-- **`ImageGrading`**: Legacy grading model (pre-dual grading system).
-  - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `grader_user_id`, `grader_role`, `graded_for`, `impression`
-  - **Purpose**: Maintains backward compatibility with old grading data
+- **`AIModel`**: AI model information.
+  - **Key Fields**: `id`, `name`, `version`, `description`, `created_at`
 
-### 9. AI Model Integration
-
-- **`AIGrade`**: AI model predictions for images.
-  - **Key Fields**: `id`, `encounter_file_id` OR `direct_image_upload_id`, `disease_id`, `model_name`, `model_version`
-  - **Prediction Data**: `label_disease_grading_id`, `confidence`, `probabilities_json`, `run_id`
-  - **Performance**: `inference_time_ms`
-  - **Purpose**: Stores AI model outputs for comparison and analysis
-
-### 10. Job Management
+### 9. Job Management
 
 - **`Job`**: Background processing jobs for batch operations.
   - **Key Fields**: `id`, `token` (unique), `status`, `error`, `rejected_summary`, `excel_filename`, `upload_type`, `created_at`, `updated_at`, `uploader_user_id`, `uploader_username`, `uploader_ip`, `lab_unit_id`
@@ -167,7 +161,7 @@ These models track the raw data as it is uploaded and processed.
   - **Relationships**: `job` (Job reference)
   - **Indexes**: `job_id`, `uploader_user_id`, `uploader_username` for performance
 
-### 11. Security & Audit
+### 10. Security & Audit
 
 - **`LoginAttempt`**: Logs all login attempts for security monitoring.
   - **Key Fields**: `id`, `username_input`, `ip_address`, `success`, `created_at`
@@ -178,7 +172,7 @@ These models track the raw data as it is uploaded and processed.
 - **`PasswordResetAttempt`**: Password reset requests for rate limiting.
   - **Key Fields**: `id`, `email`, `ip_address`, `attempted_at`
 
-### 12. Notifications
+### 11. Notifications
 
 - **`Notification`**: System notifications for users.
   - **Key Fields**: `id`, `title`, `message`, `notification_type`, `recipient_user_id`, `sender_user_id`
@@ -189,11 +183,40 @@ These models track the raw data as it is uploaded and processed.
   - **Key Fields**: `id`, `notification_id`, `user_id`, `read_at`
   - **Purpose**: Per-user read tracking
 
-### 13. Session Management
+### 12. Ad-hoc Task Creation
+
+- **`AdHocTaskCreation`**: Auditable record of an Ad-hoc Task creation workflow.
+    - **Key Fields**: `id`, `created_by_id`, `created_at`, `diseases_json`, `max_images`, `filters_json`, `selected_image_refs_json`, `summary_json`, `randomized`, `remarks`
+
+### 13. Application Settings
+
+- **`AppSetting`**: Key/value application settings store.
+    - **Key Fields**: `key`, `value`, `value_type`, `created_at`, `updated_at`
+
+### 14. Intra-rater Reliability
+
+- **`IntraRaterBatch`**: Batch metadata for intra-rater reliability assessments.
+    - **Key Fields**: `id`, `disease_id`, `lab_unit_id`, `created_by_user_id`, `cooldown_days_override`, `target_images_per_grader`, `normal_grade_id`, `selection_snapshot_json`, `remarks`, `created_at`, `updated_at`
+
+- **`IntraRaterTask`**: Individual intra-rater reassessment task scoped to a grader.
+    - **Key Fields**: `id`, `uuid`, `batch_id`, `grader_user_id`, `disease_id`, `lab_unit_id`, `encounter_file_id`, `direct_image_upload_id`, `source_task_id`, `state`, `created_at`, `updated_at`
+
+- **`IntraRaterGrade`**: Grader submission for an intra-rater task.
+    - **Key Fields**: `id`, `task_id`, `batch_id`, `grader_user_id`, `disease_grading_id`, `comment`, `selected_features_json`, `time_taken`, `start_time`, `created_at`, `updated_at`, `disease_name`, `grade_name`, `grade_description`
+
+### 15. Session Management
 
 - **`FlaskSession`**: Server-side session storage.
   - **Key Fields**: `session_id` (primary key), `data`, `expiry`, `user_id`, `started_at`, `ended_at`
   - **Purpose**: Secure session management with user tracking
+
+### 16. Viewer Settings
+
+- **`ViewerSettings`**: User-specific viewer settings.
+    - **Key Fields**: `id`, `user_id`, `loupe_size`, `loupe_zoom`, `loupe_enabled`, `zoom`, `pan_x`, `pan_y`, `brightness`, `contrast`, `filter`, `created_at`, `updated_at`
+
+- **`ViewerPresets`**: User-specific viewer presets.
+    - **Key Fields**: `id`, `user_id`, `slot_number`, `name`, `loupe_size`, `loupe_zoom`, `loupe_enabled`, `zoom`, `pan_x`, `pan_y`, `brightness`, `contrast`, `filter`, `created_at`, `updated_at`
 
 ## Key Relationships
 
@@ -219,7 +242,13 @@ Grade (many) -- (1) DiseaseGrading
 ```
 DirectImageUpload (1) -- (many) DirectImageVerify
 DirectImageUpload (1) -- (many) GradingTask
-DirectImageUpload (1) -- (many) ImageGrading
+```
+
+### Intra-rater Reliability Flow
+```
+IntraRaterBatch (1) -- (many) IntraRaterTask
+IntraRaterTask (1) -- (many) IntraRaterGrade
+IntraRaterBatch (1) -- (many) IntraRaterGrade
 ```
 
 ### Organizational Structure
@@ -267,9 +296,10 @@ User (many) -- (many) Disease (via UserDiseaseUnitRole)
 - Ensures data integrity even if master tables change
 
 ### Audit Trails
-- All grading activities tracked with user, timestamp, and IP address
+- All grading activities tracked with user and timestamp
 - Login attempts and security events logged
 - Job processing history maintained
+- Ad-hoc task creation is audited
 
 ### Security
 - Password hashing with secure algorithms

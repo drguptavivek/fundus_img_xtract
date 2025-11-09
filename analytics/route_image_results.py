@@ -146,8 +146,9 @@ def image_results() -> str:
                 .all()
             )
 
-        diseases = db.query(Disease).order_by(Disease.name).all()
-        hospitals = db.query(Hospital).order_by(Hospital.name).all()
+        # Convert to simple data structures to avoid session issues in templates
+        diseases = [{"id": d.id, "name": d.name} for d in db.query(Disease).order_by(Disease.name).all()]
+        hospitals = [{"id": h.id, "name": h.name} for h in db.query(Hospital).order_by(Hospital.name).all()]
         rows = fetch_image_task_details(db, tasks)
 
     total_pages = max(1, math.ceil(total / per_page)) if total else 1

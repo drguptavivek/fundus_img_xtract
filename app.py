@@ -552,8 +552,7 @@ def create_app():
     from notifications import bp as notifications_bp
     app.register_blueprint(notifications_bp)
 
-    from api.gradings import bp as api_gradings_bp
-    app.register_blueprint(api_gradings_bp)
+   
 
     from tasks import bp as tasks_bp
     app.register_blueprint(tasks_bp)

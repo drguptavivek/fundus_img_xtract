@@ -10,7 +10,7 @@ This script will:
    - Grade records
    - Consensus records
    - TaskTracker records
-   - ImageGrading records
+   # Note: ImageGrading records removed - now using Grade model through GradingTask
 4. Finally remove the duplicate DirectImageUpload records
 5. Optionally clean up the actual image files
 """
@@ -34,7 +34,7 @@ from models import (
     Grade,
     Consensus,
     TaskTracker,
-    ImageGrading,
+    # Note: ImageGrading removed - now using Grade model through GradingTask
 )
 from db_transaction_manager import get_db_session
 
@@ -132,14 +132,10 @@ def get_associated_data_counts(db_session: Session, record_ids: List[int]) -> Di
         ))
     ).scalar()
     counts['task_trackers'] = tracker_count
-    
-    # ImageGrading records
-    image_grading_count = db_session.execute(
-        select(func.count(ImageGrading.id))
-        .where(ImageGrading.direct_image_upload_id.in_(record_ids))
-    ).scalar()
-    counts['image_gradings'] = image_grading_count
-    
+
+    # Note: ImageGrading records removed - now using Grade model through GradingTask
+    counts['image_gradings'] = 0  # Legacy count, always 0 now
+
     return counts
 
 
@@ -182,15 +178,9 @@ def remove_associated_data(db_session: Session, record_ids: List[int]) -> None:
     )
     result = db_session.execute(grade_delete)
     print(f"  Deleted {result.rowcount} Grade records")
-    
-    # 4. Remove ImageGrading records
-    image_grading_delete = delete(ImageGrading).where(
-        ImageGrading.direct_image_upload_id.in_(record_ids)
-    )
-    result = db_session.execute(image_grading_delete)
-    print(f"  Deleted {result.rowcount} ImageGrading records")
-    
-    # 5. Remove GradingTask records
+
+    # Note: ImageGrading records removed - now using Grade model through GradingTask
+    # 4. Remove GradingTask records (renumbered)
     task_delete = delete(GradingTask).where(
         GradingTask.direct_image_upload_id.in_(record_ids)
     )

@@ -17,8 +17,9 @@ from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
 
 from models import (
-    LabUnit, Hospital, User, GradingTask, Grade, 
-    DirectImageUpload, DirectImageVerify, ImageGrading,  
+    LabUnit, Hospital, User, GradingTask, Grade,
+    DirectImageUpload, DirectImageVerify,
+    # Note: ImageGrading removed - now using Grade model through GradingTask
 )
 from db_transaction_manager import get_db_session
 
@@ -51,7 +52,8 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
             joinedload(DirectImageUpload.area),
             joinedload(DirectImageUpload.uploader),
             joinedload(DirectImageUpload.verifications).joinedload(DirectImageVerify.verified_by),
-            joinedload(DirectImageUpload.gradings).joinedload(ImageGrading.grader)
+            # Note: ImageGrading relationship removed - now using Grade model through GradingTask
+            # joinedload(DirectImageUpload.gradings).joinedload(ImageGrading.grader)
         )
         
         # Apply date filters based on upload_date (created_at field)

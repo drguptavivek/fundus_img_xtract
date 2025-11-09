@@ -17,7 +17,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.dataFrameDirectFiles import generate_direct_image_upload_df
 from models import (
-    ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
+    Session, PatientEncounters, EncounterFile, EncounterFilePDF,
     DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
     LabUnit, Hospital, DiseaseGrading, Disease, ZipFile
 )

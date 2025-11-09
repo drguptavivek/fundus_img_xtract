@@ -56,7 +56,7 @@ from models import (
     UserRole, Role, User,
     # Image and grading data
     Consensus, Grade, GradingTask, DirectImageVerify, DirectImageUpload,
-    ImageGrading, GlaucomaResultsCleaned, GlaucomaReport, DiabeticRetinopathyReport,
+    GlaucomaResultsCleaned, GlaucomaReport, DiabeticRetinopathyReport,
     EncounterFilePDF, EncounterFile, PatientEncounters, ZipFile,
     JobItem, Job
 )
@@ -162,155 +162,153 @@ def clear_database():
     
     with get_db_session() as db:
         try:
-        print("Starting to clear the database...")
+            print("Starting to clear the database...")
+
+            # Clear viewer settings and presets (user-specific data)
+            print("Deleting Viewer Presets...")
+            db.query(ViewerPresets).delete()
+
+            print("Deleting Viewer Settings...")
+            db.query(ViewerSettings).delete()
+
+            # Clear session management
+            print("Deleting Flask Sessions...")
+            db.query(FlaskSession).delete()
+
+            # Clear intra-rater reliability data (depends on tasks, users, etc.)
+            print("Deleting Intra-Rater Grades...")
+            db.query(IntraRaterGrade).delete()
+
+            print("Deleting Intra-Rater Tasks...")
+            db.query(IntraRaterTask).delete()
+
+            print("Deleting Intra-Rater Batches...")
+            db.query(IntraRaterBatch).delete()
+
+            # Clear application settings
+            print("Deleting Application Settings...")
+            db.query(AppSetting).delete()
+
+            # Clear ad-hoc task creation records
+            print("Deleting Ad-Hoc Task Creations...")
+            db.query(AdHocTaskCreation).delete()
         
-        # Clear viewer settings and presets (user-specific data)
-        print("Deleting Viewer Presets...")
-        db.query(ViewerPresets).delete()
+            # Clear notifications
+            print("Deleting Notification Reads...")
+            db.query(NotificationRead).delete()
+            
+            print("Deleting Notifications...")
+            db.query(Notification).delete()
+            
+            # Clear task tracking
+            print("Deleting Task Trackers...")
+            db.query(TaskTracker).delete()
+            
+            # Clear user role management
+            print("Deleting User Disease Unit Roles...")
+            db.query(UserDiseaseUnitRole).delete()
+            
+            # Clear AI models (referenced by grades)
+            print("Deleting AI Models...")
+            db.query(AIModel).delete()
+            
+            # Clear security-related data
+            print("Deleting Password Reset Attempts...")
+            db.query(PasswordResetAttempt).delete()
+            
+            print("Deleting IP Locks...")
+            db.query(IpLock).delete()
+            
+            print("Deleting Login Attempts...")
+            db.query(LoginAttempt).delete()
+            
+            # Clear grading consensus and grades (depend on tasks)
+            print("Deleting Consensus...")
+            db.query(Consensus).delete()
+            
+            print("Deleting Grades...")
+            db.query(Grade).delete()
+            
+            # Clear grading tasks (depend on images, diseases, etc.)
+            print("Deleting Grading Tasks...")
+            db.query(GradingTask).delete()
+            
+            # Clear image-related data
+            print("Deleting Direct Image Verifications...")
+            db.query(DirectImageVerify).delete()
+
+            # Note: ImageGrading model removed - now using Grade model through GradingTask
+            print("Deleting Direct Image Uploads...")
+            db.query(DirectImageUpload).delete()
+            
+            print("Deleting Glaucoma Results Cleaned...")
+            db.query(GlaucomaResultsCleaned).delete()
+            
+            print("Deleting Glaucoma Reports...")
+            db.query(GlaucomaReport).delete()
+            
+            print("Deleting Diabetic Retinopathy Reports...")
+            db.query(DiabeticRetinopathyReport).delete()
+            
+            print("Deleting Encounter File PDFs...")
+            db.query(EncounterFilePDF).delete()
+            
+            print("Deleting Encounter Files...")
+            db.query(EncounterFile).delete()
+            
+            print("Deleting Patient Encounters...")
+            db.query(PatientEncounters).delete()
+            
+            print("Deleting Zip Files...")
+            db.query(ZipFile).delete()
+            
+            # Clear job-related data
+            print("Deleting Job Items...")
+            db.query(JobItem).delete()
+            
+            print("Deleting Jobs...")
+            db.query(Job).delete()
+            
+            # Clear reference data (after dependent data is deleted)
+            print("Deleting Gradings Features...")
+            db.query(GradingsFeatures).delete()
+            
+            print("Deleting Disease Gradings...")
+            db.query(DiseaseGrading).delete()
+            
+            print("Deleting Areas...")
+            db.query(Area).delete()
+            
+            print("Deleting Diseases...")
+            db.query(Disease).delete()
+            
+            print("Deleting Cameras...")
+            db.query(Camera).delete()
+            
+            print("Deleting Lab Units...")
+            db.query(LabUnit).delete()
+            
+            print("Deleting Hospitals...")
+            db.query(Hospital).delete()
+            
+            # Clear user management (after dependent data is deleted)
+            print("Deleting User Roles...")
+            db.query(UserRole).delete()
+            
+            print("Deleting Roles...")
+            db.query(Role).delete()
+            
+            print("Deleting Users...")
+            db.query(User).delete()
+            
+            # Commit all deletions
+            db.commit()
+            print("Database cleared successfully!")
         
-        print("Deleting Viewer Settings...")
-        db.query(ViewerSettings).delete()
-        
-        # Clear session management
-        print("Deleting Flask Sessions...")
-        db.query(FlaskSession).delete()
-        
-        # Clear intra-rater reliability data (depends on tasks, users, etc.)
-        print("Deleting Intra-Rater Grades...")
-        db.query(IntraRaterGrade).delete()
-        
-        print("Deleting Intra-Rater Tasks...")
-        db.query(IntraRaterTask).delete()
-        
-        print("Deleting Intra-Rater Batches...")
-        db.query(IntraRaterBatch).delete()
-        
-        # Clear application settings
-        print("Deleting Application Settings...")
-        db.query(AppSetting).delete()
-        
-        # Clear ad-hoc task creation records
-        print("Deleting Ad-Hoc Task Creations...")
-        db.query(AdHocTaskCreation).delete()
-        
-        # Clear notifications
-        print("Deleting Notification Reads...")
-        db.query(NotificationRead).delete()
-        
-        print("Deleting Notifications...")
-        db.query(Notification).delete()
-        
-        # Clear task tracking
-        print("Deleting Task Trackers...")
-        db.query(TaskTracker).delete()
-        
-        # Clear user role management
-        print("Deleting User Disease Unit Roles...")
-        db.query(UserDiseaseUnitRole).delete()
-        
-        # Clear AI models (referenced by grades)
-        print("Deleting AI Models...")
-        db.query(AIModel).delete()
-        
-        # Clear security-related data
-        print("Deleting Password Reset Attempts...")
-        db.query(PasswordResetAttempt).delete()
-        
-        print("Deleting IP Locks...")
-        db.query(IpLock).delete()
-        
-        print("Deleting Login Attempts...")
-        db.query(LoginAttempt).delete()
-        
-        # Clear grading consensus and grades (depend on tasks)
-        print("Deleting Consensus...")
-        db.query(Consensus).delete()
-        
-        print("Deleting Grades...")
-        db.query(Grade).delete()
-        
-        # Clear grading tasks (depend on images, diseases, etc.)
-        print("Deleting Grading Tasks...")
-        db.query(GradingTask).delete()
-        
-        # Clear image-related data
-        print("Deleting Direct Image Verifications...")
-        db.query(DirectImageVerify).delete()
-        
-        print("Deleting Image Gradings...")
-        db.query(ImageGrading).delete()
-        
-        print("Deleting Direct Image Uploads...")
-        db.query(DirectImageUpload).delete()
-        
-        print("Deleting Glaucoma Results Cleaned...")
-        db.query(GlaucomaResultsCleaned).delete()
-        
-        print("Deleting Glaucoma Reports...")
-        db.query(GlaucomaReport).delete()
-        
-        print("Deleting Diabetic Retinopathy Reports...")
-        db.query(DiabeticRetinopathyReport).delete()
-        
-        print("Deleting Encounter File PDFs...")
-        db.query(EncounterFilePDF).delete()
-        
-        print("Deleting Encounter Files...")
-        db.query(EncounterFile).delete()
-        
-        print("Deleting Patient Encounters...")
-        db.query(PatientEncounters).delete()
-        
-        print("Deleting Zip Files...")
-        db.query(ZipFile).delete()
-        
-        # Clear job-related data
-        print("Deleting Job Items...")
-        db.query(JobItem).delete()
-        
-        print("Deleting Jobs...")
-        db.query(Job).delete()
-        
-        # Clear reference data (after dependent data is deleted)
-        print("Deleting Gradings Features...")
-        db.query(GradingsFeatures).delete()
-        
-        print("Deleting Disease Gradings...")
-        db.query(DiseaseGrading).delete()
-        
-        print("Deleting Areas...")
-        db.query(Area).delete()
-        
-        print("Deleting Diseases...")
-        db.query(Disease).delete()
-        
-        print("Deleting Cameras...")
-        db.query(Camera).delete()
-        
-        print("Deleting Lab Units...")
-        db.query(LabUnit).delete()
-        
-        print("Deleting Hospitals...")
-        db.query(Hospital).delete()
-        
-        # Clear user management (after dependent data is deleted)
-        print("Deleting User Roles...")
-        db.query(UserRole).delete()
-        
-        print("Deleting Roles...")
-        db.query(Role).delete()
-        
-        print("Deleting Users...")
-        db.query(User).delete()
-        
-        # Commit all deletions
-        db.commit()
-        print("Database cleared successfully!")
-        
-    except Exception as e:
-            print(f"Error clearing database: {e}")
-            db.rollback()
-            raise
+        except Exception as e:
+                print(f"Error clearing database: {e}")
+                db.rollback()
+                raise
 
 
 def reset_all():

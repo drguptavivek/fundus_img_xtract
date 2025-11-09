@@ -2,7 +2,7 @@ from flask import render_template, request, current_app, url_for, Response
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from db_transaction_manager import get_db_session
-from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, ImageGrading, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
+from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport, Grade, GradingTask, DiseaseGrading
 from auth.roles import roles_required
 import pandas as pd
 import io
@@ -325,38 +325,69 @@ def image_list():
         # Limit to per_page
         unified_images = unified_images[:per_page]
         
-        # Get gradings for all images
+        # Get gradings for all images - using Grade model instead of ImageGrading
         image_gradings = {}
         image_vcdr_values = {}  # To store VCDR values for encounter files
         direct_ids = [item['image'].id for item in unified_images if item['type'] == 'direct']
         encounter_ids = [item['image'].id for item in unified_images if item['type'] == 'encounter']
-        
+
         if direct_ids or encounter_ids:
-            grading_conditions = []
+            # Build conditions for GradingTask which links to images via Grade model
+            task_conditions = []
             if direct_ids:
-                grading_conditions.append(ImageGrading.direct_image_upload_id.in_(direct_ids))
+                task_conditions.append(GradingTask.direct_image_upload_id.in_(direct_ids))
             if encounter_ids:
-                grading_conditions.append(ImageGrading.encounter_file_id.in_(encounter_ids))
-            
+                task_conditions.append(GradingTask.encounter_file_id.in_(encounter_ids))
+
             # Combine conditions with OR
-            if len(grading_conditions) == 1:
-                gradings_query = select(ImageGrading).where(grading_conditions[0])
+            if len(task_conditions) == 1:
+                grade_query = select(Grade).join(GradingTask).where(task_conditions[0])
             else:
-                gradings_query = select(ImageGrading).where(or_(*grading_conditions))
-                
-            gradings = db.execute(gradings_query).scalars().all()
-            
-            # Group gradings by image ID and role
-            for grading in gradings:
-                img_id = grading.direct_image_upload_id or grading.encounter_file_id
+                grade_query = select(Grade).join(GradingTask).where(or_(*task_conditions))
+
+            # Include relationships for grader info and disease grading
+            grade_query = grade_query.options(
+                selectinload(Grade.grader),
+                selectinload(Grade.label),
+                selectinload(Grade.task).selectinload(GradingTask.disease)
+            )
+
+            grades = db.execute(grade_query).scalars().all()
+
+            # Group grades by image ID and role
+            for grade in grades:
+                task = grade.task
+                img_id = task.direct_image_upload_id or task.encounter_file_id
+
                 if img_id not in image_gradings:
                     image_gradings[img_id] = {}
-                
-                # Group by grader role
-                role = grading.grader_role or 'unknown'
+
+                # Map role_slot to grader_role for template compatibility
+                role = grade.role_slot or 'unknown'
+                # For display purposes, map role_slot names to what the template expects
+                if role == 'resident':
+                    role = 'resident'
+                elif role == 'resident2':
+                    role = 'resident'  # Both residents show as 'resident' in template
+                elif role == 'arbitrator':
+                    role = 'ophthalmologist'  # Arbitrators show as 'ophthalmologist'
+                elif role == 'ai':
+                    role = 'ai'
+
                 if role not in image_gradings[img_id]:
                     image_gradings[img_id][role] = []
-                image_gradings[img_id][role].append(grading)
+
+                # Create a grading object compatible with template expectations
+                # using grade attributes to match ImageGrading structure
+                image_gradings[img_id][role].append({
+                    'id': grade.id,
+                    'impression': grade.label.impression if grade.label else 'Unknown',
+                    'remarks': grade.comment,
+                    'graded_for': task.disease.name if task.disease else 'unknown',
+                    'grader': grade.grader,
+                    'created_at': grade.created_at,
+                    'updated_at': grade.updated_at
+                })
         
         # Extract VCDR values for encounter files
         if encounter_ids:

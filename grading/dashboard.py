@@ -7,7 +7,7 @@ from sqlalchemy import and_, desc, distinct, func
 
 
 from auth.roles import roles_required
-from models import Session, PatientEncounters, EncounterFile, ImageGrading, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
+from models import Session, PatientEncounters, EncounterFile, DirectImageUpload, Disease, DirectImageVerify, GradingTask, User, Grade
 from utils.dualGradingKPIs import get_user_kpi_pending_task_count_data
 from utils.dualGradingKPIs import get_user_kpi_completed_task_count_data
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details

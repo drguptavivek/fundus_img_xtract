@@ -19,7 +19,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 
 from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
 from models import (
-    ImageGrading, Session, PatientEncounters, EncounterFile, EncounterFilePDF,
+    Session, PatientEncounters, EncounterFile, EncounterFilePDF,
     DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
     LabUnit, Hospital, DiseaseGrading, Disease, ZipFile
 )

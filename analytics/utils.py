@@ -12,7 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session as SASession, joinedload, selectinload
 
 from models import (
-    
+
     Consensus,
     DiabeticRetinopathyReport,
     DirectImageUpload,
@@ -20,7 +20,6 @@ from models import (
     GlaucomaResultsCleaned,
     Grade,
     GradingTask,
-    ImageGrading,
     LabUnit,
     PatientEncounters,
 )

@@ -263,8 +263,8 @@ class EncounterFile(Base):
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
-    gradings: Mapped[List["ImageGrading"]] = relationship(back_populates="image", cascade="all, delete-orphan")
     lab_unit: Mapped["LabUnit"] = relationship()
+    # Note: ImageGrading relationship removed - now using Grade model through GradingTask
     # Add a check constraint to ensure only image files are stored in this table
     __table_args__ = (CheckConstraint("file_type != 'pdf'", name="ck_encounter_file_not_pdf"),)
 
@@ -340,7 +340,8 @@ class ImageGrading(Base):
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
-    image: Mapped["EncounterFile"] = relationship(back_populates="gradings")
+    image: Mapped["EncounterFile"] = relationship()
+    # Note: back_populates removed - EncounterFile no longer has gradings relationship
     direct_image: Mapped["DirectImageUpload"] = relationship()
     grader: Mapped["User"] = relationship("User", foreign_keys=[grader_user_id])
     __table_args__ = (
@@ -466,7 +467,7 @@ class DirectImageUpload(Base):
     )
     
     verifications: Mapped[List["DirectImageVerify"]] = relationship(back_populates="image_upload", cascade="all, delete-orphan")
-    gradings: Mapped[List["ImageGrading"]] = relationship(foreign_keys="ImageGrading.direct_image_upload_id", back_populates="direct_image", cascade="all, delete-orphan")
+    # Note: ImageGrading relationship removed - now using Grade model through GradingTask
 
 
 class DirectImageVerify(Base):

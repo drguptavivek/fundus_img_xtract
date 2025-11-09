@@ -2,10 +2,10 @@ from flask import render_template
 from sqlalchemy import select, func, or_, distinct, case, and_
 from db_transaction_manager import get_db_session
 from models import (
-    Session, EncounterFile, PatientEncounters, ImageGrading,
+    Session, EncounterFile, PatientEncounters,
     GlaucomaReport, GlaucomaResultsCleaned, DiabeticRetinopathyReport,
     DirectImageUpload, DirectImageVerify, LabUnit, Disease,
-    Grade, DiseaseGrading
+    Grade, DiseaseGrading, GradingTask
 )
 
 def homepage():
@@ -70,10 +70,13 @@ def homepage():
         # Disease distribution for chart
         # Removed as requested
         
-        # Grading distribution for chart
+        # Grading distribution for chart - using Grade model instead of ImageGrading
+        # Note: Grade model uses task.disease.name instead of graded_for
         grading_distribution = db.execute(
-            select(ImageGrading.graded_for, func.count(ImageGrading.id))
-            .group_by(ImageGrading.graded_for)
+            select(Disease.name, func.count(Grade.id))
+            .join(Grade.task)
+            .join(Disease, GradingTask.disease_id == Disease.id)
+            .group_by(Disease.name)
         ).all()
         
         # VCDR value ranges for chart (adjusted cutoffs)
@@ -96,36 +99,48 @@ def homepage():
             )
         ).first()
         
-        # Calculate ungradable images
+        # Calculate ungradable images - using Grade model instead of ImageGrading
+        # Map disease names: "glaucoma" and "dr" to actual disease names in database
         total_gradable_images = db.execute(
-            select(func.count(ImageGrading.id))
-            .where(ImageGrading.graded_for.in_(["glaucoma", "dr"]))
+            select(func.count(Grade.id))
+            .join(Grade.task)
+            .join(Disease, GradingTask.disease_id == Disease.id)
+            .where(Disease.name.in_(["glaucoma", "dr"]))
         ).scalar_one()
-        
+
         ungradable_images = db.execute(
-            select(func.count(ImageGrading.id))
+            select(func.count(Grade.id))
+            .join(Grade.task)
+            .join(Disease, GradingTask.disease_id == Disease.id)
+            .join(DiseaseGrading, Grade.disease_grading_id == DiseaseGrading.id)
             .where(and_(
-                ImageGrading.graded_for.in_(["glaucoma", "dr"]),
-                ImageGrading.impression == "Not gradable"
+                Disease.name.in_(["glaucoma", "dr"]),
+                DiseaseGrading.impression == "Not gradable"
             ))
         ).scalar_one()
         
         gradable_images = total_gradable_images - ungradable_images
         
-        # DR grading distribution
+        # DR grading distribution - using Grade model instead of ImageGrading
         dr_impression_distribution = db.execute(
-            select(ImageGrading.impression, func.count(ImageGrading.id))
-            .where(ImageGrading.graded_for == "dr")
-            .group_by(ImageGrading.impression)
-            .order_by(func.count(ImageGrading.id).desc())
+            select(DiseaseGrading.impression, func.count(Grade.id))
+            .join(Grade.task)
+            .join(Disease, GradingTask.disease_id == Disease.id)
+            .join(DiseaseGrading, Grade.disease_grading_id == DiseaseGrading.id)
+            .where(Disease.name == "dr")
+            .group_by(DiseaseGrading.impression)
+            .order_by(func.count(Grade.id).desc())
         ).all()
-        
-        # Glaucoma grading distribution
+
+        # Glaucoma grading distribution - using Grade model instead of ImageGrading
         glaucoma_impression_distribution = db.execute(
-            select(ImageGrading.impression, func.count(ImageGrading.id))
-            .where(ImageGrading.graded_for == "glaucoma")
-            .group_by(ImageGrading.impression)
-            .order_by(func.count(ImageGrading.id).desc())
+            select(DiseaseGrading.impression, func.count(Grade.id))
+            .join(Grade.task)
+            .join(Disease, GradingTask.disease_id == Disease.id)
+            .join(DiseaseGrading, Grade.disease_grading_id == DiseaseGrading.id)
+            .where(Disease.name == "glaucoma")
+            .group_by(DiseaseGrading.impression)
+            .order_by(func.count(Grade.id).desc())
         ).all()
         
         # Images by lab unit and disease (stacked bar chart)

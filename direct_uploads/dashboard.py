@@ -14,8 +14,9 @@ from models import (
     Camera,
     Disease,
     Area,
-    ImageGrading,
+    Grade,
     GradingTask,
+    DiseaseGrading,
     utcnow,
 )
 
@@ -669,20 +670,23 @@ def dashboard():
         )
         uploads = db_session.execute(main_q).scalars().all()
 
-        # Fetch gradings for these uploads
+        # Fetch gradings for these uploads using Grade model instead of ImageGrading
         upload_ids = [u.id for u in uploads]
         gradings = {}
         if upload_ids:
+            # Query Grade records through GradingTask for these uploads
             grading_rows = db_session.execute(
-                select(ImageGrading)
-                .where(ImageGrading.direct_image_upload_id.in_(upload_ids))
+                select(Grade)
+                .join(GradingTask, Grade.task_id == GradingTask.id)
+                .where(GradingTask.direct_image_upload_id.in_(upload_ids))
             ).scalars().all()
-            
-            # Group gradings by upload_id
-            for grading in grading_rows:
-                if grading.direct_image_upload_id not in gradings:
-                    gradings[grading.direct_image_upload_id] = []
-                gradings[grading.direct_image_upload_id].append(grading)
+
+            # Group gradings by upload_id (from task)
+            for grade in grading_rows:
+                upload_id = grade.task.direct_image_upload_id
+                if upload_id not in gradings:
+                    gradings[upload_id] = []
+                gradings[upload_id].append(grade)
 
         # Side lookups for the current page
         ids = lambda attr: {getattr(u, attr) for u in uploads}

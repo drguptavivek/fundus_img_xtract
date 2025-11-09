@@ -51,7 +51,7 @@
         <select class="form-select" id="filter-lab-unit" name="lab_unit_id">
           <option value="">All</option>
           {% for lab_unit in lab_units %}
-          <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
+          <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital_name %} — {{ lab_unit.hospital_name }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>

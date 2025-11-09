@@ -136,9 +136,9 @@ def image_results() -> str:
 
         # Filter lab units to only those the user has access to
         if is_admin_like:
-            lab_units = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
+            lab_units_query = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
         else:
-            lab_units = (
+            lab_units_query = (
                 db.query(LabUnit)
                 .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
                 .options(selectinload(LabUnit.hospital))
@@ -149,6 +149,10 @@ def image_results() -> str:
         # Convert to simple data structures to avoid session issues in templates
         diseases = [{"id": d.id, "name": d.name} for d in db.query(Disease).order_by(Disease.name).all()]
         hospitals = [{"id": h.id, "name": h.name} for h in db.query(Hospital).order_by(Hospital.name).all()]
+        lab_units = [
+            {"id": lu.id, "name": lu.name, "hospital_id": lu.hospital_id, "hospital_name": lu.hospital.name if lu.hospital else None}
+            for lu in lab_units_query
+        ]
         rows = fetch_image_task_details(db, tasks)
 
     total_pages = max(1, math.ceil(total / per_page)) if total else 1

@@ -80,8 +80,7 @@ def encounter_results() -> str:
             .outerjoin(Hospital, LabUnit.hospital)
             .options(
                 selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
-                selectinload(PatientEncounters.encounter_files)
-                .selectinload(EncounterFile.gradings),
+                selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
                 selectinload(PatientEncounters.dr_reports),
                 selectinload(PatientEncounters.zip_file),
@@ -162,34 +161,36 @@ def encounter_results() -> str:
                 .all()
             )
 
-    total_pages = max(1, math.ceil(total / per_page)) if total else 1
-    filter_params = {
-        "hospital_id": hospital_id,
-        "lab_unit_id": lab_unit_id,
-        "capture_date": capture_date_str,
-    }
+        # Calculate pagination and URLs within the session context
+        total_pages = max(1, math.ceil(total / per_page)) if total else 1
+        filter_params = {
+            "hospital_id": hospital_id,
+            "lab_unit_id": lab_unit_id,
+            "capture_date": capture_date_str,
+        }
 
-    def _enc_filter_kwargs(target_page: int) -> dict[str, int | str]:
-        params: dict[str, int | str] = {"page": target_page}
-        for key, value in filter_params.items():
-            if not value:
-                continue
-            params[key] = value
-        return params
+        def _enc_filter_kwargs(target_page: int) -> dict[str, int | str]:
+            params: dict[str, int | str] = {"page": target_page}
+            for key, value in filter_params.items():
+                if not value:
+                    continue
+                params[key] = value
+            return params
 
-    prev_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page - 1)) if page > 1 else None
-    next_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page + 1)) if page < total_pages else None
+        prev_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page - 1)) if page > 1 else None
+        next_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page + 1)) if page < total_pages else None
 
-    return render_template(
-        "analytics/results_encounters.html",
-        encounters=encounter_rows,
-        hospitals=hospitals,
-        lab_units=lab_units,
-        filters=filter_params,
-        page=page,
-        total_pages=total_pages,
-        prev_url=prev_url,
-        next_url=next_url,
-        total=total,
-        per_page=per_page,
-    )
+        # Render template while session is still active
+        return render_template(
+            "analytics/results_encounters.html",
+            encounters=encounter_rows,
+            hospitals=hospitals,
+            lab_units=lab_units,
+            filters=filter_params,
+            page=page,
+            total_pages=total_pages,
+            prev_url=prev_url,
+            next_url=next_url,
+            total=total,
+            per_page=per_page,
+        )

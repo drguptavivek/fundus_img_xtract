@@ -5,12 +5,12 @@ It is extensible
 
 ## DISEASES
  - Users can add more diseases. 
- - For each diseases, gradings can be added. 
+ - For each disease, gradings can be added. 
  - For each grade, features can be optionally defined which users may select. [multiple features can be selected per grade]]
 
 ## Hospital and Labs/Units
  - Hospitals and Laboratory/Units can be added
- - User can be mapped to specific Laboratpry / Units within hospitals
+ - User can be mapped to specific Laboratory / Units within hospitals
  - This scopes their access (except for grading that has a slot based access system) to images/ data for these Labs/Units
 
 ## Users and roles
@@ -18,7 +18,7 @@ It is extensible
  - Each user can get allocated various roles - 
 
 
-Has specific workflows for Remedio FOP zip files that get downlaoded from the remedio dashboard
+Has specific workflows for Remedio FOP zip files that get downloaded from the remedio dashboard
 
 ## DOCKER Containerized Deployment
 
@@ -42,7 +42,7 @@ cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- remove this in production 
 
-# Enure overdide file is not present
+# Ensure override file is not present
 rm docker-compose.override.yml
 
 # Ensure Local development config is removed
@@ -91,14 +91,14 @@ docker compose logs web
 Build Time (docker compose build):  uses the `dockerfile`
  - python:3.12-slim AS base
  - Installs System Dependencies - tesseract, libmagic, pq, uv etc
- - Copy Dependency files - `pyprroject.toml`.
+ - Copy Dependency files - `pyproject.toml`.
  - Copy Application Code in /app in container
  - Sets .venv location - ENV UV_PROJECT_ENVIRONMENT=/app/.venv
  - Python packages installed using `uv sync`. Packages are installed in /app/.venv inside the container.
  - Copies the `entrypoint.sh` script into the container image
  - Sets `entrypoint.sh` as the ENTRYPOINT for the container. No execution happens during build
 
-** In case of code chanmge, rebuild is needed to copy fresh code top the container**
+** In case of code change, rebuild is needed to copy fresh code to the container**
 `docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build `
 
 Runtime (docker compose up):
@@ -112,7 +112,7 @@ Runtime (docker compose up):
     - Conditional Seeding → Only seeds if core data missing
  - Finally executes the CMD (gunicorn server)
 
-The First time, application is started, following migratiosn are done
+The First time, application is started, following migrations are done
 1. **Initial Migration** (`5a49784f68f1`): Creates all database tables
 2. **Data Seeding Migration** (`691d42ba3fff`): Safely populates core reference data. Uses @scripts/setup_core_entities.py
 
@@ -144,7 +144,7 @@ nano  deploy.secrets.env
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env  build web
 
 
-# DBa nd CaACHE
+# DB and CACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
 # MIGRATIONS - Now Automatic
@@ -168,7 +168,7 @@ uv run scripts/add_test_users.py
 
 
 
-## NON-DOCKER DEVELROPMNENT
+## NON-DOCKER DEVELOPMENT
 Only DB and Redis run in docker. The app runs in terminal via `uv run app.py`
 
 
@@ -179,9 +179,9 @@ cp deploy.config.env.example deploy.config.env
 cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 
 nano  deploy.secrets.env
-# POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS ORESENT this for development so that 127.0.0.1 is used to resolve the db container 
+# POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS PRESENT this for development so that 127.0.0.1 is used to resolve the db container 
 
-# REDIS_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS ORESENT this for development so that 127.0.0.1 is used to resolve the db container 
+# REDIS_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS PRESENT this for development so that 127.0.0.1 is used to resolve the db container 
 
 nano docker-compose.yml
 #  Ensure REDIS PORT is exposed to host and bound to 127.0.0.1 and not an open relay
@@ -189,9 +189,8 @@ nano docker-compose.yml
 #      -  "127.0.0.1:${REDIS_PORT:-6379}:6379"
 
 # PREVENT REDIS OPEN RELAY
-# 
 
-# DBa nd CaACHE
+# DB and CACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
 # MIGRATIONS
@@ -913,4 +912,15 @@ git branch --set-upstream-to=origin/main main
 
 git add . && git commit -a -m "The commit message"
 git push -u origin main
+
+
+git ls-files | grep -E '\.py$|\.html$|\.js$' | xargs wc -l | awk '{SUM += $1} END {print SUM}'
+# 161406
+
+git ls-files | grep -E '\.py$|\.html$|\.js$|\.css$' | xargs wc -l | awk '{SUM += $1} END {print SUM}'
+# 165546
+
+git ls-files -z | grep -zE '\.py$|\.html$|\.js$|\.css$|\.md$' | xargs -0 wc -l | awk '{SUM += $1} END {print SUM}'
+# 243938
+
 ```

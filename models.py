@@ -550,7 +550,7 @@ class Grade(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey('grading_tasks.id', ondelete='CASCADE'), nullable=False, index=True)
     grader_user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # resident | resident2 | arbitrator | ai
+    # resident | resident2 | arbitrator | ai | review
     role_slot: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
     # Normalized to master labels for the disease

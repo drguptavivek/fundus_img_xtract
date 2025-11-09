@@ -1,6 +1,10 @@
 """Materialized View Status Admin Routes
 
 Admin routes for monitoring and managing the materialized view refresh scheduler.
+This handles ALL materialized views including:
+- mvw_grading_data_all (general grading data)
+- mvw_diabetic_retinopathy_grading_pivot (DR-specific pivoted data)
+- mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
 """
 
 from flask import jsonify, request, current_app
@@ -12,7 +16,7 @@ from flask_login import login_required, current_user
 @login_required
 @roles_required("admin")
 def materialized_view_status():
-    """Display materialized view refresh status and information."""
+    """Display status for all materialized view refreshes and information."""
     from flask import render_template, request
     from utils.datetime_filters import format_user_datetime
 
@@ -168,7 +172,7 @@ def api_last_refresh():
 @login_required
 @roles_required("admin")
 def manual_refresh():
-    """Manual refresh trigger for materialized view."""
+    """Manual refresh trigger for all materialized views."""
     try:
         result = manual_refresh_now(current_app)
         return jsonify({

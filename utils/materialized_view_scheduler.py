@@ -1,6 +1,10 @@
 """Materialized View Refresh Scheduler
 
-Timezone-aware scheduler for automatic refresh of mvw_grading_data_all materialized view.
+Timezone-aware scheduler for automatic refresh of all materialized views including:
+- mvw_grading_data_all (general grading data)
+- mvw_diabetic_retinopathy_grading_pivot (DR-specific pivoted data)
+- mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
+
 Integrates with existing Flask application infrastructure including logging,
 database sessions, and background task patterns.
 """
@@ -19,14 +23,19 @@ logger = logging.getLogger("materialized_view")
 
 
 def refresh_materialized_view(app, schedule_time="manual"):
-    """Execute materialized view refresh with proper timezone logging and timestamp tracking.
+    """Execute all materialized view refreshes with proper timezone logging and timestamp tracking.
+
+    Refreshes the following views in order:
+    1. mvw_grading_data_all (general grading data)
+    2. mvw_diabetic_retinopathy_grading_pivot (DR-specific pivoted data)
+    3. mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
 
     Args:
         app: Flask application instance
         schedule_time: String identifier for the scheduled refresh time
 
     Returns:
-        bool: True if refresh successful, False otherwise
+        bool: True if all refreshes successful, False otherwise
     """
     from datetime import datetime as dt
 
@@ -61,30 +70,58 @@ def refresh_materialized_view(app, schedule_time="manual"):
                 )
                 log_id = result.scalar()
 
-                # Execute the refresh
-                db.execute(text("REFRESH MATERIALIZED VIEW mvw_grading_data_all"))
+                # Refresh all materialized views in order
+                views_to_refresh = [
+                    ("mvw_grading_data_all", "General Grading Data"),
+                    ("mvw_diabetic_retinopathy_grading_pivot", "Diabetic Retinopathy Pivot"),
+                    ("mvw_glaucoma_grading_pivot", "Glaucoma Pivot")
+                ]
 
-                duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
+                total_duration = 0
+                successful_refreshes = 0
 
-                # Update log entry with success
+                for view_name, view_description in views_to_refresh:
+                    view_start_time = datetime.now(pytz.UTC)
+
+                    try:
+                        logger.info(f"Refreshing {view_description} ({view_name})")
+                        db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
+
+                        view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
+                        total_duration += view_duration
+                        successful_refreshes += 1
+
+                        logger.info(f"Successfully refreshed {view_description} in {view_duration:.2f} seconds")
+
+                    except Exception as view_error:
+                        logger.error(f"Failed to refresh {view_description} ({view_name}): {str(view_error)}")
+                        # Continue with other views even if one fails
+
+                overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
+
+                # Update log entry with overall success
+                success = successful_refreshes == len(views_to_refresh)
                 db.execute(
                     text("""
                         UPDATE materialized_view_refresh_log
                         SET refresh_completed_at = :completed_at,
                             refresh_duration_seconds = :duration,
-                            success = TRUE,
+                            success = :success,
+                            error_message = :error_message,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = :log_id
                     """),
                     {
                         "completed_at": datetime.now(pytz.UTC),
-                        "duration": duration,
+                        "duration": overall_duration,
+                        "success": success,
+                        "error_message": None if success else f"Failed {len(views_to_refresh) - successful_refreshes}/{len(views_to_refresh)} views",
                         "log_id": log_id
                     }
                 )
 
-                logger.info(f"Materialized view refreshed successfully in {duration:.2f} seconds - Schedule: {schedule_time}")
-                return True
+                logger.info(f"Materialized view refresh completed: {successful_refreshes}/{len(views_to_refresh)} views successful in {overall_duration:.2f} seconds - Schedule: {schedule_time}")
+                return success
 
     except Exception as e:
         logger.error(f"Failed to refresh materialized view - Schedule: {schedule_time}, Error: {str(e)}")
@@ -204,12 +241,12 @@ def manual_refresh_now(app):
     if result:
         return {
             "success": True,
-            "message": f"Materialized view refreshed successfully at {current_ist.strftime('%Y-%m-%d %H:%M:%S IST')}"
+            "message": f"All materialized views refreshed successfully at {current_ist.strftime('%Y-%m-%d %H:%M:%S IST')}"
         }
     else:
         return {
             "success": False,
-            "message": f"Materialized view refresh failed at {current_ist.strftime('%Y-%m-%d %H:%M:%S IST')}. Check logs for details."
+            "message": f"One or more materialized view refreshes failed at {current_ist.strftime('%Y-%m-%d %H:%M:%S IST')}. Check logs for details."
         }
 
 

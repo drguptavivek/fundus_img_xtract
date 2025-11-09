@@ -866,6 +866,7 @@ class FlaskSession(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True, index=True)
     user: Mapped["User"] = relationship("User", lazy="selectin")
 
 # --- Viewer Settings and Presets Models ---

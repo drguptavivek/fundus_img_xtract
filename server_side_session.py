@@ -29,6 +29,7 @@ class DatabaseSessionInterface(SessionInterface):
 
     def __init__(self, key_length: int = 64):
         self.key_length = key_length
+        self._current_request = None
 
     @staticmethod
     def _now() -> datetime:
@@ -53,10 +54,25 @@ class DatabaseSessionInterface(SessionInterface):
         # Skip session handling for static files to improve performance and avoid database issues
         if request.path and request.path.startswith('/static/'):
             return None
-            
+
+        # Get client IP address
+        def get_client_ip():
+            # Check for IP in headers (common for reverse proxies)
+            if request.headers.getlist("X-Forwarded-For"):
+                return request.headers.getlist("X-Forwarded-For")[0]
+            elif request.headers.getlist("X-Real-IP"):
+                return request.headers.getlist("X-Real-IP")[0]
+            else:
+                return request.remote_addr
+
+        client_ip = get_client_ip()
+
+        # Store the current request for later use in save_session
+        self._current_request = request
+
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = request.cookies.get(cookie_name)
-        
+
         db = DbSession()
         try:
             if not session_id:
@@ -97,14 +113,26 @@ class DatabaseSessionInterface(SessionInterface):
         # Skip session handling for static files
         if session is None:
             return
-            
+
         cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
         session_id = getattr(session, "session_id", None)
-        
+
+        # Get client IP address using stored request
+        def get_client_ip():
+            request = self._current_request
+            if request.headers.getlist("X-Forwarded-For"):
+                return request.headers.getlist("X-Forwarded-For")[0]
+            elif request.headers.getlist("X-Real-IP"):
+                return request.headers.getlist("X-Real-IP")[0]
+            else:
+                return request.remote_addr
+
+        client_ip = get_client_ip()
+
         # Add logging for debugging Safari issues
         import logging
         session_logger = logging.getLogger("session")
-        session_logger.info(f"Save session called - Session ID: {session_id}, Modified: {getattr(session, 'modified', False)}, New: {getattr(session, 'new', False)}, Session data: {dict(session) if session else 'None'}")
+        session_logger.info(f"Save session called - Session ID: {session_id}, Modified: {getattr(session, 'modified', False)}, New: {getattr(session, 'new', False)}, Session data: {dict(session) if session else 'None'}, IP: {client_ip}")
 
         # If the session is empty, stamp it as ended and remove the browser cookie
         if not session:
@@ -121,6 +149,8 @@ class DatabaseSessionInterface(SessionInterface):
                             stored.started_at = now
                         if stored.ended_at is None:
                             stored.ended_at = now
+                        # Update IP address on session end
+                        stored.ip_address = client_ip
                         db.commit()
                 finally:
                     db.close()
@@ -143,6 +173,7 @@ class DatabaseSessionInterface(SessionInterface):
         try:
             stored = db.get(FlaskSession, session.session_id)
             payload_dict = dict(session)
+            payload_dict['_ip_address'] = client_ip  # Add IP to session data
             payload = self.serializer.dumps(payload_dict)
             raw_user_id = payload_dict.get("_user_id")
             try:
@@ -156,11 +187,13 @@ class DatabaseSessionInterface(SessionInterface):
                     expiry=expires,
                     user_id=user_id_value,
                     started_at=self._now(),
+                    ip_address=client_ip,
                 )
                 db.add(stored)
             else:
                 stored.data = payload
                 stored.expiry = expires
+                stored.ip_address = client_ip  # Update IP address
                 if user_id_value is not None:
                     stored.user_id = user_id_value
                 if stored.started_at is None:

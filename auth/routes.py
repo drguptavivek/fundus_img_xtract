@@ -177,8 +177,12 @@ def login():
             # Flask-WTF CSRF protection is automatically applied
             # No need for manual validation here
             
-            # Log POST request details for debugging
-            auth_logger.info(f"POST request received - Form data: {dict(request.form)}")
+            # Log POST request details for debugging (excluding sensitive data)
+            form_data = dict(request.form)
+            # Remove sensitive fields before logging
+            sensitive_fields = ['password', 'csrf_token', 'new_password', 'confirm_password']
+            safe_form_data = {k: v for k, v in form_data.items() if k not in sensitive_fields}
+            auth_logger.info(f"POST request received - Form data (sanitized): {safe_form_data}")
             auth_logger.info(f"POST request headers - Content-Type: {request.content_type}, Content-Length: {request.content_length}")
             
             username = (request.form.get("username") or "").strip()
@@ -266,12 +270,16 @@ def login():
             # Verify password
             if user and user.is_active and verify_password(user.password_hash, password):
                 _record_attempt(db, username, ip, success=True)
-                auth_logger.info(f"User login successful - User: {username}, IP: {ip}")
                 login_user(user)
+
                 # Start sliding inactivity window
                 session.permanent = True  # enable cookie expiration control
                 session["last_active"] = int(time.time())
                 session.modified = True
+
+                # Log successful login with session ID
+                session_id = session.get('_id', 'unknown')
+                auth_logger.info(f"User login successful - User: {username}, IP: {ip}, SessionID: {session_id}, UserID: {user.id}")
 
                 # Role-based landing pages
                 if user.has_role('ophthalmologist'):
@@ -414,10 +422,11 @@ def captcha_audio():
 def logout():
     # Log logout event
     username = getattr(current_user, 'username', 'Unknown')
+    user_id = getattr(current_user, 'id', 'Unknown')
     ip = get_client_ip()
-    auth_logger.info(f"User logout - User: {username}, IP: {ip}")
     cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
     prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
+    auth_logger.info(f"User logout - User: {username}, UserID: {user_id}, IP: {ip}, SessionID: {prior_session_id}")
     try:
         session_user_id = int(current_user.get_id())  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -537,6 +546,7 @@ def reset_password():
     if request.method == "POST":
         # Flask-WTF CSRF protection is automatically applied
         # No need for manual validation here
+        ip = get_client_ip()
         otp = request.form.get("otp", "").strip()
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
@@ -606,6 +616,10 @@ def reset_password():
         session.pop('password_reset_email', None)
         session.pop('password_reset_expiry', None)
         session.pop('password_reset_user_id', None)
+
+        # Log successful password reset
+        session_id = session.get('_id', 'unknown')
+        auth_logger.info(f"Password reset successful - User: {user.username}, Email: {user.email}, IP: {ip}, SessionID: {session_id}, UserID: {user.id}")
 
         flash("Password updated. You can now log in with your new password.", "success")
         return redirect(url_for("auth.login"))

@@ -14,6 +14,22 @@ document.addEventListener('DOMContentLoaded', function() {
     let captchaLoaded = false;  // Track if CAPTCHA has successfully loaded
     let audioLoaded = false;  // Track if audio has successfully loaded
 
+    /**
+     * Utility function to show flash toast with fallback to alert
+     */
+    function showToast(message, type = 'info') {
+        if (window.showFlashToast) {
+            window.showFlashToast(message, type);
+        } else {
+            // Fallback to console for development
+            console.log(`[${type.toUpperCase()}] ${message}`);
+            // For critical errors, still use alert as fallback
+            if (type === 'error') {
+                alert(message);
+            }
+        }
+    }
+
     
     /**
      * Update the audio button based on audio availability and loading state
@@ -47,6 +63,28 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize button states
     updateFormValidation();
     updateAudioButton();
+
+    // Hide traditional alerts and show only flash toasts
+    const existingAlerts = document.querySelectorAll('.alert');
+    existingAlerts.forEach((alert) => {
+        const message = alert.textContent.trim();
+        if (message && !message.includes('Close')) {
+            // Determine toast type based on alert class
+            let toastType = 'info';
+            if (alert.classList.contains('alert-danger') || alert.classList.contains('alert-error')) {
+                toastType = 'error';
+            } else if (alert.classList.contains('alert-warning')) {
+                toastType = 'warning';
+            } else if (alert.classList.contains('alert-success')) {
+                toastType = 'success';
+            }
+
+            // Show as toast immediately
+            showToast(message, toastType);
+        }
+        // Hide the original alert immediately
+        alert.style.display = 'none';
+    });
 
     // Auto-capitalize CAPTCHA input
     if (captchaInput) {
@@ -147,6 +185,68 @@ document.addEventListener('DOMContentLoaded', function() {
             field.addEventListener('blur', updateFormValidation);
         }
     });
+
+    // Add form submission listener to handle validation errors
+    const loginForm = document.querySelector('form[method="post"]');
+    if (loginForm) {
+        loginForm.addEventListener('submit', function(e) {
+            // Client-side validation before submission
+            const username = document.getElementById('username');
+            const password = document.getElementById('password');
+            const captcha = document.getElementById('captcha');
+
+            // Check if fields are filled
+            if (!username || !username.value.trim()) {
+                e.preventDefault();
+                showToast('Please enter your username', 'warning');
+                username?.focus();
+                return false;
+            }
+
+            if (!password || !password.value.trim()) {
+                e.preventDefault();
+                showToast('Please enter your password', 'warning');
+                password?.focus();
+                return false;
+            }
+
+            if (!captcha || !captcha.value.trim()) {
+                e.preventDefault();
+                showToast('Please enter the CAPTCHA code', 'warning');
+                captcha?.focus();
+                return false;
+            }
+
+            // Check field length limits
+            if (username.value.length > 50) {
+                e.preventDefault();
+                showToast('Username must be 50 characters or less', 'error');
+                username?.focus();
+                return false;
+            }
+
+            if (password.value.length > 255) {
+                e.preventDefault();
+                showToast('Password must be 255 characters or less', 'error');
+                password?.focus();
+                return false;
+            }
+
+            if (captcha.value.length > 10) {
+                e.preventDefault();
+                showToast('CAPTCHA must be 10 characters or less', 'error');
+                captcha?.focus();
+                return false;
+            }
+
+            // If we get here, validation passed
+            // Don't clear CAPTCHA input here - let the backend handle it
+            // If login fails, backend will show error and generate new CAPTCHA
+            // If login succeeds, user will be redirected anyway
+
+            return true;
+        });
+    }
     
     if (captchaImg) {
         // Add click event to refresh CAPTCHA
@@ -231,7 +331,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     captchaLoaded = true;
                     updateFormValidation();
                     updateAudioButton();
-                }
+
+                                    }
             })
             .catch(error => {
                 console.error('Error refreshing CAPTCHA:', error);
@@ -260,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function createAndPlayAudio() {
         // Check if we have current CAPTCHA data with audio
         if (!currentCaptchaData || !currentCaptchaData.audio) {
-            alert('No audio available for the current CAPTCHA. Please try refreshing.');
+            showToast('No audio available for the current CAPTCHA. Please try refreshing.', 'warning');
             return;
         }
 
@@ -309,7 +410,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     captchaAudio.play().catch(err => {
                         console.error('Retry failed:', err);
                         updatePlayButtonState('error');
-                        alert('Could not play audio. Your browser may not support audio playback.');
+                        showToast('Could not play audio. Your browser may not support audio playback.', 'error');
                     });
                 }, 100);
             });
@@ -339,7 +440,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Base64 decode error:', decodeError);
             }
 
-            alert('Could not load audio. The audio data may be corrupted. Please try refreshing the CAPTCHA.');
+            showToast('Could not load audio. The audio data may be corrupted. Please try refreshing the CAPTCHA.', 'error');
         });
     }
 

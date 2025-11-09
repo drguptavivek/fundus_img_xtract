@@ -142,8 +142,8 @@ def _get_email_results(user_id: str):
 # ----- Routes -----
 @auth_bp.route("/login", methods=["GET", "POST"])
 @rate_limit_with_feedback("20 per minute", show_warning=True)
-@protect_form_submission(max_fields=10, max_field_length=500)
-@validate_payload_size(max_size=1024)  # 1KB limit for login form
+@protect_form_submission(max_fields=6, max_field_length=255)  # 6 fields, 255 for password, reasonable limits for others
+@validate_payload_size(max_size=768)  # 768 bytes - more restrictive than 1KB
 def login():
     from flask_login import current_user
     from utils.captcha import captcha_manager
@@ -317,18 +317,15 @@ def login():
                                    captcha_image=captcha_data['image'],
                                    captcha_data=captcha_data)
 
-        # GET - Generate and display the CAPTCHA
+        # GET - Initialize session and render login page
         # Force session modification to ensure cookie is set
         session["_session_initialized"] = True
         session.modified = True
-        
-        captcha_data = captcha_manager.generate_captcha()
+
         auth_logger.info(f"GET request - Session initialized, keys: {list(session.keys())}")
         auth_logger.info(f"GET request - Session cookie will be set")
-        
-        return render_template("auth/login.html",
-                                   captcha_image=captcha_data['image'],
-                                   captcha_data=captcha_data)
+
+        return render_template("auth/login.html")
 
 @auth_bp.route("/refresh-captcha")
 @rate_limit("10 per minute")
@@ -447,8 +444,8 @@ def ping():
 
 @auth_bp.route("/forgot-password", methods=["GET", "POST"])
 @auth_rate_limit("10 per 5 minutes")  # Slightly less restrictive for user convenience
-@protect_form_submission(max_fields=5, max_field_length=200)
-@validate_payload_size(max_size=1024)  # 1KB limit for forgot password form
+@protect_form_submission(max_fields=3, max_field_length=254)  # Email max length is 254 chars per RFC
+@validate_payload_size(max_size=512)  # 512B limit - more restrictive for single email field
 def forgot_password():
     """
     Route to handle forgot password functionality.

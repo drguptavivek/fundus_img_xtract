@@ -50,6 +50,8 @@
                 autocomplete="username"
                 required
                 autofocus
+                maxlength="50"
+                placeholder="Enter your username"
               >
             </div>
 
@@ -62,6 +64,8 @@
                 id="password"
                 autocomplete="current-password"
                 required
+                maxlength="255"
+                placeholder="Enter your password"
               >
             </div>
 
@@ -70,7 +74,7 @@
               <div class="d-flex align-items-start gap-2">
                 <div class="flex-grow-1">
                   <div class="d-flex align-items-center gap-2 mb-2">
-                    <img src="{{ captcha_image }}" alt="CAPTCHA" class="captcha-image border rounded" style="height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh" data-captcha-id="{{ captcha_data.captcha_id }}" data-timestamp="{{ captcha_data.timestamp }}">
+                    <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjUwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iNTAiIGZpbGw9IiNmOGY5ZmEiIHN0cm9rZT0iI2RlZTJlNiIgc3Ryb2tlLXdpZHRoPSIxIi8+CiAgPHRleHQgeD0iOTAiIHk9IjMwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxvYWRpbmcuLi48L3RleHQ+Cjwvc3ZnPg==" alt="Loading CAPTCHA..." class="captcha-image border rounded" style="width: 180px; height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh">
                     <input
                       class="form-control"
                       name="captcha"
@@ -78,27 +82,21 @@
                       autocomplete="off"
                       required
                       placeholder="Enter CAPTCHA code"
+                      style="text-transform: uppercase;"
+                      maxlength="10"
                     >
                     <button type="button" class="btn btn-outline-info btn-sm" id="refresh-captcha-btn" title="Refresh CAPTCHA">
                       🔄 Refresh
                     </button>
                   </div>
-                  {% if captcha_data.audio_available and captcha_data.audio %}
-                  <div class="d-flex align-items-center gap-2">
-                    <audio id="captcha-audio" controls class="" style="width: auto; min-width: 300px;">
-                      <source src="{{ url_for('auth.captcha_audio') }}" type="audio/wav">
-                      Your browser does not support the audio element.
-                    </audio>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="play-audio-btn" title="Play CAPTCHA audio">
-                      🔊 Play Audio
+                  <div class="d-flex align-items-center gap-2" id="audio-controls-container">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="play-audio-btn" title="Play CAPTCHA audio" disabled>
+                      🔊 Loading Audio...
                     </button>
                   </div>
-                  {% endif %}
                   <div class="form-text">
                     Click on CAPTCHA image or refresh button to get a new code.
-                    {% if captcha_data.audio_available %}
                     <br>Can't see the CAPTCHA? Click the play button to hear the code.
-                    {% endif %}
                   </div>
                 </div>
               </div>
@@ -112,7 +110,7 @@
             </div>
             #}
 
-            <button class="btn btn-primary w-100" type="submit">Sign in</button>
+            <button class="btn btn-primary w-100" type="submit" id="signin-btn" disabled>Sign in</button>
           </form>
 
         </div>

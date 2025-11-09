@@ -1,0 +1,2 @@
+# Run logrotate daily at 2:30 AM
+30 2 * * * /usr/sbin/logrotate /app/docker/logrotate.conf >/dev/null 2>&1

@@ -11,6 +11,8 @@ RUN apt-get update && \
         ca-certificates \
         curl \
         gnupg \
+        logrotate \
+        cron \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt/ $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && \
@@ -40,8 +42,15 @@ RUN pip install --no-cache-dir uv && \
 COPY . .
 
 # Ensure runtime directories exist
-RUN mkdir -p /app/logs /app/files  /var/log/fundus-img-xtract && \
-    chmod 755 /app/logs /app/files  /var/log/fundus-img-xtract
+RUN mkdir -p /app/logs /app/files /var/log/fundus-img-xtract /var/run/fundus-img-xtract && \
+    chmod 755 /app/logs /app/files /var/log/fundus-img-xtract /var/run/fundus-img-xtract
+
+# Set up logrotate configuration and cron job
+RUN cp /app/docker/logrotate.conf /etc/logrotate.d/fundus-img-xtract && \
+    cp /app/docker/logrotate.cron /etc/cron.d/fundus-img-xtract && \
+    chmod 0644 /etc/logrotate.d/fundus-img-xtract && \
+    chmod 0644 /etc/cron.d/fundus-img-xtract && \
+    touch /var/log/cron.log
 
 EXPOSE 5001
 

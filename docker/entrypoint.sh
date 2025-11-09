@@ -75,4 +75,9 @@ fi
 
 echo "✅ Database setup completed successfully!"
 
+# Start cron daemon for log rotation
+echo "Starting cron daemon for log rotation..."
+service cron start
+echo "✅ Cron daemon started"
+
 exec "$@"

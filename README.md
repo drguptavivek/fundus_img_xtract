@@ -813,81 +813,66 @@ flowchart TD
 
 ## Discrepancy Review Workflow
 
-This independent flowchart shows the Discrepancy Review process where teams validate automated consensus decisions rather than building consensus through discussion. This is a separate quality assurance workflow that complements the Intra-Rater Agreement system.
+This flowchart shows the actual implemented Discrepancy Review functionality. Note: This is a manual review process - there is no automated discrepancy detection or meeting scheduling in the current system.
 
 ```mermaid
 flowchart TD
-    subgraph Discrepancy Detection
-        A["Quality Assurance Dashboard"] --> B["Automated Discrepancy Identification"];
-        B --> C["Flag High-Priority Cases"];
-        C --> D["Generate Discrepancy Report"];
+    subgraph Discrepancy Review Access
+        A["Admin/Data Manager Login"] --> B["Access Discrepancy Review Interface"];
+        B --> C["/review/discrepancy-review Route"];
     end
 
-    subgraph Team Review Preparation
-        D --> E["Schedule Review Meeting"];
-        E --> F["Prepare Case Materials"];
-        F --> G["Gather Automated Consensus Data"];
-        G --> H["Compile Review Package"];
+    subgraph Manual Case Identification
+        C --> D["Apply Filters - Disease, Lab Unit, Grade Types"];
+        D --> E["Review Discrepancy Cases List"];
+        E --> F["Manual Selection of Cases for Review"];
     end
 
-    subgraph Collaborative Review Session
-        H --> I["Team Meeting Begins"];
-        I --> J["Present Case & Images"];
-        J --> K["Review Automated Consensus Logic"];
-        K --> L["Discuss System Decision Rules"];
-        L --> M["Validate Consensus Outcome"];
+    subgraph Case Review Process
+        F --> G["View Task Details with All Grades"];
+        G --> H["Compare Resident vs Resident2 Grades"];
+        H --> I["Review Consensus Status"];
+        I --> J["Assess Arbitration Outcomes"];
+        J --> K["Access Task Review Interface"];
     end
 
-    subgraph Consensus Validation
-        M --> N{"Consensus Logic Valid?"};
-        N -->|Yes| O["Approve Automated Decision"];
-        N -->|No| P["Identify Logic Issues"];
-        P --> Q["Recommend Rule Adjustments"];
-        Q --> R["Document Validation Findings"];
-        O --> R;
+    subgraph Review Actions
+        K --> L["Submit Review Grade"];
+        L --> M{"Has Required Permissions?"};
+        M -->|Yes| N["Add Review Grade & Comments"];
+        M -->|No| O["View-Only Access"];
+        N --> P["Update Task Status"];
+        O --> P;
     end
 
-    subgraph System Improvement
-        R --> S["Update Consensus Rules"];
-        S --> T["Modify Reference Standards"];
-        T --> U["Implement Changes"];
-        U --> V["Monitor Impact"];
-    end
-
-    subgraph Quality Assurance Actions
-        V --> W["Identify Training Needs"];
-        W --> X["Update Grading Guidelines"];
-        X --> Y["Provide Team Feedback"];
-        Y --> Z["Process Improvement Documentation"];
+    subgraph Analytics Support
+        P --> Q["Materialized View Analytics"];
+        Q --> R["Disease-Specific Pivot Data"];
+        R --> S["Grading Pattern Analysis"];
+        S --> T["Export Data for External Review"];
     end
 
     %% Style definitions for dark mode compatibility
     style A fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
     style B fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
     style C fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
-    style D fill:#4B0082,stroke:#000,stroke-width:2px,color:#fff;
+    style D fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
     style E fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
     style F fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
-    style G fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
-    style H fill:#6A5ACD,stroke:#000,stroke-width:2px,color:#fff;
+    style G fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style H fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
     style I fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
     style J fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
     style K fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
-    style L fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
-    style M fill:#7B68EE,stroke:#000,stroke-width:2px,color:#fff;
+    style L fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
+    style M fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
     style N fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
     style O fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
     style P fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
-    style Q fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
-    style R fill:#9370DB,stroke:#000,stroke-width:2px,color:#fff;
-    style S fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style T fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style U fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style V fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style W fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style X fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style Y fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
-    style Z fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style Q fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style R fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style S fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style T fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
 ```
 
 ## API Documentation

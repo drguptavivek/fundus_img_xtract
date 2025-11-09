@@ -726,15 +726,15 @@ flowchart TD
         U --> V[Dataset Ready for Training/Validation];
     end
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px;
-    style E fill:#f9f,stroke:#333,stroke-width:2px;
-    style BB fill:#bbf,stroke:#333,stroke-width:2px;
-    style AA fill:#fbb,stroke:#333,stroke-width:2px;
-    style GG fill:#ffb,stroke:#333,stroke-width:2px;
-    style MM fill:#bfb,stroke:#333,stroke-width:2px;
-    style SS fill:#bbf,stroke:#333,stroke-width:2px;
-    style V fill:#bbf,stroke:#333,stroke-width:2px;
-    style Q fill:#ff9,stroke:#333,stroke-width:2px;
+    style A fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style E fill:#8B0000,stroke:#000,stroke-width:2px,color:#fff;
+    style BB fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style AA fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
+    style GG fill:#B8860B,stroke:#000,stroke-width:2px,color:#fff;
+    style MM fill:#006400,stroke:#000,stroke-width:2px,color:#fff;
+    style SS fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style V fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
+    style Q fill:#FF8C00,stroke:#000,stroke-width:2px,color:#fff;
 ```
 
 ## API Documentation

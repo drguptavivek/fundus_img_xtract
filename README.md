@@ -650,7 +650,7 @@ flowchart TD
 
         E[Direct Image Upload] --> F[Assign UUID & Metadata];
 
-        GG[Pre-Graded Upload with Excel] --> HH[Parse Grades Excel];
+        GG["Pre-Graded Upload with Excel"] --> HH["Parse Grades Excel"];
         HH --> II[Map Images to Pre-Grades];
         II --> F;
     end
@@ -685,19 +685,19 @@ flowchart TD
         L --> M[Assign Tasks Based on User Roles & Lab Units];
         M --> N[Task Queue Management];
 
-        L --> AA[Ad_Hoc Task Creation - Search & Select];
+        L --> AA["Ad-Hoc Task Creation - Search & Select"];
         AA --> N;
 
         II --> JJ[Create Review Tasks for Pre-Graded Images];
         JJ --> M;
 
-        O --> KK[Create Intra-Rater Agreement Batches];
-        KK --> LL[Generate Self-Comparison Tasks];
+        O --> KK["Create Intra-Rater Agreement Batches"];
+        KK --> LL["Generate Self-Comparison Tasks"];
         LL --> N;
     end
 
-    subgraph AI Grade Processing (via Excel Import)
-        BB[AI Grades via Pre-Graded Excel] --> CC[Validate AI Grades & Models];
+    subgraph AI Grade Processing via Excel Import
+        BB["AI Grades via Pre-Graded Excel"] --> CC["Validate AI Grades & Models"];
         CC --> DD[Create Review Tasks for AI Graded Images];
         DD --> M;
     end
@@ -712,12 +712,12 @@ flowchart TD
     end
 
     subgraph Intra-Rater Agreement System
-        MM[Intra-Rater Admin Dashboard] --> NN[Batch Configuration];
-        NN --> OO[Select Images for Self-Comparison];
-        OO --> PP[Generate Intra-Rater Tasks];
-        PP --> QQ[Grader Self-Comparison];
-        QQ --> RR[Original vs New Grade Analysis];
-        RR --> SS[KPI Calculation & Reporting];
+        MM["Intra-Rater Admin Dashboard"] --> NN["Batch Configuration"];
+        NN --> OO["Select Images for Self-Comparison"];
+        OO --> PP["Generate Intra-Rater Tasks"];
+        PP --> QQ["Grader Self-Comparison"];
+        QQ --> RR["Original vs New Grade Analysis"];
+        RR --> SS["KPI Calculation & Reporting"];
     end
 
     subgraph Quality Control & AI Integration

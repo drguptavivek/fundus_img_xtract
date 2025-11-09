@@ -102,6 +102,12 @@ def create_app():
     # Thread pool (shared via app.config)
     app.config["EXECUTOR"] = ThreadPoolExecutor(max_workers=app.config["WORKERS"])
 
+    # Materialized View Scheduler Configuration
+    app.config["MATERIALIZED_VIEW_SCHEDULE_ENABLED"] = str(os.getenv("MATERIALIZED_VIEW_SCHEDULE_ENABLED", "true")).lower() in ("1", "true", "yes")
+    app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv("MATERIALIZED_VIEW_SCHEDULE_TIMES", "07:00,13:30,19:00,01:30").split(",")
+    app.config["MATERIALIZED_VIEW_TIMEZONE"] = os.getenv("MATERIALIZED_VIEW_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"])
+    app.config["MATERIALIZED_VIEW_RETRY_ATTEMPTS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_ATTEMPTS", "3"))
+    app.config["MATERIALIZED_VIEW_RETRY_DELAY_SECONDS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_DELAY_SECONDS", "60"))
 
     app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60  # 1 hour
     # app.config["WTF_CSRF_CHECK_DEFAULT"] = True  # default True
@@ -250,6 +256,7 @@ def create_app():
     intra_rater_debug_handler = make_handler("intra_rater_debug.log", logging.INFO, base_format)
     sqlalchemy_failure_handler = make_handler("sqlalchemy_failure.log", logging.ERROR, detailed_format)
     flash_handler = make_handler("flash_messages.log", logging.INFO, base_format)
+    materialized_view_handler = make_handler("materialized_view.log", logging.INFO, base_format)
 
     debug_handler = None
     console_handler = None
@@ -273,6 +280,7 @@ def create_app():
     intra_rater_debug_logger = configure_logger("intra_rater_debug", logging.INFO, intra_rater_debug_handler)
     sqlalchemy_failure_logger = configure_logger("sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler)
     flash_logger = configure_logger("flash.messages", logging.INFO, flash_handler)
+    materialized_view_logger = configure_logger("materialized_view", logging.INFO, materialized_view_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
@@ -316,6 +324,7 @@ def create_app():
     intra_rater_debug_logger.info("Intra-rater debug logger initialized at %s", str(log_dir / "intra_rater_debug.log"))
     sqlalchemy_failure_logger.info("SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log"))
     flash_logger.info("Flash message logger initialized at %s", str(log_dir / "flash_messages.log"))
+    materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
 
     def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
         level = logging.INFO
@@ -883,6 +892,21 @@ def create_app():
             return jsonify({"status": "error", "message": str(e)}), 500
         finally:
             db.close()
+
+    # Initialize Materialized View Scheduler
+    if app.config.get("MATERIALIZED_VIEW_SCHEDULE_ENABLED", False):
+        try:
+            from utils.materialized_view_scheduler import initialize_scheduler
+            scheduler_thread = initialize_scheduler(app)
+            if scheduler_thread:
+                scheduler_thread.start()
+                materialized_view_logger.info("Materialized view scheduler started successfully")
+            else:
+                materialized_view_logger.info("Materialized view scheduler disabled")
+        except Exception as e:
+            materialized_view_logger.error(f"Failed to start materialized view scheduler: {str(e)}")
+    else:
+        materialized_view_logger.info("Materialized view scheduler disabled by configuration")
 
     return app
 

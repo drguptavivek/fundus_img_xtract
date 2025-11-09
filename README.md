@@ -680,9 +680,19 @@ flowchart TD
     end
 
     subgraph Task Creation & Assignment
-        K3 --> L[Create Grading Tasks per Disease];
+        K3 --> L["Create Grading Tasks per Disease"];
         K4 --> L;
-        L --> M[Assign Tasks Based on User Roles & Lab Units];
+
+        L --> L1["DR Tasks: Images with DR Reports"];
+        L --> L2["DR Tasks: Images without Reports"];
+        L --> L3["Glaucoma Tasks: Images with Glaucoma Reports"];
+        L --> L4["Other Disease Tasks: Based on Available Data"];
+
+        L1 --> M;
+        L2 --> M;
+        L3 --> M;
+        L4 --> M;
+
         M --> N[Task Queue Management];
 
         II --> JJ[Create Review Tasks for Pre-Graded Images];
@@ -726,6 +736,11 @@ flowchart TD
     style HH fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style V fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style Q fill:#FF8C00,stroke:#000,stroke-width:2px,color:#fff;
+    style L fill:#4169E1,stroke:#000,stroke-width:2px,color:#fff;
+    style L1 fill:#6495ED,stroke:#000,stroke-width:2px,color:#fff;
+    style L2 fill:#87CEEB,stroke:#000,stroke-width:2px,color:#fff;
+    style L3 fill:#4682B4,stroke:#000,stroke-width:2px,color:#fff;
+    style L4 fill:#5F9EA0,stroke:#000,stroke-width:2px,color:#fff;
     style AA fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
     style BB fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;
     style CC fill:#8B4513,stroke:#000,stroke-width:2px,color:#fff;

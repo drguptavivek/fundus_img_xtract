@@ -1,650 +1,583 @@
 # CAPTCHA System Documentation
 
 ## Overview
-The Fundus Image Manager implements a comprehensive CAPTCHA system with both visual and audio accessibility features. This document covers the implementation, fixes, and operational procedures.
+The Fundus Image Manager implements a comprehensive CAPTCHA system with both visual and audio accessibility features. The system provides secure authentication protection with WCAG 2.1 compliance through visual and audio CAPTCHA options.
 
-## Architecture
+## Current Implementation
 
-### Components
-1. **Visual CAPTCHA** - PNG image generation with random alphanumeric codes
-2. **Audio CAPTCHA** - Text-to-speech conversion using PiperTTS
-3. **Refresh Mechanism** - Client-side regeneration with server-side validation
-4. **Session Management** - Secure CAPTCHA state tracking
+### Core Components
+1. **Visual CAPTCHA** - PNG image generation with enhanced contrast and readability
+2. **Audio CAPTCHA** - Text-to-speech conversion using PiperTTS (when available)
+3. **Refresh Mechanism** - Client-side regeneration with proper session management
+4. **Session Management** - Secure CAPTCHA state tracking with 5-minute expiry
+5. **Form Validation** - Real-time client-side validation with user feedback
 
 ### File Structure
 ```
-utils/captcha.py          # Core CAPTCHA generation and validation
-templates/auth/login.html  # Login form with CAPTCHA integration
-static/js/auth-captcha.js   # Client-side CAPTCHA functionality
+utils/captcha.py              # Core CAPTCHA generation and validation logic
+static/js/auth-captcha.js     # Client-side CAPTCHA functionality and validation
+templates/auth/login.html     # Login form with CAPTCHA integration
+auth/routes.py               # CAPTCHA refresh and audio endpoints
 ```
+
+### Dependencies
+- `captcha` library for visual CAPTCHA generation
+- `piper` for text-to-speech audio CAPTCHA (optional)
+- `Pillow` for image enhancement
+- `Flask` session management
 
 ## Implementation Details
 
-### Audio CAPTCHA Generation (utils/captcha.py)
+### CAPTCHA Manager Class (utils/captcha.py)
 
-#### PiperTTS Configuration
+The `CaptchaManager` class handles all CAPTCHA operations with the following configuration:
 
 ```python
-"""
-CAPTCHA utility module for generating and validating CAPTCHAs. 
-"""
-
-import logging
-import os
-import io
-import base64
-import random
-import string
-import tempfile
-import wave
-from captcha.image import ImageCaptcha
-from flask import session
-from piper import PiperVoice, SynthesisConfig
-import hashlib
-
-AUDIO_ENABLED = True  # Enabled - audio captcha available
-
-auth_logger = logging.getLogger("auth")
-
 class CaptchaManager:
-    """Manages CAPTCHA generation and validation."""
-    
     def __init__(self):
         self.image_captcha = ImageCaptcha(width=180, height=50)
         self.session_key = 'captcha_text'
         self.session_expiry_key = 'captcha_expiry'
         self.captcha_length = 5
         self.expiry_minutes = 5
-        
-        # Initialize Piper TTS for audio CAPTCHA
-        self.piper_voice = None
-        if AUDIO_ENABLED:
-            try:
-                # Path to Piper model files
-                model_path = "en_US-lessac-medium.onnx"
-                config_path = "en_US-lessac-medium.onnx.json"
-                
-                if os.path.exists(model_path) and os.path.exists(config_path):
-                    self.piper_voice = PiperVoice.load(model_path, config_path)
-                else:
-                    import logging
-                    logging.getLogger("auth").warning(f"Piper model files not found: {model_path}, {config_path}")
-            except Exception as e:
-                import logging
-                logging.getLogger("auth").error(f"Failed to initialize Piper TTS: {e}")
-                # Disable audio for this instance if initialization fails
-                self.audio_enabled = False
-    
-    
-    def generate_captcha_text(self):
-        """Generate a random CAPTCHA text with improved readability."""
-        # Use characters that are less likely to be confused
-        # Avoid: 0/O, 1/l/I, 2/Z, 5/S, etc.
-        readable_chars = 'ACDEFGHJKLMNPQRSTUVWXY23456789'
-        
-        # Ensure we have a good mix of character types
-        text_parts = []
-        for i in range(self.captcha_length):
-            if i < 2:  # First 2 characters: uppercase letters
-                text_parts.append(random.choice('ACDEFGHJKLMNPQRSTUVWXY23456789'))
-            elif i < 4:  # Next 2 characters: lowercase letters
-                text_parts.append(random.choice('23456789'))
-            else:  # Last character: digit
-                text_parts.append(random.choice('ACDEFGHJKLMNPQRSTUVWXY23456789'))
-        
-        # Shuffle the positions to make it less predictable
-        random.shuffle(text_parts)
-        return ''.join(text_parts)
-    
-    def generate_captcha_image(self, text):
-        """Generate CAPTCHA image as base64 string with improved accessibility."""
-        # Create image with better contrast and readability
-        image = self.image_captcha.generate_image(text)
-        
-        # Apply additional processing for better accessibility
-        # Convert to RGB if needed for better processing
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        # Enhance contrast for better readability
-        from PIL import ImageEnhance
-        enhancer = ImageEnhance.Contrast(image)
-        image = enhancer.enhance(1.5)  # Increase contrast by 50%
-        
-        # Slightly sharpen the image
-        sharpener = ImageEnhance.Sharpness(image)
-        image = sharpener.enhance(1.2)  # Slight sharpening
-        
-        # Convert image to base64 string
-        buffer = io.BytesIO()
-        image.save(buffer, format='PNG', optimize=True)
-        image_str = base64.b64encode(buffer.getvalue()).decode()
-        
-        return f"data:image/png;base64,{image_str}"
-    
-    def generate_captcha_audio(self, text):
-        """Generate CAPTCHA audio as base64 string using Piper TTS."""
-        if not AUDIO_ENABLED or not self.piper_voice:
-            return None
-        
-        try:
-            # Convert CAPTCHA text to spoken format
-            # Spell out characters clearly for better comprehension
-            spoken_text = " ".join(list(text.upper()))
-            
-            # Generate audio using Piper with basic config
-            syn_config = SynthesisConfig(
-                volume=0.5,  # half as loud
-                length_scale=2.0,  # twice as slow
-                noise_scale=1.0,  # more audio variation
-                noise_w_scale=1.0,  # more speaking variation
-                normalize_audio=False, # use raw audio from voice
-            )
-            
-            # Generate audio data
-            audio_generator = self.piper_voice.synthesize(
-                spoken_text,
-                syn_config
-            )
-            
-            # Convert AudioChunk objects to bytes
-            # AudioChunk has an audio_int16_bytes property that contains the raw audio data
-            audio_chunks = []
-            for audio_chunk in audio_generator:
-                # Use the audio_int16_bytes property which contains the raw audio data
-                if hasattr(audio_chunk, 'audio_int16_bytes') and audio_chunk.audio_int16_bytes:
-                    audio_chunks.append(audio_chunk.audio_int16_bytes)
-                else:
-                    # Fallback: convert to int16 array then to bytes
-                    if hasattr(audio_chunk, 'audio_int16_array') and audio_chunk.audio_int16_array is not None:
-                        audio_chunks.append(audio_chunk.audio_int16_array.tobytes())
-                    else:
-                        # Last resort: convert float array to int16 then to bytes
-                        if hasattr(audio_chunk, 'audio_float_array') and audio_chunk.audio_float_array is not None:
-                            import numpy as np
-                            int16_array = (audio_chunk.audio_float_array * 32767).astype(np.int16)
-                            audio_chunks.append(int16_array.tobytes())
-                        else:
-                            auth_logger.warning(f"AudioChunk has no audio data: {audio_chunk}")
-            
-            # Combine all audio data
-            audio_data = b''.join(audio_chunks)
-            
-            # Convert to WAV format in memory
-            audio_buffer = io.BytesIO()
-            with wave.open(audio_buffer, 'wb') as wav_file:
-                wav_file.setnchannels(1)  # Mono
-                wav_file.setsampwidth(2)  # 16-bit
-                wav_file.setframerate(22050)  # Piper sample rate
-                wav_file.writeframes(audio_data)
-            
-            # Convert to base64 for web delivery
-            audio_buffer.seek(0)
-            audio_str = base64.b64encode(audio_buffer.getvalue()).decode()
-            return f"data:audio/wav;base64,{audio_str}"
-            
-        except Exception as e:
-            import logging
-            logging.getLogger("auth").error(f"Failed to generate CAPTCHA audio: {e}")
-            return None
-    
-    
-    def generate_captcha(self):
-        """Generate a new CAPTCHA and store it in session."""
-        from datetime import datetime, timezone, timedelta
-        import uuid
-        import time
-        import logging
-        
-        text = self.generate_captcha_text()
-        image_data = self.generate_captcha_image(text)
-        
-        # Generate unique identifier for this captcha
-        captcha_id = str(uuid.uuid4())
-        timestamp = int(time.time() * 1000)  # Millisecond timestamp
-        
-        # Store in session with expiry time
-        session[self.session_key] = text
-        session[self.session_expiry_key] = (datetime.now(timezone.utc) + timedelta(minutes=self.expiry_minutes)).isoformat()
-        session.modified = True
-        
-        # Log the generated CAPTCHA code for testing
-        auth_logger = logging.getLogger("auth")
-        auth_logger.info(f"Generated CAPTCHA - ID: {captcha_id}, Code: {text}")
-        
-        # Generate audio if available
-        audio_data = self.generate_captcha_audio(text) if AUDIO_ENABLED else None
-        
-        result = {
-            'image': image_data,
-            'audio': audio_data,
-            'audio_available': AUDIO_ENABLED,
-            'captcha_id': captcha_id,
-            'timestamp': timestamp
-        }
-        
-        return result
-    
-    def validate_captcha(self, user_input):
-        """Validate user input against stored CAPTCHA."""
-        from datetime import datetime, timezone
-        
-        if not user_input:
-            return False, "Please enter the CAPTCHA code."
-        
-        # Get stored CAPTCHA from session
-        stored_text = session.get(self.session_key)
-        expiry_str = session.get(self.session_expiry_key)
-        
-        if not stored_text or not expiry_str:
-            return False, "CAPTCHA has expired. Please try again."
-        
-        # Check if CAPTCHA has expired
-        try:
-            expiry_time = datetime.fromisoformat(expiry_str)
-            current_time = datetime.now(timezone.utc)
-            
-            # Ensure both datetimes are timezone-aware
-            if expiry_time.tzinfo is None:
-                expiry_time = expiry_time.replace(tzinfo=timezone.utc)
-            if current_time.tzinfo is None:
-                current_time = current_time.replace(tzinfo=timezone.utc)
-            
-            if current_time > expiry_time:
-                # Clear expired CAPTCHA
-                self.clear_captcha()
-                return False, "CAPTCHA has expired. Please try again."
-        except (ValueError, TypeError):
-            # Invalid expiry format
+        self.piper_voice = None  # For audio CAPTCHA
+```
+
+#### Visual CAPTCHA Generation
+
+**Character Selection**: Uses readable characters to avoid confusion:
+- Avoids: 0/O, 1/l/I, 2/Z, 5/S
+- Uses: `ACDEFGHJKLMNPQRSTUVWXY23456789`
+
+**Image Enhancement**:
+- 50% contrast enhancement using PIL
+- 20% sharpening for clarity
+- RGB conversion for better processing
+- Optimized PNG output
+
+```python
+def generate_captcha_image(self, text):
+    image = self.image_captcha.generate_image(text)
+    # Convert to RGB and enhance
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(1.5)
+
+    sharpener = ImageEnhance.Sharpness(image)
+    image = sharpizer.enhance(1.2)
+
+    # Convert to base64 for web delivery
+    buffer = io.BytesIO()
+    image.save(buffer, format='PNG', optimize=True)
+    return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+```
+
+#### Audio CAPTCHA with PiperTTS
+
+**Configuration**: (when AUDIO_ENABLED=True and model files available)
+```python
+# Model files required
+model_path = "en_US-lessac-medium.onnx"
+config_path = "en_US-lessac-medium.onnx.json"
+
+# Synthesis configuration
+syn_config = SynthesisConfig(
+    volume=0.5,           # Half as loud
+    length_scale=2.0,     # Twice as slow for clarity
+    noise_scale=1.0,      # More audio variation
+    noise_w_scale=1.0,    # More speaking variation
+    normalize_audio=False # Use raw audio from voice
+)
+```
+
+**Audio Processing Pipeline**:
+1. Convert CAPTCHA text to spoken format (character-by-character)
+2. Generate audio using PiperTTS synthesis
+3. Process AudioChunk objects to extract audio data
+4. Convert to WAV format (22.05kHz, 16-bit, mono)
+5. Encode as base64 for web delivery
+
+**Robust Audio Data Extraction**:
+```python
+for audio_chunk in audio_generator:
+    # Primary method: use audio_int16_bytes property
+    if hasattr(audio_chunk, 'audio_int16_bytes') and audio_chunk.audio_int16_bytes:
+        audio_chunks.append(audio_chunk.audio_int16_bytes)
+    # Fallback 1: convert int16 array to bytes
+    elif hasattr(audio_chunk, 'audio_int16_array') and audio_chunk.audio_int16_array is not None:
+        audio_chunks.append(audio_chunk.audio_int16_array.tobytes())
+    # Fallback 2: convert float array to int16 then to bytes
+    elif hasattr(audio_chunk, 'audio_float_array') and audio_chunk.audio_float_array is not None:
+        import numpy as np
+        int16_array = (audio_chunk.audio_float_array * 32767).astype(np.int16)
+        audio_chunks.append(int16_array.tobytes())
+```
+
+### Session Management and Validation
+
+**CAPTCHA Generation**:
+```python
+def generate_captcha(self):
+    text = self.generate_captcha_text()
+    image_data = self.generate_captcha_image(text)
+
+    # Generate unique identifier for tracking
+    captcha_id = str(uuid.uuid4())
+    timestamp = int(time.time() * 1000)
+
+    # Store in session with 5-minute expiry
+    session[self.session_key] = text
+    session[self.session_expiry_key] = (
+        datetime.now(timezone.utc) + timedelta(minutes=self.expiry_minutes)
+    ).isoformat()
+    session.modified = True
+
+    # Generate audio if available
+    audio_data = self.generate_captcha_audio(text) if AUDIO_ENABLED else None
+
+    return {
+        'image': image_data,
+        'audio': audio_data,
+        'audio_available': AUDIO_ENABLED,
+        'captcha_id': captcha_id,
+        'timestamp': timestamp
+    }
+```
+
+**Validation Logic**:
+```python
+def validate_captcha(self, user_input):
+    if not user_input:
+        return False, "Please enter the CAPTCHA code."
+
+    stored_text = session.get(self.session_key)
+    expiry_str = session.get(self.session_expiry_key)
+
+    # Check expiry with timezone-aware comparison
+    try:
+        expiry_time = datetime.fromisoformat(expiry_str)
+        current_time = datetime.now(timezone.utc)
+
+        if current_time > expiry_time:
             self.clear_captcha()
             return False, "CAPTCHA has expired. Please try again."
-        
-        # Validate input (case insensitive)
-        if user_input.upper() != stored_text.upper():
-            return False, "Invalid CAPTCHA. Please try again."
-        
-        # Clear validated CAPTCHA to prevent reuse
+    except (ValueError, TypeError):
         self.clear_captcha()
-        return True, "CAPTCHA validated successfully."
-    
-    def clear_captcha(self):
-        """Clear CAPTCHA from session."""
-        session.pop(self.session_key, None)
-        session.pop(self.session_expiry_key, None)
-        session.modified = True
+        return False, "CAPTCHA has expired. Please try again."
 
+    # Case insensitive validation
+    if user_input.upper() != stored_text.upper():
+        return False, "Invalid CAPTCHA. Please try again."
 
-# Global CAPTCHA manager instance
-captcha_manager = CaptchaManager()
-
+    self.clear_captcha()  # Prevent reuse
+    return True, "CAPTCHA validated successfully."
 ```
 
-#### Audio Processing Pipeline
-1. **Text-to-Speech**: PiperTTS converts CAPTCHA code to audio
-2. **Format Conversion**: AudioChunk → numpy array → WAV format
-3. **Quality Enhancement**: 16kHz sample rate, mono channel
-4. **Duration Optimization**: 2-3 seconds for accessibility
+### Client-Side Implementation (static/js/auth-captcha.js)
 
-### Client-Side Functionality (static/js/auth-captcha.js)
+#### Real-time Form Validation
 
-#### CAPTCHA Refresh with Audio Update
+The JavaScript provides comprehensive client-side validation with user feedback:
+
+**Input Validation**:
+- Auto-converts CAPTCHA input to uppercase
+- Enforces length limits (Username: 50, Password: 255, CAPTCHA: 10)
+- Real-time validation feedback with dynamic button states
+- Flash toast integration for better UX
+
+**CAPTCHA State Management**:
 ```javascript
-/**
- * CAPTCHA functionality for login page
- */
- 
-document.addEventListener('DOMContentLoaded', function() {
-    const captchaImg = document.getElementById('captcha-img');
-    const captchaInput = document.getElementById('captcha');
-    const refreshBtn = document.getElementById('refresh-captcha-btn');
-    const playAudioBtn = document.getElementById('play-audio-btn');
-    const captchaAudio = document.getElementById('captcha-audio');
-    let refreshRequestInProgress = false;  // Prevent multiple refresh requests
-    
-    if (captchaImg) {
-        // Add click event to refresh CAPTCHA
-        captchaImg.addEventListener('click', function() {
-            refreshCaptcha();
-        });
-        
-        // Add hover effect to indicate it's clickable
-        captchaImg.style.cursor = 'pointer';
-        captchaImg.title = 'Click to refresh CAPTCHA';
-    }
-    
-    // Refresh button functionality
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', function() {
-            refreshCaptcha();
-        });
-    }
-    
-    // Audio button functionality
-    if (playAudioBtn) {
-        playAudioBtn.addEventListener('click', function() {
-            if (captchaAudio) {
-                captchaAudio.play();
-            } else {
-                // Fallback: try to load audio
-                loadCaptchaAudio();
-            }
-        });
-    }
-    
-    /**
-     * Refresh CAPTCHA image
-     */
-    function refreshCaptcha() {
-        // Prevent multiple refresh requests
-        if (refreshRequestInProgress) {
-            return;
-        }
-        
-        refreshRequestInProgress = true;
-        
-        fetch('/refresh-captcha')
-            .then(response => response.json())
-            .then(data => {
-                if (data && data.image) {
-                    captchaImg.src = data.image;
-                    // Clear CAPTCHA input field
-                    if (captchaInput) {
-                        captchaInput.value = '';
-                        captchaInput.focus();
-                    }
-                    // Refresh audio source to get new CAPTCHA audio
-                    if (captchaAudio) {
-                        // Add cache-busting parameter to force reload of new audio
-                        const timestamp = new Date().getTime();
-                        captchaAudio.src = '/captcha-audio?t=' + timestamp;
-                        captchaAudio.load(); // Reload the audio with new source
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error refreshing CAPTCHA:', error);
-                // Fallback: reload the page if fetch fails
-                window.location.reload();
-            })
-            .finally(() => {
-                refreshRequestInProgress = false;
-            });
-    }
-    
-    /**
-     * Load CAPTCHA audio
-     */
-    function loadCaptchaAudio() {
-        fetch('/captcha-audio')
-            .then(response => {
-                if (response.ok) {
-                    return response.blob();
-                } else {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Failed to load audio');
-                    });
-                }
-            })
-            .then(audioBlob => {
-                if (captchaAudio) {
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    captchaAudio.src = audioUrl;
-                    captchaAudio.load(); // Preload the audio
-                    captchaAudio.play();
-                }
-            })
-            .catch(error => {
-                console.error('Error loading CAPTCHA audio:', error);
-                // Show user-friendly error
-                alert('Unable to load CAPTCHA audio. Please try refreshing the CAPTCHA.');
-            });
-    }
-    
-    // Add keyboard shortcut: Ctrl+R or F5 when on CAPTCHA field refreshes it
-    if (captchaInput) {
-        captchaInput.addEventListener('keydown', function(e) {
-            if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
-                e.preventDefault();
-                refreshCaptcha();
-            }
-        });
-    }
-});
+let captchaLoaded = false;      // Track if CAPTCHA has successfully loaded
+let audioLoaded = false;        // Track if audio has successfully loaded
+let currentCaptchaData = null;  // Store the latest CAPTCHA data
+let refreshRequestInProgress = false;  // Prevent multiple refresh requests
 ```
 
-## Recent Fixes (November 2025)
+**Dynamic Button States**:
+- Sign-in button: Shows validation status and disabled state
+- Audio button: Updates based on audio availability and loading state
+- Visual feedback for all user interactions
 
-### 1. AudioChunk Conversion Fix
-**Problem**: AudioChunk objects couldn't be directly converted to WAV format
-**Solution**: Implemented proper numpy array conversion pipeline
-```python
-# Fixed conversion pipeline
-audio_chunk = piper_tts.synthesize(text_raw, **synth_params)
-audio_array = np.frombuffer(audio_chunk.to_bytes(), dtype=np.int16)
-```
+#### CAPTCHA Refresh Mechanism
 
-### 2. CAPTCHA Refresh KeyError Fix
-**Problem**: Audio source wasn't updated when CAPTCHA was refreshed
-**Solution**: Added cache-busting and audio reload in JavaScript
+**Refresh Process**:
+1. Fetch new CAPTCHA from `/refresh-captcha` endpoint
+2. Update CAPTCHA image with new base64 data
+3. Store new CAPTCHA data (including audio) for later use
+4. Clear user input and reset focus
+5. Update button states based on audio availability
+
+**Error Handling**:
+- Prevents multiple simultaneous refresh requests
+- Graceful fallback to page reload on network failures
+- Comprehensive logging for debugging
+- User-friendly error messages
+
+#### Audio CAPTCHA Implementation
+
+**Audio Playback Strategy**:
 ```javascript
-// Cache-busting implementation
-const timestamp = new Date().getTime();
-captchaAudio.src = '/captcha-audio?t=' + timestamp;
-captchaAudio.load();
+function createAndPlayAudio() {
+    // Check if we have current CAPTCHA data with audio
+    if (!currentCaptchaData || !currentCaptchaData.audio) {
+        showToast('No audio available for the current CAPTCHA. Please try refreshing.', 'warning');
+        return;
+    }
+
+    // Create hidden audio element dynamically
+    captchaAudio = document.createElement('audio');
+    captchaAudio.id = 'captcha-audio';
+    captchaAudio.preload = 'auto';
+    captchaAudio.src = currentCaptchaData.audio;  // Base64 data URL
+
+    document.body.appendChild(captchaAudio);
+
+    // Play with comprehensive error handling
+    captchaAudio.play().then(() => {
+        console.log('Audio playback successful');
+    }).catch(error => {
+        // Retry logic and user feedback
+        setTimeout(() => {
+            captchaAudio.play().catch(err => {
+                showToast('Could not play audio. Your browser may not support audio playback.', 'error');
+            });
+        }, 100);
+    });
+}
 ```
 
-### 3. Session Management Enhancement
-**Problem**: KeyError during CAPTCHA refresh operations
-**Solution**: Robust session key access with error handling
+**Audio Button State Management**:
+- **Loading**: "🔊 Loading Audio..."
+- **Ready**: "🔊 Play Audio"
+- **Playing**: "🔊 Playing..."
+- **Unavailable**: "🔊 Audio Unavailable"
+- **Error**: "🔊 Error"
+
+#### Browser Compatibility Features
+
+**Keyboard Shortcuts**:
+- `Ctrl+R` or `F5` when focused on CAPTCHA field refreshes the CAPTCHA
+- Full keyboard accessibility for all controls
+
+**Browser Audio Testing**:
+- `window.testAudioSupport()` function for debugging audio capabilities
+- Comprehensive audio event logging
+- Browser compatibility detection
+
+**Fallback Mechanisms**:
+- Flash toast integration with alert fallback
+- Graceful degradation when audio is unavailable
+- Network error recovery with page reload fallback
+## Web Integration
+
+### Login Form Integration (templates/auth/login.html)
+
+**CAPTCHA Display**:
+```html
+<div class="mb-3">
+  <label class="form-label" for="captcha">CAPTCHA</label>
+  <div class="d-flex align-items-start gap-2">
+    <div class="flex-grow-1">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <img src="data:image/svg+xml;base64,..."
+             alt="Loading CAPTCHA..."
+             class="captcha-image border rounded"
+             id="captcha-img"
+             title="Click to refresh">
+        <input class="form-control"
+               name="captcha"
+               id="captcha"
+               required
+               placeholder="Enter CAPTCHA code"
+               style="text-transform: uppercase;"
+               maxlength="10">
+        <button type="button"
+                class="btn btn-outline-info btn-sm"
+                id="refresh-captcha-btn"
+                title="Refresh CAPTCHA">
+          🔄 Refresh
+        </button>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button type="button"
+                class="btn btn-outline-secondary btn-sm"
+                id="play-audio-btn"
+                title="Play CAPTCHA audio"
+                disabled>
+          🔊 Loading Audio...
+        </button>
+      </div>
+      <div class="form-text">
+        Click on CAPTCHA image or refresh button to get a new code.
+        <br>Can't see the CAPTCHA? Click the play button to hear the code.
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+**Key Features**:
+- Loading placeholder image while CAPTCHA loads
+- Auto-uppercase input for user convenience
+- Clickable image and refresh button
+- Audio button with disabled state until loaded
+- Helpful instructional text for users
+
+### API Endpoints (auth/routes.py)
+
+**CAPTCHA Refresh Endpoint**:
 ```python
-# Safe session access
-try:
-    captcha_id = session.get('captcha_id')
-    session_text = session.get('captcha_text')
-except KeyError:
-    # Graceful handling of missing session data
-    pass
+@auth_bp.route("/refresh-captcha", methods=["POST"])
+def refresh_captcha():
+    """Generate new CAPTCHA and return as JSON"""
+    from utils.captcha import captcha_manager
+
+    captcha_data = captcha_manager.generate_captcha()
+    auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['captcha_id']}")
+
+    response = jsonify(captcha_data)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
 ```
 
-## API Endpoints
+**Audio Endpoint** (Legacy - for direct audio requests):
+```python
+@auth_bp.route("/captcha-audio", methods=["GET"])
+def captcha_audio():
+    """Serve audio for current CAPTCHA"""
+    from utils.captcha import captcha_manager
 
-### `/captcha-audio`
-- **Method**: GET
-- **Purpose**: Generate and serve audio CAPTCHA
-- **Response**: WAV audio file (16kHz, mono)
-- **Caching**: Browser-based with cache-busting support
+    if 'captcha_text' not in session:
+        return "No CAPTCHA session found", 404
 
-### `/refresh-captcha`
-- **Method**: POST
-- **Purpose**: Generate new CAPTCHA code and image
-- **Response**: JSON with image data
-- **Session Update**: Creates new CAPTCHA state
+    # Check expiry
+    captcha_expiry = session.get('captcha_expiry', 0)
+    current_time = datetime.now(timezone.utc)
 
-## Security Features
+    try:
+        if isinstance(captcha_expiry, str):
+            expiry_time = datetime.fromisoformat(captcha_expiry)
+        else:
+            expiry_time = datetime.fromtimestamp(captcha_expiry)
 
-### Rate Limiting
-- IP-based request throttling
-- Session-based attempt tracking
-- Automatic lockout after repeated failures
+        if current_time > expiry_time:
+            return "CAPTCHA expired", 410
+    except:
+        return "Invalid expiry format", 400
 
-### CSRF Protection
-- All CAPTCHA operations protected by CSRF tokens
-- Secure session management
-- SameSite cookie attributes
+    captcha_text = session.get('captcha_text', '')
+    audio_data = captcha_manager.generate_captcha_audio(captcha_text)
 
-### Session Security
-- Secure, HTTP-only cookies
-- Configurable expiration times
-- Session regeneration on privilege changes
+    if audio_data:
+        return audio_data, 200, {'Content-Type': 'audio/wav'}
+    else:
+        return "Audio generation failed", 500
+```
 
-## Accessibility Compliance
+**Note**: The current implementation primarily uses the `/refresh-captcha` endpoint which returns both image and audio data together, making the separate `/captcha-audio` endpoint less commonly used.
 
-### WCAG 2.1 Guidelines
-- **Visual Alternative**: Audio CAPTCHA for visually impaired users
-- **Keyboard Navigation**: Full keyboard accessibility
-- **Screen Reader Support**: Proper ARIA labels and semantic HTML
-- **Timing Control**: 2-3 second audio duration for comprehension
+## Current Status and Features
+
+### Working Components
+
+1. **Visual CAPTCHA**: Fully functional with enhanced readability
+2. **Audio CAPTCHA**: Functional when PiperTTS model files are available
+3. **Session Management**: 5-minute expiry with timezone-aware validation
+4. **Client-side Validation**: Real-time form validation with user feedback
+5. **Refresh Mechanism**: AJAX-based refresh with proper error handling
+6. **Accessibility Compliance**: WCAG 2.1 compatible with audio alternative
+
+### Configuration Options
+
+**Audio CAPTCHA**:
+- `AUDIO_ENABLED = True` in `utils/captcha.py`
+- Requires PiperTTS model files: `en_US-lessac-medium.onnx` and `en_US-lessac-medium.onnx.json`
+- Gracefully degrades when audio is unavailable
+
+**Security Features**:
+- Case-insensitive validation (user-friendly)
+- Automatic CAPTCHA clearing after validation (prevents reuse)
+- Session-based storage (stateless and secure)
+- Unique CAPTCHA IDs for tracking and debugging
+
+### Logging and Monitoring
+
+**CAPTCHA Generation**:
+```python
+auth_logger.info(f"Generated CAPTCHA - ID: {captcha_id}, Code: {text}")
+auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['captcha_id']}")
+```
+
+**Validation Attempts**:
+```python
+auth_logger.info(f"CAPTCHA validation attempt - Input: '{captcha_input}'")
+auth_logger.info(f"CAPTCHA validation result - Valid: {captcha_valid}, Message: {captcha_message}")
+```
+
+**Error Handling**:
+- Comprehensive audio synthesis error logging
+- Session management error handling
+- Browser audio compatibility logging
+
+## Security and Performance
+
+### Security Features
+1. **CSRF Protection**: All CAPTCHA operations protected by Flask-WTF CSRF tokens
+2. **Session Management**: Secure server-side storage with automatic cleanup
+3. **Input Validation**: Client-side and server-side validation with sanitization
+4. **Rate Limiting**: Application-level rate limiting (handled by Flask security)
+5. **Expiry Handling**: 5-minute CAPTCHA expiry prevents replay attacks
+
+### Performance Characteristics
+- **Visual CAPTCHA Generation**: < 100ms for image creation and encoding
+- **Audio CAPTCHA Generation**: 200-500ms when PiperTTS models are available
+- **File Sizes**:
+  - PNG images: ~8-15KB
+  - WAV audio: ~50-80KB (when available)
+- **Memory Usage**: Minimal - in-memory processing with automatic cleanup
 
 ### Browser Compatibility
-- **Modern Browsers**: Full HTML5 audio support
-- **Legacy Support**: Fallback mechanisms for older browsers
-- **Mobile Optimization**: Touch-friendly controls and responsive design
+- **Modern Browsers**: Full support for all features (Chrome, Firefox, Safari, Edge)
+- **HTML5 Audio**: Required for CAPTCHA audio playback
+- **JavaScript**: Required for dynamic refresh and validation
+- **Fallback**: Graceful degradation when features are unavailable
 
-## Performance Metrics
+## Troubleshooting Common Issues
 
-### Audio Generation
-- **Processing Time**: < 500ms for 5-character codes
-- **File Size**: ~50KB WAV files
-- **Quality**: 16kHz, 16-bit, mono
-- **Success Rate**: > 99.9% synthesis success
+### Audio CAPTCHA Not Working
 
-### Caching Strategy
-- **Server-Side**: CAPTCHA state cached in session
-- **Client-Side**: Audio files cached with cache-busting
-- **CDN Ready**: Static asset optimization support
+**Symptoms**: Audio button shows "Audio Unavailable" or playback fails
 
-## Monitoring and Logging
-
-### Key Metrics
-```python
-# Performance tracking
-logger.info(f"CAPTCHA generated - ID: {captcha_id}, Code: {code}, Duration: {duration}s")
-
-# Error tracking
-logger.error(f"Audio synthesis failed - Error: {str(e)}")
-
-# Security events
-logger.warning(f"CAPTCHA refresh attempt - IP: {request.remote_addr}")
-```
-
-### Debug Information
-- CAPTCHA generation timestamps
-- Audio synthesis parameters
-- Session state changes
-- Error conditions and recovery
-
-## Testing Procedures
-
-### Audio Playback Testing
-1. Verify audio duration (2-3 seconds)
-2. Check audio clarity and volume
-3. Test with different browsers
-4. Validate screen reader compatibility
-
-### Refresh Functionality Testing
-1. Confirm new CAPTCHA generation
-2. Verify audio source update
-3. Test cache-busting effectiveness
-4. Validate session state consistency
-
-### Integration Testing
-1. Complete login flow with audio CAPTCHA
-2. Test form validation and submission
-3. Verify session management
-4. Check error handling and recovery
-
-## Troubleshooting
-
-### Common Issues
-
-#### Audio Not Playing
-**Symptoms**: No audio or very short duration
-**Causes**: 
-- AudioChunk conversion error
-- Incorrect MIME type
-- Browser compatibility issues
+**Common Causes**:
+1. PiperTTS model files missing (`en_US-lessac-medium.onnx` and `.json`)
+2. Browser audio autoplay policies
+3. Network connectivity issues
 
 **Solutions**:
-```javascript
-// Debug audio element
-console.log('Audio src:', captchaAudio.src);
-console.log('Audio duration:', captchaAudio.duration);
-console.log('Audio readyState:', captchaAudio.readyState);
-```
-
-#### CAPTCHA Refresh Not Working
-**Symptoms**: Same code after refresh
-**Causes**:
-- JavaScript errors
-- Network request failures
-- Session synchronization issues
-
-**Solutions**:
-```javascript
-// Check refresh response
-fetch('/refresh-captcha')
-    .then(response => response.json())
-    .then(data => console.log('New CAPTCHA:', data));
-```
-
-### Performance Issues
-
-#### Slow Audio Generation
-**Optimizations**:
-- Pre-warm TTS model
-- Cache frequent voice settings
-- Optimize numpy operations
-- Use efficient audio formats
-
-#### High Memory Usage
-**Mitigations**:
-- Stream audio processing
-- Limit concurrent requests
-- Clear audio caches
-- Monitor memory usage patterns
-
-## Future Enhancements
-
-### Planned Improvements
-1. **Multi-Language Support**: International accessibility
-2. **Voice Selection**: User-preferred TTS voices
-3. **Advanced Security**: Bot detection and behavioral analysis
-4. **Performance Optimization**: Edge computing for audio processing
-
-### Scalability Considerations
-- **Horizontal Scaling**: Multiple TTS service instances
-- **Load Balancing**: Distributed CAPTCHA generation
-- **Caching Strategy**: Redis-based session storage
-- **Monitoring**: Real-time performance dashboards
-
-## Configuration
-
-### Environment Variables
 ```bash
-# TTS Configuration
-PIPER_MODEL_PATH=/path/to/piper/model.onnx
-PIPER_VOICE_CONFIG=default
-CAPTCHA_AUDIO_SAMPLE_RATE=16000
+# Check if model files exist
+ls -la en_US-lessac-medium.onnx*
 
-# Security Settings
-CAPTCHA_SESSION_TIMEOUT=300
-CAPTCHA_MAX_ATTEMPTS=5
-CAPTCHA_LOCKOUT_DURATION=14400
+# Test browser audio support
+# Open browser console and run:
+window.testAudioSupport()
 ```
 
-### Development Settings
+**Debugging**:
+```javascript
+// Check current CAPTCHA data
+console.log('Current CAPTCHA data:', currentCaptchaData);
+
+// Check audio element state
+const audio = document.getElementById('captcha-audio');
+console.log('Audio error:', audio ? audio.error : 'No audio element');
+```
+
+### CAPTCHA Refresh Fails
+
+**Symptoms**: Same CAPTCHA code appears after refresh, or error messages
+
+**Debugging Steps**:
+1. Check browser network tab for `/refresh-captcha` request
+2. Verify Flask application logs for CAPTCHA generation
+3. Check for JavaScript errors in browser console
+
+**Common Solutions**:
+- Clear browser cache and cookies
+- Check Flask application is running
+- Verify CSRF token is present in form
+
+### Session Issues
+
+**Symptoms**: "CAPTCHA has expired" immediately after generation
+
+**Causes**:
+- Server time zone configuration issues
+- Session storage problems
+- Browser blocking cookies
+
+**Verification**:
 ```python
-# Debug mode
-DEBUG_CAPTCHA=true
-CAPTCHA_LOG_LEVEL=INFO
-AUDIO_CACHE_ENABLED=true
+# Check Flask session configuration
+from flask import session
+print('Session config:', session.config)
 ```
 
-## Maintenance
+## Configuration and Setup
 
-### Regular Tasks
-1. **Model Updates**: Keep TTS models current
-2. **Log Rotation**: Archive old CAPTCHA logs
-3. **Performance Review**: Monitor synthesis times
-4. **Security Audit**: Review access patterns
+### Audio CAPTCHA Setup (Optional)
 
-### Backup Procedures
-1. **Session Backup**: Regular session state exports
-2. **Configuration Backup**: Version control for settings
-3. **Model Backup**: TTS model redundancy
-4. **Disaster Recovery**: Rapid restoration procedures
+1. **Install PiperTTS**:
+```bash
+pip install piper-tts
+```
+
+2. **Download Voice Model**:
+```bash
+# Example download command (check PiperTTS documentation for current URLs)
+wget https://github.com/rhasspy/piper/releases/download/v1.0.0/en_US-lessac-medium.onnx
+wget https://github.com/rhasspy/piper/releases/download/v1.0.0/en_US-lessac-medium.onnx.json
+```
+
+3. **Place Model Files**:
+- Put model files in the application root directory
+- Update `model_path` and `config_path` in `utils/captcha.py` if using different locations
+
+### Customization Options
+
+**CAPTCHA Configuration** (in `utils/captcha.py`):
+```python
+# Adjust CAPTCHA properties
+self.captcha_length = 5          # Code length
+self.expiry_minutes = 5         # Session expiry time
+self.image_captcha = ImageCaptcha(width=180, height=50)  # Image dimensions
+```
+
+**Visual Customization**:
+- Character set can be modified in `generate_captcha_text()`
+- Image enhancement parameters in `generate_captcha_image()`
+- Audio synthesis settings in `generate_captcha_audio()`
+
+## Monitoring and Maintenance
+
+### Log Monitoring
+
+**Important Log Messages**:
+```python
+# Successful generation
+"Generated CAPTCHA - ID: {uuid}, Code: {text}"
+
+# Validation attempts
+"CAPTCHA validation attempt - Input: '{user_input}'"
+"CAPTCHA validation result - Valid: {valid}, Message: {message}"
+
+# Audio errors (if applicable)
+"Failed to initialize Piper TTS: {error}"
+"Failed to generate CAPTCHA audio: {error}"
+```
+
+**Health Checks**:
+- Monitor CAPTCHA generation success rates
+- Track validation failure patterns
+- Watch for audio synthesis errors
+
+### Regular Maintenance
+
+**Performance Optimization**:
+- Monitor CAPTCHA generation times
+- Check session storage usage
+- Review error logs regularly
+
+**Security Monitoring**:
+- Track unusual validation patterns
+- Monitor for brute force attempts
+- Review session management logs
 
 ---
 
-**Last Updated**: November 6, 2025  
-**Version**: 1.0.0  
+**Implementation Status**: ✅ Fully Implemented and Working
+**Last Updated**: November 10, 2025
+**Version**: 2.0.0
+**Dependencies**: Flask, Pillow, captcha, piper (optional)  

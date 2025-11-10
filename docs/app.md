@@ -29,8 +29,9 @@ The primary component of `app.py` is the `create_app()` function, which follows 
 
 4.  **Environment and Database Setup:**
     *   Calls `setup_environment()` to ensure that all necessary directories (e.g., for uploads, logs) exist.
-    *   Uses SQLAlchemy to create all database tables defined in `models.py` via `Base.metadata.create_all(engine)`. This is idempotent and safe to run on every startup.
+    *   **Database Management**: Database tables are now managed by Alembic migrations instead of automatic creation. The app uses SQLAlchemy 2.0+ with PostgreSQL for production.
     *   **Role-Based Access Control (RBAC):** Seeds the database with a predefined set of user roles by calling `auth.roles.ensure_roles()`. This is also an idempotent operation.
+    *   **Session Management**: Uses database-backed sessions with `DatabaseSessionInterface` for secure session storage.
 
 5.  **Logging:**
     *   Configures robust, rotating file-based logging for various application components.
@@ -42,8 +43,10 @@ The primary component of `app.py` is the `create_app()` function, which follows 
         *   `editing.log`: Records image editing activities
         *   `consensus.log`: Records consensus grading activities
         *   `email_success.log` and `email_error.log`: Records email sending activities
+        *   `pregraded_processing.log`: Records pre-graded Excel file processing
         *   `app.log`: General application logging
         *   `debug.log`: Detailed debug logging when debug mode is enabled
+        *   `rate_limit.log`: Records rate limiting activities
     *   Uses `RotatingFileHandler` to prevent log files from growing indefinitely.
     *   Includes request context filtering to add URL and method information to log entries.
 
@@ -83,12 +86,15 @@ The primary component of `app.py` is the `create_app()` function, which follows 
         *   `preprocess_bp`: Handles image preprocessing tasks like anonymization.
         *   `notifications_bp`: Manages user notifications.
         *   `tasks_bp`: Provides task management interfaces for grading workflows.
+        *   `ad_hoc_tasks_bp`: Handles ad-hoc task creation for cross-disease grading.
+        *   `help_bp`: Provides help documentation and support pages.
+        *   `review_bp`: Contains review workflows and discrepancy review functionality.
         *   `auth_bp`: Manages user authentication (login, logout, password reset).
         *   `admin_bp`: Contains all administrative functionalities.
+        *   `rate_limit_admin_bp`: Administrative interface for rate limiting configuration.
         *   `dashboard_bp`: Provides dashboard interfaces.
         *   `api_bp`: Provides RESTful API endpoints for programmatic access.
         *   `docs_bp`: Serves documentation pages.
-        *   `api_gradings_bp`: Specific API endpoints for grading data.
 
 9.  **Error Handling:**
     *   Custom error handlers are defined for common HTTP status codes (`404`, `405`, `500`, `501`) to display user-friendly error pages.
@@ -116,25 +122,40 @@ The application includes a background thread for stuck task cleanup:
 ## Security Features
 
 1. **Session Management:**
-   - Server-side sessions with database storage
-   - Automatic session cleanup for ended sessions
+   - Server-side sessions with database storage via `DatabaseSessionInterface`
+   - Automatic session cleanup for ended sessions with `mark_session_ended()`
    - Inactivity timeout with sliding window
    - Secure cookie settings (HTTPOnly, SameSite, Secure when applicable)
 
 2. **CSRF Protection:**
-   - Automatic CSRF token generation and validation
-   - Custom error handling for CSRF failures
+   - Automatic CSRF token generation and validation via Flask-WTF
+   - Custom error handling for CSRF failures with detailed logging
    - Token expiration after 1 hour
+   - Enhanced CSRF debugging in development mode
 
 3. **Authentication & Authorization:**
-   - Role-based access control (RBAC)
+   - Role-based access control (RBAC) with hierarchical roles
    - Global authentication guard with public route exemptions
-   - Template helpers for role-based UI rendering
+   - Template helpers for role-based UI rendering via `current_user_has()`
+   - Flask-Login integration for user session management
 
-4. **Input Validation:**
+4. **Rate Limiting:**
+   - Configurable rate limiting per endpoint
+   - Database-backed rate limit storage
+   - Custom rate limit admin interface
+   - Detailed rate limiting activity logging
+
+5. **Security Middleware:**
+   - Payload size validation for request protection
+   - File upload security with size and type restrictions
+   - Enhanced request logging with security context
+   - IP-based locking for failed login attempts
+
+6. **Input Validation:**
    - File upload size limits
    - Content type validation
    - Form validation with WTForms
+   - Enhanced request validation middleware
 
 ## Running the Application
 
@@ -143,4 +164,19 @@ The `if __name__ == "__main__":` block at the end of the file allows the applica
 2. Starts the stuck task cleanup thread
 3. Starts the Flask development server with debug mode enabled
 
-For a production environment, a more robust WSGI server like Gunicorn or uWSGI should be used instead of the built-in development server.
+### Development
+Use `uv run app.py` for development to ensure proper virtual environment usage. The application runs on port 5001 by default.
+
+### Production
+For production deployment, use Gunicorn with the provided configuration:
+- Application runs on port 5001
+- Uses Gunicorn WSGI server with configurable workers
+- Database-backed sessions and proper error handling
+- Comprehensive logging and monitoring
+
+### Key Application Settings
+- **Port**: 5001 (configurable via `PORT` environment variable)
+- **Database**: PostgreSQL in production, SQLite for development
+- **Package Manager**: Uses `uv` for dependency management
+- **Session Storage**: Database-backed sessions via `DatabaseSessionInterface`
+- **File Uploads**: Configurable size limits and processing workflows

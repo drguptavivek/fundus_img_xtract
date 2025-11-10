@@ -1,22 +1,80 @@
 # Fundus Image Manager
 
-A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). 
-It is extensible
+A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). It is extensible
 
-## DISEASES
- - Users can add more diseases. 
- - For each disease, gradings can be added. 
- - For each grade, features can be optionally defined which users may select. [multiple features can be selected per grade]]
 
-## Hospital and Labs/Units
- - Hospitals and Laboratory/Units can be added
- - User can be mapped to specific Laboratory / Units within hospitals
- - This scopes their access (except for grading that has a slot based access system) to images/ data for these Labs/Units
+## 🔑 KEY FEATURES
 
-## Users and roles
- - Multiple users can be added
- - Each user can get allocated various roles - 
+**Some of the unique features** include:
 
+### 🏥 Disease Management System
+- **Multi-Disease Support**: Extensible framework supporting Glaucoma, Diabetic Retinopathy (DR), AMD, and custom diseases
+- **Dynamic Grading Scales**: Configurable grading systems per disease with clinical validation
+- **Feature Selection**: Optional clinical features can be defined per grade for detailed analysis
+- **Cross-Disease Analysis**: Ad-hoc task creation allows images to be graded for multiple diseases
+
+### 🏢 Hospital & Laboratory Management
+- **Multi-Hospital Support**: Separate instances for different eye hospitals
+- **Lab Unit Scoping**: Granular access control based on organizational hierarchy
+- **User-Lab Mapping**: Precise access control ensuring data privacy and security
+- **Cross-Unit Collaboration**: Secure sharing while maintaining data boundaries
+
+### 🔐 Hybrid Access Control System (RBAC + ABAC)
+The application implements a sophisticated **hybrid access control model** combining both Role-Based and Attribute-Based Access Control:
+
+#### **Role-Based Access Control (RBAC)**
+- **Multiple User Roles**: Admin, Data Manager, Ophthalmologist, Optometrist, File Uploader, and more
+- **Permission Matrix**: Role-based permissions for system features and data access
+- **Audit Trail**: Comprehensive logging of all user actions and role-based decisions
+
+#### **Attribute-Based Access Control (ABAC)**
+- **User-LabUnit Scoping**: Organizational boundaries control access to images and data across different features
+- **User-LabUnit-Slot Scoping**: Fine-grained access control for dual grading system based on user attributes and organizational context
+- **Dynamic Access Evaluation**: Real-time access decisions based on user roles, lab unit assignments, and task contexts
+- **Contextual Permissions**: Access rights vary based on the specific action, resource, and organizational relationships
+
+### 🎯 Advanced Dual Grading System
+- **Three-Tier Workflow**: Resident → Resident2 → Arbitrator consensus building
+- **Quality Assurance**: Automatic conflict detection and resolution workflow
+- **Revision Support**: Time-bound revision capabilities for grade corrections
+- **Intra-Rater Agreement**: Quality control system for grader consistency monitoring
+- **Performance Analytics**: Comprehensive KPI tracking and grader performance metrics
+
+### Grading Workflows
+
+
+### 🔬 Medical-Grade Image Viewer ⭐
+**A sophisticated medical imaging system specifically designed for retinal fundus examination**
+
+#### **Professional Magnification Tools**
+- **Medical Zoom**: 40-500% magnification with 1% precision control
+- **Loupe Magnifier**: Localized magnification (100-500px, 1.0-4.0x) for detailed examination
+- **Smooth Navigation**: Precise pan control with ±600 pixel range
+- **Optimized Views**: Specialized configurations for optic nerve, macula, and peripheral examination
+
+#### **Clinical Imaging Filters**
+- **Red-Free Filter**: Enhanced vessel visibility and microaneurysm detection
+- **Green Boost Filter**: Improved drusen visibility and retinal pigment epithelium analysis
+- **Blue Mono Filter**: Optimized for exudate and cotton wool spot identification
+- **Contrast & Grayscale**: Boundary definition and color-blind accessibility options
+
+#### **Professional Workflow Integration**
+- **Persistent Settings**: 5 customizable presets that sync across sessions and devices
+- **Context Awareness**: Automatic adjustment based on disease type and grading role
+- **Performance Optimization**: Image preloading, caching, and memory management
+- **Clinical Presets**: Pre-configured settings for DR, Glaucoma, and AMD assessment
+- **Full Documentation**: [📖 Complete Viewer Help Guide](docs/Help/Advanced_Image_Viewer_Guide.md)
+
+### 📊 Advanced Analytics & Reporting
+- **Materialized Views**: Four specialized views for high-performance analytics
+- **Disease-Specific Pivots**: Separate analytics for DR, Glaucoma, and AMD
+- **Automated Refresh**: 4x daily updates with manual refresh capabilities
+- **Real-Time KPIs**: Live performance metrics and quality indicators
+- **Export Capabilities**: Comprehensive data export for research and reporting
+
+
+
+## DEPLOYMENT AND DEVELOPMENT
 
 Has specific workflows for Remedio FOP zip files that get downloaded from the remedio dashboard
 
@@ -522,11 +580,14 @@ python app.py
 
 ### Data Processing Workflows (`docs/01-Adding_Images/`)
 - [ZIP Uploads](docs/01-Adding_Images/zip_uploads.md)
+- [Comprehensive ZIP Upload Workflow](docs/01-Adding_Images/comprehensive_zip_workflow.md) - Complete ZIP processing pipeline
     - [Main Processing Pipeline](docs/main.md)
     - [PDF Processing](docs/01-Adding_Images/process_pdfs.md)
     - [OCR Extraction](docs/01-Adding_Images/ocr_extraction.md)
 - [Direct Uploads](docs/01-Adding_Images/direct_uploads.md)
+- [Comprehensive Direct Upload Workflow](docs/01-Adding_Images/comprehensive_direct_upload_workflow.md) - Complete individual image upload system
 - [Pre-Graded Uploads](docs/01-Adding_Images/pre_graded.md)
+- [AI Grades Import Workflow (Excel Consumption)](docs/01-Adding_Images/comprehensive_ai_grades_import_workflow.md) - Excel file import for AI grades (consumption only)
 - [Audit Workflows](docs/01-Adding_Images/audit.md)
 
 ### Image Management & Processing (`docs/01-Adding_Images/`)
@@ -534,6 +595,7 @@ python app.py
 
 ### Report Verification Workflows
 - [Verification Workflows Overview](docs/02-Verify-Anonymize/verification-workflows-overview.md) - Comprehensive documentation for DR, Glaucoma, and No-DR report verification workflows
+- [Comprehensive Verification Workflows](docs/02-Verify-Anonymize/comprehensive_verification_workflows.md) - Complete verification system documentation
   - [DR PDF Verification Details](docs/02-Verify-Anonymize/dr-verification-details.md) - Technical implementation of DR PDF verification
   - [Glaucoma PDF Verification Details](docs/02-Verify-Anonymize/glaucoma-verification-details.md) - Technical implementation of Glaucoma PDF verification
   - [No DR Report Verification Details](docs/02-Verify-Anonymize/no-dr-verification-details.md) - Technical implementation of No-DR fallback verification
@@ -543,11 +605,13 @@ python app.py
 ### Task Creation
 - [Scoping](docs/03-Tasks/Scoping.md) - ABAC - Attribute-Based Access Control & RBAC for Uplaoding and HGrading  and access to app features
 - [Task Creation Services](docs/03-Tasks/taskCreationServices.md)
+- [Comprehensive Task Management System](docs/03-Tasks/comprehensive_task_management_system.md) - Complete task creation, assignment, and management documentation
 - [Task Utilities](docs/10-DEVELOP/Utilities/utils_taskUtils.md) - Functions for retrieving and managing task information with proper scoping
 
 
 ### Grading System (`docs/04-Grade/`)
 - [Dual Grading Workflow](docs/04-Grade/dual_grading.md) - Updated with current implementation details
+- [Comprehensive Dual Grading System](docs/04-Grade/comprehensive_dual_grading_system.md) - Complete three-tier dual grading documentation
 - [Dual Grading Implementation Details](docs/04-Grade/dual_grading_flow.md) - Technical implementation guide
 - [Dual Grading Utilities](docs/04-Grade/dual_grading_utils.md) - Comprehensive function documentation for dual grading
 - [Grading Edge Cases](docs/04-Grade/edge_cases.md) - Edge case analysis and resolution status
@@ -629,6 +693,10 @@ python app.py
 ### Module-Specific Documentation
 - [Analytics Utils](docs/10-DEVELOP/Utilities/analytics_utils.md) - Functions for encounter analytics and data processing
 - [Services Task Creation](docs/03-Tasks/taskCreationServices.md) - Task creation services and related functionality
+
+### Analytics & Reporting System
+- [Comprehensive Analytics & Reporting System](docs/11-KPI and DFs/comprehensive_analytics_reporting_system.md) - Complete materialized views and analytics platform documentation
+- [Analytics User Guide](docs/user-guide/viewing-analytics.md) - User interface for viewing analytics and reports
 
 ### Scripts & Migrations (`scripts/`)
 - [User Management Scripts](scripts/USERS.md) - User creation and management
@@ -873,6 +941,53 @@ flowchart TD
     style S fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
     style T fill:#000080,stroke:#000,stroke-width:2px,color:#fff;
 ```
+
+## ⭐ Advanced Image Viewer System
+
+One of the most sophisticated features of the Fundus Image Manager is its **medical-grade image viewer** specifically designed for retinal fundus examination in ophthalmic diagnostics. This professional-grade viewer provides specialized tools that go far beyond standard image viewing capabilities.
+
+### 🔬 Key Medical Features
+
+#### **Medical-Grade Magnification**
+- **Zoom Range**: 40-500% magnification with 1% precision
+- **Loupe Magnifier**: Localized magnification (100-500px diameter, 1.0-4.0x zoom)
+- **Smooth Pan**: Precise navigation with ±600 pixel range
+- **Clinical Applications**: Optimized for optic nerve, macula, and peripheral examination
+
+#### **Specialized Clinical Filters**
+- **Red-Free Filter**: Enhances vessel visibility, microaneurysm detection, and nerve fiber layer examination
+- **Green Boost Filter**: Improves drusen visibility and retinal pigment epithelium changes
+- **Blue Mono Filter**: Optimized for exudate and cotton wool spot identification
+- **Contrast & Grayscale**: Boundary definition and color-blind friendly viewing
+
+#### **Professional Enhancement Tools**
+- **Brightness Control**: 0.5-1.5 range for exposure compensation
+- **Contrast Adjustment**: Enhanced lesion visibility and boundary definition
+- **Persistent Presets**: 5 customizable settings that sync across sessions and devices
+- **Clinical Presets**: Pre-configured for DR, Glaucoma, and AMD assessment
+
+### ⚡ Workflow Integration
+
+The viewer seamlessly integrates with the **dual grading system**:
+- **Context Awareness**: Automatically adjusts based on disease type and grading role
+- **Performance Optimization**: Preloading, caching, and memory management
+- **Quality Assurance**: Viewing history tracking for audit trails
+- **Accessibility**: Full keyboard control and screen reader support
+
+### 🎯 Clinical Excellence
+
+Designed specifically for **ophthalmic professionals**:
+- **Standardized Viewing**: Consistent parameters across graders for reliable assessments
+- **Educational Features**: Enhanced learning for residents with annotation tools
+- **Research Support**: Export capabilities for publication and research purposes
+- **Compliance**: Meets medical imaging standards and requirements
+
+### 📖 Complete Documentation
+
+For comprehensive usage instructions, clinical applications, and troubleshooting:
+**[📖 Advanced Image Viewer Help Guide](docs/Help/Advanced_Image_Viewer_Guide.md)**
+
+---
 
 ## API Documentation
 

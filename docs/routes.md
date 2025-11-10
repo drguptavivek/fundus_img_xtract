@@ -7,328 +7,435 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 1. [Core Application Routes](#core-application-routes)
 2. [Authentication Routes](#authentication-routes)
 3. [Account Management Routes](#account-management-routes)
-4. [Administration Routes](#administration-routes)
-5. [File Uploads Routes](#file-uploads-routes)
-6. [Direct Uploads Routes](#direct-uploads-routes)
+4. [Task Management Routes](#task-management-routes)
+5. [Ad-Hoc Tasks Routes](#ad-hoc-tasks-routes)
+6. [Administration Routes](#administration-routes)
 7. [Analytics Routes](#analytics-routes)
-8. [Tasks Routes](#tasks-routes)
-9. [Search Routes](#search-routes)
-10. [Image Grading Routes](#image-grading-routes)
-11. [Media Serving Routes](#media-serving-routes)
-12. [Report Serving Routes](#report-serving-routes)
-13. [DR Verification Routes](#dr-verification-routes)
-14. [Glaucoma Verification Routes](#glaucoma-verification-routes)
+8. [Image Grading Routes](#image-grading-routes)
+9. [File Uploads Routes](#file-uploads-routes)
+10. [Direct Uploads Routes](#direct-uploads-routes)
+11. [Search Routes](#search-routes)
+12. [Media Serving Routes](#media-serving-routes)
+13. [Report Serving Routes](#report-serving-routes)
+14. [Verification Workflows Routes](#verification-workflows-routes)
 15. [Patient Screenings Routes](#patient-screenings-routes)
 16. [Job Processing Routes](#job-processing-routes)
 17. [Data Audit Routes](#data-audit-routes)
-18. [Image Preprocessing Routes](#image-preprocessing-routes)
+18. [Review Routes](#review-routes)
+19. [Help & Documentation Routes](#help--documentation-routes)
+20. [API Routes](#api-routes)
+21. [Notifications Routes](#notifications-routes)
+22. [Preprocessing Routes](#preprocessing-routes)
 
 ---
 
 ## Core Application Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| / | homepage | GET | app.py | - |
-| /style_guide | style_guide | GET | app.py | - |
-| /healthz | healthz | GET | app.py | - |
-| /favicon.ico | _favicon | GET | app.py | - |
+**Base URL:** `/`
+**No role restrictions** (accessible without login)
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | homepage | Main homepage |
+| `/favicon.ico` | GET | _favicon | Serve favicon |
+| `/style_guide` | GET | style_guide | Display style guide |
+| `/test-rate-limit` | GET | test_rate_limit | Test endpoint for rate limiting |
+| `/healthz` | GET | healthz | Health check endpoint |
 
 ---
 
 ## Authentication Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /login | auth.login | GET, POST | auth/routes.py | - |
-| /logout | auth.logout | POST, GET | auth/routes.py | login_required |
-| /ping | auth.ping | GET | auth/routes.py | login_required |
+**Base URL:** `/auth`
+**No role restrictions** (public routes)
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/login` | GET, POST | login | User login page and form submission |
+| `/logout` | GET | logout | User logout |
+| `/forgot-password` | GET, POST | forgot_password | Forgot password page and request |
+| `/reset-password` | GET, POST | reset_password | Reset password with token |
+| `/check-email-status` | GET | check_email_status | Check email verification status |
 
 ---
 
 ## Account Management Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /account/profile | account.profile | GET, POST | account/routes.py | login_required |
-| /account/change-password | account.change_password_self | GET, POST | account/routes.py | login_required |
+**Base URL:** `/account`
+**Role restrictions:** `login_required` for all routes
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | profile | User profile page |
+| `/settings` | GET | settings | Account settings |
+| `/preferences` | GET | preferences | User preferences |
+| `/security` | GET | security | Security settings |
+| `/notifications` | GET | notifications | Notification preferences |
+
+---
+
+## Task Management Routes
+
+**Base URL:** `/tasks`
+**Role restrictions:** Multiple roles per route
+
+| Route Path | HTTP Methods | Required Roles | Function | Description |
+|------------|--------------|---------------|----------|-------------|
+| `/` | GET | admin, data_manager, ophthalmologist, optometrist | index | Main tasks page |
+| `/pending` | GET | admin, data_manager, ophthalmologist, optometrist | pending | View pending tasks |
+| `/viewTaskDetails/<int:task_id>` | GET | admin, data_manager, optometrist | view_task_details | View task details |
+| `/all-tasks` | GET | admin, data_manager | all_tasks | View all organizational tasks with filtering |
+| `/intra-rater` | GET | ophthalmologist, admin, data_manager | intra_rater_dashboard | Intra-rater task dashboard |
+| `/intra-rater/admin` | GET | admin, data_manager | intra_rater_admin | Intra-rater admin management |
+| `/intra-rater/batches` | GET, POST | admin, data_manager | list/create_intra_rater_batch | List/create intra-rater batches |
+| `/intra-rater/my-tasks` | GET | ophthalmologist, admin, data_manager | list_my_intra_rater_tasks | List user's intra-rater tasks |
+| `/intra-rater/tasks/<int:task_id>/submit` | POST | ophthalmologist | submit_intra_rater_grade | Submit intra-rater grade |
+| `/intra-rater/kpi-data` | GET | ophthalmologist, admin, data_manager | get_intra_rater_kpi_data | Get intra-rater KPI data |
+
+---
+
+## Ad-Hoc Tasks Routes
+
+**Base URL:** `/tasks/ad_hoc`
+**Role restrictions:** admin, data_manager only
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Ad-hoc task creation interface |
+| `/list` | GET | list_batches | List ad-hoc batches |
+| `/detail/<int:ad_hoc_id>` | GET | detail | View ad-hoc batch details |
+| `/search` | GET | search | Search images for ad-hoc tasks |
+| `/preview` | POST | preview | Preview ad-hoc task candidates |
+| `/create` | POST | create | Create ad-hoc tasks |
 
 ---
 
 ## Administration Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /admin/users | admin.users_list | GET | admin/users.py | admin |
-| /admin/users/new | admin.add_user | GET, POST | admin/users.py | admin |
-| /admin/users/\<int:user_id\>/edit | admin.edit_user | GET, POST | admin/users.py | admin |
-| /admin/users/\<int:user_id\>/update | admin.users_update | POST | admin/users.py | admin |
-| /admin/change-password | admin.change_password | GET, POST | admin/security.py | admin |
-| /admin/roles | admin.manage_roles | GET, POST | admin/security.py | admin |
-| /admin/\<string:model_name\> | admin.list_and_create_lookup | GET, POST | admin/lookups.py | admin |
-| /admin/\<string:model_name\>/\<int:item_id\>/edit | admin.edit_lookup | GET, POST | admin/lookups.py | admin |
-| /admin/\<string:model_name\>/\<int:item_id\>/delete | admin.delete_lookup | POST | admin/lookups.py | admin |
-| /admin/disease-gradings | admin.list_disease_gradings | GET, POST | admin/disease_gradings.py | admin |
-| /admin/disease-gradings/\<int:grading_id\>/json | admin.get_disease_grading_json | GET | admin/disease_gradings.py | admin |
-| /admin/disease-gradings/\<int:grading_id\>/delete | admin.delete_disease_grading | POST | admin/disease_gradings.py | admin |
-| /admin/malicious-uploads | admin.malicious_uploads | GET | admin/uploads.py | admin |
+**Base URL:** `/admin`
+**Role restrictions:** admin, data_manager only
 
----
-
-## File Uploads Routes
-
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /upload_files | uploads.upload_form | GET | uploads/routes.py | admin, fileUploader |
-| /upload | uploads.upload_files | POST | uploads/routes.py | admin, fileUploader |
-| /uploaded_zips | uploaded_zips.list_uploaded_zips | GET | uploaded_zips/routes.py | admin, fileUploader |
-
----
-
-## Direct Uploads Routes
-
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /direct/upload | direct_uploads.upload | GET, POST | direct_uploads/upload.py | fileUploader, optometrist, data_manager, admin |
-| /direct/upload/processing/\<int:job_id\> | direct_uploads.upload_processing | GET | direct_uploads/upload.py | fileUploader, optometrist, data_manager, admin |
-| /direct/dashboard | direct_uploads.dashboard | GET, POST | direct_uploads/dashboard.py | fileUploader, optometrist, data_manager, admin |
-| /direct/upload/edit_image/\<int:upload_id\> | direct_uploads.edit_image | GET | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /direct/upload/edit/\<int:upload_id\> | direct_uploads.edit_upload | GET, POST | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /direct/upload/restore_original/\<int:upload_id\> | direct_uploads.restore_original | POST | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /direct/upload/save_image/\<int:upload_id\> | direct_uploads.save_edited_image | POST | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /api/direct/upload/status/\<int:job_id\> | direct_uploads.api_upload_status | GET | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /api/hospital/\<int:lab_unit_id\> | direct_uploads.get_hospital | GET | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
-| /api/lab-units/\<int:user_id\> | direct_uploads.get_lab_units | GET | direct_uploads/routes.py | fileUploader, optometrist, data_manager, admin |
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Admin dashboard |
+| `/users` | GET | users | User management |
+| `/roles` | GET | roles | Role management |
+| `/hospitals` | GET | hospitals | Hospital management |
+| `/lab-units` | GET | lab_units | Lab unit management |
+| `/diseases` | GET | diseases | Disease management |
+| `/uploads` | GET | uploads | Upload management |
+| `/logs` | GET | logs | System logs |
+| `/disk-usage` | GET | disk_usage | Disk usage statistics |
+| `/ai-models` | GET | ai_models | AI model management |
+| `/grading-eligibility` | GET | grading_eligibility | Grading eligibility configuration |
+| `/disease-gradings` | GET | disease_gradings | Disease grading management |
+| `/security` | GET | security | Security settings |
+| `/database-dump` | GET | database_dump | Database dump functionality |
+| `/database-export` | GET | database_excel_export | Database export to Excel |
+| `/materialized-view` | GET | materialized_view_status | Materialized view status and management |
+| `/rate-limit` | GET | rate_limit_admin | Rate limit management interface |
 
 ---
 
 ## Analytics Routes
 
-### Access Control and Data Scoping
+**Base URL:** `/analytics`
+**Role restrictions:** admin, data_manager only
 
-Access to analytics routes is controlled based on user roles and lab unit associations:
-- **Admins** have unrestricted access to all data
-- **Data managers** have access to analytics routes scoped to their associated lab units
-- **Ophthalmologists, Residents, and other roles** have access to routes based on their lab unit associations
-- **Optometrists** have access to specific routes only (search, task details), also scoped to their associated lab units
-- All access is restricted based on lab unit associations, meaning users can only view data related to the lab units they are associated with
-- Filtering options are restricted so users can only filter by lab units they have access to
-- UI dropdowns only show lab units and hospitals that the user has permission to access
-- **Navbar visibility**: The "Discrepancy Review" link in the "Grade" menu is only visible to admin and data_manager roles (not visible to ophthalmologists)
-
-### Route Summary
-
-| Route Path | URL For | HTTP Methods | Roles Required | Purpose |
-|------------|---------|--------------|----------------|---------|
-| /analytics/images | analytics.image_results | GET | admin, data_manager | Render per-image grading results with filtering and pagination |
-| /analytics/encounters | analytics.encounter_results | GET | admin, data_manager | Render encounter-level grading summaries |
-| /analytics/images/no-tasks | analytics.images_without_tasks | GET | admin, data_manager | Display images that have no associated grading tasks |
-| /analytics/images/search | analytics.search_images | GET | admin, data_manager, optometrist | Search for images with comprehensive filters |
-| /analytics/direct/view/\<uuid_str\> | analytics.direct_view | GET | admin, data_manager | View details for a direct image upload |
-| /analytics/encounter/view/\<int:encounter_id\> | analytics.encounter_view | GET | admin, data_manager | View details for a specific encounter |
-| /analytics/encounters-simple | analytics.encounter_results_simple | GET | admin, data_manager | Render a simplified encounter list showing only encounters with non-pending tasks |
-| /analytics/discrepancy-review | analytics.discrepancy_review | GET | admin, data_manager | Main page for discrepancy review process |
-| /analytics/viewTaskDetails/\<int:task_id\> | analytics.task_details | GET | admin, data_manager, optometrist | View details for a specific grading task |
-
----
-
-## Tasks Routes
-
-### Access Control and Data Scoping
-
-Access to tasks routes is controlled based on user roles and lab unit associations:
-- **Admins** have unrestricted access to all tasks
-- **Data managers** have access to tasks scoped to their associated lab units
-- **Ophthalmologists** have access to tasks based on their associated lab units
-- **Optometrists** have access to tasks assigned to their associated lab units
-- All access is restricted based on lab unit associations, meaning users can only view tasks related to the lab units they are associated with
-- **All tasks route** (`/tasks/all-tasks`) is restricted to admin and data_manager roles only
-- **Navbar visibility**: The "Tasks and Images" dropdown menu in the navbar is only visible to admin, data_manager, and optometrist roles (not visible to ophthalmologists)
-
-### Route Summary
-
-| Route Path | URL For | HTTP Methods | Roles Required | Purpose |
-|------------|---------|--------------|----------------|---------|
-| /tasks/ | tasks.index | GET | admin, data_manager, ophthalmologist, optometrist | Main tasks page |
-| /tasks/my-tasks | tasks.my_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View and manage user's assigned tasks |
-| /tasks/pending | tasks.pending_tasks | GET | admin, data_manager, ophthalmologist, optometrist | View pending tasks in user's lab units |
-| /tasks/all-tasks | tasks.all_tasks | GET | admin, data_manager | View all tasks scoped to user's lab units with filtering options |
-
----
-
-## Search Routes
-
-### Search Images Route
-
-- **Route Path**: `/search/images/`
-- **HTTP Methods**: GET
-- **Route File**: `search/route_search_images.py`
-- **Roles Required**: admin, data_manager
-- **Purpose**: Provides comprehensive search functionality for images with various filters including hospital, lab unit, camera, disease, area, and date ranges.
-
-#### Filter Parameters
-
-**Global Filters (Apply to both image types when no specific filters are present)**
-- `source` - Filter by image source (`all`, `zip`, `direct`)
-- `hospital_id` - Filter by hospital ID
-- `lab_unit_id` - Filter by lab unit ID
-- `upload_start` - Filter for images uploaded after this date
-- `upload_end` - Filter for images uploaded before this date
-- `search_query` - Text search against UUIDs and filenames
-
-**Direct Upload Specific Filters**
-- `camera_id` - Filter by camera ID
-- `disease_id` - Filter by disease ID
-- `area_id` - Filter by area ID
-- `is_mydriatic` - Filter by mydriatic status (`true`, `false`)
-
-**ZIP Upload Specific Filters**
-- `has_dr_report` - Filter for presence/absence of DR reports (`true`, `false`)
-- `has_glaucoma_report` - Filter for presence/absence of Glaucoma reports (`true`, `false`)
-- `capture_start` - Filter for images captured after this date
-- `capture_end` - Filter for images captured before this date
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | view_direct_view | Analytics dashboard |
+| `/direct/view/<uuid_str>` | GET | view_upload | View direct upload details |
+| `/encounter/view/<uuid_str>` | GET | view_encounter | View encounter file details |
+| `/images` | GET | view_direct_image | View direct image details |
+| `/encounterFiles` | GET | view_encounterFiles | View encounter files |
+| `/image/results` | GET | route_image_results | Image results view |
+| `/encounter/results` | GET | route_encounter_results | Encounter results view |
+| `/imagesWithoutTasks` | GET | route_images_without_tasks | Images without tasks |
+| `/directFilesKpi` | GET | route_directFiles_kpi_display | Direct files KPI display |
+| `/encounterFilesKpi` | GET | route_encounterFiles_kpi_display | Encounter files KPI display |
+| `/simpleRoutes` | GET | route_routes_simple | Simple routes view |
 
 ---
 
 ## Image Grading Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /grading/ | grading.index | GET, POST | grading/dashboard.py | resident, ophthalmologist |
-| /grading/grade/\<int:disease_id\>/\<string:role_slot\> | grading.start_grading | GET | grading/start_grading.py | resident, ophthalmologist |
-| /grading/task/\<int:task_id\>/\<string:slot_type\> | grading.dual_grading_task | GET | grading/dual_grading.py | resident, ophthalmologist, admin |
-| /grading/task/submit | grading.dual_grading_submit | POST | grading/dual_grading.py | resident, ophthalmologist, admin |
-| /grading/revise/\<int:grade_id\> | grading.revise_grading | GET | grading/dual_grading.py | resident, ophthalmologist, admin |
+**Base URL:** `/grading`
+**Role restrictions:** Varies by route (typically ophthalmologist, optometrist)
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Grading interface |
+| `/<int:task_id>` | GET | grade | Grade specific task |
+| `/<int:task_id>/submit` | POST | submit | Submit grading |
+| `/<int:task_id>/save` | POST | save | Save grading draft |
+
+---
+
+## File Uploads Routes
+
+### Uploaded ZIPs
+**Base URL:** `/uploaded_zips`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | List uploaded ZIP files |
+| `/<int:zip_id>` | GET | view | View ZIP file details |
+| `/<int:zip_id>/status` | GET | status | View ZIP processing status |
+| `/<int:zip_id>/tasks` | GET | tasks | View tasks for ZIP file |
+
+### Remedio ZIP Uploads
+**Base URL:** `/remedio_zip_uploads`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | List Remedio ZIP uploads |
+| `/<int:upload_id>` | GET | view | View upload details |
+
+---
+
+## Direct Uploads Routes
+
+**Base URL:** `/direct_uploads`
+**Role restrictions:** Multiple roles per route
+
+| Route Path | HTTP Methods | Required Roles | Function | Description |
+|------------|--------------|---------------|----------|-------------|
+| `/` | GET | - | index | List direct uploads |
+| `/upload` | GET | fileUploader, optometrist, data_manager, admin | upload | Upload page |
+| `/upload` | POST | fileUploader, optometrist, data_manager, admin | upload | Process upload |
+| `/<int:upload_id>` | GET | fileUploader, optometrist, data_manager, admin | view | View upload details |
+| `/<int:upload_id>/download` | GET | fileUploader, optometrist, data_manager, admin | download | Download file |
+| `/upload/edit_image/<int:upload_id>` | GET | fileUploader, optometrist, data_manager, admin | edit_image | Edit uploaded image |
+| `/upload/edit/<int:upload_id>` | GET, POST | fileUploader, optometrist, data_manager, admin | edit_upload | Edit upload metadata |
+| `/upload/restore_original/<int:upload_id>` | POST | fileUploader, optometrist, data_manager, admin | restore_original | Restore original image |
+| `/upload/save_image/<int:upload_id>` | POST | fileUploader, optometrist, data_manager, admin | save_edited_image | Save edited image |
+| `/api/direct/upload/status/<int:job_id>` | GET | fileUploader, optometrist, data_manager, admin | api_upload_status | Get upload status |
+
+---
+
+## Search Routes
+
+**Base URL:** `/search`
+**Role restrictions:** admin, data_manager only
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | search_route | Search interface |
+| `/images` | GET | search_images_route | Search images with filters |
 
 ---
 
 ## Media Serving Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /media/encounter/img/\<uuid_str\> | media._encounterImageByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
-| /media/direct_upload/org_img/\<uuid_str\> | media._directImgOrigByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
-| /media/direct_upload/ed_img/\<uuid_str\> | media._directImgEdByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
-| /media/direct_upload/fn_img/\<uuid_str\> | media._directImgFinalByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
-| /media/img/\<uuid_str\> | media._imgForGradingByUUID | GET | media/routes.py | fileUploader, optometrist, data_manager, admin, ophthalmologist, resident |
+**Base URL:** `/media`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/image/<uuid_str>` | GET | _imgForGradingByUUID | Serve image for grading |
+| `/thumbnail/<uuid_str>` | GET | _thumbnailByUUID | Serve image thumbnail |
 
 ---
 
 ## Report Serving Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /reports/dr/\<path:filename\> | reports.serve_dr_pdf | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
-| /reports/glaucoma/\<path:filename\> | reports.serve_glaucoma_pdf | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
-| /reports/dr/by-uuid/\<uuid\> | reports.serve_dr_pdf_by_uuid | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
-| /reports/glaucoma/by-uuid/\<uuid\> | reports.serve_glaucoma_pdf_by_uuid | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
-| /reports/glaucoma_results | reports.glaucoma_results_redirect | GET | reports/routes.py | admin, fileUploader, optometrist, data_manager |
+**Base URL:** `/reports`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | List reports |
+| `/<int:report_id>` | GET | view | View report details |
+| `/<int:report_id>/download` | GET | download | Download report |
 
 ---
 
-## DR Verification Routes
+## Verification Workflows Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /verify_remedio_dr/list | verify_remedio_dr.verify_dr_list | GET | verify_remedio_dr/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_dr/detail/\<int:report_id\> | verify_remedio_dr.verify_dr_detail | GET | verify_remedio_dr/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_dr/edit/\<int:report_id\> | verify_remedio_dr.verify_dr_edit | GET, POST | verify_remedio_dr/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_dr/edit/\<int:report_id\>/verify | verify_remedio_dr.verify_dr_verify | POST | verify_remedio_dr/routes.py | admin, optometrist |
-| /verify_remedio_dr/edit/\<int:report_id\>/unverify | verify_remedio_dr.verify_dr_unverify | POST | verify_remedio_dr/routes.py | admin, optometrist |
-| /verify_remedio_dr/edit/\<int:report_id\>/mark_eye | verify_remedio_dr.verify_dr_mark_eye | POST | verify_remedio_dr/routes.py | admin, optometrist, data_manager |
+### Diabetic Retinopathy Verification
+**Base URL:** `/verify_remedio_dr`
+**Role restrictions:** Varies by route
 
----
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Verify DR reports |
 
-## Glaucoma Verification Routes
+### Glaucoma Verification
+**Base URL:** `/verify_remedio_glaucoma`
+**Role restrictions:** Varies by route
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /verify_remedio_glaucoma/results | verify_remedio_glaucoma.glaucoma_results | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/list | verify_remedio_glaucoma.glaucoma_list | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/clean | verify_remedio_glaucoma.glaucoma_clean_workflow | GET, POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/detail/\<int:clean_id\> | verify_remedio_glaucoma.glaucoma_detail | GET | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\> | verify_remedio_glaucoma.glaucoma_edit | GET, POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\>/verify | verify_remedio_glaucoma.glaucoma_verify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\>/unverify | verify_remedio_glaucoma.glaucoma_unverify | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
-| /verify_remedio_glaucoma/edit/\<int:clean_id\>/mark_eye | verify_remedio_glaucoma.glaucoma_mark_eye | POST | verify_remedio_glaucoma/routes.py | admin, optometrist, data_manager |
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Verify glaucoma reports |
+
+### No DR Verification
+**Base URL:** `/verify_remedio_nodr`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Verify no DR reports |
 
 ---
 
 ## Patient Screenings Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /screenings/ | screenings.list_screenings | GET | screenings/routes.py | admin, fileUploader, optometrist, data_manager |
-| /screenings/\<int:encounter_id\> | screenings.screening_detail | GET | screenings/routes.py | admin, fileUploader, optometrist, data_manager |
+**Base URL:** `/screenings`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | List screening encounters |
+| `/<int:encounter_id>` | GET | view | View screening details |
+| `/<int:encounter_id>/status` | GET | status | View screening status |
 
 ---
 
 ## Job Processing Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /jobs/ | jobs.list_recent_jobs | GET | jobs/routes.py | - |
-| /jobs/\<job_token\> | jobs.job_status_json | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
-| /jobs/\<job_token\>/view | jobs.job_status_page | GET | jobs/routes.py | admin, fileUploader, optometrist, data_manager |
+**Base URL:** `/jobs`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | jobs | List all jobs |
+| `/queue` | GET | queue | View job queue |
+| `/logs` | GET | logs | View job logs |
+| `/cleanup` | GET | cleanup | Cleanup old jobs |
+| `/status` | GET | status | Get job status |
 
 ---
 
 ## Data Audit Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /audit/missing_capture_date | audit.missing_capture_date | GET | audit/routes.py | admin |
+**Base URL:** `/audit`
+**Role restrictions:** admin, data_manager only
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Audit trail |
+| `/logs` | GET | logs | View audit logs |
+| `/search` | GET | search | Search audit logs |
 
 ---
 
-## Image Preprocessing Routes
+## Review Routes
 
-| Route Path | URL For | HTTP Methods | Route File | Roles Required |
-|------------|---------|--------------|------------|----------------|
-| /preprocess/dashboard | preprocess.anonymization_dashboard | GET | preprocess/anonymize_image.py | admin, optometrist, data_manager |
-| /preprocess/anonymize_image/\<uuid:uuid\> | preprocess.anonymize_image | GET, POST | preprocess/anonymize_image.py | admin, optometrist, data_manager |
-| /preprocess/anonymize_image/\<uuid:uuid\>/restore_original | preprocess.restore_original_anonymized_image | POST | preprocess/anonymize_image.py | admin, optometrist, data_manager |
+**Base URL:** `/review`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Review interface |
+| `/discrepancies` | GET | discrepancies | View discrepancies |
+| `/<int:task_id>` | GET | review_task | Review specific task |
+| `/<int:task_id>/approve` | POST | approve | Approve task |
+| `/<int:task_id>/reject` | POST | reject | Reject task |
 
 ---
 
-## Notes
+## Dashboard Routes
 
-1. **URL For**: This column shows the value used in `url_for()` function in templates and redirects.
-2. **Roles Required**: Some routes have role-based access control. The roles are:
-   - `admin`: Administrative users
-   - `fileUploader`: Users who can upload files
-   - `ophthalmologist`: Medical doctors
-   - `optometrist`: Eye care professionals
-   - `data_manager`: Users who manage data
-   - `resident`: Medical residents
-   - `login_required`: Any authenticated user
-3. **HTTP Methods**: All routes specify the HTTP methods they accept.
-4. **Route File**: Indicates which file contains the route implementation.
-5. **Data Scoping**: For routes with data scoping, users can only access data related to their associated lab units.
-6. **Navbar Menu Items**:
-   - **Account Menu**: Contains user profile, change password, notifications, and Help items
-   - **Help Item**: Provides access to API documentation and user guides
+**Base URL:** `/dashboard`
+**Role restrictions:** Multiple roles per route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | dashboard | Main dashboard |
+| `/hospitals` | GET | hospital_dashboard | Hospital overview |
+| `/hospitals/<int:hospital_id>` | GET | hospital_detail | Hospital details |
+| `/images` | GET | image_list | Image list with pagination |
+
+---
+
+## Help & Documentation Routes
+
+### Help Documentation
+**Base URL:** `/help`
+**No role restrictions** (public routes)
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Help documentation |
+| `/faq` | GET | faq | FAQ page |
+| `/contact` | GET | contact | Contact support |
+| `/api` | GET | api_docs | API documentation |
+
+### Docs System
+**Base URL:** `/docs`
+**No role restrictions** (public routes)
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | docs | Documentation |
+| `/swagger` | GET | swagger_ui | Swagger UI |
+
+---
 
 ## API Routes
 
-The application includes comprehensive API endpoints that are documented separately in [OpenAPI Specification](openapi.yaml). These endpoints provide RESTful access to application functionality for programmatic integration.
+**Base URL:** `/api`
+**Role restrictions:** Varies by route
 
-### API Route Summary
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | api_docs | API documentation |
+| `/users` | GET | users | User API endpoints |
+| `/uploads` | GET | uploads | Upload API endpoints |
+| `/tasks` | GET | tasks | Task API endpoints |
+| `/stats` | GET | stats | Statistics API endpoints |
+| `/hospitals` | GET | hospitals | Hospital API endpoints |
+| `/lab-units` | GET | labUnits | Lab unit API endpoints |
+| `/kpis` | GET | kpis | KPI data API endpoints |
 
-| Route Path | HTTP Methods | Route File | Roles Required | Purpose |
-|------------|--------------|------------|----------------|---------|
-| /api/users/\<int:user_id\>/lab-units | GET | api/direct_uploads.py | admin, data_manager, or user themselves | Get lab units for a user |
-| /api/lab-units/\<int:lab_unit_id\>/hospital | GET | api/direct_uploads.py | All authenticated users | Get hospital for a lab unit |
-| /api/upload-jobs/\<int:job_id\>/status | GET | api/direct_uploads.py | Job owner | Get upload job status |
-| /api/disease-grades/\<int:disease_id\> | GET | api/disease.py | admin, data_manager, optometrist | Get disease grading options |
-| /api/diseases-with-gradings | GET | api/disease.py | admin, data_manager, optometrist | Get all diseases with gradings |
-| /api/diseases-gradings-features/\<int:disease_id\> | GET | api/disease.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all gradings and features for a disease |
-| /api/grading-eligibility/users/\<int:user_id\> | GET | api/grading_eligibility.py | admin | Get user grading eligibility |
-| /api/grading-eligibility/users/\<int:user_id\>/details | GET | api/grading_eligibility.py | admin | Get detailed grading eligibility |
-| /api/gradings | GET | api/gradings.py | admin, resident, ophthalmologist | Get filtered gradings data |
-| /api/hospitals | GET | api/hospitals.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all hospitals |
-| /api/hospitals/\<int:hospital_id\> | GET | api/hospitals.py | admin, data_manager, ophthalmologist, resident, optometrist | Get hospital by ID |
-| /api/hospitals/\<int:hospital_id\>/labunits | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get lab units by hospital |
-| /api/labunits | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get all lab units |
-| /api/labunits/\<int:lab_unit_id\> | GET | api/labUnits.py | admin, data_manager, ophthalmologist, resident, optometrist | Get lab unit by ID |
-| /api/eligibleLabUnit | GET | api/userUtils.py | admin, data_manager, optometrist, fileUploader | Get eligible lab units |
+---
+
+## Notifications Routes
+
+**Base URL:** `/notifications`
+**Role restrictions:** Varies by route
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/` | GET | index | Notification center |
+| `/subscribe` | POST | subscribe | Subscribe to notifications |
+| `/unsubscribe` | POST | unsubscribe | Unsubscribe from notifications |
+
+---
+
+## Preprocessing Routes
+
+**Base URL:** `/preprocess`
+**Role restrictions:** admin only
+
+| Route Path | HTTP Methods | Function | Description |
+|------------|--------------|----------|-------------|
+| `/anonymize` | POST | anonymize | Anonymize images |
+
+---
+
+## Route Access Control Notes
+
+### Role Hierarchy
+- **admin**: Full system access
+- **data_manager**: Administrative data access and reporting
+- **ophthalmologist**: Medical grading and review capabilities
+- **optometrist**: Basic grading and data entry
+- **fileUploader**: File upload and management
+- **viewer**: Read-only access to assigned data
+
+### Scoping Mechanisms
+- **Lab Unit Scoping**: Users can be restricted to specific lab units within hospitals
+- **Task-Based Access**: Grading access is controlled through task assignments
+- **Role-Based UI**: Interface elements are shown/hidden based on user roles
+- **Data Filtering**: Users only see data within their assigned scope
+
+### Security Features
+- **Global Authentication Guard**: All routes require authentication except explicitly public routes
+- **CSRF Protection**: All state-changing requests require CSRF tokens
+- **Rate Limiting**: Configurable rate limits per endpoint
+- **Session Management**: Database-backed sessions with inactivity timeout
+- **Audit Logging**: Comprehensive audit trail for all user actions

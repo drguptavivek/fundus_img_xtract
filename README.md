@@ -47,30 +47,105 @@ The application implements a sophisticated **hybrid access control model** combi
 **A sophisticated medical imaging system specifically designed for retinal fundus examination**
 
 #### **Professional Magnification Tools**
-- **Medical Zoom**: 40-500% magnification with 1% precision control
+- **Image Zoom**: 40-500% magnification with 1% precision control
 - **Loupe Magnifier**: Localized magnification (100-500px, 1.0-4.0x) for detailed examination
 - **Smooth Navigation**: Precise pan control with ±600 pixel range
-- **Optimized Views**: Specialized configurations for optic nerve, macula, and peripheral examination
+- **Optimized Views**: Specialized and customizable configurations for optic nerve, macula, and peripheral examination
 
 #### **Clinical Imaging Filters**
 - **Red-Free Filter**: Enhanced vessel visibility and microaneurysm detection
 - **Green Boost Filter**: Improved drusen visibility and retinal pigment epithelium analysis
 - **Blue Mono Filter**: Optimized for exudate and cotton wool spot identification
-- **Contrast & Grayscale**: Boundary definition and color-blind accessibility options
+- **Contrast & Grayscale**: Boundary definition 
 
-#### **Professional Workflow Integration**
+#### **Settings and Presets**
 - **Persistent Settings**: 5 customizable presets that sync across sessions and devices
 - **Context Awareness**: Automatic adjustment based on disease type and grading role
-- **Performance Optimization**: Image preloading, caching, and memory management
 - **Clinical Presets**: Pre-configured settings for DR, Glaucoma, and AMD assessment
 - **Full Documentation**: [📖 Complete Viewer Help Guide](docs/Help/Advanced_Image_Viewer_Guide.md)
 
 ### 📊 Advanced Analytics & Reporting
-- **Materialized Views**: Four specialized views for high-performance analytics
+- **Materialized Views**: Four specialized POSTGreSQL Materialzied views for high-performance analytics
 - **Disease-Specific Pivots**: Separate analytics for DR, Glaucoma, and AMD
 - **Automated Refresh**: 4x daily updates with manual refresh capabilities
 - **Real-Time KPIs**: Live performance metrics and quality indicators
-- **Export Capabilities**: Comprehensive data export for research and reporting
+- **Export Capabilities**: Comprehensive data export for research and reporting. Including Excel Exports
+
+### 🛡️ Enterprise Security & Comprehensive Auditing
+- **CSRF Protection**: Comprehensive Cross-Site Request Forgery prevention across all forms
+- **XSS Prevention**: Input sanitization and output encoding to prevent injection attacks
+- **HTTP-Only Cookies**: Secure cookie configuration with proper flag management
+- **Rate Limiting**: Intelligent throttling to prevent abuse and brute force attacks
+- **Secure Authentication**: Advanced login systems with CAPTCHA and session management
+- **HTTPS Enabled**: Secure communication with SSL/TLS certificate requirements. Use a Revrse proxy for SSL/TLS or set up certifictes in Gunicorn
+- **Backups**: Database SQL backups and all table excel file exports
+
+### 📝 Comprehensive Audit & Logging System
+The application maintains extensive audit trails across all critical operations:
+
+#### **Grading System Audit Trail**
+- **Grade Submissions**: Complete logging of all grade entries with timestamps, user context, and IP addresses
+- **Consensus Building**: Detailed tracking of arbitration decisions and consensus formation
+- **Revision History**: Comprehensive logging of all grade revisions with before/after comparisons
+- **Task Lifecycle**: End-to-end tracking of task creation, assignment, and completion
+
+#### **Image & Data Management Audit**
+- **Image Uploads**: Complete audit trail of all image uploads with metadata and MD5 hashes
+- **Image Edits**: Detailed logging of all image modifications and metadata changes
+- **Verification Workflows**: Comprehensive tracking of PDF verification and anonymization processes
+- **Data Access**: Granular logging of all data access patterns and user interactions
+
+#### **Security & Authentication Audit**
+- **Login Attempts**: Detailed logging of all authentication attempts with success/failure tracking
+- **Session Management**: Comprehensive session lifecycle monitoring and security events
+- **Permission Changes**: Audit trail of all role assignments and permission modifications
+- **Security Events**: Real-time monitoring of potential security threats and policy violations
+
+### 🔄 Multi-Source Ingestion & Processing Systems
+**Advanced data ingestion capabilities supporting multiple formats and workflows:**
+
+#### **ZIP File Processing Pipeline** For Remedio Dashboard donlaoded ZIP files having FOP images
+- **Remedio FOP Integration**: Specialized processing for ZIP files downloaded from Remedio dashboard
+- **Dual Content Processing**: Simultaneous extraction and processing of images and PDF reports
+- **Automated Workflow**: Background processing with job queue management and progress tracking
+- **Metadata Extraction**: OCR-based data extraction from PDF reports with clinical validation
+- **DR Report Processing**: Comprehensive Diabetic Retinopathy PDF report verification workflows
+- **Glaucoma Report Processing**: Specialized glaucoma PDF verification and clinical data extraction
+- **No-DR Fallback**: Intelligent handling of cases without glaucoma and DR reports. These are processed for DR grading in Dual grading system
+- **OCR Integration**: Advanced optical character recognition with medical terminology recognition
+- **Clinical Validation**: Manual validation steps of extracted clinical data and assignment logic
+
+#### **Direct Image Upload System**
+- **Individual Image Upload**: Support for single and batch image uploads from various cameras
+- **Metadata Management**: Complete metadata assignment and management for direct uploads
+- **Real-Time Processing**: Immediate processing and task creation for uploaded images based on disease for which the image had been captured
+- **Quality Assessment**: Image quality evaluation and enhancement tools
+- **Batch Operations**: Efficient bulk image operations with progress tracking
+
+#### **Pre-Graded Excel Import System**
+**Consumption-only system for importing externally generated grades:**
+
+##### **Multi-Grade Support**
+- **Resident Grades**: Import of resident-generated grades with feature selection support
+- **Resident2 Grades**: Import of secondary resident grades for comparison analysis
+- **Faculty/Arbitrator Grades**: Import of expert grades  Excel files for dual grading and consensus building
+- **AI Grades**: Import of AI model grades Excel files for human-AI comparison studies
+- **Excel Mapping Engine**: Intelligent mapping of Excel columns to system grade structures
+- **Grade Validation**: Comprehensive validation of grade values against disease-specific scales
+- **Feature Integration**: Support for selected clinical features and annotations
+- **Consensus Integration**: Automatic integration with existing consensus and arbitration workflows
+
+#### **Cross-Workflow Integration**
+- **Unified Data Model**: Consistent data structures across all ingestion methods
+- **Task Creation**: Automatic grading task creation for all ingestion types
+- **Verification Workflows**: Integrated verification for ingested reports and data
+- **Quality Assurance**: Comprehensive validation and quality metrics across all sources
+
+#### **Processing Features**
+- **Duplicate Detection**: MD5-based duplicate prevention across all upload methods
+- **Progress Tracking**: Real-time progress monitoring for long-running processes
+- **Error Handling**: Robust error handling with detailed logging and recovery mechanisms
+- **Scalable Architecture**: Background processing with job queue management for high-volume ingestion
 
 
 

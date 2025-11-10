@@ -129,17 +129,17 @@ classDiagram
 ```
 ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
 │  Image/Encounter │───▶│  Disease         │───▶│  GradingTask     │
-│  Ingestion      │    │  Eligibility     │    │  Creation       │
-│  (Remedio,      │    │  Check (for      │    │  (Based on      │
-│  Direct Upload)  │    │  each disease)   │    │  eligibility)   │
+│  Ingestion       │    │  Eligibility     │    │  Creation        │
+│  (Remedio,       │    │  Check (for      │    │  (Based on       │
+│  Direct Upload)  │    │  each disease)   │    │  eligibility)    │
 └──────────────────┘    └──────────────────┘    └──────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
 │  EncounterFile   │    │  Disease         │───▶│  Task created    │
-│  /DirectImage    │    │  Unit Role       │    │  with state:    │
-│  stored         │    │  mapping for     │    │  "pending"      │
-└──────────────────┘    │  each user      │    └──────────────────┘
+│  /DirectImage    │    │  Unit Role       │    │  with state:     │
+│  stored          │    │  mapping for     │    │  "pending"       │
+└──────────────────┘    │  each user       │    └──────────────────┘
                         └──────────────────┘
 ```
 
@@ -158,23 +158,23 @@ classDiagram
         └──────┬──────┘
                │
                │ Resident2 grades  
-        ┌──────▼──────┐    ┌──────────────┐
-        │resident2_done │───▶│arbitration   │←─┐
-        │ Both grades │    │Arbitrator    │ │ │
-        │ but differ  │    │ decides      │ │ │
-        └─────────────┘    └──────┬───────┘ │ │
+        ┌──────▼──────┐    ┌─────────────┐
+        │resident2done│───▶│arbitration  │←─┐
+        │ Both grades │    │Arbitrator   │  │ │
+        │ but differ  │    │ decides     │  │ │
+        └─────────────┘    └────┬────────┘  │ │
                                 │           │ │
                         ┌───────▼───────┐   │ │
                         │    final      │───┼─┘
                         │ Consensus     │   │
                         │ created       │   │
                         └───────────────┘   │
-                                          │
-                                ┌─────────▼────────┐
-                                │ Revision allowed │
-                                │ (Arbitrator only │
-                                │  within 6 hours) │
-                                └──────────────────┘
+                                            │
+                                  ┌─────────▼────────┐
+                                  │ Revision allowed │
+                                  │ (Arbitrator only │
+                                  │  within 6 hours) │
+                                  └──────────────────┘
 ```
 
 ### C. Grade Submission Flow
@@ -182,16 +182,16 @@ classDiagram
 ┌──────────────────────┐
 │  User accesses task  │
 │  with specific role  │
-│  (resident/resident2/  │
+│ (resident/resident2/ │
 │   arbitrator)        │
 └─────────┬────────────┘
           │
           ▼
 ┌──────────────────────┐
 │  Role-Eligibility    │
-│  Check (using       │
+│  Check (using        │
 │  get_user_eligibility│
-│  _for_task)         │
+│  _for_task)          │
 └─────────┬────────────┘
           │
           ▼

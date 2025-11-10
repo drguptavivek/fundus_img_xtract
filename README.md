@@ -1,5 +1,7 @@
 # Fundus Image Manager
 
+**Because AIs need Data**
+
 A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). It is extensible
 
 
@@ -298,6 +300,492 @@ uv run scripts/add_test_users.py
 ```
 3. Edit source code locally; the container sees changes immediately and the Flask reloader restarts automatically.
 4. When switching back to production settings, stop the dev stack (`docker compose down`) so subsequent `docker compose up` runs use the Gunicorn configuration without the override.
+
+## Nginx Reverse Proxy Deployment
+
+For production deployments, it's recommended to run the Fundus Image Manager behind an Nginx reverse proxy. This provides SSL termination, load balancing, caching, and enhanced security features.
+
+### Architecture Overview
+
+```mermaid
+flowchart TD
+    A[Internet] --> B[Nginx Proxy Manager/Reverse Proxy]
+    B --> C[SSL/TLS Termination]
+    C --> D[Rate Limiting & Security Headers]
+    D --> E[Load Balancing]
+    E --> F[Fundus Image Manager:5001]
+
+    subgraph "SSL Certificate Management"
+        G[Let's Encrypt] --> H[Automatic Renewal]
+        H --> B
+    end
+
+    subgraph "Backend Services"
+        F --> I[PostgreSQL:5432]
+        F --> J[Redis:6379]
+    end
+
+    style A fill:#e1f5fe
+    style B fill:#4caf50,color:#fff
+    style F fill:#2196f3,color:#fff
+    style G fill:#ff9800,color:#fff
+```
+
+### Option 1: Nginx Proxy Manager (Recommended for Easy Setup)
+
+**Nginx Proxy Manager** provides a web-based GUI for managing proxy hosts, SSL certificates, and security settings.
+
+#### Docker Compose Integration
+
+Add this service to your `docker-compose.yml`:
+
+```yaml
+services:
+  # ... existing services (web, db, cache)
+
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      # Public HTTP Port:
+      - '80:80'
+      # Public HTTPS Port:
+      - '443:443'
+      # Admin Web Port:
+      - '81:81'
+    volumes:
+      - ./nginx-proxy-manager/data:/data
+      - ./nginx-proxy-manager/letsencrypt:/etc/letsencrypt
+    networks:
+      - app-network
+    depends_on:
+      - web
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+#### Setup Instructions
+
+1. **Create necessary directories:**
+```bash
+mkdir -p nginx-proxy-manager/{data,letsencrypt}
+```
+
+2. **Update your `deploy.config.env`:**
+```env
+# Add these lines to deploy.config.env
+DOMAIN=yourdomain.com
+ADMIN_EMAIL=admin@yourdomain.com
+NGINX_PROXY_PORT=80
+NGINX_SSL_PORT=443
+NGINX_ADMIN_PORT=81
+```
+
+3. **Start the proxy manager:**
+```bash
+docker compose --env-file deploy.config.env --env-file deploy.secrets.env up -d nginx-proxy-manager
+```
+
+4. **Access the admin interface:**
+- URL: `http://your-server-ip:81`
+- Default Email: `admin@example.com`
+- Default Password: `changeme`
+
+5. **Configure proxy host:**
+- Navigate to **Hosts** → **Proxy Hosts**
+- Click **Add Proxy Host**
+- **Details Tab:**
+  - Domain Names: `yourdomain.com`
+  - Scheme: `http`
+  - Forward Hostname/IP: `web` (Docker service name)
+  - Forward Port: `5001`
+  - Block Common Exploits: ✅
+  - Websockets Support: ✅
+- **SSL Tab:**
+  - SSL Certificate: **Request a new SSL Certificate**
+  - Force SSL: ✅
+  - HTTP/2 Support: ✅
+  - HSTS Enabled: ✅
+
+### Option 2: Custom Nginx Configuration
+
+For advanced users who prefer direct Nginx configuration.
+
+#### Nginx Configuration File
+
+Create `nginx/conf.d/fundus-manager.conf`:
+
+```nginx
+# Rate limiting
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+
+# Upstream configuration
+upstream fundus_backend {
+    server web:5001;
+    keepalive 32;
+}
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Let's Encrypt ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all HTTP traffic to HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# HTTPS server configuration
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com www.yourdomain.com;
+
+    # SSL Configuration
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Security Headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';" always;
+
+    # Client maximum body size (for file uploads)
+    client_max_body_size 100M;
+
+    # Logging
+    access_log /var/log/nginx/fundus_access.log;
+    error_log /var/log/nginx/fundus_error.log;
+
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/json
+        application/javascript
+        application/xml+rss
+        application/atom+xml
+        image/svg+xml;
+
+    # Static file caching
+    location ~* \.(css|js|ico|gif|jpe?g|png|svg|eot|otf|ttf|woff2?)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Content-Type-Options nosniff;
+        proxy_pass http://fundus_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # API endpoints with rate limiting
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+
+        proxy_pass http://fundus_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Login endpoint with stricter rate limiting
+    location /login {
+        limit_req zone=login burst=5 nodelay;
+
+        proxy_pass http://fundus_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # File upload endpoints with larger timeouts
+    location ~ ^/(upload|process-zip) {
+        proxy_pass http://fundus_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Extended timeouts for large file uploads
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        client_body_timeout 300s;
+
+        # Buffer settings
+        proxy_request_buffering off;
+        proxy_buffering off;
+    }
+
+    # Default location for all other requests
+    location / {
+        proxy_pass http://fundus_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support for real-time features
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+#### Docker Compose for Custom Nginx
+
+Add to your `docker-compose.yml`:
+
+```yaml
+services:
+  # ... existing services
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/logs:/var/log/nginx
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - web
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+### SSL Certificate Setup
+
+#### Using Let's Encrypt with Certbot
+
+1. **Generate SSL certificates:**
+```bash
+# Initial certificate generation
+docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot -d yourdomain.com -d www.yourdomain.com --email admin@yourdomain.com --agree-tos --no-eff-email
+
+# Set up automatic renewal
+docker compose run --rm certbot renew --dry-run
+```
+
+2. **Create renewal cron job:**
+```bash
+# Add to crontab: 0 3 * * * cd /path/to/project && docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
+```
+
+### Security Enhancements
+
+#### Fail2Ban Integration
+
+Create `/etc/fail2ban/jail.local`:
+
+```ini
+[nginx-http-auth]
+enabled = true
+filter = nginx-http-auth
+port = http,https
+logpath = /var/log/nginx/fundus_error.log
+maxretry = 5
+findtime = 600
+bantime = 3600
+
+[nginx-limit-req]
+enabled = true
+filter = nginx-limit-req
+port = http,https
+logpath = /var/log/nginx/fundus_error.log
+maxretry = 10
+findtime = 600
+bantime = 3600
+```
+
+#### Additional Security Headers
+
+The Nginx configuration includes comprehensive security headers:
+
+- **HSTS**: Enforces HTTPS connections
+- **CSP**: Prevents XSS attacks
+- **X-Frame-Options**: Prevents clickjacking
+- **X-Content-Type-Options**: Prevents MIME-type sniffing
+- **Referrer-Policy**: Controls referrer information
+
+### Performance Optimization
+
+#### Caching Configuration
+
+Add to your Nginx configuration for enhanced caching:
+
+```nginx
+# FastCGI cache
+fastcgi_cache_path /var/cache/nginx levels=1:2 keys_zone=FUNDUS_CACHE:100m inactive=60m use_temp_path=off;
+
+server {
+    # ... existing configuration
+
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header X-Cache-Status $upstream_cache_status;
+
+        proxy_cache FUNDUS_CACHE;
+        proxy_cache_valid 200 1y;
+        proxy_cache_key "$scheme$request_method$host$request_uri";
+    }
+}
+```
+
+### Monitoring and Logging
+
+#### Access Log Format
+
+Add to your Nginx configuration for detailed logging:
+
+```nginx
+http {
+    log_format detailed '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       '$request_time $upstream_response_time '
+                       '$ssl_protocol $ssl_cipher';
+
+    access_log /var/log/nginx/fundus_access.log detailed;
+}
+```
+
+#### Health Checks
+
+Configure health check endpoints:
+
+```nginx
+location /health {
+    access_log off;
+    return 200 "healthy\n";
+    add_header Content-Type text/plain;
+}
+
+location /nginx-health {
+    access_log off;
+    return 200 "nginx ok\n";
+    add_header Content-Type text/plain;
+}
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **502 Bad Gateway**: Check if the Flask app is running on port 5001
+2. **SSL Certificate Errors**: Verify domain DNS and certificate paths
+3. **Upload Failures**: Check `client_max_body_size` and timeout settings
+4. **WebSocket Issues**: Ensure `proxy_set_header Upgrade` is configured
+
+#### Debug Commands
+
+```bash
+# Test Nginx configuration
+docker compose exec nginx nginx -t
+
+# Reload Nginx
+docker compose exec nginx nginx -s reload
+
+# View Nginx logs
+docker compose logs nginx
+
+# Check SSL certificate
+docker compose exec nginx openssl x509 -in /etc/letsencrypt/live/yourdomain.com/fullchain.pem -text -noout
+
+# Test SSL configuration
+docker compose run --rm nginx openssl s_client -connect yourdomain.com:443
+```
+
+### Production Deployment Checklist
+
+- [ ] Configure reverse proxy (Nginx Proxy Manager or custom Nginx)
+- [ ] Set up SSL certificates with Let's Encrypt
+- [ ] Configure rate limiting and security headers
+- [ ] Set up monitoring and logging
+- [ ] Test file upload functionality
+- [ ] Verify WebSocket support
+- [ ] Configure backup strategy
+- [ ] Set up SSL certificate auto-renewal
+- [ ] Test failover scenarios
+- [ ] Document deployment procedures
+
+### Migration from Direct Docker Access
+
+If you're currently running the application directly on port 5001, follow these steps to migrate to a reverse proxy setup:
+
+1. **Backup current configuration**
+2. **Add proxy service to docker-compose.yml**
+3. **Update firewall rules to only allow ports 80/443**
+4. **Configure proxy host settings**
+5. **Test SSL certificate setup**
+6. **Update DNS records if necessary**
+7. **Monitor application performance after migration**
 
 
 

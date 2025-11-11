@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
-from flask import send_file, abort, flash, make_response
+from flask import send_file, abort, flash, make_response, current_app
 from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
@@ -286,10 +286,24 @@ def encounterImageThumbnailByUUID(uuid: str):
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         original_image_path = IMAGE_DIR / upload_date_str / encounter_file.filename
 
-        # Check if thumbnail exists
+        # Check if thumbnail exists and generate on-demand if missing
         if not thumbnail_exists_encounter(original_image_path):
-            # If thumbnail doesn't exist, serve the original image instead
-            return encounterImageByUUID(uuid)
+            # Generate thumbnail on-demand
+            try:
+                from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+                thumbnail_filename = get_thumbnail_filename(original_image_path.name)
+                thumbnail_path = original_image_path.parent / thumbnail_filename
+
+                success = generate_thumbnail(original_image_path, thumbnail_path)
+                if not success:
+                    # If generation fails, fall back to original image
+                    current_app.logger.warning(f"Failed to generate thumbnail for {original_image_path.name}")
+                    return encounterImageByUUID(uuid)
+
+            except Exception as e:
+                # If generation fails, fall back to original image
+                current_app.logger.error(f"Error generating thumbnail for {original_image_path.name}: {e}")
+                return encounterImageByUUID(uuid)
 
         # Get thumbnail path
         try:
@@ -428,14 +442,56 @@ def directImgFinalThumbnailByUUID(uuid: str):
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             abort(404)
 
-        # Prefer edited image thumbnail if both exist
-        if direct_image.edited_filename and direct_image.edited_thumbnail_filename:
-            return directImgEdThumbnailByUUID(uuid)
-        elif direct_image.filename and direct_image.thumbnail_filename:
-            return directImgOrigThumbnailByUUID(uuid)
-        else:
-            # Fallback to original image logic
-            return directImgFinalByUUID(uuid)
+        # Try edited image thumbnail first
+        if direct_image.edited_filename:
+            if direct_image.edited_thumbnail_filename:
+                return directImgEdThumbnailByUUID(uuid)
+            else:
+                # Generate edited thumbnail on-demand
+                try:
+                    from utils.fileUtils import abs_from_parts
+                    from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+
+                    edited_path = abs_from_parts(direct_image.folder_rel, direct_image.edited_filename, kind='edited')
+                    if edited_path.exists():
+                        thumb_basename = get_thumbnail_filename(direct_image.edited_filename)
+                        thumb_path = edited_path.parent / thumb_basename
+
+                        success = generate_thumbnail(edited_path, thumb_path)
+                        if success:
+                            # Update database with thumbnail filename
+                            direct_image.edited_thumbnail_filename = thumb_basename
+                            db.commit()
+                            return directImgEdThumbnailByUUID(uuid)
+                except Exception as e:
+                    current_app.logger.error(f"Error generating edited thumbnail on-demand: {e}")
+
+        # Try original image thumbnail
+        if direct_image.filename:
+            if direct_image.thumbnail_filename:
+                return directImgOrigThumbnailByUUID(uuid)
+            else:
+                # Generate original thumbnail on-demand
+                try:
+                    from utils.fileUtils import abs_from_parts
+                    from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+
+                    orig_path = abs_from_parts(direct_image.folder_rel, direct_image.filename, kind='original')
+                    if orig_path.exists():
+                        thumb_basename = get_thumbnail_filename(direct_image.filename)
+                        thumb_path = orig_path.parent / thumb_basename
+
+                        success = generate_thumbnail(orig_path, thumb_path)
+                        if success:
+                            # Update database with thumbnail filename
+                            direct_image.thumbnail_filename = thumb_basename
+                            db.commit()
+                            return directImgOrigThumbnailByUUID(uuid)
+                except Exception as e:
+                    current_app.logger.error(f"Error generating original thumbnail on-demand: {e}")
+
+        # If both fail, fallback to original image logic
+        return directImgFinalByUUID(uuid)
 
 
 def universalImageThumbnailByUUID(uuid: str):

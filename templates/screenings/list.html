@@ -290,8 +290,8 @@
                   <div class="d-flex flex-wrap gap-2 mb-3">
                     {% for ef in image_files[:4] %}
                     <div class="scr-thumb-container">
-                      <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" 
-                           alt="Thumbnail" 
+                      <img src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=ef.uuid) }}"
+                           alt="Thumbnail"
                            class="scr-thumb-img"
                            loading="lazy">
                     </div>

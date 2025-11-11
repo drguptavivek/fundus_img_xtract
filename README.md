@@ -171,9 +171,8 @@ To run the production container stack with Gunicorn:
 ```bash
 # Copy env templates and fill in secrets if not already done
 cp deploy.config.env.example deploy.config.env
+
 cp deploy.secrets.env.example deploy.secrets.env  # edit values!
-
-
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- remove this in production 
 
@@ -188,15 +187,8 @@ docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env buil
 
 # docker-compose down cache && docker volume rm fundus_img_xtract_redis_data
 # docker-compose down db && docker volume rm fundus_img_xtract_postgres_data
-
-
-
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d cache
-
-
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db
-
-
+# docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d cache
+# docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db
 # DB and CaACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
@@ -213,10 +205,9 @@ docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up -
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
-
 uv run python -m scripts.create_user admin
-uv run python -m scripts.assign_roles admin --roles admin
-
+uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
+exit
 
 # Check service status
 docker compose ps
@@ -278,7 +269,6 @@ nano  deploy.secrets.env
 # BUILD App
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env  build web
 
-
 # DB and CACHE
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
@@ -291,10 +281,15 @@ docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   u
 
 # User
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
-uv run python -m scripts.create_user admin
-uv run python -m scripts.assign_roles admin --roles admin
-uv run scripts/initial_setup.py 
-uv run scripts/add_test_users.py
+ # In Conatainer
+ uv run python -m scripts.create_user admin
+ uv run python -m scripts.assign_roles admin --roles admin
+ uv run scripts/initial_setup.py 
+ uv run scripts/add_test_users.py
+ exit
+
+# MIGRATIONS
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   exec web uv run alembic
 
  
 ```
@@ -686,7 +681,7 @@ fastcgi_cache_path /var/cache/nginx levels=1:2 keys_zone=FUNDUS_CACHE:100m inact
 server {
     # ... existing configuration
 
-    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+    location ~* \.(css|js|gif|ico|svg|woff|woff2)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         add_header X-Cache-Status $upstream_cache_status;
@@ -716,23 +711,6 @@ http {
 }
 ```
 
-#### Health Checks
-
-Configure health check endpoints:
-
-```nginx
-location /health {
-    access_log off;
-    return 200 "healthy\n";
-    add_header Content-Type text/plain;
-}
-
-location /nginx-health {
-    access_log off;
-    return 200 "nginx ok\n";
-    add_header Content-Type text/plain;
-}
-```
 
 ### Troubleshooting
 

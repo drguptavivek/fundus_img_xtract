@@ -262,11 +262,15 @@ class EncounterFile(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+    thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     lab_unit: Mapped["LabUnit"] = relationship()
     # Note: ImageGrading relationship removed - now using Grade model through GradingTask
     # Add a check constraint to ensure only image files are stored in this table
-    __table_args__ = (CheckConstraint("file_type != 'pdf'", name="ck_encounter_file_not_pdf"),)
+    __table_args__ = (
+        CheckConstraint("file_type != 'pdf'", name="ck_encounter_file_not_pdf"),
+        CheckConstraint("thumbnail_filename IS NULL OR position('/' in thumbnail_filename) = 0", name="ck_ef_thumbnail_filename_no_slash"),
+    )
 
 class EncounterFilePDF(Base):
     __tablename__ = 'encounter_file_pdfs'
@@ -413,6 +417,8 @@ class DirectImageUpload(Base):
     area_id: Mapped[int] = mapped_column(ForeignKey("areas.id"), nullable=False)
     is_mydriatic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_pregraded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
+    edited_thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # edited thumbnail basename (thm_uuid.ext)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
     # Relationships
     uploader: Mapped["User"] = relationship(foreign_keys=[uploader_id])
@@ -428,6 +434,14 @@ class DirectImageUpload(Base):
         CheckConstraint(
             "edited_filename IS NULL OR position('/' in edited_filename) = 0",
             name="ck_diu_edited_filename_no_slash",
+        ),
+        CheckConstraint(
+            "thumbnail_filename IS NULL OR position('/' in thumbnail_filename) = 0",
+            name="ck_diu_thumbnail_filename_no_slash",
+        ),
+        CheckConstraint(
+            "edited_thumbnail_filename IS NULL OR position('/' in edited_thumbnail_filename) = 0",
+            name="ck_diu_edited_thumbnail_filename_no_slash",
         ),
         # folder_rel should be a relative POSIX path (no leading '/', no backslashes)
         CheckConstraint("substring(folder_rel, 1, 1) <> '/'", name="ck_diu_folder_not_absolute"),

@@ -307,6 +307,13 @@
               Admin
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
+              <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.admin_status') }}">
+                <i class="fas fa-tachometer-alt"></i> Admin Status Dashboard
+                <span class="badge bg-primary ms-auto">New</span>
+              </a></li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
               <li><a class="dropdown-item" href="{{ url_for('admin.users_list') }}">Users </a></li>
               <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Dashboard</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.malicious_uploads') }}">Malicious Uploads</a></li>
@@ -315,7 +322,9 @@
               <li><a class="dropdown-item" href="{{ url_for('admin.disk_usage') }}">Disk Usage</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.database_dump') }}">Database Backup</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.database_excel_export') }}">Database Tables export</a></li>
-              
+              <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views Status</a></li>
+
               <li>
                 <hr class="dropdown-divider">
               </li>

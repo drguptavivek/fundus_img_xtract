@@ -300,6 +300,68 @@ def api_full_maintenance():
         }), 500
 
 
+def get_system_health():
+    """Get comprehensive system health status for admin dashboard."""
+    try:
+        health_status = {
+            'status': 'healthy',
+            'issues': [],
+            'recommendations': [],
+            'performance_metrics': {}
+        }
+
+        # Check database connectivity
+        with transaction_scope() as db:
+            try:
+                db.execute(text("SELECT 1")).fetchone()
+            except Exception as e:
+                health_status['status'] = 'error'
+                health_status['issues'].append(f"Database connectivity error: {str(e)}")
+
+        # Check scheduler status
+        scheduler_enabled = current_app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False)
+        if not scheduler_enabled:
+            if health_status['status'] == 'healthy':
+                health_status['status'] = 'warning'
+            health_status['issues'].append("Thumbnail maintenance scheduler is disabled")
+            health_status['recommendations'].append("Enable THUMBNAIL_MAINTENANCE_ENABLED in configuration")
+
+        # Check for large number of missing thumbnails
+        stats = get_thumbnail_statistics()
+        total_missing = (
+            stats['direct_uploads']['missing_thumbnails'] +
+            stats['encounter_files']['missing_thumbnails']
+        )
+
+        if total_missing > 1000:
+            if health_status['status'] == 'healthy':
+                health_status['status'] = 'warning'
+            health_status['issues'].append(f"High number of missing thumbnails: {total_missing}")
+            health_status['recommendations'].append("Run manual thumbnail regeneration")
+
+        # Check storage usage for orphaned thumbnails
+        if total_missing > 100:
+            health_status['recommendations'].append("Consider running orphaned cleanup to free up space")
+
+        # Add performance metrics
+        health_status['performance_metrics'] = {
+            'missing_thumbnail_ratio': total_missing / max(1, stats['direct_uploads']['total'] + stats['encounter_files']['total']),
+            'scheduler_enabled': scheduler_enabled,
+            'total_images_processed': stats['direct_uploads']['total'] + stats['encounter_files']['total']
+        }
+
+        return health_status
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting system health: {str(e)}")
+        return {
+            'status': 'error',
+            'issues': [f"Health check failed: {str(e)}"],
+            'recommendations': ['Check application logs', 'Verify system configuration'],
+            'performance_metrics': {}
+        }
+
+
 @login_required
 @roles_required("admin", "data_manager")
 def api_thumbnail_health_check():
@@ -380,56 +442,56 @@ def register_thumbnail_admin_routes(bp):
 
     # API endpoints
     bp.add_url_rule(
-        '/api/admin/thumbnail_stats',
+        '/api/thumbnail_stats',
         'api_thumbnail_stats',
         api_thumbnail_stats,
         methods=['GET']
     )
 
     bp.add_url_rule(
-        '/api/admin/maintenance_status',
+        '/api/maintenance_status',
         'api_maintenance_status',
         api_maintenance_status,
         methods=['GET']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/manual_maintenance',
+        '/api/thumbnail/manual_maintenance',
         'api_manual_maintenance',
         api_manual_maintenance,
         methods=['POST']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/cleanup_orphaned',
+        '/api/thumbnail/cleanup_orphaned',
         'api_cleanup_orphaned',
         api_cleanup_orphaned,
         methods=['POST']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/regenerate_missing',
+        '/api/thumbnail/regenerate_missing',
         'api_regenerate_missing',
         api_regenerate_missing,
         methods=['POST']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/validate_integrity',
+        '/api/thumbnail/validate_integrity',
         'api_validate_integrity',
         api_validate_integrity,
         methods=['POST']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/full_maintenance',
+        '/api/thumbnail/full_maintenance',
         'api_full_maintenance',
         api_full_maintenance,
         methods=['POST']
     )
 
     bp.add_url_rule(
-        '/api/admin/thumbnail/health_check',
+        '/api/thumbnail/health_check',
         'api_thumbnail_health_check',
         api_thumbnail_health_check,
         methods=['GET']

@@ -1,0 +1,535 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Status Dashboard{% endblock %}
+
+{% block extra_styles %}
+<style>
+.status-overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.status-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+.status-card.health-healthy {
+    border-left-color: #28a745;
+}
+
+.status-card.health-warning {
+    border-left-color: #ffc107;
+}
+
+.status-card.health-error {
+    border-left-color: #dc3545;
+}
+
+.status-card h5 {
+    margin: 0 0 1rem 0;
+    color: #495057;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.status-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: white;
+}
+
+.status-icon.healthy { background-color: #28a745; }
+.status-icon.warning { background-color: #ffc107; }
+.status-icon.error { background-color: #dc3545; }
+.status-icon.info { background-color: #17a2b8; }
+
+.status-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #007bff;
+    margin: 0.5rem 0;
+}
+
+.status-details {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.status-actions {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.recent-activity {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.activity-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: white;
+    flex-shrink: 0;
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-title {
+    font-weight: 600;
+    color: #495057;
+    margin: 0 0 0.25rem 0;
+}
+
+.activity-description {
+    font-size: 0.9rem;
+    color: #6c757d;
+    margin: 0;
+}
+
+.activity-time {
+    font-size: 0.8rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.management-tools {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.tool-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.2s ease;
+}
+
+.tool-card:hover {
+    transform: translateY(-2px);
+}
+
+.tool-card h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.quick-stat {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1.25rem;
+    border-radius: 10px;
+    text-align: center;
+}
+
+.quick-stat h6 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.875rem;
+    opacity: 0.9;
+}
+
+.quick-stat .stat-number {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.btn-management {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    border: none;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.btn-management:hover {
+    background: linear-gradient(135deg, #0056b3, #004085);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.badge-status {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.system-health {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.system-health.warning {
+    background: linear-gradient(135deg, #ffc107, #fd7e14);
+}
+
+.system-health.error {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1">Admin Status Dashboard</h1>
+            <p class="text-muted mb-0">Comprehensive overview of system status and management tools</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="refreshStatus()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <div class="text-muted small">
+                Last updated: <span id="last-updated">{{ current_time|user_datetime('%Y-%m-%d %H:%M:%S') }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Health Overview -->
+    {% if health_status.status == 'healthy' %}
+    <div class="system-health">
+        <h4 class="mb-2"><i class="fas fa-check-circle"></i> System Health: Optimal</h4>
+        <p class="mb-0">All systems are functioning normally</p>
+    </div>
+    {% elif health_status.status == 'warning' %}
+    <div class="system-health warning">
+        <h4 class="mb-2"><i class="fas fa-exclamation-triangle"></i> System Health: Warning</h4>
+        <p class="mb-0">{{ health_status.issues|length }} issue(s) require attention</p>
+    </div>
+    {% else %}
+    <div class="system-health error">
+        <h4 class="mb-2"><i class="fas fa-times-circle"></i> System Health: Critical</h4>
+        <p class="mb-0">{{ health_status.issues|length }} critical issue(s) require immediate attention</p>
+    </div>
+    {% endif %}
+
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+        <div class="quick-stat">
+            <h6><i class="fas fa-users"></i> Users</h6>
+            <p class="stat-number">{{ system_stats.users.total }}</p>
+            <small>{{ system_stats.users.active }} active this week</small>
+        </div>
+        <div class="quick-stat">
+            <h6><i class="fas fa-images"></i> Images</h6>
+            <p class="stat-number">{{ system_stats.images.total }}</p>
+            <small>{{ system_stats.images.direct_uploads }} direct + {{ system_stats.images.encounter_files }} ZIP</small>
+        </div>
+        <div class="quick-stat">
+            <h6><i class="fas fa-tasks"></i> Jobs</h6>
+            <p class="stat-number">{{ system_stats.jobs.total }}</p>
+            <small>{{ system_stats.jobs.recent_week }} this week</small>
+        </div>
+        <div class="quick-stat">
+            <h6><i class="fas fa-hdd"></i> Storage</h6>
+            <p class="stat-number">{{ "%.1f"|format(system_stats.storage.zip_size_estimate) }}MB</p>
+            <small>{{ system_stats.storage.total_zips }} ZIP files</small>
+        </div>
+    </div>
+
+    <!-- Status Overview Cards -->
+    <div class="status-overview">
+        <!-- Thumbnail Status -->
+        <div class="status-card {% if thumbnail_stats.direct_uploads.missing_thumbnails > 10 or thumbnail_stats.encounter_files.missing_thumbnails > 10 %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if thumbnail_stats.direct_uploads.missing_thumbnails > 10 or thumbnail_stats.encounter_files.missing_thumbnails > 10 %}warning{% else %}healthy{% endif %}">
+                    {% if thumbnail_stats.direct_uploads.missing_thumbnails > 10 or thumbnail_stats.encounter_files.missing_thumbnails > 10 %}
+                        <i class="fas fa-exclamation"></i>
+                    {% else %}
+                        <i class="fas fa-check"></i>
+                    {% endif %}
+                </span>
+                Thumbnail System
+            </h5>
+            <div class="status-value">
+                {{ "%.1f"|format(thumbnail_stats.storage.estimated_thumbnail_size_mb) }}MB
+            </div>
+            <p class="status-details">
+                Direct: {{ thumbnail_stats.direct_uploads.with_original_thumbnails }}/{{ thumbnail_stats.direct_uploads.total }}<br>
+                ZIP: {{ thumbnail_stats.encounter_files.with_thumbnails }}/{{ thumbnail_stats.encounter_files.total }}
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.thumbnail_management') }}" class="btn-management btn-sm">
+                    <i class="fas fa-cogs"></i> Manage
+                </a>
+                {% if thumbnail_stats.direct_uploads.missing_thumbnails > 0 or thumbnail_stats.encounter_files.missing_thumbnails > 0 %}
+                <a href="{{ url_for('admin.thumbnail_management') }}#generate-missing" class="btn btn-warning btn-sm">
+                    <i class="fas fa-plus"></i> Generate Missing
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Maintenance Status -->
+        <div class="status-card {% if maintenance_status.currently_running %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if maintenance_status.currently_running %}warning{% else %}healthy{% endif %}">
+                    {% if maintenance_status.currently_running %}
+                        <i class="fas fa-cog fa-spin"></i>
+                    {% else %}
+                        <i class="fas fa-check"></i>
+                    {% endif %}
+                </span>
+                Maintenance System
+            </h5>
+            <div class="status-value">
+                {% if maintenance_status.currently_running %}
+                    Running
+                {% else %}
+                    Idle
+                {% endif %}
+            </div>
+            <p class="status-details">
+                {% if maintenance_status.last_run %}
+                    Last: {{ maintenance_status.last_run.completed_at|user_datetime('%m/%d %H:%M') }}<br>
+                    Status: {{ maintenance_status.last_run.status }}
+                {% else %}
+                    No maintenance runs recorded
+                {% endif %}
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.thumbnail_management') }}#maintenance" class="btn-management btn-sm">
+                    <i class="fas fa-tools"></i> Maintenance
+                </a>
+            </div>
+        </div>
+
+        <!-- Materialized Views Status -->
+        <div class="status-card health-info">
+            <h5>
+                <span class="status-icon info">
+                    <i class="fas fa-chart-bar"></i>
+                </span>
+                Analytics Views
+            </h5>
+            <div class="status-value">
+                Active
+            </div>
+            <p class="status-details">
+                Advanced analytics platform<br>
+                Disease-specific pivot views
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.materialized_view_status') }}" class="btn-management btn-sm">
+                    <i class="fas fa-chart-line"></i> View Status
+                </a>
+            </div>
+        </div>
+
+        <!-- System Storage -->
+        <div class="status-card health-info">
+            <h5>
+                <span class="status-icon info">
+                    <i class="fas fa-database"></i>
+                </span>
+                Database & Storage
+            </h5>
+            <div class="status-value">
+                {{ system_stats.jobs.total_items }}
+            </div>
+            <p class="status-details">
+                Total job items processed<br>
+                {{ system_stats.storage.total_zips }} ZIP files stored
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.database_dump') }}" class="btn-management btn-sm">
+                    <i class="fas fa-download"></i> Export
+                </a>
+                <a href="{{ url_for('admin.disk_usage') }}" class="btn-management btn-sm">
+                    <i class="fas fa-hdd"></i> Disk Usage
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Management Tools Section -->
+    <div class="row">
+        <div class="col-lg-8">
+            <h3 class="h4 mb-3">Management Tools</h3>
+            <div class="management-tools">
+                <!-- User Management -->
+                <div class="tool-card">
+                    <h6><i class="fas fa-users-cog"></i> User Management</h6>
+                    <p class="text-muted small">Manage user accounts, roles, and permissions</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-primary btn-sm">Users</a>
+                        <a href="{{ url_for('admin.manage_roles') }}" class="btn btn-outline-primary btn-sm">Roles</a>
+                        <a href="{{ url_for('admin.manage_eligibility_users') }}" class="btn btn-outline-primary btn-sm">Grading Access</a>
+                    </div>
+                </div>
+
+                <!-- Content Management -->
+                <div class="tool-card">
+                    <h6><i class="fas fa-folder-open"></i> Content Management</h6>
+                    <p class="text-muted small">Manage images, screenings, and data quality</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('screenings.list_screenings') }}" class="btn btn-outline-primary btn-sm">Screenings</a>
+                        <a href="{{ url_for('analytics.images_without_tasks') }}" class="btn btn-outline-primary btn-sm">Images Without Tasks</a>
+                        <a href="{{ url_for('admin.malicious_uploads') }}" class="btn btn-outline-primary btn-sm">Security</a>
+                    </div>
+                </div>
+
+                <!-- System Tools -->
+                <div class="tool-card">
+                    <h6><i class="fas fa-tools"></i> System Tools</h6>
+                    <p class="text-muted small">Database operations and system maintenance</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('admin.log_viewer') }}" class="btn btn-outline-primary btn-sm">Logs</a>
+                        <a href="{{ url_for('admin.database_excel_export') }}" class="btn btn-outline-primary btn-sm">Export Data</a>
+                        <a href="{{ url_for('admin.disk_usage') }}" class="btn btn-outline-primary btn-sm">Storage Analysis</a>
+                    </div>
+                </div>
+
+                <!-- AI Models -->
+                <div class="tool-card">
+                    <h6><i class="fas fa-brain"></i> AI Models</h6>
+                    <p class="text-muted small">Manage AI grading models and configurations</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('admin.list_and_create_ai_model') }}" class="btn btn-outline-primary btn-sm">Model List</a>
+                        <a href="{{ url_for('admin.list_disease_gradings') }}" class="btn btn-outline-primary btn-sm">Disease Gradings</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <h3 class="h4 mb-3">Recent Activity</h3>
+            <div class="recent-activity">
+                {% if recent_activity %}
+                    {% for activity in recent_activity %}
+                    <div class="activity-item">
+                        <div class="activity-icon {% if activity.type == 'maintenance' %}bg-info{% elif activity.type == 'thumbnail' %}bg-warning{% elif activity.type == 'health' %}bg-danger{% else %}bg-secondary{% endif %}">
+                            {% if activity.type == 'maintenance' %}
+                                <i class="fas fa-tools"></i>
+                            {% elif activity.type == 'thumbnail' %}
+                                <i class="fas fa-image"></i>
+                            {% elif activity.type == 'health' %}
+                                <i class="fas fa-heartbeat"></i>
+                            {% else %}
+                                <i class="fas fa-info"></i>
+                            {% endif %}
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">{{ activity.title }}</div>
+                            <div class="activity-description">{{ activity.description }}</div>
+                        </div>
+                        <div class="activity-time">
+                            {% if activity.timestamp %}
+                                {{ activity.timestamp|user_datetime('%H:%M') }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center">No recent activity recorded</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function refreshStatus() {
+    // Show loading state
+    const refreshBtn = document.querySelector('button[onclick="refreshStatus()"]');
+    const originalHtml = refreshBtn.innerHTML;
+    refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Refreshing...';
+    refreshBtn.disabled = true;
+
+    // Update last updated time
+    document.getElementById('last-updated').textContent = new Date().toLocaleString();
+
+    // Reload page after a short delay
+    setTimeout(() => {
+        window.location.reload();
+    }, 500);
+}
+
+// Auto-refresh every 5 minutes
+setTimeout(() => {
+    refreshStatus();
+}, 5 * 60 * 1000);
+
+// Initialize tooltips if Bootstrap is available
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof bootstrap !== 'undefined') {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -274,7 +274,7 @@ function runMaintenance(taskType) {
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running...';
 
-    let endpoint = '/api/admin/thumbnail/';
+    let endpoint = '/admin/api/thumbnail/';
     let data = {};
 
     switch(taskType) {
@@ -321,7 +321,7 @@ function runMaintenance(taskType) {
 
 // Health check
 function healthCheck() {
-    fetch('/api/admin/thumbnail/health_check')
+    fetch('/admin/api/thumbnail/health_check')
     .then(response => response.json())
     .then(data => {
         if (data.success) {
@@ -361,8 +361,8 @@ function healthCheck() {
 // Refresh statistics
 function refreshStats() {
     Promise.all([
-        fetch('/api/admin/thumbnail_stats').then(r => r.json()),
-        fetch('/api/admin/maintenance_status').then(r => r.json())
+        fetch('/admin/api/thumbnail_stats').then(r => r.json()),
+        fetch('/admin/api/maintenance_status').then(r => r.json())
     ])
     .then(([statsData, statusData]) => {
         if (statsData.success) {

@@ -249,3 +249,5 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 
 ### Next Steps
 Ready to proceed with Phase 9: Batch Processing for existing images, which will provide utilities to generate thumbnails for all existing images in the system with progress tracking and resume capabilities.
+Run tests using
+`docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   exec web uv run `

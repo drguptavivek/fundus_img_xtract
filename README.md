@@ -1237,6 +1237,7 @@ python app.py
 
 ### Analytics & Reporting System
 - [Comprehensive Analytics & Reporting System](docs/11-KPI and DFs/comprehensive_analytics_reporting_system.md) - Complete materialized views and analytics platform documentation
+- [Encounter Pivot View User Guide](docs/11-KPI and DFs/06-Encounter-Pivot-View-User-Guide.md) - Complete guide for using the encounter pivot materialized view for research analytics and operational reporting
 - [Analytics User Guide](docs/user-guide/viewing-analytics.md) - User interface for viewing analytics and reports
 
 ### Scripts & Migrations (`scripts/`)

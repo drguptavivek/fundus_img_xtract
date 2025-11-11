@@ -440,12 +440,12 @@ def image_list():
         total_pages = (total_images + per_page - 1) // per_page
 
         return render_template(
-            "dashboard/image_list.html",
-            images=unified_images,
-            image_gradings=image_gradings,
-            image_vcdr_values=image_vcdr_values,
-            page=page,
-            total_pages=total_pages,
-            total_images=total_images,
-            search_query=search_query
+                "dashboard/image_list.html",
+                images=unified_images,
+                image_gradings=image_gradings,
+                image_vcdr_values=image_vcdr_values,
+                page=page,
+                total_pages=total_pages,
+                total_images=total_images,
+                search_query=search_query
         )

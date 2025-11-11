@@ -180,6 +180,22 @@ def upload():
                                     dest = uniquify(orig_dir, filename)
                                     dest.write_bytes(content)
 
+                                    # Generate thumbnail for the uploaded image
+                                    thumbnail_filename = None
+                                    try:
+                                        from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+                                        thumb_filename = get_thumbnail_filename(dest.name)
+                                        thumb_path = dest.parent / thumb_filename
+
+                                        success = generate_thumbnail(dest, thumb_path)
+                                        if success:
+                                            thumbnail_filename = thumb_filename
+                                            current_app.logger.info(f"Generated thumbnail: {thumb_filename}")
+                                        else:
+                                            current_app.logger.warning(f"Failed to generate thumbnail for: {dest.name}")
+                                    except Exception as e:
+                                        current_app.logger.error(f"Error generating thumbnail for {dest.name}: {e}")
+
                                     # create DB row (folder-based; store basenames only)
                                     db_session.add(DirectImageUpload(
                                         original_filename=filename,
@@ -195,6 +211,7 @@ def upload():
                                         disease_id=disease.id,
                                         area_id=area.id,
                                         is_mydriatic=is_mydriatic,
+                                        thumbnail_filename=thumbnail_filename,
                                     ))
                                     current_user.file_upload_count += 1
                                     state, detail = "completed", "File uploaded successfully"

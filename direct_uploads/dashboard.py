@@ -538,7 +538,43 @@ def dashboard():
                             u.id, u.folder_rel, u.filename, e
                         )
 
-                    # Clean up associated thumbnails before deleting the record
+                    # Collect all upload IDs that will be deleted
+                deleted_upload_ids = [u.id for u in deletable_uploads]
+
+                # Delete pending grading tasks FIRST (before deleting the uploads)
+                deleted_task_count = 0
+                if deleted_upload_ids:
+                    # Check for ANY tasks referencing these uploads (not just pending ones)
+                    all_referencing_tasks = db_session.execute(
+                        select(GradingTask).where(
+                            GradingTask.direct_image_upload_id.in_(deleted_upload_ids)
+                        )
+                    ).scalars().all()
+
+                    for task in all_referencing_tasks:
+                        # Only delete tasks that are pending or completed (not active ones)
+                        if task.state in ('pending', 'completed', 'error'):
+                            db_session.delete(task)
+                            deleted_task_count += 1
+                            editing_logger.info(
+                                "Deleted %s grading task (state=%s) for upload_id=%s before deletion",
+                                task.id, task.state, task.direct_image_upload_id
+                            )
+                        else:
+                            editing_logger.warning(
+                                "Cannot delete upload_id=%s: grading task %s has state='%s'",
+                                task.direct_image_upload_id, task.id, task.state
+                            )
+
+                    if deleted_task_count > 0:
+                        editing_logger.info(
+                            "Deleted %s grading tasks (pending/completed) for removed images by user_id=%s",
+                            deleted_task_count,
+                            current_user.id,
+                        )
+
+                # Now clean up associated thumbnails
+                for u in deletable_uploads:
                     try:
                         thumbnail_results = add_thumbnail_cleanup_to_direct_upload_deletion(u, editing_logger)
                         if thumbnail_results['original_deleted']:
@@ -551,31 +587,10 @@ def dashboard():
                     except Exception as e:
                         editing_logger.warning(f"Failed to clean up thumbnails for upload_id={u.id}: {e}")
 
-                    # Always remove DB row (even if files were missing)
+                # Finally delete the DirectImageUpload records (now safe)
+                for u in deletable_uploads:
                     db_session.delete(u)
                     deleted_rows += 1
-
-                # Delete pending grading tasks for the deleted images
-                deleted_upload_ids = [u.id for u in deletable_uploads]
-                deleted_task_count = 0
-                if deleted_upload_ids:
-                    pending_tasks = db_session.execute(
-                        select(GradingTask).where(
-                            GradingTask.direct_image_upload_id.in_(deleted_upload_ids),
-                            GradingTask.state == 'pending'
-                        )
-                    ).scalars().all()
-                    
-                    for task in pending_tasks:
-                        db_session.delete(task)
-                        deleted_task_count += 1
-                    
-                    if deleted_task_count > 0:
-                        editing_logger.info(
-                            "Deleted %s pending grading tasks for removed images by user_id=%s",
-                            deleted_task_count,
-                            current_user.id,
-                        )
 
                 db_session.commit()
                 editing_logger.info(

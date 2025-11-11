@@ -3,6 +3,12 @@ from pathlib import Path
 from typing import Tuple
 from flask import send_file, abort, flash, make_response
 from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from utils.fileUtils import (
+    get_thumbnail_path_direct, get_thumbnail_path_encounter,
+    thumbnail_exists_direct, thumbnail_exists_encounter,
+    get_encounter_thumbnail_serving_path, get_direct_thumbnail_serving_path
+)
+from utils.image_processing import get_thumbnail_filename
 from sqlalchemy import  and_, select
 from db_transaction_manager import get_db_session
 
@@ -260,4 +266,200 @@ def imgForGradingByUUID(uuid: str):
         
         # If neither exists, show error message
         flash(f"Error: Image not found with UUID: {uuid}", "danger")
+        abort(404)
+
+
+# === Thumbnail Serving Functions ===
+
+def encounterImageThumbnailByUUID(uuid: str):
+    """Serve thumbnail for encounter (ZIP upload) images."""
+    with get_db_session() as db:
+        result = (db.query(EncounterFile, PatientEncounters, ZipFile)
+                 .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+                 .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                 .filter(EncounterFile.uuid == uuid).first())
+
+        if not result or not result[0].filename:
+            abort(404)
+
+        encounter_file, patient_encounter, zip_file = result
+        upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+        original_image_path = IMAGE_DIR / upload_date_str / encounter_file.filename
+
+        # Check if thumbnail exists
+        if not thumbnail_exists_encounter(original_image_path):
+            # If thumbnail doesn't exist, serve the original image instead
+            return encounterImageByUUID(uuid)
+
+        # Get thumbnail path
+        try:
+            thumbnail_dir, thumbnail_filename = get_encounter_thumbnail_serving_path(original_image_path)
+            thumbnail_path = thumbnail_dir / thumbnail_filename
+
+            if not thumbnail_path.exists():
+                # Fallback to original image
+                return encounterImageByUUID(uuid)
+
+            file_extension = Path(thumbnail_filename).suffix.lower()
+            mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                           '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
+            mimetype = mimetype_map.get(file_extension, 'image/jpeg')
+
+            response = make_response(send_file(
+                str(thumbnail_path),
+                mimetype=mimetype,
+                as_attachment=False,
+                download_name=f"thm_{uuid}{file_extension}"
+            ))
+
+            # Add cache headers for thumbnails (can be cached longer than original images)
+            response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour cache
+            response.headers['X-Thumbnail'] = 'true'
+
+            return response
+
+        except Exception:
+            # If any error occurs, fallback to original image
+            return encounterImageByUUID(uuid)
+
+
+def directImgOrigThumbnailByUUID(uuid: str):
+    """Serve thumbnail for direct upload original images."""
+    with get_db_session() as db:
+        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        if not direct_image or not direct_image.filename:
+            abort(404)
+
+        # Check if thumbnail exists in database or on disk
+        if (not direct_image.thumbnail_filename or
+            not thumbnail_exists_direct(direct_image.folder_rel, direct_image.filename, 'orig')):
+            # If thumbnail doesn't exist, serve the original image instead
+            return directImgOrigByUUID(uuid)
+
+        # Get thumbnail path
+        try:
+            thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
+                direct_image.folder_rel, direct_image.filename, 'orig'
+            )
+            thumbnail_path = thumbnail_dir / thumbnail_filename
+
+            if not thumbnail_path.exists():
+                # Fallback to original image
+                return directImgOrigByUUID(uuid)
+
+            file_extension = Path(thumbnail_filename).suffix.lower()
+            mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                           '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
+            mimetype = mimetype_map.get(file_extension, 'image/jpeg')
+
+            response = make_response(send_file(
+                str(thumbnail_path),
+                mimetype=mimetype,
+                as_attachment=False,
+                download_name=f"thm_{uuid}{file_extension}"
+            ))
+
+            # Add cache headers for thumbnails
+            response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour cache
+            response.headers['X-Thumbnail'] = 'true'
+
+            return response
+
+        except Exception:
+            # If any error occurs, fallback to original image
+            return directImgOrigByUUID(uuid)
+
+
+def directImgEdThumbnailByUUID(uuid: str):
+    """Serve thumbnail for direct upload edited images."""
+    with get_db_session() as db:
+        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        if not direct_image or not direct_image.edited_filename:
+            abort(404)
+
+        # Check if thumbnail exists in database or on disk
+        if (not direct_image.edited_thumbnail_filename or
+            not thumbnail_exists_direct(direct_image.folder_rel, direct_image.edited_filename, 'edited')):
+            # If thumbnail doesn't exist, serve the edited image instead
+            return directImgEdByUUID(uuid)
+
+        # Get thumbnail path
+        try:
+            thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
+                direct_image.folder_rel, direct_image.edited_filename, 'edited'
+            )
+            thumbnail_path = thumbnail_dir / thumbnail_filename
+
+            if not thumbnail_path.exists():
+                # Fallback to edited image
+                return directImgEdByUUID(uuid)
+
+            file_extension = Path(thumbnail_filename).suffix.lower()
+            mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                           '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
+            mimetype = mimetype_map.get(file_extension, 'image/jpeg')
+
+            response = make_response(send_file(
+                str(thumbnail_path),
+                mimetype=mimetype,
+                as_attachment=False,
+                download_name=f"thm_{uuid}{file_extension}"
+            ))
+
+            # Add cache headers for thumbnails
+            response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour cache
+            response.headers['X-Thumbnail'] = 'true'
+
+            return response
+
+        except Exception:
+            # If any error occurs, fallback to edited image
+            return directImgEdByUUID(uuid)
+
+
+def directImgFinalThumbnailByUUID(uuid: str):
+    """
+    Serve thumbnail for direct upload images (prefers edited if available, otherwise original).
+
+    This follows the same logic as directImgFinalByUUID but for thumbnails.
+    """
+    with get_db_session() as db:
+        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
+            abort(404)
+
+        # Prefer edited image thumbnail if both exist
+        if direct_image.edited_filename and direct_image.edited_thumbnail_filename:
+            return directImgEdThumbnailByUUID(uuid)
+        elif direct_image.filename and direct_image.thumbnail_filename:
+            return directImgOrigThumbnailByUUID(uuid)
+        else:
+            # Fallback to original image logic
+            return directImgFinalByUUID(uuid)
+
+
+def universalImageThumbnailByUUID(uuid: str):
+    """
+    Universal thumbnail serving function that works for both encounter and direct upload images.
+
+    This follows the same logic as imgForGradingByUUID but for thumbnails.
+    """
+    with get_db_session() as db:
+        # Check if both encounter image and direct upload image exist with the same UUID
+        encounter_image = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
+        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+
+        # If both exist, this is an integrity error
+        if encounter_image and direct_image:
+            abort(404)
+
+        # If only encounter image exists, serve its thumbnail
+        if encounter_image:
+            return encounterImageThumbnailByUUID(uuid)
+
+        # If only direct image exists, serve its thumbnail
+        if direct_image:
+            return directImgFinalThumbnailByUUID(uuid)
+
+        # If neither exists, return 404
         abort(404)

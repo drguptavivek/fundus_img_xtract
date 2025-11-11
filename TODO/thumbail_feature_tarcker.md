@@ -54,13 +54,17 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - [x] Create decorators for automatic thumbnail triggering
 - [x] Add Flask blueprint integration helpers
 
-### Phase 6: Thumbnail Serving Routes
-- [ ] Add `/encounter/img/<uuid>/thumbnail` route for ZIP images
-- [ ] Add `/direct_upload/org_img/<uuid>/thumbnail` route for original direct uploads
-- [ ] Add `/direct_upload/ed_img/<uuid>/thumbnail` route for edited direct uploads
-- [ ] Update `utils/utilsImgServe.py` with thumbnail serving logic
-- [ ] Add proper cache headers and MIME type validation
-- [ ] Implement access control for thumbnail endpoints
+### Phase 6: Thumbnail Serving Routes ✅ COMPLETED
+- [x] Add `/encounter/img/<uuid>/thumbnail` route for ZIP images
+- [x] Add `/direct_upload/org_img/<uuid>/thumbnail` route for original direct uploads
+- [x] Add `/direct_upload/ed_img/<uuid>/thumbnail` route for edited direct uploads
+- [x] Add `/direct_upload/fn_img/<uuid>/thumbnail` route for final direct upload images
+- [x] Add `/img/<uuid>/thumbnail` universal thumbnail route
+- [x] Update `utils/utilsImgServe.py` with thumbnail serving logic
+- [x] Add proper cache headers and MIME type validation
+- [x] Implement access control for thumbnail endpoints
+- [x] Add fallback to original image if thumbnail missing
+- [x] Implement rate limiting (600 requests/minute for thumbnails)
 
 ### Phase 7: Automatic Cleanup System
 - [ ] **CRITICAL**: Add thumbnail cleanup to DirectImageUpload deletion
@@ -152,17 +156,18 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 ---
 
 **Last Updated**: 2025-11-11
-**Status**: Phase 1-5 Complete ✅ | Phase 6: Serving Routes (Next)
+**Status**: Phase 1-6 Complete ✅ | Phase 7: Cleanup System (Next)
 
 ## Completed Work
 
-### Phase 1-5 Summary
+### Phase 1-6 Summary
 ✅ **Database Schema**: Added thumbnail fields to DirectImageUpload and EncounterFile models
 ✅ **Migration**: Successfully applied Alembic migration (8b273099d1c0)
 ✅ **Image Processing**: Created comprehensive thumbnail generation utility (180x180px, 85% quality)
 ✅ **File Management**: Added secure thumbnail path utilities with proper validation
 ✅ **Background Jobs**: Complete async job system using existing Job/JobItem infrastructure
 ✅ **Integration**: Easy-to-use helpers and decorators for workflow integration
+✅ **Serving Routes**: Complete HTTP API for thumbnail access with fallback logic
 ✅ **Testing**: All systems tested and working in Docker environment
 
 ### Key Features Implemented
@@ -172,6 +177,10 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - **File Management**: Separate utilities for direct uploads and ZIP upload images
 - **Background Processing**: Async thumbnail generation with job tracking and retry logic
 - **Integration Helpers**: Simple functions and decorators for easy workflow integration
+- **HTTP API**: 5 thumbnail endpoints with proper access control and caching
+- **Fallback Logic**: Automatic fallback to original images when thumbnails missing
+- **Rate Limiting**: 600 requests/minute for thumbnail endpoints (higher than images)
+- **Cache Headers**: Optimized caching for thumbnails (1 hour cache)
 - **Batch Processing**: Admin utilities for processing existing images
 - **Cleanup**: Orphaned thumbnail detection and removal
 - **Naming Convention**: `thm_uuid.filetype` as specified
@@ -181,6 +190,14 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - **`utils/thumbnail_jobs.py`**: Background job system and worker
 - **`utils/thumbnail_integration.py`**: Easy integration helpers and decorators
 - **Database Migration**: 8b273099d1c0 (applied successfully)
+- **Thumbnail Routes**: 5 new HTTP endpoints in `media/routes.py`
+
+### HTTP API Endpoints
+- `/media/encounter/img/<uuid>/thumbnail` - ZIP upload image thumbnails
+- `/media/direct_upload/org_img/<uuid>/thumbnail` - Direct upload original thumbnails
+- `/media/direct_upload/ed_img/<uuid>/thumbnail` - Direct upload edited thumbnails
+- `/media/direct_upload/fn_img/<uuid>/thumbnail` - Final image thumbnails (prefers edited)
+- `/media/img/<uuid>/thumbnail` - Universal thumbnail endpoint
 
 ### Next Steps
-Ready to proceed with Phase 6: Thumbnail Serving Routes to expose thumbnails via HTTP endpoints.
+Ready to proceed with Phase 7: Automatic Cleanup System to ensure thumbnails are deleted when parent images are removed.

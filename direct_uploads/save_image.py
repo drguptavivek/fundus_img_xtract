@@ -73,8 +73,25 @@ def save_edited_image(upload_id: int):
             # Save the new edited image
             edited_path.write_bytes(image_bytes)
 
-            # Update the database with the basename of the edited file
+            # Generate thumbnail for the edited image
+            edited_thumbnail_filename = None
+            try:
+                from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+                edited_thumb_basename = get_thumbnail_filename(edited_basename)
+                edited_thumb_path = edited_path.parent / edited_thumb_basename
+
+                success = generate_thumbnail(edited_path, edited_thumb_path)
+                if success:
+                    edited_thumbnail_filename = edited_thumb_basename
+                    editing_logger.info(f"Generated edited image thumbnail: {edited_thumb_basename}")
+                else:
+                    editing_logger.warning(f"Failed to generate thumbnail for edited image: {edited_basename}")
+            except Exception as e:
+                editing_logger.error(f"Error generating thumbnail for edited image {edited_basename}: {e}")
+
+            # Update the database with the basename of the edited file and its thumbnail
             upload.edited_filename = edited_basename
+            upload.edited_thumbnail_filename = edited_thumbnail_filename
             db.commit()
 
             editing_logger.info("Saved edited image for upload %s by user %s", upload_id, current_user.id)

@@ -289,7 +289,7 @@ def api_full_maintenance():
     try:
         result = run_maintenance_tasks(current_app)
         return jsonify({
-            'success': result.get('success', False),
+            'success': result.get('overall_success', False),
             'result': result
         })
     except Exception as e:

@@ -364,7 +364,7 @@ def validate_thumbnail_integrity(app, schedule_time="manual", sample_size=100):
 
         # Validate EncounterFile records
         with transaction_scope() as db:
-            from models import IMAGE_DIR, ZipFile
+            from models import IMAGE_DIR, ZipFile, PatientEncounters
 
             encounter_files = db.query(EncounterFile).limit(sample_size // 2).all()
 
@@ -656,12 +656,16 @@ def get_maintenance_status():
         dict: Current status information
     """
     # This would typically query a database table or cache for recent results
-    # For now, return a simple status
+    # For now, return a simple status with expected fields for JavaScript
     return {
+        'overall_status': 'healthy',
         'scheduler_enabled': True,
         'last_cleanup': None,
         'last_regeneration': None,
         'last_validation': None,
+        'last_run': None,
+        'operations_today': 0,
+        'currently_running': False,
         'next_scheduled': {
             'cleanup': None,
             'regeneration': None,

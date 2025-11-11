@@ -128,6 +128,10 @@
 {% endblock %}
 
 {% block content %}
+<!-- CSRF token for AJAX requests -->
+{% from "_forms.html" import csrf_field %}
+{{ csrf_field() }}
+
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Thumbnail Management</h2>
@@ -298,7 +302,7 @@ function runMaintenance(taskType) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrf_token')
+            'X-CSRFToken': getCSRFToken()
         },
         body: JSON.stringify(data)
     })
@@ -447,10 +451,16 @@ function showResult(data) {
 }
 
 // Cookie helper
-function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
+function getCSRFToken() {
+    // Prefer hidden input (Flask-WTF forms)
+    const input = document.querySelector('input[name="csrf_token"]');
+    if (input && input.value) return input.value;
+
+    // Fallback to meta tag if you render one in your layout
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) return meta.content;
+
+    return null;
 }
 
 // Auto-refresh stats every 30 seconds

@@ -544,10 +544,12 @@
                                     </button>
                                     {% endif %}
                                     {% if gradings and gradings[upload.id] %}
-                                    <a href="{{ url_for('grading.direct_image', uuid=upload.uuid) }}"
-                                        class="btn btn-sm btn-outline-success">
-                                        <i class="bi bi-arrow-repeat"></i> Revise ({{ gradings[upload.id]|length }})
+                                    {% for grade in gradings[upload.id] %}
+                                    <a href="{{ url_for('grading.revise_grading', grade_id=grade.id) }}"
+                                        class="btn btn-sm btn-outline-success me-1">
+                                        <i class="bi bi-arrow-repeat"></i> Revise
                                     </a>
+                                    {% endfor %}
                                     {% endif %}
                                 </div>
                             </div>

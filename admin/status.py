@@ -13,14 +13,13 @@ import pytz
 from utils.thumbnail_maintenance_scheduler import (
     get_maintenance_status
 )
-from utils.env_loader import get_env
-
-from .thumbnail_management import (
+from admin.thumbnail_management import (
     get_thumbnail_statistics,
     get_system_health,
     api_thumbnail_stats,
     api_maintenance_status
 )
+from utils.env_loader import get_env
 
 
 @roles_required('admin', 'data_manager')

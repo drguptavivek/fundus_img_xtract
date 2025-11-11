@@ -454,7 +454,7 @@
   </div>
 
 
-  <div class="container">
+  <div class="container main-content">
     {% from "_forms.html" import csrf_field %}
     {% block content %}
 
@@ -552,6 +552,7 @@
   <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}?v={{ v }}"></script>
 
   <!-- Global JS  -->
+  <script src="{{ url_for('static', filename='js/page-transitions.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
   <script src="{{ url_for('static', filename='js/app.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
   <script src="{{ url_for('static', filename='js/flash-toasts.js') }}?v={{ config.get('ASSETS_VERSION','') }}"
     defer></script>

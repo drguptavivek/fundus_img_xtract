@@ -2,6 +2,44 @@
 /* Custom app styles (viewer, pages). Theme and components are built via Sass. */
 
 /* ================================
+   View Transitions API
+   ================================ */
+
+/* Enable automatic view transitions for same-origin navigation */
+@view-transition {
+  navigation: auto;
+}
+
+/* Target main content area for transitions */
+.main-content {
+  view-transition-name: main-content;
+}
+
+/* Simple fade transition settings */
+::view-transition-old(main-content),
+::view-transition-new(main-content) {
+  animation-duration: 200ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Accessibility: Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(main-content),
+  ::view-transition-new(main-content) {
+    animation: none;
+  }
+}
+
+/* ================================
+   Layout Stability
+   ================================ */
+
+/* Always show vertical scrollbar to prevent navbar shift across pages */
+html {
+  overflow-y: scroll;
+}
+
+/* ================================
    Screening List Improvements
    ================================ */
    

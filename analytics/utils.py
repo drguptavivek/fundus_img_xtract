@@ -362,15 +362,23 @@ def build_encounter_result_payload(
         images: List[Dict[str, Any]] = []
         for image in sorted(encounter.encounter_files, key=lambda ef: ((ef.eye_side or ""), ef.id)):
             legacy_gradings: List[Dict[str, Any]] = []
-            for grading in sorted(image.gradings, key=lambda g: g.updated_at or g.created_at):
-                legacy_gradings.append(
-                    {
-                        "graded_for": grading.graded_for,
-                        "impression": grading.impression,
-                        "grader": grading.grader_username or (grading.grader.username if grading.grader else None),
-                        "updated_at": grading.updated_at,
-                    }
-                )
+            # Get gradings through the new Grade model via GradingTask
+            from db_transaction_manager import transaction_scope
+            with transaction_scope() as db:
+                tasks = db.query(GradingTask).filter(
+                    GradingTask.encounter_file_id == image.id
+                ).all()
+
+                for task in tasks:
+                    for grade in sorted(task.grades, key=lambda g: g.updated_at or g.created_at):
+                        legacy_gradings.append(
+                            {
+                                "graded_for": task.disease.name if task.disease else 'unknown',
+                                "impression": grade.grade_name or grade.label.impression if grade.label else None,
+                                "grader": grade.grader.username if grade.grader else None,
+                                "updated_at": grade.updated_at,
+                            }
+                        )
 
             images.append(
                 {

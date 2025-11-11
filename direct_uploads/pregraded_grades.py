@@ -470,9 +470,35 @@ def _process_rows(
                 disease_id=pending.disease_id,
             )
             if not upload:
-                raise ValueError(
-                    f"Image '{filename}' not found in pre-graded uploads for the selected hospital/lab/disease."
+                # Log the error without traceback and continue processing
+                current_app.logger.warning(
+                    "Failed to import grade for %s: Image '%s' not found in pre-graded uploads for the selected hospital/lab/disease.",
+                    filename, filename
                 )
+                item_state = "error"
+                detail = f"Image '{filename}' not found in pre-graded uploads for the selected hospital/lab/disease."
+                failures += 1
+                # Skip to job_items creation and continue with next row
+                job_items.append(
+                    JobItem(
+                        job_id=job.id,
+                        filename=filename,
+                        state=item_state,
+                        detail=detail,
+                        uploader_user_id=current_user.id,
+                        uploader_username=current_user.username,
+                        uploader_ip=request.remote_addr,
+                    )
+                )
+                processing_logger.info(
+                    "job_id=%s role=%s filename=%s result=%s detail=%s",
+                    job.id,
+                    pending.role,
+                    filename,
+                    item_state,
+                    detail,
+                )
+                continue  # Skip to next row without processing grades
 
             try:
                 ensure_task(upload.uuid, pending.disease_id)
@@ -682,7 +708,7 @@ def pregraded_grades():
             recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="resident2 excel"))
             recent_uploads.extend(get_recent_zip_uploads(limit=5, job_type="ai excel"))
             # Sort by created_at date and take the top 5
-            recent_uploads.sort(key=lambda x: x['job'].created_at, reverse=True)
+            recent_uploads.sort(key=lambda x: x['job']['created_at'], reverse=True)
             recent_uploads = recent_uploads[:5]
                 
             context["recent_uploads"] = recent_uploads

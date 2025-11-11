@@ -37,7 +37,7 @@ def index():
             ).limit(1).scalar()
             
             if most_recent_date:
-                filter_date = most_recent_date  # func.date() already returns a string in YYYY-MM-DD format
+                filter_date = most_recent_date.strftime('%Y-%m-%d')  # Convert datetime.date to string
         
         # Get user's gradings with details using pagination
         my_items, total_mine = get_user_gradings_with_details(

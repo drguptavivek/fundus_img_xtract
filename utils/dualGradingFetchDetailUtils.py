@@ -6,7 +6,8 @@ The caller is responsible for managing the session lifecycle (opening and closin
 This design allows for better transaction management and session reuse.
 """
 
-from typing import List, Tuple, Optional, Dict, Any, Iterable
+from typing import List, Tuple, Optional, Dict, Any, Iterable, Union
+from datetime import date
 from sqlalchemy import desc
 from sqlalchemy.orm import selectinload
 from models import (
@@ -157,7 +158,7 @@ def get_user_gradings_with_details(
     page: int = 1,
     per_page: int = 20,
     role_slot: Optional[str] = None,
-    filter_date: Optional[str] = None,
+    filter_date: Optional[Union[str, date]] = None,
     exclude_role_slots: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
@@ -208,10 +209,15 @@ def get_user_gradings_with_details(
     
     # Filter by date if provided
     if filter_date:
-        from datetime import datetime
+        from datetime import datetime, date
         try:
-            # Parse the date string and create a datetime range for the entire day
-            filter_datetime = datetime.strptime(filter_date, '%Y-%m-%d')
+            # Handle both string and datetime.date inputs
+            if isinstance(filter_date, date) and not isinstance(filter_date, datetime):
+                # Convert datetime.date to datetime
+                filter_datetime = datetime.combine(filter_date, datetime.min.time())
+            else:
+                # Parse the date string and create a datetime range for the entire day
+                filter_datetime = datetime.strptime(filter_date, '%Y-%m-%d')
             from models import utcnow
             from sqlalchemy import and_
             

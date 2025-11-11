@@ -135,7 +135,8 @@
                   <div class="collapse" id="jobItems{{ upload.job.id }}">
                     <div class="p-3 bg-light">
                       <h6 class="mb-3">Files in this job (showing up to 100 items):</h6>
-                      {% if upload.job.items %}
+                      {% set job_items = upload.job.get('items', []) %}
+                      {% if job_items %}
                       <div class="table-responsive">
                         <table class="table table-sm table-bordered">
                           <thead class="table-light">
@@ -148,7 +149,7 @@
                             </tr>
                           </thead>
                           <tbody>
-                            {% for item in upload.job.items[:100] %}
+                            {% for item in job_items[:100] %}
                             <tr>
                               <td class="text-truncate" style="max-width: 300px;" title="{{ item.filename }}">{{ item.filename }}</td>
                               <td>
@@ -167,10 +168,10 @@
                               <td class="text-truncate" style="max-width: 200px;" title="{{ item.detail or '-' }}">{{ item.detail[:50] + '...' if item.detail and item.detail|length > 50 else (item.detail or '-') }}</td>
                             </tr>
                             {% endfor %}
-                            {% if upload.job.items|length > 100 %}
+                            {% if job_items|length > 100 %}
                             <tr>
                               <td colspan="5" class="text-center text-muted">
-                                <em>... and {{ upload.job.items|length - 100 }} more items</em>
+                                <em>... and {{ job_items|length - 100 }} more items</em>
                               </td>
                             </tr>
                             {% endif %}

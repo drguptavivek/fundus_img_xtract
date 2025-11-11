@@ -63,8 +63,9 @@ def upload_form():
     # Get available hospitals and lab units for the current user via shared eligibility helper
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
 
-    db = Session()
-    try:
+    from db_transaction_manager import transaction_scope
+
+    with transaction_scope() as db:
         if allowed_lab_unit_ids:
             lab_units = (
                 db.query(LabUnit)
@@ -77,6 +78,7 @@ def upload_form():
             if hospital_ids:
                 hospitals = (
                     db.query(Hospital)
+                    .options(selectinload(Hospital.lab_units))
                     .filter(Hospital.id.in_(hospital_ids))
                     .order_by(Hospital.name)
                     .all()
@@ -86,18 +88,38 @@ def upload_form():
         else:
             lab_units = []
             hospitals = []
-    finally:
-        db.close()
+
+        # Extract lab_units data to avoid session issues in templates
+        lab_units_data = [
+            {
+                'id': lu.id,
+                'name': lu.name,
+                'hospital_id': lu.hospital_id,
+                'hospital': {
+                    'id': lu.hospital.id,
+                    'name': lu.hospital.name
+                } if lu.hospital else None
+            } for lu in lab_units
+        ]
+
+        # Extract hospitals data to avoid session issues in templates
+        hospitals_data = [
+            {
+                'id': h.id,
+                'name': h.name,
+                'lab_units_count': len(h.lab_units) if hasattr(h, 'lab_units') else 0
+            } for h in hospitals
+        ]
 
     # Get recent ZIP uploads for display
     recent_uploads = get_recent_zip_uploads(limit=5, job_type="zip upload")
-    
+
     return render_template(
         "upload/upload_multi.html",
         per_file_mb=int(current_app.config["PER_FILE_MAX_BYTES"] / (1024 * 1024)),
         max_files=current_app.config["MAX_FILES_PER_UPLOAD"],
-        hospitals=hospitals,
-        lab_units=lab_units,
+        hospitals=hospitals_data,  # Use extracted data instead of objects
+        lab_units=lab_units_data,   # Use extracted data instead of objects
         recent_uploads=recent_uploads
     )
 

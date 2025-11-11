@@ -11,38 +11,41 @@ from utils.utils import get_db_session
 def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> List[Dict[str, Any]]:
     """
     Get recent ZIP upload jobs with success/failure status
-    
+
     Args:
         limit: Maximum number of records to return (default: 100)
         job_type: Type of job to filter (default: "zip upload")
-        
+
     Returns:
         List of dictionaries containing job information and status counts
     """
-    with get_db_session() as db:
+    from db_transaction_manager import transaction_scope
+
+    with transaction_scope() as db:
         # Query for jobs of specified type
         query = (
             db.query(Job)
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
+            .options(selectinload(Job.items))
         )
-        
+
         # Apply job type filter if provided
         if job_type:
             query = query.filter(Job.upload_type == job_type)
-            
+
         jobs = (
             query
             .order_by(Job.created_at.desc())
             .limit(limit)
             .all()
         )
-        
+
         # Get counts for each job
         result = []
         for job in jobs:
             # Count items by state
             total_items = len(job.items)
-            successful_items = sum(1 for item in job.items if item.state == "completed")
+            successful_items = sum(1 for item in job.items if item.state in ("completed", "ok"))
             failed_items = sum(1 for item in job.items if item.state == "error")
             processing_items = sum(1 for item in job.items if item.state in ("queued", "processing"))
             
@@ -57,8 +60,39 @@ def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> Li
                 status = "success"
                 status_class = "text-success"
             
+            # Extract essential job data to avoid session issues
+            job_data = {
+                'id': job.id,
+                'token': job.token,
+                'status': job.status,
+                'upload_type': job.upload_type,
+                'created_at': job.created_at,
+                'updated_at': job.updated_at,
+                'excel_filename': job.excel_filename,
+                'uploader_username': job.uploader_username,
+                'lab_unit': {
+                    'id': job.lab_unit.id if job.lab_unit else None,
+                    'name': job.lab_unit.name if job.lab_unit else None,
+                    'hospital': {
+                        'id': job.lab_unit.hospital.id if job.lab_unit and job.lab_unit.hospital else None,
+                        'name': job.lab_unit.hospital.name if job.lab_unit and job.lab_unit.hospital else None
+                    } if job.lab_unit and job.lab_unit.hospital else None
+                } if job.lab_unit else None,
+                'items': [
+                    {
+                        'id': item.id,
+                        'filename': item.filename,
+                        'state': item.state,
+                        'started_at': item.started_at,
+                        'finished_at': item.finished_at,
+                        'detail': item.detail
+                    }
+                    for item in job.items
+                ] if job.items else []
+            }
+
             result.append({
-                'job': job,
+                'job': job_data,  # Use extracted data instead of Job object
                 'total_items': total_items,
                 'successful_items': successful_items,
                 'failed_items': failed_items,

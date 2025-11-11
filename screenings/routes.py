@@ -374,9 +374,21 @@ def delete_encounter(encounter_id: int):
                 if zip_file:
                     upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
                     from models import IMAGE_DIR
+                    from utils.image_processing import get_thumbnail_filename
+
+                    # Delete original image
                     img_path = IMAGE_DIR / upload_date_str / img_file.filename
                     if img_path.exists():
                         os.remove(img_path)
+                        current_app.logger.info(f"Deleted image file: {img_file.filename}")
+
+                    # Delete thumbnail file
+                    thumb_filename = get_thumbnail_filename(img_file.filename)
+                    thumb_path = IMAGE_DIR / upload_date_str / thumb_filename
+                    if thumb_path.exists():
+                        os.remove(thumb_path)
+                        current_app.logger.info(f"Deleted thumbnail file: {thumb_filename}")
+
             except Exception as e:
                 current_app.logger.warning(f"Failed to delete image file {img_file.filename}: {e}")
         
@@ -437,8 +449,24 @@ def delete_encounter(encounter_id: int):
         # Delete the encounter (cascade will handle related database records)
         db.delete(encounter)
         
-        # Also delete the ZIP file record to allow re-uploading the same ZIP
+        # Also delete the ZIP file record and actual file to allow re-uploading the same ZIP
         if zip_file:
+            # Delete the actual ZIP file from disk
+            try:
+                from models import PROCESSED_DIR
+                # ZIP files are stored in date subdirectories under PROCESSED_DIR
+                upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
+                zip_file_path = PROCESSED_DIR / upload_date_str / zip_file.zip_filename
+
+                if zip_file_path.exists():
+                    os.remove(zip_file_path)
+                    current_app.logger.info(f"Deleted ZIP file: {zip_file.zip_filename}")
+                else:
+                    current_app.logger.warning(f"ZIP file not found for deletion: {zip_file_path}")
+            except Exception as e:
+                current_app.logger.error(f"Failed to delete ZIP file {zip_file.zip_filename}: {e}")
+
+            # Delete the database record
             db.delete(zip_file)
         
         db.commit()

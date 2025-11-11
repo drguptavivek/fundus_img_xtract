@@ -257,6 +257,7 @@ def create_app():
     sqlalchemy_failure_handler = make_handler("sqlalchemy_failure.log", logging.ERROR, detailed_format)
     flash_handler = make_handler("flash_messages.log", logging.INFO, base_format)
     materialized_view_handler = make_handler("materialized_view.log", logging.INFO, base_format)
+    thumbnail_maintenance_handler = make_handler("thumbnail_maintenance.log", logging.INFO, base_format)
 
     debug_handler = None
     console_handler = None
@@ -281,6 +282,7 @@ def create_app():
     sqlalchemy_failure_logger = configure_logger("sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler)
     flash_logger = configure_logger("flash.messages", logging.INFO, flash_handler)
     materialized_view_logger = configure_logger("materialized_view", logging.INFO, materialized_view_handler)
+    thumbnail_maintenance_logger = configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
@@ -325,6 +327,7 @@ def create_app():
     sqlalchemy_failure_logger.info("SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log"))
     flash_logger.info("Flash message logger initialized at %s", str(log_dir / "flash_messages.log"))
     materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
+    thumbnail_maintenance_logger.info("Thumbnail maintenance logger initialized at %s", str(log_dir / "thumbnail_maintenance.log"))
 
     def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
         level = logging.INFO
@@ -907,6 +910,21 @@ def create_app():
             materialized_view_logger.error(f"Failed to start materialized view scheduler: {str(e)}")
     else:
         materialized_view_logger.info("Materialized view scheduler disabled by configuration")
+
+    # Initialize Thumbnail Maintenance Scheduler
+    if app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False):
+        try:
+            from utils.thumbnail_maintenance_scheduler import initialize_scheduler
+            maintenance_scheduler_thread = initialize_scheduler(app)
+            if maintenance_scheduler_thread:
+                maintenance_scheduler_thread.start()
+                thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler started successfully")
+            else:
+                thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled")
+        except Exception as e:
+            thumbnail_maintenance_logger.error(f"Failed to start thumbnail maintenance scheduler: {str(e)}")
+    else:
+        thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled by configuration")
 
     return app
 

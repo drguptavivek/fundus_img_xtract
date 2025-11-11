@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+
+{% block extra_styles %}
+<style>
+.thumbnail-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+}
+
+.stat-card h5 {
+    margin: 0 0 0.5rem 0;
+    color: #495057;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #007bff;
+    margin: 0;
+}
+
+.stat-details {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.maintenance-controls {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.health-indicator {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.health-healthy {
+    background: #d4edda;
+    color: #155724;
+}
+
+.health-warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.health-error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.history-table {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.history-table table {
+    margin: 0;
+}
+
+.task-type {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.task-cleanup {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.task-regeneration {
+    background: #d4edda;
+    color: #155724;
+}
+
+.task-validation {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.task-full_cycle {
+    background: #e2e3e5;
+    color: #383d41;
+}
+
+.status-success {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.status-failed {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.status-running {
+    color: #007bff;
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Thumbnail Management</h2>
+        <div>
+            <span class="health-indicator {{ 'health-healthy' if maintenance_status.overall_status == 'healthy' else 'health-warning' if maintenance_status.overall_status == 'warning' else 'health-error' }}">
+                {{ maintenance_status.overall_status|title }}
+            </span>
+            {% if scheduler_enabled %}
+                <span class="badge bg-success ms-2">Scheduler Enabled</span>
+            {% else %}
+                <span class="badge bg-secondary ms-2">Scheduler Disabled</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Thumbnail Statistics -->
+    <div class="thumbnail-stats">
+        <div class="stat-card">
+            <h5>Direct Upload Images</h5>
+            <p class="stat-value">{{ thumbnail_stats.direct_uploads.total }}</p>
+            <div class="stat-details">
+                <div>With Original Thumbnails: {{ thumbnail_stats.direct_uploads.with_original_thumbnails }}</div>
+                <div>With Edited Thumbnails: {{ thumbnail_stats.direct_uploads.with_edited_thumbnails }}</div>
+                <div>Missing Thumbnails: {{ thumbnail_stats.direct_uploads.missing_thumbnails }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <h5>Encounter Images</h5>
+            <p class="stat-value">{{ thumbnail_stats.encounter_files.total }}</p>
+            <div class="stat-details">
+                <div>With Thumbnails: {{ thumbnail_stats.encounter_files.with_thumbnails }}</div>
+                <div>Missing Thumbnails: {{ thumbnail_stats.encounter_files.missing_thumbnails }}</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <h5>Storage Usage</h5>
+            <p class="stat-value">{{ "%.1f"|format(thumbnail_stats.storage.estimated_thumbnail_size_mb) }}MB</p>
+            <div class="stat-details">
+                <div>Potential Savings: {{ "%.1f"|format(thumbnail_stats.storage.potential_space_saving_mb) }}MB</div>
+                <div>Est. per thumbnail: ~5KB</div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <h5>Health Status</h5>
+            <p class="stat-value" id="health-status">{{ maintenance_status.overall_status|title }}</p>
+            <div class="stat-details" id="health-details">
+                <div>Operations Today: {{ maintenance_status.operations_today or 0 }}</div>
+                <div>Last Run: {{ maintenance_status.last_run or 'Never' }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maintenance Controls -->
+    <div class="maintenance-controls">
+        <h4 class="mb-3">Maintenance Operations</h4>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-primary" onclick="runMaintenance('cleanup')">
+                        <i class="bi bi-trash"></i> Cleanup Orphaned Thumbnails
+                    </button>
+                    <button type="button" class="btn btn-success" onclick="runMaintenance('regeneration')">
+                        <i class="bi bi-arrow-clockwise"></i> Regenerate Missing Thumbnails
+                    </button>
+                    <button type="button" class="btn btn-info" onclick="runMaintenance('validation')">
+                        <i class="bi bi-check-circle"></i> Validate Thumbnail Integrity
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-warning" onclick="runMaintenance('all')">
+                        <i class="bi bi-gear"></i> Run Full Maintenance Cycle
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="refreshStats()">
+                        <i class="bi bi-arrow-repeat"></i> Refresh Statistics
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="healthCheck()">
+                        <i class="bi bi-heart-pulse"></i> Health Check
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Maintenance History -->
+    <div class="history-table">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Task Type</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in recent_history %}
+                    <tr>
+                        <td>{{ format_user_datetime(entry.timestamp) }}</td>
+                        <td><span class="task-type task-{{ entry.task_type }}">{{ entry.task_type|replace('_', ' ') }}</span></td>
+                        <td><span class="status-{{ entry.status }}">{{ entry.status|title }}</span></td>
+                        <td>{{ entry.details }}</td>
+                        <td>{{ "%.1fs"|format(entry.duration_seconds) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for task results -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Maintenance Result</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="resultContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+// Maintenance operations
+function runMaintenance(taskType) {
+    const button = event.target.closest('button');
+    const originalText = button.innerHTML;
+
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running...';
+
+    let endpoint = '/api/admin/thumbnail/';
+    let data = {};
+
+    switch(taskType) {
+        case 'cleanup':
+            endpoint += 'cleanup_orphaned';
+            break;
+        case 'regeneration':
+            endpoint += 'regenerate_missing';
+            data = { limit: 50 };
+            break;
+        case 'validation':
+            endpoint += 'validate_integrity';
+            data = { sample_size: 100 };
+            break;
+        case 'all':
+            endpoint += 'full_maintenance';
+            break;
+    }
+
+    fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrf_token')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        showResult(data);
+        if (data.success) {
+            // Refresh stats after successful operation
+            setTimeout(refreshStats, 1000);
+        }
+    })
+    .catch(error => {
+        showResult({ success: false, error: error.message });
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+// Health check
+function healthCheck() {
+    fetch('/api/admin/thumbnail/health_check')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const health = data.health_status;
+            let html = `
+                <div class="alert alert-${health.overall_health === 'healthy' ? 'success' : health.overall_health === 'warning' ? 'warning' : 'danger'}">
+                    <h6>Overall Health: ${health.overall_health.toUpperCase()}</h6>
+                </div>
+            `;
+
+            if (health.issues.length > 0) {
+                html += '<h6>Issues:</h6><ul>';
+                health.issues.forEach(issue => {
+                    html += `<li class="text-danger">${issue}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            if (health.recommendations.length > 0) {
+                html += '<h6>Recommendations:</h6><ul>';
+                health.recommendations.forEach(rec => {
+                    html += `<li class="text-info">${rec}</li>`;
+                });
+                html += '</ul>';
+            }
+
+            showResult({ success: true, result: html });
+        } else {
+            showResult(data);
+        }
+    })
+    .catch(error => {
+        showResult({ success: false, error: error.message });
+    });
+}
+
+// Refresh statistics
+function refreshStats() {
+    Promise.all([
+        fetch('/api/admin/thumbnail_stats').then(r => r.json()),
+        fetch('/api/admin/maintenance_status').then(r => r.json())
+    ])
+    .then(([statsData, statusData]) => {
+        if (statsData.success) {
+            updateStats(statsData.stats);
+        }
+        if (statusData.success) {
+            updateMaintenanceStatus(statusData.status);
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing stats:', error);
+        showToast('Error refreshing statistics', 'error');
+    });
+}
+
+// Update statistics on page
+function updateStats(stats) {
+    // Update direct uploads
+    document.querySelector('.stat-card:nth-child(1) .stat-value').textContent = stats.direct_uploads.total;
+    const directDetails = document.querySelector('.stat-card:nth-child(1) .stat-details');
+    directDetails.innerHTML = `
+        <div>With Original Thumbnails: ${stats.direct_uploads.with_original_thumbnails}</div>
+        <div>With Edited Thumbnails: ${stats.direct_uploads.with_edited_thumbnails}</div>
+        <div>Missing Thumbnails: ${stats.direct_uploads.missing_thumbnails}</div>
+    `;
+
+    // Update encounter files
+    document.querySelector('.stat-card:nth-child(2) .stat-value').textContent = stats.encounter_files.total;
+    const encounterDetails = document.querySelector('.stat-card:nth-child(2) .stat-details');
+    encounterDetails.innerHTML = `
+        <div>With Thumbnails: ${stats.encounter_files.with_thumbnails}</div>
+        <div>Missing Thumbnails: ${stats.encounter_files.missing_thumbnails}</div>
+    `;
+
+    // Update storage
+    document.querySelector('.stat-card:nth-child(3) .stat-value').textContent = stats.storage.estimated_thumbnail_size_mb.toFixed(1) + 'MB';
+    const storageDetails = document.querySelector('.stat-card:nth-child(3) .stat-details');
+    storageDetails.innerHTML = `
+        <div>Potential Savings: ${stats.storage.potential_space_saving_mb.toFixed(1)}MB</div>
+        <div>Est. per thumbnail: ~5KB</div>
+    `;
+}
+
+// Update maintenance status
+function updateMaintenanceStatus(status) {
+    const healthIndicator = document.querySelector('.health-indicator');
+    healthIndicator.className = `health-indicator ${status.overall_status === 'healthy' ? 'health-healthy' : status.overall_status === 'warning' ? 'health-warning' : 'health-error'}`;
+    healthIndicator.textContent = status.overall_status.charAt(0).toUpperCase() + status.overall_status.slice(1);
+
+    const healthStatus = document.getElementById('health-status');
+    healthStatus.textContent = status.overall_status.charAt(0).toUpperCase() + status.overall_status.slice(1);
+
+    const healthDetails = document.getElementById('health-details');
+    healthDetails.innerHTML = `
+        <div>Operations Today: ${status.operations_today || 0}</div>
+        <div>Last Run: ${status.last_run || 'Never'}</div>
+    `;
+}
+
+// Show result modal
+function showResult(data) {
+    const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+    const content = document.getElementById('resultContent');
+
+    if (data.success) {
+        content.innerHTML = `
+            <div class="alert alert-success">
+                <h6>✓ Success</h6>
+                <pre class="mb-0">${JSON.stringify(data.result, null, 2)}</pre>
+            </div>
+        `;
+    } else {
+        content.innerHTML = `
+            <div class="alert alert-danger">
+                <h6>✗ Error</h6>
+                <p class="mb-0">${data.error}</p>
+            </div>
+        `;
+    }
+
+    modal.show();
+}
+
+// Cookie helper
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+// Auto-refresh stats every 30 seconds
+setInterval(refreshStats, 30000);
+
+// Initial stats load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshStats();
+});
+</script>
+{% endblock %}

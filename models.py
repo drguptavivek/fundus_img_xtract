@@ -507,8 +507,8 @@ class GradingTask(Base):
     )
 
     # Exactly one of these must be non-null
-    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id'), nullable=True, index=True)
-    direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id'), nullable=True, index=True)
+    encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id', ondelete='CASCADE'), nullable=True, index=True)
+    direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id', ondelete='CASCADE'), nullable=True, index=True)
 
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False, index=True)
     # lab_unit_id is used strictly for grading assignment and queue scoping.

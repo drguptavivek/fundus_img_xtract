@@ -483,7 +483,31 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                     files_to_add_pdfs.append(EncounterFilePDF(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
                     added_pdf_filenames.append(new_filename)
                 else:
-                    files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id))
+                    # Generate thumbnail for the image file
+                    thumbnail_filename = None
+                    try:
+                        from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+                        from utils.fileUtils import get_upload_dirs
+
+                        # Get the file path for the extracted image
+                        image_path = daily_dirs['image'] / new_filename
+
+                        if image_path.exists():
+                            thumb_basename = get_thumbnail_filename(new_filename)
+                            thumb_path = image_path.parent / thumb_basename
+
+                            success = generate_thumbnail(image_path, thumb_path)
+                            if success:
+                                thumbnail_filename = thumb_basename
+                                print(f"  - Generated thumbnail: {thumb_basename}")
+                            else:
+                                print(f"  - Failed to generate thumbnail for: {new_filename}")
+                        else:
+                            print(f"  - Image file not found for thumbnail generation: {image_path}")
+                    except Exception as e:
+                        print(f"  - Error generating thumbnail for {new_filename}: {e}")
+
+                    files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id, thumbnail_filename=thumbnail_filename))
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add

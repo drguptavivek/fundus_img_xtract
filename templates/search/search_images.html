@@ -307,7 +307,7 @@
                     {% if row.uuid %}
                       {% set gallery_id = 'search-gallery-' ~ loop.index0 %}
                       <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=row.uuid) }}" data-pswp-type="image" title="Search Image"></a>
+                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=row.uuid) }}" data-pswp-type="image" title=""></a>
                       </div>
                       <a class="btn btn-primary" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                     {% else %}

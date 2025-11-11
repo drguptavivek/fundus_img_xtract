@@ -150,7 +150,16 @@ def images_without_tasks() -> str:
                     }
                 )
 
-        records.sort(key=lambda item: item.get("record_date") or datetime.min, reverse=True)
+        # Normalize datetimes for comparison - handle both timezone-aware and naive datetimes
+        def normalize_datetime(dt):
+            if dt is None:
+                return datetime.min
+            # If datetime is timezone-aware, convert to naive for consistent comparison
+            if hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+                return dt.replace(tzinfo=None)
+            return dt
+
+        records.sort(key=lambda item: normalize_datetime(item.get("record_date")), reverse=True)
         total = len(records)
         start = (page - 1) * per_page
         end = start + per_page

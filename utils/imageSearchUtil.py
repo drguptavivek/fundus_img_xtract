@@ -752,13 +752,17 @@ def search_images_strict(
                     all_results.append(formatted)
         
         # Sort combined results by upload_date (most recent first)
-        # Handle both datetime and date objects safely
+        # Handle both datetime and date objects safely, including timezone-aware datetimes
         def sort_key(item):
             upload_date = item.get('upload_date')
             if upload_date is None:
                 return ''
+
             # Convert date to datetime for consistent comparison
             if hasattr(upload_date, 'date'):  # It's a datetime
+                # Handle timezone-aware datetimes by converting to naive for comparison
+                if hasattr(upload_date, 'tzinfo') and upload_date.tzinfo is not None:
+                    return upload_date.replace(tzinfo=None)
                 return upload_date
             else:  # It's a date, convert to datetime
                 from datetime import datetime, time

@@ -543,6 +543,7 @@
                                         <i class="bi bi-image"></i> Edit Image
                                     </button>
                                     {% endif %}
+                                    {% if not upload.is_pregraded %}
                                     {% if gradings and gradings[upload.id] %}
                                     {% for grade in gradings[upload.id] %}
                                     <a href="{{ url_for('grading.revise_grading', grade_id=grade.id) }}"
@@ -550,6 +551,7 @@
                                         <i class="bi bi-arrow-repeat"></i> Revise
                                     </a>
                                     {% endfor %}
+                                    {% endif %}
                                     {% endif %}
                                 </div>
                             </div>

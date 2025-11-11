@@ -54,22 +54,25 @@ def materialized_view_status():
                     # Convert UTC times to user's timezone
                     timezone_str = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
 
-                    if row['refresh_started_at']:
-                        started_at = format_user_datetime(row['refresh_started_at'])
+                    # Access row data by index (tuple format)
+                    refresh_type, refresh_started_at, refresh_completed_at, refresh_duration_seconds, success, error_message, created_at, updated_at = row
+
+                    if refresh_started_at:
+                        started_at = format_user_datetime(refresh_started_at)
                     else:
                         started_at = None
 
-                    if row['refresh_completed_at']:
-                        completed_at = format_user_datetime(row['refresh_completed_at'])
+                    if refresh_completed_at:
+                        completed_at = format_user_datetime(refresh_completed_at)
                     else:
                         completed_at = None
 
                     # Calculate data freshness
                     data_freshness = None
-                    if row['refresh_completed_at']:
+                    if refresh_completed_at:
                         from datetime import datetime, timedelta
                         utc_now = datetime.utcnow()
-                        completed_at_utc = row['refresh_completed_at']
+                        completed_at_utc = refresh_completed_at
                         if completed_at_utc.tzinfo is None:
                             from utils.datetime_filters import DEFAULT_TIMEZONE
                             import pytz
@@ -77,15 +80,15 @@ def materialized_view_status():
                         data_freshness = round((utc_now - completed_at_utc).total_seconds() / 60, 1)
 
                     refresh_history.append({
-                        'refresh_type': row['refresh_type'],
+                        'refresh_type': refresh_type,
                         'started_at': started_at,
                         'completed_at': completed_at,
-                        'duration_seconds': row['refresh_duration_seconds'],
-                        'success': row['success'],
-                        'error_message': row['error_message'],
+                        'duration_seconds': refresh_duration_seconds,
+                        'success': success,
+                        'error_message': error_message,
                         'data_freshness_minutes': data_freshness,
-                        'created_at': format_user_datetime(row['created_at']),
-                        'updated_at': format_user_datetime(row['updated_at'])
+                        'created_at': format_user_datetime(created_at),
+                        'updated_at': format_user_datetime(updated_at)
                     })
 
                 # Get refresh statistics
@@ -101,14 +104,17 @@ def materialized_view_status():
                     WHERE materialized_view_name = 'mvw_grading_data_all'
                 """)).fetchone()
 
+                # Access stats by index (tuple format)
+                total_refreshes, successful_refreshes, failed_refreshes, avg_duration, max_duration, min_duration = stats_result
+
                 refresh_stats = {
-                    'total_refreshes': stats_result['total_refreshes'],
-                    'successful_refreshes': stats_result['successful_refreshes'],
-                    'failed_refreshes': stats_result['failed_refreshes'],
-                    'avg_duration': round(stats_result['avg_duration'], 2) if stats_result['avg_duration'] else 0,
-                    'max_duration': stats_result['max_duration'],
-                    'min_duration': stats_result['min_duration'],
-                    'success_rate': round((stats_result['successful_refreshes'] / stats_result['total_refreshes'] * 100), 1) if stats_result['total_refreshes'] > 0 else 0
+                    'total_refreshes': total_refreshes,
+                    'successful_refreshes': successful_refreshes,
+                    'failed_refreshes': failed_refreshes,
+                    'avg_duration': round(avg_duration, 2) if avg_duration else 0,
+                    'max_duration': max_duration,
+                    'min_duration': min_duration,
+                    'success_rate': round((successful_refreshes / total_refreshes * 100), 1) if total_refreshes > 0 else 0
                 }
 
     except Exception as e:

@@ -977,3 +977,72 @@ def _log_sqlalchemy_error(exc_context) -> None:  # pragma: no cover - defensive 
     )
 
 Session = sessionmaker(bind=engine)
+
+# === Thumbnail Cleanup Event Handlers ===
+
+@event.listens_for(DirectImageUpload, 'before_delete')
+def cleanup_direct_upload_thumbnails(mapper, connection, target):
+    """Clean up thumbnails when DirectImageUpload record is deleted."""
+    try:
+        from utils.thumbnail_cleanup import delete_thumbnails_for_direct_upload
+        import logging
+
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        results = delete_thumbnails_for_direct_upload(target.id)
+
+        if results['original_deleted']:
+            cleanup_logger.info(f"Cleaned up original thumbnail for DirectImageUpload {target.id}")
+        if results['edited_deleted']:
+            cleanup_logger.info(f"Cleaned up edited thumbnail for DirectImageUpload {target.id}")
+        if results['errors']:
+            for error in results['errors']:
+                cleanup_logger.warning(f"Thumbnail cleanup error for DirectImageUpload {target.id}: {error}")
+
+    except Exception as e:
+        import logging
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        cleanup_logger.error(f"Failed to clean up thumbnails for DirectImageUpload {target.id}: {e}")
+
+
+@event.listens_for(EncounterFile, 'before_delete')
+def cleanup_encounter_file_thumbnails(mapper, connection, target):
+    """Clean up thumbnails when EncounterFile record is deleted."""
+    try:
+        from utils.thumbnail_cleanup import delete_thumbnails_for_encounter_file
+        import logging
+
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        results = delete_thumbnails_for_encounter_file(target.id)
+
+        if results['deleted']:
+            cleanup_logger.info(f"Cleaned up thumbnail for EncounterFile {target.id}")
+        if results['errors']:
+            for error in results['errors']:
+                cleanup_logger.warning(f"Thumbnail cleanup error for EncounterFile {target.id}: {error}")
+
+    except Exception as e:
+        import logging
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        cleanup_logger.error(f"Failed to clean up thumbnails for EncounterFile {target.id}: {e}")
+
+
+@event.listens_for(PatientEncounters, 'before_delete')
+def cleanup_patient_encounter_thumbnails(mapper, connection, target):
+    """Clean up thumbnails for all encounter files when PatientEncounters record is deleted."""
+    try:
+        from utils.thumbnail_cleanup import delete_thumbnails_for_patient_encounter
+        import logging
+
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        results = delete_thumbnails_for_patient_encounter(target.id)
+
+        if results['thumbnails_deleted'] > 0:
+            cleanup_logger.info(f"Cleaned up {results['thumbnails_deleted']} thumbnails for PatientEncounter {target.id}")
+        if results['errors']:
+            for error in results['errors']:
+                cleanup_logger.warning(f"Thumbnail cleanup error for PatientEncounter {target.id}: {error}")
+
+    except Exception as e:
+        import logging
+        cleanup_logger = logging.getLogger("thumbnail_cleanup")
+        cleanup_logger.error(f"Failed to clean up thumbnails for PatientEncounter {target.id}: {e}")

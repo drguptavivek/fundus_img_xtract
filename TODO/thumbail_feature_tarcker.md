@@ -66,13 +66,15 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - [x] Add fallback to original image if thumbnail missing
 - [x] Implement rate limiting (600 requests/minute for thumbnails)
 
-### Phase 7: Automatic Cleanup System
-- [ ] **CRITICAL**: Add thumbnail cleanup to DirectImageUpload deletion
-- [ ] **CRITICAL**: Add thumbnail cleanup to EncounterFile deletion
-- [ ] **CRITICAL**: Add thumbnail cleanup to PatientEncounters cascade deletion
-- [ ] Handle cleanup for edited image thumbnails when original deleted
-- [ ] Implement database event handlers for automatic cleanup
-- [ ] Test all deletion scenarios thoroughly
+### Phase 7: Automatic Cleanup System ✅ COMPLETED
+- [x] **CRITICAL**: Add thumbnail cleanup to DirectImageUpload deletion
+- [x] **CRITICAL**: Add thumbnail cleanup to EncounterFile deletion
+- [x] **CRITICAL**: Add thumbnail cleanup to PatientEncounters cascade deletion
+- [x] Handle cleanup for edited image thumbnails when original deleted
+- [x] Implement database event handlers for automatic cleanup
+- [x] Test all deletion scenarios thoroughly
+- [x] Add comprehensive cleanup utilities for admin use
+- [x] Create integration helpers for existing deletion logic
 
 ### Phase 8: Maintenance Workers
 - [ ] Implement orphaned thumbnail cleanup worker
@@ -156,11 +158,11 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 ---
 
 **Last Updated**: 2025-11-11
-**Status**: Phase 1-6 Complete ✅ | Phase 7: Cleanup System (Next)
+**Status**: Phase 1-7 Complete ✅ | Phase 8: Maintenance Workers (Next)
 
 ## Completed Work
 
-### Phase 1-6 Summary
+### Phase 1-7 Summary
 ✅ **Database Schema**: Added thumbnail fields to DirectImageUpload and EncounterFile models
 ✅ **Migration**: Successfully applied Alembic migration (8b273099d1c0)
 ✅ **Image Processing**: Created comprehensive thumbnail generation utility (180x180px, 85% quality)
@@ -168,6 +170,7 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 ✅ **Background Jobs**: Complete async job system using existing Job/JobItem infrastructure
 ✅ **Integration**: Easy-to-use helpers and decorators for workflow integration
 ✅ **Serving Routes**: Complete HTTP API for thumbnail access with fallback logic
+✅ **Automatic Cleanup**: SQLAlchemy event handlers + integration with existing deletion logic
 ✅ **Testing**: All systems tested and working in Docker environment
 
 ### Key Features Implemented
@@ -181,14 +184,19 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - **Fallback Logic**: Automatic fallback to original images when thumbnails missing
 - **Rate Limiting**: 600 requests/minute for thumbnail endpoints (higher than images)
 - **Cache Headers**: Optimized caching for thumbnails (1 hour cache)
+- **Automatic Cleanup**: SQLAlchemy event handlers ensure thumbnail deletion when parent images are removed
+- **Cascade Deletion**: Complete cleanup through PatientEncounters → EncounterFiles → thumbnails
+- **Edited Image Support**: Separate cleanup for original and edited image thumbnails
+- **Error Handling**: Graceful handling of missing files and database errors
 - **Batch Processing**: Admin utilities for processing existing images
-- **Cleanup**: Orphaned thumbnail detection and removal
+- **Maintenance Tools**: Comprehensive cleanup and validation utilities
 - **Naming Convention**: `thm_uuid.filetype` as specified
 
 ### New Modules Created
 - **`utils/image_processing.py`**: Core thumbnail generation logic
 - **`utils/thumbnail_jobs.py`**: Background job system and worker
 - **`utils/thumbnail_integration.py`**: Easy integration helpers and decorators
+- **`utils/thumbnail_cleanup.py`**: Automatic cleanup system with event handlers
 - **Database Migration**: 8b273099d1c0 (applied successfully)
 - **Thumbnail Routes**: 5 new HTTP endpoints in `media/routes.py`
 
@@ -199,5 +207,12 @@ Implement thumbnail generation for both DirectImageUpload and EncounterFile mode
 - `/media/direct_upload/fn_img/<uuid>/thumbnail` - Final image thumbnails (prefers edited)
 - `/media/img/<uuid>/thumbnail` - Universal thumbnail endpoint
 
+### Automatic Cleanup System
+- **SQLAlchemy Event Handlers**: `before_delete` triggers for DirectImageUpload, EncounterFile, PatientEncounters
+- **Integration Points**: Updated direct_uploads/dashboard.py to include thumbnail cleanup
+- **Cascade Support**: Automatic cleanup through parent-child relationships
+- **Error Resilience**: Continues deletion even if thumbnail cleanup fails
+- **Logging**: Comprehensive logging for cleanup operations and errors
+
 ### Next Steps
-Ready to proceed with Phase 7: Automatic Cleanup System to ensure thumbnails are deleted when parent images are removed.
+Ready to proceed with Phase 8: Maintenance Workers for scheduled thumbnail generation and cleanup operations.

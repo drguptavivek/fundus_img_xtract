@@ -25,6 +25,7 @@ from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.thumbnail_cleanup import add_thumbnail_cleanup_to_direct_upload_deletion
 
 
 editing_logger = logging.getLogger("editing")
@@ -536,6 +537,19 @@ def dashboard():
                             "Failed to delete original file for upload_id=%s (folder_rel=%r, filename=%r): %s",
                             u.id, u.folder_rel, u.filename, e
                         )
+
+                    # Clean up associated thumbnails before deleting the record
+                    try:
+                        thumbnail_results = add_thumbnail_cleanup_to_direct_upload_deletion(u, editing_logger)
+                        if thumbnail_results['original_deleted']:
+                            editing_logger.info(f"Deleted original thumbnail for upload_id={u.id}")
+                        if thumbnail_results['edited_deleted']:
+                            editing_logger.info(f"Deleted edited thumbnail for upload_id={u.id}")
+                        if thumbnail_results['errors']:
+                            for error in thumbnail_results['errors']:
+                                editing_logger.warning(f"Thumbnail cleanup error for upload_id={u.id}: {error}")
+                    except Exception as e:
+                        editing_logger.warning(f"Failed to clean up thumbnails for upload_id={u.id}: {e}")
 
                     # Always remove DB row (even if files were missing)
                     db_session.delete(u)

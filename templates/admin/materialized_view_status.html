@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_styles %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
     <div class="row">
@@ -7,7 +11,7 @@
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h1 class="h3">Materialized View Status</h1>
                 <div>
-                    <button type="button" class="btn btn-success" id="manual-refresh-btn" data-bs-toggle="modal" data-bs-target="#refreshModal">
+                    <button type="button" class="btn btn-success" id="manual-refresh-btn">
                         <i class="bi bi-arrow-clockwise"></i> Manual Refresh
                     </button>
                     <button type="button" class="btn btn-outline-secondary" id="refresh-status-btn">
@@ -258,6 +262,72 @@ document.addEventListener('DOMContentLoaded', function() {
     const manualRefreshBtn = document.getElementById('manual-refresh-btn');
     const confirmRefreshBtn = document.getElementById('confirm-refresh-btn');
     const refreshStatus = document.getElementById('refresh-status');
+    const refreshModal = document.getElementById('refreshModal');
+
+    // Initialize modal manually
+    let modalInstance = null;
+
+    // Manual refresh button click
+    manualRefreshBtn.addEventListener('click', function() {
+        // Remove any existing backdrops and modal states
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        refreshModal.classList.remove('show');
+        refreshModal.style.display = 'none';
+
+        // Create new modal instance without backdrop
+        modalInstance = new bootstrap.Modal(refreshModal, {
+            backdrop: false,
+            keyboard: true,
+            focus: true
+        });
+
+        // Manually create backdrop with proper z-index
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.style.zIndex = '1400';
+        backdrop.style.position = 'fixed';
+        backdrop.style.top = '0';
+        backdrop.style.left = '0';
+        backdrop.style.width = '100%';
+        backdrop.style.height = '100%';
+        backdrop.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        document.body.appendChild(backdrop);
+
+        // Show the modal
+        modalInstance.show();
+
+        // Ensure modal is above backdrop
+        setTimeout(() => {
+            refreshModal.style.zIndex = '1405';
+        }, 10);
+    });
+
+    // Clean up when modal is hidden
+    refreshModal.addEventListener('hidden.bs.modal', function() {
+        // Remove all backdrops
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+        // Reset body styles
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        // Reset modal styles
+        refreshModal.style.zIndex = '';
+        // Dispose modal instance
+        if (modalInstance) {
+            modalInstance.dispose();
+            modalInstance = null;
+        }
+    });
+
+    // Handle backdrop click to close modal
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('modal-backdrop') && modalInstance) {
+            modalInstance.hide();
+        }
+    });
 
     // Refresh page status
     refreshStatusBtn.addEventListener('click', function() {
@@ -309,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Add CSS for rotating icon
+    // Add CSS for rotating icon and modal z-index fix
     const style = document.createElement('style');
     style.textContent = `
         .rotating {
@@ -318,6 +388,46 @@ document.addEventListener('DOMContentLoaded', function() {
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+        }
+
+        /* Fix modal z-index issues - ensure above dark mode button (1300) */
+        .modal-backdrop {
+            z-index: 1400 !important;
+        }
+
+        .modal {
+            z-index: 1405 !important;
+        }
+
+        .modal-dialog {
+            z-index: 1410 !important;
+        }
+
+        .modal-content {
+            z-index: 1411 !important;
+        }
+
+        /* Fix view transitions interference with modals */
+        body.modal-open {
+            overflow: hidden !important;
+        }
+
+        body.modal-open html {
+            overflow: hidden !important;
+        }
+
+        /* Ensure main-content doesn't interfere with modal backdrop */
+        body.modal-open .main-content {
+            view-transition-name: none !important;
+        }
+
+        /* Override any conflicting overflow settings during modal display */
+        .modal-open {
+            overflow: hidden !important;
+        }
+
+        .modal-open .main-content {
+            overflow: visible !important;
         }
     `;
     document.head.appendChild(style);

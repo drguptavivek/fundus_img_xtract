@@ -386,7 +386,7 @@ def get_last_refresh_info(app):
                         'error_message': result['error_message'],
                         'ist_time': refresh_completed_utc.strftime('%Y-%m-%d %H:%M:%S IST') if refresh_completed_utc else None,
                         'utc_time': result['refresh_completed_at'].strftime('%Y-%m-%d %H:%M:%S UTC') if result['refresh_completed_at'] else None,
-                        'data_freshness_minutes': round((datetime.utcnow() - result['refresh_completed_at']).total_seconds() / 60, 1) if result['refresh_completed_at'] else None
+                        'data_freshness_minutes': round((datetime.now(pytz.UTC) - result['refresh_completed_at'].astimezone(pytz.UTC)).total_seconds() / 60, 1) if result['refresh_completed_at'] else None
                     }
                 else:
                     return {

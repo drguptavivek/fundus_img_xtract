@@ -71,12 +71,19 @@ def materialized_view_status():
                     data_freshness = None
                     if refresh_completed_at:
                         from datetime import datetime, timedelta
-                        utc_now = datetime.utcnow()
+                        import pytz
+
+                        # Create timezone-aware UTC now
+                        utc_now = datetime.now(pytz.UTC)
                         completed_at_utc = refresh_completed_at
+
+                        # Ensure completed_at_utc is timezone-aware
                         if completed_at_utc.tzinfo is None:
-                            from utils.datetime_filters import DEFAULT_TIMEZONE
-                            import pytz
                             completed_at_utc = pytz.utc.localize(completed_at_utc)
+                        else:
+                            # Convert to UTC if it's in a different timezone
+                            completed_at_utc = completed_at_utc.astimezone(pytz.UTC)
+
                         data_freshness = round((utc_now - completed_at_utc).total_seconds() / 60, 1)
 
                     refresh_history.append({

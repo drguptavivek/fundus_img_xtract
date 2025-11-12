@@ -43,6 +43,9 @@ def upgrade() -> None:
                 -- Pregraded status
                 diu.is_pregraded,
 
+                -- Laterality information (NULL for direct uploads)
+                NULL as laterality,
+
                 -- Report availability (0 for direct uploads)
                 0 as has_glaucoma_report,
                 0 as has_dr_report,
@@ -83,12 +86,15 @@ def upgrade() -> None:
                 -- Upload type classification
                 'ZIP' as upload_type,
 
-                -- Verification status
+                -- Verification status (ZIP image is verified if laterality/eye_side is marked)
                 0 as verified_status_direct,
-                CASE WHEN pe.encounter_verified_status = 'verified' THEN 1 ELSE 0 END as verified_status_zip,
+                CASE WHEN ef.eye_side IS NOT NULL THEN 1 ELSE 0 END as verified_status_zip,
 
                 -- Pregraded status
                 FALSE as is_pregraded,
+
+                -- Laterality information
+                ef.eye_side as laterality,
 
                 -- Report availability
                 CASE WHEN pe.glaucoma_verified_status IS NOT NULL THEN 1 ELSE 0 END as has_glaucoma_report,
@@ -283,6 +289,9 @@ def upgrade() -> None:
     op.execute("CREATE INDEX idx_image_listing_verification_direct ON mvw_image_listing_all(verified_status_direct);")
     op.execute("CREATE INDEX idx_image_listing_verification_zip ON mvw_image_listing_all(verified_status_zip);")
 
+    # Laterality index for ZIP uploads
+    op.execute("CREATE INDEX idx_image_listing_laterality ON mvw_image_listing_all(laterality);")
+
     # Task and grading count indexes for analytics
     op.execute("CREATE INDEX idx_image_listing_has_dr_task ON mvw_image_listing_all(has_dr_task);")
     op.execute("CREATE INDEX idx_image_listing_has_glaucoma_task ON mvw_image_listing_all(has_glaucoma_task);")
@@ -360,6 +369,7 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS idx_image_listing_has_dr_task;")
 
     # Drop classification indexes
+    op.execute("DROP INDEX IF EXISTS idx_image_listing_laterality;")
     op.execute("DROP INDEX IF EXISTS idx_image_listing_verification_zip;")
     op.execute("DROP INDEX IF EXISTS idx_image_listing_verification_direct;")
     op.execute("DROP INDEX IF EXISTS idx_image_listing_original_disease;")

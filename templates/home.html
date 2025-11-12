@@ -95,14 +95,17 @@
     </div>
   {% endif %}
 
-  <!-- KPIs -->
+  <!-- System KPIs from Materialized Views -->
   <div class="row g-3 mb-4">
     <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--primary h-100">
         <div class="card-body">
           <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
-          <div class="display-6 fw-bold">{{ images_count or 0 }}</div>
-          <div class="small opacity-75">From ZIP uploads</div>
+          <div class="display-6 fw-bold" id="home-total-images">-</div>
+          <div class="small opacity-75">
+            <span id="home-verified-images">-</span> verified
+            (<span id="home-verification-rate">-</span>%)
+          </div>
         </div>
       </div>
     </div>
@@ -110,65 +113,78 @@
     <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--info h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Screenings</div>
-          <div class="display-6 fw-bold">{{ screenings_count or 0 }}</div>
-          <div class="small opacity-75">Patient encounters</div>
+          <div class="text-uppercase small fw-semibold opacity-75">Total Encounters</div>
+          <div class="display-6 fw-bold" id="home-total-encounters">-</div>
+          <div class="small opacity-75">Patient screening sessions</div>
         </div>
       </div>
     </div>
-    
+
     <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--success h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Direct Images</div>
-          <div class="display-6 fw-bold">{{ direct_images_count or 0 }}</div>
-          <div class="small opacity-75">Direct uploads</div>
+          <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
+          <div class="display-6 fw-bold" id="home-total-gradings">-</div>
+          <div class="small opacity-75">
+            <span id="home-ai-gradings">-</span> AI gradings
+          </div>
         </div>
       </div>
     </div>
-    
+
     <div class="col-12 col-md-3">
       <div class="card kpi-card kpi--warning h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Verified Images</div>
-          <div class="display-6 fw-bold">{{ verified_direct_images_count or 0 }}</div>
-          <div class="small opacity-75">Anonymized & verified</div>
+          <div class="text-uppercase small fw-semibold opacity-75">Medical Reports</div>
+          <div class="display-6 fw-bold" id="home-total-reports">-</div>
+          <div class="small opacity-75">
+            DR: <span id="home-dr-reports">-</span> |
+            Glaucoma: <span id="home-glaucoma-reports">-</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
-  
-  <!-- Grading KPIs -->
+
+  <!-- Image Type Distribution -->
   <div class="row g-3 mb-4">
     <div class="col-12 col-md-4">
       <div class="card kpi-card kpi--purple h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
-          <div class="display-6 fw-bold">{{ total_gradings_count or 0 }}</div>
-          <div class="small opacity-75">All image gradings</div>
+          <div class="text-uppercase small fw-semibold opacity-75">Direct Uploads</div>
+          <div class="display-6 fw-bold" id="home-direct-uploads">-</div>
+          <div class="small opacity-75">Clinic image uploads</div>
         </div>
       </div>
     </div>
-    
+
     <div class="col-12 col-md-4">
       <div class="card kpi-card kpi--danger h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">Glaucoma Gradings</div>
-          <div class="display-6 fw-bold">{{ glaucoma_gradings_count or 0 }}</div>
-          <div class="small opacity-75">Glaucoma assessments</div>
+          <div class="text-uppercase small fw-semibold opacity-75">ZIP Uploads</div>
+          <div class="display-6 fw-bold" id="home-zip-uploads">-</div>
+          <div class="small opacity-75">Bulk image processing</div>
         </div>
       </div>
     </div>
-    
+
     <div class="col-12 col-md-4">
       <div class="card kpi-card kpi--teal h-100">
         <div class="card-body">
-          <div class="text-uppercase small fw-semibold opacity-75">DR Gradings</div>
-          <div class="display-6 fw-bold">{{ dr_gradings_count or 0 }}</div>
-          <div class="small opacity-75">Diabetic Retinopathy</div>
+          <div class="text-uppercase small fw-semibold opacity-75">Pregraded Images</div>
+          <div class="display-6 fw-bold" id="home-pregraded-uploads">-</div>
+          <div class="small opacity-75">Pre-graded datasets</div>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Analytics Link -->
+  <div class="text-center mb-4">
+    <a href="/analytics" class="btn btn-outline-primary btn-lg">
+      <i class="fas fa-chart-line me-2"></i>
+      View Detailed Analytics Dashboard
+    </a>
   </div>
 
   <!-- Charts Section (Visible only to logged-in users) -->
@@ -343,5 +359,73 @@
     {% endfor %}
   ];
   {% endif %}
+
+  // Load KPIs from analytics API
+  function loadHomeKPIs() {
+    fetch('/api/analytics/kpi')
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const summary = data.data.summary;
+          const imageTypes = data.data.image_types;
+          const reportStats = data.data.report_stats;
+
+          // Update summary KPIs
+          document.getElementById('home-total-images').textContent = formatNumber(summary.total_images);
+          document.getElementById('home-verified-images').textContent = formatNumber(summary.total_verified_images);
+          document.getElementById('home-verification-rate').textContent = summary.overall_verification_rate;
+          document.getElementById('home-total-encounters').textContent = formatNumber(summary.total_encounters);
+          document.getElementById('home-total-gradings').textContent = formatNumber(summary.total_gradings);
+          document.getElementById('home-ai-gradings').textContent = formatNumber(summary.total_ai_gradings);
+
+          // Update reports KPIs
+          const totalReports = (reportStats.dr_reports || 0) + (reportStats.glaucoma_reports || 0);
+          document.getElementById('home-total-reports').textContent = formatNumber(totalReports);
+          document.getElementById('home-dr-reports').textContent = formatNumber(reportStats.dr_reports || 0);
+          document.getElementById('home-glaucoma-reports').textContent = formatNumber(reportStats.glaucoma_reports || 0);
+
+          // Update image type KPIs
+          if (imageTypes.Direct) {
+            document.getElementById('home-direct-uploads').textContent = formatNumber(imageTypes.Direct.total);
+          } else {
+            document.getElementById('home-direct-uploads').textContent = '0';
+          }
+
+          if (imageTypes.ZIP) {
+            document.getElementById('home-zip-uploads').textContent = formatNumber(imageTypes.ZIP.total);
+          } else {
+            document.getElementById('home-zip-uploads').textContent = '0';
+          }
+
+          if (imageTypes.Pregraded) {
+            document.getElementById('home-pregraded-uploads').textContent = formatNumber(imageTypes.Pregraded.total);
+          } else {
+            document.getElementById('home-pregraded-uploads').textContent = '0';
+          }
+
+        } else {
+          console.error('Failed to load KPIs:', data.error);
+        }
+      })
+      .catch(error => {
+        console.error('Error loading KPIs:', error);
+      });
+  }
+
+  // Helper function to format numbers
+  function formatNumber(num) {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+  }
+
+  // Load KPIs when page loads
+  document.addEventListener('DOMContentLoaded', loadHomeKPIs);
+
+  // Refresh KPIs every 5 minutes
+  setInterval(loadHomeKPIs, 5 * 60 * 1000);
 </script>
 {% endblock %}

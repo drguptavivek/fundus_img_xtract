@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+
+{% block title %}System Analytics{% endblock %}
+
+{% block extra_styles %}
+<style>
+.kpi-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-5px);
+}
+
+.kpi-card.primary {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.kpi-card.success {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.kpi-card.warning {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.kpi-card.info {
+    background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+}
+
+.kpi-number {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin: 0;
+}
+
+.kpi-label {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.kpi-subtitle {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    margin: 0.25rem 0 0 0;
+}
+
+.chart-container {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.status-badge.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-badge.warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    transition: width 0.3s ease;
+}
+
+.data-freshness {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    font-size: 0.8rem;
+    z-index: 1000;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #2c3e50;
+}
+
+.chart-placeholder {
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    border-radius: 10px;
+    color: #6c757d;
+    font-style: italic;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-4 fw-bold text-center mb-3">System Analytics Dashboard</h1>
+            <p class="text-center text-muted">Real-time insights into fundus image management and grading system</p>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-5">
+        <div class="loading-spinner"></div>
+        <p class="mt-3 text-muted">Loading analytics data...</p>
+    </div>
+
+    <!-- Main Content (Hidden Initially) -->
+    <div id="analyticsContent" style="display: none;">
+        <!-- Summary KPIs -->
+        <div class="row stats-grid">
+            <div class="col-md-3 col-sm-6">
+                <div class="kpi-card primary">
+                    <h3 class="kpi-number" id="totalImages">-</h3>
+                    <p class="kpi-label">Total Images</p>
+                    <p class="kpi-subtitle">
+                        <span id="verifiedImages">-</span> verified
+                        (<span id="verificationRate">-</span>%)
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6">
+                <div class="kpi-card success">
+                    <h3 class="kpi-number" id="totalEncounters">-</h3>
+                    <p class="kpi-label">Total Encounters</p>
+                    <p class="kpi-subtitle">Patient screening sessions</p>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6">
+                <div class="kpi-card warning">
+                    <h3 class="kpi-number" id="totalGradings">-</h3>
+                    <p class="kpi-label">Total Gradings</p>
+                    <p class="kpi-subtitle">
+                        <span id="aiGradings">-</span> AI gradings
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-md-3 col-sm-6">
+                <div class="kpi-card info">
+                    <h3 class="kpi-number" id="totalGraders">-</h3>
+                    <p class="kpi-label">Active Graders</p>
+                    <p class="kpi-subtitle">
+                        <span id="aiModels">-</span> AI models
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Types Distribution -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2 class="section-title">Image Distribution by Upload Type</h2>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="chart-container">
+                            <div id="imageTypeChart" class="chart-placeholder">Chart visualization will appear here</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="chart-container">
+                            <h5 class="mb-3">Image Type Breakdown</h5>
+                            <div id="imageTypeStats"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disease Tasks and Reports -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">Grading Tasks by Disease</h5>
+                    <div id="diseaseTasksStats"></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">Medical Reports</h5>
+                    <div id="reportsStats"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trends Section -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">Monthly Upload Trends</h5>
+                    <div id="uploadTrendsChart" class="chart-placeholder">Upload trends chart will appear here</div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-container">
+                    <h5 class="mb-3">Monthly Encounters</h5>
+                    <div id="encounterTrendsChart" class="chart-placeholder">Encounter trends chart will appear here</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Health -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="chart-container">
+                    <h5 class="mb-3">System Health Overview</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 id="totalTasks">-</h4>
+                                <p class="text-muted">Total Tasks</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 id="aiCoverage">-</h4>
+                                <p class="text-muted">AI Coverage</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 id="consensusRate">-</h4>
+                                <p class="text-muted">Consensus Rate</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 id="hospitals">-</h4>
+                                <p class="text-muted">Hospitals</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="alert alert-danger" style="display: none;">
+        <h4>Error Loading Analytics</h4>
+        <p id="errorMessage">Unable to load analytics data. Please try again later.</p>
+        <button class="btn btn-outline-danger" onclick="loadAnalyticsData()">Retry</button>
+    </div>
+</div>
+
+<!-- Data Freshness Indicator -->
+<div id="dataFreshness" class="data-freshness" style="display: none;">
+    <i class="fas fa-clock me-2"></i>
+    Data updated <span id="freshnessText">-</span> ago
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+let analyticsData = null;
+
+// Load analytics data when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadAnalyticsData();
+});
+
+function loadAnalyticsData() {
+    showLoading();
+
+    fetch('/api/analytics/kpi')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                analyticsData = data.data;
+                displayAnalytics(data.data);
+                hideLoading();
+            } else {
+                showError(data.error || 'Unknown error occurred');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading analytics:', error);
+            showError('Failed to load analytics data');
+        });
+}
+
+function showLoading() {
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('analyticsContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+    document.getElementById('dataFreshness').style.display = 'none';
+}
+
+function hideLoading() {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('analyticsContent').style.display = 'block';
+    document.getElementById('errorState').style.display = 'none';
+    document.getElementById('dataFreshness').style.display = 'block';
+}
+
+function showError(message) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('analyticsContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'block';
+    document.getElementById('errorMessage').textContent = message;
+}
+
+function displayAnalytics(data) {
+    // Update summary KPIs
+    document.getElementById('totalImages').textContent = formatNumber(data.summary.total_images);
+    document.getElementById('verifiedImages').textContent = formatNumber(data.summary.total_verified_images);
+    document.getElementById('verificationRate').textContent = data.summary.overall_verification_rate;
+
+    document.getElementById('totalEncounters').textContent = formatNumber(data.summary.total_encounters);
+    document.getElementById('totalGradings').textContent = formatNumber(data.summary.total_gradings);
+    document.getElementById('aiGradings').textContent = formatNumber(data.summary.total_ai_gradings);
+    document.getElementById('totalGraders').textContent = formatNumber(data.summary.total_graders);
+    document.getElementById('aiModels').textContent = formatNumber(data.summary.ai_models_count);
+
+    // Update system health
+    document.getElementById('totalTasks').textContent = formatNumber(data.summary.total_tasks);
+    document.getElementById('hospitals').textContent = Object.keys(data.hospital_distribution).length;
+
+    // Display image types
+    displayImageTypes(data.image_types);
+
+    // Display disease tasks
+    displayDiseaseTasks(data.disease_tasks);
+
+    // Display reports
+    displayReports(data.report_stats);
+
+    // Display trends
+    displayTrends(data);
+
+    // Update data freshness
+    updateDataFreshness(data);
+}
+
+function displayImageTypes(imageTypes) {
+    const container = document.getElementById('imageTypeStats');
+    container.innerHTML = '';
+
+    Object.entries(imageTypes).forEach(([type, stats]) => {
+        const percentage = stats.verification_rate;
+        const statusClass = percentage >= 80 ? 'success' : percentage >= 50 ? 'warning' : 'danger';
+
+        const typeHtml = `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <strong>${type}</strong>
+                    <span class="status-badge ${statusClass}">${percentage}% verified</span>
+                </div>
+                <div class="d-flex justify-content-between text-muted small mb-1">
+                    <span>${stats.total} images</span>
+                    <span>${stats.verified} verified</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                </div>
+            </div>
+        `;
+        container.innerHTML += typeHtml;
+    });
+}
+
+function displayDiseaseTasks(diseaseTasks) {
+    const container = document.getElementById('diseaseTasksStats');
+    container.innerHTML = '';
+
+    Object.entries(diseaseTasks).forEach(([disease, stats]) => {
+        const diseaseHtml = `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>${disease}</strong>
+                    <span class="badge bg-primary">${stats.tasks} tasks</span>
+                </div>
+                <div class="text-muted small">
+                    ${stats.unique_images} unique images
+                </div>
+            </div>
+        `;
+        container.innerHTML += diseaseHtml;
+    });
+
+    if (Object.keys(diseaseTasks).length === 0) {
+        container.innerHTML = '<p class="text-muted">No grading tasks available</p>';
+    }
+}
+
+function displayReports(reportStats) {
+    const container = document.getElementById('reportsStats');
+    container.innerHTML = `
+        <div class="row">
+            <div class="col-6">
+                <div class="text-center mb-3">
+                    <h4 class="text-primary">${formatNumber(reportStats.dr_reports)}</h4>
+                    <p class="text-muted">DR Reports</p>
+                    <small class="text-success">${reportStats.verified_dr_reports} verified</small>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="text-center mb-3">
+                    <h4 class="text-warning">${formatNumber(reportStats.glaucoma_reports)}</h4>
+                    <p class="text-muted">Glaucoma Reports</p>
+                    <small class="text-success">${reportStats.verified_glaucoma_reports} verified</small>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function displayTrends(data) {
+    // For now, display simple text instead of charts
+    const uploadContainer = document.getElementById('uploadTrendsChart');
+    const encounterContainer = document.getElementById('encounterTrendsChart');
+
+    // Show monthly upload stats
+    if (data.monthly_uploads && Object.keys(data.monthly_uploads).length > 0) {
+        const recentMonth = Object.keys(data.monthly_uploads)[0];
+        const uploadData = data.monthly_uploads[recentMonth];
+        const totalUploads = Object.values(uploadData).reduce((sum, count) => sum + count, 0);
+
+        uploadContainer.innerHTML = `
+            <div class="text-center">
+                <h3>${formatNumber(totalUploads)}</h3>
+                <p class="text-muted">Uploads in ${recentMonth}</p>
+                <div class="small">
+                    ${Object.entries(uploadData).map(([type, count]) =>
+                        `${type}: ${formatNumber(count)}`
+                    ).join(' | ')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Show monthly encounter stats
+    if (data.monthly_encounters && data.monthly_encounters.length > 0) {
+        const recentEncounter = data.monthly_encounters[0];
+        encounterContainer.innerHTML = `
+            <div class="text-center">
+                <h3>${formatNumber(recentEncounter.total)}</h3>
+                <p class="text-muted">Encounters in ${recentEncounter.month}</p>
+                <div class="small">
+                    DR: ${recentEncounter.dr} | Glaucoma: ${recentEncounter.glaucoma}
+                </div>
+            </div>
+        `;
+    }
+}
+
+function updateDataFreshness(data) {
+    const freshnessElement = document.getElementById('freshnessText');
+    if (data.data_freshness_minutes !== null) {
+        const minutes = Math.round(data.data_freshness_minutes);
+        if (minutes < 60) {
+            freshnessElement.textContent = `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+        } else {
+            const hours = Math.floor(minutes / 60);
+            const remainingMinutes = minutes % 60;
+            freshnessElement.textContent = `${hours} hour${hours !== 1 ? 's' : ''} ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
+        }
+    } else {
+        freshnessElement.textContent = 'just now';
+    }
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+}
+
+// Auto-refresh data every 5 minutes
+setInterval(loadAnalyticsData, 5 * 60 * 1000);
+</script>
+{% endblock %}

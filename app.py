@@ -579,6 +579,10 @@ def create_app():
     from review import bp as review_bp
     app.register_blueprint(review_bp)
 
+    # -------- Public routes (no auth required) --------
+    from public import bp as public_bp
+    app.register_blueprint(public_bp)          # /analytics
+
         # -------- Auth blueprint + Flask-Login --------
     # (Requires the auth/ package provided earlier)
     from auth.routes import auth_bp, login_manager
@@ -622,6 +626,8 @@ def create_app():
             or path=="/captcha-audio"
             or path.startswith("/docs/")
             or path.startswith("/help/")
+            or path == "/analytics"
+            or path.startswith("/api/analytics/")
         ):
             return  # allowed without auth
         if not current_user.is_authenticated:

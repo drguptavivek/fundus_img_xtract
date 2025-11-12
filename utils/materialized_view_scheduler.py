@@ -6,6 +6,7 @@ Timezone-aware scheduler for automatic refresh of all materialized views includi
 - mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
 - mvw_amd_grading_pivot (AMD-specific pivoted data)
 - mvw_encounter_pivot (comprehensive encounter-centric analytics with individual image grade pivots)
+- mvw_image_listing_all (comprehensive image catalog with upload types, verification status, and disease configuration)
 
 Integrates with existing Flask application infrastructure including logging,
 database sessions, and background task patterns.
@@ -33,6 +34,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
     3. mvw_glaucoma_grading_pivot (glaucoma-specific pivoted data)
     4. mvw_amd_grading_pivot (AMD-specific pivoted data)
     5. mvw_encounter_pivot (comprehensive encounter-centric analytics with individual image grade pivots)
+    6. mvw_image_listing_all (comprehensive image catalog with upload types and verification status)
 
     Args:
         app: Flask application instance
@@ -80,7 +82,8 @@ def refresh_materialized_view(app, schedule_time="manual"):
                     ("mvw_diabetic_retinopathy_grading_pivot", "Diabetic Retinopathy Pivot"),
                     ("mvw_glaucoma_grading_pivot", "Glaucoma Pivot"),
                     ("mvw_amd_grading_pivot", "AMD Pivot"),
-                    ("mvw_encounter_pivot", "Encounter Pivot")
+                    ("mvw_encounter_pivot", "Encounter Pivot"),
+                    ("mvw_image_listing_all", "Image Listing All")
                 ]
 
                 total_duration = 0

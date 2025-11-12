@@ -4,35 +4,7 @@
 
 {% block extra_styles %}
 <style>
-.kpi-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 15px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    transition: transform 0.2s ease;
-}
-
-.kpi-card:hover {
-    transform: translateY(-5px);
-}
-
-.kpi-card.primary {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-}
-
-.kpi-card.success {
-    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-}
-
-.kpi-card.warning {
-    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-}
-
-.kpi-card.info {
-    background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
-}
-
+/* Using existing KPI card styles from style_guide.html */
 .kpi-number {
     font-size: 2.5rem;
     font-weight: bold;
@@ -41,21 +13,18 @@
 
 .kpi-label {
     font-size: 0.9rem;
-    opacity: 0.9;
+    opacity: 0.75;
     margin: 0;
 }
 
 .kpi-subtitle {
     font-size: 0.8rem;
-    opacity: 0.8;
+    opacity: 0.75;
     margin: 0.25rem 0 0 0;
 }
 
 .chart-container {
-    background: white;
-    border-radius: 15px;
     padding: 1.5rem;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     margin-bottom: 2rem;
 }
 
@@ -83,18 +52,23 @@
 }
 
 .status-badge.success {
-    background-color: #d4edda;
-    color: #155724;
+    background-color: var(--bs-success);
+    color: white;
 }
 
 .status-badge.warning {
-    background-color: #fff3cd;
-    color: #856404;
+    background-color: var(--bs-warning);
+    color: white;
 }
 
 .status-badge.danger {
-    background-color: #f8d7da;
-    color: #721c24;
+    background-color: var(--bs-danger);
+    color: white;
+}
+
+.status-badge.info {
+    background-color: var(--bs-info);
+    color: white;
 }
 
 .stats-grid {
@@ -107,7 +81,7 @@
 .progress-bar {
     width: 100%;
     height: 8px;
-    background-color: #e9ecef;
+    background-color: var(--bs-secondary-bg);
     border-radius: 4px;
     overflow: hidden;
     margin-top: 0.5rem;
@@ -115,7 +89,18 @@
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    background: var(--bs-primary);
+    transition: width 0.3s ease;
+}
+
+/* Ensure all progress bars fill the container height */
+.progress .progress-bar {
+    height: 100% !important;
+}
+
+/* Custom progress bar segments */
+.custom-progress-segment {
+    height: 100%;
     transition: width 0.3s ease;
 }
 
@@ -123,19 +108,20 @@
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
+    background: var(--bs-dark);
+    color: var(--bs-light);
     padding: 0.5rem 1rem;
     border-radius: 25px;
     font-size: 0.8rem;
     z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .section-title {
     font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 1.5rem;
-    color: #2c3e50;
+    color: var(--bs-body-color);
 }
 
 .chart-placeholder {
@@ -143,10 +129,50 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f8f9fa;
-    border-radius: 10px;
-    color: #6c757d;
+    background: var(--bs-secondary-bg);
+    border-radius: 8px;
+    color: var(--bs-secondary-color);
     font-style: italic;
+    border: 1px dashed var(--bs-border-color);
+}
+
+/* Enhanced KPI card styling */
+.kpi-card .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 120px;
+}
+
+.kpi-card .display-6 {
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .kpi-number {
+        font-size: 2rem;
+    }
+
+    .chart-container {
+        padding: 1rem;
+    }
+}
+
+/* Smooth transitions */
+.kpi-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 </style>
 {% endblock %}
@@ -169,62 +195,93 @@
 
     <!-- Main Content (Hidden Initially) -->
     <div id="analyticsContent" style="display: none;">
-        <!-- Summary KPIs -->
-        <div class="row stats-grid">
-            <div class="col-md-3 col-sm-6">
-                <div class="kpi-card primary">
-                    <h3 class="kpi-number" id="totalImages">-</h3>
-                    <p class="kpi-label">Total Images</p>
-                    <p class="kpi-subtitle">
-                        <span id="verifiedImages">-</span> verified
-                        (<span id="verificationRate">-</span>%)
-                    </p>
+        <!-- Summary KPIs using existing KPI card styles -->
+        <div class="row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-4 mb-4">
+            <div class="col">
+                <div class="card kpi-card kpi--primary h-100">
+                    <div class="card-body">
+                        <div class="text-uppercase small fw-semibold opacity-75">Total Images</div>
+                        <div class="display-6 fw-bold" id="totalImages">-</div>
+                        <div class="small opacity-75">
+                            <span id="verifiedImages">-</span> verified
+                            (<span id="verificationRate">-</span>%)
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="col-md-3 col-sm-6">
-                <div class="kpi-card success">
-                    <h3 class="kpi-number" id="totalEncounters">-</h3>
-                    <p class="kpi-label">Total Encounters</p>
-                    <p class="kpi-subtitle">Patient screening sessions</p>
+            <div class="col">
+                <div class="card kpi-card kpi--success h-100">
+                    <div class="card-body">
+                        <div class="text-uppercase small fw-semibold opacity-75">Total Encounters</div>
+                        <div class="display-6 fw-bold" id="totalEncounters">-</div>
+                        <div class="small opacity-75">Patient screening sessions</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="col-md-3 col-sm-6">
-                <div class="kpi-card warning">
-                    <h3 class="kpi-number" id="totalGradings">-</h3>
-                    <p class="kpi-label">Total Gradings</p>
-                    <p class="kpi-subtitle">
-                        <span id="aiGradings">-</span> AI gradings
-                    </p>
+            <div class="col">
+                <div class="card kpi-card kpi--warning h-100">
+                    <div class="card-body">
+                        <div class="text-uppercase small fw-semibold opacity-75">Total Gradings</div>
+                        <div class="display-6 fw-bold" id="totalGradings">-</div>
+                        <div class="small opacity-75">
+                            <span id="aiGradings">-</span> AI gradings
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="col-md-3 col-sm-6">
-                <div class="kpi-card info">
-                    <h3 class="kpi-number" id="totalGraders">-</h3>
-                    <p class="kpi-label">Active Graders</p>
-                    <p class="kpi-subtitle">
-                        <span id="aiModels">-</span> AI models
-                    </p>
+            <div class="col">
+                <div class="card kpi-card kpi--info h-100">
+                    <div class="card-body">
+                        <div class="text-uppercase small fw-semibold opacity-75">Active Graders</div>
+                        <div class="display-6 fw-bold" id="totalGraders">-</div>
+                        <div class="small opacity-75">
+                            <span id="aiModels">-</span> AI models
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Image Types Distribution -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <h2 class="section-title">Image Distribution by Upload Type</h2>
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="chart-container">
-                            <div id="imageTypeChart" class="chart-placeholder">Chart visualization will appear here</div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="chart-container">
+        <div class="row g-3 mb-4">
+            <div class="col">
+                <div class="p-2 theme-uploads h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
                             <h5 class="mb-3">Image Type Breakdown</h5>
                             <div id="imageTypeStats"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="p-2 theme-screenings h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Verification Status</h5>
+                            <div id="verificationStats"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="p-2 theme-admin h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">System Health</h5>
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="h5 mb-1" id="diseaseTaskCount">-</div>
+                                    <div class="small text-secondary">Disease Tasks</div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="h5 mb-1" id="consensusRate">-</div>
+                                    <div class="small text-secondary">Consensus Rate</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -232,33 +289,67 @@
         </div>
 
         <!-- Disease Tasks and Reports -->
-        <div class="row mb-4">
+        <div class="row g-3 mb-4">
             <div class="col-md-6">
-                <div class="chart-container">
-                    <h5 class="mb-3">Grading Tasks by Disease</h5>
-                    <div id="diseaseTasksStats"></div>
+                <div class="p-2 theme-grading h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Grading Tasks by Disease</h5>
+                            <div id="diseaseTasksStats"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="chart-container">
-                    <h5 class="mb-3">Medical Reports</h5>
-                    <div id="reportsStats"></div>
+                <div class="p-2 theme-glaucoma h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Medical Reports</h5>
+                            <div id="reportsStats"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Consensus Rate by Disease -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="p-2 theme-audit h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Consensus Achievement by Disease</h5>
+                            <div id="consensusStats"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Trends Section -->
-        <div class="row mb-4">
+        <div class="row g-3 mb-4">
             <div class="col-md-6">
-                <div class="chart-container">
-                    <h5 class="mb-3">Monthly Upload Trends</h5>
-                    <div id="uploadTrendsChart" class="chart-placeholder">Upload trends chart will appear here</div>
+                <div class="p-2 theme-uploaded_zips h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Monthly Upload Trends</h5>
+                            <div style="position: relative; height: 300px; width: 100%;">
+                                <canvas id="uploadTrendsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="chart-container">
-                    <h5 class="mb-3">Monthly Encounters</h5>
-                    <div id="encounterTrendsChart" class="chart-placeholder">Encounter trends chart will appear here</div>
+                <div class="p-2 theme-screenings h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">Monthly Encounters</h5>
+                            <div style="position: relative; height: 300px; width: 100%;">
+                                <canvas id="encounterTrendsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -266,31 +357,35 @@
         <!-- System Health -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="chart-container">
-                    <h5 class="mb-3">System Health Overview</h5>
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="text-center">
-                                <h4 id="totalTasks">-</h4>
-                                <p class="text-muted">Total Tasks</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center">
-                                <h4 id="aiCoverage">-</h4>
-                                <p class="text-muted">AI Coverage</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center">
-                                <h4 id="consensusRate">-</h4>
-                                <p class="text-muted">Consensus Rate</p>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="text-center">
-                                <h4 id="hospitals">-</h4>
-                                <p class="text-muted">Hospitals</p>
+                <div class="p-2 theme-jobs h-100">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="mb-3">System Health Overview</h5>
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 id="totalTasks">-</h4>
+                                        <p class="text-secondary">Total Tasks</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 id="aiCoverage">-</h4>
+                                        <p class="text-secondary">AI Coverage</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 id="systemConsensusRate">-</h4>
+                                        <p class="text-secondary">Consensus Rate</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 id="hospitals">-</h4>
+                                        <p class="text-secondary">Hospitals</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -315,8 +410,11 @@
 {% endblock %}
 
 {% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 let analyticsData = null;
+let uploadTrendsChart = null;
+let encounterTrendsChart = null;
 
 // Load analytics data when page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -380,14 +478,39 @@ function displayAnalytics(data) {
     document.getElementById('totalTasks').textContent = formatNumber(data.summary.total_tasks);
     document.getElementById('hospitals').textContent = Object.keys(data.hospital_distribution).length;
 
+    // Update disease task count in System Health
+    const totalDiseaseTasks = Object.values(data.disease_tasks).reduce((sum, disease) => sum + disease.tasks, 0);
+    document.getElementById('diseaseTaskCount').textContent = formatNumber(totalDiseaseTasks);
+
+    // Calculate and update consensus rate
+    let totalConsensusTasks = 0;
+    let consensusAchievedTasks = 0;
+    Object.values(data.consensus).forEach(diseaseConsensus => {
+        totalConsensusTasks += diseaseConsensus.total_tasks;
+        consensusAchievedTasks += diseaseConsensus.consensus_achieved;
+    });
+    const consensusRate = totalConsensusTasks > 0 ? (consensusAchievedTasks / totalConsensusTasks * 100).toFixed(1) : 0;
+    document.getElementById('systemConsensusRate').textContent = consensusRate + '%';
+
+    // Calculate AI coverage
+    const aiCoverage = data.summary.total_gradings > 0 ?
+        (data.summary.total_ai_gradings / data.summary.total_gradings * 100).toFixed(1) : 0;
+    document.getElementById('aiCoverage').textContent = aiCoverage + '%';
+
     // Display image types
     displayImageTypes(data.image_types);
+
+    // Display verification status
+    displayVerificationStatus(data.image_types);
 
     // Display disease tasks
     displayDiseaseTasks(data.disease_tasks);
 
     // Display reports
     displayReports(data.report_stats);
+
+    // Display consensus
+    displayConsensus(data.consensus);
 
     // Display trends
     displayTrends(data);
@@ -414,8 +537,10 @@ function displayImageTypes(imageTypes) {
                     <span>${stats.total} images</span>
                     <span>${stats.verified} verified</span>
                 </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${percentage}%"></div>
+                <div class="custom-progress" style="height: 8px; background-color: var(--bs-secondary-bg); border-radius: 4px; overflow: hidden;">
+                    <div class="custom-progress-segment ${statusClass === 'success' ? 'bg-success' : statusClass === 'warning' ? 'bg-warning' : 'bg-danger'}" style="width: ${percentage}%; height: 100%; float: left;"></div>
+                    <div class="custom-progress-segment ${statusClass === 'success' ? 'bg-danger' : statusClass === 'warning' ? 'bg-warning' : 'bg-danger'}" style="width: ${100 - percentage}%; height: 100%; float: left;"></div>
+                    <div style="clear: both;"></div>
                 </div>
             </div>
         `;
@@ -427,6 +552,11 @@ function displayDiseaseTasks(diseaseTasks) {
     const container = document.getElementById('diseaseTasksStats');
     container.innerHTML = '';
 
+    if (!diseaseTasks || Object.keys(diseaseTasks).length === 0) {
+        container.innerHTML = '<p class="text-muted">No grading tasks available</p>';
+        return;
+    }
+
     Object.entries(diseaseTasks).forEach(([disease, stats]) => {
         const diseaseHtml = `
             <div class="mb-3">
@@ -434,17 +564,13 @@ function displayDiseaseTasks(diseaseTasks) {
                     <strong>${disease}</strong>
                     <span class="badge bg-primary">${stats.tasks} tasks</span>
                 </div>
-                <div class="text-muted small">
+                <div class="text-secondary small">
                     ${stats.unique_images} unique images
                 </div>
             </div>
         `;
         container.innerHTML += diseaseHtml;
     });
-
-    if (Object.keys(diseaseTasks).length === 0) {
-        container.innerHTML = '<p class="text-muted">No grading tasks available</p>';
-    }
 }
 
 function displayReports(reportStats) {
@@ -454,14 +580,14 @@ function displayReports(reportStats) {
             <div class="col-6">
                 <div class="text-center mb-3">
                     <h4 class="text-primary">${formatNumber(reportStats.dr_reports)}</h4>
-                    <p class="text-muted">DR Reports</p>
+                    <p class="text-secondary">DR Reports</p>
                     <small class="text-success">${reportStats.verified_dr_reports} verified</small>
                 </div>
             </div>
             <div class="col-6">
                 <div class="text-center mb-3">
                     <h4 class="text-warning">${formatNumber(reportStats.glaucoma_reports)}</h4>
-                    <p class="text-muted">Glaucoma Reports</p>
+                    <p class="text-secondary">Glaucoma Reports</p>
                     <small class="text-success">${reportStats.verified_glaucoma_reports} verified</small>
                 </div>
             </div>
@@ -469,43 +595,281 @@ function displayReports(reportStats) {
     `;
 }
 
+function displayConsensus(consensusData) {
+    const container = document.getElementById('consensusStats');
+    container.innerHTML = '';
+
+    if (!consensusData || Object.keys(consensusData).length === 0) {
+        container.innerHTML = '<p class="text-muted">No consensus data available</p>';
+        return;
+    }
+
+    let consensusHtml = '<div class="row">';
+
+    Object.entries(consensusData).forEach(([disease, stats]) => {
+        const consensusRate = stats.total_tasks > 0 ?
+            (stats.consensus_achieved / stats.total_tasks * 100).toFixed(1) : 0;
+
+        consensusHtml += `
+            <div class="col-md-4 mb-3">
+                <div class="text-center">
+                    <h5>${disease}</h5>
+                    <div class="h4 mb-1">${consensusRate}%</div>
+                    <div class="small text-muted">
+                        ${stats.consensus_achieved}/${stats.total_tasks} tasks
+                    </div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar bg-success" style="width: ${consensusRate}%"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    consensusHtml += '</div>';
+    container.innerHTML = consensusHtml;
+}
+
+function displayVerificationStatus(imageTypes) {
+    const container = document.getElementById('verificationStats');
+    container.innerHTML = '';
+
+    if (!imageTypes || Object.keys(imageTypes).length === 0) {
+        container.innerHTML = '<p class="text-secondary">No verification data available</p>';
+        return;
+    }
+
+    let totalVerified = 0;
+    let totalUnverified = 0;
+
+    Object.entries(imageTypes).forEach(([type, stats]) => {
+        totalVerified += stats.verified;
+        totalUnverified += (stats.total - stats.verified);
+    });
+
+    const overallVerificationRate = (totalVerified + totalUnverified) > 0 ?
+        (totalVerified / (totalVerified + totalUnverified) * 100).toFixed(1) : 0;
+
+    container.innerHTML = `
+        <div class="text-center">
+            <div class="h4 mb-1">${overallVerificationRate}%</div>
+            <div class="small text-secondary">Overall Verification Rate</div>
+            <div class="custom-progress mt-3 mb-3" style="height: 12px; background-color: var(--bs-secondary-bg); border-radius: 4px; overflow: hidden;">
+                <div class="custom-progress-segment bg-success" style="width: ${overallVerificationRate}%; height: 100%; float: left;"></div>
+                <div class="custom-progress-segment bg-danger" style="width: ${100 - overallVerificationRate}%; height: 100%; float: left;"></div>
+                <div style="clear: both;"></div>
+            </div>
+            <div class="row text-center small">
+                <div class="col-6">
+                    <div class="text-success fw-bold">${formatNumber(totalVerified)}</div>
+                    <div class="text-secondary">Verified</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-danger fw-bold">${formatNumber(totalUnverified)}</div>
+                    <div class="text-secondary">Pending</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function displayTrends(data) {
-    // For now, display simple text instead of charts
-    const uploadContainer = document.getElementById('uploadTrendsChart');
-    const encounterContainer = document.getElementById('encounterTrendsChart');
+    displayUploadTrendsChart(data);
+    displayEncounterTrendsChart(data);
+}
 
-    // Show monthly upload stats
-    if (data.monthly_uploads && Object.keys(data.monthly_uploads).length > 0) {
-        const recentMonth = Object.keys(data.monthly_uploads)[0];
-        const uploadData = data.monthly_uploads[recentMonth];
-        const totalUploads = Object.values(uploadData).reduce((sum, count) => sum + count, 0);
+function displayUploadTrendsChart(data) {
+    const ctx = document.getElementById('uploadTrendsChart').getContext('2d');
 
-        uploadContainer.innerHTML = `
-            <div class="text-center">
-                <h3>${formatNumber(totalUploads)}</h3>
-                <p class="text-muted">Uploads in ${recentMonth}</p>
-                <div class="small">
-                    ${Object.entries(uploadData).map(([type, count]) =>
-                        `${type}: ${formatNumber(count)}`
-                    ).join(' | ')}
-                </div>
-            </div>
-        `;
+    // Destroy existing chart if it exists
+    if (uploadTrendsChart) {
+        uploadTrendsChart.destroy();
     }
 
-    // Show monthly encounter stats
-    if (data.monthly_encounters && data.monthly_encounters.length > 0) {
-        const recentEncounter = data.monthly_encounters[0];
-        encounterContainer.innerHTML = `
-            <div class="text-center">
-                <h3>${formatNumber(recentEncounter.total)}</h3>
-                <p class="text-muted">Encounters in ${recentEncounter.month}</p>
-                <div class="small">
-                    DR: ${recentEncounter.dr} | Glaucoma: ${recentEncounter.glaucoma}
-                </div>
-            </div>
-        `;
+    // Prepare data for chart
+    const months = [];
+    const directData = [];
+    const zipData = [];
+    const pregradedData = [];
+
+    if (data.monthly_uploads) {
+        // Sort months chronologically
+        const sortedMonths = Object.keys(data.monthly_uploads).sort();
+
+        sortedMonths.forEach(month => {
+            const monthData = data.monthly_uploads[month];
+            months.push(formatMonthLabel(month));
+            directData.push(monthData.Direct || 0);
+            zipData.push(monthData.ZIP || 0);
+            pregradedData.push(monthData.Pregraded || 0);
+        });
     }
+
+    uploadTrendsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Direct Uploads',
+                    data: directData,
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    tension: 0.1
+                },
+                {
+                    label: 'ZIP Uploads',
+                    data: zipData,
+                    borderColor: 'rgba(220, 53, 69, 1)',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    tension: 0.1
+                },
+                {
+                    label: 'Pregraded Uploads',
+                    data: pregradedData,
+                    borderColor: 'rgba(25, 135, 84, 1)',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: 'currentColor'
+                    }
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: 'currentColor'
+                    },
+                    grid: {
+                        color: 'rgba(var(--bs-border-color-rgb), 0.5)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Images',
+                        color: 'currentColor'
+                    },
+                    ticks: {
+                        color: 'currentColor',
+                        precision: 0
+                    },
+                    grid: {
+                        color: 'rgba(var(--bs-border-color-rgb), 0.5)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function displayEncounterTrendsChart(data) {
+    const ctx = document.getElementById('encounterTrendsChart').getContext('2d');
+
+    // Destroy existing chart if it exists
+    if (encounterTrendsChart) {
+        encounterTrendsChart.destroy();
+    }
+
+    // Prepare data for chart
+    const months = [];
+    const totalData = [];
+    const drData = [];
+    const glaucomaData = [];
+
+    if (data.monthly_encounters) {
+        data.monthly_encounters.forEach(encounter => {
+            months.push(formatMonthLabel(encounter.month));
+            totalData.push(encounter.total);
+            drData.push(encounter.dr);
+            glaucomaData.push(encounter.glaucoma);
+        });
+    }
+
+    encounterTrendsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Total Encounters',
+                    data: totalData,
+                    backgroundColor: 'rgba(13, 110, 253, 0.8)',
+                },
+                {
+                    label: 'DR Cases',
+                    data: drData,
+                    backgroundColor: 'rgba(220, 53, 69, 0.8)',
+                },
+                {
+                    label: 'Glaucoma Cases',
+                    data: glaucomaData,
+                    backgroundColor: 'rgba(25, 135, 84, 0.8)',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        color: 'currentColor'
+                    }
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: 'currentColor'
+                    },
+                    grid: {
+                        color: 'rgba(var(--bs-border-color-rgb), 0.5)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Encounters',
+                        color: 'currentColor'
+                    },
+                    ticks: {
+                        color: 'currentColor',
+                        precision: 0,
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: 'rgba(var(--bs-border-color-rgb), 0.5)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function formatMonthLabel(monthStr) {
+    // Convert 'YYYY-MM' to readable format like 'Jan 2024'
+    const [year, month] = monthStr.split('-');
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${monthNames[parseInt(month) - 1]} ${year}`;
 }
 
 function updateDataFreshness(data) {

@@ -30,6 +30,11 @@ def _ensure_task_uuid(db, task: GradingTask) -> None:
         db.add(task)
         db.flush()
 
+    # Ensure the UUID is loaded in the current session to prevent DetachedInstanceError
+    if task.uuid is None:
+        # Refresh the task to ensure UUID is loaded
+        db.refresh(task)
+
 
 def _has_user_graded_task_6hr(db, user_id: int, task_id: int) -> bool:
     """

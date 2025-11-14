@@ -7,6 +7,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident2_task_atomic,
     get_next_eligible_arbitrator_task_atomic,
 )
+from db_transaction_manager import transaction_scope
   
 
 def register_routes(bp):
@@ -48,58 +49,68 @@ def start_grading(disease_id: int, role_slot: str):
     finally:
         db.close()
     
-    # Get the next eligible task based on role slot
-    task = None
-    effective_slot = role_slot
-    can_grade_resident2 = current_user.has_role('ophthalmologist')
-    if role_slot == 'resident':
-        resident_message = None
-        resident2_message = None
+    # Get the next eligible task based on role slot using a single transaction scope
+    # This prevents DetachedInstanceError by keeping the session open until we access UUID
+    with transaction_scope() as db:
+        task = None
+        effective_slot = role_slot
+        can_grade_resident2 = current_user.has_role('ophthalmologist')
 
-        if can_grade_resident2:
-            resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
+        if role_slot == 'resident':
+            resident_message = None
+            resident2_message = None
+
+            if can_grade_resident2:
+                resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=db)
+                if resident2_candidate is not None and not isinstance(resident2_candidate, str):
+                    task = resident2_candidate
+                    effective_slot = 'resident2'
+                else:
+                    resident2_message = resident2_candidate
+
+            if task is None:
+                resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id, db=db)
+                if resident_candidate is not None and not isinstance(resident_candidate, str):
+                    task = resident_candidate
+                else:
+                    resident_message = resident_candidate
+
+            # Prefer resident2 informational messages if both are messages
+            if task is None:
+                task = resident2_message if resident2_message not in (None, "") else resident_message
+
+        elif role_slot == 'resident2':
+            resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=db)
             if resident2_candidate is not None and not isinstance(resident2_candidate, str):
                 task = resident2_candidate
-                effective_slot = 'resident2'
             else:
-                resident2_message = resident2_candidate
-
-        if task is None:
-            resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-            if resident_candidate is not None and not isinstance(resident_candidate, str):
-                task = resident_candidate
-            else:
-                resident_message = resident_candidate
-
-        # Prefer resident2 informational messages if both are messages
-        if task is None:
-            task = resident2_message if resident2_message not in (None, "") else resident_message
-    elif role_slot == 'resident2':
-        resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
-        if resident2_candidate is not None and not isinstance(resident2_candidate, str):
-            task = resident2_candidate
-        else:
-            resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-            if resident_candidate is not None and not isinstance(resident_candidate, str):
-                task = resident_candidate
-                effective_slot = 'resident'
-            else:
-                if resident2_candidate not in (None, ""):
-                    task = resident2_candidate
-                else:
+                resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id, db=db)
+                if resident_candidate is not None and not isinstance(resident_candidate, str):
                     task = resident_candidate
-    elif role_slot == 'arbitrator':
-        task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
-    
-    # Handle the result
-    if task is None:
-        flash(f"No tasks available for {disease.name} as {effective_slot}.", "info")
-        return redirect(url_for("grading.index"))
-    elif isinstance(task, str):
-        # It's a helpful message
-        flash(task, "info")
-        return redirect(url_for("grading.index"))
-    else:
-        # It's a GradingTask object
-        # Call dual_grading_task directly with slot_type as a parameter
-        return redirect(url_for("grading.dual_grading_task", task_uuid=task.uuid, slot_type=effective_slot))
+                    effective_slot = 'resident'
+                else:
+                    if resident2_candidate not in (None, ""):
+                        task = resident2_candidate
+                    else:
+                        task = resident_candidate
+
+        elif role_slot == 'arbitrator':
+            task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id, db=db)
+
+        # Handle the result within the same transaction
+        if task is None:
+            flash(f"No tasks available for {disease.name} as {effective_slot}.", "info")
+            return redirect(url_for("grading.index"))
+        elif isinstance(task, str):
+            # It's a helpful message
+            flash(task, "info")
+            return redirect(url_for("grading.index"))
+        else:
+            # It's a GradingTask object - access UUID while session is still open
+            task_uuid = task.uuid  # Direct access is safe within the transaction
+            if not task_uuid:
+                flash("Task UUID is missing. Please try again.", "danger")
+                return redirect(url_for("grading.index"))
+
+            # Call dual_grading_task directly with slot_type as a parameter
+            return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=effective_slot))

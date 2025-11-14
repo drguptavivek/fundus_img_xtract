@@ -800,39 +800,52 @@ def dual_grading_submit():
                     else:
                         grades_logger.warning(f"No intra-rater task found for user {current_user.id}, disease {disease_id}")
 
-                    # Try to find the next eligible task with a new session
+                    # Try to find the next eligible task with a new transaction scope
+                    from db_transaction_manager import transaction_scope
+
                     next_task = None
                     next_slot_type = slot
                     resident_message = None
                     resident2_message = None
 
-                    if slot in ("resident", "resident2") and current_user.has_role("ophthalmologist"):
-                        resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id)
-                        if resident2_candidate is not None and not isinstance(resident2_candidate, str):
-                            next_task = resident2_candidate
-                            next_slot_type = "resident2"
-                        else:
-                            resident2_message = resident2_candidate
+                    # Initialize variables outside transaction scope
+                    next_task_uuid = None
 
-                    if next_task is None and slot in ("resident", "resident2"):
-                        resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id)
-                        if resident_candidate is not None and not isinstance(resident_candidate, str):
-                            next_task = resident_candidate
-                            next_slot_type = "resident"
-                        else:
-                            resident_message = resident_candidate
+                    with transaction_scope() as new_db:
+                        if slot in ("resident", "resident2") and current_user.has_role("ophthalmologist"):
+                            resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=new_db)
+                            if resident2_candidate is not None and not isinstance(resident2_candidate, str):
+                                next_task = resident2_candidate
+                                next_slot_type = "resident2"
+                                # Pre-load UUID while transaction is active
+                                next_task_uuid = next_task.uuid
+                            else:
+                                resident2_message = resident2_candidate
 
-                    if next_task is None and slot == "arbitrator":
-                        next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id)
+                        if next_task is None and slot in ("resident", "resident2"):
+                            resident_candidate = get_next_eligible_resident_task_atomic(current_user.id, disease_id, db=new_db)
+                            if resident_candidate is not None and not isinstance(resident_candidate, str):
+                                next_task = resident_candidate
+                                next_slot_type = "resident"
+                                # Pre-load UUID while transaction is active
+                                next_task_uuid = next_task.uuid
+                            else:
+                                resident_message = resident_candidate
 
-                    if next_task is None and slot in ("resident", "resident2"):
-                        # Surface resident2 info message first if available
-                        if resident2_message not in (None, ""):
-                            next_task = resident2_message
-                        else:
-                            next_task = resident_message
-                    
-                    # Handle the result
+                        if next_task is None and slot == "arbitrator":
+                            next_task = get_next_eligible_arbitrator_task_atomic(current_user.id, disease_id, db=new_db)
+                            if next_task is not None and not isinstance(next_task, str):
+                                # Pre-load UUID while transaction is active
+                                next_task_uuid = next_task.uuid
+
+                        if next_task is None and slot in ("resident", "resident2"):
+                            # Surface resident2 info message first if available
+                            if resident2_message not in (None, ""):
+                                next_task = resident2_message
+                            else:
+                                next_task = resident_message
+
+                    # Handle the result outside transaction scope
                     if next_task is None:
                         flash("Grade submitted successfully.", "success")
                         flash("No more tasks available.", "info")
@@ -843,9 +856,9 @@ def dual_grading_submit():
                         flash(next_task, "info")
                         return redirect(url_for("grading.index"))
                     else:
-                        # It's a GradingTask object
+                        # It's a GradingTask object - use pre-loaded UUID
                         flash("Grade submitted successfully.", "success")
-                        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task.uuid, slot_type=next_slot_type))
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=next_task_uuid, slot_type=next_slot_type))
                 except Exception as e:
                     grades_logger.exception("Failed to find next task: %s", e)
                     flash("Grade submitted successfully, but failed to navigate to next task.", "warning")

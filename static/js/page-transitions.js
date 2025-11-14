@@ -21,7 +21,7 @@
     // Configuration
     const config = {
         enableFallbacks: true,
-        debugMode: false,
+        debugMode: false,  // Disable debug mode to reduce console spam
         respectReducedMotion: true
     };
 
@@ -36,6 +36,20 @@
     function prefersReducedMotion() {
         if (!config.respectReducedMotion) return false;
         return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    // Check if any modals are currently open
+    function hasActiveModals() {
+        return document.querySelector('.modal.show') !== null;
+    }
+
+    // Check if any modal is currently opening or closing
+    function hasModalTransitions() {
+        const modals = document.querySelectorAll('.modal');
+        return Array.from(modals).some(modal => {
+            const style = window.getComputedStyle(modal);
+            return style.transition !== 'none' && style.transitionDuration !== '0s';
+        });
     }
 
     // Get current page identifier for navigation direction
@@ -74,6 +88,9 @@
         if (supportsViewTransitions) {
             setupNavigationListeners();
         }
+
+        // Setup modal event listeners to prevent conflicts
+        setupModalListeners();
 
         // Add page transition classes for enhanced styling
         addTransitionClasses();
@@ -134,6 +151,12 @@
     function handleNavigationChange(from, to) {
         if (from === to) return;
 
+        // Check for active modals - skip transitions if found
+        if (hasActiveModals() || document.body.classList.contains('modal-active')) {
+            // Don't add transition classes if modals are active
+            return;
+        }
+
         const direction = getNavigationDirection(from, to);
         log(`Navigation change: ${from} → ${to} (${direction})`);
 
@@ -153,12 +176,44 @@
         // Listen for navigation events if available
         if ('navigation' in window && 'addEventListener' in window.navigation) {
             window.navigation.addEventListener('navigate', (event) => {
+                // Check for active modals before allowing navigation
+                if (hasActiveModals() || hasModalTransitions()) {
+                    log('Preventing navigation - active modal detected');
+                    event.preventDefault();
+                    return;
+                }
+
                 const to = new URL(event.destination.url).pathname;
                 const direction = getNavigationDirection(lastPath, to);
                 log(`Navigate event: ${lastPath} → ${to} (${direction})`);
                 lastPath = to;
             });
         }
+    }
+
+    // Setup modal event listeners to prevent conflicts
+    function setupModalListeners() {
+        // Remove page transitioning class when modals start showing
+        document.addEventListener('show.bs.modal', function(event) {
+            document.body.classList.remove('page-transitioning');
+            document.body.classList.add('modal-active');
+        });
+
+        // Ensure page transitioning class is removed when modals are fully shown
+        document.addEventListener('shown.bs.modal', function(event) {
+            document.body.classList.remove('page-transitioning');
+            document.body.classList.add('modal-active');
+        });
+
+        // Handle modal hidden events - allow transitions after modal closes
+        document.addEventListener('hidden.bs.modal', function(event) {
+            document.body.classList.remove('modal-active');
+        });
+
+        // Handle modal hide events - prepare for transition re-enable
+        document.addEventListener('hide.bs.modal', function(event) {
+            document.body.classList.remove('page-transitioning');
+        });
     }
 
     // Add transition classes to main content for styling
@@ -184,8 +239,21 @@
         // Check if reduced motion is preferred
         prefersReducedMotion: prefersReducedMotion,
 
+        // Check if any modals are currently active
+        hasActiveModals: hasActiveModals,
+
+        // Check if any modal transitions are in progress
+        hasModalTransitions: hasModalTransitions,
+
         // Manually trigger a transition (advanced usage)
         triggerTransition: function(callback) {
+            // Skip transitions if modals are active
+            if (hasActiveModals() || hasModalTransitions()) {
+                log('Skipping manual transition - active modal detected');
+                callback();
+                return { finished: Promise.resolve() };
+            }
+
             if (supportsViewTransitions && !prefersReducedMotion()) {
                 return document.startViewTransition(callback);
             } else {

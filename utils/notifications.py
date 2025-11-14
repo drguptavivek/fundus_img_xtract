@@ -4,7 +4,7 @@ from typing import Optional, Union
 
 from sqlalchemy import select
 
-from db_transaction_manager import get_db_session
+from db_transaction_manager import transaction_scope
 from models import Notification, NotificationRead, NotificationType, Role, User
 
 MAX_TITLE_LENGTH = 200
@@ -62,7 +62,7 @@ def send_notification_to_user(
     """
     cleaned_title, cleaned_message = prepare_notification_payload(title, message)
 
-    with get_db_session() as db:
+    with transaction_scope() as db:
         notif_type = _normalize_type(notification_type)
         notification = Notification(
             title=cleaned_title,
@@ -72,10 +72,10 @@ def send_notification_to_user(
             sender_user_id=sender_user_id,
         )
 
-        # Add to session and commit
+        # Add to session - transaction_scope will auto-commit
         db.add(notification)
         db.flush()  # Get the ID without committing
-        
+
         return notification
 
 
@@ -99,21 +99,21 @@ def send_notification_to_admins(
     """
     cleaned_title, cleaned_message = prepare_notification_payload(title, message)
 
-    with get_db_session() as db:
+    with transaction_scope() as db:
         # Find admin users (users with 'admin' role)
         admin_role = db.execute(
             select(Role).where(Role.name == 'admin')
         ).scalar()
-        
+
         if not admin_role:
             # If there's no admin role in the system, just return empty list
             return []
-        
+
         # Get all users with the admin role
         admin_users = db.execute(
             select(User).where(User.roles.any(Role.id == admin_role.id))
         ).scalars().all()
-        
+
         notifications = []
         notif_type = _normalize_type(notification_type)
 
@@ -125,12 +125,11 @@ def send_notification_to_admins(
                 recipient_user_id=admin_user.id,
                 sender_user_id=sender_user_id,
             )
-            
+
             db.add(notification)
             notifications.append(notification)
-        
-        # Commit all notifications
-        db.commit()
+
+        # transaction_scope will auto-commit on success
         return notifications
 
 
@@ -154,7 +153,7 @@ def send_system_notification(
     """
     cleaned_title, cleaned_message = prepare_notification_payload(title, message)
 
-    with get_db_session() as db:
+    with transaction_scope() as db:
         notif_type = _normalize_type(notification_type)
         notification = Notification(
             title=cleaned_title,
@@ -163,10 +162,10 @@ def send_system_notification(
             recipient_user_id=None,
             sender_user_id=sender_user_id,
         )
-        
+
         db.add(notification)
-        db.commit()
-        
+        # transaction_scope will auto-commit on success
+
         return notification
 
 
@@ -182,17 +181,17 @@ def get_user_notifications(user_id: int, unread_only: bool = False, limit: Optio
     Returns:
         list: List of notification objects
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         query = select(Notification).where(Notification.recipient_user_id == user_id)
-        
+
         if unread_only:
             query = query.where(Notification.is_read == False)
-        
+
         query = query.order_by(Notification.created_at.desc())
-        
+
         if limit:
             query = query.limit(limit)
-        
+
         return db.execute(query).scalars().all()
 
 
@@ -204,7 +203,7 @@ def mark_notification_as_read(notification_id: int, user_id: int) -> bool:
         notification_id (int): ID of the notification to mark as read
         user_id (int): ID of the user requesting the change
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         notification = db.execute(
             select(Notification).where(Notification.id == notification_id)
         ).scalar()
@@ -221,7 +220,7 @@ def mark_notification_as_read(notification_id: int, user_id: int) -> bool:
             if existing:
                 return True
             db.add(NotificationRead(notification_id=notification_id, user_id=user_id))
-            db.commit()
+            # transaction_scope will auto-commit on success
             return True
 
         if notification.recipient_user_id != user_id:
@@ -231,7 +230,7 @@ def mark_notification_as_read(notification_id: int, user_id: int) -> bool:
             return True
 
         notification.mark_as_read()
-        db.commit()
+        # transaction_scope will auto-commit on success
         return True
 
 
@@ -242,7 +241,7 @@ def mark_all_user_notifications_as_read(user_id: int):
     Args:
         user_id (int): ID of the user
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         target_notifications = db.execute(
             select(Notification).where(
                 Notification.recipient_user_id == user_id,
@@ -271,4 +270,4 @@ def mark_all_user_notifications_as_read(user_id: int):
                     continue
                 db.add(NotificationRead(notification_id=notification_id, user_id=user_id))
 
-        db.commit()
+        # transaction_scope will auto-commit on success

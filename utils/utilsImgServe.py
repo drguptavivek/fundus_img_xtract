@@ -10,13 +10,13 @@ from utils.fileUtils import (
 )
 from utils.image_processing import get_thumbnail_filename
 from sqlalchemy import  and_, select
-from db_transaction_manager import get_db_session
+from db_transaction_manager import transaction_scope
 
 
 
 
 def encounterImageByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         result = (db.query(EncounterFile, PatientEncounters, ZipFile).join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(EncounterFile.uuid == uuid).first())
         if not result or not result[0].filename:
             flash(f"Error: Encounter image not found with UUID: {uuid}", "danger")
@@ -41,7 +41,7 @@ def encounterImageByUUID(uuid: str):
         return response
 
 def encounterDrReportByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(f"DR PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
@@ -88,7 +88,7 @@ def encounterDrReportByUUID(uuid: str):
         return response
 
 def encounterGlaucomaReportByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
         current_app.logger.info(f"PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
@@ -141,7 +141,7 @@ def encounterPDFByUUID(uuid: str):
     """
     Serve the original PDF file from an encounter by UUID.
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         result = (
             db.query(EncounterFilePDF, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
@@ -164,7 +164,7 @@ def encounterPDFByUUID(uuid: str):
         return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
 
 def directImgOrigByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or not direct_image.filename:
             abort(404)
@@ -186,7 +186,7 @@ def directImgOrigByUUID(uuid: str):
         return response
 
 def directImgEdByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or not direct_image.edited_filename:
             flash(f"Error: No Edited Image for UUID: {uuid}", "danger")
@@ -209,7 +209,7 @@ def directImgEdByUUID(uuid: str):
         return response
 
 def directImgFinalByUUID(uuid: str):
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             flash(f"Error: Image not found with UUID: {uuid}", "danger")
@@ -246,7 +246,7 @@ def imgForGradingByUUID(uuid: str):
     Shows appropriate error messages using flash if issues occur.
     Only one match is returned - encounter images have priority.
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         # Check if both encounter image and direct upload image exist with the same UUID
         encounter_image = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
@@ -273,7 +273,7 @@ def imgForGradingByUUID(uuid: str):
 
 def encounterImageThumbnailByUUID(uuid: str):
     """Serve thumbnail for encounter (ZIP upload) images."""
-    with get_db_session() as db:
+    with transaction_scope() as db:
         result = (db.query(EncounterFile, PatientEncounters, ZipFile)
                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
                  .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
@@ -339,7 +339,7 @@ def encounterImageThumbnailByUUID(uuid: str):
 
 def directImgOrigThumbnailByUUID(uuid: str):
     """Serve thumbnail for direct upload original images."""
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or not direct_image.filename:
             abort(404)
@@ -386,7 +386,7 @@ def directImgOrigThumbnailByUUID(uuid: str):
 
 def directImgEdThumbnailByUUID(uuid: str):
     """Serve thumbnail for direct upload edited images."""
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or not direct_image.edited_filename:
             abort(404)
@@ -437,7 +437,7 @@ def directImgFinalThumbnailByUUID(uuid: str):
 
     This follows the same logic as directImgFinalByUUID but for thumbnails.
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             abort(404)
@@ -461,7 +461,7 @@ def directImgFinalThumbnailByUUID(uuid: str):
                         if success:
                             # Update database with thumbnail filename
                             direct_image.edited_thumbnail_filename = thumb_basename
-                            db.commit()
+                            # transaction_scope will auto-commit on success
                             return directImgEdThumbnailByUUID(uuid)
                 except Exception as e:
                     current_app.logger.error(f"Error generating edited thumbnail on-demand: {e}")
@@ -485,7 +485,7 @@ def directImgFinalThumbnailByUUID(uuid: str):
                         if success:
                             # Update database with thumbnail filename
                             direct_image.thumbnail_filename = thumb_basename
-                            db.commit()
+                            # transaction_scope will auto-commit on success
                             return directImgOrigThumbnailByUUID(uuid)
                 except Exception as e:
                     current_app.logger.error(f"Error generating original thumbnail on-demand: {e}")
@@ -500,7 +500,7 @@ def universalImageThumbnailByUUID(uuid: str):
 
     This follows the same logic as imgForGradingByUUID but for thumbnails.
     """
-    with get_db_session() as db:
+    with transaction_scope() as db:
         # Check if both encounter image and direct upload image exist with the same UUID
         encounter_image = db.query(EncounterFile).filter(EncounterFile.uuid == uuid).first()
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()

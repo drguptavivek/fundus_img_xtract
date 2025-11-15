@@ -5,13 +5,14 @@ from sqlalchemy.orm import selectinload
 
 from . import api_bp
 from auth.roles import roles_required
-from models import Session, User, Disease, LabUnit, UserDiseaseUnitRole, Hospital
+from db_transaction_manager import get_db_session
+from models import User, Disease, LabUnit, UserDiseaseUnitRole, Hospital
 
 @api_bp.route('/grading-eligibility/users/<int:user_id>', methods=['GET'])
 @roles_required('admin')
 def get_user_grading_eligibility(user_id: int):
     print(f"GET request received for user_id: {user_id}")
-    with Session() as db:
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
@@ -38,7 +39,7 @@ def get_user_grading_eligibility(user_id: int):
 @roles_required('admin')
 def get_user_grading_eligibility_details(user_id: int):
     """Get detailed grading eligibility information with lab unit and disease names."""
-    with Session() as db:
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({'error': 'User not found'}), 404

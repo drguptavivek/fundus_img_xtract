@@ -22,7 +22,7 @@ from flask import request, jsonify, current_app, g
 from flask_limiter import Limiter, ExemptionScope
 from flask_limiter.util import get_remote_address
 from sqlalchemy import text
-from models import Session
+from db_transaction_manager import get_db_session
 from utils.env_loader import load_environment
 from utils.redis_connection import build_redis_url
 
@@ -463,8 +463,8 @@ def get_user_rate_limits(user_id: int) -> dict:
     Admins and privileged users get higher limits.
     """
     from models import User
-    
-    with Session() as db:
+
+    with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return {"default": "500 per hour"}

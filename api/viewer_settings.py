@@ -1,6 +1,6 @@
 from flask import jsonify, request
 from flask_login import current_user, login_required
-from models import Session, ViewerSettings, ViewerPresets
+from models import ViewerSettings, ViewerPresets
 from auth.roles import roles_required, login_required
 from . import api_bp
 
@@ -88,12 +88,9 @@ def save_viewer_settings_impl(db):
             settings.contrast = float(data.get('contrast', 1.0))
         if 'filter' in data:
             settings.filter = str(data.get('filter', 'none'))
-        
-        db.commit()
-        
+
         return jsonify({'success': True})
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route("/viewer/presets", methods=["GET"])
@@ -174,12 +171,9 @@ def save_viewer_preset_impl(db, slot_number):
         preset.brightness = float(data.get('brightness', 1.0))
         preset.contrast = float(data.get('contrast', 1.0))
         preset.filter = str(data.get('filter', 'none'))
-        
-        db.commit()
-        
+
         return jsonify({'success': True})
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route("/viewer/presets/<int:slot_number>", methods=["DELETE"])
@@ -204,10 +198,8 @@ def delete_viewer_preset_impl(db, slot_number):
         
         if preset:
             db.delete(preset)
-            db.commit()
             return jsonify({'success': True})
         else:
             return jsonify({'error': 'Preset not found'}), 404
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from flask import Response, abort, send_file
 from werkzeug.utils import secure_filename
-from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, Session, EncounterFile, PatientEncounters, ZipFile
+from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, EncounterFile, PatientEncounters, ZipFile
 from utils.image_processing import get_thumbnail_filename
 
  

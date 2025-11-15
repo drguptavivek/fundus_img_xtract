@@ -9,7 +9,8 @@ from . import api_bp
 
 # Import utility functions and models
 from auth.roles import roles_required
-from models import Session, Hospital, LabUnit
+from db_transaction_manager import get_db_session
+from models import Hospital, LabUnit
 
 
 # -------------------
@@ -21,7 +22,7 @@ from models import Session, Hospital, LabUnit
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_hospitals_list():
     """Get all hospitals."""
-    with Session() as db:
+    with get_db_session() as db:
         hospitals = db.execute(
             select(Hospital)
             .order_by(Hospital.name.asc())
@@ -43,7 +44,7 @@ def get_hospitals_list():
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_hospital_by_id(hospital_id):
     """Get a specific hospital by ID."""
-    with Session() as db:
+    with get_db_session() as db:
         hospital = db.get(Hospital, hospital_id)
         if not hospital:
             return jsonify({"error": "Hospital not found"}), 404

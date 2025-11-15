@@ -2,7 +2,7 @@ from flask import render_template, request, current_app, url_for, Response
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from db_transaction_manager import get_db_session
-from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport, Grade, GradingTask, DiseaseGrading
+from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport, Grade, GradingTask, DiseaseGrading
 from auth.roles import roles_required
 import pandas as pd
 import io
@@ -99,7 +99,7 @@ def hospital_detail(hospital_id):
 from flask import render_template, request, current_app, url_for, Response
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
-from models import Session, Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
+from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, ZipFile, PatientEncounters, user_lab_units, Disease, Area, GlaucomaResultsCleaned, GlaucomaReport
 from auth.roles import roles_required
 import pandas as pd
 import io

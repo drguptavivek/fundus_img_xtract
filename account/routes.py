@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from db_transaction_manager import get_db_session
-from models import Session, User
+from models import User
 from utils.timezone_choices import (
     TIMEZONE_CHOICES,
     TIMEZONE_VALUES,

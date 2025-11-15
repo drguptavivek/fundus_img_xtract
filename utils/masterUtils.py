@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from db_transaction_manager import get_db_session
-from models import Session, Disease, DiseaseGrading, Hospital, LabUnit, Area, Camera
+from models import Disease, DiseaseGrading, Hospital, LabUnit, Area, Camera
 
 
 def get_all_diseases() -> List[Dict[str, Any]]:

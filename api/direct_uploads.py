@@ -10,7 +10,7 @@ from . import api_bp
 
 # Import utility functions and models
 from auth.roles import roles_required
-from models import Session, User, LabUnit, Job, JobItem
+from models import User, LabUnit, Job, JobItem
 
 
 # -------------------

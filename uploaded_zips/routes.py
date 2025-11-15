@@ -5,7 +5,8 @@ from flask_login import current_user
 
 from auth.roles import roles_required
 from . import bp
-from models import Session, ZipFile, PatientEncounters, LabUnit, Hospital
+from db_transaction_manager import get_db_session
+from models import ZipFile, PatientEncounters, LabUnit, Hospital
 from sqlalchemy.orm import selectinload  
 from utils.upload_eligibility import get_user_lab_unit_ids
 
@@ -21,8 +22,7 @@ def list_uploaded_zips():
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
     is_admin_like = current_user.has_role('admin', 'data_manager')
 
-    db = Session()
-    try:
+    with get_db_session() as db:
         if not is_admin_like and not allowed_lab_unit_ids:
             total = 0
             items = []
@@ -50,22 +50,21 @@ def list_uploaded_zips():
                 .limit(per_page)
                 .all()
             )
-    finally:
-        db.close()
 
-    total_pages = max(1, ceil(total / per_page)) if total else 1
-    has_prev = page > 1
-    has_next = page < total_pages
+        total_pages = max(1, ceil(total / per_page)) if total else 1
+        has_prev = page > 1
+        has_next = page < total_pages
 
-    return render_template(
-        "upload/uploaded_results_list.html",
-        items=items,
-        page=page,
-        per_page=per_page,
-        total=total,
-        total_pages=total_pages,
-        has_prev=has_prev,
-        has_next=has_next,
-        prev_url=url_for("uploaded_zips.list_uploaded_zips", page=page - 1) if has_prev else None,
-        next_url=url_for("uploaded_zips.list_uploaded_zips", page=page + 1) if has_next else None,
-    )
+        # Render template while session is still active to avoid DetachedInstanceError
+        return render_template(
+            "upload/uploaded_results_list.html",
+            items=items,
+            page=page,
+            per_page=per_page,
+            total=total,
+            total_pages=total_pages,
+            has_prev=has_prev,
+            has_next=has_next,
+            prev_url=url_for("uploaded_zips.list_uploaded_zips", page=page - 1) if has_prev else None,
+            next_url=url_for("uploaded_zips.list_uploaded_zips", page=page + 1) if has_next else None,
+        )

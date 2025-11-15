@@ -9,7 +9,8 @@ from . import api_bp
 
 # Import utility functions and models
 from auth.roles import roles_required
-from models import Session, Hospital, LabUnit
+from db_transaction_manager import get_db_session
+from models import Hospital, LabUnit
 
 
 # -------------------
@@ -21,7 +22,7 @@ from models import Session, Hospital, LabUnit
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_lab_units_by_hospital(hospital_id):
     """Get all lab units for a specific hospital."""
-    with Session() as db:
+    with get_db_session() as db:
         # Check if hospital exists
         hospital = db.get(Hospital, hospital_id)
         if not hospital:
@@ -51,7 +52,7 @@ def get_lab_units_by_hospital(hospital_id):
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_all_lab_units_list():
     """Get all lab units."""
-    with Session() as db:
+    with get_db_session() as db:
         lab_units = db.execute(
             select(LabUnit)
             .options(selectinload(LabUnit.hospital))
@@ -76,7 +77,7 @@ def get_all_lab_units_list():
 @roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_lab_unit_by_id(lab_unit_id):
     """Get a specific lab unit by ID."""
-    with Session() as db:
+    with get_db_session() as db:
         lab_unit = db.get(LabUnit, lab_unit_id)
         if not lab_unit:
             return jsonify({"error": "Lab unit not found"}), 404

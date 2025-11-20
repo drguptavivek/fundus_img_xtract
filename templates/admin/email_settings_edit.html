@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+{% block title %}Edit Email Settings{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h4 mb-0">Edit Email Settings</h1>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.email_settings_list') }}">
+            <i class="fas fa-arrow-left"></i> Back to Settings
+        </a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <strong>SMTP Configuration</strong>
+                    {% if email_settings.is_active %}
+                        <span class="badge bg-success">Active Configuration</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Inactive Configuration</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="email-settings-form">
+                        {{ csrf_field() }}
+
+                        <!-- SMTP Server Settings -->
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <label for="smtp_server" class="form-label">SMTP Server *</label>
+                                <input type="text" class="form-control" id="smtp_server" name="smtp_server"
+                                       value="{{ form_data.smtp_server or email_settings.smtp_server }}" required
+                                       placeholder="smtp.example.com">
+                                <div class="form-text">SMTP server hostname (e.g., smtp.gmail.com, smtp.office365.com)</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="smtp_port" class="form-label">Port *</label>
+                                <input type="number" class="form-control" id="smtp_port" name="smtp_port"
+                                       value="{{ form_data.smtp_port or email_settings.smtp_port }}" required
+                                       min="1" max="65535">
+                                <div class="form-text">Typical: 587 (TLS), 465 (SSL), 25 (legacy)</div>
+                            </div>
+                        </div>
+
+                        <!-- Authentication -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="smtp_username" class="form-label">SMTP Username *</label>
+                                <input type="text" class="form-control" id="smtp_username" name="smtp_username"
+                                       value="{{ form_data.smtp_username or email_settings.smtp_username }}" required
+                                       placeholder="user@example.com">
+                                <div class="form-text">SMTP authentication username</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="smtp_password" class="form-label">SMTP Password *</label>
+                                <input type="password" class="form-control" id="smtp_password" name="smtp_password"
+                                       value="{{ form_data.smtp_password or '' }}" required>
+                                <div class="form-text">
+                                    {% if email_settings.smtp_password %}
+                                        <small class="text-muted">Leave unchanged to keep existing password</small>
+                                    {% else %}
+                                        SMTP authentication password
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- From Email -->
+                        <div class="mb-3">
+                            <label for="from_email" class="form-label">From Email Address *</label>
+                            <input type="email" class="form-control" id="from_email" name="from_email"
+                                   value="{{ form_data.from_email or email_settings.from_email }}" required
+                                   placeholder="noreply@example.com">
+                            <div class="form-text">Email address that will appear in the "From" field</div>
+                        </div>
+
+                        <!-- Security Settings -->
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <strong>Security Settings</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="use_tls" name="use_tls"
+                                                   {% if form_data.use_tls is defined %}
+                                                       {% if form_data.use_tls %}checked{% endif %}
+                                                   {% else %}
+                                                       {% if email_settings.use_tls %}checked{% endif %}
+                                                   {% endif %}>
+                                            <label class="form-check-label" for="use_tls">
+                                                <strong>Use TLS (StartTLS)</strong>
+                                            </label>
+                                            <div class="form-text">Upgrade connection to TLS after initial connection (port 587)</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="use_ssl" name="use_ssl"
+                                                   {% if form_data.use_ssl is defined %}
+                                                       {% if form_data.use_ssl %}checked{% endif %}
+                                                   {% else %}
+                                                       {% if email_settings.use_ssl %}checked{% endif %}
+                                                   {% endif %}>
+                                            <label class="form-check-label" for="use_ssl">
+                                                <strong>Use SSL/TLS</strong>
+                                            </label>
+                                            <div class="form-text">Use SSL/TLS from start (port 465)</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="verify_certificates" name="verify_certificates"
+                                                   {% if form_data.verify_certificates is defined %}
+                                                       {% if form_data.verify_certificates %}checked{% endif %}
+                                                   {% else %}
+                                                       {% if email_settings.verify_certificates is not defined or email_settings.verify_certificates %}checked{% endif %}
+                                                   {% endif %}>
+                                            <label class="form-check-label" for="verify_certificates">
+                                                <strong>Verify SSL Certificates</strong>
+                                            </label>
+                                            <div class="form-text">Validate server SSL certificates (recommended)</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="debug_logging" name="debug_logging"
+                                                   {% if form_data.debug_logging is defined %}
+                                                       {% if form_data.debug_logging %}checked{% endif %}
+                                                   {% else %}
+                                                       {% if email_settings.debug_logging %}checked{% endif %}
+                                                   {% endif %}>
+                                            <label class="form-check-label" for="debug_logging">
+                                                <strong>Debug Logging</strong>
+                                            </label>
+                                            <div class="form-text">Enable detailed email debug logs</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Connection Timeout -->
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="connection_timeout" class="form-label">Connection Timeout (seconds)</label>
+                                        <input type="number" class="form-control" id="connection_timeout" name="connection_timeout"
+                                               value="{{ form_data.connection_timeout or email_settings.connection_timeout or '30' }}" min="1" max="300">
+                                        <div class="form-text">Maximum time to wait for connection (1-300 seconds)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Active Status -->
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <strong>Configuration Status</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                                           {% if form_data.is_active is defined %}
+                                               {% if form_data.is_active %}checked{% endif %}
+                                           {% else %}
+                                               {% if email_settings.is_active %}checked{% endif %}
+                                           {% endif %}>
+                                    <label class="form-check-label" for="is_active">
+                                        <strong>Make this the active configuration</strong>
+                                    </label>
+                                    <div class="form-text">
+                                        Only one email configuration can be active at a time. Activating this will deactivate others.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Metadata -->
+                        <div class="card mb-3">
+                            <div class="card-header py-2">
+                                <strong>Configuration Information</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Created:</strong><br>
+                                        {% if email_settings.created_at %}
+                                            {{ email_settings.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                        {% else %}
+                                            Not available
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Last Updated:</strong><br>
+                                        {% if email_settings.updated_at %}
+                                            {{ email_settings.updated_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+                                        {% else %}
+                                            Not available
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security Warning -->
+                        <div class="alert alert-warning">
+                            <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Security Notice</h6>
+                            <p class="mb-0">
+                                <strong>Password Storage:</strong> SMTP passwords are stored in the database.
+                                For production environments, consider implementing encryption for sensitive credentials.
+                            </p>
+                        </div>
+
+                        <!-- Form Buttons -->
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                {% if not email_settings.is_active %}
+                                    <a href="{{ url_for('admin.delete_email_settings', settings_id=email_settings.id) }}"
+                                       class="btn btn-danger me-2"
+                                       onclick="return confirm('Are you sure you want to delete this email configuration?')">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </a>
+                                {% endif %}
+                                <a href="{{ url_for('admin.email_settings_list') }}" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> Cancel
+                                </a>
+                            </div>
+                            <div>
+                                {% if not email_settings.is_active %}
+                                    <a href="{{ url_for('admin.activate_email_settings', settings_id=email_settings.id) }}"
+                                       class="btn btn-outline-success me-2"
+                                       onclick="return confirm('Activate this email configuration?')">
+                                        <i class="fas fa-check"></i> Activate
+                                    </a>
+                                {% endif %}
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const tlsCheckbox = document.getElementById('use_tls');
+    const sslCheckbox = document.getElementById('use_ssl');
+
+    // Ensure TLS and SSL are mutually exclusive
+    tlsCheckbox.addEventListener('change', function() {
+        if (this.checked && sslCheckbox.checked) {
+            sslCheckbox.checked = false;
+        }
+        // Auto-set port based on security choice
+        if (this.checked) {
+            document.getElementById('smtp_port').value = '587';
+        }
+    });
+
+    sslCheckbox.addEventListener('change', function() {
+        if (this.checked && tlsCheckbox.checked) {
+            tlsCheckbox.checked = false;
+        }
+        // Auto-set port based on security choice
+        if (this.checked) {
+            document.getElementById('smtp_port').value = '465';
+        }
+    });
+
+    // Form validation
+    const form = document.getElementById('email-settings-form');
+    form.addEventListener('submit', function(e) {
+        const smtpServer = document.getElementById('smtp_server').value.trim();
+        const smtpUsername = document.getElementById('smtp_username').value.trim();
+        const smtpPassword = document.getElementById('smtp_password').value.trim();
+        const fromEmail = document.getElementById('from_email').value.trim();
+        const smtpPort = parseInt(document.getElementById('smtp_port').value);
+
+        if (!smtpServer || !smtpUsername || !fromEmail) {
+            e.preventDefault();
+            alert('Please fill in all required fields.');
+            return;
+        }
+
+        // Password is required for new config, but can be empty for existing (keeps current password)
+        if (!smtpPassword && !{{ email_settings.smtp_password|tojson }}) {
+            e.preventDefault();
+            alert('SMTP password is required for this configuration.');
+            return;
+        }
+
+        if (smtpPort < 1 || smtpPort > 65535) {
+            e.preventDefault();
+            alert('SMTP port must be between 1 and 65535.');
+            return;
+        }
+
+        if (!fromEmail.includes('@')) {
+            e.preventDefault();
+            alert('Please enter a valid email address.');
+            return;
+        }
+    });
+});
+</script>
+{% endblock %}

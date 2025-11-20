@@ -3,6 +3,7 @@ Email utilities for the fundus image management system.
 """
 
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from flask import current_app
@@ -10,12 +11,21 @@ import logging
 from threading import Thread
 from typing import Callable, Optional
 
+from utils.email_config import EmailConfigService, EmailConfigError
+
 
 def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger | None]:
     """Return configured success, error, and optional debug email loggers."""
     debug_logger = None
-    if current_app and current_app.config.get("EMAIL_DEBUG_LOGGING"):
-        debug_logger = logging.getLogger("email_debug")
+    try:
+        config = EmailConfigService.get_email_config()
+        if config.get('debug_logging', False):
+            debug_logger = logging.getLogger("email_debug")
+    except EmailConfigError:
+        # Fallback to app config if email config service fails
+        if current_app and current_app.config.get("EMAIL_DEBUG_LOGGING"):
+            debug_logger = logging.getLogger("email_debug")
+
     return (
         logging.getLogger("email_success"),
         logging.getLogger("email_error"),
@@ -26,83 +36,112 @@ def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger
 def send_email_sync(to_email: str, subject: str, body: str) -> bool:
     """
     Synchronous function to send an email to the specified recipient.
-    
+
     Args:
         to_email (str): Recipient's email address
         subject (str): Subject of the email
         body (str): Body content of the email
-        
+
     Returns:
         bool: True if email was sent successfully, False otherwise
     """
     success_logger, error_logger, debug_logger = _get_email_loggers()
-    
+
     try:
-        # Get email settings from environment variables
-        smtp_server = current_app.config.get('SMTP_SERVER', 'localhost')
-        smtp_port = current_app.config.get('SMTP_PORT', 587)
-        smtp_username = current_app.config.get('SMTP_USERNAME')
-        smtp_password = current_app.config.get('SMTP_PASSWORD')
-        from_email = current_app.config.get('FROM_EMAIL', smtp_username)
-        
-        # Verify required email settings exist
-        if not all([smtp_server, smtp_username, smtp_password, from_email]):
-            error_logger.error("Missing SMTP configuration", extra={
-                "to": to_email,
-                "subject": subject,
-            })
-            current_app.logger.error("Email settings not configured properly")
-            return False
-        
+        # Get email settings from database (with fallback to environment variables)
+        config = EmailConfigService.get_email_config()
+
+        smtp_server = config['smtp_server']
+        smtp_port = config['smtp_port']
+        smtp_username = config['smtp_username']
+        smtp_password = config['password']  # Password is stored under 'password' key
+        from_email = config['from_email']
+        use_tls = config['use_tls']
+        use_ssl = config['use_ssl']
+        verify_certificates = config['verify_certificates']
+        connection_timeout = config.get('connection_timeout', 30)
+
         if debug_logger:
             debug_logger.debug(
-                "Preparing email - To: %s Subject: %s From: %s",
+                "Preparing email - To: %s Subject: %s From: %s Server: %s:%d (TLS=%s, SSL=%s)",
                 to_email,
                 subject,
                 from_email,
+                smtp_server,
+                smtp_port,
+                use_tls,
+                use_ssl,
             )
 
         msg = MIMEMultipart()
         msg['From'] = from_email
         msg['To'] = to_email
         msg['Subject'] = subject
-        
+
         # Add body to email
         msg.attach(MIMEText(body, 'plain'))
-        
+
         # Extract headers for logging
         headers = dict(msg.items())
-        
-        # Send the email
-        smtp_port = int(smtp_port)
-        use_ssl = smtp_port == 465 or current_app.config.get("SMTP_USE_SSL", False)
-        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
 
-        with smtp_class(smtp_server, smtp_port) as server:
+        # Choose SMTP class and create SSL context
+        if use_ssl:
+            smtp_class = smtplib.SMTP_SSL
+            if verify_certificates:
+                context = ssl.create_default_context()
+            else:
+                context = ssl._create_unverified_context()
+            server_kwargs = {"context": context, "timeout": connection_timeout}
+        else:
+            smtp_class = smtplib.SMTP
+            server_kwargs = {"timeout": connection_timeout}
+            if verify_certificates:
+                context = ssl.create_default_context()
+                server_kwargs["context"] = context
+
+        # Send the email
+        with smtp_class(smtp_server, smtp_port, **server_kwargs) as server:
+            server.set_debuglevel(1 if debug_logger else 0)
+
             if debug_logger:
-                debug_logger.debug("SMTP connect: %s:%s (SSL=%s)", smtp_server, smtp_port, use_ssl)
-            if not use_ssl:
+                debug_logger.debug("SMTP connected to %s:%d", smtp_server, smtp_port)
+
+            if use_tls and not use_ssl:
                 server.starttls()  # Enable encryption
                 if debug_logger:
                     debug_logger.debug("SMTP starttls complete")
+
             server.login(smtp_username, smtp_password)
             if debug_logger:
                 debug_logger.debug("SMTP authenticated as %s", smtp_username)
+
             server.send_message(msg)
             if debug_logger:
                 debug_logger.debug("SMTP message sent")
-        
+
         # Log successful email
         success_logger.info(
-            "Email sent - To: %s Subject: %s From: %s Headers: %s",
+            "Email sent - To: %s Subject: %s From: %s Headers: %s Source: %s",
             to_email,
             subject,
             from_email,
             headers,
+            config.get('source', 'unknown'),
         )
-        current_app.logger.info(f"Email sent successfully to {to_email}")
+        if current_app:
+            current_app.logger.info(f"Email sent successfully to {to_email}")
         return True
 
+    except EmailConfigError as e:
+        error_logger.error(
+            "Email configuration error - To: %s Subject: %s Error: %s",
+            to_email,
+            subject,
+            str(e),
+        )
+        if current_app:
+            current_app.logger.error(f"Email configuration error: {e}")
+        return False
     except Exception as e:
         # Log failed email
         error_logger.error(
@@ -111,7 +150,8 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
             subject,
             str(e),
         )
-        current_app.logger.error(f"Failed to send email to {to_email}: {e}")
+        if current_app:
+            current_app.logger.error(f"Failed to send email to {to_email}: {e}")
         return False
 
 

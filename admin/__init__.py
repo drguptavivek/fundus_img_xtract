@@ -15,6 +15,11 @@ from .database_excel_export import database_excel_export, get_database_tables
 from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 from .thumbnail_management import register_thumbnail_admin_routes
 from .status import admin_status, api_admin_status, register_status_routes
+from .email_settings import (
+    email_settings_list, create_email_settings, edit_email_settings,
+    test_email_settings, delete_email_settings, activate_email_settings,
+    api_test_current_email_config
+)
 
 
 # Register routes with the blueprint
@@ -85,3 +90,12 @@ register_thumbnail_admin_routes(admin_bp)
 
 # Register admin status routes
 register_status_routes(admin_bp)
+
+# Email settings routes
+admin_bp.add_url_rule("/email-settings", view_func=email_settings_list, methods=["GET"])
+admin_bp.add_url_rule("/email-settings/new", view_func=create_email_settings, methods=["GET", "POST"])
+admin_bp.add_url_rule("/email-settings/<int:settings_id>/edit", view_func=edit_email_settings, methods=["GET", "POST"])
+admin_bp.add_url_rule("/email-settings/<int:settings_id>/test", view_func=test_email_settings, methods=["POST"])
+admin_bp.add_url_rule("/email-settings/<int:settings_id>/delete", view_func=delete_email_settings, methods=["POST"])
+admin_bp.add_url_rule("/email-settings/<int:settings_id>/activate", view_func=activate_email_settings, methods=["POST"])
+admin_bp.add_url_rule("/api/email-settings/test-current", view_func=api_test_current_email_config, methods=["GET"])

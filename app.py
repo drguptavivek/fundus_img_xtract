@@ -72,6 +72,7 @@ def create_app():
     app.config["WORKERS"] = int(os.getenv("WORKERS", "4"))
     app.config["UPLOADED_RESULTS_PAGE_SIZE"] = int(os.getenv("UPLOADED_RESULTS_PAGE_SIZE", 50))
     app.config["SCREENINGS_PAGE_SIZE"] = int(os.getenv("SCREENINGS_PAGE_SIZE", 50))
+    # Keep legacy environment variable email config for fallback compatibility
     app.config["EMAIL_DEBUG_LOGGING"] = str(os.getenv("EMAIL_DEBUG_LOGGING", "false")).lower() in ("1", "true", "yes")
     app.config["SMTP_SERVER"] = os.getenv("SMTP_SERVER")
     smtp_port_env = os.getenv("SMTP_PORT")
@@ -79,6 +80,7 @@ def create_app():
     app.config["SMTP_USERNAME"] = os.getenv("SMTP_USERNAME")
     app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD")
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
+    app.config["SMTP_USE_SSL"] = str(os.getenv("SMTP_USE_SSL", "false")).lower() in ("1", "true", "yes")
 
    # Session cookie hygiene - updated to prevent partitioned cookie warnings in iframes
     app.config.update(
@@ -931,6 +933,14 @@ def create_app():
             thumbnail_maintenance_logger.error(f"Failed to start thumbnail maintenance scheduler: {str(e)}")
     else:
         thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled by configuration")
+
+    # Initialize email configuration from database
+    try:
+        from utils.email_config import EmailConfigService
+        EmailConfigService.update_flask_config()
+        app.logger.info("Email configuration initialized from database or environment")
+    except Exception as e:
+        app.logger.warning(f"Failed to initialize email configuration: {e}")
 
     return app
 

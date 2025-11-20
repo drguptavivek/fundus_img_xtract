@@ -1046,3 +1046,115 @@ def cleanup_patient_encounter_thumbnails(mapper, connection, target):
         import logging
         cleanup_logger = logging.getLogger("thumbnail_cleanup")
         cleanup_logger.error(f"Failed to clean up thumbnails for PatientEncounter {target.id}: {e}")
+
+
+class EmailSettings(Base):
+    """
+    Database-backed email configuration settings.
+    Allows dynamic management of email configuration through admin interface.
+    """
+    __tablename__ = "email_settings"
+
+    # Core SMTP configuration
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    smtp_server: Mapped[str] = mapped_column(String(255), nullable=False, default="localhost")
+    smtp_port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
+    smtp_username: Mapped[str] = mapped_column(String(255), nullable=False)
+    smtp_password: Mapped[str] = mapped_column(String(255), nullable=False)  # Should be encrypted
+    from_email: Mapped[str] = mapped_column(String(254), nullable=False)
+
+    # Security settings
+    use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # StartTLS
+    use_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # SSL/TLS
+    verify_certificates: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Configuration and debugging
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    debug_logging: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Connection settings
+    connection_timeout: Mapped[int] = mapped_column(Integer, nullable=False, default=30)  # seconds
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by], post_update=True)
+    updater: Mapped["User"] = relationship(foreign_keys=[updated_by], post_update=True)
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("smtp_port > 0 AND smtp_port <= 65535", name="check_smtp_port_range"),
+        CheckConstraint("connection_timeout > 0 AND connection_timeout <= 300", name="check_connection_timeout_range"),
+        CheckConstraint("NOT (use_tls AND use_ssl)", name="check_mutually_exclusive_tls_ssl"),
+        Index("ix_email_settings_active", "is_active"),
+        Index("ix_email_settings_updated", "updated_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<EmailSettings(id={self.id}, smtp_server={self.smtp_server}, port={self.smtp_port}, active={self.is_active})>"
+
+    def to_dict(self) -> dict:
+        """Convert EmailSettings to dictionary, excluding sensitive password."""
+        return {
+            "id": self.id,
+            "smtp_server": self.smtp_server,
+            "smtp_port": self.smtp_port,
+            "smtp_username": self.smtp_username,
+            "from_email": self.from_email,
+            "use_tls": self.use_tls,
+            "use_ssl": self.use_ssl,
+            "verify_certificates": self.verify_certificates,
+            "is_active": self.is_active,
+            "debug_logging": self.debug_logging,
+            "connection_timeout": self.connection_timeout,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_by": self.created_by,
+            "updated_by": self.updated_by,
+        }
+
+    @classmethod
+    def get_active_settings(cls, db_session) -> Optional["EmailSettings"]:
+        """Get the currently active email settings."""
+        return db_session.query(cls).filter(cls.is_active == True).first()
+
+    def test_connection(self) -> tuple[bool, str]:
+        """
+        Test the SMTP connection with current settings.
+
+        Returns:
+            tuple[bool, str]: (success, message)
+        """
+        import smtplib
+        import ssl
+
+        try:
+            # Choose SMTP class based on security settings
+            if self.use_ssl:
+                smtp_class = smtplib.SMTP_SSL
+                context = ssl.create_default_context() if self.verify_certificates else ssl._create_unverified_context()
+                server_kwargs = {"context": context}
+            else:
+                smtp_class = smtplib.SMTP
+                server_kwargs = {}
+                if self.verify_certificates:
+                    context = ssl.create_default_context()
+                    server_kwargs["context"] = context
+
+            # Test connection
+            with smtp_class(self.smtp_server, self.smtp_port, **server_kwargs) as server:
+                server.set_debuglevel(self.debug_logging)
+
+                if self.use_tls and not self.use_ssl:
+                    server.starttls()
+
+                server.login(self.smtp_username, self.smtp_password)
+
+            return True, "Connection test successful"
+
+        except Exception as e:
+            return False, f"Connection failed: {str(e)}"

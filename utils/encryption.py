@@ -6,6 +6,7 @@ Uses Flask secret key for reversible encryption/decryption.
 
 import base64
 import hashlib
+import secrets
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -20,12 +21,25 @@ class EncryptionError(Exception):
     pass
 
 
-def _get_encryption_key() -> bytes:
+def generate_salt() -> str:
     """
-    Derive encryption key from Flask secret key.
+    Generate a cryptographically secure random salt for password encryption.
 
     Returns:
-        bytes: Encryption key derived from Flask secret key
+        str: Hex-encoded random salt (32 bytes = 64 hex characters)
+    """
+    return secrets.token_hex(32)
+
+
+def _get_encryption_key(salt: str = None) -> bytes:
+    """
+    Derive encryption key from Flask secret key and optional salt.
+
+    Args:
+        salt (str, optional): Salt to use for key derivation. If None, uses default salt.
+
+    Returns:
+        bytes: Encryption key derived from Flask secret key and salt
 
     Raises:
         EncryptionError: If no Flask app context or secret key available
@@ -44,12 +58,20 @@ def _get_encryption_key() -> bytes:
         if not secret_key:
             raise EncryptionError("Flask SECRET_KEY not configured")
 
-        # Use PBKDF2 to derive encryption key from secret key
+        # Use provided salt or default salt for backward compatibility
+        if salt is None:
+            salt_bytes = b'smtp_password_salt'  # Default salt for backward compatibility
+            logger.debug("Using default salt for backward compatibility")
+        else:
+            salt_bytes = bytes.fromhex(salt)  # Convert hex salt back to bytes
+            logger.debug("Using provided unique salt")
+
+        # Use PBKDF2 to derive encryption key from secret key and salt
         # This provides key stretching and makes it more secure
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=b'smtp_password_salt',  # Fixed salt for consistency
+            salt=salt_bytes,
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))
@@ -63,7 +85,7 @@ def _get_encryption_key() -> bytes:
 
 def encrypt_password(plain_password: str) -> str:
     """
-    Encrypt a plaintext password.
+    Encrypt a plaintext password using default salt (backward compatibility).
 
     Args:
         plain_password (str): The plaintext password to encrypt
@@ -78,7 +100,7 @@ def encrypt_password(plain_password: str) -> str:
         return ""
 
     try:
-        key = _get_encryption_key()
+        key = _get_encryption_key()  # Uses default salt for backward compatibility
         fernet = Fernet(key)
 
         # Encrypt the password
@@ -92,9 +114,41 @@ def encrypt_password(plain_password: str) -> str:
         raise EncryptionError(f"Failed to encrypt password: {str(e)}")
 
 
+def encrypt_password_with_salt(plain_password: str, salt: str) -> str:
+    """
+    Encrypt a plaintext password using a specific salt.
+
+    Args:
+        plain_password (str): The plaintext password to encrypt
+        salt (str): Salt to use for encryption (hex-encoded)
+
+    Returns:
+        str: Base64-encoded encrypted password
+
+    Raises:
+        EncryptionError: If encryption fails
+    """
+    if not plain_password:
+        return ""
+
+    try:
+        key = _get_encryption_key(salt)  # Use provided salt
+        fernet = Fernet(key)
+
+        # Encrypt the password
+        encrypted_password = fernet.encrypt(plain_password.encode())
+
+        # Return as base64 string for database storage
+        return base64.urlsafe_b64encode(encrypted_password).decode()
+
+    except Exception as e:
+        logger.error(f"Failed to encrypt password with salt: {e}")
+        raise EncryptionError(f"Failed to encrypt password with salt: {str(e)}")
+
+
 def decrypt_password(encrypted_password: str) -> str:
     """
-    Decrypt an encrypted password.
+    Decrypt an encrypted password using default salt (backward compatibility).
 
     Args:
         encrypted_password (str): Base64-encoded encrypted password
@@ -109,7 +163,7 @@ def decrypt_password(encrypted_password: str) -> str:
         return ""
 
     try:
-        key = _get_encryption_key()
+        key = _get_encryption_key()  # Uses default salt for backward compatibility
         fernet = Fernet(key)
 
         # Decode from base64 and decrypt
@@ -121,6 +175,38 @@ def decrypt_password(encrypted_password: str) -> str:
     except Exception as e:
         logger.error(f"Failed to decrypt password: {e}")
         raise EncryptionError(f"Failed to decrypt password: {str(e)}")
+
+
+def decrypt_password_with_salt(encrypted_password: str, salt: str) -> str:
+    """
+    Decrypt an encrypted password using a specific salt.
+
+    Args:
+        encrypted_password (str): Base64-encoded encrypted password
+        salt (str): Salt that was used for encryption (hex-encoded)
+
+    Returns:
+        str: The decrypted plaintext password
+
+    Raises:
+        EncryptionError: If decryption fails
+    """
+    if not encrypted_password:
+        return ""
+
+    try:
+        key = _get_encryption_key(salt)  # Use provided salt
+        fernet = Fernet(key)
+
+        # Decode from base64 and decrypt
+        encrypted_data = base64.urlsafe_b64decode(encrypted_password.encode())
+        decrypted_password = fernet.decrypt(encrypted_data)
+
+        return decrypted_password.decode()
+
+    except Exception as e:
+        logger.error(f"Failed to decrypt password with salt: {e}")
+        raise EncryptionError(f"Failed to decrypt password with salt: {str(e)}")
 
 
 def is_encrypted_value(value: str) -> bool:

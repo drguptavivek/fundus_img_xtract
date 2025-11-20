@@ -1061,6 +1061,7 @@ class EmailSettings(Base):
     smtp_port: Mapped[int] = mapped_column(Integer, nullable=False, default=587)
     smtp_username: Mapped[str] = mapped_column(String(255), nullable=False)
     smtp_password: Mapped[str] = mapped_column(String(255), nullable=False)  # Should be encrypted
+    password_salt: Mapped[str] = mapped_column(String(64), nullable=True)  # Unique salt for password encryption
     from_email: Mapped[str] = mapped_column(String(254), nullable=False)
 
     # Security settings
@@ -1166,18 +1167,43 @@ class EmailSettings(Base):
         Returns:
             str: Decrypted password
         """
-        from utils.encryption import get_password_for_use
-        return get_password_for_use(self.smtp_password)
+        from utils.encryption import decrypt_password_with_salt, decrypt_password
+        import logging
+
+        if not self.smtp_password:
+            return ""
+
+        # If we have a salt, use salted decryption
+        if self.password_salt:
+            try:
+                return decrypt_password_with_salt(self.smtp_password, self.password_salt)
+            except Exception as e:
+                # Fall back to default decryption for backward compatibility
+                logging.warning(f"Failed to decrypt password with salt for email settings {self.id}, falling back to default salt: {e}")
+                pass
+
+        # Try default decryption (for backward compatibility with existing passwords)
+        try:
+            return decrypt_password(self.smtp_password)
+        except Exception as e:
+            # If all decryption fails, assume it's plaintext (very old passwords)
+            logging.warning(f"Failed to decrypt password for email settings {self.id}, assuming plaintext: {e}")
+            return self.smtp_password
 
     def set_password(self, plain_password: str) -> None:
         """
-        Set and encrypt the password.
+        Set and encrypt the password using a unique salt.
 
         Args:
             plain_password (str): Plain text password to encrypt and store
         """
-        from utils.encryption import encrypt_password
-        self.smtp_password = encrypt_password(plain_password)
+        from utils.encryption import encrypt_password_with_salt, generate_salt
+
+        # Generate a unique salt for this email setting
+        self.password_salt = generate_salt()
+
+        # Encrypt the password using the unique salt
+        self.smtp_password = encrypt_password_with_salt(plain_password, self.password_salt)
 
     def get_password_for_display(self) -> str:
         """

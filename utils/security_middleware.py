@@ -54,8 +54,8 @@ class PayloadSizeValidator:
                 )
                 abort(413, description=f"Request entity too large. Maximum size is {max_size} bytes.")
         
-        # Validate JSON structure for JSON endpoints
-        if request.is_json and not self._is_authenticated_route():
+        # Validate JSON structure for JSON endpoints (only if there's actual content)
+        if request.is_json and not self._is_authenticated_route() and request.content_length:
             try:
                 # This will raise JSONDecodeError if malformed
                 request.get_json()

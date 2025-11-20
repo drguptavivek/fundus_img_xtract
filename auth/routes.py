@@ -612,6 +612,11 @@ def reset_password():
             user.updated_at = datetime.now(timezone.utc)
             db.add(user)
 
+            # Capture user information before session ends
+            username = user.username
+            email = user.email
+            user_id = user.id
+
         session.pop('password_reset_otp', None)
         session.pop('password_reset_email', None)
         session.pop('password_reset_expiry', None)
@@ -619,7 +624,7 @@ def reset_password():
 
         # Log successful password reset
         session_id = session.get('_id', 'unknown')
-        auth_logger.info(f"Password reset successful - User: {user.username}, Email: {user.email}, IP: {ip}, SessionID: {session_id}, UserID: {user.id}")
+        auth_logger.info(f"Password reset successful - User: {username}, Email: {email}, IP: {ip}, SessionID: {session_id}, UserID: {user_id}")
 
         flash("Password updated. You can now log in with your new password.", "success")
         return redirect(url_for("auth.login"))

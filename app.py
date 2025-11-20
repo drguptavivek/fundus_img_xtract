@@ -170,11 +170,24 @@ def create_app():
     # Initialize security middleware for payload protection
     payload_validator = PayloadSizeValidator(app)
     
-    # Initialize CORS for API endpoints
+    # Initialize CORS for API endpoints and auth status endpoints
     # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
+    # Include production domains for live server
     CORS(app, resources={
         r"/api/*": {
-            "origins": ["http://localhost:5001", "http://127.0.0.1:5001"],
+            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
+            "supports_credentials": True
+        },
+        r"/check-email-status": {
+            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
+            "supports_credentials": True
+        },
+        r"/email-sse": {
+            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
+            "supports_credentials": True
+        },
+        r"/check-session": {
+            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
             "supports_credentials": True
         }
     }, supports_credentials=True)

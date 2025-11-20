@@ -128,7 +128,7 @@ def create_email_settings():
             logger.info(
                 "Admin '%s' created email settings ID %d for server %s:%d",
                 getattr(current_user, 'username', 'unknown'),
-                email_settings.id,
+                email_settings,
                 smtp_server,
                 smtp_port
             )

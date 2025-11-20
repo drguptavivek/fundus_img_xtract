@@ -43,7 +43,7 @@ class EmailConfigService:
                 if email_settings:
                     config = email_settings.to_dict()
                     config['source'] = 'database'
-                    config['password'] = email_settings.smtp_password  # Include password for email sending
+                    config['password'] = email_settings._get_password_for_use()  # Include decrypted password for email sending
                     logger.info(f"Using email configuration from database (ID: {email_settings.id})")
                     return config
 
@@ -228,7 +228,7 @@ class EmailConfigService:
                     smtp_server=smtp_server,
                     smtp_port=smtp_port,
                     smtp_username=smtp_username,
-                    smtp_password=smtp_password,
+                    smtp_password="",  # Will be set via set_password method
                     from_email=from_email,
                     use_tls=use_tls,
                     use_ssl=use_ssl,
@@ -239,6 +239,9 @@ class EmailConfigService:
                     created_by=created_by,
                     updated_by=created_by
                 )
+
+                # Encrypt and set the password
+                email_settings.set_password(smtp_password)
 
                 db.add(email_settings)
                 db.flush()  # Get ID without committing
@@ -277,7 +280,11 @@ class EmailConfigService:
                 # Update fields
                 for key, value in kwargs.items():
                     if hasattr(email_settings, key) and key not in ['id', 'created_at', 'created_by']:
-                        setattr(email_settings, key, value)
+                        if key == 'smtp_password' and value:
+                            # Encrypt password if provided
+                            email_settings.set_password(value)
+                        else:
+                            setattr(email_settings, key, value)
 
                 email_settings.updated_by = updated_by
 

@@ -1152,9 +1152,42 @@ class EmailSettings(Base):
                 if self.use_tls and not self.use_ssl:
                     server.starttls()
 
-                server.login(self.smtp_username, self.smtp_password)
+                server.login(self.smtp_username, self._get_password_for_use())
 
             return True, "Connection test successful"
 
         except Exception as e:
             return False, f"Connection failed: {str(e)}"
+
+    def _get_password_for_use(self) -> str:
+        """
+        Get the decrypted password for use in connections.
+
+        Returns:
+            str: Decrypted password
+        """
+        from utils.encryption import get_password_for_use
+        return get_password_for_use(self.smtp_password)
+
+    def set_password(self, plain_password: str) -> None:
+        """
+        Set and encrypt the password.
+
+        Args:
+            plain_password (str): Plain text password to encrypt and store
+        """
+        from utils.encryption import encrypt_password
+        self.smtp_password = encrypt_password(plain_password)
+
+    def get_password_for_display(self) -> str:
+        """
+        Get a masked version of the password for display purposes.
+
+        Returns:
+            str: Masked password (e.g., "••••••••••••")
+        """
+        if not self.smtp_password:
+            return ""
+
+        # Return masked version regardless of whether encrypted or not
+        return "•" * min(len(self.smtp_password), 12)

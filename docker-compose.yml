@@ -23,6 +23,7 @@ services:
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
+      - web_venv:/app/.venv
     restart: unless-stopped
 
   db:
@@ -74,3 +75,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  web_venv:

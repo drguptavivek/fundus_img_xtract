@@ -36,6 +36,16 @@ except Exception as e:
   sleep 3
 done
 
+echo "✅ Database is ready!"
+
+# Check if virtual environment exists and is valid
+if [ -d "/app/.venv" ] && [ -f "/app/.venv/bin/python" ]; then
+    echo "✅ Virtual environment already exists - skipping recreation"
+else
+    echo "🔄 Virtual environment missing or invalid - creating..."
+    uv sync
+fi
+
 # Run initial migration first
 echo "Running initial database migration..."
 uv run alembic upgrade 5a49784f68f1

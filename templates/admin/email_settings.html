@@ -148,12 +148,11 @@
                                                 <i class="fas fa-edit"></i> Edit
                                             </a>
                                             {% if not settings.is_active %}
-                                                <a href="{{ url_for('admin.activate_email_settings', settings_id=settings.id) }}"
-                                                   class="btn btn-outline-success"
-                                                   onclick="return confirm('Activate this email configuration?')"
-                                                   title="Activate">
+                                                <button type="button" class="btn btn-outline-success activate-settings-btn"
+                                                        data-id="{{ settings.id }}"
+                                                        title="Activate">
                                                     <i class="fas fa-check"></i> Activate
-                                                </a>
+                                                </button>
                                             {% endif %}
                                             {% if not settings.is_active %}
                                                 <button type="button" class="btn btn-outline-danger delete-settings-btn"
@@ -340,9 +339,46 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Activate settings
+    document.querySelectorAll('.activate-settings-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const settingsId = this.dataset.id;
+
+            if (confirm('Activate this email configuration?')) {
+                // Create a form and submit it via POST
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/admin/email-settings/${settingsId}/activate`;
+
+                // Add CSRF token
+                const csrfToken = document.createElement('input');
+                csrfToken.type = 'hidden';
+                csrfToken.name = 'csrf_token';
+                csrfToken.value = document.querySelector('input[name="csrf_token"]')?.value || '';
+                form.appendChild(csrfToken);
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
+    });
+
     document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
         if (deleteId) {
-            window.location.href = `/admin/email-settings/${deleteId}/delete`;
+            // Create a form and submit it via POST
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/admin/email-settings/${deleteId}/delete`;
+
+            // Add CSRF token
+            const csrfToken = document.createElement('input');
+            csrfToken.type = 'hidden';
+            csrfToken.name = 'csrf_token';
+            csrfToken.value = document.querySelector('input[name=\"csrf_token\"]')?.value || '';
+            form.appendChild(csrfToken);
+
+            document.body.appendChild(form);
+            form.submit();
         }
     });
 });

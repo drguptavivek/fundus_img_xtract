@@ -133,7 +133,7 @@ def create_email_settings():
             )
 
             flash("Email settings created successfully!", "success")
-            return redirect(url_for("admin.email_settings"))
+            return redirect(url_for("admin.email_settings_list"))
 
         except Exception as e:
             logger.error(f"Failed to create email settings: {e}")
@@ -156,7 +156,7 @@ def edit_email_settings(settings_id: int):
         email_settings = db.get(EmailSettings, settings_id)
         if not email_settings:
             flash("Email settings not found.", "danger")
-            return redirect(url_for("admin.email_settings"))
+            return redirect(url_for("admin.email_settings_list"))
 
         if request.method == "POST":
             # Get form data
@@ -252,7 +252,7 @@ def edit_email_settings(settings_id: int):
                 )
 
                 flash("Email settings updated successfully!", "success")
-                return redirect(url_for("admin.email_settings"))
+                return redirect(url_for("admin.email_settings_list"))
 
             except Exception as e:
                 logger.error(f"Failed to update email settings: {e}")
@@ -266,7 +266,8 @@ def edit_email_settings(settings_id: int):
         # GET request - show edit form
         return render_template(
             "admin/email_settings_edit.html",
-            email_settings=email_settings
+            email_settings=email_settings,
+            form_data={}
         )
 
 
@@ -313,12 +314,12 @@ def delete_email_settings(settings_id: int):
         email_settings = db.get(EmailSettings, settings_id)
         if not email_settings:
             flash("Email settings not found.", "danger")
-            return redirect(url_for("admin.email_settings"))
+            return redirect(url_for("admin.email_settings_list"))
 
         # Prevent deletion of active settings
         if email_settings.is_active:
             flash("Cannot delete active email settings. Please activate another configuration first.", "danger")
-            return redirect(url_for("admin.email_settings"))
+            return redirect(url_for("admin.email_settings_list"))
 
         try:
             db.delete(email_settings)
@@ -336,7 +337,7 @@ def delete_email_settings(settings_id: int):
             logger.error(f"Failed to delete email settings: {e}")
             flash(f"Failed to delete email settings: {str(e)}", "danger")
 
-        return redirect(url_for("admin.email_settings"))
+        return redirect(url_for("admin.email_settings_list"))
 
 
 @roles_required("admin")
@@ -348,7 +349,7 @@ def activate_email_settings(settings_id: int):
         email_settings = db.get(EmailSettings, settings_id)
         if not email_settings:
             flash("Email settings not found.", "danger")
-            return redirect(url_for("admin.email_settings"))
+            return redirect(url_for("admin.email_settings_list"))
 
         try:
             # Deactivate all other settings
@@ -376,7 +377,7 @@ def activate_email_settings(settings_id: int):
             logger.error(f"Failed to activate email settings: {e}")
             flash(f"Failed to activate email settings: {str(e)}", "danger")
 
-        return redirect(url_for("admin.email_settings"))
+        return redirect(url_for("admin.email_settings_list"))
 
 
 @roles_required("admin")

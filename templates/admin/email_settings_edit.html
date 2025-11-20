@@ -218,11 +218,11 @@
                         <div class="d-flex justify-content-between">
                             <div>
                                 {% if not email_settings.is_active %}
-                                    <a href="{{ url_for('admin.delete_email_settings', settings_id=email_settings.id) }}"
-                                       class="btn btn-danger me-2"
-                                       onclick="return confirm('Are you sure you want to delete this email configuration?')">
+                                    <button type="button" class="btn btn-danger me-2 delete-settings-btn"
+                                            data-id="{{ email_settings.id }}"
+                                            onclick="return confirm('Are you sure you want to delete this email configuration?')">
                                         <i class="fas fa-trash"></i> Delete
-                                    </a>
+                                    </button>
                                 {% endif %}
                                 <a href="{{ url_for('admin.email_settings_list') }}" class="btn btn-secondary">
                                     <i class="fas fa-times"></i> Cancel
@@ -230,11 +230,11 @@
                             </div>
                             <div>
                                 {% if not email_settings.is_active %}
-                                    <a href="{{ url_for('admin.activate_email_settings', settings_id=email_settings.id) }}"
-                                       class="btn btn-outline-success me-2"
-                                       onclick="return confirm('Activate this email configuration?')">
+                                    <button type="button" class="btn btn-outline-success me-2 activate-settings-btn"
+                                            data-id="{{ email_settings.id }}"
+                                            title="Activate this configuration">
                                         <i class="fas fa-check"></i> Activate
-                                    </a>
+                                    </button>
                                 {% endif %}
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-save"></i> Save Changes
@@ -309,6 +309,52 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Please enter a valid email address.');
             return;
         }
+    });
+
+    // Delete settings button
+    document.querySelectorAll('.delete-settings-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const settingsId = this.dataset.id;
+
+            // Create a form and submit it via POST
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/admin/email-settings/${settingsId}/delete`;
+
+            // Add CSRF token
+            const csrfToken = document.createElement('input');
+            csrfToken.type = 'hidden';
+            csrfToken.name = 'csrf_token';
+            csrfToken.value = document.querySelector('input[name="csrf_token"]')?.value || '';
+            form.appendChild(csrfToken);
+
+            document.body.appendChild(form);
+            form.submit();
+        });
+    });
+
+    // Activate settings button
+    document.querySelectorAll('.activate-settings-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const settingsId = this.dataset.id;
+
+            if (confirm('Activate this email configuration?')) {
+                // Create a form and submit it via POST
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/admin/email-settings/${settingsId}/activate`;
+
+                // Add CSRF token
+                const csrfToken = document.createElement('input');
+                csrfToken.type = 'hidden';
+                csrfToken.name = 'csrf_token';
+                csrfToken.value = document.querySelector('input[name="csrf_token"]')?.value || '';
+                form.appendChild(csrfToken);
+
+                document.body.appendChild(form);
+                form.submit();
+            }
+        });
     });
 });
 </script>

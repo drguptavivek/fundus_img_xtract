@@ -19,7 +19,7 @@ services:
       REDIS_DB: ${REDIS_DB}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
@@ -38,7 +38,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_APP_PASSWORD}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

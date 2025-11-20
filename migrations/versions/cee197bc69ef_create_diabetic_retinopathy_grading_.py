@@ -201,12 +201,12 @@ def upgrade() -> None:
         CREATE INDEX idx_mvw_dr_pivot_aimodel_2_grade ON mvw_diabetic_retinopathy_grading_pivot(aimodel_2_grade);
 
         -- Features JSON indexes for feature analysis
-        CREATE INDEX idx_mvw_dr_pivot_resident_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(resident_features);
-        CREATE INDEX idx_mvw_dr_pivot_resident2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(resident2_features);
-        CREATE INDEX idx_mvw_dr_pivot_arbitrator_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(arbitrator_features);
-        CREATE INDEX idx_mvw_dr_pivot_review_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(review_features);
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_1_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(aimodel_1_features);
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN(aimodel_2_features);
+        CREATE INDEX idx_mvw_dr_pivot_resident_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident_features::jsonb));
+        CREATE INDEX idx_mvw_dr_pivot_resident2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident2_features::jsonb));
+        CREATE INDEX idx_mvw_dr_pivot_arbitrator_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((arbitrator_features::jsonb));
+        CREATE INDEX idx_mvw_dr_pivot_review_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((review_features::jsonb));
+        CREATE INDEX idx_mvw_dr_pivot_aimodel_1_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_1_features::jsonb));
+        CREATE INDEX idx_mvw_dr_pivot_aimodel_2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_2_features::jsonb));
 
         -- Time-based indexes for trending analysis
         CREATE INDEX idx_mvw_dr_pivot_task_created ON mvw_diabetic_retinopathy_grading_pivot(task_created_at);

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.email_config import EmailConfigService, EmailConfigError
+from utils.emails import send_email_sync
 from models import EmailSettings, User
 from db_transaction_manager import transaction_scope, get_db_session
 import logging
@@ -398,4 +399,121 @@ def api_test_current_email_config():
         return jsonify({
             "success": False,
             "message": f"Test failed: {str(e)}"
+        }), 500
+
+
+@roles_required("admin")
+def send_sample_email():
+    """
+    Send a sample test email using the current email configuration.
+    """
+    try:
+        # Get form data
+        recipient_email = request.form.get("recipient_email", "").strip()
+        subject = request.form.get("subject", "Test Email from Fundus Image Manager").strip()
+        message = request.form.get("message", "").strip()
+
+        # Validate recipient email
+        if not recipient_email:
+            return jsonify({
+                "success": False,
+                "message": "Recipient email address is required."
+            }), 400
+
+        if "@" not in recipient_email:
+            return jsonify({
+                "success": False,
+                "message": "Invalid recipient email address format."
+            }), 400
+
+        # Use default message if empty
+        if not message:
+            message = """
+This is a test email sent from the Fundus Image Manager system.
+
+If you receive this email, it confirms that your email configuration is working correctly.
+
+System Configuration:
+- SMTP Server: Configured and tested
+- Email Sending: Functional
+- Database Integration: Active
+
+Thank you for testing the email system.
+
+Fundus Image Manager Team
+            """.strip()
+
+        # Get current email configuration
+        try:
+            email_config = EmailConfigService.get_email_config()
+            if not email_config.get('smtp_server'):
+                return jsonify({
+                    "success": False,
+                    "message": "No email configuration found. Please create and activate email settings first."
+                }), 400
+        except EmailConfigError:
+            return jsonify({
+                "success": False,
+                "message": "Email configuration not available. Please check your email settings."
+            }), 400
+
+        # Send the test email
+        try:
+            # Create email body with custom message
+            email_body = f"""
+TEST EMAIL FROM FUNDUS IMAGE MANAGER
+
+This is a test email sent from the Fundus Image Manager system.
+
+If you receive this email, it confirms that your email configuration is working correctly.
+
+System Configuration:
+- SMTP Server: Configured and tested
+- Email Sending: Functional
+- Database Integration: Active
+
+Custom Message:
+{message if message else "[No custom message provided]"}
+
+Thank you for testing the email system.
+
+Fundus Image Manager Team
+            """
+
+            success = send_email_sync(
+                to_email=recipient_email,
+                subject=subject,
+                body=email_body
+            )
+
+            if not success:
+                return jsonify({
+                    "success": False,
+                    "message": "Failed to send email. Please check your email configuration and try again."
+                }), 500
+
+            # Log successful email send
+            logger.info(
+                "Admin '%s' sent sample test email to '%s'",
+                getattr(current_user, 'username', 'unknown'),
+                recipient_email
+            )
+
+            return jsonify({
+                "success": True,
+                "message": f"Sample email sent successfully to {recipient_email}. Please check your inbox."
+            })
+
+        except Exception as email_error:
+            logger.error(f"Failed to send sample email: {email_error}")
+            return jsonify({
+                "success": False,
+                "message": f"Failed to send email: {str(email_error)}"
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Sample email send failed: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"An error occurred: {str(e)}"
         }), 500

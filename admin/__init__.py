@@ -18,7 +18,7 @@ from .status import admin_status, api_admin_status, register_status_routes
 from .email_settings import (
     email_settings_list, create_email_settings, edit_email_settings,
     test_email_settings, delete_email_settings, activate_email_settings,
-    api_test_current_email_config
+    api_test_current_email_config, send_sample_email
 )
 
 
@@ -95,7 +95,8 @@ register_status_routes(admin_bp)
 admin_bp.add_url_rule("/email-settings", view_func=email_settings_list, methods=["GET"])
 admin_bp.add_url_rule("/email-settings/new", view_func=create_email_settings, methods=["GET", "POST"])
 admin_bp.add_url_rule("/email-settings/<int:settings_id>/edit", view_func=edit_email_settings, methods=["GET", "POST"])
-admin_bp.add_url_rule("/email-settings/<int:settings_id>/test", view_func=test_email_settings, methods=["POST"])
+admin_bp.add_url_rule("/email-settings/<int:settings_id>/test", view_func=test_email_settings, methods=["GET"])
 admin_bp.add_url_rule("/email-settings/<int:settings_id>/delete", view_func=delete_email_settings, methods=["POST"])
 admin_bp.add_url_rule("/email-settings/<int:settings_id>/activate", view_func=activate_email_settings, methods=["POST"])
 admin_bp.add_url_rule("/api/email-settings/test-current", view_func=api_test_current_email_config, methods=["GET"])
+admin_bp.add_url_rule("/api/email-settings/send-sample", view_func=send_sample_email, methods=["POST"])

@@ -255,6 +255,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const tlsCheckbox = document.getElementById('use_tls');
     const sslCheckbox = document.getElementById('use_ssl');
 
+    // Helper function to get CSRF token (following project standards)
+    function getCSRFToken() {
+        const input = document.querySelector('input[name="csrf_token"]');
+        if (input && input.value) return input.value;
+
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) return meta.content;
+
+        return '';
+    }
+
     // Ensure TLS and SSL are mutually exclusive
     tlsCheckbox.addEventListener('change', function() {
         if (this.checked && sslCheckbox.checked) {
@@ -292,7 +303,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Password is required for new config, but can be empty for existing (keeps current password)
-        if (!smtpPassword && !{{ email_settings.smtp_password|tojson }}) {
+        var hasExistingPassword = "{{ email_settings.smtp_password }}" !== "";
+        if (!smtpPassword && !hasExistingPassword) {
             e.preventDefault();
             alert('SMTP password is required for this configuration.');
             return;
@@ -325,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const csrfToken = document.createElement('input');
             csrfToken.type = 'hidden';
             csrfToken.name = 'csrf_token';
-            csrfToken.value = document.querySelector('input[name="csrf_token"]')?.value || '';
+            csrfToken.value = getCSRFToken();
             form.appendChild(csrfToken);
 
             document.body.appendChild(form);
@@ -348,7 +360,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const csrfToken = document.createElement('input');
                 csrfToken.type = 'hidden';
                 csrfToken.name = 'csrf_token';
-                csrfToken.value = document.querySelector('input[name="csrf_token"]')?.value || '';
+                csrfToken.value = getCSRFToken();
                 form.appendChild(csrfToken);
 
                 document.body.appendChild(form);

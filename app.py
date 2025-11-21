@@ -594,7 +594,7 @@ def create_app():
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: blob: https:",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
-            "connect-src 'self' https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu",
+            "connect-src 'self' https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu https://cdn.jsdelivr.net",
             "frame-src 'self'",
             "object-src 'none'",
             "base-uri 'self'",

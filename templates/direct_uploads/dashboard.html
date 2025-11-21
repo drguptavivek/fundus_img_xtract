@@ -797,7 +797,9 @@
         window.hideBulkEdit = function () {
             bulkEditControls.classList.add('d-none');
             // Reset form fields
-            bulkOperationsForm.reset();
+            if (bulkOperationsForm) {
+                bulkOperationsForm.reset();
+            }
         };
 
         // Confirm delete action
@@ -813,12 +815,15 @@
                 // Set action to delete and submit form
                 bulkActionField.value = 'bulk_delete';
                 // Instead of calling submit(), let the form submit naturally
-                bulkOperationsForm.dispatchEvent(new Event('submit'));
+                if (bulkOperationsForm) {
+                    bulkOperationsForm.dispatchEvent(new Event('submit'));
+                }
             }
         };
 
         // Form submission validation
-        bulkOperationsForm.addEventListener('submit', function (e) {
+        if (bulkOperationsForm) {
+            bulkOperationsForm.addEventListener('submit', function (e) {
             const action = bulkActionField.value;
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
 
@@ -858,6 +863,7 @@
             
             // Allow the form to submit naturally if validation passes
         });
+        }
 
         // Initialize image toggle functionality
         initializeImageToggle();

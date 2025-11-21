@@ -599,6 +599,7 @@ def create_app():
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
+            "require-trusted-types-for 'script'",
             "frame-ancestors 'self'",
             "manifest-src 'self'",
             "worker-src 'self' blob:",

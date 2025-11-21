@@ -310,7 +310,7 @@
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chartjs-plugin-datalabels.js') }}"></script>
 <!-- <script src="{{ url_for('static', filename='js/home-charts.js') }}"></script> -->
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   // Pass data to the external JavaScript file through global variables
   {% if grading_distribution %}
   var gradingLabels = [{% for item in grading_distribution %}"{{ item[0] }}",{% endfor %}];

@@ -383,6 +383,19 @@ def create_app():
                 return False
         return dict(current_user_has=current_user_has)
 
+    @app.context_processor
+    def inject_csp_nonces():
+        """Inject CSP nonces into templates for inline scripts and styles."""
+        from flask import g
+        def get_script_nonce():
+            return getattr(g, 'csp_script_nonce', '')
+        def get_style_nonce():
+            return getattr(g, 'csp_style_nonce', '')
+        return dict(
+            csp_script_nonce=get_script_nonce,
+            csp_style_nonce=get_style_nonce
+        )
+
 
     @app.before_request
     def start_timer():
@@ -542,9 +555,18 @@ def create_app():
         
         return response
 
+    @app.before_request
+    def generate_csp_nonces():
+        """Generate CSP nonces before request processing."""
+        import secrets
+        from flask import g
+        # Generate new nonces for each request
+        g.csp_script_nonce = secrets.token_urlsafe(16)
+        g.csp_style_nonce = secrets.token_urlsafe(16)
+
     @app.after_request
     def add_security_headers(response):
-        """Add comprehensive security headers including CSP."""
+        """Add comprehensive security headers including CSP with nonces."""
         # Skip adding CSP to static assets and API responses that handle their own CSP
         content_type = response.headers.get('Content-Type', '').lower()
         path = request.path
@@ -560,10 +582,15 @@ def create_app():
             content_type.startswith('application/pdf')):
             return response
 
-        # Build CSP directive
+        # Get nonces from request context
+        from flask import g
+        script_nonce = getattr(g, 'csp_script_nonce', '')
+        style_nonce = getattr(g, 'csp_style_nonce', '')
+
+        # Build CSP directive with nonces (allow inline styles but secure scripts)
         csp_directives = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+            f"script-src 'self' 'nonce-{script_nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
             "img-src 'self' data: blob: https:",
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",

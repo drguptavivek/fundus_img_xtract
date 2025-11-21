@@ -26,7 +26,7 @@
   {% endblock %}
 
   <!-- Theme bootstrapper: set initial theme ASAP to avoid FOUC -->
-  <script>
+  <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
     (function () {
       try {
         var stored = localStorage.getItem('theme');
@@ -587,7 +587,7 @@
   </button>
 
   <!-- Theme + palette logic -->
-  <script>
+  <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
     (function () {
       function updateToggle(theme) {
         var icon = document.querySelector('[data-theme-icon]');

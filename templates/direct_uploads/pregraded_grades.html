@@ -388,7 +388,7 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/pregraded_grades.js') }}"></script>
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function () {
     // Grade type selector functionality
     const residentRadio = document.getElementById('residentRadio');
@@ -430,7 +430,7 @@
   });
 </script>
 {% if modal_values %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function () {
     const modalEl = document.getElementById('gradeMappingModal');
     if (modalEl) {

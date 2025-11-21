@@ -94,7 +94,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
     // Highlight current navigation item
     const currentPath = window.location.pathname;

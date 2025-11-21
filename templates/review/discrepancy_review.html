@@ -562,7 +562,7 @@
   </div>
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 function clearFilters() {
   // Clear disease and lab unit dropdowns
   document.getElementById('diseaseSelect').value = '';

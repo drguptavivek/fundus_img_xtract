@@ -39,7 +39,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
     const jobId = "{{ job_id }}";
     const overallStatusSpan = document.getElementById('overall-status');

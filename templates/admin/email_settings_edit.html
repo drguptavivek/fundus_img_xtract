@@ -250,7 +250,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
     const tlsCheckbox = document.getElementById('use_tls');
     const sslCheckbox = document.getElementById('use_ssl');

@@ -114,7 +114,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
   // Fetch grading eligibility for all users with resident or ophthalmologist roles
   const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');

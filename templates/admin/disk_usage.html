@@ -116,7 +116,7 @@
   </div>
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 function toggleDirectory(path) {
   const url = new URL(window.location);
   const expandedDirs = url.searchParams.get('expanded') ? url.searchParams.get('expanded').split(',') : [];

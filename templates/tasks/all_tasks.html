@@ -263,7 +263,7 @@
   </div>
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function() {
     const hospitalFilter = document.getElementById('hospitalFilter');
     const labUnitFilter = document.getElementById('labUnitFilter');

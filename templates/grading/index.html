@@ -343,7 +343,7 @@
   </div>
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
   const dateFilter = document.getElementById('grading-date-filter');
   const clearButton = document.getElementById('clear-date-filter');

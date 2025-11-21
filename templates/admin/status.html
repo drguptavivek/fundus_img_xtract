@@ -500,7 +500,7 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 function refreshStatus() {
     // Show loading state
     const refreshBtn = document.querySelector('button[onclick="refreshStatus()"]');

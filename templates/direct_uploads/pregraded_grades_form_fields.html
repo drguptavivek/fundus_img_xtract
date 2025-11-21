@@ -40,7 +40,7 @@
   </div>
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 // Ensure hospital filter is applied after form restoration
 document.addEventListener('DOMContentLoaded', function() {
   const form = document.querySelector('[data-role="{{ form_role }}"]').closest('form');

@@ -222,7 +222,7 @@
 
 {% block page_scripts %}
 {{ super() }}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function () {
     var modalElement = document.getElementById('notificationModal');
     if (!modalElement || typeof window.bootstrap === 'undefined') {

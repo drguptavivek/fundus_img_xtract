@@ -225,7 +225,7 @@
 
 </div>
 
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 const reviewGradingFeatures = {{ grading_features | tojson }};
 const existingReviewSelectedFeatures = {{ existing_selected_features | tojson }};
 const existingReviewGradeId = {{ existing_review_grade.disease_grading_id if existing_review_grade else 'null' }};

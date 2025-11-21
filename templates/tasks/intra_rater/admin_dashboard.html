@@ -204,7 +204,7 @@
 
 {% block page_scripts %}
 {{ super() }}
-<script>
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   window.INTRA_RATER_GRADINGS = {{ disease_gradings|tojson|safe }};
   window.INTRA_RATER_LAB_UNITS = {{ lab_units|tojson|safe }};
 </script>

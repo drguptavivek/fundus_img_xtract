@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const refreshBtn = document.getElementById('refresh-captcha-btn');
     const playAudioBtn = document.getElementById('play-audio-btn');
     const signinBtn = document.getElementById('signin-btn');
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : null;
     let captchaAudio = null; // Will be created dynamically when needed
     let currentCaptchaData = null; // Store the latest CAPTCHA data
     let refreshRequestInProgress = false;  // Prevent multiple refresh requests
@@ -186,8 +188,28 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    /**
+     * Ensure login form always carries a CSRF token value.
+     * Some automation tools submit the form without re-reading the hidden input,
+     * so we inject/populate it from the meta tag as a fallback.
+     */
+    const loginForm = document.querySelector('form[method=\"post\"]');
+    function ensureCsrfTokenOnForm() {
+        if (!loginForm) return;
+        let csrfInput = loginForm.querySelector('input[name=\"csrf_token\"]');
+        if (!csrfInput) {
+            csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            loginForm.prepend(csrfInput);
+        }
+        if (!csrfInput.value && csrfToken) {
+            csrfInput.value = csrfToken;
+        }
+    }
+    ensureCsrfTokenOnForm();
+
     // Add form submission listener to handle validation errors
-    const loginForm = document.querySelector('form[method="post"]');
     if (loginForm) {
         loginForm.addEventListener('submit', function(e) {
             // Client-side validation before submission

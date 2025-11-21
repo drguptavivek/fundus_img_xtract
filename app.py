@@ -17,6 +17,7 @@ import atexit
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
@@ -100,6 +101,11 @@ def create_app():
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta( minutes=app.config["INACTIVITY_TIMEOUT_MINUTES"])
     # refresh cookie each request (sliding window)
     app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+    force_https = str(os.getenv("FORCE_HTTPS", "false")).lower() in ("1", "true", "yes")
+    proxy_hops = int(os.getenv("TRUST_PROXY_HOPS", "1"))
+
+    # Respect proxy headers so request.is_secure reflects original scheme
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops, x_host=proxy_hops, x_prefix=proxy_hops)
 
     # Thread pool (shared via app.config)
     app.config["EXECUTOR"] = ThreadPoolExecutor(max_workers=app.config["WORKERS"])
@@ -163,6 +169,17 @@ def create_app():
     app.before_request(csrf_protect)
     csrf.init_app(app)
     app.session_interface = DatabaseSessionInterface()
+    if force_https:
+        @app.before_request
+        def _redirect_insecure_requests():
+            """Force HTTPS to avoid dropping secure cookies/CSRF tokens behind a proxy."""
+            if request.is_secure:
+                return None
+            forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+            if forwarded_proto == "https":
+                return None  # ProxyFix already marked it secure
+            https_url = request.url.replace("http://", "https://", 1)
+            return redirect(https_url, code=301)
     
     # Initialize rate limiting
     init_rate_limiting(app)

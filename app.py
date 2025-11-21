@@ -609,6 +609,9 @@ def create_app():
         csp = '; '.join(csp_directives)
         response.headers['Content-Security-Policy'] = csp
 
+        # Add Cross-Origin-Opener-Policy header
+        response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+
         return response
 
     #  relative imports

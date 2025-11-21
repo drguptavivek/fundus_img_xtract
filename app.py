@@ -542,6 +542,47 @@ def create_app():
         
         return response
 
+    @app.after_request
+    def add_security_headers(response):
+        """Add comprehensive security headers including CSP."""
+        # Skip adding CSP to static assets and API responses that handle their own CSP
+        content_type = response.headers.get('Content-Type', '').lower()
+        path = request.path
+
+        # Don't override CSP if it's already set (e.g., for PDF/image serving)
+        if response.headers.get('Content-Security-Policy'):
+            return response
+
+        # Skip CSP for certain paths
+        if (path.startswith('/static/') or
+            path.startswith('/api/') or
+            content_type.startswith('image/') or
+            content_type.startswith('application/pdf')):
+            return response
+
+        # Build CSP directive
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
+            "img-src 'self' data: blob: https:",
+            "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
+            "connect-src 'self' https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu",
+            "frame-src 'self'",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "frame-ancestors 'self'",
+            "manifest-src 'self'",
+            "worker-src 'self' blob:",
+            "upgrade-insecure-requests"
+        ]
+
+        csp = '; '.join(csp_directives)
+        response.headers['Content-Security-Policy'] = csp
+
+        return response
+
     #  relative imports
     from jobs import jobs_bp
     app.register_blueprint(jobs_bp)
@@ -647,6 +688,7 @@ def create_app():
             or path == "/login"
             or path.startswith("/static/")
             or path == "/favicon.ico"
+            or path == "/robots.txt"
             or path == "/style_guide"
             or path== "/forgot-password"
             or path == "/reset-password"
@@ -890,6 +932,12 @@ def create_app():
     @rate_limit("100 per minute")
     def _favicon():
         return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
+    # Serve robots.txt for search engine crawlers
+    @app.get('/robots.txt')
+    @rate_limit("100 per minute")
+    def _robots():
+        return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
 
     # -------------------------------
     # New homepage route

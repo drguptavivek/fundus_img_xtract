@@ -1,0 +1,57 @@
+User-agent: *
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /admin/
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /static/temp/
+Disallow: /files/
+Disallow: /grading/
+Disallow: /verify_remedio_dr/
+Disallow: /verify_remedio_glaucoma/
+Disallow: /verify_remedio_nodr/
+Disallow: /media/
+Disallow: /direct_uploads/
+Disallow: /remedio_zip_uploads/
+Disallow: /preprocess/
+Disallow: /notifications/
+Disallow: /tasks/
+Disallow: /review/
+Disallow: /reports/
+Disallow: /analytics
+Disallow: /search
+Disallow: /audit
+Disallow: /account/
+Disallow: /jobs/
+Disallow: /screenings/
+Disallow: /uploaded_zips/
+Disallow: /email-sse
+Disallow: /check-email-status
+Disallow: /check-session
+Disallow: /test-rate-limit
+Disallow: /refresh-captcha
+Disallow: /captcha-audio
+
+# Allow static assets that are safe for public access
+Allow: /static/css/
+Allow: /static/js/
+Allow: /static/images/
+
+# Disallow sensitive file types
+Disallow: /*.pdf$
+Disallow: /*.zip$
+Disallow: /*.log$
+Disallow: /*.sql$
+
+# Crawl delay to be respectful of server resources
+Crawl-delay: 1
+
+# Sitemap location (if you have one)
+# Sitemap: https://eye.epidemiology.tech/sitemap.xml
+
+# Medical imaging application - restrict to index only public pages
+# Allow homepage and help documentation for SEO
+Allow: /$
+Allow: /help/
+Allow: /docs/

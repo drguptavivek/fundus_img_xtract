@@ -414,301 +414,74 @@ For advanced users who prefer direct Nginx configuration.
 Create `nginx/conf.d/fundus-manager.conf`:
 
 ```nginx
-# Rate limiting
-limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
-limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
-
-# Upstream configuration
-upstream fundus_backend {
-    server web:5001;
+upstream eye_app_backend {
+    server 10.0.0.2:5001;
     keepalive 32;
 }
 
-# HTTP to HTTPS redirect
+# --- HTTP: redirect + ACME for Certbot ---
 server {
     listen 80;
-    server_name yourdomain.com www.yourdomain.com;
+    listen [::]:80;
+    server_name eye.epidemiology.tech;
 
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
-    # Let's Encrypt ACME challenge
+    # Let Certbot HTTP-01 challenge work if ever needed again
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
 
-    # Redirect all HTTP traffic to HTTPS
+    # Everything else: redirect to HTTPS
     location / {
-        return 301 https://$server_name$request_uri;
+        return 301 https://$host$request_uri;
     }
+
+    access_log /var/log/nginx/eye.epidemiology.tech.http.access.log;
+    error_log  /var/log/nginx/eye.epidemiology.tech.http.error.log warn;
 }
 
-# HTTPS server configuration
+# --- HTTPS: terminate TLS and proxy to app ---
 server {
     listen 443 ssl http2;
-    server_name yourdomain.com www.yourdomain.com;
+    listen [::]:443 ssl http2;
+    server_name eye.epidemiology.tech;
 
-    # SSL Configuration
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/eye.epidemiology.tech/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/eye.epidemiology.tech/privkey.pem;
+
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache shared:SSL:10m;
+    ssl_prefer_server_ciphers on;
     ssl_session_timeout 10m;
+    ssl_session_cache shared:SSL:10m;
 
-    # Security Headers
+    # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
 
-    # Client maximum body size (for file uploads)
-    client_max_body_size 100M;
-
-    # Logging
-    access_log /var/log/nginx/fundus_access.log;
-    error_log /var/log/nginx/fundus_error.log;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types
-        text/plain
-        text/css
-        text/xml
-        text/javascript
-        application/json
-        application/javascript
-        application/xml+rss
-        application/atom+xml
-        image/svg+xml;
-
-    # Static file caching
-    location ~* \.(css|js|ico|gif|jpe?g|png|svg|eot|otf|ttf|woff2?)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        add_header X-Content-Type-Options nosniff;
-        proxy_pass http://fundus_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # API endpoints with rate limiting
-    location /api/ {
-        limit_req zone=api burst=20 nodelay;
-
-        proxy_pass http://fundus_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket support
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-
-    # Login endpoint with stricter rate limiting
-    location /login {
-        limit_req zone=login burst=5 nodelay;
-
-        proxy_pass http://fundus_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # File upload endpoints with larger timeouts
-    location ~ ^/(upload|process-zip) {
-        proxy_pass http://fundus_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Extended timeouts for large file uploads
-        proxy_connect_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-        client_body_timeout 300s;
-
-        # Buffer settings
-        proxy_request_buffering off;
-        proxy_buffering off;
-    }
-
-    # Default location for all other requests
     location / {
-        proxy_pass http://fundus_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://eye_app_backend;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # WebSocket support for real-time features
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
 
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
         proxy_read_timeout 60s;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 60s;
     }
+
+    access_log /var/log/nginx/eye.epidemiology.tech.https.access.log;
+    error_log  /var/log/nginx/eye.epidemiology.tech.https.error.log warn;
 }
-```
 
-#### Docker Compose for Custom Nginx
-
-Add to your `docker-compose.yml`:
-
-```yaml
-services:
-  # ... existing services
-
-  nginx:
-    image: nginx:alpine
-    container_name: nginx-reverse-proxy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/logs:/var/log/nginx
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    depends_on:
-      - web
-    networks:
-      - app-network
-
-  certbot:
-    image: certbot/certbot
-    container_name: certbot
-    volumes:
-      - ./certbot/conf:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-
-networks:
-  app-network:
-    driver: bridge
-```
-
-### SSL Certificate Setup
-
-#### Using Let's Encrypt with Certbot
-
-1. **Generate SSL certificates:**
-```bash
-# Initial certificate generation
-docker compose run --rm certbot certonly --webroot --webroot-path /var/www/certbot -d yourdomain.com -d www.yourdomain.com --email admin@yourdomain.com --agree-tos --no-eff-email
-
-# Set up automatic renewal
-docker compose run --rm certbot renew --dry-run
-```
-
-2. **Create renewal cron job:**
-```bash
-# Add to crontab: 0 3 * * * cd /path/to/project && docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
-```
-
-### Security Enhancements
-
-#### Fail2Ban Integration
-
-Create `/etc/fail2ban/jail.local`:
-
-```ini
-[nginx-http-auth]
-enabled = true
-filter = nginx-http-auth
-port = http,https
-logpath = /var/log/nginx/fundus_error.log
-maxretry = 5
-findtime = 600
-bantime = 3600
-
-[nginx-limit-req]
-enabled = true
-filter = nginx-limit-req
-port = http,https
-logpath = /var/log/nginx/fundus_error.log
-maxretry = 10
-findtime = 600
-bantime = 3600
-```
-
-#### Additional Security Headers
-
-The Nginx configuration includes comprehensive security headers:
-
-- **HSTS**: Enforces HTTPS connections
-- **CSP**: Prevents XSS attacks
-- **X-Frame-Options**: Prevents clickjacking
-- **X-Content-Type-Options**: Prevents MIME-type sniffing
-- **Referrer-Policy**: Controls referrer information
-
-### Performance Optimization
-
-#### Caching Configuration
-
-Add to your Nginx configuration for enhanced caching:
-
-```nginx
-# FastCGI cache
-fastcgi_cache_path /var/cache/nginx levels=1:2 keys_zone=FUNDUS_CACHE:100m inactive=60m use_temp_path=off;
-
-server {
-    # ... existing configuration
-
-    location ~* \.(css|js|gif|ico|svg|woff|woff2)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        add_header X-Cache-Status $upstream_cache_status;
-
-        proxy_cache FUNDUS_CACHE;
-        proxy_cache_valid 200 1y;
-        proxy_cache_key "$scheme$request_method$host$request_uri";
-    }
-}
-```
-
-### Monitoring and Logging
-
-#### Access Log Format
-
-Add to your Nginx configuration for detailed logging:
-
-```nginx
-http {
-    log_format detailed '$remote_addr - $remote_user [$time_local] '
-                       '"$request" $status $body_bytes_sent '
-                       '"$http_referer" "$http_user_agent" '
-                       '$request_time $upstream_response_time '
-                       '$ssl_protocol $ssl_cipher';
-
-    access_log /var/log/nginx/fundus_access.log detailed;
-}
 ```
 
 

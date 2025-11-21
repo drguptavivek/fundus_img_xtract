@@ -8,7 +8,7 @@ The `config.js` file provides centralized configuration for all E2E tests. It re
 
 ### Environment Variables
 
-- `BASE_URL`: The base URL of the application (default: `http://127.0.0.1:5001`)
+- `BASE_URL`: The base URL of the application (default: `http://127.0.0.1:5001`) - used in test scripts only
 
 ### Usage
 

@@ -1072,7 +1072,7 @@ def run_stuck_task_cleanup():
             # Even if an error occurs, keep the thread running by sleeping a bit before continuing
             time.sleep(5 * 60)  # Wait 5 minutes before retrying
 
-  if __name__ == "__main__":
+if __name__ == "__main__":
     app = create_app()
     
     # Start the stuck task cleanup thread

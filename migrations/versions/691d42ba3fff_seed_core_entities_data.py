@@ -52,8 +52,8 @@ def upgrade() -> None:
         # Insert core hospitals
         connection.execute(sa.text("""
             INSERT INTO hospitals (id, name) VALUES
-            (1, 'Sankara Eye Hospital'),
-            (2, 'Aravind Eye Hospital')
+            (1, 'RPC AIIMS'),
+            (2, 'UCMS GTB Hosp')
             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
         """))
 
@@ -85,10 +85,10 @@ def upgrade() -> None:
         # Insert core lab units (with hospital_id to satisfy NOT NULL constraint)
         connection.execute(sa.text("""
             INSERT INTO lab_units (id, name, hospital_id) VALUES
-            (1, 'Lab Unit 1', 1),
-            (2, 'Lab Unit 2', 1),
-            (3, 'Lab Unit 3', 2),
-            (4, 'Lab Unit 4', 2)
+            (1, 'Community Ophthalmology', 1),
+            (2, 'Retina Lab', 1),
+            (3, 'Glaucoma Lab', 1),
+            (4, 'Glaucoma-GTBH', 2)
             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, hospital_id = EXCLUDED.hospital_id
         """))
 

@@ -3,6 +3,8 @@ services:
     build: .
     image: fundus-img-xtract:web
     container_name: fundus-img-xtract-web
+    mem_reservation: 1500m
+    mem_limit: 3g
     depends_on:
       db:
         condition: service_healthy
@@ -29,6 +31,8 @@ services:
   db:
     image: postgres:18-alpine
     container_name: fundus-img-xtract-db
+    mem_reservation: 512m
+    mem_limit: 1500m
     env_file:
       - deploy.config.env
       - deploy.secrets.env
@@ -48,10 +52,20 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=384MB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "max_connections=50"
 
   cache:
     image: redis:7-alpine
     container_name: fundus-img-xtract-cache
+    mem_reservation: 256m
+    mem_limit: 512m
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379" # REDIS PORT is exposed to host and bound to 127.0.0.1 and not an open relay
     env_file:
@@ -62,7 +76,7 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       REDIS_DB: ${REDIS_DB}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    command: ["sh", "-c", "exec redis-server --save 60 1 --loglevel warning --requirepass \"$REDIS_PASSWORD\""]
+    command: ["sh", "-c", "exec redis-server --save 60 1 --loglevel warning --requirepass \"$REDIS_PASSWORD\" --maxmemory 256mb --maxmemory-policy allkeys-lru"]
     volumes:
       - redis_data:/data
     healthcheck:

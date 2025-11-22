@@ -1,7 +1,6 @@
 # app.py
 import os
 import logging
-from logging.handlers import RotatingFileHandler
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, current_app, jsonify, render_template, request, redirect, url_for, session, flash
 from flask import send_from_directory
@@ -25,6 +24,9 @@ from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
 from utils.security_middleware import PayloadSizeValidator
 from utils.env_loader import load_environment
+from app_init.logging_config import configure_logging
+from app_init.security_headers import register_csp
+from app_init.startup_checks import run_startup_env_checks
 
 
 csrf = CSRFProtect()
@@ -223,239 +225,26 @@ def create_app():
         # Ensure core diseases are always present
         
 
-    # ---------------- Logging Configuration ----------------
-    from pathlib import Path
+    loggers = configure_logging(app)
+    http_error_logger = loggers["http_error"]
+    runtime_error_logger = loggers["runtime_error"]
+    grades_logger = loggers["grades"]
+    pregraded_processing_logger = loggers["pregraded_processing"]
+    auth_logger = loggers["auth"]
+    editing_logger = loggers["editing"]
+    consensus_logger = loggers["consensus"]
+    email_success_logger = loggers["email_success"]
+    email_error_logger = loggers["email_error"]
+    rate_limit_logger = loggers["rate_limit"]
+    flask_limiter_logger = loggers["flask_limiter"]
+    intra_rater_debug_logger = loggers["intra_rater_debug"]
+    sqlalchemy_failure_logger = loggers["sqlalchemy_failure"]
+    flash_logger = loggers["flash"]
+    materialized_view_logger = loggers["materialized_view"]
+    thumbnail_maintenance_logger = loggers["thumbnail_maintenance"]
+    startup_env_logger = loggers["startup_env"]
 
-    log_root_setting = app.config.get("LOG_DIR") or os.getenv("LOG_DIR")
-    log_dir = Path(log_root_setting or (Path(__file__).resolve().parent / "logs"))
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    debug_mode = bool(app.debug or app.config.get("ENABLE_DEBUG_LOGGING", False))
-    log_max_bytes = int(app.config.get("LOG_MAX_BYTES", 2 * 1024 * 1024))
-    log_backup_count = int(app.config.get("LOG_BACKUP_COUNT", 5))
-
-    class RequestContextFilter(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
-            record.url = "-"
-            record.method = "-"
-            try:
-                record.url = request.url  # type: ignore[attr-defined]
-                record.method = request.method  # type: ignore[attr-defined]
-            except Exception:
-                pass
-            return True
-
-    request_filter = RequestContextFilter()
-
-    def make_handler(filename: str, level: int, formatter: logging.Formatter, *, filters: list[logging.Filter] | None = None) -> logging.Handler:
-        handler = RotatingFileHandler(log_dir / filename, maxBytes=log_max_bytes, backupCount=log_backup_count, encoding="utf-8", delay=True)
-        handler.setLevel(level)
-        handler.setFormatter(formatter)
-        for flt in filters or []:
-            handler.addFilter(flt)
-        return handler
-
-    def configure_logger(name: str, level: int, handler: logging.Handler, extra_handlers: list[logging.Handler] | None = None) -> logging.Logger:
-        logger = logging.getLogger(name)
-        logger.setLevel(level)
-        logger.propagate = False
-        for existing in list(logger.handlers):
-            logger.removeHandler(existing)
-            try:
-                existing.close()
-            except Exception:
-                pass
-        logger.addHandler(handler)
-        for extra in extra_handlers or []:
-            logger.addHandler(extra)
-        return logger
-
-    base_format = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s %(message)s")
-    detailed_format = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s %(filename)s:%(lineno)d %(message)s")
-    http_error_format = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s url=%(url)s %(message)s")
-
-    http_error_handler = make_handler("http_error.log", logging.WARNING, http_error_format, filters=[request_filter])
-    runtime_error_handler = make_handler("runtime_error.log", logging.ERROR, detailed_format)
-    grades_handler = make_handler("grades.log", logging.INFO, base_format)
-    pregraded_processing_handler = make_handler("pregraded_processing.log", logging.INFO, base_format)
-    auth_handler = make_handler("auth.log", logging.INFO, base_format)
-    editing_handler = make_handler("editing.log", logging.INFO, base_format)
-    consensus_handler = make_handler("consensus.log", logging.INFO, base_format)
-    email_success_handler = make_handler("email_success.log", logging.INFO, base_format)
-    email_error_handler = make_handler("email_error.log", logging.ERROR, detailed_format)
-    app_handler = make_handler("app.log", logging.INFO, base_format)
-    flask_limiter_handler = make_handler("flask_limiter.log", logging.INFO, base_format)
-    intra_rater_debug_handler = make_handler("intra_rater_debug.log", logging.INFO, base_format)
-    sqlalchemy_failure_handler = make_handler("sqlalchemy_failure.log", logging.ERROR, detailed_format)
-    flash_handler = make_handler("flash_messages.log", logging.INFO, base_format)
-    materialized_view_handler = make_handler("materialized_view.log", logging.INFO, base_format)
-    thumbnail_maintenance_handler = make_handler("thumbnail_maintenance.log", logging.INFO, base_format)
-    startup_env_handler = make_handler("startup_env_error.log", logging.INFO, detailed_format)
-
-    debug_handler = None
-    console_handler = None
-    if debug_mode:
-        debug_handler = make_handler("debug.log", logging.DEBUG, detailed_format)
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.DEBUG)
-        console_handler.setFormatter(detailed_format)
-
-    http_error_logger = configure_logger("http_error", logging.WARNING, http_error_handler)
-    runtime_error_logger = configure_logger("runtime_error", logging.ERROR, runtime_error_handler)
-    grades_logger = configure_logger("grades", logging.INFO, grades_handler)
-    pregraded_processing_logger = configure_logger("pregraded_processing", logging.INFO, pregraded_processing_handler)
-    auth_logger = configure_logger("auth", logging.INFO, auth_handler)
-    editing_logger = configure_logger("editing", logging.INFO, editing_handler)
-    consensus_logger = configure_logger("consensus", logging.INFO, consensus_handler)
-    email_success_logger = configure_logger("email_success", logging.INFO, email_success_handler)
-    email_error_logger = configure_logger("email_error", logging.ERROR, email_error_handler)
-    rate_limit_logger = configure_logger("rate_limit", logging.INFO, app_handler)
-    flask_limiter_logger = configure_logger("flask-limiter", logging.INFO, flask_limiter_handler)
-    intra_rater_debug_logger = configure_logger("intra_rater_debug", logging.INFO, intra_rater_debug_handler)
-    sqlalchemy_failure_logger = configure_logger("sqlalchemy.failure", logging.ERROR, sqlalchemy_failure_handler)
-    flash_logger = configure_logger("flash.messages", logging.INFO, flash_handler)
-    materialized_view_logger = configure_logger("materialized_view", logging.INFO, materialized_view_handler)
-    thumbnail_maintenance_logger = configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
-    startup_env_logger = configure_logger("startup_env", logging.INFO, startup_env_handler)
-
-    if app.config.get("EMAIL_DEBUG_LOGGING"):
-        email_debug_handler = make_handler("email_debug.log", logging.DEBUG, detailed_format)
-        configure_logger("email_debug", logging.DEBUG, email_debug_handler)
-    else:
-        email_debug_logger = logging.getLogger("email_debug")
-        for existing in list(email_debug_logger.handlers):
-            email_debug_logger.removeHandler(existing)
-            try:
-                existing.close()
-            except Exception:
-                pass
-        email_debug_logger.handlers = []
-
-    extra_app_handlers: list[logging.Handler] = []
-    if debug_handler is not None:
-        debug_logger = configure_logger("debug", logging.DEBUG, debug_handler, extra_handlers=[console_handler] if console_handler else None)
-        extra_app_handlers.append(debug_handler)
-        if console_handler:
-            extra_app_handlers.append(console_handler)
-    else:
-        debug_logger = configure_logger("debug", logging.INFO, app_handler)
-
-    app_logger = configure_logger("app", logging.DEBUG if debug_mode else logging.INFO, app_handler, extra_handlers=extra_app_handlers)
-
-    app.logger.handlers = []
-    app.logger.setLevel(app_logger.level)
-    for handler in app_logger.handlers:
-        app.logger.addHandler(handler)
-    app.logger.propagate = False
-
-    grades_logger.info("Grades logger initialized at %s", str(log_dir / "grades.log"))
-    pregraded_processing_logger.info("Pregraded processing logger initialized at %s", str(log_dir / "pregraded_processing.log"))
-    auth_logger.info("Auth logger initialized at %s", str(log_dir / "auth.log"))
-    editing_logger.info("Editing logger initialized at %s", str(log_dir / "editing.log"))
-    consensus_logger.info("Consensus logger initialized at %s", str(log_dir / "consensus.log"))
-    email_success_logger.info("Email success logger initialized at %s", str(log_dir / "email_success.log"))
-    email_error_logger.info("Email error logger initialized at %s", str(log_dir / "email_error.log"))
-    runtime_error_logger.info("Runtime error logger initialized at %s", str(log_dir / "runtime_error.log"))
-    flask_limiter_logger.info("Flask-Limiter logger initialized at %s", str(log_dir / "flask_limiter.log"))
-    intra_rater_debug_logger.info("Intra-rater debug logger initialized at %s", str(log_dir / "intra_rater_debug.log"))
-    sqlalchemy_failure_logger.info("SQLAlchemy failure logger ready at %s", str(log_dir / "sqlalchemy_failure.log"))
-    flash_logger.info("Flash message logger initialized at %s", str(log_dir / "flash_messages.log"))
-    materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
-    thumbnail_maintenance_logger.info("Thumbnail maintenance logger initialized at %s", str(log_dir / "thumbnail_maintenance.log"))
-    startup_env_logger.info("Startup environment logger initialized at %s", str(log_dir / "startup_env_error.log"))
-
-    def _mask_url_password(url: str) -> str:
-        """Mask credentials in URLs before logging."""
-        try:
-            from urllib.parse import urlsplit, urlunsplit
-            parts = urlsplit(url)
-            netloc = parts.hostname or ""
-            if parts.username:
-                masked_user = parts.username
-                if parts.password:
-                    masked_user += ":***"
-                netloc = f"{masked_user}@{netloc}"
-            if parts.port:
-                netloc += f":{parts.port}"
-            return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
-        except Exception:
-            return url
-
-    def run_startup_env_checks(app: Flask) -> None:
-        """Validate critical deployment assumptions and log any issues for operators."""
-        findings: list[tuple[str, str]] = []
-
-        # Cookie security expectations
-        secure_cookie = bool(app.config.get("SESSION_COOKIE_SECURE", False))
-        same_site = str(app.config.get("SESSION_COOKIE_SAMESITE", "")).lower()
-        force_https_env = str(os.getenv("FORCE_HTTPS", "false")).lower() in ("1", "true", "yes")
-        if same_site == "none" and not secure_cookie:
-            findings.append((
-                "error",
-                "SESSION_COOKIE_SAMESITE=None requires SESSION_COOKIE_SECURE=true or browsers will drop the cookie."
-            ))
-        if secure_cookie and not force_https_env:
-            findings.append((
-                "warning",
-                "SESSION_COOKIE_SECURE is enabled but FORCE_HTTPS is not; proxy traffic over plain HTTP will strip the cookie."
-            ))
-
-        # Proxy/forwarded header configuration
-        proxy_fix_applied = isinstance(app.wsgi_app, ProxyFix)
-        if not proxy_fix_applied:
-            findings.append((
-                "error",
-                "ProxyFix wrapper is missing; X-Forwarded-* headers will be ignored and scheme detection will be incorrect."
-            ))
-        else:
-            x_proto = getattr(app.wsgi_app, "x_proto", 0)
-            if force_https_env and x_proto < 1:
-                findings.append((
-                    "warning",
-                    "FORCE_HTTPS is true but TRUST_PROXY_HOPS (x_proto) is < 1; forwarded proto may not be honored."
-                ))
-
-        # Redis connectivity for rate limiting/session tasks
-        redis_url = (
-            app.config.get("RATELIMIT_REDIS_URL")
-            or app.config.get("REDIS_URL")
-            or os.getenv("REDIS_URL")
-        )
-        if redis_url:
-            try:
-                import redis  # type: ignore[import-not-found]
-                client = redis.from_url(redis_url, socket_connect_timeout=2, socket_timeout=2)
-                if not client.ping():  # pragma: no cover - defensive
-                    findings.append(("error", f"Redis ping returned falsy for { _mask_url_password(redis_url) }"))
-            except Exception as exc:  # pragma: no cover - best effort
-                findings.append(("error", f"Redis unreachable at {_mask_url_password(redis_url)}: {exc}"))
-        else:
-            findings.append((
-                "warning",
-                "No Redis URL configured; rate limiting may fall back to in-memory storage."
-            ))
-
-        for level, message in findings:
-            log_fn = startup_env_logger.error if level == "error" else startup_env_logger.warning
-            log_fn(message)
-        if not findings:
-            startup_env_logger.info("Startup environment checks passed.")
-
-        @app.before_request
-        def _log_forwarded_headers_once() -> None:
-            """Log the first observed forwarded headers to diagnose proxy issues."""
-            if app.config.get("_forwarded_headers_logged"):
-                return
-            headers_of_interest = {
-                "X-Forwarded-For": request.headers.get("X-Forwarded-For"),
-                "X-Forwarded-Proto": request.headers.get("X-Forwarded-Proto"),
-                "X-Forwarded-Host": request.headers.get("X-Forwarded-Host"),
-                "Forwarded": request.headers.get("Forwarded"),
-            }
-            startup_env_logger.info("First request forwarded header snapshot: %s", headers_of_interest)
-            app.config["_forwarded_headers_logged"] = True
-
-    run_startup_env_checks(app)
+    run_startup_env_checks(app, startup_env_logger)
 
     def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
         level = logging.INFO
@@ -479,19 +268,8 @@ def create_app():
                 return False
         return dict(current_user_has=current_user_has)
 
-    @app.context_processor
-    def inject_csp_nonces():
-        """Inject CSP nonces into templates for inline scripts and styles."""
-        from flask import g
-        def get_script_nonce():
-            return getattr(g, 'csp_script_nonce', '')
-        def get_style_nonce():
-            return getattr(g, 'csp_style_nonce', '')
-        return dict(
-            csp_script_nonce=get_script_nonce,
-            csp_style_nonce=get_style_nonce
-        )
-
+    # Security headers and CSP nonces
+    register_csp(app)
 
     @app.before_request
     def start_timer():
@@ -649,65 +427,6 @@ def create_app():
             rate_limit_logger = logging.getLogger("rate_limit")
             rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
         
-        return response
-
-    @app.before_request
-    def generate_csp_nonces():
-        """Generate CSP nonces before request processing."""
-        import secrets
-        from flask import g
-        # Generate new nonces for each request
-        g.csp_script_nonce = secrets.token_urlsafe(16)
-        g.csp_style_nonce = secrets.token_urlsafe(16)
-
-    @app.after_request
-    def add_security_headers(response):
-        """Add comprehensive security headers including CSP with nonces."""
-        # Skip adding CSP to static assets and API responses that handle their own CSP
-        content_type = response.headers.get('Content-Type', '').lower()
-        path = request.path
-
-        # Don't override CSP if it's already set (e.g., for PDF/image serving)
-        if response.headers.get('Content-Security-Policy'):
-            return response
-
-        # Skip CSP for certain paths
-        if (path.startswith('/static/') or
-            path.startswith('/api/') or
-            content_type.startswith('image/') or
-            content_type.startswith('application/pdf')):
-            return response
-
-        # Get nonces from request context
-        from flask import g
-        script_nonce = getattr(g, 'csp_script_nonce', '')
-        style_nonce = getattr(g, 'csp_style_nonce', '')
-
-        # Build CSP directive with nonces (allow inline styles but secure scripts)
-        csp_directives = [
-            "default-src 'self'",
-            f"script-src 'self' 'nonce-{script_nonce}' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
-            "img-src 'self' data: blob: https:",
-            "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
-            "connect-src 'self' https://eye.epidemiology.tech https://eyeimg.aiims.edu.in https://eyeimg.aiims.edu https://cdn.jsdelivr.net",
-            "frame-src 'self'",
-            "object-src 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-            "require-trusted-types-for 'script'",
-            "frame-ancestors 'self'",
-            "manifest-src 'self'",
-            "worker-src 'self' blob:",
-            "upgrade-insecure-requests"
-        ]
-
-        csp = '; '.join(csp_directives)
-        response.headers['Content-Security-Policy'] = csp
-
-        # Add Cross-Origin-Opener-Policy header
-        response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
-
         return response
 
     #  relative imports

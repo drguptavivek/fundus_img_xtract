@@ -180,8 +180,14 @@ class EmailConfigService:
 
         except EmailConfigError as e:
             logger.warning(f"Could not update Flask email config: {e}")
+            # Also log to startup_env_error logger for visibility
+            startup_env_logger = logging.getLogger("startup_env")
+            startup_env_logger.error(f"Could not update Flask email config: {e}")
         except Exception as e:
             logger.error(f"Error updating Flask email config: {e}")
+            # Also log to startup_env_error logger for visibility
+            startup_env_logger = logging.getLogger("startup_env")
+            startup_env_logger.error(f"Error updating Flask email config: {e}")
 
     @staticmethod
     def create_email_settings(

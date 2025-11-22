@@ -83,8 +83,26 @@ def run_startup_env_checks(app: Flask, startup_env_logger: logging.Logger) -> No
     else:
         findings.append(("warning", "No Redis URL configured; rate limiting may fall back to in-memory storage."))
 
+    # Email configuration validation
+    try:
+        from utils.email_config import EmailConfigService
+
+        email_config = EmailConfigService.get_email_config()
+        if email_config:
+            findings.append(("info", f"Email configuration loaded from {email_config.get('source', 'unknown')}"))
+        else:
+            findings.append(("warning", "No email configuration found - email functionality will be disabled"))
+
+    except Exception as e:
+        findings.append(("error", f"Email configuration validation failed: {str(e)}"))
+
     for level, message in findings:
-        log_fn = startup_env_logger.error if level == "error" else startup_env_logger.warning
+        if level == "error":
+            log_fn = startup_env_logger.error
+        elif level == "warning":
+            log_fn = startup_env_logger.warning
+        else:
+            log_fn = startup_env_logger.info
         log_fn(message)
     if not findings:
         startup_env_logger.info("Startup environment checks passed.")

@@ -239,6 +239,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
 
+            // Check if CAPTCHA is still loading
+            if (!captchaLoaded) {
+                e.preventDefault();
+                showToast('Please wait for CAPTCHA to load', 'warning');
+                return false;
+            }
+
             // Check field length limits
             if (username.value.length > 50) {
                 e.preventDefault();
@@ -298,6 +305,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Sign-in button click handler for better UX
+    if (signinBtn) {
+        signinBtn.addEventListener('click', function(e) {
+            if (signinBtn.disabled || !captchaLoaded) {
+                e.preventDefault();
+                if (!captchaLoaded) {
+                    showToast('Please wait for CAPTCHA to load', 'warning');
+                } else {
+                    showToast('Please fill in all required fields', 'warning');
+                }
+                return false;
+            }
+        });
+    }
+
     // Audio button functionality - play audio directly
     if (playAudioBtn) {
         playAudioBtn.addEventListener('click', function() {

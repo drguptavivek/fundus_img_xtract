@@ -96,9 +96,20 @@
       </div>
     `;
 
-    // Add toast to container
-    container.insertAdjacentHTML('beforeend', toastHtml);
-    const toastElement = document.getElementById(toastId);
+    // Add toast to container (handle Trusted Types)
+    let toastElement;
+    if (window.trustedTypes && window.trustedTypes.createPolicy) {
+      // Use Trusted Types if available
+      const policy = window.trustedTypes.createPolicy('toastPolicy', {
+        createHTML: (string) => string
+      });
+      container.insertAdjacentHTML('beforeend', policy.createHTML(toastHtml));
+      toastElement = document.getElementById(toastId);
+    } else {
+      // Fallback for browsers without Trusted Types
+      container.insertAdjacentHTML('beforeend', toastHtml);
+      toastElement = document.getElementById(toastId);
+    }
 
     // Show toast using Bootstrap if available, otherwise fallback
     try {

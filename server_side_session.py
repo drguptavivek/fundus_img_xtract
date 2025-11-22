@@ -129,11 +129,6 @@ class DatabaseSessionInterface(SessionInterface):
 
         client_ip = get_client_ip()
 
-        # Add logging for debugging Safari issues
-        import logging
-        session_logger = logging.getLogger("session")
-        session_logger.info(f"Save session called - Session ID: {session_id}, Modified: {getattr(session, 'modified', False)}, New: {getattr(session, 'new', False)}, Session data: {dict(session) if session else 'None'}, IP: {client_ip}")
-
         # If the session is empty, stamp it as ended and remove the browser cookie
         if not session:
             session_id = getattr(session, "session_id", None)
@@ -202,8 +197,10 @@ class DatabaseSessionInterface(SessionInterface):
         finally:
             db.close()
 
+        lifetime_seconds = int(self._get_permanent_lifetime(app).total_seconds())
         cookie_settings = {
-            'expires': expires,
+            # Use max_age so browser uses its own clock instead of server time for expiry
+            'max_age': lifetime_seconds,
             'httponly': app.config.get("SESSION_COOKIE_HTTPONLY", True),
             'secure': app.config.get("SESSION_COOKIE_SECURE", False),
             'samesite': app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
@@ -211,15 +208,11 @@ class DatabaseSessionInterface(SessionInterface):
             'domain': self.get_cookie_domain(app),
         }
         
-        session_logger.info(f"Setting cookie - Name: {cookie_name}, Value: {session.session_id}, Settings: {cookie_settings}")
-        
         response.set_cookie(
             cookie_name,
             session.session_id,
             **cookie_settings
         )
-        
-        session_logger.info(f"Cookie set successfully - Response headers: {dict(response.headers)}")
 
 
 def mark_session_ended(session_id: str, user_id: int | None = None) -> None:

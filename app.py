@@ -31,6 +31,20 @@ from app_init.startup_checks import run_startup_env_checks
 
 csrf = CSRFProtect()
 
+
+def _env_bool(key: str, default: str = "false") -> bool:
+    """Parse a boolean environment variable with sane defaults."""
+    return str(os.getenv(key, default)).lower() in ("1", "true", "yes")
+
+
+def _env_domain(key: str) -> str | None:
+    """Return an optional cookie domain, treating empty/none-like values as unset."""
+    value = os.getenv(key)
+    if value and value.lower() not in ("none", "null"):
+        return value
+    return None
+
+
 def create_app():
     # Always load environment configuration
     load_environment()
@@ -85,17 +99,18 @@ def create_app():
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
     app.config["SMTP_USE_SSL"] = str(os.getenv("SMTP_USE_SSL", "false")).lower() in ("1", "true", "yes")
 
-   # Session cookie hygiene - updated to prevent partitioned cookie warnings in iframes
+    # Session cookie hygiene - configurable via env with simple parsing
     app.config.update(
-        SESSION_COOKIE_HTTPONLY=True,
-        # Use Lax for SameSite by default (more secure and compatible with all browsers)
+        SESSION_COOKIE_HTTPONLY=_env_bool("SESSION_COOKIE_HTTPONLY", "true"),
         SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "Lax"),
-        SESSION_COOKIE_SECURE=str(os.getenv("SESSION_COOKIE_SECURE", "false")).lower() == "true",
-        # Add additional cookie settings for iframe compatibility
-        SESSION_COOKIE_PATH="/",
-        SESSION_COOKIE_DOMAIN=None,  # Allow same-origin access
-        # Add explicit session cookie name for consistency
-        SESSION_COOKIE_NAME="session",
+        SESSION_COOKIE_SECURE=_env_bool("SESSION_COOKIE_SECURE", "false"),
+        SESSION_COOKIE_PATH=os.getenv("SESSION_COOKIE_PATH", "/"),
+        SESSION_COOKIE_DOMAIN=_env_domain("SESSION_COOKIE_DOMAIN"),
+        SESSION_COOKIE_NAME=os.getenv("SESSION_COOKIE_NAME", "session"),
+        PREFERRED_URL_SCHEME=os.getenv(
+            "PREFERRED_URL_SCHEME",
+            "https" if _env_bool("FORCE_HTTPS", "false") else "http",
+        ),
     )
     # --- Inactivity timeout (sliding) ---
     app.config["INACTIVITY_TIMEOUT_MINUTES"] = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 30))
@@ -103,7 +118,7 @@ def create_app():
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta( minutes=app.config["INACTIVITY_TIMEOUT_MINUTES"])
     # refresh cookie each request (sliding window)
     app.config["SESSION_REFRESH_EACH_REQUEST"] = True
-    force_https = str(os.getenv("FORCE_HTTPS", "false")).lower() in ("1", "true", "yes")
+    force_https = _env_bool("FORCE_HTTPS", "false")
     proxy_hops = int(os.getenv("TRUST_PROXY_HOPS", "1"))
 
     # Respect proxy headers so request.is_secure reflects original scheme

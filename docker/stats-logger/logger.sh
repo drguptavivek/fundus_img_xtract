@@ -13,18 +13,27 @@ TARGET_CONTAINERS="${TARGET_CONTAINERS#\"}"
 touch "${LOG_FILE}"
 
 to_bytes() {
-  val="$1"
-  case "$val" in
-    *GiB) num=${val%GiB}; mul=1073741824;;
-    *MiB) num=${val%MiB}; mul=1048576;;
-    *KiB) num=${val%KiB}; mul=1024;;
-    *GB)  num=${val%GB};  mul=1000000000;;
-    *MB)  num=${val%MB};  mul=1000000;;
-    *KB|*kB) num=${val%?B}; mul=1000;;
-    *B)   num=${val%B};   mul=1;;
-    *)    num=$val;       mul=1;;
-  esac
-  awk "BEGIN { printf \"%.0f\", $num*$mul }"
+  python3 - "$1" <<'PY'
+import sys
+val = sys.argv[1]
+units = {
+    "GiB": 2**30,
+    "MiB": 2**20,
+    "KiB": 2**10,
+    "GB": 10**9,
+    "MB": 10**6,
+    "KB": 10**3,
+    "kB": 10**3,
+    "B": 1,
+}
+for suffix, mul in units.items():
+    if val.endswith(suffix):
+        num = float(val[:-len(suffix)] or "0")
+        print(int(num * mul))
+        break
+else:
+    print(int(float(val or "0")))
+PY
 }
 
 while true; do
@@ -50,11 +59,13 @@ while true; do
     continue
   }
 
-  {
-    echo "# ${ts_rfc}"
-    echo "${stats_output}"
-  } | while IFS="|" read -r name mem cpu net; do
+  echo "# ${ts_rfc}" >> "${LOG_FILE}"
+  echo "${stats_output}" | while IFS="|" read -r name mem cpu net; do
     [ -z "${name}" ] && continue
+    case "${name}" in
+      \#*) continue ;;
+    esac
+    [ -z "${mem}" ] && continue
     mem_cur=${mem%%/*}; mem_cur=${mem_cur% }; mem_cur=${mem_cur% }
     mem_lim=${mem#*/ }; mem_lim=${mem_lim# }
     cpu_perc=${cpu%%%}

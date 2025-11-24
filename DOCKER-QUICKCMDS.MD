@@ -29,6 +29,16 @@ docker compose ps
 docker compose logs web
 
 sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
+
+
+# 1) Stop/remove any stats-logger containers
+docker rm -f $(docker ps -a --filter name=fundus-img-xtract-stats --format '{{.ID}}') 2>/dev/null || true
+# 2) Remove all stats-logger images
+docker rmi -f $(docker images --format '{{.ID}} {{.Repository}}' | awk '$2 ~ /stats-logger/{print $1}') 2>/dev/null || true
+# 3) Rebuild and start fresh
+docker compose -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
+
+
 ```
 
 ## DEVELOPMENT

@@ -134,7 +134,6 @@ def pregraded_upload():
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
                 lab_unit_id=lab_unit.id,
-                rejected_summary=dataset_label or None,
             )
             db_session.add(new_job)
             db_session.flush()

@@ -101,6 +101,15 @@ def upgrade() -> None:
             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
         """))
 
+        # Sync sequences so future inserts pick the next available IDs
+        for table_name in ("hospitals", "areas", "cameras", "lab_units", "diseases"):
+            connection.execute(sa.text(f"""
+                SELECT setval(
+                    pg_get_serial_sequence('{table_name}', 'id'),
+                    (SELECT COALESCE(MAX(id), 1) FROM {table_name})
+                )
+            """))
+
         print("✅ Core entities data seeded successfully using raw SQL")
 
     except Exception as e:

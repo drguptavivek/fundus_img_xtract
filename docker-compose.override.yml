@@ -1,0 +1,25 @@
+services:
+  web:
+    command:
+      - uv
+      - run
+      - flask
+      - --app
+      - app.py
+      - run
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5001"
+      - --reload
+    environment:
+      FLASK_ENV: development
+      FLASK_DEBUG: "1"
+    volumes:
+      - .:/app
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - web_venv:/app/.venv
+
+volumes:
+  web_venv:

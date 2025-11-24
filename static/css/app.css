@@ -1,6 +1,11 @@
 /* static/css/app.css     */
 /* Custom app styles (viewer, pages). Theme and components are built via Sass. */
 
+/* Always reserve space for a vertical scrollbar to avoid layout shift */
+body {
+  overflow-y: scroll;
+}
+
 /* ================================
    Screening List Improvements
    ================================ */

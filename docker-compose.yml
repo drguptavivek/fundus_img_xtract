@@ -26,7 +26,13 @@ services:
       - ./files:/app/files
       - ./logs:/app/logs
       - web_venv:/app/.venv
-    restart: unless-stopped
+    restart: on-failure:5
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5001/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   db:
     image: postgres:18-alpine
@@ -84,6 +90,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  stats-logger:
+    image: docker:27-cli
+    container_name: fundus-img-xtract-stats
+    env_file:
+      - deploy.config.env
+    environment:
+      STATS_INTERVAL: ${STATS_INTERVAL:-30}
+      TARGET_CONTAINERS: ${TARGET_CONTAINERS:-"fundus-img-xtract-web fundus-img-xtract-db fundus-img-xtract-cache"}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/logs
+    command: >
+      sh -c 'while true; do
+      date --iso-8601=seconds >> /logs/container-stats.log;
+      docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}\t{{.NetIO}}" $${TARGET_CONTAINERS} >> /logs/container-stats.log;
+      echo "" >> /logs/container-stats.log;
+      sleep $${STATS_INTERVAL:-30};
+      done'
     restart: unless-stopped
 
 volumes:

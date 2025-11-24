@@ -12,9 +12,7 @@ docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up
 
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env logs db cache
 
-
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
-
 
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up  web -d
 
@@ -22,7 +20,7 @@ docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
-uv run python -m scripts.create_user admin
+uv run python -m scripts.create_user vivekadmin
 uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
 exit
 

@@ -72,29 +72,35 @@
 
             <div class="mb-3">
               <label class="form-label" for="captcha">CAPTCHA</label>
-              <div class="d-flex align-items-start gap-2">
-                <div class="flex-grow-1">
-                  <div class="d-flex align-items-center gap-2 mb-2">
-                    <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjUwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iNTAiIGZpbGw9IiNmOGY5ZmEiIHN0cm9rZT0iI2RlZTJlNiIgc3Ryb2tlLXdpZHRoPSIxIi8+CiAgPHRleHQgeD0iOTAiIHk9IjMwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxvYWRpbmcuLi48L3RleHQ+Cjwvc3ZnPg==" alt="Loading CAPTCHA..." class="captcha-image border rounded" style="width: 180px; height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh">
-                    <input
-                      class="form-control"
-                      name="captcha"
-                      id="captcha"
-                      autocomplete="off"
-                      required
-                      placeholder="Enter CAPTCHA code"
-                      style="text-transform: uppercase;"
-                      maxlength="10"
-                    >
-                    <button type="button" class="btn btn-outline-info btn-sm" id="refresh-captcha-btn" title="Refresh CAPTCHA">
-                      🔄 Refresh
-                    </button>
-                  </div>
+              <div class="row g-2 align-items-center">
+                <div class="col-12 col-lg-auto">
+                  <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjUwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSIxODAiIGhlaWdodD0iNTAiIGZpbGw9IiNmOGY5ZmEiIHN0cm9rZT0iI2RlZTJlNiIgc3Ryb2tlLXdpZHRoPSIxIi8+CiAgPHRleHQgeD0iOTAiIHk9IjMwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkxvYWRpbmcuLi48L3RleHQ+Cjwvc3ZnPg==" alt="Loading CAPTCHA..." class="captcha-image border rounded" style="width: 180px; height: 50px; cursor: pointer;" id="captcha-img" title="Click to refresh">
+                </div>
+                <div class="col-12 col-lg-6">
+                  <input
+                    class="form-control"
+                    name="captcha"
+                    id="captcha"
+                    autocomplete="off"
+                    required
+                    placeholder="Enter CAPTCHA code"
+                    style="text-transform: uppercase;"
+                    maxlength="10"
+                  >
+                </div>
+                <div class="col-12 col-lg-auto">
+                  <button type="button" class="btn btn-outline-info btn-sm w-100 w-lg-auto" id="refresh-captcha-btn" title="Refresh CAPTCHA">
+                    🔄 Refresh
+                  </button>
+                </div>
+                <div class="col-12">
                   <div class="d-flex align-items-center gap-2" id="audio-controls-container">
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="play-audio-btn" title="Play CAPTCHA audio" disabled>
                       🔊 Loading Audio...
                     </button>
                   </div>
+                </div>
+                <div class="col-12">
                   <div class="form-text">
                     Click on CAPTCHA image or refresh button to get a new code.
                     <br>Can't see the CAPTCHA? Click the play button to hear the code.

@@ -20,6 +20,29 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
+  <style>
+    @media (max-width: 991.98px) {
+      .navbar.navbar-overlay-collapse {
+        position: sticky;
+        top: 0;
+        z-index: 1030;
+      }
+      .navbar.navbar-overlay-collapse .navbar-collapse {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background-color: var(--bs-body-bg);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid var(--bs-border-color);
+        padding: 0.5rem 1rem;
+      }
+      .navbar.navbar-overlay-collapse .navbar-collapse .navbar-nav {
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+    }
+  </style>
  
   {% block extra_styles %}
 
@@ -54,7 +77,7 @@
 <body
   class="bg-body d-flex flex-column min-vh-100 theme-{{ request.blueprint|default('root', true) }} {% block body_classes %}{% endblock %}">
 
-  <nav class="navbar navbar-expand-lg theme-auto bg-body border-bottom mb-4">
+  <nav class="navbar navbar-expand-lg theme-auto bg-body border-bottom mb-4 navbar-overlay-collapse">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('homepage') }}">
         <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Eye retina logo" width="36"

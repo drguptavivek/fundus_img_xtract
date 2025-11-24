@@ -2,6 +2,29 @@
 
 {% block extra_styles %}
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+.card-soft {
+    background: var(--bs-card-bg);
+    color: var(--bs-body-color);
+    border: 1px solid var(--bs-border-color);
+    box-shadow: var(--bs-box-shadow-sm);
+}
+.card-soft .card-title,
+.card-soft .card-text {
+    color: var(--bs-body-color);
+}
+.card-soft.bg-primary,
+.card-soft.bg-info,
+.card-soft.bg-success,
+.card-soft.bg-warning {
+    background: var(--bs-card-bg) !important;
+    color: var(--bs-body-color) !important;
+}
+.card-soft .badge,
+.card-soft .progress-bar {
+    color: var(--bs-body-color);
+}
+</style>
 {% endblock %}
 
 {% block content %}
@@ -25,14 +48,14 @@
     <!-- Scheduler Status Cards -->
     <div class="row mb-4">
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-primary text-white">
+            <div class="card card-soft">
                 <div class="card-body">
                     <h5 class="card-title">Scheduler Status</h5>
                     <h3 class="card-text" id="scheduler-enabled">
                         {% if scheduler_status.enabled %}
-                            <i class="bi bi-check-circle-fill"></i> Enabled
+                            <i class="bi bi-check-circle-fill text-success"></i> Enabled
                         {% else %}
-                            <i class="bi bi-x-circle-fill"></i> Disabled
+                            <i class="bi bi-x-circle-fill text-danger"></i> Disabled
                         {% endif %}
                     </h3>
                 </div>
@@ -40,7 +63,7 @@
         </div>
 
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-info text-white">
+            <div class="card card-soft">
                 <div class="card-body">
                     <h5 class="card-title">Current Time</h5>
                     <h6 class="card-text">
@@ -52,7 +75,7 @@
         </div>
 
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-success text-white">
+            <div class="card card-soft">
                 <div class="card-body">
                     <h5 class="card-title">Last Refresh</h5>
                     <h6 class="card-text" id="last-refresh-time">
@@ -81,7 +104,7 @@
         </div>
 
         <div class="col-md-6 col-lg-3">
-            <div class="card bg-warning text-dark">
+            <div class="card card-soft">
                 <div class="card-body">
                     <h5 class="card-title">Next Refresh</h5>
                     <h6 class="card-text" id="next-refresh-time">

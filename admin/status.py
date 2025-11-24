@@ -412,7 +412,7 @@ def register_status_routes(bp):
     """Register admin status routes with the blueprint"""
 
     bp.add_url_rule(
-        '/admin/status',
+        '/status',
         view_func=admin_status,
         methods=['GET']
     )

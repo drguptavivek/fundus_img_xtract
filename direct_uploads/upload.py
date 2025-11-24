@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from flask import request, render_template, redirect, url_for, flash, current_app
 from flask_login import current_user
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from utils.utils2 import uniquify
 from utils.env_loader import load_environment
@@ -17,7 +17,7 @@ from auth.roles import roles_required
 from utils.rate_limiter import upload_rate_limit
 from models import (
     User, LabUnit, Hospital, DirectImageUpload,
-    Camera, Disease, Area, Job, JobItem
+    Camera, Disease, Area, Job, JobItem, AppSetting
 )
 
 from utils.fileUtils import get_upload_dirs
@@ -33,6 +33,80 @@ def _to_int(v):
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+def _get_int_setting(db_session: Session, key: str, env_var: str, default: int) -> int:
+    """
+    Resolve integer settings, preferring the database-backed app_settings entry
+    and falling back to environment/default values if absent or invalid.
+    """
+    env_value = _to_int(os.getenv(env_var))
+    env_fallback = env_value if env_value is not None else default
+    setting = db_session.get(AppSetting, key)
+    if setting is None:
+        return env_fallback
+
+    value = _to_int(setting.value)
+    if value is None:
+        current_app.logger.warning(
+            "Invalid integer for %s in app_settings (value=%s). Using fallback %s",
+            key, setting.value, env_fallback
+        )
+        return env_fallback
+
+    return value
+
+
+def _get_csv_setting(db_session: Session, key: str, env_var: str, default: list[str]) -> list[str]:
+    """
+    Resolve CSV/list settings, preferring the database-backed app_settings entry
+    and falling back to environment/default values if absent or invalid.
+    """
+    def _split_csv(raw: str | None) -> list[str]:
+        if not raw:
+            return []
+        return [part.strip() for part in raw.split(",") if part.strip()]
+
+    env_value = _split_csv(os.getenv(env_var))
+    env_fallback = env_value if env_value else default
+
+    setting = db_session.get(AppSetting, key)
+    if setting is None:
+        return env_fallback
+
+    parsed = _split_csv(setting.value)
+    if not parsed:
+        current_app.logger.warning(
+            "Invalid list/CSV for %s in app_settings (value=%s). Using fallback %s",
+            key, setting.value, env_fallback
+        )
+        return env_fallback
+
+    return parsed
+
+
+def _get_lifetime_quota(db_session: Session, user) -> int | None:
+    """
+    Determine the lifetime upload quota for a user.
+    Priority:
+    1. User-specific file_upload_quota (>0) -> enforce that limit
+    2. AppSetting DIRECT_UPLOAD_LIFETIME_QUOTA (fallback env/default)
+    3. If resolved quota <=0 or missing -> unlimited (return None)
+    """
+    user_quota = _to_int(getattr(user, "file_upload_quota", None))
+    if user_quota and user_quota > 0:
+        return user_quota
+
+    # Resolve default quota
+    quota = _get_int_setting(
+        db_session,
+        "DIRECT_UPLOAD_LIFETIME_QUOTA",
+        "DIRECT_UPLOAD_LIFETIME_QUOTA",
+        50,
+    )
+    if quota is not None and quota > 0:
+        return quota
+    return None  # None means unlimited
 
 
 @bp.route("/upload", methods=["GET"])
@@ -67,12 +141,19 @@ def upload():
             )
 
             # ---- limits & allowed types ----
-            MAX_FILES_ALLOWED   = int(os.getenv("DIRECT_UPLOAD_MAX_FILES", 100))
-            MAX_FILE_SIZE_MB    = int(os.getenv("DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5))
+            MAX_FILES_ALLOWED = _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
+            )
+            MAX_FILE_SIZE_MB = _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+            )
             MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-            ALLOWED_MIMETYPES   = [m.strip() for m in os.getenv(
-                "DIRECT_UPLOAD_ALLOWED_MIMETYPES", "image/jpeg,image/png"
-            ).split(",")]
+            ALLOWED_MIMETYPES = _get_csv_setting(
+                db_session,
+                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
+                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
+                ["image/jpeg", "image/png"],
+            )
 
             # ---- validate required fields ----
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
@@ -171,7 +252,8 @@ def upload():
                                 current_app.logger.info("Duplicate: %s", filename)
                             else:
                                 # per-request quota (optional; your config key)
-                                if current_user.file_upload_count >= current_app.config.get("MAX_FILES_PER_UPLOAD", 50):
+                                lifetime_quota = _get_lifetime_quota(db_session, current_user)
+                                if lifetime_quota is not None and current_user.file_upload_count >= lifetime_quota:
                                     state, detail = "error", "Upload quota exceeded"
                                     current_app.logger.warning("Quota exceeded for user %s (%s)",
                                                                current_user.username, current_user.id)
@@ -263,8 +345,24 @@ def upload():
         # Get recent direct image uploads for display
         recent_uploads = get_recent_zip_uploads(limit=5, job_type="direct image")
 
-        return render_template("direct_uploads/upload.html",
-                               hospitals=hospitals, lab_units=lab_units,
-                               cameras=cameras, diseases=diseases, areas=areas,
-                               recent_uploads=recent_uploads)
+        lifetime_quota = _get_lifetime_quota(db_session, current_user)
 
+        display_max_files = _get_int_setting(
+            db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
+        )
+        display_max_mb = _get_int_setting(
+            db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+        )
+
+        return render_template(
+            "direct_uploads/upload.html",
+            hospitals=hospitals,
+            lab_units=lab_units,
+            cameras=cameras,
+            diseases=diseases,
+            areas=areas,
+            recent_uploads=recent_uploads,
+            max_files_per_upload=display_max_files,
+            per_file_mb_limit=display_max_mb,
+            lifetime_quota=lifetime_quota,
+        )

@@ -5,7 +5,10 @@
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h3 mb-0">Users</h1>
-    <a class="btn btn-success" href="{{ url_for('admin.add_user') }}">Add User</a>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('admin.list_upload_quotas') }}">Upload Quotas</a>
+      <a class="btn btn-success" href="{{ url_for('admin.add_user') }}">Add User</a>
+    </div>
   </div>
 
   {% if not users %}

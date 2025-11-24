@@ -96,7 +96,10 @@
           </div>
 
           <div class="col-12">
-            <label for="files" class="form-label">Select Images (Max {{ config['MAX_FILES_PER_UPLOAD'] }} files, {{ config['PER_FILE_MAX_BYTES'] / (1024*1024) }}MB per file) <span class="text-danger">*</span></label>
+            <label for="files" class="form-label">
+                Select Images (Max {{ max_files_per_upload }} files, {{ per_file_mb_limit }}MB per file)
+                <span class="text-danger">*</span>
+            </label>
             <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>
           </div>
         </div>

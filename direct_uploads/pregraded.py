@@ -37,6 +37,7 @@ from models import (
 from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
 from utils.env_loader import load_environment
+from .upload import _get_int_setting, _get_csv_setting
 
 
 load_environment()
@@ -63,15 +64,20 @@ def pregraded_upload():
             is_mydriatic = request.form.get("is_mydriatic") == "on"
             files = request.files.getlist("files")
 
-            MAX_FILES_ALLOWED = int(os.getenv("DIRECT_UPLOAD_MAX_FILES", 100))
-            MAX_FILE_SIZE_MB = int(os.getenv("DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5))
+            MAX_FILES_ALLOWED = _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
+            )
+            MAX_FILE_SIZE_MB = _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+            )
             MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-            ALLOWED_MIMETYPES = [
-                m.strip()
-                for m in os.getenv(
-                    "DIRECT_UPLOAD_ALLOWED_MIMETYPES", "image/jpeg,image/png"
-                ).split(",")
-            ]
+            ALLOWED_MIMETYPES = _get_csv_setting(
+                db_session,
+                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
+                "DIRECT_UPLOAD_ALLOWED_MIMETYPES",
+                ["image/jpeg", "image/png"],
+            )
+            lifetime_quota = _get_lifetime_quota(db_session, current_user)
 
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
                 # Store form data in session for potential validation failure
@@ -135,6 +141,10 @@ def pregraded_upload():
             orig_dir, _, _, folder_rel = get_upload_dirs(current_user.id)
 
             files = files[:MAX_FILES_ALLOWED]
+
+            if lifetime_quota is not None and current_user.file_upload_count >= lifetime_quota:
+                flash("Upload quota exceeded.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
             if not files:
                 flash("No files selected.", "warning")
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
@@ -417,6 +427,15 @@ def pregraded_upload():
             "diseases": diseases,
             "areas": areas,
             "recent_uploads": recent_uploads,
+            "max_files_per_upload": _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILES", "DIRECT_UPLOAD_MAX_FILES", 100
+            ),
+            "per_file_mb_limit": _get_int_setting(
+                db_session, "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", "DIRECT_UPLOAD_MAX_FILE_SIZE_MB", 5
+            ),
+            "lifetime_quota": _get_lifetime_quota(
+                db_session, current_user
+            ),
         })
 
         return render_template("direct_uploads/pregraded_upload.html", **context)

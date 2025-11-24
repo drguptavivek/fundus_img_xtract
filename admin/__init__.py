@@ -21,6 +21,8 @@ from .status import (
     refresh_sequences,
     api_sequences_status,
 )
+from .app_settings import upload_settings, admin_settings
+from .upload_quotas import list_upload_quotas, update_upload_quota, upload_quota_redirect
 from .email_settings import (
     email_settings_list, create_email_settings, edit_email_settings,
     test_email_settings, delete_email_settings, activate_email_settings,
@@ -44,6 +46,42 @@ admin_bp.add_url_rule("/change-password", view_func=change_password, methods=["G
 admin_bp.add_url_rule("/roles", view_func=manage_roles, methods=["GET", "POST"])
 admin_bp.add_url_rule("/role-usage", view_func=role_usage, methods=["GET"])
 admin_bp.add_url_rule("/routes-by-role/<string:role_name>", view_func=routes_by_role, methods=["GET"])
+
+# App settings routes (place before catch-all lookup routes)
+admin_bp.add_url_rule(
+    "/settings/uploads",
+    view_func=upload_settings,
+    methods=["GET", "POST"],
+    endpoint="upload_settings",
+    strict_slashes=False,
+)
+admin_bp.add_url_rule(
+    "/settings",
+    view_func=admin_settings,
+    methods=["GET", "POST"],
+    endpoint="admin_settings",
+    strict_slashes=False,
+)
+
+# Upload quotas
+admin_bp.add_url_rule(
+    "/upload-quotas",
+    view_func=list_upload_quotas,
+    methods=["GET"],
+    endpoint="list_upload_quotas",
+)
+admin_bp.add_url_rule(
+    "/upload-quota",
+    view_func=upload_quota_redirect,
+    methods=["GET"],
+    endpoint="upload_quota_redirect",
+)
+admin_bp.add_url_rule(
+    "/upload-quotas/<int:user_id>/update",
+    view_func=update_upload_quota,
+    methods=["POST"],
+    endpoint="update_upload_quota",
+)
 
 # Lookup table routes
 admin_bp.add_url_rule("/<string:model_name>", view_func=list_and_create_lookup, methods=["GET", "POST"])

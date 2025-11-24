@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Upload Quotas{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h4 mb-1">Upload Quotas</h1>
+            <p class="text-muted mb-0">
+                Default lifetime quota: {% if default_quota is none %}<strong>Unlimited</strong>{% else %}<strong>{{ default_quota }}</strong>{% endif %}
+            </p>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.users_list') }}">Back to Admin</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th class="text-end">Uploads</th>
+                            <th class="text-end">Quota (user)</th>
+                            <th class="text-end">Effective</th>
+                            <th class="text-end">Remaining</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ u.username }}</div>
+                                {% if u.full_name %}<div class="text-muted small">{{ u.full_name }}</div>{% endif %}
+                            </td>
+                            <td class="text-end">{{ u.file_upload_count }}</td>
+                            <td class="text-end">
+                                <form class="d-flex gap-2 justify-content-end" method="POST" action="{{ url_for('admin.update_upload_quota', user_id=u.id) }}">
+                                    {{ csrf_field() }}
+                                    <input type="hidden" name="file_upload_count" value="{{ u.file_upload_count }}">
+                                    <input type="number" min="0" class="form-control form-control-sm text-end" style="max-width:110px"
+                                           name="file_upload_quota" value="{{ u.file_upload_quota if u.file_upload_quota is not none else '' }}"
+                                           placeholder="0 = unlimited">
+                                    <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                                </form>
+                            </td>
+                            <td class="text-end">
+                                {% if u.effective_quota is none %}
+                                    <span class="badge text-bg-secondary">Unlimited</span>
+                                {% else %}
+                                    {{ u.effective_quota }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if u.effective_quota is none %}
+                                    —
+                                {% else %}
+                                    {{ u.remaining }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <form class="d-inline" method="POST" action="{{ url_for('admin.update_upload_quota', user_id=u.id) }}">
+                                    {{ csrf_field() }}
+                                    <input type="hidden" name="file_upload_quota" value="{{ u.file_upload_quota if u.file_upload_quota is not none else '' }}">
+                                    <input type="hidden" name="file_upload_count" value="0">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Reset count for {{ u.username }}?')">
+                                        Reset Count
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

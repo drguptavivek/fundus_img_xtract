@@ -85,16 +85,17 @@
 }
 
 .recent-activity {
-    background: white;
+    background: var(--bs-card-bg);
+    border: 1px solid var(--bs-border-color);
     border-radius: 12px;
     padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: var(--bs-box-shadow-sm);
     margin-bottom: 2rem;
 }
 
 .activity-item {
     padding: 0.75rem 0;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--bs-border-color);
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -120,22 +121,22 @@
     flex: 1;
 }
 
-.activity-title {
-    font-weight: 600;
-    color: #495057;
-    margin: 0 0 0.25rem 0;
+.activity-title { font-weight: 600; color: var(--bs-body-color); margin: 0 0 0.25rem 0; }
+.activity-description { font-size: 0.9rem; color: var(--bs-secondary-color); margin: 0; }
+.activity-time { font-size: 0.8rem; color: var(--bs-secondary-color); white-space: nowrap; }
+
+[data-bs-theme="dark"] .recent-activity .activity-item {
+    background: var(--bs-gray-900);
+    border-color: var(--bs-border-color);
 }
 
-.activity-description {
-    font-size: 0.9rem;
-    color: #6c757d;
-    margin: 0;
+[data-bs-theme="dark"] .recent-activity .activity-title {
+    color: var(--bs-body-color);
 }
 
-.activity-time {
-    font-size: 0.8rem;
-    color: #6c757d;
-    white-space: nowrap;
+[data-bs-theme="dark"] .recent-activity .activity-description,
+[data-bs-theme="dark"] .recent-activity .activity-time {
+    color: var(--bs-secondary-color);
 }
 
 .management-tools {
@@ -145,21 +146,27 @@
 }
 
 .tool-card {
-    background: white;
+    background: var(--bs-card-bg);
+    border: 1px solid var(--bs-border-color);
     border-radius: 12px;
     padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    transition: transform 0.2s ease;
+    box-shadow: var(--bs-box-shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .tool-card:hover {
     transform: translateY(-2px);
+    box-shadow: var(--bs-box-shadow);
 }
 
 .tool-card h6 {
-    color: #495057;
+    color: var(--bs-body-color);
     font-weight: 600;
     margin-bottom: 1rem;
+}
+
+[data-bs-theme="dark"] .tool-card {
+    box-shadow: var(--bs-box-shadow);
 }
 
 .quick-stats {
@@ -443,7 +450,8 @@
                     <h6><i class="fas fa-users-cog"></i> User Management</h6>
                     <p class="text-muted small">Manage user accounts, roles, and permissions</p>
                     <div class="d-flex gap-2 flex-wrap">
-                        <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-primary btn-sm">Users</a>
+            <a href="{{ url_for('admin.admin_status') }}" class="btn btn-outline-primary btn-sm">Status</a>
+            <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-primary btn-sm">Users</a>
                         <a href="{{ url_for('admin.manage_roles') }}" class="btn btn-outline-primary btn-sm">Roles</a>
                         <a href="{{ url_for('admin.manage_eligibility_users') }}" class="btn btn-outline-primary btn-sm">Grading Access</a>
                     </div>
@@ -456,7 +464,12 @@
                     <div class="d-flex gap-2 flex-wrap">
                         <a href="{{ url_for('screenings.list_screenings') }}" class="btn btn-outline-primary btn-sm">Screenings</a>
                         <a href="{{ url_for('analytics.images_without_tasks') }}" class="btn btn-outline-primary btn-sm">Images Without Tasks</a>
-                        <a href="{{ url_for('admin.malicious_uploads') }}" class="btn btn-outline-primary btn-sm">Security</a>
+                        <a href="{{ url_for('admin.list_and_create_lookup', model_name='hospital') }}" class="btn btn-outline-primary btn-sm">Hospitals</a>
+                        <a href="{{ url_for('admin.list_and_create_lookup', model_name='lab_unit') }}" class="btn btn-outline-primary btn-sm">Lab Units</a>
+                        <a href="{{ url_for('admin.list_and_create_lookup', model_name='disease') }}" class="btn btn-outline-primary btn-sm">Diseases</a>
+                        <a href="{{ url_for('admin.list_disease_gradings') }}" class="btn btn-outline-primary btn-sm">Gradings</a>
+                        <a href="{{ url_for('admin.list_and_create_lookup', model_name='area') }}" class="btn btn-outline-primary btn-sm">Areas</a>
+                        <a href="{{ url_for('admin.list_and_create_lookup', model_name='camera') }}" class="btn btn-outline-primary btn-sm">Cameras</a>
                     </div>
                 </div>
 
@@ -466,8 +479,14 @@
                     <p class="text-muted small">Database operations and system maintenance</p>
                     <div class="d-flex gap-2 flex-wrap">
                         <a href="{{ url_for('admin.log_viewer') }}" class="btn btn-outline-primary btn-sm">Logs</a>
+                        <a href="{{ url_for('admin.malicious_uploads') }}" class="btn btn-outline-primary btn-sm">Security</a>
+                        <a href="{{ url_for('rate_limit_admin.index') }}" class="btn btn-outline-primary btn-sm">Rate Limits</a>
+                        <a href="{{ url_for('admin.database_dump') }}" class="btn btn-outline-primary btn-sm">Database Dump</a>
+                        <a href="{{ url_for('admin.email_settings_list') }}" class="btn btn-outline-primary btn-sm">Email Settings</a>
+                        <a href="{{ url_for('admin.send_sample_email') }}" class="btn btn-outline-primary btn-sm">Send Sample Email</a>
                         <a href="{{ url_for('admin.database_excel_export') }}" class="btn btn-outline-primary btn-sm">Export Data</a>
                         <a href="{{ url_for('admin.disk_usage') }}" class="btn btn-outline-primary btn-sm">Storage Analysis</a>
+                        <a href="{{ url_for('admin.admin_settings') }}" class="btn btn-outline-primary btn-sm">Admin Settings</a>
                     </div>
                 </div>
 

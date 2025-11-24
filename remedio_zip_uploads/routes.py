@@ -8,7 +8,7 @@ from flask import (
 from flask_login import current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import selectinload
-from models import Hospital, LabUnit, Session, UPLOAD_DIR
+from models import Hospital, LabUnit, UPLOAD_DIR, AppSetting
 import json
 from job_store import db_create_job
 from worker import queue_job
@@ -16,9 +16,40 @@ from . import bp
 from auth.roles import roles_required
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.jobUtils import get_recent_zip_uploads
+from db_transaction_manager import get_db_session
 
 
 ALLOWED_EXT = {"zip"}
+
+
+def _to_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_int_setting(db_session, key: str, env_var: str, default: int, *, min_value: int | None = None) -> int:
+    """
+    Resolve integer settings for ZIP uploads, preferring database values with env/default fallback.
+    """
+    env_value = _to_int(os.getenv(env_var))
+    fallback = env_value if env_value is not None else default
+
+    setting = db_session.get(AppSetting, key)
+    if setting is None:
+        return fallback
+
+    value = _to_int(setting.value)
+    if value is None or (min_value is not None and value < min_value):
+        current_app.logger.warning(
+            "Invalid integer for %s in app_settings (value=%s). Using fallback %s",
+            key, setting.value, fallback
+        )
+        return fallback
+
+    return value
+
 
 def _allowed_zip(name: str) -> bool:
     return "." in name and name.rsplit(".", 1)[1].lower() in ALLOWED_EXT
@@ -114,10 +145,26 @@ def upload_form():
     # Get recent ZIP uploads for display
     recent_uploads = get_recent_zip_uploads(limit=5, job_type="zip upload")
 
+    with get_db_session() as settings_db:
+        max_files = _get_int_setting(
+            settings_db,
+            "MAX_FILES_PER_UPLOAD",
+            "MAX_FILES_PER_UPLOAD",
+            int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50)),
+            min_value=1,
+        )
+        per_file_max_bytes = _get_int_setting(
+            settings_db,
+            "PER_FILE_MAX_BYTES",
+            "PER_FILE_MAX_BYTES",
+            int(current_app.config.get("PER_FILE_MAX_BYTES", 10 * 1024 * 1024)),
+            min_value=1,
+        )
+
     return render_template(
         "upload/upload_multi.html",
-        per_file_mb=int(current_app.config["PER_FILE_MAX_BYTES"] / (1024 * 1024)),
-        max_files=current_app.config["MAX_FILES_PER_UPLOAD"],
+        per_file_mb=int(per_file_max_bytes / (1024 * 1024)),
+        max_files=max_files,
         hospitals=hospitals_data,  # Use extracted data instead of objects
         lab_units=lab_units_data,   # Use extracted data instead of objects
         recent_uploads=recent_uploads
@@ -126,8 +173,12 @@ def upload_form():
 @bp.route("/upload", methods=["POST"])
 @roles_required("admin", "fileUploader", "optometrist", "data_manager")
 def upload_files():
-    per_file_max = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
-    max_files = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))
+    per_file_default = int(current_app.config.get("PER_FILE_MAX_BYTES", 64 * 1024 * 1024))
+    max_files_default = int(current_app.config.get("MAX_FILES_PER_UPLOAD", 50))
+
+    with get_db_session() as db:
+        per_file_max = _get_int_setting(db, "PER_FILE_MAX_BYTES", "PER_FILE_MAX_BYTES", per_file_default, min_value=1)
+        max_files = _get_int_setting(db, "MAX_FILES_PER_UPLOAD", "MAX_FILES_PER_UPLOAD", max_files_default, min_value=1)
 
     # Validate hospital and lab unit selection
     try:
@@ -144,8 +195,7 @@ def upload_files():
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
 
     # Validate that the selected lab unit belongs to the selected hospital
-    db = Session()
-    try:
+    with get_db_session() as db:
         lab_unit = db.query(LabUnit).filter(
             LabUnit.id == lab_unit_id,
             LabUnit.hospital_id == hospital_id
@@ -162,8 +212,6 @@ def upload_files():
         if not allowed_lab_unit_ids and not current_user.has_role('admin'):
             flash("You don't have access to any lab units. Contact an administrator.", "danger")
             return redirect(url_for("remedio_zip_uploads.upload_form"))
-    finally:
-        db.close()
 
     files = request.files.getlist("files")
     if not files:

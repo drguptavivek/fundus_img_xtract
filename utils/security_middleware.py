@@ -4,6 +4,7 @@ Provides additional protection layers for non-authenticated routes.
 """
 
 import logging
+import os
 from typing import Callable, Optional
 from flask import request, jsonify, current_app, g, abort, Response
 from functools import wraps
@@ -133,8 +134,9 @@ class PayloadSizeValidator:
         }
         
         if any(path.startswith(route) for route in upload_routes):
-            # Return a large value for upload routes (they have their own validation)
-            return 100 * 1024 * 1024  # 100MB
+            # Uploads are validated per-file elsewhere; allow a larger envelope (configurable)
+            max_mb = int(os.getenv("UPLOAD_MAX_PAYLOAD_MB", "600"))
+            return max_mb * 1024 * 1024
         
         # Stricter limits for authentication endpoints
         if path in ["/login", "/forgot-password", "/reset-password"]:

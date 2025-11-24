@@ -437,6 +437,44 @@ def directImgFinalThumbnailByUUID(uuid: str):
 
     This follows the same logic as directImgFinalByUUID but for thumbnails.
     """
+    def _serve_direct_thumbnail(folder_rel: str, original_filename: str, kind: str):
+        """
+        Serve a thumbnail file without opening a new DB session.
+        """
+        try:
+            thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
+                folder_rel, original_filename, kind
+            )
+            thumbnail_path = thumbnail_dir / thumbnail_filename
+            if not thumbnail_path.exists():
+                return None
+
+            file_extension = thumbnail_path.suffix.lower()
+            mimetype_map = {
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".png": "image/png",
+                ".gif": "image/gif",
+                ".bmp": "image/bmp",
+                ".webp": "image/webp",
+            }
+            mimetype = mimetype_map.get(file_extension, "image/jpeg")
+
+            response = make_response(
+                send_file(
+                    str(thumbnail_path),
+                    mimetype=mimetype,
+                    as_attachment=False,
+                    download_name=f"thm_{uuid}{file_extension}",
+                )
+            )
+            response.headers["Cache-Control"] = "public, max-age=3600"
+            response.headers["X-Thumbnail"] = "true"
+            return response
+        except Exception as e:
+            current_app.logger.error(f"Error serving direct thumbnail inline: {e}")
+            return None
+
     with transaction_scope() as db:
         direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
@@ -445,7 +483,11 @@ def directImgFinalThumbnailByUUID(uuid: str):
         # Try edited image thumbnail first
         if direct_image.edited_filename:
             if direct_image.edited_thumbnail_filename:
-                return directImgEdThumbnailByUUID(uuid)
+                served = _serve_direct_thumbnail(
+                    direct_image.folder_rel, direct_image.edited_filename, "edited"
+                )
+                if served:
+                    return served
             else:
                 # Generate edited thumbnail on-demand
                 try:
@@ -462,14 +504,22 @@ def directImgFinalThumbnailByUUID(uuid: str):
                             # Update database with thumbnail filename
                             direct_image.edited_thumbnail_filename = thumb_basename
                             # transaction_scope will auto-commit on success
-                            return directImgEdThumbnailByUUID(uuid)
+                            served = _serve_direct_thumbnail(
+                                direct_image.folder_rel, direct_image.edited_filename, "edited"
+                            )
+                            if served:
+                                return served
                 except Exception as e:
                     current_app.logger.error(f"Error generating edited thumbnail on-demand: {e}")
 
         # Try original image thumbnail
         if direct_image.filename:
             if direct_image.thumbnail_filename:
-                return directImgOrigThumbnailByUUID(uuid)
+                served = _serve_direct_thumbnail(
+                    direct_image.folder_rel, direct_image.filename, "orig"
+                )
+                if served:
+                    return served
             else:
                 # Generate original thumbnail on-demand
                 try:
@@ -486,7 +536,11 @@ def directImgFinalThumbnailByUUID(uuid: str):
                             # Update database with thumbnail filename
                             direct_image.thumbnail_filename = thumb_basename
                             # transaction_scope will auto-commit on success
-                            return directImgOrigThumbnailByUUID(uuid)
+                            served = _serve_direct_thumbnail(
+                                direct_image.folder_rel, direct_image.filename, "orig"
+                            )
+                            if served:
+                                return served
                 except Exception as e:
                     current_app.logger.error(f"Error generating original thumbnail on-demand: {e}")
 

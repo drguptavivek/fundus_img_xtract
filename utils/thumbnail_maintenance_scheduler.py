@@ -167,16 +167,22 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
             stats['direct_uploads_processed'] = len(direct_missing_original) + len(direct_missing_edited)
 
             # Trigger thumbnail generation for direct uploads
+            system_ctx = {
+                'user_id': None,
+                'username': 'system',
+                'ip': '127.0.0.1',
+            }
+
             for direct_upload in direct_missing_original:
                 try:
-                    trigger_direct_upload_thumbnails(direct_upload.id, app)
+                    trigger_direct_upload_thumbnails(direct_upload.id, system_ctx)
                     stats['direct_uploads_triggered'] += 1
                 except Exception as e:
                     stats['errors'].append(f"Direct upload {direct_upload.id}: {str(e)}")
 
             for direct_upload in direct_missing_edited:
                 try:
-                    trigger_direct_upload_thumbnails(direct_upload.id, app)
+                    trigger_direct_upload_thumbnails(direct_upload.id, system_ctx)
                     stats['direct_uploads_triggered'] += 1
                 except Exception as e:
                     stats['errors'].append(f"Direct upload {direct_upload.id}: {str(e)}")
@@ -194,7 +200,14 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
             encounter_file_ids = [ef.id for ef in encounter_missing]
             if encounter_file_ids:
                 try:
-                    trigger_encounter_thumbnails(encounter_file_ids, app)
+                    trigger_encounter_thumbnails(
+                        encounter_file_ids,
+                        user_context={
+                            'user_id': None,
+                            'username': 'system',
+                            'ip': '127.0.0.1',
+                        },
+                    )
                     stats['encounter_files_triggered'] = len(encounter_file_ids)
                 except Exception as e:
                     stats['errors'].append(f"Encounter files batch: {str(e)}")

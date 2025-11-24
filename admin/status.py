@@ -4,11 +4,12 @@ Comprehensive admin dashboard providing overview and access to all management ta
 including system health, maintenance operations, and monitoring tools.
 """
 
-from flask import render_template, jsonify, current_app
+from flask import render_template, jsonify, current_app, flash, redirect, url_for
 from auth.roles import roles_required
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 import pytz
+import sqlalchemy as sa
 
 from utils.thumbnail_maintenance_scheduler import (
     get_maintenance_status
@@ -68,6 +69,9 @@ def admin_status():
     # Get recent activity data
     recent_activity = get_recent_activity()
 
+    # Get sequence diagnostics
+    sequence_report = get_sequence_report()
+
     return render_template(
         'admin/status.html',
         thumbnail_stats=thumbnail_stats,
@@ -75,6 +79,7 @@ def admin_status():
         health_status=health_status,
         system_stats=system_stats,
         recent_activity=recent_activity,
+        sequence_report=sequence_report,
         current_time=datetime.now(pytz.UTC)
     )
 
@@ -106,6 +111,34 @@ def api_admin_status():
             'error': str(e),
             'timestamp': datetime.now(pytz.UTC).isoformat()
         }), 500
+
+
+@roles_required('admin')
+def refresh_sequences():
+    """Admin action to realign all sequences to current table maxima."""
+    try:
+        from db_transaction_manager import transaction_scope
+
+        with transaction_scope() as db:
+            _ensure_refresh_function(db)
+            db.execute(sa.text("SELECT refresh_all_sequences();"))
+            db.commit()
+        flash("Sequences refreshed to match table maxima.", "success")
+    except Exception as exc:
+        current_app.logger.exception("Failed to refresh sequences")
+        flash(f"Failed to refresh sequences: {exc}", "danger")
+    return redirect(url_for("admin.admin_status"))
+
+
+@roles_required('admin', 'data_manager')
+def api_sequences_status():
+    """API to get current sequence vs max diagnostics."""
+    try:
+        report = get_sequence_report()
+        return jsonify({"success": True, "data": report})
+    except Exception as exc:
+        current_app.logger.exception("Failed to get sequence diagnostics")
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 def get_system_statistics():
@@ -281,6 +314,98 @@ def get_management_tools_status():
         }
 
     return tools_status
+
+
+def get_sequence_report():
+    """Collect sequence vs table max diagnostics."""
+    from db_transaction_manager import transaction_scope
+
+    report = {
+        "checked_at": datetime.now(pytz.UTC),
+        "mismatches": [],
+        "total_sequences": 0,
+        "entries": [],
+    }
+
+    with transaction_scope() as db:
+        sequences = db.execute(sa.text("""
+            SELECT
+                table_schema,
+                table_name,
+                column_name,
+                pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) AS seq_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) IS NOT NULL
+        """)).all()
+
+        report["total_sequences"] = len(sequences)
+
+        for row in sequences:
+            seq_name = row.seq_name
+            if not seq_name:
+                continue
+
+            table_fq = f'"{row.table_schema}"."{row.table_name}"'
+            col_name = f'"{row.column_name}"'
+
+            max_id = db.execute(
+                sa.text(f"SELECT COALESCE(MAX({col_name}), 0) FROM {table_fq}")
+            ).scalar_one()
+
+            last_value, is_called = db.execute(
+                sa.text(f"SELECT last_value, is_called FROM {seq_name}")
+            ).one()
+
+            next_value = last_value + 1 if is_called else last_value
+            mismatch = max_id >= next_value
+
+            entry = {
+                "table": f"{row.table_schema}.{row.table_name}",
+                "column": row.column_name,
+                "sequence": seq_name,
+                "max_id": int(max_id) if max_id is not None else 0,
+                "last_value": int(last_value),
+                "is_called": bool(is_called),
+                "next_value": int(next_value),
+                "mismatch": mismatch,
+            }
+            report["entries"].append(entry)
+
+            if mismatch:
+                report["mismatches"].append(entry)
+
+    return report
+
+
+def _ensure_refresh_function(db):
+    """Ensure refresh_all_sequences function exists before invoking."""
+    db.execute(sa.text("""
+        CREATE OR REPLACE FUNCTION refresh_all_sequences()
+        RETURNS void AS $$
+        DECLARE
+            rec record;
+            max_id bigint;
+            set_to bigint;
+            is_called boolean;
+        BEGIN
+            FOR rec IN
+                SELECT
+                    format('%I.%I', table_schema, table_name) AS fqtn,
+                    column_name,
+                    pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) AS seq_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND pg_get_serial_sequence(format('%I.%I', table_schema, table_name), column_name) IS NOT NULL
+            LOOP
+                EXECUTE format('SELECT COALESCE(MAX(%I), 0) FROM %s', rec.column_name, rec.fqtn) INTO max_id;
+                set_to := GREATEST(max_id, 1);
+                is_called := max_id > 0;
+                EXECUTE format('SELECT setval(%L, %s, %L)', rec.seq_name, set_to, is_called);
+            END LOOP;
+        END;
+        $$ LANGUAGE plpgsql;
+    """))
 
 
 def register_status_routes(bp):

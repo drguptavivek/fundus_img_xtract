@@ -14,7 +14,13 @@ from .database_dump import database_dump, get_database_info
 from .database_excel_export import database_excel_export, get_database_tables
 from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 from .thumbnail_management import register_thumbnail_admin_routes
-from .status import admin_status, api_admin_status, register_status_routes
+from .status import (
+    admin_status,
+    api_admin_status,
+    register_status_routes,
+    refresh_sequences,
+    api_sequences_status,
+)
 from .email_settings import (
     email_settings_list, create_email_settings, edit_email_settings,
     test_email_settings, delete_email_settings, activate_email_settings,
@@ -84,6 +90,8 @@ admin_bp.add_url_rule("/api/materialized-view/status", view_func=api_materialize
 admin_bp.add_url_rule("/api/materialized-view/last-refresh", view_func=api_last_refresh, methods=["GET"])
 admin_bp.add_url_rule("/api/materialized-view/refresh", view_func=manual_refresh, methods=["POST"])
 admin_bp.add_url_rule("/api/materialized-view/schedule", view_func=api_schedule_status, methods=["GET"])
+admin_bp.add_url_rule("/sequences/refresh", view_func=refresh_sequences, methods=["POST"])
+admin_bp.add_url_rule("/api/sequences/status", view_func=api_sequences_status, methods=["GET"])
 
 # Register thumbnail management routes
 register_thumbnail_admin_routes(admin_bp)

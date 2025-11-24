@@ -273,6 +273,27 @@
     </div>
     {% endif %}
 
+    {% if health_status.issues %}
+    <div class="alert alert-warning mt-3 mb-4">
+        <strong>Health issues:</strong>
+        <ul class="mb-1">
+            {% for issue in health_status.issues %}
+                <li>{{ issue }}</li>
+            {% endfor %}
+        </ul>
+        {% if health_status.recommendations %}
+        <div class="small text-muted">
+            Recommended actions:
+            <ul class="mb-0">
+                {% for rec in health_status.recommendations %}
+                    <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Quick Stats -->
     <div class="quick-stats">
         <div class="quick-stat">
@@ -450,6 +471,45 @@
                     </div>
                 </div>
 
+                <!-- Sequence Health -->
+                <div class="tool-card">
+                    <h6 class="d-flex align-items-center gap-2">
+                        <i class="fas fa-sort-numeric-up-alt"></i> Sequence Health
+                        {% if sequence_report.mismatches %}
+                            <span class="badge bg-danger">{{ sequence_report.mismatches|length }} mismatch{{ 'es' if sequence_report.mismatches|length != 1 }}</span>
+                        {% else %}
+                            <span class="badge bg-success">In sync</span>
+                        {% endif %}
+                    </h6>
+                    <p class="text-muted small">
+                        Checks Postgres sequences against table maxima. Total sequences: {{ sequence_report.total_sequences }}
+                    </p>
+                    {% if sequence_report.mismatches %}
+                        <ul class="list-unstyled small mb-2">
+                            {% for item in sequence_report.mismatches[:5] %}
+                                <li class="mb-1">
+                                    <strong>{{ item.table }}.{{ item.column }}</strong><br>
+                                    max={{ item.max_id }}, next_seq={{ item.next_value }} ({{ item.sequence }})
+                                </li>
+                            {% endfor %}
+                            {% if sequence_report.mismatches|length > 5 %}
+                                <li class="text-muted">…and {{ sequence_report.mismatches|length - 5 }} more</li>
+                            {% endif %}
+                        </ul>
+                    {% else %}
+                        <p class="text-success small mb-2">No mismatches detected.</p>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('admin.refresh_sequences') }}">
+                        {{ csrf_field() }}
+                        <button type="submit" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-sync-alt"></i> Refresh sequences
+                        </button>
+                    </form>
+                    <button class="btn btn-outline-secondary btn-sm mt-2" type="button" data-bs-toggle="modal" data-bs-target="#seqDetailsModal">
+                        <i class="fas fa-list"></i> View details
+                    </button>
+                </div>
+
                 <!-- AI Models -->
                 <div class="tool-card">
                     <h6><i class="fas fa-brain"></i> AI Models</h6>
@@ -496,6 +556,55 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Sequence details modal -->
+<div class="modal fade" id="seqDetailsModal" tabindex="-1" aria-labelledby="seqDetailsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="seqDetailsLabel">Sequence details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">Table</th>
+                <th scope="col">Column</th>
+                <th scope="col">Sequence</th>
+                <th scope="col" class="text-end">Max ID</th>
+                <th scope="col" class="text-end">Next Seq</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in sequence_report.entries %}
+              <tr class="{% if item.mismatch %}table-warning{% endif %}">
+                <td class="small">{{ item.table }}</td>
+                <td class="small">{{ item.column }}</td>
+                <td class="small">{{ item.sequence }}</td>
+                <td class="text-end">{{ item.max_id }}</td>
+                <td class="text-end">{{ item.next_value }}</td>
+                <td>
+                  {% if item.mismatch %}
+                    <span class="badge bg-warning text-dark">Mismatch</span>
+                  {% else %}
+                    <span class="badge bg-success">OK</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

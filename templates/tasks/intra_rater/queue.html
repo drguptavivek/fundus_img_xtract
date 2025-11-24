@@ -71,6 +71,6 @@
 
 {% block page_scripts %}
 {{ super() }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 <script src="{{ url_for('static', filename='js/intra_rater_tasks.js') }}?v={{ config.get('ASSETS_VERSION', '') }}"></script>
 {% endblock %}

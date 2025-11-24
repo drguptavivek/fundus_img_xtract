@@ -305,10 +305,8 @@
                     <div>
                         <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-selection-btn"
                             disabled>Clear</button>
-                        <button type="button" class="btn btn-sm btn-danger" id="bulk-delete-btn" disabled
-                            onclick="confirmDelete()">Delete Selected</button>
-                        <button type="button" class="btn btn-sm btn-primary" id="bulk-edit-btn" disabled
-                            onclick="showBulkEdit()">Edit Selected</button>
+                        <button type="button" class="btn btn-sm btn-danger" id="bulk-delete-btn" disabled>Delete Selected</button>
+                        <button type="button" class="btn btn-sm btn-primary" id="bulk-edit-btn" disabled>Edit Selected</button>
                     </div>
                 </div>
 
@@ -369,8 +367,7 @@
                     </div>
                     <div class="col-md-1">
                         <button type="submit" class="btn btn-success btn-sm">Apply</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                            onclick="hideBulkEdit()">Cancel</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="bulk-cancel-btn">Cancel</button>
                     </div>
                 </div>
                 <!-- Select All Checkboxes -->
@@ -395,24 +392,22 @@
                                 {% if upload.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif',
                                 '.bmp')) %}
                                 <div
-                                    class="image-container w-100 h-100 d-flex align-items-center justify-content-center">
+                                    class="image-container w-100 h-100 d-flex align-items-center justify-content-center"
+                                    data-upload-id="{{ upload.id }}">
                                     {% if upload.edited_filename %}
                                     <!-- hidden original as fallback --> 
                                     <img src="{{ url_for('media._directImgOrigThumbnailByUUID', uuid_str=upload.uuid) }}"
                                         class="img-fluid mh-100 mw-100 original-image d-none"
-                                        alt="{{ upload.filename }}" loading="lazy" style="object-fit: contain;"
-                                        onerror="this.onerror=null; this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';">
+                                        alt="{{ upload.filename }}" loading="lazy" style="object-fit: contain;">
                                     <!-- edited shown first -->
                                     <img src="{{ url_for('media._directImgEdThumbnailByUUID', uuid_str=upload.uuid) }}"
                                         class="img-fluid mh-100 mw-100 edited-image"
-                                        alt="{{ upload.filename }} (edited)" loading="lazy" style="object-fit: contain;"
-                                        onerror="this.onerror=null; const o=this.previousElementSibling; if(o){o.classList.remove('d-none'); this.remove();} else { this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>'; }">
+                                        alt="{{ upload.filename }} (edited)" loading="lazy" style="object-fit: contain;">
                                     {% else %}
                                     <!-- no edited: single original -->
                                     <img src="{{ url_for('media._directImgOrigThumbnailByUUID', uuid_str=upload.uuid) }}"
                                         class="img-fluid mh-100 mw-100" alt="{{ upload.filename }}" loading="lazy"
-                                        style="object-fit: contain;"
-                                        onerror="this.onerror=null; this.closest('.image-container').innerHTML='<div class=\'d-flex align-items-center justify-content-center h-100 text-muted\'><i class=\'bi bi-image fs-1\'></i></div>';">
+                                        style="object-fit: contain;">
                                     {% endif %}
                                 </div>
                                 {% else %}
@@ -780,7 +775,7 @@
         }
 
         // Show bulk edit controls
-        window.showBulkEdit = function () {
+        const showBulkEdit = function () {
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             if (!anyChecked) {
                 alert('Please select at least one upload to edit.');
@@ -794,7 +789,7 @@
         };
 
         // Hide bulk edit controls
-        window.hideBulkEdit = function () {
+        const hideBulkEdit = function () {
             bulkEditControls.classList.add('d-none');
             // Reset form fields
             if (bulkOperationsForm) {
@@ -803,7 +798,7 @@
         };
 
         // Confirm delete action
-        window.confirmDelete = function () {
+        const confirmDelete = function () {
             const anyChecked = Array.from(uploadCheckboxes).some(cb => cb.checked);
             if (!anyChecked) {
                 alert('Please select at least one upload to delete.');
@@ -865,6 +860,23 @@
         });
         }
 
+        // Wire up bulk action buttons
+        if (bulkEditBtn) {
+            bulkEditBtn.addEventListener('click', showBulkEdit);
+        }
+
+        const bulkCancelBtn = document.getElementById('bulk-cancel-btn');
+        if (bulkCancelBtn) {
+            bulkCancelBtn.addEventListener('click', hideBulkEdit);
+        }
+
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.addEventListener('click', confirmDelete);
+        }
+
+        // Initialize image error fallbacks
+        attachThumbnailFallbacks();
+
         // Initialize image toggle functionality
         initializeImageToggle();
     });
@@ -883,7 +895,7 @@
     // Function to toggle between original and edited images
     function toggleImage(uploadId) {
         const switchElement = document.getElementById(`toggle-${uploadId}`);
-        const container = document.querySelector(`.image-container [data-upload-id="${uploadId}"]`)?.closest('.image-container');
+        const container = document.querySelector(`.image-container[data-upload-id="${uploadId}"]`);
 
         if (!container) return;
 
@@ -901,6 +913,35 @@
             originalImage.style.display = 'block';
             editedImage.style.display = 'none';
         }
+    }
+
+    function attachThumbnailFallbacks() {
+        const placeholderMarkup = `
+            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                <i class="bi bi-image fs-1"></i>
+            </div>
+        `;
+
+        document.querySelectorAll('.image-container img').forEach(img => {
+            img.addEventListener('error', () => {
+                const container = img.closest('.image-container');
+
+                // If edited image fails, fall back to original if available
+                if (img.classList.contains('edited-image') && container) {
+                    const original = container.querySelector('.original-image');
+                    if (original) {
+                        original.classList.remove('d-none');
+                        original.style.display = 'block';
+                        img.remove();
+                        return;
+                    }
+                }
+
+                if (container) {
+                    container.innerHTML = placeholderMarkup;
+                }
+            }, { once: true });
+        });
     }
 </script>
 {% endblock %}

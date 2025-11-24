@@ -37,7 +37,7 @@ from models import (
 from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
 from utils.env_loader import load_environment
-from .upload import _get_int_setting, _get_csv_setting
+from .upload import _get_int_setting, _get_csv_setting, _get_lifetime_quota
 
 
 load_environment()

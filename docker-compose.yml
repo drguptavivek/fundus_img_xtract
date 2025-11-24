@@ -92,26 +92,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  stats-logger:
-    image: docker:27-cli
-    container_name: fundus-img-xtract-stats
-    env_file:
-      - deploy.config.env
-    environment:
-      STATS_INTERVAL: ${STATS_INTERVAL:-30}
-      TARGET_CONTAINERS: ${TARGET_CONTAINERS:-"fundus-img-xtract-web fundus-img-xtract-db fundus-img-xtract-cache"}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./logs:/logs
-    command: >
-      sh -c 'while true; do
-      date --iso-8601=seconds >> /logs/container-stats.log;
-      docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}\t{{.NetIO}}" $${TARGET_CONTAINERS} >> /logs/container-stats.log;
-      echo "" >> /logs/container-stats.log;
-      sleep $${STATS_INTERVAL:-30};
-      done'
-    restart: unless-stopped
-
 volumes:
   postgres_data:
   redis_data:

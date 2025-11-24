@@ -1,11 +1,17 @@
 # Rapid Docker commands for setting up the app 
 
 ```bash
+rm docker-compose.override.yml 
+rm develop.secrets.env
+
+cp deploy.secrets.env.example deploy.secrets.env
+nano deploy.secrets.env
 
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env down -v
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env logs db cache
+
 
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
 

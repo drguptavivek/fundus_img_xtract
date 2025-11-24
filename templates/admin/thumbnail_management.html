@@ -193,26 +193,26 @@
         <div class="row">
             <div class="col-md-6">
                 <div class="d-grid gap-2">
-                    <button type="button" class="btn btn-primary" onclick="runMaintenance('cleanup')">
+                    <button type="button" class="btn btn-primary maintenance-btn" data-task="cleanup">
                         <i class="bi bi-trash"></i> Cleanup Orphaned Thumbnails
                     </button>
-                    <button type="button" class="btn btn-success" onclick="runMaintenance('regeneration')">
+                    <button type="button" class="btn btn-success maintenance-btn" data-task="regeneration">
                         <i class="bi bi-arrow-clockwise"></i> Regenerate Missing Thumbnails
                     </button>
-                    <button type="button" class="btn btn-info" onclick="runMaintenance('validation')">
+                    <button type="button" class="btn btn-info maintenance-btn" data-task="validation">
                         <i class="bi bi-check-circle"></i> Validate Thumbnail Integrity
                     </button>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="d-grid gap-2">
-                    <button type="button" class="btn btn-warning" onclick="runMaintenance('all')">
+                    <button type="button" class="btn btn-warning maintenance-btn" data-task="all">
                         <i class="bi bi-gear"></i> Run Full Maintenance Cycle
                     </button>
-                    <button type="button" class="btn btn-outline-primary" onclick="refreshStats()">
+                    <button type="button" class="btn btn-outline-primary" id="refresh-stats">
                         <i class="bi bi-arrow-repeat"></i> Refresh Statistics
                     </button>
-                    <button type="button" class="btn btn-outline-info" onclick="healthCheck()">
+                    <button type="button" class="btn btn-outline-info" id="health-check">
                         <i class="bi bi-heart-pulse"></i> Health Check
                     </button>
                 </div>
@@ -271,12 +271,14 @@
 {% block page_scripts %}
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 // Maintenance operations
-function runMaintenance(taskType) {
-    const button = event.target.closest('button');
-    const originalText = button.innerHTML;
+function runMaintenance(taskType, button) {
+    const targetButton = button || null;
+    const originalText = targetButton ? targetButton.innerHTML : null;
 
-    button.disabled = true;
-    button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running...';
+    if (targetButton) {
+        targetButton.disabled = true;
+        targetButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running...';
+    }
 
     let endpoint = '/admin/api/thumbnail/';
     let data = {};
@@ -318,8 +320,10 @@ function runMaintenance(taskType) {
         showResult({ success: false, error: error.message });
     })
     .finally(() => {
-        button.disabled = false;
-        button.innerHTML = originalText;
+        if (targetButton) {
+            targetButton.disabled = false;
+            targetButton.innerHTML = originalText;
+        }
     });
 }
 
@@ -466,8 +470,22 @@ function getCSRFToken() {
 // Auto-refresh stats every 30 seconds
 setInterval(refreshStats, 30000);
 
-// Initial stats load
+// Initial wiring and stats load
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.maintenance-btn').forEach(btn => {
+        btn.addEventListener('click', () => runMaintenance(btn.dataset.task, btn));
+    });
+
+    const refreshBtn = document.getElementById('refresh-stats');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => refreshStats());
+    }
+
+    const healthBtn = document.getElementById('health-check');
+    if (healthBtn) {
+        healthBtn.addEventListener('click', () => healthCheck());
+    }
+
     refreshStats();
 });
 </script>

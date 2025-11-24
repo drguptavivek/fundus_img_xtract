@@ -519,6 +519,13 @@
                                             {% endif %}
                                         </span>
                                     </div>
+
+                                    {% if upload.is_pregraded and verification_map.get(upload.id) %}
+                                    <div class="mt-2">
+                                        <span class="badge bg-warning text-dark">Dataset</span>
+                                        <span class="text-muted small">{{ verification_map.get(upload.id) }}</span>
+                                    </div>
+                                    {% endif %}
                                 </div>
 
                                 <!-- Edit Button -->

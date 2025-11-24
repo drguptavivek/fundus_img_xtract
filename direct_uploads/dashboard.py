@@ -11,6 +11,7 @@ from models import (
     LabUnit,
     Hospital,
     DirectImageUpload,
+    DirectImageVerify,
     Camera,
     Disease,
     Area,
@@ -699,8 +700,19 @@ def dashboard():
         )
         uploads = db_session.execute(main_q).scalars().all()
 
-        # Fetch gradings for these uploads using Grade model instead of ImageGrading
         upload_ids = [u.id for u in uploads]
+        # Fetch associated verification remarks (includes dataset labels for pre-graded)
+        verification_map: dict[int, str] = {}
+        if upload_ids:
+            verification_rows = db_session.execute(
+                select(DirectImageVerify.image_upload_id, DirectImageVerify.remarks)
+                .where(DirectImageVerify.image_upload_id.in_(upload_ids))
+            ).all()
+            for image_upload_id, remarks in verification_rows:
+                if remarks:
+                    verification_map[image_upload_id] = remarks
+
+        # Fetch gradings for these uploads using Grade model instead of ImageGrading
         gradings = {}
         if upload_ids:
             # Query Grade records through GradingTask for these uploads
@@ -854,5 +866,6 @@ def dashboard():
             filter_lab_unit_id=f_lab_unit_id, filter_uploader_id=f_uploader_id,
             filter_hospital_id=f_hospital_id, filter_camera_id=f_camera_id,
             filter_disease_id=f_disease_id, filter_area_id=f_area_id, filter_pregraded=f_pregraded,
+            verification_map=verification_map,
             bulk_edit_result=bulk_edit_result
         )

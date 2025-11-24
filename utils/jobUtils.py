@@ -8,13 +8,19 @@ from models import Job, LabUnit
 from utils.utils import get_db_session
 
 
-def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> List[Dict[str, Any]]:
+def get_recent_zip_uploads(
+    limit: int = 100,
+    job_type: str = "zip upload",
+    include_null_types: bool = False,
+) -> List[Dict[str, Any]]:
     """
     Get recent ZIP upload jobs with success/failure status
 
     Args:
         limit: Maximum number of records to return (default: 100)
         job_type: Type of job to filter (default: "zip upload")
+        include_null_types: When True, include jobs where upload_type is NULL
+            (useful for legacy rows that did not populate upload_type).
 
     Returns:
         List of dictionaries containing job information and status counts
@@ -31,7 +37,10 @@ def get_recent_zip_uploads(limit: int = 100, job_type: str = "zip upload") -> Li
 
         # Apply job type filter if provided
         if job_type:
-            query = query.filter(Job.upload_type == job_type)
+            if include_null_types:
+                query = query.filter(Job.upload_type.in_([job_type, None]))
+            else:
+                query = query.filter(Job.upload_type == job_type)
 
         jobs = (
             query

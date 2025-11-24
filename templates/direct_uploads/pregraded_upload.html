@@ -288,20 +288,66 @@
 {% block page_scripts %}
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function () {
+    const STORAGE_KEY = 'pregraded_upload_prefs';
+
+    function loadPrefs() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        console.warn('Failed to read pregraded prefs', e);
+        return {};
+      }
+    }
+
+    function savePref(key, value) {
+      try {
+        const prefs = loadPrefs();
+        prefs[key] = value;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+      } catch (e) {
+        console.warn('Failed to save pregraded prefs', e);
+      }
+    }
+
+    function applyRadioValue(groupName, value) {
+      if (!value) return;
+      const radio = document.querySelector(`input[name="${groupName}"][value="${value}"]`);
+      if (radio) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change'));
+      }
+    }
+
     const mydriaticCheckbox = document.getElementById('is_mydriatic');
     const mydriaticLabel = document.getElementById('mydriatic-label');
+    const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
+    const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
+    const cameraButtons = document.querySelectorAll('[name="camera_id"]');
+    const diseaseButtons = document.querySelectorAll('[name="disease_id"]');
+    const areaButtons = document.querySelectorAll('[name="area_id"]');
+
+    const prefs = loadPrefs();
+
+    // Apply saved selections (excluding dataset label and files)
+    applyRadioValue('hospital_id', prefs.hospital_id);
+    applyRadioValue('lab_unit_id', prefs.lab_unit_id);
+    applyRadioValue('camera_id', prefs.camera_id);
+    applyRadioValue('disease_id', prefs.disease_id);
+    applyRadioValue('area_id', prefs.area_id);
+
+    if (mydriaticCheckbox && typeof prefs.is_mydriatic === 'boolean') {
+      mydriaticCheckbox.checked = prefs.is_mydriatic;
+    }
 
     // Initialize the mydriatic label based on checkbox state
     if (mydriaticCheckbox) {
       mydriaticLabel.textContent = mydriaticCheckbox.checked ? 'Mydriatic' : 'Non Mydriatic';
+      mydriaticCheckbox.addEventListener('change', function () {
+        mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
+        savePref('is_mydriatic', this.checked);
+      });
     }
-
-    mydriaticCheckbox.addEventListener('change', function () {
-      mydriaticLabel.textContent = this.checked ? 'Mydriatic' : 'Non Mydriatic';
-    });
-
-    const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
-    const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');
 
     // Function to filter lab units based on selected hospital
     function filterLabUnits(selectedHospitalId) {
@@ -313,6 +359,7 @@
         } else {
           labButton.parentElement.style.display = 'none';
           label.style.display = 'none';
+          labButton.checked = false;
         }
       });
     }
@@ -320,7 +367,32 @@
     hospitalButtons.forEach(button => {
       button.addEventListener('change', function () {
         const selectedHospitalId = this.value;
+        savePref('hospital_id', selectedHospitalId);
         filterLabUnits(selectedHospitalId);
+      });
+    });
+
+    labUnitButtons.forEach(button => {
+      button.addEventListener('change', function () {
+        savePref('lab_unit_id', this.value);
+      });
+    });
+
+    cameraButtons.forEach(button => {
+      button.addEventListener('change', function () {
+        savePref('camera_id', this.value);
+      });
+    });
+
+    diseaseButtons.forEach(button => {
+      button.addEventListener('change', function () {
+        savePref('disease_id', this.value);
+      });
+    });
+
+    areaButtons.forEach(button => {
+      button.addEventListener('change', function () {
+        savePref('area_id', this.value);
       });
     });
 
@@ -331,10 +403,11 @@
       label.style.display = 'none';
     });
 
-    // Check if there's a pre-selected hospital and apply the filter
+    // Apply filter if we have a hospital selection (saved or from server)
     const selectedHospital = document.querySelector('[name="hospital_id"]:checked');
     if (selectedHospital) {
       filterLabUnits(selectedHospital.value);
+      savePref('hospital_id', selectedHospital.value);
     }
   });
 </script>

@@ -129,6 +129,7 @@ def pregraded_upload():
             new_job = Job(
                 token=job_token,
                 status="processing",
+                upload_type="pregraded",
                 uploader_user_id=current_user.id,
                 uploader_username=current_user.username,
                 uploader_ip=request.remote_addr,
@@ -418,7 +419,11 @@ def pregraded_upload():
         )
 
         # Get recent pregraded uploads for display
-        recent_uploads = get_recent_zip_uploads(limit=5, job_type="pregraded")
+        recent_uploads = get_recent_zip_uploads(
+            limit=5,
+            job_type="pregraded",
+            include_null_types=True,  # include legacy jobs that lacked upload_type
+        )
 
         context.update({
             "hospitals": hospitals,

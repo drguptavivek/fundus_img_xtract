@@ -606,6 +606,14 @@ class ThumbnailMaintenanceScheduler:
                 if current_time.hour == 13 and current_time.minute == 30:
                     self._schedule_task(regenerate_missing_thumbnails, "13:30_daily")
 
+                # Schedule 2b: Additional regeneration at 20:00 IST
+                if current_time.hour == 20 and current_time.minute == 0:
+                    self._schedule_task(regenerate_missing_thumbnails, "20:00_daily")
+
+                # Schedule 2c: Light-touch regeneration every 10 minutes
+                if current_time.minute % 10 == 0:
+                    self._schedule_task(lambda app, label: regenerate_missing_thumbnails(app, label, limit=200), "every_10_minutes")
+
                 # Schedule 3: Integrity validation at 19:00 IST
                 if current_time.hour == 19 and current_time.minute == 0:
                     self._schedule_task(validate_thumbnail_integrity, "19:00_daily")
@@ -724,3 +732,28 @@ def trigger_manual_maintenance(task_type="all"):
             'error': str(e),
             'task_type': task_type
         }
+
+
+def queue_missing_thumbnail_regeneration(app, schedule_time: str = "post_upload", limit: int = 200):
+    """
+    Queue a missing-thumbnail regeneration run in the background.
+
+    Args:
+        app: Flask application instance
+        schedule_time: Label for logging/metrics
+        limit: Max thumbnails to trigger in this run
+    """
+    try:
+        executor = app.config.get("EXECUTOR")
+        if executor:
+            executor.submit(regenerate_missing_thumbnails, app, schedule_time, limit)
+            logger.info(f"Queued missing-thumbnail regeneration (limit {limit}) via executor, schedule={schedule_time}")
+        else:
+            threading.Thread(
+                target=regenerate_missing_thumbnails,
+                args=(app, schedule_time, limit),
+                daemon=True,
+            ).start()
+            logger.info(f"Started missing-thumbnail regeneration thread (limit {limit}), schedule={schedule_time}")
+    except Exception as e:
+        logger.error(f"Failed to queue missing-thumbnail regeneration: {e}")

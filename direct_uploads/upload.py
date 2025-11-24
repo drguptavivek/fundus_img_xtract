@@ -23,6 +23,7 @@ from models import (
 from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids
 from utils.jobUtils import get_recent_zip_uploads
+from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 
 
 load_environment()
@@ -316,6 +317,12 @@ def upload():
             ok = sum(1 for i in job_items if i.state == "completed")
             err = len(job_items) - ok
             current_app.logger.info("Job %s done. Success:%s Errors:%s", new_job.id, ok, err)
+
+            # Trigger a background missing-thumbnail regeneration to catch any gaps
+            try:
+                queue_missing_thumbnail_regeneration(current_app, schedule_time="post_direct_upload", limit=200)
+            except Exception as e:
+                current_app.logger.warning(f"Could not queue thumbnail regeneration after upload: {e}")
 
             flash("Upload process initiated. Check status for details.", "info")
             return redirect(url_for("jobs.upload_processing", job_id=new_job.token), code=303)

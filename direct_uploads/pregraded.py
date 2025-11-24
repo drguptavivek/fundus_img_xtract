@@ -39,6 +39,7 @@ from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
 from utils.env_loader import load_environment
 from .upload import _get_int_setting, _get_csv_setting, _get_lifetime_quota
+from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 
 
 load_environment()
@@ -307,6 +308,12 @@ def pregraded_upload():
                 else f"{errors} of {len(job_items)} files encountered issues."
             )
             db_session.commit()
+
+            # Kick off background regeneration to cover any missing thumbnails from this batch
+            try:
+                queue_missing_thumbnail_regeneration(current_app, schedule_time="post_pregraded_upload", limit=200)
+            except Exception as e:
+                current_app.logger.warning(f"Could not queue thumbnail regeneration after pregraded upload: {e}")
 
             flash(
                 "Pre-graded upload processed. Review job status for details.",

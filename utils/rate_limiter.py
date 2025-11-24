@@ -70,46 +70,51 @@ def rate_limit_with_feedback(
         error_message: Custom error message for rate limit exceeded
         show_warning: Whether to show a warning message when approaching the limit
     """
+    def _get_current_limiter():
+        """
+        Safely resolve the current limiter instance from app extensions or global.
+        Returns None if not initialized to avoid breaking routes during app startup.
+        """
+        if current_app and 'limiter' in current_app.extensions:
+            limiter_set = current_app.extensions['limiter']
+            if isinstance(limiter_set, set) and limiter_set:
+                return next(iter(limiter_set))
+            return limiter_set
+        return limiter
+
+    def _apply_limit(func: Callable) -> Callable:
+        """Apply limiter if available, otherwise return the original function."""
+        current_limiter = _get_current_limiter()
+        if current_limiter is None:
+            return func
+        return current_limiter.limit(
+            limit,
+            per_method=per_method,
+            methods=methods,
+            error_message=error_message or f"Rate limit exceeded: {limit}",
+            override_defaults=True
+        )(func)
+
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def wrapped(*args, **kwargs):
-            # Check if we should show a warning about remaining requests
+            # Optionally provide user-facing warning hooks (left as no-op today)
             if show_warning and not request.path.startswith('/api/'):
                 try:
-                    # Get current rate limit status
-                    from flask import g
+                    from flask import g  # noqa: WPS433 (runtime import)
                     if hasattr(g, 'limiter'):
-                        # This is a simplified check - in a real implementation,
-                        # you might want to check the actual remaining requests
                         pass
                 except Exception:
                     pass
-            
-            # Get the limiter from app context or use global
-            from flask import current_app
-            if current_app and 'limiter' in current_app.extensions:
-                # Flask-Limiter 4.0 stores the limiter in a set
-                limiter_set = current_app.extensions['limiter']
-                if isinstance(limiter_set, set) and limiter_set:
-                    current_limiter = next(iter(limiter_set))
-                else:
-                    current_limiter = limiter_set
-            else:
-                current_limiter = limiter
-            
-            if current_limiter is None:
-                # If no limiter is available, just call the function
-                return f(*args, **kwargs)
-            
-            # Apply the limiter dynamically
-            return current_limiter.limit(
-                limit,
-                per_method=per_method,
-                methods=methods,
-                error_message=error_message or f"Rate limit exceeded: {limit}",
-                override_defaults=True
-            )(f)(*args, **kwargs)
-        
+
+            limited_func = wrapped._limited_func  # type: ignore[attr-defined]
+            if limited_func is None:
+                limited_func = _apply_limit(f)
+                wrapped._limited_func = limited_func  # type: ignore[attr-defined]
+
+            return limited_func(*args, **kwargs)
+
+        wrapped._limited_func = _apply_limit(f)  # type: ignore[attr-defined]
         return wrapped
     
     return decorator
@@ -129,34 +134,37 @@ def rate_limit(
         methods: List of HTTP methods to limit (None = all)
         error_message: Custom error message for rate limit exceeded
     """
+    def _get_current_limiter():
+        if current_app and 'limiter' in current_app.extensions:
+            limiter_set = current_app.extensions['limiter']
+            if isinstance(limiter_set, set) and limiter_set:
+                return next(iter(limiter_set))
+            return limiter_set
+        return limiter
+
+    def _apply_limit(func: Callable) -> Callable:
+        current_limiter = _get_current_limiter()
+        if current_limiter is None:
+            return func
+        return current_limiter.limit(
+            limit,
+            per_method=per_method,
+            methods=methods,
+            error_message=error_message or f"Rate limit exceeded: {limit}",
+            override_defaults=False
+        )(func)
+
     def decorator(f: Callable) -> Callable:
         @wraps(f)
         def wrapped(*args, **kwargs):
-            # Get the limiter from app context or use global
-            from flask import current_app
-            if current_app and 'limiter' in current_app.extensions:
-                # Flask-Limiter 4.0 stores the limiter in a set
-                limiter_set = current_app.extensions['limiter']
-                if isinstance(limiter_set, set) and limiter_set:
-                    current_limiter = next(iter(limiter_set))
-                else:
-                    current_limiter = limiter_set
-            else:
-                current_limiter = limiter
-            
-            if current_limiter is None:
-                # If no limiter is available, just call the function
-                return f(*args, **kwargs)
-            
-            # Apply the limiter dynamically
-            return current_limiter.limit(
-                limit,
-                per_method=per_method,
-                methods=methods,
-                error_message=error_message or f"Rate limit exceeded: {limit}",
-                override_defaults=False
-            )(f)(*args, **kwargs)
-        
+            limited_func = wrapped._limited_func  # type: ignore[attr-defined]
+            if limited_func is None:
+                limited_func = _apply_limit(f)
+                wrapped._limited_func = limited_func  # type: ignore[attr-defined]
+
+            return limited_func(*args, **kwargs)
+
+        wrapped._limited_func = _apply_limit(f)  # type: ignore[attr-defined]
         return wrapped
     
     return decorator

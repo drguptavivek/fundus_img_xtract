@@ -12,6 +12,7 @@ from flask import (
     url_for,
     flash,
     current_app,
+    session,
 )
 from flask_login import current_user
 from sqlalchemy import select, func
@@ -79,9 +80,21 @@ def pregraded_upload():
             )
             lifetime_quota = _get_lifetime_quota(db_session, current_user)
 
+            if len(files) > MAX_FILES_ALLOWED:
+                session["pregraded_upload_form_data"] = {
+                    "hospital_id": hospital_id,
+                    "lab_unit_id": lab_unit_id,
+                    "camera_id": camera_id,
+                    "disease_id": disease_id,
+                    "area_id": area_id,
+                    "dataset_label": dataset_label,
+                    "is_mydriatic": is_mydriatic,
+                }
+                flash(f"Too many files selected. You can upload up to {MAX_FILES_ALLOWED} files at once.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
+
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
                 # Store form data in session for potential validation failure
-                from flask import session
                 form_data = {
                     "hospital_id": hospital_id,
                     "lab_unit_id": lab_unit_id,
@@ -96,7 +109,6 @@ def pregraded_upload():
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
             
             # Clear form data from session after successful validation
-            from flask import session
             if "pregraded_upload_form_data" in session:
                 del session["pregraded_upload_form_data"]
 
@@ -306,7 +318,6 @@ def pregraded_upload():
             )
 
         # Check if there's stored form data from a previous submission
-        from flask import session
         stored_form_data = session.get("pregraded_upload_form_data")
         context = {}
         

@@ -4,7 +4,13 @@ import logging
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
 
-from utils.rate_limiter import clear_rate_limit, get_rate_limit_status, get_rate_limit_key, limiter
+from utils.rate_limiter import (
+    clear_rate_limit,
+    conditional_exempt,
+    get_rate_limit_status,
+    get_rate_limit_key,
+    limiter,
+)
 from utils.redis_connection import build_redis_url
 from auth.roles import roles_required
 
@@ -22,6 +28,7 @@ rate_limit_logger = logging.getLogger("rate_limit")
 @rate_limit_admin_bp.route("/")
 @login_required
 @roles_required("admin")
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def index():
     """Rate limit management dashboard."""
     # Get pagination parameters
@@ -47,6 +54,7 @@ def index():
 @rate_limit_admin_bp.route("/clear", methods=["POST"])
 @login_required
 @roles_required("admin")
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def clear_limit():
     """Clear a rate limit block."""
     key = request.form.get("key", "").strip()
@@ -84,6 +92,7 @@ def clear_limit():
 @rate_limit_admin_bp.route("/status")
 @login_required
 @roles_required("admin")
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def status():
     """Get rate limit status as JSON."""
     key = request.args.get("key")
@@ -95,6 +104,7 @@ def status():
 
 @rate_limit_admin_bp.route("/my-key")
 @login_required
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def get_my_key():
     """Get the current user's rate limit key."""
     # Call the function to get the key
@@ -105,6 +115,7 @@ def get_my_key():
 @rate_limit_admin_bp.route("/clear-all", methods=["POST"])
 @login_required
 @roles_required("admin")
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def clear_all():
     """Clear ALL rate limits (dangerous operation)."""
     # Require confirmation
@@ -138,6 +149,7 @@ def clear_all():
 @rate_limit_admin_bp.route("/clear-limit-ajax", methods=["POST"])
 @login_required
 @roles_required("admin")
+@conditional_exempt(lambda: hasattr(current_user, "is_authenticated") and current_user.is_authenticated and current_user.has_role("admin"))
 def clear_limit_ajax():
     """Clear a rate limit block via AJAX."""
     key = request.json.get("key", "").strip()

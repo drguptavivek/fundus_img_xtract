@@ -101,6 +101,7 @@
                 <span class="text-danger">*</span>
             </label>
             <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>
+            <div class="invalid-feedback" id="files-feedback"></div>
           </div>
         </div>
 
@@ -288,6 +289,48 @@
 {% block page_scripts %}
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   document.addEventListener('DOMContentLoaded', function () {
+    const MAX_FILES = {{ max_files_per_upload }};
+    const filesInput = document.getElementById('files');
+    const filesFeedback = document.getElementById('files-feedback');
+    const uploadForm = document.querySelector('form[action="{{ url_for("direct_uploads.pregraded_upload") }}"]');
+
+    function clearFileError() {
+      if (filesInput) {
+        filesInput.classList.remove('is-invalid');
+      }
+      if (filesFeedback) {
+        filesFeedback.textContent = '';
+      }
+    }
+
+    function validateFileCount() {
+      if (!filesInput) return true;
+      const tooMany = filesInput.files.length > MAX_FILES;
+      if (tooMany) {
+        filesInput.classList.add('is-invalid');
+        if (filesFeedback) {
+          filesFeedback.textContent = `You can select up to ${MAX_FILES} files per upload.`;
+        }
+        return false;
+      }
+      clearFileError();
+      return true;
+    }
+
+    if (filesInput) {
+      filesInput.addEventListener('change', validateFileCount);
+    }
+
+    if (uploadForm) {
+      uploadForm.addEventListener('submit', function (event) {
+        if (!validateFileCount()) {
+          event.preventDefault();
+          event.stopPropagation();
+          filesInput?.focus();
+        }
+      });
+    }
+
     const STORAGE_KEY = 'pregraded_upload_prefs';
 
     function loadPrefs() {

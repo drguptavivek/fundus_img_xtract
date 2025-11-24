@@ -5,12 +5,28 @@ set -eu
 INTERVAL="${STATS_INTERVAL:-30}"
 TARGET_CONTAINERS="${TARGET_CONTAINERS:-fundus-img-xtract-web fundus-img-xtract-db fundus-img-xtract-cache}"
 LOG_FILE="${LOG_FILE:-/logs/container-stats.log}"
+LOG_MAX_BYTES="${LOG_MAX_BYTES:-52428800}" # 50MB default
+LOG_MAX_FILES="${LOG_MAX_FILES:-7}"
 
 # Trim optional surrounding quotes
 TARGET_CONTAINERS="${TARGET_CONTAINERS%\"}"
 TARGET_CONTAINERS="${TARGET_CONTAINERS#\"}"
 
 touch "${LOG_FILE}"
+chmod 0640 "${LOG_FILE}" || true
+
+rotate_log() {
+  size=$(stat -c%s "${LOG_FILE}" 2>/dev/null || echo 0)
+  if [ "${size}" -ge "${LOG_MAX_BYTES}" ]; then
+    ts=$(date -Iseconds | tr ':' '_')
+    rotated="${LOG_FILE}.${ts}"
+    mv "${LOG_FILE}" "${rotated}" 2>/dev/null || return
+    gzip -f "${rotated}" || true
+    touch "${LOG_FILE}"
+    chmod 0640 "${LOG_FILE}" || true
+    ls -1t "${LOG_FILE}".* 2>/dev/null | tail -n +$((LOG_MAX_FILES + 1)) | xargs -r rm -f --
+  fi
+}
 
 to_bytes() {
   python3 - "$1" <<'PY'
@@ -37,6 +53,7 @@ PY
 }
 
 while true; do
+  rotate_log
   if [ ! -S /var/run/docker.sock ]; then
     echo "$(date -Iseconds) docker.sock not available" >> "${LOG_FILE}"
     sleep "${INTERVAL}"

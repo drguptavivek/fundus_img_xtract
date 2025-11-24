@@ -245,7 +245,7 @@ def api_cleanup_orphaned():
 def api_regenerate_missing():
     """API endpoint to regenerate missing thumbnails."""
     data = request.get_json() or {}
-    limit = min(int(data.get('limit', 50)), 200)  # Cap at 200
+    limit = min(int(data.get('limit', 200)), 500)  # Default 200, cap at 500
 
     try:
         result = regenerate_missing_thumbnails(current_app, "manual", limit=limit)

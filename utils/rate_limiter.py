@@ -752,13 +752,13 @@ def init_rate_limiting(app):
     """
     # Read all rate limiting configuration from environment
     app.config['RATELIMIT_ENABLED'] = os.getenv('RATELIMIT_ENABLED', 'true').lower() in ('true', '1', 'yes')
-    app.config['RATELIMIT_DEFAULT'] = os.getenv('RATELIMIT_DEFAULT', '500 per hour, 50 per minute')
+    app.config['RATELIMIT_DEFAULT'] = os.getenv('RATELIMIT_DEFAULT', '500 per hour, 600 per minute')
     app.config['RATELIMIT_STORAGE_URI'] = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
     app.config['RATELIMIT_KEY_PREFIX'] = os.getenv('RATELIMIT_KEY_PREFIX', '')
     app.config['RATELIMIT_STRATEGY'] = os.getenv('RATELIMIT_STRATEGY', 'fixed-window')
     
     # Application limits for overall protection (Flask-Limiter 4.0)
-    app.config['RATELIMIT_APPLICATION'] = os.getenv('RATELIMIT_APPLICATION', '1000 per hour, 100 per minute')
+    app.config['RATELIMIT_APPLICATION'] = os.getenv('RATELIMIT_APPLICATION', '5000 per hour, 600 per minute')
     
     # Configure headers based on environment variable
     app.config['RATELIMIT_HEADERS_ENABLED'] = os.getenv('RATELIMIT_HEADERS_ENABLED', 'false').lower() in ('true', '1', 'yes')

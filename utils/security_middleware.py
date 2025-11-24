@@ -135,7 +135,7 @@ class PayloadSizeValidator:
         
         if any(path.startswith(route) for route in upload_routes):
             # Uploads are validated per-file elsewhere; allow a larger envelope (configurable)
-            max_mb = int(os.getenv("UPLOAD_MAX_PAYLOAD_MB", "600"))
+            max_mb = int(os.getenv("UPLOAD_MAX_PAYLOAD_MB", "1024"))
             return max_mb * 1024 * 1024
         
         # Stricter limits for authentication endpoints

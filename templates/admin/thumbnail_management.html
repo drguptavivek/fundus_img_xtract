@@ -289,7 +289,7 @@ function runMaintenance(taskType, button) {
             break;
         case 'regeneration':
             endpoint += 'regenerate_missing';
-            data = { limit: 50 };
+            data = { limit: 200 };
             break;
         case 'validation':
             endpoint += 'validate_integrity';

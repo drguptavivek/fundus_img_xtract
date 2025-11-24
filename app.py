@@ -83,7 +83,8 @@ def create_app():
         default_theme = "dark" if request.blueprint == "grading" else "auto"
         return {"default_theme": default_theme}
 
-    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 500 * 1024 * 1024))
+    # Allow larger upload envelopes by default (1GB), overridable via env
+    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024))
     app.config["PER_FILE_MAX_BYTES"] = int(os.getenv("PER_FILE_MAX_BYTES", 10 * 1024 * 1024))
     app.config["MAX_FILES_PER_UPLOAD"] = int(os.getenv("MAX_FILES_PER_UPLOAD", 50))
     app.config["WORKERS"] = int(os.getenv("WORKERS", "4"))

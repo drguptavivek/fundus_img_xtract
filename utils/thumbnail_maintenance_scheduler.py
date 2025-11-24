@@ -150,19 +150,23 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
     }
 
     try:
+        remaining_direct = max(limit, 0)
+
         # Process DirectImageUpload records missing thumbnails
         with transaction_scope() as db:
-            # Find direct uploads missing original thumbnails
+            # Prioritise originals, then edited, respecting the overall limit
             direct_missing_original = db.query(DirectImageUpload).filter(
                 DirectImageUpload.thumbnail_filename.is_(None),
                 DirectImageUpload.filename.isnot(None)
-            ).limit(limit // 2).all()
+            ).limit(remaining_direct).all()
+            remaining_direct -= len(direct_missing_original)
 
-            # Find direct uploads missing edited thumbnails
-            direct_missing_edited = db.query(DirectImageUpload).filter(
-                DirectImageUpload.edited_thumbnail_filename.is_(None),
-                DirectImageUpload.edited_filename.isnot(None)
-            ).limit(limit // 2).all()
+            direct_missing_edited = []
+            if remaining_direct > 0:
+                direct_missing_edited = db.query(DirectImageUpload).filter(
+                    DirectImageUpload.edited_thumbnail_filename.is_(None),
+                    DirectImageUpload.edited_filename.isnot(None)
+                ).limit(remaining_direct).all()
 
             stats['direct_uploads_processed'] = len(direct_missing_original) + len(direct_missing_edited)
 
@@ -187,30 +191,32 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
                 except Exception as e:
                     stats['errors'].append(f"Direct upload {direct_upload.id}: {str(e)}")
 
-        # Process EncounterFile records missing thumbnails
-        with transaction_scope() as db:
-            encounter_missing = db.query(EncounterFile).filter(
-                EncounterFile.thumbnail_filename.is_(None),
-                EncounterFile.filename.isnot(None)
-            ).limit(limit // 2).all()
+        # Process EncounterFile records missing thumbnails using remaining capacity
+        remaining_for_encounters = max(limit - stats['direct_uploads_triggered'], 0)
+        if remaining_for_encounters > 0:
+            with transaction_scope() as db:
+                encounter_missing = db.query(EncounterFile).filter(
+                    EncounterFile.thumbnail_filename.is_(None),
+                    EncounterFile.filename.isnot(None)
+                ).limit(remaining_for_encounters).all()
 
-            stats['encounter_files_processed'] = len(encounter_missing)
+                stats['encounter_files_processed'] = len(encounter_missing)
 
-            # Trigger thumbnail generation for encounter files
-            encounter_file_ids = [ef.id for ef in encounter_missing]
-            if encounter_file_ids:
-                try:
-                    trigger_encounter_thumbnails(
-                        encounter_file_ids,
-                        user_context={
-                            'user_id': None,
-                            'username': 'system',
-                            'ip': '127.0.0.1',
-                        },
-                    )
-                    stats['encounter_files_triggered'] = len(encounter_file_ids)
-                except Exception as e:
-                    stats['errors'].append(f"Encounter files batch: {str(e)}")
+                # Trigger thumbnail generation for encounter files
+                encounter_file_ids = [ef.id for ef in encounter_missing]
+                if encounter_file_ids:
+                    try:
+                        trigger_encounter_thumbnails(
+                            encounter_file_ids,
+                            user_context={
+                                'user_id': None,
+                                'username': 'system',
+                                'ip': '127.0.0.1',
+                            },
+                        )
+                        stats['encounter_files_triggered'] = len(encounter_file_ids)
+                    except Exception as e:
+                        stats['errors'].append(f"Encounter files batch: {str(e)}")
 
         stats['total_processed'] = stats['direct_uploads_processed'] + stats['encounter_files_processed']
         stats['total_triggered'] = stats['direct_uploads_triggered'] + stats['encounter_files_triggered']

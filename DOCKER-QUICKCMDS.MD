@@ -20,7 +20,7 @@ docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
-uv run python -m scripts.create_user vivekadmin
+uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
 exit
 
@@ -39,6 +39,7 @@ docker rmi -f $(docker images --format '{{.ID}} {{.Repository}}' | awk '$2 ~ /st
 docker compose -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
 
 
+sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 ```
 
 ## DEVELOPMENT

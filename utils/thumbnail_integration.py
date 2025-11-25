@@ -19,7 +19,7 @@ from utils.thumbnail_jobs import (
 logger = logging.getLogger(__name__)
 
 
-def trigger_direct_upload_thumbnails(direct_upload_id: int, user_context: Optional[Dict[str, Any]] = None):
+def trigger_direct_upload_thumbnails(direct_upload_id: int, app=None, user_context: Optional[Dict[str, Any]] = None):
     """
     Trigger thumbnail generation for a direct upload image.
 
@@ -27,9 +27,14 @@ def trigger_direct_upload_thumbnails(direct_upload_id: int, user_context: Option
 
     Args:
         direct_upload_id: ID of the DirectImageUpload record
+        app: Flask application instance (will use current_app if not provided)
         user_context: Optional user context (will use current_user if not provided)
     """
     try:
+        # Use provided app or current_app (if in request context)
+        if app is None:
+            app = current_app
+
         # Create user context if not provided
         if user_context is None and current_user.is_authenticated:
             from flask import request
@@ -47,14 +52,14 @@ def trigger_direct_upload_thumbnails(direct_upload_id: int, user_context: Option
             )
 
         # Schedule thumbnail generation
-        schedule_direct_upload_thumbnails(direct_upload_id, current_app, user_context)
+        schedule_direct_upload_thumbnails(direct_upload_id, app, user_context)
         logger.info(f"Triggered thumbnails for direct upload {direct_upload_id}")
 
     except Exception as e:
         logger.error(f"Failed to trigger thumbnails for direct upload {direct_upload_id}: {str(e)}")
 
 
-def trigger_encounter_thumbnails(encounter_file_ids, user_context: Optional[Dict[str, Any]] = None):
+def trigger_encounter_thumbnails(encounter_file_ids, app=None, user_context: Optional[Dict[str, Any]] = None):
     """
     Trigger thumbnail generation for encounter files (ZIP uploads).
 
@@ -62,6 +67,7 @@ def trigger_encounter_thumbnails(encounter_file_ids, user_context: Optional[Dict
 
     Args:
         encounter_file_ids: List or single ID of EncounterFile records
+        app: Flask application instance (will use current_app if not provided)
         user_context: Optional user context (will use current_user if not provided)
     """
     try:
@@ -72,6 +78,10 @@ def trigger_encounter_thumbnails(encounter_file_ids, user_context: Optional[Dict
         if not encounter_file_ids:
             return
 
+        # Use provided app or current_app (if in request context)
+        if app is None:
+            app = current_app
+
         # Create user context if not provided
         if user_context is None and current_user.is_authenticated:
             from flask import request
@@ -89,7 +99,7 @@ def trigger_encounter_thumbnails(encounter_file_ids, user_context: Optional[Dict
             )
 
         # Schedule thumbnail generation
-        schedule_encounter_thumbnails(encounter_file_ids, current_app, user_context)
+        schedule_encounter_thumbnails(encounter_file_ids, app, user_context)
         logger.info(f"Triggered thumbnails for {len(encounter_file_ids)} encounter files")
 
     except Exception as e:

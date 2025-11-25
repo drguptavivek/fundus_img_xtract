@@ -179,14 +179,14 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
 
             for direct_upload in direct_missing_original:
                 try:
-                    trigger_direct_upload_thumbnails(direct_upload.id, system_ctx)
+                    trigger_direct_upload_thumbnails(direct_upload.id, app, system_ctx)
                     stats['direct_uploads_triggered'] += 1
                 except Exception as e:
                     stats['errors'].append(f"Direct upload {direct_upload.id}: {str(e)}")
 
             for direct_upload in direct_missing_edited:
                 try:
-                    trigger_direct_upload_thumbnails(direct_upload.id, system_ctx)
+                    trigger_direct_upload_thumbnails(direct_upload.id, app, system_ctx)
                     stats['direct_uploads_triggered'] += 1
                 except Exception as e:
                     stats['errors'].append(f"Direct upload {direct_upload.id}: {str(e)}")
@@ -208,6 +208,7 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
                     try:
                         trigger_encounter_thumbnails(
                             encounter_file_ids,
+                            app,
                             user_context={
                                 'user_id': None,
                                 'username': 'system',
@@ -744,13 +745,21 @@ def queue_missing_thumbnail_regeneration(app, schedule_time: str = "post_upload"
         limit: Max thumbnails to trigger in this run
     """
     try:
+        # Import context wrapper from thumbnail_jobs
+        from utils.thumbnail_jobs import with_app_context
+
         executor = app.config.get("EXECUTOR")
         if executor:
-            executor.submit(regenerate_missing_thumbnails, app, schedule_time, limit)
+            # Use context wrapper to ensure Flask app context is available
+            # in background threads, preventing "Working outside of application context" errors
+            wrapped_regenerate_thumbnails = with_app_context(app, regenerate_missing_thumbnails)
+            executor.submit(wrapped_regenerate_thumbnails, app, schedule_time, limit)
             logger.info(f"Queued missing-thumbnail regeneration (limit {limit}) via executor, schedule={schedule_time}")
         else:
+            # For threading fallback, use context wrapper as well
+            wrapped_regenerate_thumbnails = with_app_context(app, regenerate_missing_thumbnails)
             threading.Thread(
-                target=regenerate_missing_thumbnails,
+                target=wrapped_regenerate_thumbnails,
                 args=(app, schedule_time, limit),
                 daemon=True,
             ).start()

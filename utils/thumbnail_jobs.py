@@ -26,6 +26,27 @@ from utils.fileUtils import (
 # Configure logger
 logger = logging.getLogger(__name__)
 
+
+def with_app_context(app, func):
+    """
+    Wrapper to ensure function runs within Flask application context.
+
+    This wrapper solves the "Working outside of application context" error
+    by ensuring that background threads have access to Flask's current_app
+    and other context-bound functionality.
+
+    Args:
+        app: Flask application instance
+        func: Function to wrap with application context
+
+    Returns:
+        Wrapped function that will execute within Flask app context
+    """
+    def wrapper(*args, **kwargs):
+        with app.app_context():
+            return func(*args, **kwargs)
+    return wrapper
+
 # Job types for thumbnail generation
 class ThumbnailJobType(Enum):
     DIRECT_ORIGINAL = "thumbnail_direct_original"
@@ -344,7 +365,10 @@ def queue_thumbnail_job(job_token: str, app):
         if not executor:
             raise ValueError("No executor found in app config")
 
-        executor.submit(process_thumbnail_job, job_token)
+        # Use context wrapper to ensure Flask app context is available
+        # in background threads, preventing "Working outside of application context" errors
+        wrapped_process_thumbnail_job = with_app_context(app, process_thumbnail_job)
+        executor.submit(wrapped_process_thumbnail_job, job_token)
         logger.info(f"Queued thumbnail job for processing: {job_token}")
 
     except Exception as e:

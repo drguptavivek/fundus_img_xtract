@@ -24,6 +24,7 @@ from models import (
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
+from utils.rate_limiter import rate_limit
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.thumbnail_cleanup import add_thumbnail_cleanup_to_direct_upload_deletion
@@ -109,6 +110,8 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
 @roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@rate_limit("10000 per hour, 500 per minute", methods=["GET"])  # More permissive for pagination/browsing
+@rate_limit("3000 per hour, 60 per minute", methods=["POST"])   # More restrictive for operations
 def dashboard():
     with get_db_session() as db_session:
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)

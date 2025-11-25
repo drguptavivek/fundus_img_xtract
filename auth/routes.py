@@ -419,6 +419,7 @@ def captcha_audio():
 
 @auth_bp.route("/logout", methods=["POST", "GET"])
 @login_required
+@rate_limit("30 per minute")
 def logout():
     # Log logout event
     username = getattr(current_user, 'username', 'Unknown')

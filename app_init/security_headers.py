@@ -49,7 +49,7 @@ def register_csp(app: Flask) -> None:
 
         csp_directives = [
             "default-src 'self'",
-            f"script-src 'self' 'nonce-{script_nonce}' https://cdn.jsdelivr.net",
+            f"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "img-src 'self' data: blob: https:",
             "font-src 'self' https://fonts.gstatic.com data:",

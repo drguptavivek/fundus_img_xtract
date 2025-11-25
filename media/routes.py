@@ -60,7 +60,7 @@ def _encounterPDFByUUID(uuid_str: str):
 @bp.route("/encounter/img/<uuid_str>/thumbnail", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
-    "5000 per hour; 900 per minute",
+    "50000 per hour; 5000 per minute",
     methods=["GET"],
     per_method=True,
     error_message="Thumbnail fetch limit exceeded. Please slow down.",
@@ -72,7 +72,7 @@ def _encounterImageThumbnailByUUID(uuid_str: str):
 @bp.route("/direct_upload/org_img/<uuid_str>/thumbnail", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
-    "5000 per hour; 900 per minute",
+    "50000 per hour; 5000 per minute",
     methods=["GET"],
     per_method=True,
     error_message="Thumbnail fetch limit exceeded. Please slow down.",
@@ -84,7 +84,7 @@ def _directImgOrigThumbnailByUUID(uuid_str: str):
 @bp.route("/direct_upload/ed_img/<uuid_str>/thumbnail", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
-    "5000 per hour; 900 per minute",
+    "50000 per hour; 5000 per minute",
     methods=["GET"],
     per_method=True,
     error_message="Thumbnail fetch limit exceeded. Please slow down.",
@@ -96,7 +96,7 @@ def _directImgEdThumbnailByUUID(uuid_str: str):
 @bp.route("/direct_upload/fn_img/<uuid_str>/thumbnail", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
-    "5000 per hour; 900 per minute",
+    "50000 per hour; 5000 per minute",
     methods=["GET"],
     per_method=True,
     error_message="Thumbnail fetch limit exceeded. Please slow down.",
@@ -108,7 +108,7 @@ def _directImgFinalThumbnailByUUID(uuid_str: str):
 @bp.route("/img/<uuid_str>/thumbnail", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit_with_feedback(
-    "5000 per hour; 900 per minute",
+    "50000 per hour; 5000 per minute",
     methods=["GET"],
     per_method=True,
     error_message="Thumbnail fetch limit exceeded. Please slow down.",

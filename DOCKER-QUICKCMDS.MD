@@ -16,10 +16,12 @@ docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env buil
 
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up  web -d
 
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs web -f
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs web  --tail=20 -f
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web  uv run 
+
 uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
 exit

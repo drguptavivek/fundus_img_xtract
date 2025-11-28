@@ -12,6 +12,7 @@ from .disk_usage import disk_usage, delete_duplicates, delete_old_processed_zips
 from .ai_models import list_and_create_ai_model, edit_ai_model, delete_ai_model
 from .database_dump import database_dump, get_database_info
 from .database_excel_export import database_excel_export, get_database_tables
+from .database_restore import bp as database_restore_bp
 from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 from .thumbnail_management import register_thumbnail_admin_routes
 from .status import (
@@ -136,6 +137,9 @@ register_thumbnail_admin_routes(admin_bp)
 
 # Register admin status routes
 register_status_routes(admin_bp)
+
+# Register database restore blueprint
+admin_bp.register_blueprint(database_restore_bp)
 
 # Email settings routes
 admin_bp.add_url_rule("/email-settings", view_func=email_settings_list, methods=["GET"])

@@ -93,3 +93,8 @@ docker-compose.override.yml
 # UPLAODS
 /files/*
 /uploads/*
+
+/tmp/*.*/*.*
+/tmp/*.*
+/tmp/*
+/logs/*.log

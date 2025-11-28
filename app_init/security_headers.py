@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import secrets
 from typing import Callable
+import os
 
 from flask import Flask, g, request
 from werkzeug.wrappers.response import Response
@@ -47,6 +48,13 @@ def register_csp(app: Flask) -> None:
         script_nonce = getattr(g, "csp_script_nonce", "")
         style_nonce = getattr(g, "csp_style_nonce", "")
 
+        # Check if we're in development mode
+        is_development = (
+            app.debug or
+            str(os.getenv("FLASK_ENV", "production")).lower() == "development" or
+            str(os.getenv("DEBUG", "false")).lower() in ("1", "true", "yes")
+        )
+
         csp_directives = [
             "default-src 'self'",
             f"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
@@ -62,8 +70,11 @@ def register_csp(app: Flask) -> None:
               "frame-ancestors 'self'",
             "manifest-src 'self'",
             "worker-src 'self' blob:",
-            "upgrade-insecure-requests",
         ]
+
+        # Only add upgrade-insecure-requests in production
+        if not is_development:
+            csp_directives.append("upgrade-insecure-requests")
 
         csp = "; ".join(csp_directives)
         response.headers["Content-Security-Policy"] = csp

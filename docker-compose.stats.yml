@@ -1,0 +1,19 @@
+services:
+  stats-logger:
+    build:
+      context: .
+      dockerfile: docker/stats-logger/Dockerfile
+    container_name: fundus-img-xtract-stats
+    env_file:
+      - deploy.config.env
+    environment:
+      STATS_INTERVAL: ${STATS_INTERVAL:-30}
+      TARGET_CONTAINERS: ${TARGET_CONTAINERS:-fundus-img-xtract-web fundus-img-xtract-db fundus-img-xtract-cache}
+      DOCKER_HOST: unix:///var/run/docker.sock
+    user: root
+    group_add:
+      - "${DOCKER_GID:-988}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/logs
+    restart: unless-stopped

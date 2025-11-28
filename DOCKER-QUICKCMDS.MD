@@ -12,7 +12,7 @@ docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up
 
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env logs db cache
 
-docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build 
+docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build web
 
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up  web -d
 
@@ -37,8 +37,9 @@ sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 docker rm -f $(docker ps -a --filter name=fundus-img-xtract-stats --format '{{.ID}}') 2>/dev/null || true
 # 2) Remove all stats-logger images
 docker rmi -f $(docker images --format '{{.ID}} {{.Repository}}' | awk '$2 ~ /stats-logger/{print $1}') 2>/dev/null || true
+
 # 3) Rebuild and start fresh
-docker compose -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env  -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
 
 
 sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract

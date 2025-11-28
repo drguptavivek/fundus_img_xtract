@@ -10,7 +10,7 @@ from flask import current_app, render_template, request, url_for
 from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
-
+ 
 from . import bp
 from models import (
     Area,

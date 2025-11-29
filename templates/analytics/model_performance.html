@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% from "_forms.html" import csrf_field %}
+
+{% block title %}AI Model Performance{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">AI Model Performance</h1>
+      <p class="text-muted mb-0">Compare AI predictions to selected human references with configurable positives, exclusions, and ROC/AUC.</p>
+    </div>
+    <form class="row gy-2 gx-2 align-items-end" method="get">
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-disease">Disease</label>
+        <select class="form-select" id="filter-disease" name="disease_id" required>
+          <option value="">Select disease</option>
+          {% for disease in diseases %}
+          <option value="{{ disease.id }}" {% if selected_disease_id and selected_disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-model">AI Model</label>
+        <select class="form-select" id="filter-model" name="ai_model_id" required>
+          <option value="">Select model</option>
+          {% for model in ai_models %}
+          <option value="{{ model.id }}" {% if selected_model_id and selected_model_id == model.id %}selected{% endif %}>{{ model.name }} v{{ model.version }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-upload-type">Upload Type</label>
+        <select class="form-select" id="filter-upload-type" name="upload_type">
+          <option value="">All</option>
+          <option value="zip" {% if upload_type == 'zip' %}selected{% endif %}>ZIP ingestion</option>
+          <option value="direct" {% if upload_type == 'direct' %}selected{% endif %}>Direct upload</option>
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-camera">Camera</label>
+        <select class="form-select" id="filter-camera" name="camera_id">
+          <option value="">All</option>
+          {% for camera in cameras %}
+          <option value="{{ camera.id }}" {% if selected_camera_id == camera.id %}selected{% endif %}>{{ camera.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-lab-unit">Lab Units</label>
+        <select class="form-select" id="filter-lab-unit" name="lab_unit_id" multiple>
+          {% for lab in lab_units %}
+          <option value="{{ lab.id }}" {% if lab.id in selected_lab_units %}selected{% endif %}>{{ lab.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Restricted to lab units you can access.</div>
+      </div>
+      <div class="w-100 d-block d-lg-none"></div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-reference">Reference</label>
+        <select class="form-select" id="filter-reference" name="reference_source">
+          <option value="consensus" {% if reference_source == 'consensus' %}selected{% endif %}>Consensus (default)</option>
+          <option value="arbitrator" {% if reference_source == 'arbitrator' %}selected{% endif %}>Arbitrator</option>
+          <option value="resident2" {% if reference_source == 'resident2' %}selected{% endif %}>Resident2</option>
+          <option value="resident" {% if reference_source == 'resident' %}selected{% endif %}>Resident</option>
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-positive">Positive Labels</label>
+        <select class="form-select" id="filter-positive" name="positive_label" multiple data-selected='{{ positive_labels|tojson|safe }}'>
+        </select>
+        <div class="form-text">Select impressions that count as disease-positive.</div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-exclude">Exclude Labels</label>
+        <select class="form-select" id="filter-exclude" name="exclude_label" multiple data-selected='{{ exclude_labels|list|tojson|safe }}'>
+        </select>
+        <div class="form-text">Use for non-gradable or other labels to drop.</div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-threshold">Threshold</label>
+        <input type="number" step="0.01" min="0" max="1" class="form-control" id="filter-threshold" name="threshold" value="{{ '%.2f'|format(threshold) }}">
+        <div class="form-text">Used for binary metrics.</div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <label class="form-label mb-1" for="filter-bootstrap">Bootstrap samples</label>
+        <input type="number" min="100" max="10000" class="form-control" id="filter-bootstrap" name="bootstrap_samples" value="{{ bootstrap_samples }}">
+        <div class="form-text">95% CIs via nonparametric bootstrap.</div>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button class="btn btn-primary w-100" type="submit">Show Performance</button>
+      </div>
+    </form>
+  </div>
+
+  {% if error_message %}
+    <div class="alert alert-danger">{{ error_message }}</div>
+  {% endif %}
+
+  {% if selected_disease and selected_model and not performance and not error_message %}
+    <div class="alert alert-info">No matching cases with AI grades for this selection.</div>
+  {% endif %}
+
+  {% if performance %}
+    <div class="alert alert-secondary small">
+      Filters applied: Disease = {{ selected_disease_name or '—' }}, Model = {{ selected_model_name or '—' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
+      {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
+      Reference: {{ reference_source }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <div class="text-muted text-uppercase small">Total Cases</div>
+            <div class="display-6">{{ performance.total }}</div>
+            <div class="text-muted">Model: {{ selected_model_name or '—' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}</div>
+            <div class="text-muted">Disease: {{ selected_disease_name or '—' }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <div class="text-muted text-uppercase small">Accuracy</div>
+            <div class="display-6">
+              {% if performance.overall.accuracy is not none %}
+                {{ '%.3f'|format(performance.overall.accuracy) }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
+            <div class="text-muted">Correct: {{ performance.correct }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <div class="text-muted text-uppercase small">Cohen's Kappa</div>
+            <div class="display-6">
+              {% if performance.overall.cohens_kappa is not none %}
+                {{ '%.3f'|format(performance.overall.cohens_kappa) }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
+            <div class="text-muted">Macro F1:
+              {% if performance.overall.macro_f1 is not none %}
+                {{ '%.3f'|format(performance.overall.macro_f1) }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 mb-0">Binary Metrics (positive labels vs rest)</h2>
+          <p class="mb-0 text-muted small">Threshold {{ '%.2f'|format(threshold) }}; 95% CI via bootstrap ({{ bootstrap_samples }} resamples). Minimum 20 cases.</p>
+        </div>
+      </div>
+      {% if performance.binary_metrics %}
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Metric</th>
+              <th scope="col" class="text-end">Value</th>
+              <th scope="col" class="text-end">95% CI</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for key, label in {
+              "sensitivity":"Sensitivity (Recall)",
+              "specificity":"Specificity",
+              "ppv":"PPV (Precision)",
+              "npv":"NPV",
+              "f1":"F1",
+              "accuracy":"Accuracy",
+              "kappa":"Cohen's Kappa"
+            }.items() %}
+            <tr>
+              <th scope="row">{{ label }}</th>
+              <td class="text-end">
+                {% if performance.binary_metrics[key] is not none %}
+                  {{ '%.3f'|format(performance.binary_metrics[key]) }}
+                {% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% set ci = performance.binary_ci.get(key) if performance.binary_ci else None %}
+                {% if ci and ci[0] is not none and ci[1] is not none %}
+                  {{ '%.3f'|format(ci[0]) }} – {{ '%.3f'|format(ci[1]) }}
+                {% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+            <tr>
+              <th scope="row">Support</th>
+              <td class="text-end">{{ performance.binary_metrics.support }}</td>
+              <td class="text-end">TP: {{ performance.binary_metrics.tp }}, FP: {{ performance.binary_metrics.fp }}, TN: {{ performance.binary_metrics.tn }}, FN: {{ performance.binary_metrics.fn }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="alert alert-warning m-3">Not enough cases (need ≥20) or no positive label selection to compute binary metrics.</div>
+      {% endif %}
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 mb-0">ROC / AUC</h2>
+          <p class="mb-0 text-muted small">One-vs-rest using selected positive labels. Requires parsed AI probabilities.</p>
+        </div>
+        <div class="text-muted small">
+          AUC:
+          {% if performance.auc is not none %}
+            {{ '%.3f'|format(performance.auc) }}
+            {% if performance.auc_ci and performance.auc_ci[0] is not none %}
+              (95% CI {{ '%.3f'|format(performance.auc_ci[0]) }} – {{ '%.3f'|format(performance.auc_ci[1]) }})
+            {% endif %}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+      {% if performance.roc_points %}
+        <div class="p-3">
+          <canvas id="roc-chart" height="200" data-roc-points='{{ roc_points_json|e }}'></canvas>
+        </div>
+      {% else %}
+        <div class="alert alert-warning m-3">No probabilities parsed; ROC/AUC skipped.</div>
+      {% endif %}
+    </div>
+
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 mb-0">Cross-tabulation</h2>
+          <p class="mb-0 text-muted small">Rows: reference. Columns: AI predictions.</p>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Reference \\ Prediction</th>
+              {% for label in performance.labels %}
+              <th scope="col" class="text-center">{{ label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for actual_label in performance.labels %}
+            <tr>
+              <th scope="row">{{ actual_label }}</th>
+              {% for predicted_label in performance.labels %}
+              <td class="text-center">{{ performance.cross_tab[actual_label][predicted_label] }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 mb-0">Per-Label Metrics</h2>
+          <p class="mb-0 text-muted small">Binary metrics computed one-vs-rest for each label.</p>
+        </div>
+        <div class="text-muted small">
+          Macro Precision:
+          {% if performance.overall.macro_precision is not none %}
+            {{ '%.3f'|format(performance.overall.macro_precision) }}
+          {% else %}
+            —
+          {% endif %}
+          | Macro Recall:
+          {% if performance.overall.macro_recall is not none %}
+            {{ '%.3f'|format(performance.overall.macro_recall) }}
+          {% else %}
+            —
+          {% endif %}
+          | Macro Specificity:
+          {% if performance.overall.macro_specificity is not none %}
+            {{ '%.3f'|format(performance.overall.macro_specificity) }}
+          {% else %}
+            —
+          {% endif %}
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Label</th>
+              <th scope="col" class="text-end">Support</th>
+              <th scope="col" class="text-end">TP</th>
+              <th scope="col" class="text-end">FP</th>
+              <th scope="col" class="text-end">TN</th>
+              <th scope="col" class="text-end">FN</th>
+              <th scope="col" class="text-end">Precision (PPV)</th>
+              <th scope="col" class="text-end">Recall / Sensitivity</th>
+              <th scope="col" class="text-end">Specificity</th>
+              <th scope="col" class="text-end">NPV</th>
+              <th scope="col" class="text-end">F1</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for metric in performance.label_metrics %}
+            <tr>
+              <th scope="row">{{ metric.label }}</th>
+              <td class="text-end">{{ metric.support }}</td>
+              <td class="text-end">{{ metric.tp }}</td>
+              <td class="text-end">{{ metric.fp }}</td>
+              <td class="text-end">{{ metric.tn }}</td>
+              <td class="text-end">{{ metric.fn }}</td>
+              <td class="text-end">
+                {% if metric.precision is not none %}{{ '%.3f'|format(metric.precision) }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% if metric.recall is not none %}{{ '%.3f'|format(metric.recall) }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% if metric.specificity is not none %}{{ '%.3f'|format(metric.specificity) }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% if metric.npv is not none %}{{ '%.3f'|format(metric.npv) }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end">
+                {% if metric.f1 is not none %}{{ '%.3f'|format(metric.f1) }}{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/model-performance.js') }}?v={{ v }}"></script>
+{% endblock %}

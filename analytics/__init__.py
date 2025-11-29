@@ -11,5 +11,5 @@ from . import (
     route_routes_simple,
     route_image_results,
     route_encounter_results,
-    route_images_without_tasks, route_directFiles_kpi_display
+    route_images_without_tasks, route_directFiles_kpi_display, route_model_performance
 )  # noqa: E402,F401

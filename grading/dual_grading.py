@@ -263,6 +263,9 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 return redirect(url_for("grading.index"))
 
             task_id = task.id
+
+            has_resident_grade = any(grade.role_slot == "resident" for grade in task.grades)
+            has_resident2_grade = any(grade.role_slot == "resident2" for grade in task.grades)
             
             # Validate slot_type
             if slot_type not in ['resident', 'resident2', 'arbitrator']:
@@ -272,8 +275,12 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             # Check task state validity for the requested slot at assignment time
             state_validity = True
             if slot_type == 'resident':
-                # Resident should only be assigned to 'pending' tasks
-                if task.state not in ['pending']:
+                # Resident normally sees 'pending' tasks; allow resident2_done when Resident2 grade exists but Resident grade is missing
+                allowed_states = ['pending']
+                if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
+                    allowed_states.append('resident2_done')
+
+                if task.state not in allowed_states:
                     flash(f"Task is no longer available for resident grading (current state: {task.state}).", "danger")
                     state_validity = False
             elif slot_type == 'resident2':
@@ -526,6 +533,8 @@ def dual_grading_submit():
                 return redirect(url_for("grading.index"))
             
             task_id = task.id
+            has_resident_grade = any(grade.role_slot == "resident" for grade in task.grades)
+            has_resident2_grade = any(grade.role_slot == "resident2" for grade in task.grades)
             
             # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks
             arbitrator_revision_allowed = False
@@ -544,7 +553,12 @@ def dual_grading_submit():
             state_validity = True
             if slot == 'resident':
                 # Resident should only be grading 'pending' or 'resident_done' tasks (for revisions)
-                if task.state not in ['pending', 'resident_done']:
+                # Allow resident2_done when it was an inconsistency (Resident2 graded first)
+                resident_allowed_states = ['pending', 'resident_done']
+                if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
+                    resident_allowed_states.append('resident2_done')
+
+                if task.state not in resident_allowed_states:
                     flash(f"Task state has changed and is no longer available for resident grading (current state: {task.state}).", "danger")
                     state_validity = False
             elif slot == 'resident2':

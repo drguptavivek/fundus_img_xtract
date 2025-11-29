@@ -3,7 +3,7 @@ Utility functions for getting the next eligible dual grading tasks.
 """
 
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, exists, or_, func
 from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
 from typing import Optional, Union, List
 import random
@@ -133,6 +133,44 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
     return filtered_tasks
 
 
+def _get_inconsistent_resident_tasks(db, user_id: int, disease_id: int, eligible_lab_unit_ids: list) -> list:
+    """
+    Surface tasks stuck in resident2_done with no resident grade so residents can complete them.
+
+    These tasks exist because a Resident2 grade was ingested before the Resident grade.
+    We keep them ahead of normal pending tasks to clear the inconsistency.
+    """
+    if not eligible_lab_unit_ids:
+        return []
+
+    resident2_exists = (
+        db.query(Grade.id)
+        .filter(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident2"))
+    )
+    resident_missing = ~exists().where(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident"))
+
+    tasks = (
+        db.query(GradingTask)
+        .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
+        .filter(GradingTask.disease_id == disease_id)
+        .filter(GradingTask.state == "resident2_done")
+        .filter(resident_missing)
+        .filter(resident2_exists.exists())
+        .all()
+    )
+
+    filtered_tasks = []
+    for task in tasks:
+        if _has_user_graded_task_2weeks(db, user_id, task.id):
+            continue
+        if has_user_graded_task(db, user_id, task.id, ["resident2"]):
+            continue
+        _ensure_task_uuid(db, task)
+        filtered_tasks.append(task)
+
+    return filtered_tasks
+
+
 def get_next_eligible_resident_task(user_id: int, disease_id: int, lab_unit_id: Optional[int] = None, db=None) -> Optional[Union[GradingTask, str]]:
     """
     Get the next eligible task for a resident user.
@@ -183,6 +221,10 @@ def _get_next_eligible_resident_task_with_session(user_id: int, disease_id: int,
         eligible_lab_unit_ids = [lab_unit_id]
     
     # Try up to 3 times to find a suitable task
+    inconsistent_tasks = _get_inconsistent_resident_tasks(db, user_id, disease_id, eligible_lab_unit_ids)
+    if inconsistent_tasks:
+        return random.choice(inconsistent_tasks)
+
     for attempt in range(3):
         # Get filtered tasks
         tasks = _get_filtered_tasks(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
@@ -373,7 +415,47 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
         _ensure_task_uuid(db, task)
         return task
-    
+
+    return None
+
+
+def _lock_inconsistent_resident_task(db, user_id: int, disease_id: int, eligible_lab_unit_ids: list):
+    """Lock a resident task stuck in resident2_done with no resident grade."""
+    if not eligible_lab_unit_ids:
+        return None
+
+    resident2_exists = (
+        db.query(Grade.id)
+        .filter(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident2"))
+    )
+    resident_missing = ~exists().where(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident"))
+
+    conflict_exists = (
+        db.query(Grade.id)
+        .filter(
+            Grade.task_id == GradingTask.id,
+            Grade.grader_user_id == user_id,
+            Grade.role_slot.in_(["resident2"]),
+        )
+    )
+
+    task = (
+        db.query(GradingTask)
+        .filter(GradingTask.lab_unit_id.in_(eligible_lab_unit_ids))
+        .filter(GradingTask.disease_id == disease_id)
+        .filter(GradingTask.state == "resident2_done")
+        .filter(resident_missing)
+        .filter(resident2_exists.exists())
+        .filter(~conflict_exists.exists())
+        .with_for_update()
+        .order_by(func.random())
+        .first()
+    )
+
+    if task and not _has_user_graded_task_2weeks(db, user_id, task.id):
+        _ensure_task_uuid(db, task)
+        return task
+
     return None
 
 
@@ -427,6 +509,11 @@ def _get_next_eligible_resident_task_atomic_with_session(user_id: int, disease_i
         eligible_lab_unit_ids = [lab_unit_id]
     
     # Try up to 3 times to find a suitable task with atomic locking
+    for attempt in range(3):
+        inconsistent_task = _lock_inconsistent_resident_task(db, user_id, disease_id, eligible_lab_unit_ids)
+        if inconsistent_task:
+            return inconsistent_task
+
     for attempt in range(3):
         task = _atomically_get_and_lock_task(db, user_id, disease_id, "resident", eligible_lab_unit_ids)
         if task:

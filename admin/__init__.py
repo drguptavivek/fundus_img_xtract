@@ -29,6 +29,7 @@ from .email_settings import (
     test_email_settings, delete_email_settings, activate_email_settings,
     api_test_current_email_config, send_sample_email
 )
+from .grading_state_inconsistencies import grading_state_inconsistencies
 
 
 # Register routes with the blueprint
@@ -76,6 +77,12 @@ admin_bp.add_url_rule(
     view_func=upload_quota_redirect,
     methods=["GET"],
     endpoint="upload_quota_redirect",
+)
+admin_bp.add_url_rule(
+    "/grading-inconsistencies",
+    view_func=grading_state_inconsistencies,
+    methods=["GET", "POST"],
+    endpoint="grading_state_inconsistencies",
 )
 admin_bp.add_url_rule(
     "/upload-quotas/<int:user_id>/update",

@@ -414,6 +414,27 @@
             </div>
         </div>
 
+        <!-- Grading State Inconsistencies -->
+        <div class="status-card {% if grading_inconsistency_count > 0 %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if grading_inconsistency_count > 0 %}warning{% else %}healthy{% endif %}">
+                    <i class="fas fa-balance-scale"></i>
+                </span>
+                Grading State
+            </h5>
+            <div class="status-value">
+                {{ grading_inconsistency_count }}
+            </div>
+            <p class="status-details">
+                Tasks with Resident2 grade but no Resident grade
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.grading_state_inconsistencies') }}" class="btn-management btn-sm">
+                    <i class="fas fa-exclamation-triangle"></i> Review &amp; Reset
+                </a>
+            </div>
+        </div>
+
         <!-- System Storage -->
         <div class="status-card health-info">
             <h5>

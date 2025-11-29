@@ -21,6 +21,8 @@ from admin.thumbnail_management import (
     api_maintenance_status
 )
 from utils.env_loader import get_env
+from db_transaction_manager import transaction_scope
+from models import Grade, GradingTask
 
 
 @roles_required('admin', 'data_manager')
@@ -66,6 +68,26 @@ def admin_status():
     # Get general system statistics
     system_stats = get_system_statistics()
 
+    # Grading inconsistencies (Resident2 present, Resident missing)
+    try:
+        with transaction_scope() as db:
+            resident2_exists = (
+                db.query(Grade.task_id)
+                .filter(sa.and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident2"))
+            )
+            resident_missing = ~sa.exists().where(
+                sa.and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident")
+            )
+            grading_inconsistency_count = (
+                db.query(GradingTask.id)
+                .filter(resident_missing)
+                .filter(resident2_exists.exists())
+                .count()
+            )
+    except Exception as e:
+        current_app.logger.error(f"Error computing grading inconsistencies: {e}")
+        grading_inconsistency_count = 0
+
     # Get recent activity data
     recent_activity = get_recent_activity()
 
@@ -80,6 +102,7 @@ def admin_status():
         system_stats=system_stats,
         recent_activity=recent_activity,
         sequence_report=sequence_report,
+        grading_inconsistency_count=grading_inconsistency_count,
         current_time=datetime.now(pytz.UTC)
     )
 

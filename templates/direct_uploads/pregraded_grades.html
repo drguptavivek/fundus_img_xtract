@@ -194,6 +194,16 @@
                 <div class="form-text">Columns required: <code>image_name</code>, <code>ai_grade</code>; optional: <code>ai_probability</code>, <code>ai_remarks</code>.</div>
               </div>
 
+              <div class="alert alert-info small">
+                <div class="fw-semibold">Re-upload behavior</div>
+                <ul class="mb-0 ps-3">
+                  <li>Each row matches by image name + hospital + lab + disease.</li>
+                  <li>If an AI grade already exists for that task, it is updated in place (grade/comment/model). No duplicates are created.</li>
+                  <li>Rows with issues (missing grade, unmapped grade, or image not found) are skipped and logged as errors; successful rows still apply.</li>
+                  <li>If only a Resident2 grade exists (no Resident grade), the task moves to <code>resident2_done</code> until a Resident or Arbitrator grade is added.</li>
+                </ul>
+              </div>
+
               <button type="submit" class="btn btn-warning">Upload AI Grades</button>
             </form>
           </div>

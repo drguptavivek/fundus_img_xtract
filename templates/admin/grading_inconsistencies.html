@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Grading Inconsistencies{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h3 class="mb-0">Grading Inconsistencies</h3>
+      <p class="text-muted mb-1">Tasks with Resident2 grade but missing Resident grade. Resetting moves them back to Pending so Resident can grade.</p>
+      <p class="text-muted small mb-0">After reset: when Resident submits, matching Resident/Resident2 goes to <code>final</code>; mismatch goes to <code>arbitration</code>.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.admin_status') }}">Back to Admin</a>
+  </div>
+
+  {% if total == 0 %}
+    <div class="alert alert-success">No inconsistencies detected 🎉</div>
+  {% else %}
+    <form method="POST">
+      {{ csrf_field() }}
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <strong>{{ total }}</strong> task(s) affected
+          </div>
+          <button type="submit" class="btn btn-sm btn-primary">Reset selected to Pending</button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 48px;">
+                    <input type="checkbox" class="form-check-input" id="checkAll">
+                  </th>
+                  <th>Task ID</th>
+                  <th>Disease</th>
+                  <th>Lab Unit</th>
+                  <th>State</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for disease_name, items in grouped.items() %}
+                  <tr class="table-secondary">
+                    <td colspan="6" class="fw-semibold">{{ disease_name }}</td>
+                  </tr>
+                  {% for item in items %}
+                  <tr>
+                    <td>
+                      <input type="checkbox" class="form-check-input task-check" name="task_id" value="{{ item.id }}">
+                    </td>
+                    <td><code>{{ item.id }}</code></td>
+                    <td>{{ disease_name }}</td>
+                    <td>{{ item.lab_unit_name }} (ID {{ item.lab_unit_id }})</td>
+                    <td>
+                      <span class="badge bg-warning text-dark">{{ item.state }}</span>
+                    </td>
+                    <td>
+                      {% if item.encounter_file_id %}
+                        Encounter File ID {{ item.encounter_file_id }}
+                      {% elif item.direct_image_upload_id %}
+                        Direct Upload ID {{ item.direct_image_upload_id }}
+                      {% else %}
+                        -
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <small class="text-muted">Tip: select tasks and click “Reset” to allow Resident grading to resume.</small>
+          <button type="submit" class="btn btn-sm btn-primary">Reset selected to Pending</button>
+        </div>
+      </div>
+    </form>
+  {% endif %}
+</div>
+
+<script>
+  const checkAll = document.getElementById('checkAll');
+  if (checkAll) {
+    checkAll.addEventListener('change', () => {
+      document.querySelectorAll('.task-check').forEach(cb => cb.checked = checkAll.checked);
+    });
+  }
+</script>
+{% endblock %}

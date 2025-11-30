@@ -837,7 +837,7 @@ class DirectFilesAnalytics {
                 processing: true,
                 searching: false,
                 ordering: false,
-                scrollX: true,
+                scrollX: false,
                 lengthMenu: [10, 25, 50, 100],
                 pageLength: 25,
                 ajax: function(data, callback) {

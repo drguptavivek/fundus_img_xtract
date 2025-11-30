@@ -12,3 +12,15 @@
 ## jobs blueprint (implemented)
 - Changes: Added login + role gates (`admin`, `local_admin`, `fileUploader`, `optometrist`, `data_manager`) to all routes. Scoped job listings and detail endpoints to the caller’s assigned lab units via `get_user_lab_unit_ids_no_admin_override`; owners can still access their jobs. Admin/local_admin/fileUploader/optometrist/data_manager can view other users’ jobs only when the job’s lab unit is within their scope.
 - Status: Implemented in `jobs/routes.py`.
+
+## verify_remedio_glaucoma blueprint (implemented)
+- Changes: Roles aligned to `admin/local_admin/fileUploader/optometrist/data_manager`; all pages/actions scoped with `get_user_lab_unit_ids_no_admin_override`. Results/list/clean workflows, detail/edit, verify/unverify, mark_eye, navigation (prev/next/back) all filtered to allowed lab units; users without lab units are blocked.
+- Status: Implemented in `verify_remedio_glaucoma/routes.py`.
+
+## verify_remedio_dr blueprint (implemented)
+- Changes: Roles aligned to `admin/local_admin/fileUploader/optometrist/data_manager`; list, detail, edit, verify/unverify, mark_eye scoped to allowed lab units via `get_user_lab_unit_ids_no_admin_override`. Prev/next/back navigation and recent lists respect allowed lab units.
+- Status: Implemented in `verify_remedio_dr/routes.py`.
+
+## verify_remedio_nodr blueprint (implemented)
+- Changes: Roles aligned to `admin/local_admin/fileUploader/optometrist/data_manager`; list, edit, verify/unverify, mark_eye scoped via `get_user_lab_unit_ids_no_admin_override` with prev/next filtered to allowed lab units; users without lab units are blocked. Base encounter queries now use allowed lab units for navigation.
+- Status: Implemented in `verify_remedio_nodr/routes.py`.

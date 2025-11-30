@@ -8,7 +8,7 @@ from auth.roles import roles_required
 from . import bp
 
 from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow, LabUnit, Disease
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from process_pdfs import DR_PDF_DIR
 
 # Import task creation services
@@ -16,7 +16,7 @@ from services.taskCreationServices import ensure_task
 
 
 @bp.route("/list", methods=["GET"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_list():
     """Date-wise pagination: each page shows all reports for one capture_date_dt."""
     page = request.args.get("page", default=1, type=int) or 1
@@ -28,10 +28,11 @@ def verify_dr_list():
 
     db = Session()
     try:
-        restricted_lab_units = None
-        if not (current_user.has_role('admin') or current_user.has_role('data_manager')):
-            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-            restricted_lab_units = allowed_lab_units or {-1}
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+        restricted_lab_units = allowed_lab_units
 
         # Build ordered list of distinct dates with data
         date_query = (
@@ -40,8 +41,7 @@ def verify_dr_list():
               .filter(PatientEncounters.capture_date_dt.isnot(None))
               .distinct()
         )
-        if restricted_lab_units is not None:
-            date_query = date_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
+        date_query = date_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
         date_rows = date_query.order_by(PatientEncounters.capture_date_dt.desc()).all()
         dates: list[_date] = [r[0] for r in date_rows]
 
@@ -56,8 +56,7 @@ def verify_dr_list():
               )
               .distinct()
         )
-        if restricted_lab_units is not None:
-            unv_query = unv_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
+        unv_query = unv_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
         unv_rows = unv_query.order_by(PatientEncounters.capture_date_dt.desc()).all()
         most_recent_unverified = unv_rows[0][0] if unv_rows else None
 
@@ -69,8 +68,7 @@ def verify_dr_list():
               .filter(PatientEncounters.dr_verified_status == 'verified')
               .distinct()
         )
-        if restricted_lab_units is not None:
-            ver_query = ver_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
+        ver_query = ver_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
         ver_rows = ver_query.order_by(PatientEncounters.capture_date_dt.desc()).all()
         most_recent_verified = ver_rows[0][0] if ver_rows else None
 
@@ -108,16 +106,15 @@ def verify_dr_list():
 
         # Pull all reports for the focused date
         if focus_date is not None:
-            items_query = (
+            items = (
                 db.query(DiabeticRetinopathyReport)
                   .join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
                   .filter(PatientEncounters.capture_date_dt == focus_date)
+                  .filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
                   .order_by(DiabeticRetinopathyReport.id.desc())
                   .options(selectinload(DiabeticRetinopathyReport.patient_encounter))
+                  .all()
             )
-            if restricted_lab_units is not None:
-                items_query = items_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
-            items = items_query.all()
             # Apply verified filter within date
             if ver == "yes":
                 items = [dr for dr in items if dr.patient_encounter and dr.patient_encounter.dr_verified_status == 'verified']
@@ -132,18 +129,17 @@ def verify_dr_list():
             from flask_login import current_user as cu
             uname = getattr(cu, 'username', None)
             if uname:
-                recent_query = (
+                my_recent_verified = (
                     db.query(DiabeticRetinopathyReport)
                       .join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+                      .filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
                       .filter(PatientEncounters.dr_verified_status == 'verified')
                       .filter(PatientEncounters.dr_verified_by == uname)
                       .order_by(PatientEncounters.dr_verified_at.desc(), DiabeticRetinopathyReport.id.desc())
                       .options(selectinload(DiabeticRetinopathyReport.patient_encounter))
                       .limit(20)
+                      .all()
                 )
-                if restricted_lab_units is not None:
-                    recent_query = recent_query.filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
-                my_recent_verified = recent_query.all()
         except Exception:
             my_recent_verified = []
     finally:
@@ -172,7 +168,7 @@ def verify_dr_list():
 
 
 @bp.route("/detail/<int:report_id>", methods=["GET"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_detail(report_id: int):
     """Detail view aligned to DR list ordering (date desc, id desc).
     Prev/Next follow the report sequence.
@@ -196,6 +192,10 @@ def verify_dr_detail(report_id: int):
         if not row or not row.patient_encounter:
             from flask import abort
             abort(404)
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if row.patient_encounter.lab_unit_id not in allowed_lab_units:
+            from flask import abort
+            abort(404)
 
         enc = row.patient_encounter
 
@@ -206,6 +206,7 @@ def verify_dr_detail(report_id: int):
         prev_row = (
             db.query(DiabeticRetinopathyReport)
             .join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
             .filter(
                 (
                     PatientEncounters.capture_date_dt > d
@@ -222,6 +223,7 @@ def verify_dr_detail(report_id: int):
         next_row = (
             db.query(DiabeticRetinopathyReport)
             .join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(restricted_lab_units))
             .filter(
                 (
                     PatientEncounters.capture_date_dt < d
@@ -288,7 +290,7 @@ def verify_dr_detail(report_id: int):
 
 
 @bp.route("/edit/<int:report_id>", methods=["GET", "POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_edit(report_id: int):
     db = Session()
     try:
@@ -307,11 +309,10 @@ def verify_dr_edit(report_id: int):
 
         encounter = row.patient_encounter
         lab_unit_id = getattr(encounter, "lab_unit_id", None) if encounter else None
-        if lab_unit_id is not None and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
-            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-            if lab_unit_id not in allowed_lab_units:
-                flash("You don't have permission to access this encounter.", "danger")
-                return redirect(url_for("verify_remedio_dr.verify_dr_list"))
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if lab_unit_id is not None and lab_unit_id not in allowed_lab_units:
+            flash("You don't have permission to access this encounter.", "danger")
+            return redirect(url_for("verify_remedio_dr.verify_dr_list"))
 
         if request.method == "POST":
             row.result = (request.form.get("result") or "").strip() or None
@@ -388,6 +389,7 @@ def verify_dr_edit(report_id: int):
             date_rows = (
                 db.query(PatientEncounters.capture_date_dt)
                   .join(DiabeticRetinopathyReport, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+                  .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
                   .filter(PatientEncounters.capture_date_dt.isnot(None))
                   .distinct()
                   .order_by(PatientEncounters.capture_date_dt.desc())
@@ -404,7 +406,7 @@ def verify_dr_edit(report_id: int):
  
 
 @bp.route("/edit/<int:report_id>/verify", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_verify(report_id: int):
     db = Session()
     try:
@@ -413,8 +415,8 @@ def verify_dr_verify(report_id: int):
             from flask import abort
             abort(404)
         encounter = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        if encounter and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
-            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
+        if encounter:
+            allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
             if encounter.lab_unit_id not in allowed_lab_units:
                 flash("You don't have permission to verify this encounter.", "danger")
                 return redirect(url_for('verify_remedio_dr.verify_dr_list'))
@@ -508,7 +510,7 @@ def verify_dr_verify(report_id: int):
 
 
 @bp.route("/edit/<int:report_id>/unverify", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_unverify(report_id: int):
     db = Session()
     try:
@@ -517,8 +519,8 @@ def verify_dr_unverify(report_id: int):
             from flask import abort
             abort(404)
         enc = db.query(PatientEncounters).filter(PatientEncounters.id == row.patient_encounter_id).first()
-        if enc and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
-            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
+        if enc:
+            allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
             if enc.lab_unit_id not in allowed_lab_units:
                 flash("You don't have permission to modify this encounter.", "danger")
                 return redirect(url_for('verify_remedio_dr.verify_dr_list'))
@@ -589,7 +591,7 @@ def verify_dr_unverify(report_id: int):
         db.close()
 
 @bp.route("/edit/<int:report_id>/mark_eye", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def verify_dr_mark_eye(report_id: int):
     side = (request.form.get("side") or "").strip().lower()
     ef_id = request.form.get("ef_id")

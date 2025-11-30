@@ -19,7 +19,7 @@ from models import (
     utcnow,
 )
 from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
 
@@ -49,7 +49,7 @@ def _base_encounter_query(db: Session, restricted_lab_units: set[int] | None):
 
 
 @bp.route("/list", methods=["GET"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_list():
     page = request.args.get("page", default=1, type=int) or 1
     selected_date = (request.args.get("date") or "").strip() or None
@@ -60,10 +60,11 @@ def nodr_list():
 
     db = Session()
     try:
-        restricted_lab_units: set[int] | None = None
-        if not (current_user.has_role("admin") or current_user.has_role("data_manager")):
-            allowed = get_user_lab_unit_ids(current_user.id)
-            restricted_lab_units = set(allowed) if allowed else {-1}
+        allowed = set(get_user_lab_unit_ids_no_admin_override(current_user.id))
+        if not allowed:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+        restricted_lab_units: set[int] = allowed
 
         base_query = _base_encounter_query(db, restricted_lab_units)
 
@@ -217,7 +218,7 @@ def _load_encounter(db: Session, encounter_id: int) -> PatientEncounters | None:
 
 
 @bp.route("/edit/<int:encounter_id>", methods=["GET", "POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_edit(encounter_id: int):
     page_hint = request.args.get("page", type=int)
 
@@ -229,11 +230,10 @@ def nodr_edit(encounter_id: int):
             abort(404)
 
         lab_unit_id = getattr(encounter, "lab_unit_id", None)
-        if lab_unit_id is not None and not (current_user.has_role('admin') or current_user.has_role('data_manager')):
-            allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-            if lab_unit_id not in allowed_lab_units:
-                flash("You don't have permission to access this encounter.", "danger")
-                return redirect(url_for("verify_remedio_nodr.nodr_list"))
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if lab_unit_id is not None and lab_unit_id not in allowed_lab_units:
+            flash("You don't have permission to access this encounter.", "danger")
+            return redirect(url_for("verify_remedio_nodr.nodr_list"))
 
         if request.method == "POST":
             new_pid = (request.form.get("patient_id") or "").strip()
@@ -255,7 +255,7 @@ def nodr_edit(encounter_id: int):
         # Determine prev/next encounters for navigation based on capture date/id
         focus_date = encounter.capture_date_dt
         prev_encounter = (
-            _base_encounter_query(db, None)
+            _base_encounter_query(db, allowed_lab_units)
             .filter(
                 (PatientEncounters.capture_date_dt > focus_date)
                 | (
@@ -267,7 +267,7 @@ def nodr_edit(encounter_id: int):
             .first()
         )
         next_encounter = (
-            _base_encounter_query(db, None)
+            _base_encounter_query(db, allowed_lab_units)
             .filter(
                 (PatientEncounters.capture_date_dt < focus_date)
                 | (
@@ -291,7 +291,7 @@ def nodr_edit(encounter_id: int):
 
 
 @bp.route("/edit/<int:encounter_id>/mark_eye", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_mark_eye(encounter_id: int):
     side = (request.form.get("side") or "").strip().lower()
     ef_id = request.form.get("ef_id")
@@ -314,6 +314,12 @@ def nodr_mark_eye(encounter_id: int):
         if not encounter:
             from flask import abort
             abort(404)
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if encounter.lab_unit_id not in allowed_lab_units:
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+                return {"ok": False, "error": "forbidden"}, 403
+            flash("You don't have permission to modify this encounter.", "danger")
+            return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
         ef = db.query(EncounterFile).filter(EncounterFile.id == ef_id_int).first()
         if not ef or ef.patient_encounter_id != encounter.id:
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
@@ -332,7 +338,7 @@ def nodr_mark_eye(encounter_id: int):
 
 
 @bp.route("/edit/<int:encounter_id>/verify", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_verify(encounter_id: int):
     db = Session()
     try:
@@ -340,6 +346,10 @@ def nodr_verify(encounter_id: int):
         if not encounter:
             from flask import abort
             abort(404)
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if encounter.lab_unit_id not in allowed_lab_units:
+            flash("You don't have permission to verify this encounter.", "danger")
+            return redirect(url_for("verify_remedio_nodr.nodr_list"))
 
         missing = [ef for ef in encounter.encounter_files if ef.file_type == 'image' and (ef.eye_side not in {'right', 'left', 'cannot_tell'})]
         if missing:
@@ -379,7 +389,7 @@ def nodr_verify(encounter_id: int):
 
 
 @bp.route("/edit/<int:encounter_id>/unverify", methods=["POST"])
-@roles_required("admin", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_unverify(encounter_id: int):
     db = Session()
     try:

@@ -32,3 +32,7 @@
 ## tasks blueprint (implemented)
 - Changes: Role gates for task index/pending/all-tasks/view-task-details expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`; all use `get_user_lab_unit_ids_no_admin_override` and block users without lab access. All-tasks filters, dropdowns, and summaries are restricted to the caller’s lab units/hospitals with invalid filters rejected. Intra-rater admin JSON/UI now filters batches, hospitals, lab units, and graders to allowed lab units; batch creation requires a permitted lab unit and rejects out-of-scope labs. Ad-hoc task pages/search/list/detail are scoped to allowed lab units (no admin override), and batches without in-scope tasks are hidden/blocked.
 - Status: Implemented in `tasks/route_index.py`, `tasks/route_pending.py`, `tasks/route_task_details.py`, `tasks/route_organizationalTasks.py`, `tasks/route_intra_rater.py`, `tasks/ad_hoc.py`.
+
+## search blueprint (implemented)
+- Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Search routes now enforce lab-unit access with `get_user_lab_unit_ids_no_admin_override`; users without lab units are redirected. Hospital/lab filters are validated against allowed sets; dropdown data (hospitals, lab units, cameras/diseases/areas) is limited to images within allowed lab units. Search queries always run with allowed lab_unit_ids; out-of-scope hospital/lab requests return 403.
+- Status: Implemented in `search/route_search_images.py`, `search/route_search.py`.

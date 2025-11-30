@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, date as _date, time, timezone
 from typing import Any, List, Optional
 
-from flask import current_app, render_template, request, url_for
+from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
 
@@ -16,10 +16,11 @@ from models import (
     Disease,
     Hospital,
     LabUnit,
+    DirectImageUpload,
 )
 from sqlalchemy.orm import joinedload
 from utils.imageSearchUtil import search_images_strict, ImageSearchError
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from db_transaction_manager import get_db_session
 
 
@@ -49,7 +50,15 @@ def _parse_date(value: str | None) -> _date | None:
 
 @bp.route("/images", methods=["GET"])
 @bp.route("/images/", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
 def search_images_route() -> str:
     """Search images using the centralized search_images function from utils.imageSearchUtil."""
     page = request.args.get("page", default=1, type=int) or 1
@@ -78,20 +87,30 @@ def search_images_route() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
     with get_db_session() as db:
-        # Check user permissions for lab unit access
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin = current_user.has_role("admin")
-        is_data_manager = current_user.has_role("data_manager")
-        
+        # Check user permissions for lab unit access (no admin override)
+        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        if not allowed_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+        allowed_hospital_ids = {
+            hid
+            for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(allowed_lab_unit_ids))
+            if hid is not None
+        }
+
         # Prepare filter parameters for the search_images function
         lab_unit_ids = None
         if lab_unit_id:
-            if not is_admin and lab_unit_id not in user_lab_unit_ids:
+            if lab_unit_id not in allowed_lab_unit_ids:
                 from flask import abort
                 abort(403, description="Access denied to this lab unit")
             lab_unit_ids = [lab_unit_id]
-        elif not is_admin:
-            lab_unit_ids = list(user_lab_unit_ids)
+        else:
+            lab_unit_ids = list(allowed_lab_unit_ids)
+
+        if hospital_id and hospital_id not in allowed_hospital_ids:
+            from flask import abort
+            abort(403, description="Access denied to this hospital")
         
         # Convert single IDs to lists for the search function
         camera_ids = [camera_id] if camera_id else None
@@ -193,35 +212,45 @@ def search_images_route() -> str:
         # Filter hospitals, lab units, etc. to only show those the user has access to
         # Use joinedload to eagerly load relationships to prevent DetachedInstanceError
         
-        if is_admin:
-            # Only admins see all hospitals and lab units
-            hospital_objs = db.query(Hospital).options(joinedload(Hospital.lab_units)).order_by(Hospital.name).all()
-            lab_unit_objs = db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.name).all()
-            camera_objs = db.query(Camera).order_by(Camera.name).all()
-            disease_objs = db.query(Disease).order_by(Disease.name).all()
-            area_objs = db.query(Area).order_by(Area.name).all()
-        else:
-            # Data managers only see their assigned lab units
-            lab_unit_objs = (
-                db.query(LabUnit)
-                .options(joinedload(LabUnit.hospital))
-                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
-                .order_by(LabUnit.name)
-                .all()
-            )
-            # Get hospitals for the allowed lab units
-            hospital_ids = [lu.hospital_id for lu in lab_unit_objs]
-            hospital_objs = (
-                db.query(Hospital)
-                .options(joinedload(Hospital.lab_units))
-                .filter(Hospital.id.in_(hospital_ids))
-                .order_by(Hospital.name)
-                .all()
-            )
-            # For other filters, we'll still fetch them all but only show data from allowed lab units
-            camera_objs = db.query(Camera).order_by(Camera.name).all()
-            disease_objs = db.query(Disease).order_by(Disease.name).all()
-            area_objs = db.query(Area).order_by(Area.name).all()
+        lab_unit_objs = (
+            db.query(LabUnit)
+            .options(joinedload(LabUnit.hospital))
+            .filter(LabUnit.id.in_(list(allowed_lab_unit_ids)))
+            .order_by(LabUnit.name)
+            .all()
+        )
+        hospital_ids = [lu.hospital_id for lu in lab_unit_objs if lu.hospital_id]
+        hospital_objs = (
+            db.query(Hospital)
+            .options(joinedload(Hospital.lab_units))
+            .filter(Hospital.id.in_(hospital_ids))
+            .order_by(Hospital.name)
+            .all()
+        )
+        camera_objs = (
+            db.query(Camera)
+            .join(DirectImageUpload, DirectImageUpload.camera_id == Camera.id)
+            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .distinct()
+            .order_by(Camera.name)
+            .all()
+        )
+        disease_objs = (
+            db.query(Disease)
+            .join(DirectImageUpload, DirectImageUpload.disease_id == Disease.id)
+            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .distinct()
+            .order_by(Disease.name)
+            .all()
+        )
+        area_objs = (
+            db.query(Area)
+            .join(DirectImageUpload, DirectImageUpload.area_id == Area.id)
+            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
+            .distinct()
+            .order_by(Area.name)
+            .all()
+        )
         
         # Convert SQLAlchemy objects to dictionaries to prevent DetachedInstanceError
         hospitals = [{"id": h.id, "name": h.name} for h in hospital_objs]

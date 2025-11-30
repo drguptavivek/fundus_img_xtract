@@ -332,27 +332,16 @@
       
       <!-- Middle Section: Horizontally Scrollable Table -->
       <div class="dataTables_scroll">
-        <div class="dataTables_scrollHead">
-          <table id="direct-files-table" class="display" style="width: 100%;">
-            <thead>
-              <tr id="table-headers-row">
-                <!-- Table headers will be populated dynamically from dataframe columns -->
-              </tr>
-            </thead>
-          </table>
-        </div>
-        <div class="dataTables_scrollBody">
-          <table id="direct-files-table-body" class="display" style="width: 100%;">
-            <thead style="visibility: hidden; height: 0;">
-              <tr id="table-headers-row-hidden">
-                <!-- Hidden headers for body table alignment -->
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Data will be populated via JavaScript -->
-            </tbody>
-          </table>
-        </div>
+        <table id="direct-files-table" class="display" style="width: 100%;">
+          <thead>
+            <tr id="table-headers-row">
+              <!-- Table headers will be populated dynamically from dataframe columns -->
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Data will be populated via JavaScript -->
+          </tbody>
+        </table>
       </div>
       
       <!-- Bottom Section: Info and Left-Aligned Pagination -->

@@ -24,9 +24,11 @@ from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
 from utils.security_middleware import PayloadSizeValidator
 from utils.env_loader import load_environment
+from utils.redis_connection import build_redis_url
 from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
+from app_cache import cache
 
 
 csrf = CSRFProtect()
@@ -58,6 +60,11 @@ def create_app():
     # Static cache age (seconds) — tweak per env
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))  # 7 days
     app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
+    # Flask-Caching (Redis backend) shared across the app
+    app.config.setdefault("CACHE_TYPE", "RedisCache")
+    app.config.setdefault("CACHE_REDIS_URL", os.getenv("CACHE_REDIS_URL") or build_redis_url())
+    app.config.setdefault("CACHE_DEFAULT_TIMEOUT", 15 * 60)  # 15 minutes
+    app.config.setdefault("CACHE_KEY_PREFIX", os.getenv("CACHE_KEY_PREFIX", "fim:cache:"))
 
     app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
 
@@ -198,6 +205,7 @@ def create_app():
     # Register the CSRF protection with logging
     app.before_request(csrf_protect)
     csrf.init_app(app)
+    cache.init_app(app)
     app.session_interface = DatabaseSessionInterface()
     if force_https:
         @app.before_request

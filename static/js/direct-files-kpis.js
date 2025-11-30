@@ -346,11 +346,32 @@ class DirectFilesKPIs {
             this.charts.diseaseDistribution = null;
         }
 
+        const diseaseData = (data.by_disease || []).map(d => ({
+            label: d && d.disease_name ? d.disease_name : 'Unknown',
+            value: d && typeof d.upload_count === 'number' ? d.upload_count : 0
+        })).filter(d => d.value > 0);
+
+        if (diseaseData.length === 0) {
+            this.charts.diseaseDistribution = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['No data'],
+                    datasets: [{
+                        data: [1],
+                        backgroundColor: ['rgba(200,200,200,0.6)'],
+                        borderColor: ['rgba(200,200,200,1)']
+                    }]
+                },
+                options: this.getPieChartOptions('Disease Distribution')
+            });
+            return;
+        }
+
         const chartData = {
-            labels: data.by_disease.map(d => d.disease_name),
+            labels: diseaseData.map(d => d.label),
             datasets: [{
                 label: 'Uploads by Disease',
-                data: data.by_disease.map(d => d.upload_count),
+                data: diseaseData.map(d => d.value),
                 backgroundColor: [
                     'rgba(255, 99, 132, 0.6)',
                     'rgba(54, 162, 235, 0.6)',
@@ -624,45 +645,22 @@ class DirectFilesAnalytics {
 
             // Always set column order, even when there's no data, to prevent DataTable initialization errors
             this.columnOrder = [
-                "image_id",
                 "image_uuid",
-                "filename",
-                "original_filename",
-                "edited_filename",
-                "folder_rel",
-                "file_hash",
-                "content_hash",
                 "upload_date",
                 "upload_datetime",
-                "uploader_id",
-                "uploader_username",
-                "uploader_full_name",
-                "hospital_id",
                 "hospital_name",
-                "lab_unit_id",
                 "lab_unit_name",
-                "camera_id",
                 "camera_name",
-                "disease_id",
                 "disease_name",
-                "area_id",
-                "area_name",
                 "is_mydriatic",
                 "is_pregraded",
                 "verification_status",
-                "verification_remarks",
-                "verified_by_id",
                 "verified_by_username",
                 "verified_at",
-                "has_verification",
-                "has_grading",
-                "grading_count",
-                "latest_grading_date",
-                "grading_roles",
-                "has_task",
                 "task_count",
-                "task_states",
-                "latest_task_date"
+                "latest_task_date",
+                "grading_count",
+                "latest_grading_date"
             ];
             console.log('Available columns:', this.columnOrder);
 
@@ -904,24 +902,11 @@ class DirectFilesAnalytics {
             // Update the custom layout elements
             this.updateCustomLayout();
             
-            // Copy the table structure to the body table for scrolling
-            this.updateBodyTable();
-            
             console.log('DataTable initialized successfully:', this.dataTable);
             console.log('Table info:', this.dataTable.page.info());
         } catch (error) {
             console.error('Error initializing DataTable:', error);
         }
-    }
-    
-    updateBodyTable() {
-        // Copy headers from main table to body table for alignment
-        const mainHeaders = $('#direct-files-table thead tr').html();
-        $('#direct-files-table-body thead tr').html(mainHeaders);
-        
-        // Copy the tbody content to the body table
-        const mainBody = $('#direct-files-table tbody').html();
-        $('#direct-files-table-body tbody').html(mainBody);
     }
     
     updateCustomLayout() {
@@ -945,8 +930,14 @@ class DirectFilesAnalytics {
         const span = paginate.querySelector('span');
         span.innerHTML = '';
         
-        // Add page numbers
-        for (let i = 0; i < info.pages; i++) {
+        // Add limited page numbers around current page
+        const maxLinks = 7;
+        let start = Math.max(0, info.page - Math.floor(maxLinks / 2));
+        let end = Math.min(info.pages, start + maxLinks);
+        if (end - start < maxLinks) {
+            start = Math.max(0, end - maxLinks);
+        }
+        for (let i = start; i < end; i++) {
             const a = document.createElement('a');
             a.className = `paginate_button ${i === info.page ? 'current' : ''}`;
             a.setAttribute('aria-controls', 'direct-files-table');

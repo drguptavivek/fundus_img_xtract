@@ -4,16 +4,36 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, date as _date
-from typing import Any
+from typing import Any, Dict, List, Tuple
 
 from flask import current_app, render_template, request, url_for
 from flask_login import current_user
 from auth.roles import roles_required
+from app_cache import cache
 from db_transaction_manager import get_db_session
 
 from . import bp
 from api.kpis.direct_files_kpis import get_filtered_direct_image_dataframe
 from api.kpis.kpiutils import parse_filter_params, get_user_permissions
+
+DISPLAY_COLUMNS: Tuple[str, ...] = (
+    "image_uuid",
+    "upload_date",
+    "upload_datetime",
+    "hospital_name",
+    "lab_unit_name",
+    "camera_name",
+    "disease_name",
+    "is_mydriatic",
+    "is_pregraded",
+    "verification_status",
+    "verified_by_username",
+    "verified_at",
+    "task_count",
+    "grading_count",
+    "latest_task_date",
+    "latest_grading_date",
+)
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -43,41 +63,26 @@ def direct_files() -> str:
     per_page = current_app.config.get("REPORT_DIRECT_FILES_PAGE_SIZE", 50)
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
-    # Use the API module to get filtered dataframe
-    with get_db_session() as db:
-        # Parse filter parameters using API utility
-        params = parse_filter_params()
-        
-        # Override date filters if they were provided in the request
-        if start_date:
-            params['start_date'] = start_date
-        if end_date:
-            params['end_date'] = end_date
-            
-        # Get user permissions using API utility
-        user_lab_unit_ids = get_user_permissions(current_user.id)
-        
-        # Get filtered dataframe using API function
-        df, _ = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
-    
-    # Get total count after filtering
-    total = len(df)
-    
-    # Apply pagination
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    df_page = df.iloc[start_idx:end_idx]
-    
-    # Convert dataframe to list of dictionaries for template
-    direct_files_data = df_page.to_dict('records')
-    
-    # Convert dataframe to HTML for display
-    df_html = df_page.to_html(
-        classes='table table-striped table-hover table-sm',
-        table_id='direct-files-table',
-        index=False,
-        escape=False,
-        na_rep='-'
+    # Parse filters and permissions
+    params = parse_filter_params()
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+
+    user_lab_unit_ids = get_user_permissions(current_user.id)
+
+    # Build deterministic key for caching
+    params_key = _build_params_key(params)
+
+    # Cached fetch for this user + filters + page
+    df_html, direct_files_data, total = _get_direct_files_page(
+        current_user.id,
+        params_key,
+        params,
+        tuple(sorted(user_lab_unit_ids)),
+        page,
+        per_page,
     )
 
     total_pages = max(1, math.ceil(total / per_page)) if total else 1
@@ -109,3 +114,50 @@ def direct_files() -> str:
         total=total,
         per_page=per_page,
     )
+
+
+_CACHE_TIMEOUT = 15 * 60  # 15 minutes
+
+
+@cache.memoize(timeout=_CACHE_TIMEOUT)
+def _get_direct_files_page(
+    user_id: int,
+    params_key: Tuple[Tuple[str, str], ...],
+    params: Dict[str, Any],
+    user_lab_unit_ids: Tuple[int, ...],
+    page: int,
+    per_page: int,
+) -> Tuple[str, List[Dict[str, Any]], int]:
+    """Return cached HTML/table data for direct files list for a user and filter set."""
+    with get_db_session() as db:
+        df, _ = get_filtered_direct_image_dataframe(db, params, list(user_lab_unit_ids))
+
+    total = len(df)
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    df_page = df.iloc[start_idx:end_idx]
+    for col in DISPLAY_COLUMNS:
+        if col not in df_page.columns:
+            df_page[col] = None
+    df_page = df_page[list(DISPLAY_COLUMNS)]
+
+    direct_files_data = df_page.to_dict("records")
+    df_html = df_page.to_html(
+        classes="table table-striped table-hover table-sm",
+        table_id="direct-files-table",
+        index=False,
+        escape=False,
+        na_rep="-",
+    )
+    return df_html, direct_files_data, total
+
+
+def _build_params_key(params: Dict[str, Any]) -> Tuple[Tuple[str, str], ...]:
+    """Normalize params into a deterministic, hashable key for caching."""
+    normalized: List[Tuple[str, str]] = []
+    for key, value in sorted(params.items()):
+        if isinstance(value, (_date, datetime)):
+            normalized.append((key, value.isoformat()))
+        else:
+            normalized.append((key, str(value)))
+    return tuple(normalized)

@@ -17,9 +17,17 @@ from sqlalchemy import text
 from datetime import datetime, timedelta
 import logging
 
+from app_cache import cache
+
 logger = logging.getLogger(__name__)
 
+_CACHE_TIMEOUT = 15 * 60  # 15 minutes
+_PAGE_CACHE_KEY = "public:analytics:page:v1"
+_KPI_CACHE_KEY = "public:analytics:kpi:v1"
+_CHART_CACHE_KEY = "public:analytics:charts:v1"
 
+
+@cache.cached(timeout=_CACHE_TIMEOUT, key_prefix=_PAGE_CACHE_KEY)
 def public_analytics():
     """Display public analytics dashboard with system KPIs."""
     try:
@@ -29,6 +37,7 @@ def public_analytics():
         return render_template("public/analytics_error.html", error=str(e)), 500
 
 
+@cache.cached(timeout=_CACHE_TIMEOUT, key_prefix=_KPI_CACHE_KEY)
 def api_analytics_kpi():
     """API endpoint to get key performance indicators for public analytics."""
     try:
@@ -312,6 +321,7 @@ def api_analytics_kpi():
         }), 500
 
 
+@cache.cached(timeout=_CACHE_TIMEOUT, key_prefix=_CHART_CACHE_KEY)
 def api_analytics_chart_data():
     """API endpoint for chart-specific data (uploads and gradings over time)."""
     try:

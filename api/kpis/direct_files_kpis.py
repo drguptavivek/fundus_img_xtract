@@ -1,151 +1,243 @@
 # api/kpis/encounter_files_kpis.py
-import json
-import pandas as pd
-import logging
 import io
-from datetime import datetime, date, timezone
+import json
+import logging
+from datetime import date, datetime, timezone
 from typing import Dict, List, Optional, Set
-from flask import jsonify, request, send_file
-from flask_login import login_required, current_user
-from sqlalchemy import func, extract, and_, or_, case, cast, Float
-from sqlalchemy.orm import joinedload, selectinload
+
 import numpy as np
+import pandas as pd
+from flask import jsonify, request, send_file
+from flask_login import current_user, login_required
+from sqlalchemy import Float, and_, case, cast, extract, func, or_, text
+from sqlalchemy.orm import joinedload, selectinload
 
 # Import blueprint and utilities
 from .. import api_bp
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from utils.dataFrameDirectFiles import generate_direct_image_upload_df
 from models import (
-    Session, PatientEncounters, EncounterFile, EncounterFilePDF,
-    DiabeticRetinopathyReport, GlaucomaReport, GlaucomaResultsCleaned,
-    LabUnit, Hospital, DiseaseGrading, Disease, ZipFile
+    LabUnit,
+    Session,
+    PatientEncounters,
+    EncounterFile,
+    EncounterFilePDF,
+    DiabeticRetinopathyReport,
+    GlaucomaReport,
+    GlaucomaResultsCleaned,
+    DiseaseGrading,
+    Disease,
+    ZipFile,
 )
 
 # Import KPI utilities
 from .kpiutils import (
-    create_kpi_response, create_error_response, create_combined_response, handle_nat_values_for_json,
-    parse_filter_params, get_user_permissions, determine_period,
-    create_filters_applied_dict, validate_dataframe_not_empty,
-    safe_divide, calculate_percentage, group_by_location,
-    format_month_name, log_endpoint_usage
+    calculate_percentage,
+    create_combined_response,
+    create_error_response,
+    create_filters_applied_dict,
+    create_kpi_response,
+    determine_period,
+    format_month_name,
+    get_user_permissions,
+    group_by_location,
+    handle_nat_values_for_json,
+    log_endpoint_usage,
+    parse_filter_params,
+    safe_divide,
+    validate_dataframe_not_empty,
 )
 
 
 def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set[int]) -> tuple[pd.DataFrame, Dict]:
     """
-    Generate and filter direct dataframe based on user permissions and filter parameters.
-    
+    Generate direct uploads data using the materialized view for performance.
+
     Args:
-        db: Database session
-        params: Dictionary containing filter parameters
-        user_lab_unit_ids: Set of lab unit IDs user has access to
-        
+        db: Database session.
+        params: Filter parameters.
+        user_lab_unit_ids: Lab unit IDs user can access.
+
     Returns:
         Tuple of (filtered pandas DataFrame, filters_applied dictionary)
     """
     try:
-        # Generate the complete dataframe using utility function
-        # We need to pass the db session since we're already in a with_session context
-        df = generate_direct_image_upload_df(
-            db,
-            start_date=params.get('start_date'),
-            end_date=params.get('end_date')
-        )
-        
-        # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
-        # Check if user_lab_unit_ids is not empty to avoid "ambiguous truth value" error
-        try:
-            # Debug: Check what columns are actually available in dataframe
-            error_logger = logging.getLogger('runtime_error')
-            error_logger.info(f"DEBUG: Available columns in dataframe: {list(df.columns)}")
-            
-            # Handle empty dataframe case
-            if df.empty:
-                error_logger.info("Dataframe is empty, skipping user permissions filtering")
-            elif user_lab_unit_ids and len(user_lab_unit_ids) > 0:
-                # Check if lab_unit_id column exists
-                if 'lab_unit_id' in df.columns:
-                    df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
-                else:
-                    error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
-                    # Return empty dataframe with same structure
-                    df = df.iloc[0:0]
-            else:
-                # If user has no lab unit permissions, return empty dataframe
-                df = df.iloc[0:0]  # Empty dataframe with same columns
-        except Exception as e:
-            error_logger = logging.getLogger('runtime_error')
-            error_logger.error(f"Error in user permissions filtering: {str(e)}")
-            error_logger.error(f"user_lab_unit_ids: {user_lab_unit_ids}")
-            raise
-        
-        # Apply location filters
-        try:
-            # Debug: Check what columns are actually available in dataframe
-            error_logger = logging.getLogger('runtime_error')
-            error_logger.info(f"DEBUG LOCATION FILTER: Available columns in dataframe: {list(df.columns)}")
-            
-            # Handle empty dataframe case
-            if df.empty:
-                error_logger.info("Dataframe is empty, skipping location filtering")
-            else:
-                if 'hospital_ids' in params and params['hospital_ids']:
-                    if 'hospital_id' in df.columns:
-                        df = df[df['hospital_id'].isin(params['hospital_ids'])]
-                    else:
-                        error_logger.error(f"Column 'hospital_id' not found in dataframe. Available columns: {list(df.columns)}")
-                
-                if 'lab_unit_ids' in params and params['lab_unit_ids']:
-                    if 'lab_unit_id' in df.columns:
-                        df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
-                    else:
-                        error_logger.error(f"Column 'lab_unit_id' not found in dataframe. Available columns: {list(df.columns)}")
-        except Exception as e:
-            error_logger = logging.getLogger('runtime_error')
-            error_logger.error(f"Error in location filtering: {str(e)}")
-            error_logger.error(f"params: {params}")
-            raise
-        
-        # Apply date filters through upload_date (from DirectImageUpload)
-        # Debug: Check what columns are actually available in dataframe
-        error_logger.info(f"DEBUG DATE FILTER: Available columns in dataframe: {list(df.columns)}")
-        
-        # Handle empty dataframe case
-        if df.empty:
-            error_logger.info("Dataframe is empty, skipping date filtering")
-        else:
-            if 'start_date' in params:
-                if 'upload_date' in df.columns:
-                    df = df[df['upload_date'] >= params['start_date']]
-                else:
-                    error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
-            if 'end_date' in params:
-                if 'upload_date' in df.columns:
-                    df = df[df['upload_date'] <= params['end_date']]
-                else:
-                    error_logger.error(f"Column 'upload_date' not found in dataframe. Available columns: {list(df.columns)}")
-        
-        # Create filters_applied dictionary for response
         filters_applied = {
-            "start_date": params.get('start_date'),
-            "end_date": params.get('end_date'),
-            "hospital_ids": params.get('hospital_ids'),
-            "lab_unit_ids": params.get('lab_unit_ids'),
-            "user_lab_unit_ids": list(user_lab_unit_ids)
+            "start_date": params.get("start_date"),
+            "end_date": params.get("end_date"),
+            "hospital_ids": params.get("hospital_ids"),
+            "lab_unit_ids": params.get("lab_unit_ids"),
+            "user_lab_unit_ids": list(user_lab_unit_ids),
         }
-        
+
+        base_sql = """
+            SELECT
+                di.id AS image_id,
+                di.uuid AS image_uuid,
+                di.created_at::date AS upload_date,
+                di.created_at AS upload_datetime,
+                di.uploader_id,
+                u.username AS uploader_username,
+                u.full_name AS uploader_full_name,
+                di.hospital_id,
+                h.name AS hospital_name,
+                di.lab_unit_id,
+                lu.name AS lab_unit_name,
+                di.camera_id,
+                cam.name AS camera_name,
+                di.disease_id,
+                dis.name AS disease_name,
+                di.area_id,
+                ar.name AS area_name,
+                di.is_mydriatic,
+                di.is_pregraded,
+                div.verified_status AS verification_status,
+                div.remarks AS verification_remarks,
+                div.verified_by_id,
+                vb.username AS verified_by_username,
+                div.verified_at,
+                COALESCE(gtagg.task_count, 0) AS task_count,
+                gtagg.latest_task_date,
+                COALESCE(gtagg.task_states, ARRAY[]::text[]) AS task_states,
+                COALESCE(grad.grading_count, 0) AS grading_count,
+                grad.latest_grading_date,
+                COALESCE(grad.grading_roles, ARRAY[]::text[]) AS grading_roles
+            FROM mvw_image_listing_all mv
+            JOIN direct_image_uploads di ON di.id = mv.direct_image_upload_id
+            LEFT JOIN users u ON u.id = di.uploader_id
+            LEFT JOIN hospitals h ON h.id = di.hospital_id
+            LEFT JOIN lab_units lu ON lu.id = di.lab_unit_id
+            LEFT JOIN cameras cam ON cam.id = di.camera_id
+            LEFT JOIN diseases dis ON dis.id = di.disease_id
+            LEFT JOIN areas ar ON ar.id = di.area_id
+            LEFT JOIN direct_image_verifications div ON div.image_upload_id = di.id
+            LEFT JOIN users vb ON vb.id = div.verified_by_id
+            LEFT JOIN (
+                SELECT
+                    direct_image_upload_id,
+                    COUNT(*) AS task_count,
+                    MAX(updated_at) AS latest_task_date,
+                    ARRAY_REMOVE(ARRAY_AGG(DISTINCT state), NULL) AS task_states
+                FROM grading_tasks
+                WHERE direct_image_upload_id IS NOT NULL
+                GROUP BY direct_image_upload_id
+            ) gtagg ON gtagg.direct_image_upload_id = di.id
+            LEFT JOIN (
+                SELECT
+                    gt.direct_image_upload_id,
+                    COUNT(*) AS grading_count,
+                    MAX(g.created_at) AS latest_grading_date,
+                    ARRAY_REMOVE(ARRAY_AGG(DISTINCT g.role_slot), NULL) AS grading_roles
+                FROM grades g
+                JOIN grading_tasks gt ON g.task_id = gt.id
+                WHERE gt.direct_image_upload_id IS NOT NULL
+                GROUP BY gt.direct_image_upload_id
+            ) grad ON grad.direct_image_upload_id = di.id
+            WHERE mv.upload_type IN ('Direct', 'Pregraded')
+        """
+
+        clauses = []
+        params_sql: Dict[str, object] = {}
+
+        if params.get("start_date"):
+            clauses.append("mv.upload_date_utc::date >= :start_date")
+            params_sql["start_date"] = params["start_date"]
+        if params.get("end_date"):
+            clauses.append("mv.upload_date_utc::date <= :end_date")
+            params_sql["end_date"] = params["end_date"]
+
+        lab_unit_ids = params.get("lab_unit_ids") or []
+        if lab_unit_ids:
+            clauses.append("di.lab_unit_id = ANY(:lab_unit_ids)")
+            params_sql["lab_unit_ids"] = list(lab_unit_ids)
+
+        hospital_ids = params.get("hospital_ids") or []
+        if hospital_ids:
+            clauses.append("di.hospital_id = ANY(:hospital_ids)")
+            params_sql["hospital_ids"] = list(hospital_ids)
+
+        if user_lab_unit_ids:
+            clauses.append("di.lab_unit_id = ANY(:user_lab_unit_ids)")
+            params_sql["user_lab_unit_ids"] = list(user_lab_unit_ids)
+
+        if clauses:
+            base_sql += " AND " + " AND ".join(clauses)
+
+        base_sql += " ORDER BY di.created_at DESC"
+
+        rows = db.execute(text(base_sql), params_sql).mappings().all()
+
+        data: List[Dict[str, object]] = []
+        for row in rows:
+            record = dict(row)
+            record["has_verification"] = bool(record.get("verification_status"))
+            record["has_task"] = (record.get("task_count") or 0) > 0
+            record["has_grading"] = (record.get("grading_count") or 0) > 0
+
+            for key in ("task_states", "grading_roles"):
+                value = record.get(key)
+                if value is None:
+                    record[key] = []
+                elif isinstance(value, list):
+                    record[key] = value
+                else:
+                    record[key] = list(value)
+
+            data.append(record)
+
+        df = pd.DataFrame(data)
+
+        # Ensure consistent column ordering and presence
+        desired_columns = [
+            "image_id",
+            "image_uuid",
+            "hospital_id",
+            "lab_unit_id",
+            "camera_id",
+            "disease_id",
+            "area_id",
+            "uploader_id",
+            "upload_date",
+            "upload_datetime",
+            "hospital_name",
+            "lab_unit_name",
+            "camera_name",
+            "disease_name",
+            "area_name",
+            "is_mydriatic",
+            "is_pregraded",
+            "verification_status",
+            "verification_remarks",
+            "verified_by_username",
+            "verified_at",
+            "has_verification",
+            "has_task",
+            "task_count",
+            "task_states",
+            "latest_task_date",
+            "has_grading",
+            "grading_count",
+            "grading_roles",
+            "latest_grading_date",
+        ]
+
+        for col in desired_columns:
+            if col not in df.columns:
+                df[col] = None
+
+        df = df[desired_columns]
+
         return df, filters_applied
-        
+
     except Exception as e:
         app_logger = logging.getLogger(__name__)
-        app_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
+        app_logger.error(f"Error in get_filtered_direct_image_dataframe: {str(e)}")
         app_logger.error(f"Params: {params}")
         app_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
-        
+
         # Log to runtime_error.log
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
+        error_logger.error(f"Error in get_filtered_direct_image_dataframe: {str(e)}")
         error_logger.error(f"Params: {params}")
         error_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
         raise
@@ -188,12 +280,36 @@ def get_filtered_direct_dataframe():
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
             
+            # Trim to minimal columns for browser payload
+            minimal_columns = [
+                "image_uuid",
+                "upload_date",
+                "upload_datetime",
+                "hospital_name",
+                "lab_unit_name",
+                "camera_name",
+                "disease_name",
+                "is_mydriatic",
+                "is_pregraded",
+                "verification_status",
+                "verified_by_username",
+                "verified_at",
+                "task_count",
+                "grading_count",
+                "latest_task_date",
+                "latest_grading_date",
+            ]
+            for col in minimal_columns:
+                if col not in df.columns:
+                    df[col] = None
+            df = df[minimal_columns]
+
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
-            
+
             # Convert dataframe to JSON-serializable format
-            df_json = df.to_dict('records')
-            
+            df_json = df.to_dict("records")
+
             # Additional NaN handling for JSON serialization
             for record in df_json:
                 for key, value in record.items():
@@ -214,7 +330,7 @@ def get_filtered_direct_dataframe():
                 "period": period,
                 "total_records": len(df_json),
                 "data": df_json,
-                "columns": list(df.columns)
+                "columns": list(df.columns),
             }
             response_message = "Data retrieved successfully"
             
@@ -376,46 +492,48 @@ def get_upload_metrics():
                 total_uploads = len(df)
                 
                 # Uploads by hospital
-                by_hospital = df.groupby(['hospital_id', 'hospital_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_hospital.columns = ['hospital_id', 'hospital_name', 'upload_count']
-                by_hospital = by_hospital.to_dict('records')
+                by_hospital = []
+                if "hospital_id" in df.columns and "hospital_name" in df.columns:
+                    by_hospital_df = df.groupby(["hospital_id", "hospital_name"]).agg({"image_id": "count"}).reset_index()
+                    by_hospital_df.columns = ["hospital_id", "hospital_name", "upload_count"]
+                    by_hospital = by_hospital_df.to_dict("records")
                 
                 # Uploads by lab unit
-                by_lab_unit = df.groupby(['lab_unit_id', 'lab_unit_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_lab_unit.columns = ['lab_unit_id', 'lab_unit_name', 'upload_count']
-                by_lab_unit = by_lab_unit.to_dict('records')
+                by_lab_unit = []
+                if "lab_unit_id" in df.columns and "lab_unit_name" in df.columns:
+                    by_lab_unit_df = df.groupby(["lab_unit_id", "lab_unit_name"]).agg({"image_id": "count"}).reset_index()
+                    by_lab_unit_df.columns = ["lab_unit_id", "lab_unit_name", "upload_count"]
+                    by_lab_unit = by_lab_unit_df.to_dict("records")
                 
-                # Uploads by uploader
-                by_uploader = df.groupby(['uploader_id', 'uploader_username', 'uploader_full_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_uploader.columns = ['uploader_id', 'uploader_username', 'uploader_full_name', 'upload_count']
-                by_uploader = by_uploader.to_dict('records')
-                
-                # Uploads by camera
-                by_camera = df.groupby(['camera_id', 'camera_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_camera.columns = ['camera_id', 'camera_name', 'upload_count']
-                by_camera = by_camera.to_dict('records')
-                
-                # Uploads by disease
-                by_disease = df.groupby(['disease_id', 'disease_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_disease.columns = ['disease_id', 'disease_name', 'upload_count']
-                by_disease = by_disease.to_dict('records')
-                
-                # Uploads by area
-                by_area = df.groupby(['area_id', 'area_name']).agg({
-                    'image_id': 'count'
-                }).reset_index()
-                by_area.columns = ['area_id', 'area_name', 'upload_count']
-                by_area = by_area.to_dict('records')
+                # Uploads by camera (fill Unknown for nulls)
+                by_camera = []
+                if "camera_id" in df.columns and "camera_name" in df.columns:
+                    cam_df = df.copy()
+                    cam_df["camera_id"] = cam_df["camera_id"].fillna(-1)
+                    cam_df["camera_name"] = cam_df["camera_name"].fillna("Unknown")
+                    by_camera_df = cam_df.groupby(["camera_id", "camera_name"]).agg({"image_id": "count"}).reset_index()
+                    by_camera_df.columns = ["camera_id", "camera_name", "upload_count"]
+                    by_camera = by_camera_df.to_dict("records")
+
+                # Uploads by disease (fill Unknown for nulls)
+                by_disease = []
+                if "disease_id" in df.columns and "disease_name" in df.columns:
+                    disease_df = df.copy()
+                    disease_df["disease_id"] = disease_df["disease_id"].fillna(-1)
+                    disease_df["disease_name"] = disease_df["disease_name"].fillna("Unknown")
+                    by_disease_df = disease_df.groupby(["disease_id", "disease_name"]).agg({"image_id": "count"}).reset_index()
+                    by_disease_df.columns = ["disease_id", "disease_name", "upload_count"]
+                    by_disease = by_disease_df.to_dict("records")
+
+                # Uploads by area (fill Unknown for nulls)
+                by_area = []
+                if "area_id" in df.columns and "area_name" in df.columns:
+                    area_df = df.copy()
+                    area_df["area_id"] = area_df["area_id"].fillna(-1)
+                    area_df["area_name"] = area_df["area_name"].fillna("Unknown")
+                    by_area_df = area_df.groupby(["area_id", "area_name"]).agg({"image_id": "count"}).reset_index()
+                    by_area_df.columns = ["area_id", "area_name", "upload_count"]
+                    by_area = by_area_df.to_dict("records")
                 
                 # Mydriatic vs non-mydriatic breakdown
                 mydriatic_breakdown = df.groupby('is_mydriatic').agg({
@@ -454,18 +572,14 @@ def get_upload_metrics():
                 # Task status breakdown
                 task_status_breakdown = {}
                 if 'task_states' in df.columns:
-                    # Flatten all task states from lists
+                    from collections import Counter
                     all_task_states = []
                     for states in df['task_states'].dropna():
                         if isinstance(states, list):
                             all_task_states.extend(states)
                         else:
                             all_task_states.append(states)
-                    
-                    # Count occurrences of each state
-                    from collections import Counter
-                    state_counts = Counter(all_task_states)
-                    task_status_breakdown = dict(state_counts)
+                    task_status_breakdown = dict(Counter(all_task_states))
                 
                 # Grading completion metrics
                 grading_count = df['has_grading'].sum()
@@ -474,17 +588,14 @@ def get_upload_metrics():
                 # Grading role breakdown
                 grading_role_breakdown = {}
                 if 'grading_roles' in df.columns:
-                    # Flatten all grading roles from lists
+                    from collections import Counter
                     all_grading_roles = []
                     for roles in df['grading_roles'].dropna():
                         if isinstance(roles, list):
                             all_grading_roles.extend(roles)
                         else:
                             all_grading_roles.append(roles)
-                    
-                    # Count occurrences of each role
-                    role_counts = Counter(all_grading_roles)
-                    grading_role_breakdown = dict(role_counts)
+                    grading_role_breakdown = dict(Counter(all_grading_roles))
                 
                 # Daily upload trends
                 daily_uploads = df.groupby(df['upload_date']).agg({
@@ -503,7 +614,6 @@ def get_upload_metrics():
                     "grading_count": int(grading_count),
                     "by_hospital": by_hospital,
                     "by_lab_unit": by_lab_unit,
-                    "by_uploader": by_uploader,
                     "by_camera": by_camera,
                     "by_disease": by_disease,
                     "by_area": by_area,

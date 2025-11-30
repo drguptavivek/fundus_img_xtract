@@ -3,7 +3,7 @@ name = "fundus-img-xtract"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13.9"
+requires-python = ">=3.13.3,<3.14"
 dependencies = [
     "gunicorn==23.0.0",
     "argon2-cffi==25.1.0",
@@ -77,4 +77,5 @@ dependencies = [
     "cryptography>=44.0.0",
     "fernet>=1.0.1",
     "scikit-learn>=1.7.2",
+    "flask-caching>=2.3.1",
 ]

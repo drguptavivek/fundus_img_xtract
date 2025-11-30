@@ -11,6 +11,7 @@ from . import api_bp
 # Import utility functions and models
 from auth.roles import roles_required
 from models import User, LabUnit, Job, JobItem
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 # -------------------
@@ -19,22 +20,36 @@ from models import User, LabUnit, Job, JobItem
 
 @api_bp.route('/users/<int:user_id>/lab-units', methods=['GET'])
 @login_required
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_lab_units(user_id):
     """Get lab units for a user."""
     with get_db_session() as db:
         user = db.get(User, user_id)
         if not user:
             return jsonify({"error": "User not found"}), 404
-        if not (current_user.has_role('admin', 'data_manager') or current_user.id == user_id):
+        if current_user.id != user_id:
             return jsonify({"error": "Forbidden"}), 403
-        return jsonify([{"id": lu.id, "name": lu.name} for lu in user.lab_units])
+
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        lab_units = (
+            db.query(LabUnit)
+            .filter(LabUnit.id.in_(allowed_lab_unit_ids))
+            .order_by(LabUnit.name.asc())
+            .all()
+        )
+        return jsonify([{"id": lu.id, "name": lu.name} for lu in lab_units])
 
 
 @api_bp.route('/lab-units/<int:lab_unit_id>/hospital', methods=['GET'])
 @login_required
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_hospital(lab_unit_id):
     """Get hospital for a lab unit."""
     with get_db_session() as db:
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if lab_unit_id not in allowed_lab_unit_ids:
+            return jsonify({"error": "Forbidden"}), 403
+
         lu = db.get(LabUnit, lab_unit_id)
         if not lu:
             return jsonify({"error": "Lab unit not found"}), 404
@@ -43,6 +58,7 @@ def get_hospital(lab_unit_id):
 
 @api_bp.route('/upload-jobs/<job_token>/status', methods=['GET'])
 @login_required
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_upload_status(job_token):
     """Get status of a direct upload job."""
     with get_db_session() as db:

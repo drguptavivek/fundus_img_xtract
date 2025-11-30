@@ -79,6 +79,7 @@ The system implements role-based access control with the following core roles:
 | Role | Description |
 |------|-------------|
 | Admin | System administrator with full system access |
+| Local Admin | Scoped admin for assigned lab units; can perform admin functions only within those units |
 | Data Manager | Manages data uploads and exports |
 | Resident Grader | Junior medical staff performing initial grading |
 | Resident 2 Grader | Senior medical staff performing secondary grading |

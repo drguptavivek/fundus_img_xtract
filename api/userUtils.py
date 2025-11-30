@@ -1,28 +1,21 @@
 from flask import jsonify, request
 from flask_login import current_user, login_required
 from models import LabUnit, User, Hospital
-from auth.roles import roles_required, login_required
-from utils.upload_eligibility import get_user_lab_unit_ids, get_user_lab_unit_ids_no_admin_override
+from auth.roles import roles_required
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.utils import get_db_session
 from . import api_bp
 
 @api_bp.route("/eligibleLabUnit", methods=["GET"])
 @login_required
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_eligible_lab_units():
-    """API endpoint to get eligible lab units for the current user or a specified user ID."""
+    """API endpoint to get eligible lab units for the current user."""
     with get_db_session() as db:
-        # Check if a specific user ID is provided in the query parameters
-        user_id_param = request.args.get("user_id", type=int)
-        
-        # If user_id is provided and the current user is admin, use that user_id
-        # Otherwise, use the current user's ID
-        if user_id_param and current_user.has_role("admin"):
-            user_id = user_id_param
-        else:
-            user_id = current_user.id
-        
+        user_id = current_user.id
+
         # Get the user's eligible lab unit IDs
-        lab_unit_ids = get_user_lab_unit_ids(user_id)
+        lab_unit_ids = get_user_lab_unit_ids_no_admin_override(user_id)
         
         # Get the lab unit details from the database
         lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(lab_unit_ids))).all()
@@ -46,6 +39,7 @@ def get_eligible_lab_units():
 
 @api_bp.route("/eligibleLabUnitCurrentUser", methods=["GET"])
 @login_required
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_eligible_lab_units_currentUser():
     """API endpoint to get eligible lab units for the current user only (regardless of admin status)."""
     with get_db_session() as db:

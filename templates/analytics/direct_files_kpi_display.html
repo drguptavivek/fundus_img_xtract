@@ -74,20 +74,10 @@
     float: none !important;
   }
   
-  /* Hide default DataTables layout elements */
-  .dataTables_wrapper .dataTables_length,
-  .dataTables_wrapper .dataTables_filter,
-  .dataTables_wrapper .dataTables_info,
-  .dataTables_wrapper .dataTables_paginate {
+  /* Hide custom layout since we rely on DataTables default controls */
+  .dataTables_top,
+  .dataTables_bottom {
     display: none;
-  }
-  
-  /* Show only our custom layout elements */
-  .dataTables_top .dataTables_length,
-  .dataTables_top .dataTables_filter,
-  .dataTables_bottom .dataTables_info,
-  .dataTables_bottom .dataTables_paginate {
-    display: block;
   }
   
   /* KPI Chart Styles */

@@ -611,7 +611,6 @@ class DirectFilesAnalytics {
                 await this.loadDirectFilesData();
                 await this.loadUploadMetrics();
                 this.initializeDataTable();
-                this.updateSummaryMetrics();
                 this.showDataSection();
             } else {
                 console.error('Required dependencies not available');
@@ -621,29 +620,7 @@ class DirectFilesAnalytics {
     
     async loadDirectFilesData() {
         try {
-            console.log('Loading direct files data...');
-            const queryString = window.commonFilters.buildQueryParams();
-            console.log('Query string:', queryString);
-            
-            const response = await fetch(`/api/kpis/direct-files/filtered-dataframe?${queryString}`);
-            console.log('Response status:', response.status);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            console.log('API response:', result);
-            
-            if (!result.success) {
-                throw new Error(result.message || 'API request failed');
-            }
-            
-            // The API returns data wrapped in an object, extract the actual array
-            this.directFilesData = result.data.data || [];
-            console.log('Direct files data loaded:', this.directFilesData.length, 'records');
-
-            // Always set column order, even when there's no data, to prevent DataTable initialization errors
+            // Only set column order; rows load via server-side DataTables
             this.columnOrder = [
                 "image_uuid",
                 "upload_date",
@@ -662,11 +639,7 @@ class DirectFilesAnalytics {
                 "grading_count",
                 "latest_grading_date"
             ];
-            console.log('Available columns:', this.columnOrder);
-
-            if (this.directFilesData.length > 0) {
-                console.log('Sample record:', this.directFilesData[0]);
-            }
+            console.log('Column order set for DataTable:', this.columnOrder);
         } catch (error) {
             console.error('Error loading direct files data:', error);
             this.showFlashToast('Failed to load direct files data', 'error');
@@ -725,6 +698,13 @@ class DirectFilesAnalytics {
         // Get all column names in JSON order (stored during data loading)
         const allColumns = this.columnOrder || [];
         
+        // If we have no columns, don't initialize the DataTable to prevent errors
+        if (allColumns.length === 0) {
+            console.warn('No columns defined for DataTable initialization');
+            this.showEmptyState();
+            return;
+        }
+
         // Create column definitions dynamically
         const columnDefs = allColumns.map(col => ({
             data: col,
@@ -758,9 +738,7 @@ class DirectFilesAnalytics {
         }));
         
         // Initialize DataTable directly with the data
-        console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
-        console.log('Column definitions:', columnDefs.length, 'columns');
-        console.log('Sample data:', this.directFilesData.slice(0, 2));
+        console.log('Initializing DataTable with server-side data; columns:', columnDefs.length);
         
         // Check if jQuery and DataTables are available
         if (typeof $ === 'undefined') {
@@ -808,39 +786,27 @@ class DirectFilesAnalytics {
         // Create column definitions dynamically
         const columnDefs = allColumns.map(col => ({
             data: col,
-            title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Convert snake_case to Title Case
-            render: function(data, type, row) {
-                // Handle null/undefined data
+            title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            render: function(data) {
                 if (data === null || data === undefined) {
                     return '-';
                 }
-                
-                // Format specific date columns only
                 if (col.includes('capture_date') || col.includes('upload_date') || col.includes('created_at') || col.includes('updated_at')) {
                     try {
                         return data ? new Date(data).toLocaleString() : '-';
                     } catch (e) {
-                        return data; // Return as-is if date parsing fails
+                        return data;
                     }
                 } else if (typeof data === 'boolean') {
                     return data ? 'Yes' : 'No';
                 } else if (Array.isArray(data)) {
-                    // Handle arrays (like task_states, grading_roles)
                     return data.join(', ');
                 } else if (typeof data === 'object' && data !== null) {
-                    // Handle objects by converting to JSON string
                     return JSON.stringify(data);
                 }
-                
-                // Return data as-is for all other columns
                 return data;
             }
         }));
-        
-        // Initialize DataTable directly with the data
-        console.log('Initializing DataTable with data:', this.directFilesData.length, 'records');
-        console.log('Column definitions:', columnDefs.length, 'columns');
-        console.log('Sample data:', this.directFilesData.slice(0, 2));
         
         // Check if jQuery and DataTables are available
         if (typeof $ === 'undefined') {
@@ -861,138 +827,56 @@ class DirectFilesAnalytics {
         }
         
         try {
-            // Check if we have data to display
-            if (this.directFilesData.length === 0) {
-                console.log('No data available for DataTable, showing empty state');
-                this.showEmptyState();
-                return;
-            }
-
             // Clear any existing table content to prevent duplication
             $('#direct-files-table thead tr').empty();
+            $('#direct-files-table tbody').empty();
 
-            // Make sure the body table has the same structure
-            $('#direct-files-table-body thead tr').empty();
-            $('#direct-files-table-body tbody').empty();
-
+            const self = this;
             this.dataTable = $('#direct-files-table').DataTable({
-                data: this.directFilesData,
-                columns: columnDefs,
-                dom: 'rt<"bottom">',
+                serverSide: true,
+                processing: true,
+                searching: false,
+                ordering: false,
                 scrollX: true,
-                ordering: true,
-                searching: true,
-                info: true,
-                lengthChange: true,
+                lengthMenu: [10, 25, 50, 100],
                 pageLength: 25,
-                retrieve: false, // Don't retrieve existing instance
-                destroy: false,  // Don't destroy table markup, just the DataTable instance
-                language: {
-                    lengthMenu: "Show _MENU_ entries",
-                    info: "Showing _START_ to _END_ of _TOTAL_ entries",
-                    paginate: {
-                        first: "First",
-                        last: "Last",
-                        next: "Next",
-                        previous: "Previous"
-                    }
-                }
+                ajax: function(data, callback) {
+                    const page = Math.floor(data.start / data.length) + 1;
+                    const queryString = window.commonFilters.buildQueryParams();
+                    const url = `/api/kpis/direct-files/filtered-dataframe?page=${page}&length=${data.length}&${queryString}`;
+                    fetch(url)
+                        .then(resp => resp.json())
+                        .then(result => {
+            const rows = (result.data && result.data.data) || [];
+            callback({
+                data: rows,
+                recordsTotal: result.data.recordsTotal || 0,
+                recordsFiltered: result.data.recordsFiltered || 0
             });
-            
-            // Update the custom layout elements
-            this.updateCustomLayout();
-            
-            console.log('DataTable initialized successfully:', this.dataTable);
-            console.log('Table info:', this.dataTable.page.info());
+            // Update summary metrics if available
+            self.uploadMetrics.total_uploads = result.data.recordsTotal || 0;
+            self.updateSummaryMetrics();
+                        })
+                        .catch(err => {
+                            console.error('Error loading table data:', err);
+                            callback({ data: [], recordsTotal: 0, recordsFiltered: 0 });
+                        });
+                },
+                columns: columnDefs,
+            });
+
+            console.log('DataTable initialized successfully (server-side)', this.dataTable);
         } catch (error) {
             console.error('Error initializing DataTable:', error);
         }
     }
     
-    updateCustomLayout() {
-        // Update the info display
-        const info = this.dataTable.page.info();
-        document.getElementById('direct-files-table_info').textContent =
-            `Showing ${info.start + 1} to ${info.end} of ${info.recordsDisplay} entries`;
-        
-        // Update pagination
-        this.updatePagination();
-        
-        // Set up event listeners for custom controls
-        this.setupCustomControls();
-    }
-    
-    updatePagination() {
-        const paginate = document.getElementById('direct-files-table_paginate');
-        const info = this.dataTable.page.info();
-        
-        // Clear existing pagination
-        const span = paginate.querySelector('span');
-        span.innerHTML = '';
-        
-        // Add limited page numbers around current page
-        const maxLinks = 7;
-        let start = Math.max(0, info.page - Math.floor(maxLinks / 2));
-        let end = Math.min(info.pages, start + maxLinks);
-        if (end - start < maxLinks) {
-            start = Math.max(0, end - maxLinks);
-        }
-        for (let i = start; i < end; i++) {
-            const a = document.createElement('a');
-            a.className = `paginate_button ${i === info.page ? 'current' : ''}`;
-            a.setAttribute('aria-controls', 'direct-files-table');
-            a.setAttribute('data-dt-idx', i);
-            a.setAttribute('tabindex', '0');
-            a.textContent = i + 1;
-            
-            a.addEventListener('click', () => {
-                this.dataTable.page(i).draw('page');
-            });
-            
-            span.appendChild(a);
-        }
-        
-        // Update previous/next buttons
-        const prevBtn = document.getElementById('direct-files-table_previous');
-        const nextBtn = document.getElementById('direct-files-table_next');
-        
-        prevBtn.className = `paginate_button previous ${info.page === 0 ? 'disabled' : ''}`;
-        nextBtn.className = `paginate_button next ${info.page === info.pages - 1 ? 'disabled' : ''}`;
-    }
-    
-    setupCustomControls() {
-        // Length selector
-        const lengthSelect = document.querySelector('select[name="direct-files-table_length"]');
-        lengthSelect.addEventListener('change', (e) => {
-            this.dataTable.page.len(parseInt(e.target.value)).draw();
-        });
-        
-        // Search input
-        const searchInput = document.querySelector('#direct-files-table_filter input');
-        searchInput.addEventListener('keyup', () => {
-            this.dataTable.search(searchInput.value).draw();
-        });
-        
-        // Previous/Next buttons
-        document.getElementById('direct-files-table_previous').addEventListener('click', () => {
-            this.dataTable.page('previous').draw('page');
-        });
-        
-        document.getElementById('direct-files-table_next').addEventListener('click', () => {
-            this.dataTable.page('next').draw('page');
-        });
-    }
-    
     updateSummaryMetrics() {
         const total = this.uploadMetrics.total_uploads || 0;
-        const verified = this.directFilesData.filter(item => item.has_verification === true).length;
-        const pregraded = this.directFilesData.filter(item => item.is_pregraded === true).length;
-        const mydriatic = this.directFilesData.filter(item => item.is_mydriatic === true).length;
-        
         document.getElementById('total-uploads').textContent = total;
-        document.getElementById('verified-images').textContent = verified;
-        document.getElementById('pregraded-images').textContent = pregraded;
-        document.getElementById('mydriatic-images').textContent = mydriatic;
+        document.getElementById('verified-images').textContent = this.uploadMetrics.verified_count || 0;
+        document.getElementById('pregraded-images').textContent = this.uploadMetrics.pregraded_breakdown ? (this.uploadMetrics.pregraded_breakdown.pregraded || 0) : 0;
+        document.getElementById('mydriatic-images').textContent = this.uploadMetrics.mydriatic_breakdown ? (this.uploadMetrics.mydriatic_breakdown.mydriatic || 0) : 0;
     }
     
     showDataSection() {
@@ -1040,13 +924,10 @@ class DirectFilesAnalytics {
         
         // Clear table content to ensure clean state
         try {
-            // Only clear if elements exist to avoid "not found" errors
             const headElement = $('#direct-files-table thead tr');
-            const bodyHeadElement = $('#direct-files-table-body thead tr');
-            const bodyElement = $('#direct-files-table-body tbody');
+            const bodyElement = $('#direct-files-table tbody');
             
             if (headElement.length) headElement.empty();
-            if (bodyHeadElement.length) bodyHeadElement.empty();
             if (bodyElement.length) bodyElement.empty();
             
             console.log('Table content cleared');

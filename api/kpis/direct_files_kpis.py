@@ -306,6 +306,17 @@ def get_filtered_direct_dataframe():
                     df[col] = None
             df = df[minimal_columns]
 
+            # Server-side pagination
+            page = max(request.args.get("page", default=1, type=int) or 1, 1)
+            per_page = request.args.get("length", default=25, type=int) or 25
+            start = (page - 1) * per_page
+            end = start + per_page
+
+            total_records = len(df)
+            df = df.iloc[start:end]
+            returned_records = len(df)
+            truncated_count = max(total_records - returned_records, 0)
+
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
 
@@ -330,9 +341,13 @@ def get_filtered_direct_dataframe():
             # Prepare response data
             response_data = {
                 "period": period,
-                "total_records": len(df_json),
+                "total_records": total_records,
+                "returned_records": returned_records,
+                "truncated_count": truncated_count,
                 "data": df_json,
                 "columns": list(df.columns),
+                "recordsTotal": total_records,
+                "recordsFiltered": total_records,
             }
             response_message = "Data retrieved successfully"
             

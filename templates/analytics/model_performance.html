@@ -14,11 +14,15 @@
       </div>
     </div>
   </div>
-  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-    <div>
+
+      <div>
       <h1 class="h3 mb-1">AI Model Performance</h1>
       <p class="text-muted mb-0">Compare AI predictions to selected human references with configurable positives, exclusions, and ROC/AUC.</p>
     </div>
+
+
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+
     <form class="row gy-2 gx-2 align-items-end" method="get">
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-disease">Disease</label>
@@ -57,12 +61,19 @@
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-lab-unit">Lab Units</label>
-        <select class="form-select" id="filter-lab-unit" name="lab_unit_id" multiple>
-          {% for lab in lab_units %}
-          <option value="{{ lab.id }}" {% if lab.id in selected_lab_units %}selected{% endif %}>{{ lab.name }}</option>
-          {% endfor %}
-        </select>
-        <div class="form-text">Restricted to lab units you can access.</div>
+        <div class="dropdown w-100">
+          <button class="form-select text-start" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="lab-unit-dropdown">
+            <span id="lab-unit-label">Select lab units</span>
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 280px; max-height: 260px; overflow-y: auto;">
+            {% for lab in lab_units %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" value="{{ lab.id }}" id="lab-unit-{{ lab.id }}" name="lab_unit_id" {% if lab.id in selected_lab_units %}checked{% endif %}>
+              <label class="form-check-label" for="lab-unit-{{ lab.id }}">{{ lab.name }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
       </div>
       <div class="w-100 d-block d-lg-none"></div>
       <div class="col-12 col-sm-6 col-lg-auto">
@@ -78,13 +89,30 @@
         <label class="form-label mb-1">Class Builder</label>
         <div class="card border shadow-sm">
           <div class="card-body">
-            <p class="text-muted small mb-2">Assign each label to exactly one class. Unassigned labels are dropped. Choose one class as positive for binary metrics.</p>
-            <div id="class-builder" class="d-flex flex-column gap-2" data-class-map='{{ class_map_json|e }}' data-positive-class='{{ positive_class or "" }}' data-available-labels='{{ labels_for_disease|tojson|safe }}'>
-              <!-- populated by JS -->
-            </div>
-            <div class="d-flex align-items-center gap-2 mt-2">
-              <button class="btn btn-outline-secondary btn-sm" type="button" id="add-class-row">Add Class</button>
-              <span id="class-builder-hint" class="text-muted small">Available labels: {% if labels_for_disease %}{{ labels_for_disease|join(', ') }}{% else %}-{% endif %}</span>
+            <p class="text-muted small mb-2">Drag labels into classes. Unassigned labels are ignored in metrics. Pick one positive class.</p>
+            <div id="class-builder" class="row g-3" data-class-map='{{ class_map_json|e }}' data-positive-class='{{ positive_class or "" }}' data-available-labels='{{ labels_for_disease|tojson|safe }}'>
+              <div class="col-12 col-lg-4">
+                <div class="border rounded p-2 h-100">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold">Available labels</div>
+                    <span class="badge bg-secondary" id="available-count">0</span>
+                  </div>
+                  <div id="available-labels" class="list-group list-group-flush min-vh-25" style="min-height: 200px;">
+                  </div>
+                </div>
+              </div>
+              <div class="col-12 col-lg-8">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div class="fw-semibold">Classes</div>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" type="button" id="add-class-row">Add Class</button>
+                    <button class="btn btn-outline-secondary" type="button" id="auto-fill-classes">Auto-fill (one per label)</button>
+                  </div>
+                </div>
+                <div id="class-columns" class="row g-2">
+                  <!-- class columns populated by JS -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -105,6 +133,9 @@
           <span class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true" id="submit-spinner"></span>
           Show Performance
         </button>
+      </div>
+      <div class="col-12 col-sm-6 col-lg-auto">
+        <button class="btn btn-outline-secondary w-100" type="button" id="reset-btn">Reset</button>
       </div>
       <div class="col-12">
         <div id="submit-hint" class="text-muted small"></div>

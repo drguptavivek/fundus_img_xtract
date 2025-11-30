@@ -478,13 +478,16 @@ def model_performance() -> str:
                 selected_model_name = selected_model.name
                 selected_model_version = selected_model.version
 
-        # Lab unit options respecting access
-        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager")
-        if is_admin_like:
-            lab_units = db.query(LabUnit).order_by(LabUnit.name).all()
-        else:
-            lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(user_lab_unit_ids))).order_by(LabUnit.name).all()
+        # Lab unit options respecting access (no admin override)
+        user_lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        lab_units = (
+            db.query(LabUnit)
+            .filter(LabUnit.id.in_(user_lab_unit_ids))
+            .order_by(LabUnit.name)
+            .all()
+            if user_lab_unit_ids
+            else []
+        )
         lab_units_payload = [{"id": lu.id, "name": lu.name} for lu in lab_units]
 
         if disease_id and ai_model_id:
@@ -580,9 +583,7 @@ def model_performance() -> str:
 
                 # Lab unit filter respecting access
                 if selected_lab_units:
-                    requested = set(selected_lab_units)
-                    if not is_admin_like:
-                        requested = requested & set(user_lab_unit_ids or [])
+                    requested = set(selected_lab_units) & set(user_lab_unit_ids or [])
                     if requested:
                         placeholders = []
                         for idx, val in enumerate(requested):
@@ -592,7 +593,7 @@ def model_performance() -> str:
                         sql_parts.append(f"AND lab_unit_id IN ({', '.join(placeholders)})")
                     else:
                         sql_parts.append("AND 1=0")
-                elif not is_admin_like and user_lab_unit_ids:
+                elif user_lab_unit_ids:
                     placeholders = []
                     for idx, val in enumerate(user_lab_unit_ids):
                         key = f"lab_unit_id_{idx}"

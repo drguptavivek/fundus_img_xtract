@@ -43,17 +43,22 @@
     if (!builderEl) return;
     const classMapInput = document.getElementById('class-map-input');
     const addBtn = document.getElementById('add-class-row');
+    const autoFillBtn = document.getElementById('auto-fill-classes');
     const diseaseEl = document.getElementById('filter-disease');
     const submitHint = document.getElementById('submit-hint');
     const submitBtn = document.getElementById('submit-btn');
     const submitSpinner = document.getElementById('submit-spinner');
     const formEl = builderEl.closest('form');
     const bootstrapInput = document.getElementById('filter-bootstrap');
+    const availableList = document.getElementById('available-labels');
+    const classColumns = document.getElementById('class-columns');
+    const availableCount = document.getElementById('available-count');
+    const overlay = document.getElementById('loading-overlay');
 
-    let availableLabels = parseJSONSafe(builderEl.dataset.availableLabels || '[]', []);
+    let allLabels = parseJSONSafe(builderEl.dataset.availableLabels || '[]', []);
     let classMap = parseJSONSafe(builderEl.dataset.classMap || '{}', {});
     let positiveClass = builderEl.dataset.positiveClass || '';
-    const overlay = document.getElementById('loading-overlay');
+    let classOrder = [];
 
     function setSubmitState(running) {
       if (!submitBtn || !submitSpinner) return;
@@ -73,123 +78,227 @@
       }
     }
 
-    function radioName() {
-      return 'positive_class';
+    function currentAssignedLabels() {
+      const used = new Set();
+      Object.values(classMap).forEach((labels) => labels.forEach((l) => used.add(l)));
+      return used;
     }
 
-    function buildRow(className, members) {
-      const row = document.createElement('div');
-      row.className = 'row g-2 align-items-center class-row';
-
-      const colRadio = document.createElement('div');
-      colRadio.className = 'col-auto';
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = radioName();
-      radio.value = className;
-      radio.className = 'form-check-input';
-      if (positiveClass === className) radio.checked = true;
-      colRadio.appendChild(radio);
-
-      const colName = document.createElement('div');
-      colName.className = 'col-12 col-md-3';
-      const nameInput = document.createElement('input');
-      nameInput.type = 'text';
-      nameInput.className = 'form-control form-control-sm class-name';
-      nameInput.value = className;
-      nameInput.required = true;
-      colName.appendChild(nameInput);
-
-      const colLabels = document.createElement('div');
-      colLabels.className = 'col';
-      const select = document.createElement('select');
-      select.multiple = true;
-      select.className = 'form-select form-select-sm class-labels';
-      availableLabels.forEach((lbl) => {
-        const opt = document.createElement('option');
-        opt.value = lbl;
-        opt.textContent = lbl;
-        if (members.includes(lbl)) opt.selected = true;
-        select.appendChild(opt);
+    function syncAvailableList() {
+      if (!availableList) return;
+      availableList.innerHTML = '';
+      const assigned = currentAssignedLabels();
+      const remaining = allLabels.filter((l) => !assigned.has(l));
+      remaining.forEach((lbl) => {
+        availableList.appendChild(buildDraggableItem(lbl));
       });
-      colLabels.appendChild(select);
-
-      const colRemove = document.createElement('div');
-      colRemove.className = 'col-auto';
-      const removeBtn = document.createElement('button');
-      removeBtn.type = 'button';
-      removeBtn.className = 'btn btn-outline-danger btn-sm remove-class';
-      removeBtn.textContent = 'Remove';
-      colRemove.appendChild(removeBtn);
-
-      row.append(colRadio, colName, colLabels, colRemove);
-
-      nameInput.addEventListener('input', () => {
-        radio.value = nameInput.value.trim();
-      });
-
-      removeBtn.addEventListener('click', () => {
-        row.remove();
-        if (!builderEl.querySelectorAll('.class-row').length) {
-          seedDefault();
-        }
-      });
-
-      return row;
+      if (availableCount) availableCount.textContent = remaining.length.toString();
     }
 
-    function renderBuilder() {
-      builderEl.innerHTML = '';
-      const rows = Object.entries(classMap);
-      rows.forEach(([cls, members]) => {
-        builderEl.appendChild(buildRow(cls, members));
+    function buildDraggableItem(label) {
+      const item = document.createElement('div');
+      item.className = 'list-group-item list-group-item-action py-1 px-2 draggable-label';
+      item.textContent = label;
+      item.draggable = true;
+      item.dataset.label = label;
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', label);
+        item.classList.add('dragging');
       });
-      if (!rows.length) {
-        seedDefault();
+      item.addEventListener('dragend', () => item.classList.remove('dragging'));
+      return item;
+    }
+
+    function ensurePositive() {
+      const names = Object.keys(classMap);
+      if (!positiveClass || !names.includes(positiveClass)) {
+        positiveClass = names[0] || '';
       }
     }
 
-    function seedDefault() {
-      classMap = buildDefaultClassMap(availableLabels);
-      positiveClass = Object.keys(classMap)[0] || '';
-      renderBuilder();
+    function renderClasses() {
+      if (!classColumns) return;
+      classColumns.innerHTML = '';
+      ensurePositive();
+      // keep only existing classes in order
+      classOrder = classOrder.filter((c) => classMap[c]);
+      Object.keys(classMap).forEach((c) => {
+        if (!classOrder.includes(c)) classOrder.push(c);
+      });
+
+      classOrder.forEach((cls) => {
+        const labels = classMap[cls] || [];
+        const col = document.createElement('div');
+        col.className = 'col-12 col-md-6 col-xl-4';
+
+        const card = document.createElement('div');
+        card.className = 'border rounded p-2 h-100';
+        card.dataset.className = cls;
+
+        const header = document.createElement('div');
+        header.className = 'd-flex align-items-center justify-content-between gap-2 mb-2';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'form-control form-control-sm flex-grow-1';
+        nameInput.value = cls;
+        nameInput.placeholder = 'Class name';
+
+        const controls = document.createElement('div');
+        controls.className = 'd-flex align-items-center gap-2';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'positive_class';
+        radio.className = 'form-check-input';
+        radio.value = cls;
+        radio.checked = cls === positiveClass;
+        radio.title = 'Set as positive class';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'btn btn-outline-danger btn-sm';
+        removeBtn.textContent = 'Remove';
+
+        controls.append(radio, removeBtn);
+        header.append(nameInput, controls);
+
+        const list = document.createElement('div');
+        list.className = 'list-group list-group-flush droppable py-1';
+        list.style.minHeight = '160px';
+        list.dataset.className = cls;
+
+        labels.forEach((lbl) => list.appendChild(buildDraggableItem(lbl)));
+
+        card.append(header, list);
+        col.appendChild(card);
+        classColumns.appendChild(col);
+
+        radio.addEventListener('change', () => {
+          if (radio.checked) positiveClass = radio.value;
+        });
+
+        function applyRename() {
+          const newName = nameInput.value.trim();
+          if (!newName || newName === cls) return;
+          if (classMap[newName]) {
+            if (submitHint) submitHint.textContent = `Class name '${newName}' already exists.`;
+            nameInput.value = cls;
+            return;
+          }
+          classMap[newName] = classMap[cls];
+          delete classMap[cls];
+          classOrder = classOrder.map((c) => (c === cls ? newName : c));
+          if (positiveClass === cls) positiveClass = newName;
+          renderClasses();
+          syncAvailableList();
+        }
+        nameInput.addEventListener('blur', applyRename);
+        nameInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            applyRename();
+          }
+        });
+
+        removeBtn.addEventListener('click', () => {
+          const labelsBack = classMap[cls] || [];
+          delete classMap[cls];
+          classOrder = classOrder.filter((c) => c !== cls);
+          allLabels = uniqueSorted(allLabels.concat(labelsBack));
+          ensurePositive();
+          renderClasses();
+          syncAvailableList();
+        });
+      });
+
+      enableDrops();
+    }
+
+    function enableDrops() {
+      const droppables = document.querySelectorAll('.droppable');
+      droppables.forEach((zone) => {
+        zone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          zone.classList.add('border', 'border-primary', 'border-2');
+        });
+        zone.addEventListener('dragleave', () => {
+          zone.classList.remove('border', 'border-primary', 'border-2');
+        });
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('border', 'border-primary', 'border-2');
+          const label = e.dataTransfer.getData('text/plain');
+          if (!label) return;
+          const targetClass = zone.dataset.className || null;
+          // remove from any class
+          Object.keys(classMap).forEach((cls) => {
+            classMap[cls] = classMap[cls].filter((l) => l !== label);
+          });
+          if (targetClass) {
+            classMap[targetClass].push(label);
+          }
+          renderClasses();
+          syncAvailableList();
+        });
+      });
+
+      const availableZone = document.getElementById('available-labels');
+      if (availableZone) {
+        availableZone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          availableZone.classList.add('border', 'border-primary', 'border-2');
+        });
+        availableZone.addEventListener('dragleave', () => availableZone.classList.remove('border', 'border-primary', 'border-2'));
+        availableZone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          availableZone.classList.remove('border', 'border-primary', 'border-2');
+          const label = e.dataTransfer.getData('text/plain');
+          if (!label) return;
+          Object.keys(classMap).forEach((cls) => {
+            classMap[cls] = classMap[cls].filter((l) => l !== label);
+          });
+          syncAvailableList();
+          renderClasses();
+        });
+      }
+    }
+
+    function rebuildStateFromDataset(labels) {
+      allLabels = labels;
+      classMap = normalizeClassMap(parseJSONSafe(builderEl.dataset.classMap || '{}', {}), allLabels);
+      classOrder = Object.keys(classMap);
+      // do not autocreate; keep empty until user adds or auto-fill button used
+      ensurePositive();
+      renderClasses();
+      syncAvailableList();
     }
 
     function refreshFromServer(diseaseId) {
       if (!diseaseId) return;
       fetchJSON(`/api/disease-grades/${encodeURIComponent(diseaseId)}`)
         .then((data) => {
-          availableLabels = uniqueSorted((data.grades || []).map((g) => g.impression));
-          classMap = normalizeClassMap(parseJSONSafe(builderEl.dataset.classMap || '{}', {}), availableLabels);
-          if (!Object.keys(classMap).length) classMap = buildDefaultClassMap(availableLabels);
-          if (!positiveClass || !(positiveClass in classMap)) {
-            positiveClass = Object.keys(classMap)[0] || '';
-          }
-          renderBuilder();
+          const labels = uniqueSorted((data.grades || []).map((g) => g.impression));
+          rebuildStateFromDataset(labels);
         })
         .catch((err) => {
           console.error('Failed to load gradings', err);
-          availableLabels = [];
+          allLabels = [];
           classMap = {};
-          builderEl.innerHTML = '<div class="text-danger">Failed to load labels.</div>';
+          classOrder = [];
+          if (availableList) availableList.innerHTML = '<div class="text-danger">Failed to load labels.</div>';
         });
     }
 
     function collectMapping() {
       const mapping = {};
       const usedLabels = new Set();
-      const rows = builderEl.querySelectorAll('.class-row');
-      let chosenPositive = '';
-      for (const row of rows) {
-        const nameInput = row.querySelector('.class-name');
-        const select = row.querySelector('.class-labels');
-        const radio = row.querySelector(`input[name="${radioName()}"]`);
-        if (!nameInput || !select || !radio) continue;
-        const clsName = nameInput.value.trim();
-        const labels = Array.from(select.selectedOptions).map((o) => o.value);
-        if (!clsName || !labels.length) continue;
-        if (mapping[clsName]) {
-          throw new Error(`Class name '${clsName}' is duplicated.`);
+      Object.entries(classMap).forEach(([cls, labels]) => {
+        const cleanName = (cls || '').trim();
+        if (!cleanName || !labels.length) return;
+        if (mapping[cleanName]) {
+          throw new Error(`Class name '${cleanName}' is duplicated.`);
         }
         labels.forEach((lbl) => {
           if (usedLabels.has(lbl)) {
@@ -197,24 +306,27 @@
           }
           usedLabels.add(lbl);
         });
-        mapping[clsName] = labels;
-        if (radio.checked) chosenPositive = clsName;
-      }
+        mapping[cleanName] = labels;
+      });
       if (!Object.keys(mapping).length) {
         throw new Error('Define at least one class with labels.');
       }
-      if (!chosenPositive || !(chosenPositive in mapping)) {
+      if (!positiveClass || !(positiveClass in mapping)) {
         throw new Error('Select one positive class.');
       }
-      return {mapping, positive: chosenPositive};
+      return {mapping, positive: positiveClass};
     }
 
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        const existing = builderEl.querySelectorAll('.class-row').length;
-        const newName = `Class ${existing + 1}`;
-        const row = buildRow(newName, []);
-        builderEl.appendChild(row);
+        const existing = Object.keys(classMap).length;
+        let name = `Class ${existing + 1}`;
+        while (classMap[name]) {
+          name = `${name}-1`;
+        }
+        classMap[name] = [];
+        renderClasses();
+        syncAvailableList();
       });
     }
 
@@ -223,24 +335,40 @@
         try {
           const {mapping, positive} = collectMapping();
           classMapInput.value = JSON.stringify(mapping);
-          // ensure positive radio value is up to date
-          const radios = builderEl.querySelectorAll(`input[name="${radioName()}"]`);
-          radios.forEach((r) => {
-            if (r.checked) r.value = positive;
-          });
+          positiveClass = positive;
           setSubmitState(true);
         } catch (err) {
           evt.preventDefault();
           if (submitHint) submitHint.textContent = err.message || 'Please fix class mapping.';
         }
       });
+
+      const resetBtn = document.getElementById('reset-btn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          // Clear query params by reloading base path
+          const baseUrl = window.location.pathname;
+          window.location.href = baseUrl;
+        });
+      }
+    }
+
+    if (autoFillBtn) {
+      autoFillBtn.addEventListener('click', () => {
+        classMap = buildDefaultClassMap(allLabels);
+        classOrder = Object.keys(classMap);
+        ensurePositive();
+        renderClasses();
+        syncAvailableList();
+      });
     }
 
     if (diseaseEl) {
       diseaseEl.addEventListener('change', () => refreshFromServer(diseaseEl.value));
       if (diseaseEl.value) refreshFromServer(diseaseEl.value);
+      else rebuildStateFromDataset(allLabels);
     } else {
-      renderBuilder();
+      rebuildStateFromDataset(allLabels);
     }
   }
 
@@ -387,11 +515,25 @@
     applyFilter('all');
   }
 
+  function initLabUnitDropdown() {
+    const dropdown = document.getElementById('lab-unit-dropdown');
+    const labelEl = document.getElementById('lab-unit-label');
+    if (!dropdown || !labelEl) return;
+    const checks = document.querySelectorAll('input[name="lab_unit_id"]');
+    const updateLabel = () => {
+      const selected = Array.from(checks).filter((c) => c.checked).length;
+      labelEl.textContent = selected ? `${selected} selected` : 'Select lab units';
+    };
+    checks.forEach((c) => c.addEventListener('change', updateLabel));
+    updateLabel();
+  }
+
   function init() {
     initClassBuilder();
     initRocChart();
     initConfusionPercents();
     initMismatchFilter();
+    initLabUnitDropdown();
   }
 
   if (document.readyState === 'loading') {

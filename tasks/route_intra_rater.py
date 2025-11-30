@@ -32,12 +32,22 @@ from services.intra_rater_service import (
 from services.intra_rater_service import get_default_cooldown_days
 from flask_wtf.csrf import generate_csrf
 from utils.intraraterKPIs import get_disease_summary, generate_cross_tabulation
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
 
 
 def _json_error(message: str, status: HTTPStatus = HTTPStatus.BAD_REQUEST) -> Response:
     return jsonify({"error": message}), status.value
+
+
+def _allowed_lab_units() -> set[int]:
+    """Return lab units for current user without admin override or abort if none."""
+    allowed = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    if not allowed:
+        from flask import abort
+        abort(403, description="No lab unit access")
+    return allowed
 
 
 @bp.route("/intra-rater/batches", methods=["GET"])
@@ -48,8 +58,10 @@ def list_intra_rater_batches() -> Response:
     per_page = min(max(1, request.args.get("per_page", default=25, type=int)), 200)
 
     with get_db_session() as db:
+        allowed_lab_units = _allowed_lab_units()
         query = (
             db.query(IntraRaterBatch)
+            .filter(IntraRaterBatch.lab_unit_id.in_(allowed_lab_units))
             .order_by(IntraRaterBatch.created_at.desc(), IntraRaterBatch.id.desc())
         )
 
@@ -80,9 +92,14 @@ def create_intra_rater_batch() -> Response:
         return _json_error(str(exc))
 
     with get_db_session() as db:
+        allowed_lab_units = _allowed_lab_units()
+        if params.lab_unit_id is None:
+            return _json_error("lab_unit_id is required for scoped batch creation")
+        if params.lab_unit_id not in allowed_lab_units:
+            return _json_error("You cannot create batches for this lab unit", HTTPStatus.FORBIDDEN)
         try:
             if params.lab_unit_id is not None:
-                _ensure_lab_unit_exists(db, params.lab_unit_id)
+                _ensure_lab_unit_exists(db, params.lab_unit_id, allowed_lab_units)
             _ensure_graders_authorized(
                 db=db,
                 grader_ids=params.grader_ids,
@@ -223,7 +240,7 @@ def _parse_create_payload(payload: dict) -> BatchCreateParams:
         payload.get("target_images_per_grader"), "target_images_per_grader"
     )
 
-    lab_unit_id = _optional_positive_int(payload.get("lab_unit_id"), "lab_unit_id")
+    lab_unit_id = _require_positive_int(payload.get("lab_unit_id"), "lab_unit_id")
     cooldown_days_override = _optional_positive_int(
         payload.get("cooldown_days_override"), "cooldown_days_override"
     )
@@ -422,7 +439,9 @@ def _optional_float(value: object, field: str) -> float | None:
         raise ValueError(f"{field} must be numeric") from exc
 
 
-def _ensure_lab_unit_exists(db: Session, lab_unit_id: int) -> None:
+def _ensure_lab_unit_exists(db: Session, lab_unit_id: int, allowed_lab_units: set[int]) -> None:
+    if lab_unit_id not in allowed_lab_units:
+        raise ValueError("Lab unit not permitted")
     exists_query = (
         db.query(LabUnit.id)
         .filter(LabUnit.id == lab_unit_id)
@@ -529,6 +548,7 @@ def intra_rater_dashboard() -> str:
 @roles_required("admin", "data_manager")
 def intra_rater_admin() -> str:
     with get_db_session() as db:
+        allowed_lab_units = _allowed_lab_units()
         disease_entities = db.query(Disease).order_by(Disease.name.asc()).all()
         disease_list = [
             {"id": disease.id, "name": disease.name}
@@ -549,7 +569,14 @@ def intra_rater_admin() -> str:
                     {"id": grading.id, "impression": grading.impression}
                 )
 
-        hospitals = db.query(Hospital).order_by(Hospital.name.asc()).all()
+        hospitals = (
+            db.query(Hospital)
+            .join(LabUnit, LabUnit.hospital_id == Hospital.id)
+            .filter(LabUnit.id.in_(allowed_lab_units))
+            .distinct()
+            .order_by(Hospital.name.asc())
+            .all()
+        )
         hospital_list = [
             {"id": hosp.id, "name": hosp.name}
             for hosp in hospitals
@@ -557,6 +584,7 @@ def intra_rater_admin() -> str:
 
         lab_units = (
             db.query(LabUnit)
+            .filter(LabUnit.id.in_(allowed_lab_units))
             .order_by(LabUnit.name.asc())
             .all()
         )
@@ -573,7 +601,10 @@ def intra_rater_admin() -> str:
         graders = (
             db.query(User)
             .join(UserDiseaseUnitRole, UserDiseaseUnitRole.user_id == User.id)
-            .filter(UserDiseaseUnitRole.active.is_(True))
+            .filter(
+                UserDiseaseUnitRole.active.is_(True),
+                UserDiseaseUnitRole.lab_unit_id.in_(allowed_lab_units),
+            )
             .distinct()
             .all()
         )
@@ -615,6 +646,7 @@ def intra_rater_admin() -> str:
 
         recent_batches = (
             db.query(IntraRaterBatch)
+            .filter(IntraRaterBatch.lab_unit_id.in_(allowed_lab_units))
             .order_by(IntraRaterBatch.created_at.desc())
             .limit(10)
             .all()

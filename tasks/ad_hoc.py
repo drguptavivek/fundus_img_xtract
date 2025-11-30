@@ -15,7 +15,7 @@ from flask_login import current_user
 from auth.roles import roles_required
 from utils.imageSearchUtil import search_images_strict, ImageSearchError
 from db_transaction_manager import get_db_session
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.suitability import check_suitability
 
 # TODO: import role guard, CSRF, and DB context manager per project conventions
@@ -25,11 +25,19 @@ from utils.suitability import check_suitability
 bp = Blueprint('ad_hoc_tasks', __name__, url_prefix='/tasks/ad_hoc')
 
 
+def _allowed_lab_units() -> set[int]:
+    allowed = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+    if not allowed:
+        abort(403, description="No lab unit access")
+    return allowed
+
+
 @bp.get('')
 @roles_required('admin', 'data_manager')
 def index():
     # Render with master data for target diseases
     with get_db_session() as db:
+        allowed_lab_units = _allowed_lab_units()
         # Master data needed by filters → convert to plain dicts to avoid detached instances
         from models import Hospital, LabUnit, Camera, Area
         diseases = [
@@ -38,13 +46,22 @@ def index():
         ]
         hospitals = [
             {'id': h.id, 'name': h.name}
-            for h in db.query(Hospital).order_by(Hospital.id).all()
+            for h in db.query(Hospital)
+            .join(LabUnit, LabUnit.hospital_id == Hospital.id)
+            .filter(LabUnit.id.in_(allowed_lab_units))
+            .distinct()
+            .order_by(Hospital.id)
+            .all()
         ]
         # Include hospital name for lab units to match template display
         from sqlalchemy.orm import joinedload
         lab_units = [
             {'id': lu.id, 'name': lu.name, 'hospital_name': (lu.hospital.name if getattr(lu, 'hospital', None) else None)}
-            for lu in db.query(LabUnit).options(joinedload(LabUnit.hospital)).order_by(LabUnit.id).all()
+            for lu in db.query(LabUnit)
+            .options(joinedload(LabUnit.hospital))
+            .filter(LabUnit.id.in_(allowed_lab_units))
+            .order_by(LabUnit.id)
+            .all()
         ]
         cameras = [
             {'id': c.id, 'name': c.name}
@@ -69,8 +86,14 @@ def list_batches():
     """List recent Ad-hoc batches with optional focus on a specific batch via ad_hoc_id."""
     ad_hoc_id = request.args.get('ad_hoc_id', type=int)
     with get_db_session() as db:
-        q = db.query(AdHocTaskCreation).order_by(AdHocTaskCreation.created_at.desc())
-        batches = q.limit(200).all()
+        allowed_lab_units = _allowed_lab_units()
+        q = (
+            db.query(AdHocTaskCreation)
+            .join(GradingTask, GradingTask.ad_hoc_id == AdHocTaskCreation.id)
+            .filter(GradingTask.lab_unit_id.in_(allowed_lab_units))
+            .order_by(AdHocTaskCreation.created_at.desc())
+        )
+        batches = q.distinct().limit(200).all()
         # Build display rows with disease names
         rows: list[dict[str, Any]] = []
         # Collect all disease IDs to resolve in bulk
@@ -113,6 +136,7 @@ def list_batches():
 def detail(ad_hoc_id: int):
     """Detail view for a single Ad-hoc batch: filters, remarks, diseases, summary."""
     with get_db_session() as db:
+        allowed_lab_units = _allowed_lab_units()
         b: AdHocTaskCreation | None = db.query(AdHocTaskCreation).get(ad_hoc_id)
         if not b:
             abort(404, description='Batch not found')
@@ -150,7 +174,13 @@ def detail(ad_hoc_id: int):
         }
         # Fetch created tasks for this batch and resolve image UUIDs (ORM joins; uuid for both models)
         from models import Disease as DiseaseModel, LabUnit as LabUnitModel, DirectImageUpload, EncounterFile
-        tasks_q = db.query(GradingTask).filter(GradingTask.ad_hoc_id == b.id).all()
+        tasks_q = (
+            db.query(GradingTask)
+            .filter(GradingTask.ad_hoc_id == b.id, GradingTask.lab_unit_id.in_(allowed_lab_units))
+            .all()
+        )
+        if not tasks_q:
+            abort(403, description="No access to this batch")
         # Build lookup maps for disease and lab names
         disease_name_by_id = {d.id: d.name for d in db.query(DiseaseModel).all()}
         lab_name_by_id = {lu.id: lu.name for lu in db.query(LabUnitModel).all()}
@@ -201,15 +231,16 @@ def search():
     capture_end = args.get('capture_end')
 
     with get_db_session() as db:
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role('admin', 'data_manager', 'optometrist')
-        lab_unit_ids = None
-        if lab_unit_id:
-            if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
-                abort(403, description='Access denied to this lab unit')
-            lab_unit_ids = [lab_unit_id]
-        elif not is_admin_like:
-            lab_unit_ids = list(user_lab_unit_ids)
+        allowed_lab_unit_ids = _allowed_lab_units()
+        if lab_unit_id and lab_unit_id not in allowed_lab_unit_ids:
+            abort(403, description='Access denied to this lab unit')
+        lab_unit_ids = [lab_unit_id] if lab_unit_id else list(allowed_lab_unit_ids)
+        allowed_hospital_ids = {
+            hid for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(allowed_lab_unit_ids))
+            if hid is not None
+        }
+        if hospital_id and hospital_id not in allowed_hospital_ids:
+            abort(403, description='Access denied to this hospital')
 
         camera_ids = [camera_id] if camera_id else None
         disease_ids = [disease_id] if disease_id else None

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from flask import render_template, request
+from flask import render_template, request, redirect, url_for, flash
 from auth.roles import roles_required
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from flask_login import current_user
 
 from db_transaction_manager import get_db_session
@@ -15,7 +15,15 @@ from . import bp
 
 
 @bp.route("/all-tasks", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
 def all_tasks() -> str:
     """Page to view all tasks scoped to user's lab units with pagination."""
     # Get pagination parameters from request
@@ -34,7 +42,20 @@ def all_tasks() -> str:
     
     with get_db_session() as db:
         # Get user's lab unit IDs for scoping
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        if not user_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+
+        user_lab_units = db.query(LabUnit).filter(LabUnit.id.in_(user_lab_unit_ids)).all()
+        allowed_hospital_ids = {lu.hospital_id for lu in user_lab_units if lu.hospital_id}
+
+        if hospital_filter and hospital_filter not in allowed_hospital_ids:
+            flash("Invalid hospital filter.", "danger")
+            return redirect(url_for("tasks.all_tasks"))
+        if lab_unit_filter and lab_unit_filter not in user_lab_unit_ids:
+            flash("Invalid lab unit filter.", "danger")
+            return redirect(url_for("tasks.all_tasks"))
         
         # Get paginated tasks using the utility function
         tasks, total_count = get_task_summary(
@@ -55,25 +76,18 @@ def all_tasks() -> str:
         # Get all diseases for the disease filter dropdown
         diseases = get_all_diseases()
         
-        # Get all hospitals and lab units (sorted by ID as requested)
-        all_hospitals = db.query(Hospital).order_by(Hospital.id).all()
-        all_lab_units = db.query(LabUnit).order_by(LabUnit.id).all()
-        
-        # Filter hospitals to only include those with lab units the user has access to
-        if user_lab_unit_ids:
-            # Get lab units that user has access to
-            user_lab_units = db.query(LabUnit).filter(LabUnit.id.in_(user_lab_unit_ids)).all()
-            # Extract unique hospital IDs from user's lab units
-            user_hospital_ids = list(set(lu.hospital_id for lu in user_lab_units if lu.hospital_id))
-            # Filter hospitals to only those the user has access to (sorted by ID)
-            hospitals = [h for h in all_hospitals if h.id in user_hospital_ids]
-            # Filter lab units to only those the user has access to (sorted by ID)
-            lab_units = [lu for lu in all_lab_units if lu.id in user_lab_unit_ids]
-            
-        else:
-            # User has no lab unit access, show empty lists
-            hospitals = []
-            lab_units = []
+        hospitals = (
+            db.query(Hospital)
+            .filter(Hospital.id.in_(allowed_hospital_ids))
+            .order_by(Hospital.id)
+            .all()
+        )
+        lab_units = (
+            db.query(LabUnit)
+            .filter(LabUnit.id.in_(user_lab_unit_ids))
+            .order_by(LabUnit.id)
+            .all()
+        )
         
         # Prepare context for template
         context = {

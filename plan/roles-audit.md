@@ -28,3 +28,7 @@
 ## preprocess blueprint (implemented)
 - Changes: Role gates now `admin/local_admin/fileUploader/optometrist/data_manager`. Dashboard KPIs, lists, filters, dropdowns, and charts are scoped to assigned lab units/hospitals via `get_user_lab_unit_ids_no_admin_override`; invalid filters redirect. Anonymize/restore routes require the image lab unit to be in scope (no admin override) and block users with no lab access; next-image navigation uses the same scoping.
 - Status: Implemented in `preprocess/anonymize_image.py`.
+
+## tasks blueprint (implemented)
+- Changes: Role gates for task index/pending/all-tasks/view-task-details expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`; all use `get_user_lab_unit_ids_no_admin_override` and block users without lab access. All-tasks filters, dropdowns, and summaries are restricted to the caller’s lab units/hospitals with invalid filters rejected. Intra-rater admin JSON/UI now filters batches, hospitals, lab units, and graders to allowed lab units; batch creation requires a permitted lab unit and rejects out-of-scope labs. Ad-hoc task pages/search/list/detail are scoped to allowed lab units (no admin override), and batches without in-scope tasks are hidden/blocked.
+- Status: Implemented in `tasks/route_index.py`, `tasks/route_pending.py`, `tasks/route_task_details.py`, `tasks/route_organizationalTasks.py`, `tasks/route_intra_rater.py`, `tasks/ad_hoc.py`.

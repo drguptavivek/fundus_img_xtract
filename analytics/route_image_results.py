@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
-from flask import current_app, render_template, request, url_for
+from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
 from sqlalchemy.orm import selectinload
@@ -28,7 +28,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
@@ -40,7 +40,15 @@ TASK_STATE_OPTIONS: tuple[str, ...] = (
 
 
 @bp.route("/images", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
 def image_results() -> str:
     """Render per-image grading results with filtering and pagination."""
 
@@ -65,15 +73,22 @@ def image_results() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
     with get_db_session() as db:
-        # Check user permissions for lab unit access
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager")
+        # Check user permissions for lab unit access (no admin override)
+        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        if not user_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+        allowed_hospital_ids = {
+            hid for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(user_lab_unit_ids))
+            if hid is not None
+        }
         
-        query = db.query(GradingTask).join(LabUnit, GradingTask.lab_unit).join(Hospital, LabUnit.hospital)
-
-        # Apply lab unit access control
-        if not is_admin_like and user_lab_unit_ids:
-            query = query.filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
+        query = (
+            db.query(GradingTask)
+            .join(LabUnit, GradingTask.lab_unit)
+            .join(Hospital, LabUnit.hospital)
+            .filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+        )
 
         if disease_id:
             query = query.filter(GradingTask.disease_id == disease_id)
@@ -85,11 +100,14 @@ def image_results() -> str:
                 query = query.filter(GradingTask.direct_image_upload_id.isnot(None))
 
         if hospital_id:
+            if hospital_id not in allowed_hospital_ids:
+                from flask import abort
+                abort(403, description="Access denied to this hospital")
             query = query.filter(LabUnit.hospital_id == hospital_id)
 
         # Only allow filtering by lab_unit_id if the user has access to that lab unit
         if lab_unit_id:
-            if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
+            if lab_unit_id not in user_lab_unit_ids:
                 from flask import abort
                 abort(403, description="Access denied to this lab unit")
             query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
@@ -135,20 +153,33 @@ def image_results() -> str:
         )
 
         # Filter lab units to only those the user has access to
-        if is_admin_like:
-            lab_units_query = db.query(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name).all()
-        else:
-            lab_units_query = (
-                db.query(LabUnit)
-                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
-                .options(selectinload(LabUnit.hospital))
-                .order_by(LabUnit.name)
-                .all()
-            )
+        lab_units_query = (
+            db.query(LabUnit)
+            .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+            .options(selectinload(LabUnit.hospital))
+            .order_by(LabUnit.name)
+            .all()
+        )
 
         # Convert to simple data structures to avoid session issues in templates
-        diseases = [{"id": d.id, "name": d.name} for d in db.query(Disease).order_by(Disease.name).all()]
-        hospitals = [{"id": h.id, "name": h.name} for h in db.query(Hospital).order_by(Hospital.name).all()]
+        diseases = [
+            {"id": d.id, "name": d.name}
+            for d in db.query(Disease)
+            .join(GradingTask, GradingTask.disease_id == Disease.id)
+            .filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+            .distinct()
+            .order_by(Disease.name)
+            .all()
+        ]
+        hospitals = [
+            {"id": h.id, "name": h.name}
+            for h in db.query(Hospital)
+            .join(LabUnit, LabUnit.hospital_id == Hospital.id)
+            .filter(LabUnit.id.in_(user_lab_unit_ids))
+            .distinct()
+            .order_by(Hospital.name)
+            .all()
+        ]
         lab_units = [
             {"id": lu.id, "name": lu.name, "hospital_id": lu.hospital_id, "hospital_name": lu.hospital.name if lu.hospital else None}
             for lu in lab_units_query

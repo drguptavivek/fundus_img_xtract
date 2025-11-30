@@ -36,3 +36,15 @@
 ## search blueprint (implemented)
 - Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Search routes now enforce lab-unit access with `get_user_lab_unit_ids_no_admin_override`; users without lab units are redirected. Hospital/lab filters are validated against allowed sets; dropdown data (hospitals, lab units, cameras/diseases/areas) is limited to images within allowed lab units. Search queries always run with allowed lab_unit_ids; out-of-scope hospital/lab requests return 403.
 - Status: Implemented in `search/route_search_images.py`, `search/route_search.py`.
+
+## analytics image_results blueprint (implemented)
+- Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Image results list is scoped via `get_user_lab_unit_ids_no_admin_override`; users without lab units are redirected. Hospital/lab filters are validated against allowed sets; all queries (counts, pagination) filter by allowed lab units. Dropdowns for hospitals/lab units/diseases are limited to data within allowed lab units; out-of-scope hospital/lab requests 403.
+- Status: Implemented in `analytics/route_image_results.py`.
+
+## analytics encounter_results blueprint (implemented)
+- Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Encounter results queries (encounters + related tasks) are scoped via `get_user_lab_unit_ids_no_admin_override`; users without lab access are redirected. Hospital/lab filters validated against allowed sets with 403 on violations. Dropdowns show only hospitals/lab units within allowed assignments.
+- Status: Implemented in `analytics/route_encounter_results.py`.
+
+## analytics encounter_files blueprint (implemented)
+- Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Encounter files KPI display enforces lab-unit scoping via `get_user_lab_unit_ids_no_admin_override`; users without lab units are redirected. Dataframe retrieval and filters operate only within allowed lab units.
+- Status: Implemented in `analytics/route_encounterFiles_kpi_display.py`.

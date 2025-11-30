@@ -6,7 +6,7 @@ import math
 from datetime import datetime, date as _date
 from typing import Any
 
-from flask import current_app, render_template, request, url_for
+from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -14,6 +14,7 @@ from db_transaction_manager import get_db_session
 from . import bp
 from api.kpis.encounter_files_kpis import get_filtered_encounter_dataframe
 from api.kpis.kpiutils import parse_filter_params, get_user_permissions
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -27,7 +28,15 @@ def _parse_date(value: str | None) -> _date | None:
 
 
 @bp.route("/encounter-files", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
 def encounter_files() -> str:
     """Render encounter files dataframe with filtering and pagination."""
     
@@ -54,8 +63,11 @@ def encounter_files() -> str:
         if end_date:
             params['end_date'] = end_date
             
-        # Get user permissions using API utility
-        user_lab_unit_ids = get_user_permissions(current_user.id)
+        # Get user permissions using API utility (already no admin override)
+        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        if not user_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
         
         # Get filtered dataframe using API function
         df, _ = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)

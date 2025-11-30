@@ -359,10 +359,39 @@
     update(currentMode);
   }
 
+  function initMismatchFilter() {
+    const table = document.getElementById('mismatches-table');
+    const buttons = document.querySelectorAll('[data-mm-filter]');
+    if (!table || !buttons.length) return;
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+    function applyFilter(type) {
+      rows.forEach((r) => {
+        const t = r.dataset.mmType || 'other';
+        if (type === 'all' || type === t) {
+          r.classList.remove('d-none');
+        } else {
+          r.classList.add('d-none');
+        }
+      });
+    }
+
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        buttons.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilter(btn.dataset.mmFilter);
+      });
+    });
+
+    applyFilter('all');
+  }
+
   function init() {
     initClassBuilder();
     initRocChart();
     initConfusionPercents();
+    initMismatchFilter();
   }
 
   if (document.readyState === 'loading') {

@@ -9,7 +9,7 @@
     <div class="d-flex h-100 justify-content-center align-items-center text-white">
       <div class="text-center">
         <div class="spinner-border spinner-border-lg mb-3" role="status" aria-hidden="true"></div>
-        <div class="fw-semibold">Running analysis…</div>
+        <div class="fw-semibold">Running analysis...</div>
         <div class="small">This may take a moment.</div>
       </div>
     </div>
@@ -84,7 +84,7 @@
             </div>
             <div class="d-flex align-items-center gap-2 mt-2">
               <button class="btn btn-outline-secondary btn-sm" type="button" id="add-class-row">Add Class</button>
-              <span id="class-builder-hint" class="text-muted small">Available labels: {% if labels_for_disease %}{{ labels_for_disease|join(', ') }}{% else %}—{% endif %}</span>
+              <span id="class-builder-hint" class="text-muted small">Available labels: {% if labels_for_disease %}{{ labels_for_disease|join(', ') }}{% else %}-{% endif %}</span>
             </div>
           </div>
         </div>
@@ -122,7 +122,7 @@
 
   {% if performance %}
     <div class="alert alert-secondary small">
-      Filters applied: Disease = {{ selected_disease_name or '—' }}, Model = {{ selected_model_name or '—' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
+      Filters applied: Disease = {{ selected_disease_name or '-' }}, Model = {{ selected_model_name or '-' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
       {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
       Reference: {{ reference_source }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
       {% if positive_class %} Positive class: {{ positive_class }}.{% endif %}
@@ -143,8 +143,8 @@
           <div class="card-body">
             <div class="text-muted text-uppercase small">Total Cases</div>
             <div class="display-6">{{ performance.total }}</div>
-            <div class="text-muted">Model: {{ selected_model_name or '—' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}</div>
-            <div class="text-muted">Disease: {{ selected_disease_name or '—' }}</div>
+            <div class="text-muted">Model: {{ selected_model_name or '-' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}</div>
+            <div class="text-muted">Disease: {{ selected_disease_name or '-' }}</div>
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@
               {% if performance.overall.accuracy is not none %}
                 {{ '%.3f'|format(performance.overall.accuracy) }}
               {% else %}
-                —
+                -
               {% endif %}
             </div>
             <div class="text-muted">Correct: {{ performance.correct }}</div>
@@ -166,19 +166,19 @@
       <div class="col">
         <div class="card h-100 shadow-sm">
           <div class="card-body">
-            <div class="text-muted text-uppercase small">Cohen's Kappa</div>
+            <div class="text-muted text-uppercase small">Cohens Kappa</div>
             <div class="display-6">
               {% if performance.overall.cohens_kappa is not none %}
                 {{ '%.3f'|format(performance.overall.cohens_kappa) }}
               {% else %}
-                —
+                -
               {% endif %}
             </div>
             <div class="text-muted">Macro F1:
               {% if performance.overall.macro_f1 is not none %}
                 {{ '%.3f'|format(performance.overall.macro_f1) }}
               {% else %}
-                —
+                -
               {% endif %}
             </div>
           </div>
@@ -213,20 +213,20 @@
                   "npv":"NPV",
                   "f1":"F1",
                   "accuracy":"Accuracy",
-                  "kappa":"Cohen's Kappa"
+                  "kappa":"Cohens Kappa"
                 }.items() %}
                 <tr>
                   <th scope="row">{{ label }}</th>
                   <td class="text-end">
                     {% if performance.binary_metrics[key] is not none %}
                       {{ '%.3f'|format(performance.binary_metrics[key]) }}
-                    {% else %}—{% endif %}
+                    {% else %}-{% endif %}
                   </td>
                   <td class="text-end">
                     {% set ci = performance.binary_ci.get(key) if performance.binary_ci else None %}
                     {% if ci and ci[0] is not none and ci[1] is not none %}
-                      {{ '%.3f'|format(ci[0]) }} – {{ '%.3f'|format(ci[1]) }}
-                    {% else %}—{% endif %}
+                      {{ '%.3f'|format(ci[0]) }} - {{ '%.3f'|format(ci[1]) }}
+                    {% else %}-{% endif %}
                   </td>
                 </tr>
                 {% endfor %}
@@ -244,7 +244,7 @@
             </div>
           {% endif %}
           {% else %}
-            <div class="alert alert-warning m-3">Not enough cases (need ≥20) or no positive label selection to compute binary metrics.</div>
+            <div class="alert alert-warning m-3">Not enough cases (need >=20) or no positive label selection to compute binary metrics.</div>
           {% endif %}
         </div>
       </div>
@@ -374,19 +374,19 @@
           {% if performance.overall.macro_precision is not none %}
             {{ '%.3f'|format(performance.overall.macro_precision) }}
           {% else %}
-            —
+            -
           {% endif %}
           | Macro Recall:
           {% if performance.overall.macro_recall is not none %}
             {{ '%.3f'|format(performance.overall.macro_recall) }}
           {% else %}
-            —
+            -
           {% endif %}
           | Macro Specificity:
           {% if performance.overall.macro_specificity is not none %}
             {{ '%.3f'|format(performance.overall.macro_specificity) }}
           {% else %}
-            —
+            -
           {% endif %}
         </div>
       </div>
@@ -417,19 +417,19 @@
               <td class="text-end">{{ metric.tn }}</td>
               <td class="text-end">{{ metric.fn }}</td>
               <td class="text-end">
-                {% if metric.precision is not none %}{{ '%.3f'|format(metric.precision) }}{% else %}—{% endif %}
+                {% if metric.precision is not none %}{{ '%.3f'|format(metric.precision) }}{% else %}-{% endif %}
               </td>
               <td class="text-end">
-                {% if metric.recall is not none %}{{ '%.3f'|format(metric.recall) }}{% else %}—{% endif %}
+                {% if metric.recall is not none %}{{ '%.3f'|format(metric.recall) }}{% else %}-{% endif %}
               </td>
               <td class="text-end">
-                {% if metric.specificity is not none %}{{ '%.3f'|format(metric.specificity) }}{% else %}—{% endif %}
+                {% if metric.specificity is not none %}{{ '%.3f'|format(metric.specificity) }}{% else %}-{% endif %}
               </td>
               <td class="text-end">
-                {% if metric.npv is not none %}{{ '%.3f'|format(metric.npv) }}{% else %}—{% endif %}
+                {% if metric.npv is not none %}{{ '%.3f'|format(metric.npv) }}{% else %}-{% endif %}
               </td>
               <td class="text-end">
-                {% if metric.f1 is not none %}{{ '%.3f'|format(metric.f1) }}{% else %}—{% endif %}
+                {% if metric.f1 is not none %}{{ '%.3f'|format(metric.f1) }}{% else %}-{% endif %}
               </td>
             </tr>
             {% endfor %}
@@ -443,12 +443,21 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
           <h2 class="h5 mb-0">Mismatches</h2>
-          <p class="mb-0 text-muted small">Images where reference class ≠ predicted class.</p>
+          <p class="mb-0 text-muted small">Images where reference class != predicted class. Filter by type.</p>
         </div>
-        <span class="badge text-bg-warning">{{ performance.mismatches|length }} mismatches</span>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge text-bg-warning">{{ performance.mismatches|length }} mismatches</span>
+          <span class="badge text-bg-danger">FP: {{ performance.fp_count }}</span>
+          <span class="badge text-bg-info">FN: {{ performance.fn_count }}</span>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Mismatch filters">
+            <button type="button" class="btn btn-outline-secondary active" data-mm-filter="all">All</button>
+            <button type="button" class="btn btn-outline-secondary" data-mm-filter="fp">False Positive</button>
+            <button type="button" class="btn btn-outline-secondary" data-mm-filter="fn">False Negative</button>
+          </div>
+        </div>
       </div>
       <div class="table-responsive" style="max-height: 420px;">
-        <table class="table table-sm mb-0 align-middle">
+        <table class="table table-sm mb-0 align-middle" id="mismatches-table">
           <thead class="table-light">
             <tr>
               <th scope="col">Image UUID</th>
@@ -457,11 +466,14 @@
               <th scope="col">AI Prob</th>
               <th scope="col">Lab Unit</th>
               <th scope="col">Camera</th>
+              <th scope="col">View</th>
             </tr>
           </thead>
           <tbody>
             {% for row in performance.mismatches %}
-            <tr>
+            {% set is_fp = (row.reference_class != positive_class and row.predicted_class == positive_class) %}
+            {% set is_fn = (row.reference_class == positive_class and row.predicted_class != positive_class) %}
+            <tr data-mm-type="{% if is_fp %}fp{% elif is_fn %}fn{% else %}other{% endif %}">
               <td class="text-monospace small">{{ row.image_uuid }}</td>
               <td>
                 <div class="fw-semibold">{{ row.reference_class }}</div>
@@ -471,9 +483,21 @@
                 <div class="fw-semibold">{{ row.predicted_class }}</div>
                 <div class="text-muted small">{{ row.predicted_label }}</div>
               </td>
-              <td class="text-end">{% if row.ai_probability is not none %}{{ '%.3f'|format(row.ai_probability) }}{% else %}—{% endif %}</td>
-              <td class="text-muted small">{{ row.lab_unit or '—' }}</td>
-              <td class="text-muted small">{{ row.camera_id or '—' }}</td>
+              <td class="text-end">{% if row.ai_probability is not none %}{{ '%.3f'|format(row.ai_probability) }}{% else %}-{% endif %}</td>
+              <td class="text-muted small">{{ row.lab_unit or '-' }}</td>
+              <td class="text-muted small">{{ row.camera_id or '-' }}</td>
+              <td class="text-end">
+                {% if row.image_uuid %}
+                  {% set gallery_id = 'mm-gallery-' ~ loop.index0 %}
+                  {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
+                  <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                    <a href="{{ image_href }}" data-pswp-type="image" title="{{ row.image_uuid }}"></a>
+                  </div>
+                  <button class="btn btn-sm btn-outline-primary" type="button" onclick="openPswpGallery('{{ gallery_id }}', 0)">View</button>
+                {% else %}
+                  <span class="text-muted">No image</span>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -481,6 +505,7 @@
       </div>
     </div>
     {% endif %}
+    <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
   {% endif %}
 </div>
 {% endblock %}
@@ -489,4 +514,7 @@
   {{ super() }}
   <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ v }}"></script>
   <script src="{{ url_for('static', filename='js/model-performance.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
 {% endblock %}

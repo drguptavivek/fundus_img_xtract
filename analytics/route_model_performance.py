@@ -216,6 +216,8 @@ class ModelPerformance:
     col_totals: Optional[List[int]]
     percent_matrix: Optional[List[List[float]]]
     mismatches: List[Dict[str, object]]
+    fp_count: int
+    fn_count: int
 
 
 def _safe_div(numerator: float, denominator: float) -> Optional[float]:
@@ -662,6 +664,8 @@ def model_performance() -> str:
                 cases: List[Dict[str, object]] = []
                 analyzed_rows: List[Dict[str, object]] = []
                 mismatches: List[Dict[str, object]] = []
+                fp_count = 0
+                fn_count = 0
 
                 for _key, task_entries in grouped.items():
                     # Choose latest task by task_created_at
@@ -734,6 +738,11 @@ def model_performance() -> str:
                         }
                     )
                     if ref_class != pred_class:
+                        if positive_class:
+                            if ref_class != positive_class and pred_class == positive_class:
+                                fp_count += 1
+                            if ref_class == positive_class and pred_class != positive_class:
+                                fn_count += 1
                         mismatches.append(
                             {
                                 "image_uuid": data.get("image_uuid"),
@@ -885,6 +894,8 @@ def model_performance() -> str:
                         col_totals=col_totals,
                         percent_matrix=percent_matrix,
                         mismatches=mismatches,
+                        fp_count=fp_count,
+                        fn_count=fn_count,
                     )
 
                     if download and analyzed_rows:

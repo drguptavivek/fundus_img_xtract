@@ -7,7 +7,7 @@ from . import api_bp
 
 
 @api_bp.route("/ai-models", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "local_admin", "data_manager", "optometrist")
 def get_ai_models():
     """API endpoint to get all AI models."""
     with get_db_session() as db:

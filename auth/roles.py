@@ -9,10 +9,11 @@ from sqlalchemy import select
 from models import Role
 from db_transaction_manager import get_db_session, transaction_scope
 
-DEFAULT_ROLES = ["admin", "fileUploader", "ophthalmologist", "data_manager", "resident", "optometrist"]
+DEFAULT_ROLES = ["admin", "local_admin", "fileUploader", "ophthalmologist", "data_manager", "resident", "optometrist"]
 
 # Role constants for use in decorators (these can be referenced in code)
 ROLE_ADMIN = "admin"
+ROLE_LOCAL_ADMIN = "local_admin"
 ROLE_FILE_UPLOADER = "fileUploader"
 ROLE_OPHTHALMOLOGIST = "ophthalmologist"
 ROLE_DATA_MANAGER = "data_manager"

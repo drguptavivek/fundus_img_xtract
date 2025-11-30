@@ -15,7 +15,7 @@ from . import bp
 
 
 @bp.route("/all-tasks", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def all_tasks() -> str:
     """Page to view all tasks scoped to user's lab units with pagination."""
     # Get pagination parameters from request

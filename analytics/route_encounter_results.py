@@ -50,7 +50,7 @@ def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
 
 
 @bp.route("/encounters", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def encounter_results() -> str:
     """Render encounter-level grading summaries."""
 

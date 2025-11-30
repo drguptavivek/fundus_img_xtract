@@ -11,7 +11,7 @@ from . import bp
 
 
 @bp.route("/viewTaskDetails/<int:task_id>", methods=["GET"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "local_admin", "data_manager", "optometrist")
 def view_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:

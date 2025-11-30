@@ -27,7 +27,7 @@ def _parse_date(value: str | None) -> _date | None:
 
 
 @bp.route("/direct-files", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def direct_files() -> str:
     """Render direct files dataframe with filtering and pagination."""
     

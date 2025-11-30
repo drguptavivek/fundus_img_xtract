@@ -29,7 +29,7 @@ from . import bp
 
 
 @bp.route("/discrepancy-review", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def discrepancy_review():
     """Main page for discrepancy review process.
 

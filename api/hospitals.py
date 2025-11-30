@@ -19,7 +19,7 @@ from models import Hospital, LabUnit
 
 @api_bp.route('/hospitals', methods=['GET'])
 @login_required
-@roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_hospitals_list():
     """Get all hospitals."""
     with get_db_session() as db:
@@ -41,7 +41,7 @@ def get_hospitals_list():
 
 @api_bp.route('/hospitals/<int:hospital_id>', methods=['GET'])
 @login_required
-@roles_required("admin", "data_manager", "ophthalmologist", "resident", "optometrist")
+@roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist")
 def get_hospital_by_id(hospital_id):
     """Get a specific hospital by ID."""
     with get_db_session() as db:

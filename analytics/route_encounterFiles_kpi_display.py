@@ -27,7 +27,7 @@ def _parse_date(value: str | None) -> _date | None:
 
 
 @bp.route("/encounter-files", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def encounter_files() -> str:
     """Render encounter files dataframe with filtering and pagination."""
     
@@ -109,4 +109,3 @@ def encounter_files() -> str:
         total=total,
         per_page=per_page,
     )
-

@@ -40,7 +40,7 @@ TASK_STATE_OPTIONS: tuple[str, ...] = (
 
 
 @bp.route("/images", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager")
 def image_results() -> str:
     """Render per-image grading results with filtering and pagination."""
 

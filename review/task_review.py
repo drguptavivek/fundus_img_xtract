@@ -35,7 +35,7 @@ def _parse_selected_features(selected_features_json: str | None) -> list[dict[st
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
-@roles_required("admin", "data_manager", "optometrist")
+@roles_required("admin", "local_admin", "data_manager", "optometrist")
 def review_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:

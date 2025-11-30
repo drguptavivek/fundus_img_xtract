@@ -72,6 +72,7 @@ The application implements a sophisticated **hybrid access control model** combi
 - **Automated Refresh**: 4x daily updates with manual refresh capabilities
 - **Real-Time KPIs**: Live performance metrics and quality indicators
 - **Export Capabilities**: Comprehensive data export for research and reporting. Including Excel Exports
+- **Model Performance (New)**: Interactive `/analytics/model-performance` page to compare AI grades vs human references. Supports class recoding with drag-and-drop, single positive-class selection, user-scoped lab-unit filtering, ROC/AUC with bootstrap CIs (scikit-learn), confusion matrices (table + matplotlib plot), per-label metrics, mismatch review with PhotoSwipe, and Excel downloads of analyzed rows.
 
 ### 🛡️ Enterprise Security & Comprehensive Auditing
 - **CSRF Protection**: Comprehensive Cross-Site Request Forgery prevention across all forms

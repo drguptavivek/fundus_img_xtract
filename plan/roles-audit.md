@@ -24,3 +24,7 @@
 ## verify_remedio_nodr blueprint (implemented)
 - Changes: Roles aligned to `admin/local_admin/fileUploader/optometrist/data_manager`; list, edit, verify/unverify, mark_eye scoped via `get_user_lab_unit_ids_no_admin_override` with prev/next filtered to allowed lab units; users without lab units are blocked. Base encounter queries now use allowed lab units for navigation.
 - Status: Implemented in `verify_remedio_nodr/routes.py`.
+
+## preprocess blueprint (implemented)
+- Changes: Role gates now `admin/local_admin/fileUploader/optometrist/data_manager`. Dashboard KPIs, lists, filters, dropdowns, and charts are scoped to assigned lab units/hospitals via `get_user_lab_unit_ids_no_admin_override`; invalid filters redirect. Anonymize/restore routes require the image lab unit to be in scope (no admin override) and block users with no lab access; next-image navigation uses the same scoping.
+- Status: Implemented in `preprocess/anonymize_image.py`.

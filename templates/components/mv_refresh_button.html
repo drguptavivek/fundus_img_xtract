@@ -1,0 +1,7 @@
+{# Reusable materialized-view refresh button block #}
+<div class="d-flex align-items-center gap-2" id="{{ container_id | default('mv-refresh-container') }}">
+  <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ button_id | default('mv-refresh-btn') }}">
+    <i class="bi bi-arrow-clockwise"></i> Refresh data
+  </button>
+  <div class="small text-muted" id="{{ status_id | default('mv-refresh-status') }}"></div>
+</div>

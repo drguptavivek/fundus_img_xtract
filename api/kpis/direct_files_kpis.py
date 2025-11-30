@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 # Import blueprint and utilities
 from .. import api_bp
+from app_cache import cache
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import (
@@ -252,6 +253,7 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
 @api_bp.route('/kpis/direct-files/filtered-dataframe', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
+@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:filtered:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_filtered_direct_dataframe():
     """
     Returns the filtered direct dataframe as JSON for use in app templates.
@@ -345,6 +347,7 @@ def get_filtered_direct_dataframe():
 @api_bp.route('/kpis/direct-files/filtered-dataframe-excel', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
+@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:filtered-excel:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_filtered_direct_dataframe_excel():
     """
     Returns the filtered direct dataframe as Excel file for download.
@@ -428,6 +431,7 @@ def get_filtered_direct_dataframe_excel():
 @api_bp.route('/kpis/direct-files/upload-metrics', methods=['GET'])
 @login_required
 @roles_required("admin", "data_manager")
+@cache.cached(timeout=15 * 60, key_prefix=lambda: f"direct-files:upload-metrics:{current_user.id}:{request.query_string.decode('utf-8')}")
 def get_upload_metrics():
         """
         KPI 1.1: Total DirectImages Uploads with breakdown by hospital/lab unit.

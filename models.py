@@ -619,7 +619,7 @@ class Consensus(Base):
     decided_by: Mapped['User | None'] = relationship('User')
 
     __table_args__ = (
-        CheckConstraint("method IN ('match','adjudication')", name='ck_consensus_method_valid'),
+        CheckConstraint("method IN ('match','adjudication','task_review')", name='ck_consensus_method_valid'),
     )
 
 

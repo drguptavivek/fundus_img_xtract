@@ -7,7 +7,15 @@ from json import JSONDecodeError
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Session as DBSession
+from models import (
+    GradingTask,
+    LabUnit,
+    Grade,
+    DiseaseGrading,
+    GradingsFeatures,
+    Consensus,
+    Session as DBSession,
+)
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
@@ -116,10 +124,15 @@ def review_task_details(task_id: int):
                 return redirect(url_for('review.review_task_details', task_id=task_id))
 
             # Get the disease grading
-            disease_grading = db.query(DiseaseGrading).filter(
-                DiseaseGrading.id == grading_id,
-                DiseaseGrading.disease_id == task.disease_id
-            ).first()
+            disease_grading = (
+                db.query(DiseaseGrading)
+                .filter(
+                    DiseaseGrading.id == grading_id,
+                    DiseaseGrading.disease_id == task.disease_id,
+                    DiseaseGrading.is_active.is_(True),
+                )
+                .first()
+            )
             
             if not disease_grading:
                 flash('Invalid grade selected', 'error')
@@ -153,11 +166,11 @@ def review_task_details(task_id: int):
                     ]
                 )
 
-            # Log review grade submission (including revisions) using dedicated grades logger
-            # Store in UTC for consistency
-            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            
+            previous_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
+            previous_consensus_method = previous_consensus.method if previous_consensus else None
+            previous_consensus_grade_id = previous_consensus.final_disease_grading_id if previous_consensus else None
+
             # Determine if this is a revision
             is_revision = existing_review_grade is not None
             grade_type = "revision" if is_revision else "new"
@@ -209,6 +222,27 @@ def review_task_details(task_id: int):
                 )
                 db.add(new_review_grade)
 
+            # If task already final, overwrite/create consensus with review grade
+            if task.state == "final":
+                consensus_record = previous_consensus or Consensus(task_id=task_id)
+                consensus_record.final_disease_grading_id = grading_id
+                consensus_record.method = "task_review"
+                consensus_record.decided_by_user_id = current_user.id
+                consensus_record.decided_at = datetime.now(timezone.utc)
+                consensus_record.final_disease_name = task.disease.name if task.disease else None
+                consensus_record.final_grade_name = disease_grading.impression
+                consensus_record.final_grade_description = disease_grading.guidelines
+                db.add(consensus_record)
+                grades_logger.info(
+                    "Consensus override via review [user_id: %s] [task_id: %s] [new_grade_id: %s] "
+                    "[prev_method: %s] [prev_grade_id: %s]",
+                    current_user.id,
+                    task_id,
+                    grading_id,
+                    previous_consensus_method,
+                    previous_consensus_grade_id,
+                )
+
             db.commit()
             flash('Review grade submitted successfully', 'success')
             return redirect(url_for('review.review_task_details', task_id=task_id))
@@ -239,6 +273,22 @@ def review_task_details(task_id: int):
                 }
             )
 
+        # Collect selected features for existing grader roles to display in UI
+        role_feature_map: dict[str, list[dict[str, object] | str]] = {}
+        grader_roles = ["resident", "resident2", "arbitrator"]
+        existing_role_grades = (
+            db.query(Grade)
+            .filter(Grade.task_id == task_id, Grade.role_slot.in_(grader_roles))
+            .all()
+        )
+        for role in grader_roles:
+            grade_for_role = next((g for g in existing_role_grades if g.role_slot == role), None)
+            role_feature_map[role] = _parse_selected_features(
+                grade_for_role.selected_features_json if grade_for_role else None
+            )
+
+        existing_consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
+
         # Determine which image object to use for the viewer
         image_object = task.encounter_file if task.encounter_file else task.direct_image
 
@@ -253,4 +303,6 @@ def review_task_details(task_id: int):
             available_grades=available_grades,
             grading_features=grading_features,
             existing_selected_features=existing_selected_features,
+            role_feature_map=role_feature_map,
+            existing_consensus=existing_consensus,
         )

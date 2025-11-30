@@ -55,7 +55,7 @@
           <div class="mb-2">
             <strong>Available Grades:</strong>
             {% for grade in task.grades %}
-            <span class="fw-semibold">
+            <div class="fw-semibold mb-1">
               <span class="badge 
                 {% if grade.role_slot == "resident" %}bg-secondary
                 {% elif grade.role_slot == "resident2" %}bg-info
@@ -64,8 +64,20 @@
                 {{ grade.role_slot|title }}
               </span>
               <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
-              {% if not loop.last %} | {% endif %}
-            </span>
+              {% set feature_list = role_feature_map.get(grade.role_slot) if role_feature_map else [] %}
+              {% if feature_list %}
+                <div class="small text-muted ms-2">
+                  <span class="text-uppercase">Features:</span>
+                  {% for feature in feature_list %}
+                    {% if feature is mapping %}
+                      <span class="badge bg-light text-dark border">{{ feature.label or ('#' ~ feature.id) }}</span>
+                    {% else %}
+                      <span class="badge bg-light text-dark border">{{ feature }}</span>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
             {% endfor %}
           </div>
           {% endif %}
@@ -122,7 +134,7 @@
           {% endif %}
         </div>
         <div class="card-body">
-          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}">
+          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}" id="review-form">
             {{ csrf_field() }}
             
             <div class="row">
@@ -196,7 +208,7 @@
   {% endif %}
 
   <!-- Consensus Information -->
-  {% if task.consensus %}
+  {% if existing_consensus %}
   <div class="row mt-1">
     <div class="col-12">
       <div class="card shadow-sm mb-1">
@@ -206,15 +218,15 @@
         <div class="card-body">
           <div class="row">
             <div class="col-sm-6">
-              <p><strong>Method:</strong> {{ task.consensus.method }}</p>
+              <p><strong>Method:</strong> {{ existing_consensus.method }}</p>
             </div>
             <div class="col-sm-6">
-              <p><strong>Decided At:</strong> {{ task.consensus.decided_at.strftime('%Y-%m-%d %H:%M') if task.consensus.decided_at else 'N/A' }}</p>
+              <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if existing_consensus.decided_at else 'N/A' }}</p>
             </div>
           </div>
-          <p><strong>Final Impression:</strong> {{ task.consensus.final_impression or 'N/A' }}</p>
-          {% if task.consensus.decided_by_username %}
-            <p><strong>Decided By:</strong> {{ task.consensus.decided_by_username }}</p>
+          <p><strong>Final Impression:</strong> {{ existing_consensus.final_grade_name or 'N/A' }}</p>
+          {% if existing_consensus.decided_by %}
+            <p><strong>Decided By:</strong> {{ existing_consensus.decided_by.username }}</p>
           {% endif %}
         </div>
       </div>
@@ -225,10 +237,48 @@
 
 </div>
 
+<!-- Confirmation modal for consensus override -->
+<div class="modal fade" id="reviewOverrideModal" tabindex="-1" aria-labelledby="reviewOverrideModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="reviewOverrideModalLabel">Update Final Consensus?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">This task is already final. Submitting this review will change the final consensus grade.</p>
+        <div class="border rounded p-2 mb-2">
+          <div class="fw-semibold">Current Final</div>
+          <div id="current-final-summary" class="small text-muted"></div>
+        </div>
+        <div class="border rounded p-2">
+          <div class="fw-semibold">New Final (from Review)</div>
+          <div id="new-final-summary" class="small text-muted"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-review-override">Yes, update final grade</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 const reviewGradingFeatures = {{ grading_features | tojson }};
 const existingReviewSelectedFeatures = {{ existing_selected_features | tojson }};
 const existingReviewGradeId = {{ existing_review_grade.disease_grading_id if existing_review_grade else 'null' }};
+const isFinalTask = {{ 'true' if task.status == 'final' else 'false' }};
+const consensusSnapshot = {% if existing_consensus %}
+{
+  method: {{ existing_consensus.method | tojson }},
+  final_grade_name: {{ existing_consensus.final_grade_name | tojson }},
+  final_grade_id: {{ existing_consensus.final_disease_grading_id | tojson }}
+}
+{% else %}null{% endif %};
+const availableGradesMap = new Map(
+  ({{ grading_features | tojson }} || []).map(grade => [grade.id, grade])
+);
 
 function normalizeExistingFeatures(rawSelection) {
   const normalized = { ids: [], labels: [] };
@@ -354,6 +404,12 @@ function renderReviewFeatures(gradingId, shouldPreserveExisting) {
 // Handle radio button selection visual feedback and feature hydration
 document.addEventListener('DOMContentLoaded', function() {
   const radioInputs = document.querySelectorAll('input[type="radio"][name="grading_id"]');
+  const reviewForm = document.getElementById('review-form');
+  const overrideModalEl = document.getElementById('reviewOverrideModal');
+  const confirmOverrideBtn = document.getElementById('confirm-review-override');
+  const currentFinalSummary = document.getElementById('current-final-summary');
+  const newFinalSummary = document.getElementById('new-final-summary');
+  let pendingSubmit = false;
 
   radioInputs.forEach(input => {
     input.addEventListener('change', function() {
@@ -386,6 +442,44 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+
+  if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
+    const overrideModal = new bootstrap.Modal(overrideModalEl);
+    reviewForm.addEventListener('submit', function(event) {
+      if (pendingSubmit) {
+        return;
+      }
+      const selectedRadio = document.querySelector('input[name="grading_id"]:checked');
+      if (!selectedRadio) {
+        return;
+      }
+      event.preventDefault();
+      const selectedId = Number(selectedRadio.value);
+      const selectedGrade = availableGradesMap.get(selectedId);
+
+      const currentSummary = consensusSnapshot
+        ? `${consensusSnapshot.final_grade_name || '—'} (${consensusSnapshot.method || '—'})`
+        : 'None';
+      const newSummary = selectedGrade
+        ? `${selectedGrade.impression || '—'} (task_review)`
+        : '—';
+
+      if (currentFinalSummary) {
+        currentFinalSummary.textContent = currentSummary;
+      }
+      if (newFinalSummary) {
+        newFinalSummary.textContent = newSummary;
+      }
+
+      overrideModal.show();
+    });
+
+    confirmOverrideBtn.addEventListener('click', function() {
+      pendingSubmit = true;
+      overrideModal.hide();
+      reviewForm.submit();
+    });
+  }
 });
 </script>
 {% endblock %}

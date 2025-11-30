@@ -49,3 +49,38 @@ Allow review submissions on `/review/reviewTaskDetails/<id>` to update the final
 - Overwriting arbitrator decisions is allowed; rely on logging for audit trail (consider storing previous method/grade if needed later).
 - Concurrency: last reviewer wins; logs should make this traceable.
 - Ensure inactive/foreign disease gradings cannot be submitted via crafted POST.
+
+## Priority Order
+1) Schema unblocker: migrate + model constraint to allow `task_review`.
+2) Consensus logic: enable third method in consensus utils/constants.
+3) Review submit: overwrite/create consensus on final tasks; validate active grade; log previous method/grade.
+4) Confirmation modal: require user confirmation before overwriting final consensus; show current vs. new grade/method.
+5) Feature display: show selected features for resident/resident2/arbitrator in review detail UI.
+6) UI method display: ensure templates render `task_review` appropriately (badge/label).
+7) Analytics/queries: update consumers of `consensus_method` to accept `task_review`.
+8) Docs: update method enumeration to include `task_review`.
+9) Tests: cover new method, override behavior, modal flow, feature rendering.
+
+
+
+## IMPLEMENTATION
+• Implemented review-driven consensus override and UI enhancements.
+
+  - Added task_review to the consensus method constraint (models.py) and created migration migrations/versions/
+    d7e3fb45da1d_allow_task_review_consensus_method.py (generated via docker compose --env-file deploy.config.env
+    --env-file deploy.secrets.env exec web uv run alembic revision ... and trimmed to only update the check
+    constraint).
+  - In review/task_review.py, validate the selected grading is active, parse grader feature selections, and when
+    a task is already final, overwrite/create consensus with the review grade (method=task_review, updated final
+    fields, audit log). Pulled existing grader feature selections for resident/resident2/arbitrator to show in
+    the UI.
+  - Updated templates/review/task_detail_review.html to display per-grader features, show consensus using the live
+    record, and added a Bootstrap confirmation modal for final tasks that shows current final method/grade vs. the
+    new review grade before allowing submission.
+  - Updated consensus utility docstring to acknowledge the new method, and logged priorities/touchpoints in plan/
+    plan.md.
+
+  Notes/Risks:
+
+  - Analytics/queries that group on consensus_method should be reviewed to accept task_review; not adjusted yet.
+  - No automated tests were run; please run your suite or a targeted check.

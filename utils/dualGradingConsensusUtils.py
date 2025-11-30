@@ -376,7 +376,7 @@ def _has_consensus_with_session(task_id: int, db) -> bool:
 
 def get_consensus_method(task_id: int, db=None) -> Optional[str]:
     """
-    Get the consensus method for a task (match or adjudication).
+    Get the consensus method for a task (match, adjudication, or task_review).
     
     Args:
         task_id: The ID of the task to check
@@ -403,7 +403,7 @@ def _get_consensus_method_with_session(task_id: int, db) -> Optional[str]:
         db: Database session
         
     Returns:
-        Method string ('match' or 'adjudication') or None if no consensus
+        Method string ('match', 'adjudication', 'task_review') or None if no consensus
     """
     try:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()

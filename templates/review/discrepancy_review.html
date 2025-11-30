@@ -322,6 +322,11 @@
                 {% endfor %}
               {% else %}
                 <!-- More than 7 pages, show first, current, and last -->
+                {% set start_page = page - 2 %}
+                {% set end_page = page + 2 %}
+                {% if start_page < 2 %}{% set start_page = 2 %}{% endif %}
+                {% if end_page > total_pages - 1 %}{% set end_page = total_pages - 1 %}{% endif %}
+
                 <li class="page-item {% if 1 == page %}active{% endif %}">
                   <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,
@@ -340,35 +345,33 @@
                   </a>
                 </li>
                 
-                {% if page > 3 %}
+                {% if start_page > 2 %}
                   <li class="page-item disabled">
                     <span class="page-link">...</span>
                   </li>
                 {% endif %}
                 
-                {% for p in range([page - 1, 2]|sort|first, [page + 2, total_pages]|sort|last) %}
-                  {% if p > 1 and p < total_pages %}
-                    <li class="page-item {% if p == page %}active{% endif %}">
-                      <a class="page-link" href="{{ url_for('review.discrepancy_review',
-                        disease_id=filters.disease_id,
-                        lab_unit_id=filters.lab_unit_id,
-                        resident_grade=filters.resident_grade or [],
-                        resident2_grade=filters.resident2_grade or [],
-                        arbitrator_grade=filters.arbitrator_grade or [],
-                        final_grade=filters.final_grade or [],
-                        has_ai_grade=filters.has_ai_grade,
-                        has_review=filters.has_review,
-                        has_consensus=filters.has_consensus,
-                        ai_model_id=filters.ai_model_id or [],
-                        ai_grade=filters.ai_grade or [],
-                        page=p) }}">
-                        {{ p }}
-                      </a>
-                    </li>
-                  {% endif %}
+                {% for p in range(start_page, end_page + 1) %}
+                  <li class="page-item {% if p == page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                      disease_id=filters.disease_id,
+                      lab_unit_id=filters.lab_unit_id,
+                      resident_grade=filters.resident_grade or [],
+                      resident2_grade=filters.resident2_grade or [],
+                      arbitrator_grade=filters.arbitrator_grade or [],
+                      final_grade=filters.final_grade or [],
+                      has_ai_grade=filters.has_ai_grade,
+                      has_review=filters.has_review,
+                      has_consensus=filters.has_consensus,
+                      ai_model_id=filters.ai_model_id or [],
+                      ai_grade=filters.ai_grade or [],
+                      page=p) }}">
+                      {{ p }}
+                    </a>
+                  </li>
                 {% endfor %}
                 
-                {% if page < total_pages - 2 %}
+                {% if end_page < total_pages - 1 %}
                   <li class="page-item disabled">
                     <span class="page-link">...</span>
                   </li>
@@ -559,6 +562,29 @@
                     Previous
                   </a>
                 </li>
+                {% set start_page_mobile = page - 1 %}
+                {% set end_page_mobile = page + 1 %}
+                {% if start_page_mobile < 1 %}{% set start_page_mobile = 1 %}{% endif %}
+                {% if end_page_mobile > total_pages %}{% set end_page_mobile = total_pages %}{% endif %}
+                {% for p in range(start_page_mobile, end_page_mobile + 1) %}
+                <li class="page-item {% if p == page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('review.discrepancy_review',
+                    disease_id=filters.disease_id,
+                    lab_unit_id=filters.lab_unit_id,
+                    resident_grade=filters.resident_grade or [],
+                    resident2_grade=filters.resident2_grade or [],
+                    arbitrator_grade=filters.arbitrator_grade or [],
+                    final_grade=filters.final_grade or [],
+                    has_ai_grade=filters.has_ai_grade,
+                    has_review=filters.has_review,
+                    has_consensus=filters.has_consensus,
+                    ai_model_id=filters.ai_model_id or [],
+                    ai_grade=filters.ai_grade or [],
+                    page=p) }}">
+                    {{ p }}
+                  </a>
+                </li>
+                {% endfor %}
                 <li class="page-item {% if not has_next %}disabled{% endif %}">
                   <a class="page-link" href="{{ url_for('review.discrepancy_review',
                     disease_id=filters.disease_id,

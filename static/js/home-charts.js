@@ -54,6 +54,50 @@ function initializeCharts() {
     });
   }
   
+  // Images by Disease Chart
+  if (typeof diseaseImagesData !== 'undefined' && diseaseImagesData) {
+    var diseaseCtx = document.getElementById('diseaseImagesChart').getContext('2d');
+    var diseaseTotal = diseaseImagesData.reduce((a, b) => a + b, 0);
+    var diseaseColors = ['#4b8df8', '#f39c12', '#1abc9c', '#9b59b6', '#e74c3c', '#2ecc71', '#8e44ad', '#16a085', '#f1c40f'];
+
+    new Chart(diseaseCtx, {
+      type: 'doughnut',
+      data: {
+        labels: diseaseImagesLabels,
+        datasets: [{
+          data: diseaseImagesData,
+          backgroundColor: diseaseColors.slice(0, diseaseImagesLabels.length),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+          },
+          datalabels: {
+            color: '#fff',
+            font: {
+              weight: 'bold'
+            },
+            formatter: function(value) {
+              return getPercentageLabel(value, diseaseTotal);
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, diseaseTotal) + ')';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+  
   // VCDR Ranges Chart (with adjusted cutoffs)
   if (typeof vcdrData !== 'undefined' && vcdrData) {
     var vcdrCtx = document.getElementById('vcdrChart').getContext('2d');

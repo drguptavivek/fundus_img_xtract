@@ -191,6 +191,22 @@
   <!-- Charts Section (Visible only to logged-in users) -->
   {% if current_user.is_authenticated %}
   <div class="row g-4 mb-4">
+    <!-- Image Distribution by Disease -->
+    {% if disease_image_distribution %}
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <strong>Images by Disease</strong>
+        </div>
+        <div class="card-body">
+          <div class="chart-container" style="position: relative; height:300px; width:100%">
+            <canvas id="diseaseImagesChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Grading Distribution Chart -->
     {% if grading_distribution %}
     <div class="col-12 col-lg-6">
@@ -285,12 +301,12 @@
     </div>
     {% endif %}
     
-    <!-- Glaucoma Impression Distribution Chart -->
+    <!-- Glaucoma Finalized Impression Distribution Chart -->
     {% if glaucoma_impression_distribution %}
     <div class="col-12 col-lg-6">
       <div class="card h-100">
         <div class="card-header">
-          <strong>Glaucoma Impression Distribution</strong>
+          <strong>Glaucoma Finalized Impression Distribution</strong>
         </div>
         <div class="card-body">
           <div class="chart-container" style="position: relative; height:300px; width:100%">
@@ -309,12 +325,17 @@
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chartjs-plugin-datalabels.js') }}"></script>
-<!-- <script src="{{ url_for('static', filename='js/home-charts.js') }}"></script> -->
+<script src="{{ url_for('static', filename='js/home-charts.js') }}"></script>
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
   // Pass data to the external JavaScript file through global variables
+  {% if disease_image_distribution %}
+  var diseaseImagesLabels = [{% for item in disease_image_distribution %}"{{ item.disease_name }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var diseaseImagesData = [{% for item in disease_image_distribution %}{{ item.image_count }}{% if not loop.last %},{% endif %}{% endfor %}];
+  {% endif %}
+
   {% if grading_distribution %}
-  var gradingLabels = [{% for item in grading_distribution %}"{{ item[0] }}",{% endfor %}];
-  var gradingData = [{% for item in grading_distribution %}{{ item[1] }},{% endfor %}];
+  var gradingLabels = [{% for item in grading_distribution %}"{{ item.disease_name }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var gradingData = [{% for item in grading_distribution %}{{ item.grade_count }}{% if not loop.last %},{% endif %}{% endfor %}];
   {% endif %}
   
   {% if vcdr_ranges %}
@@ -336,13 +357,13 @@
   };
   
   {% if dr_impression_distribution %}
-  var drImpressionLabels = [{% for item in dr_impression_distribution %}"{{ item[0] }}",{% endfor %}];
-  var drImpressionData = [{% for item in dr_impression_distribution %}{{ item[1] }},{% endfor %}];
+  var drImpressionLabels = [{% for item in dr_impression_distribution %}"{{ item.impression }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var drImpressionData = [{% for item in dr_impression_distribution %}{{ item.grade_count }}{% if not loop.last %},{% endif %}{% endfor %}];
   {% endif %}
   
   {% if glaucoma_impression_distribution %}
-  var glaucomaImpressionLabels = [{% for item in glaucoma_impression_distribution %}"{{ item[0] }}",{% endfor %}];
-  var glaucomaImpressionData = [{% for item in glaucoma_impression_distribution %}{{ item[1] }},{% endfor %}];
+  var glaucomaImpressionLabels = [{% for item in glaucoma_impression_distribution %}"{{ item.impression }}"{% if not loop.last %},{% endif %}{% endfor %}];
+  var glaucomaImpressionData = [{% for item in glaucoma_impression_distribution %}{{ item.image_count }}{% if not loop.last %},{% endif %}{% endfor %}];
   {% endif %}
   
   {% if images_by_lab_unit_disease %}

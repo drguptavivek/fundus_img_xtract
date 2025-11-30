@@ -76,4 +76,5 @@ dependencies = [
     "apscheduler>=3.11.1",
     "cryptography>=44.0.0",
     "fernet>=1.0.1",
+    "scikit-learn>=1.7.2",
 ]

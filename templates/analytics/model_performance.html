@@ -65,17 +65,21 @@
           <option value="resident" {% if reference_source == 'resident' %}selected{% endif %}>Resident</option>
         </select>
       </div>
-      <div class="col-12 col-sm-6 col-lg-auto">
-        <label class="form-label mb-1" for="filter-positive">Positive Labels</label>
-        <select class="form-select" id="filter-positive" name="positive_label" multiple data-selected='{{ positive_labels|tojson|safe }}'>
-        </select>
-        <div class="form-text">Select impressions that count as disease-positive.</div>
-      </div>
-      <div class="col-12 col-sm-6 col-lg-auto">
-        <label class="form-label mb-1" for="filter-exclude">Exclude Labels</label>
-        <select class="form-select" id="filter-exclude" name="exclude_label" multiple data-selected='{{ exclude_labels|list|tojson|safe }}'>
-        </select>
-        <div class="form-text">Use for non-gradable or other labels to drop.</div>
+      <div class="col-12">
+        <label class="form-label mb-1">Class Builder</label>
+        <div class="card border shadow-sm">
+          <div class="card-body">
+            <p class="text-muted small mb-2">Assign each label to exactly one class. Unassigned labels are dropped. Choose one class as positive for binary metrics.</p>
+            <div id="class-builder" class="d-flex flex-column gap-2" data-class-map='{{ class_map_json|e }}' data-positive-class='{{ positive_class or "" }}' data-available-labels='{{ labels_for_disease|tojson|safe }}'>
+              <!-- populated by JS -->
+            </div>
+            <div class="d-flex align-items-center gap-2 mt-2">
+              <button class="btn btn-outline-secondary btn-sm" type="button" id="add-class-row">Add Class</button>
+              <span id="class-builder-hint" class="text-muted small">Available labels: {% if labels_for_disease %}{{ labels_for_disease|join(', ') }}{% else %}—{% endif %}</span>
+            </div>
+          </div>
+        </div>
+        <input type="hidden" id="class-map-input" name="class_map" value="{{ class_map_json|e }}">
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-threshold">Threshold</label>
@@ -88,7 +92,13 @@
         <div class="form-text">95% CIs via nonparametric bootstrap.</div>
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
-        <button class="btn btn-primary w-100" type="submit">Show Performance</button>
+        <button class="btn btn-primary w-100" type="submit" id="submit-btn">
+          <span class="spinner-border spinner-border-sm me-1 d-none" role="status" aria-hidden="true" id="submit-spinner"></span>
+          Show Performance
+        </button>
+      </div>
+      <div class="col-12">
+        <div id="submit-hint" class="text-muted small"></div>
       </div>
     </form>
   </div>
@@ -106,7 +116,17 @@
       Filters applied: Disease = {{ selected_disease_name or '—' }}, Model = {{ selected_model_name or '—' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
       {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
       Reference: {{ reference_source }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
+      {% if positive_class %} Positive class: {{ positive_class }}.{% endif %}
     </div>
+
+    {% if performance.class_definitions %}
+    <div class="alert alert-info small">
+      Class composition:
+      {% for cname, members in performance.class_definitions.items() %}
+        <span class="badge text-bg-light border me-1">{{ cname }} = {{ members|join(', ') }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
       <div class="col">
@@ -160,7 +180,7 @@
     <div class="card mb-4 shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
-          <h2 class="h5 mb-0">Binary Metrics (positive labels vs rest)</h2>
+          <h2 class="h5 mb-0">Binary Metrics (positive class vs rest)</h2>
           <p class="mb-0 text-muted small">Threshold {{ '%.2f'|format(threshold) }}; 95% CI via bootstrap ({{ bootstrap_samples }} resamples). Minimum 20 cases.</p>
         </div>
       </div>
@@ -207,6 +227,11 @@
           </tbody>
         </table>
       </div>
+      {% if not performance.binary_ci_computed %}
+        <div class="alert alert-warning m-3 mb-0">
+          95% CIs not computed (need at least 20 cases); current sample size: {{ performance.binary_sample_size }}.
+        </div>
+      {% endif %}
       {% else %}
         <div class="alert alert-warning m-3">Not enough cases (need ≥20) or no positive label selection to compute binary metrics.</div>
       {% endif %}
@@ -230,45 +255,102 @@
           {% endif %}
         </div>
       </div>
-      {% if performance.roc_points %}
+      {% if performance.roc_available and performance.roc_points %}
         <div class="p-3">
           <canvas id="roc-chart" height="200" data-roc-points='{{ roc_points_json|e }}'></canvas>
         </div>
       {% else %}
-        <div class="alert alert-warning m-3">No probabilities parsed; ROC/AUC skipped.</div>
+        <div class="alert alert-warning m-3">No probabilities parsed or insufficient data; ROC/AUC skipped.</div>
       {% endif %}
     </div>
 
+    {% if performance.confusion_matrix %}
     <div class="card mb-4 shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center">
         <div>
-          <h2 class="h5 mb-0">Cross-tabulation</h2>
-          <p class="mb-0 text-muted small">Rows: reference. Columns: AI predictions.</p>
+          <h2 class="h5 mb-0">Confusion Matrix</h2>
+          <p class="mb-0 text-muted small">Rows: prediction. Columns: reference. Toggle % basis.</p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <a class="btn btn-outline-secondary btn-sm" href="{{ request.url }}{% if '?' in request.url %}&{% else %}?{% endif %}download=xlsx">Download Excel</a>
+          <div class="d-flex align-items-center gap-2 small">
+            <span class="text-muted">Show % by</span>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="percent-mode" id="percent-total" value="total" checked>
+              <label class="form-check-label" for="percent-total">Total</label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="percent-mode" id="percent-row" value="row">
+              <label class="form-check-label" for="percent-row">Row</label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="percent-mode" id="percent-col" value="col">
+              <label class="form-check-label" for="percent-col">Col</label>
+            </div>
+          </div>
         </div>
       </div>
       <div class="table-responsive">
-        <table class="table table-sm mb-0">
+        <table class="table table-sm mb-0 align-middle" id="confusion-table"
+          data-matrix='{{ performance.confusion_matrix|tojson|safe }}'
+          data-row-totals='{{ performance.col_totals|tojson|safe }}'
+          data-col-totals='{{ performance.row_totals|tojson|safe }}'
+          data-total='{{ performance.total }}'>
           <thead>
             <tr>
-              <th scope="col">Reference \\ Prediction</th>
+              <th scope="col">Prediction \\ Reference</th>
               {% for label in performance.labels %}
               <th scope="col" class="text-center">{{ label }}</th>
               {% endfor %}
+              <th scope="col" class="text-center">Row total</th>
             </tr>
           </thead>
           <tbody>
-            {% for actual_label in performance.labels %}
+            {% for pred_label in performance.labels %}
             <tr>
-              <th scope="row">{{ actual_label }}</th>
-              {% for predicted_label in performance.labels %}
-              <td class="text-center">{{ performance.cross_tab[actual_label][predicted_label] }}</td>
+              <th scope="row">{{ pred_label }}</th>
+              {% set pred_idx = loop.index0 %}
+              {% for ref_idx in range(performance.labels|length) %}
+                <td class="text-center">
+                  {% set cell_count = performance.confusion_matrix[ref_idx][pred_idx] %}
+                  <div class="fw-semibold">{{ cell_count }}</div>
+                  <div class="text-muted small cm-percent" data-row="{{ pred_idx }}" data-col="{{ ref_idx }}"></div>
+                </td>
               {% endfor %}
+              <td class="text-center fw-semibold">
+                {% set row_total_display = performance.col_totals[pred_idx] if performance.col_totals else None %}
+                {{ row_total_display if row_total_display is not none else '' }}
+                <div class="text-muted small cm-row-percent" data-row="{{ pred_idx }}"></div>
+              </td>
             </tr>
             {% endfor %}
           </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">Column total</th>
+              {% for ref_idx in range(performance.labels|length) %}
+              <th class="text-center">
+                {% set col_total_display = performance.row_totals[ref_idx] if performance.row_totals else None %}
+                {{ col_total_display if col_total_display is not none else '' }}
+                <div class="text-muted small cm-col-percent" data-col="{{ ref_idx }}"></div>
+              </th>
+              {% endfor %}
+              <th class="text-center fw-bold">
+                {{ performance.total }}
+                <div class="text-muted small" id="cm-total-percent">100%</div>
+              </th>
+            </tr>
+          </tfoot>
         </table>
       </div>
+      {% if performance.confusion_image_base64 %}
+      <div class="p-3 border-top">
+        <div class="text-muted small mb-2">Confusion matrix plot (sklearn)</div>
+        <img class="img-fluid" alt="Confusion matrix plot" src="data:image/png;base64,{{ performance.confusion_image_base64 }}">
+      </div>
+      {% endif %}
     </div>
+    {% endif %}
 
     <div class="card shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center">

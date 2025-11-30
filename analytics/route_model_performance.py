@@ -110,7 +110,10 @@ def _render_confusion_image(cm: List[List[int]], labels: List[str]) -> Optional[
         cm_array = np.array(cm)
         fig, ax = plt.subplots(figsize=(6, 5))
         disp = ConfusionMatrixDisplay(confusion_matrix=cm_array, display_labels=labels)
-        disp.plot(ax=ax, cmap="Blues", values_format="d", colorbar=False)
+        disp.plot(ax=ax, cmap="YlGnBu", values_format="d", colorbar=True)
+        ax.set_title("Confusion Matrix", fontsize=12)
+        ax.set_xlabel("Reference")
+        ax.set_ylabel("Prediction")
         plt.tight_layout()
         buf = io.BytesIO()
         fig.savefig(buf, format="png")
@@ -212,6 +215,7 @@ class ModelPerformance:
     row_totals: Optional[List[int]]
     col_totals: Optional[List[int]]
     percent_matrix: Optional[List[List[float]]]
+    mismatches: List[Dict[str, object]]
 
 
 def _safe_div(numerator: float, denominator: float) -> Optional[float]:
@@ -657,6 +661,7 @@ def model_performance() -> str:
                 pairs: List[Tuple[str, str]] = []
                 cases: List[Dict[str, object]] = []
                 analyzed_rows: List[Dict[str, object]] = []
+                mismatches: List[Dict[str, object]] = []
 
                 for _key, task_entries in grouped.items():
                     # Choose latest task by task_created_at
@@ -728,6 +733,20 @@ def model_performance() -> str:
                             "hospital": data.get("hospital_name"),
                         }
                     )
+                    if ref_class != pred_class:
+                        mismatches.append(
+                            {
+                                "image_uuid": data.get("image_uuid"),
+                                "reference_class": ref_class,
+                                "reference_label": ref_label,
+                                "predicted_class": pred_class,
+                                "predicted_label": ai_grade["label"],
+                                "ai_probability": ai_score,
+                                "lab_unit": data.get("lab_unit_name"),
+                                "camera_id": data.get("camera_id"),
+                                "hospital": data.get("hospital_name"),
+                            }
+                        )
 
                 if pairs:
                     total = len(pairs)
@@ -865,6 +884,7 @@ def model_performance() -> str:
                         row_totals=row_totals,
                         col_totals=col_totals,
                         percent_matrix=percent_matrix,
+                        mismatches=mismatches,
                     )
 
                     if download and analyzed_rows:

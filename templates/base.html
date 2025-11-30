@@ -321,6 +321,10 @@
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}" href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
               </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.model_performance' else '' }}" href="{{ url_for('analytics.model_performance') }}">Model Performance</a>
+              </li>
             </ul>
           </li>
           {% endif %}

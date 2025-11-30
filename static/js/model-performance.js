@@ -53,12 +53,14 @@
     let availableLabels = parseJSONSafe(builderEl.dataset.availableLabels || '[]', []);
     let classMap = parseJSONSafe(builderEl.dataset.classMap || '{}', {});
     let positiveClass = builderEl.dataset.positiveClass || '';
+    const overlay = document.getElementById('loading-overlay');
 
     function setSubmitState(running) {
       if (!submitBtn || !submitSpinner) return;
       if (running) {
         submitBtn.disabled = true;
         submitSpinner.classList.remove('d-none');
+        if (overlay) overlay.classList.remove('d-none');
         if (submitHint && bootstrapInput) {
           const samples = bootstrapInput.value || '';
           submitHint.textContent = `Running analysis${samples ? ` (bootstrap ${samples} samples)` : ''}...`;
@@ -66,6 +68,7 @@
       } else {
         submitBtn.disabled = false;
         submitSpinner.classList.add('d-none');
+        if (overlay) overlay.classList.add('d-none');
         if (submitHint) submitHint.textContent = '';
       }
     }

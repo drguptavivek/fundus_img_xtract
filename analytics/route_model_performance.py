@@ -33,6 +33,7 @@ def _ensure_sklearn() -> bool:
     try:
         from sklearn.metrics import (
             accuracy_score,
+            balanced_accuracy_score,
             cohen_kappa_score,
             confusion_matrix,
             precision_recall_fscore_support,
@@ -41,6 +42,7 @@ def _ensure_sklearn() -> bool:
         )
         globals().update(
             accuracy_score=accuracy_score,
+            balanced_accuracy_score=balanced_accuracy_score,
             cohen_kappa_score=cohen_kappa_score,
             confusion_matrix=confusion_matrix,
             precision_recall_fscore_support=precision_recall_fscore_support,
@@ -218,6 +220,7 @@ class ModelPerformance:
     mismatches: List[Dict[str, object]]
     fp_count: int
     fn_count: int
+    multi_class: bool
 
 
 def _safe_div(numerator: float, denominator: float) -> Optional[float]:
@@ -325,9 +328,11 @@ def _compute_binary_metrics(
         y_true, y_pred, average="binary", zero_division=0
     )
     accuracy = accuracy_score(y_true, y_pred)
+    balanced_acc = balanced_accuracy_score(y_true, y_pred)
     specificity = _safe_div(tn, tn + fp)
     npv = _safe_div(tn, tn + fn)
     kappa = cohen_kappa_score(y_true, y_pred) if len(set(y_true)) > 1 else 1.0
+    weighted_kappa = cohen_kappa_score(y_true, y_pred, weights="quadratic") if len(set(y_true)) > 1 else 1.0
 
     def _round(val: Optional[float]) -> Optional[float]:
         return round(val, 3) if val is not None else None
@@ -346,7 +351,9 @@ def _compute_binary_metrics(
         "npv": _round(npv),
         "f1": _round(f1),
         "accuracy": _round(accuracy),
+        "balanced_accuracy": _round(balanced_acc),
         "kappa": _round(kappa),
+        "weighted_kappa": _round(weighted_kappa),
         "threshold": threshold,
     }
 
@@ -372,7 +379,7 @@ def _build_binary_with_ci(
     point_metrics = _compute_binary_metrics(cases, threshold)
     roc_points, auc = _compute_roc(cases)
 
-    metric_samples: Dict[str, List[float]] = {k: [] for k in ("precision", "recall", "specificity", "ppv", "npv", "f1", "accuracy", "kappa")}
+    metric_samples: Dict[str, List[float]] = {k: [] for k in ("precision", "recall", "specificity", "ppv", "npv", "f1", "accuracy", "balanced_accuracy", "kappa", "weighted_kappa")}
     auc_samples: List[float] = []
 
     ci_computed = False
@@ -785,6 +792,7 @@ def model_performance() -> str:
 
                     label_metrics: List[LabelMetrics] = []
                     correct = int(cm.trace())
+                    is_multi_class = len(all_labels) > 2
 
                     for idx, lbl in enumerate(all_labels):
                         tp = int(cm[idx, idx])
@@ -821,9 +829,19 @@ def model_performance() -> str:
                     prec_macro, rec_macro, f1_macro, _ = precision_recall_fscore_support(
                         y_true, y_pred, labels=all_labels, average="macro", zero_division=0
                     )
+                    kappa_weighted = _cohens_kappa(pairs, all_labels)
+                    try:
+                        kappa_weighted = round(cohen_kappa_score(y_true, y_pred, labels=all_labels, weights="quadratic"), 3)
+                    except Exception:
+                        kappa_weighted = None
+                    try:
+                        balanced_agreement = round(balanced_accuracy_score(y_true, y_pred), 3)
+                    except Exception:
+                        balanced_agreement = None
 
                     overall = {
                         "accuracy": round(accuracy_score(y_true, y_pred), 3) if total else None,
+                        "balanced_accuracy": balanced_agreement,
                         "macro_precision": round(prec_macro, 3) if total else None,
                         "macro_recall": round(rec_macro, 3) if total else None,
                         "macro_specificity": round(
@@ -833,6 +851,7 @@ def model_performance() -> str:
                         ) if any(m.specificity is not None for m in label_metrics) else None,
                         "macro_f1": round(f1_macro, 3) if total else None,
                         "cohens_kappa": _cohens_kappa(pairs, all_labels),
+                        "weighted_kappa": kappa_weighted,
                     }
 
                     binary_metrics = None
@@ -897,6 +916,7 @@ def model_performance() -> str:
                         mismatches=mismatches,
                         fp_count=fp_count,
                         fn_count=fn_count,
+                        multi_class=is_multi_class,
                     )
 
                     if download and analyzed_rows:

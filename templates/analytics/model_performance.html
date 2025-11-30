@@ -190,6 +190,13 @@
                 -
               {% endif %}
             </div>
+            <div class="text-muted">Weighted Agreement (balanced acc):
+              {% if performance.overall.balanced_accuracy is not none %}
+                {{ '%.3f'|format(performance.overall.balanced_accuracy) }}
+              {% else %}
+                -
+              {% endif %}
+            </div>
             <div class="text-muted">Correct: {{ performance.correct }}</div>
           </div>
         </div>
@@ -205,9 +212,9 @@
                 -
               {% endif %}
             </div>
-            <div class="text-muted">Macro F1:
-              {% if performance.overall.macro_f1 is not none %}
-                {{ '%.3f'|format(performance.overall.macro_f1) }}
+            <div class="text-muted">Weighted Kappa:
+              {% if performance.overall.weighted_kappa is not none %}
+                {{ '%.3f'|format(performance.overall.weighted_kappa) }}
               {% else %}
                 -
               {% endif %}
@@ -226,7 +233,7 @@
               <p class="mb-0 text-muted small">Threshold {{ '%.2f'|format(threshold) }}; 95% CI via bootstrap ({{ bootstrap_samples }} resamples). Minimum 20 cases.</p>
             </div>
           </div>
-          {% if performance.binary_metrics %}
+          {% if performance.binary_metrics and not performance.multi_class %}
           <div class="table-responsive">
             <table class="table table-sm mb-0 align-middle">
               <thead>
@@ -244,7 +251,9 @@
                   "npv":"NPV",
                   "f1":"F1",
                   "accuracy":"Accuracy",
-                  "kappa":"Cohens Kappa"
+                  "balanced_accuracy":"Weighted Agreement (balanced acc)",
+                  "kappa":"Cohens Kappa",
+                  "weighted_kappa":"Weighted Kappa"
                 }.items() %}
                 <tr>
                   <th scope="row">{{ label }}</th>
@@ -275,7 +284,7 @@
             </div>
           {% endif %}
           {% else %}
-            <div class="alert alert-warning m-3">Not enough cases (need >=20) or no positive label selection to compute binary metrics.</div>
+            <div class="alert alert-warning m-3">Binary metrics not applicable (multi-class) or insufficient cases.</div>
           {% endif %}
         </div>
       </div>

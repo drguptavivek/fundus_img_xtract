@@ -48,3 +48,7 @@
 ## analytics encounter_files blueprint (implemented)
 - Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Encounter files KPI display enforces lab-unit scoping via `get_user_lab_unit_ids_no_admin_override`; users without lab units are redirected. Dataframe retrieval and filters operate only within allowed lab units.
 - Status: Implemented in `analytics/route_encounterFiles_kpi_display.py`.
+
+## remedio_zip_uploads blueprint (implemented)
+- Changes: Roles expanded to `admin/local_admin/fileUploader/ophthalmologist/data_manager/resident/optometrist`. Upload form and ZIP upload endpoints enforce lab-unit scoping via `get_user_lab_unit_ids_no_admin_override`; users without lab access are redirected. Hospital/lab dropdowns and selections are limited to allowed lab units, and submissions validate lab unit membership with no admin override.
+- Status: Implemented in `remedio_zip_uploads/routes.py`.

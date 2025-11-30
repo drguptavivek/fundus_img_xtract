@@ -7,14 +7,30 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 from models import Job, JobItem, LabUnit
 from db_transaction_manager import get_db_session
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import jobs_bp
 
 @jobs_bp.route("/", methods=["GET"])
+@login_required
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def list_recent_jobs():
     from flask import request
     
     with get_db_session() as db:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            return render_template(
+                "jobs/jobs_list.html",
+                jobs=[],
+                rejections={},
+                totals={},
+                successes={},
+                job_types=[],
+                selected_job_type="",
+                pagination={"page": 1, "per_page": 20, "total_count": 0, "total_pages": 1, "has_prev": False, "has_next": False, "prev_num": None, "next_num": None},
+            )
+
         # Get filter and pagination parameters
         job_type_filter = request.args.get('job_type', '')
         page = request.args.get('page', 1, type=int)
@@ -27,6 +43,7 @@ def list_recent_jobs():
         query = (
             db.query(Job)
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
+            .filter(Job.lab_unit_id.in_(allowed_lab_units))
         )
         
         # Apply job type filter if specified
@@ -115,11 +132,15 @@ def list_recent_jobs():
 
 
 @jobs_bp.route("/<job_token>", methods=["GET"])
-@roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@login_required
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def job_status_json(job_token: str):
     with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
         if not job:
+            return jsonify({"error": "job not found"}), 404
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
             return jsonify({"error": "job not found"}), 404
         
         payload = db_get_job_payload(job_token)
@@ -131,17 +152,24 @@ def job_status_json(job_token: str):
         return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
-@roles_required("admin", "fileUploader", "optometrist", "data_manager")
+@login_required
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def job_status_page(job_token: str):
     # simple HTML page that polls <token> JSON
     return render_template("jobs/job_status.html", job_id=job_token)
 
 @jobs_bp.route("/results/details/<job_token>", methods=["GET"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@login_required
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def upload_results(job_token):
     with get_db_session() as db:
         job = db.query(Job).filter_by(token=job_token).first()
-        if not job or (job.uploader_user_id != current_user.id and not current_user.has_role('admin', 'data_manager')):
+        if not job:
+            flash("Upload job not found or unauthorized access.", "danger")
+            return redirect(url_for("direct_uploads.upload"))
+
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
             flash("Upload job not found or unauthorized access.", "danger")
             return redirect(url_for("direct_uploads.upload"))
 
@@ -154,6 +182,7 @@ def upload_results(job_token):
                                job=job)
 
 @jobs_bp.route("/processing/<job_id>", methods=["GET"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@login_required
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def upload_processing(job_id):
     return render_template("jobs/jobs_processing.html", job_id=job_id)

@@ -31,7 +31,7 @@ from models import (
 )
 from services.taskCreationServices import ensure_task
 from db_transaction_manager import get_db_session
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.jobUtils import get_recent_zip_uploads
 from utils.dualGradingConsensusUtils import (
     create_or_update_consensus,
@@ -607,23 +607,17 @@ def _render_page(
     context: Optional[dict] = None,
 ):
     context = context or {}
-    allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-    is_admin_like = current_user.has_role("admin", "data_manager")
+    allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
 
-    if allowed_lab_units or is_admin_like:
-        lab_units = (
-            db_session.execute(
-                select(LabUnit).order_by(LabUnit.name)
-            ).scalars().all()
-            if is_admin_like
-            else db_session.execute(
-                select(LabUnit)
-                .where(LabUnit.id.in_(allowed_lab_units))
-                .order_by(LabUnit.name)
-            ).scalars().all()
-        )
-    else:
-        lab_units = []
+    lab_units = (
+        db_session.execute(
+            select(LabUnit)
+            .where(LabUnit.id.in_(allowed_lab_units))
+            .order_by(LabUnit.name)
+        ).scalars().all()
+        if allowed_lab_units
+        else []
+    )
 
     hospital_ids = {lu.hospital_id for lu in lab_units}
     hospitals = (
@@ -671,7 +665,7 @@ def _render_page(
 
 
 @bp.route("/direct/pregraded/grades", methods=["GET", "POST"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def pregraded_grades():
     with get_db_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
@@ -853,9 +847,8 @@ def pregraded_grades():
         if "pregraded_form_submission" in session:
             del session["pregraded_form_submission"]
 
-        allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager")
-        if not is_admin_like and lab_unit_id not in allowed_lab_units:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if lab_unit_id not in allowed_lab_units:
             processing_logger.warning(
                 "User %s attempted grade import to unauthorized lab %s",
                 current_user.id,
@@ -1060,7 +1053,7 @@ def pregraded_grades():
 
 
 @bp.route("/direct/pregraded/grades/recent", methods=["GET"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def recent_pregraded_grades():
     """Display a list of recent Excel grading files that were uploaded."""
     with get_db_session() as db_session:

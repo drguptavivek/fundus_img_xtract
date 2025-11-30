@@ -21,7 +21,7 @@ from models import (
 )
 
 from utils.fileUtils import get_upload_dirs
-from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids_no_admin_override
 from utils.jobUtils import get_recent_zip_uploads
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 
@@ -111,17 +111,22 @@ def _get_lifetime_quota(db_session: Session, user) -> int | None:
 
 
 @bp.route("/upload", methods=["GET"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def upload_index():
     eligibility = get_user_uploadVerify_eligibility(current_user.id)
     return render_template("direct_uploads/index.html", eligibility=eligibility)
 
 
 @bp.route("/direct/upload", methods=["GET", "POST"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 @upload_rate_limit("60 per minute")  # Reduced to prevent abuse while allowing reasonable uploads
 def upload():
     with get_db_session() as db_session:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            flash("You are not mapped to any lab units.", "warning")
+            return redirect(url_for("home.index"))
+
         if request.method == "POST":
             # ---- form fields ----
             hospital_id = _to_int(request.form.get("hospital_id"))
@@ -181,13 +186,9 @@ def upload():
                 return redirect(url_for("direct_uploads.upload"), code=303)
 
             # Enforce user-level lab unit eligibility
-            is_admin = current_user.has_role("admin")
-            is_manager = current_user.has_role("data_manager")
-            if not (is_admin or is_manager):
-                allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-                if lab_unit.id not in allowed_lab_units:
-                    flash("You don't have access to the selected lab unit.", "danger")
-                    return redirect(url_for("direct_uploads.upload"), code=303)
+            if lab_unit.id not in allowed_lab_units:
+                flash("You don't have access to the selected lab unit.", "danger")
+                return redirect(url_for("direct_uploads.upload"), code=303)
  
             # ---- job bookkeeping ----
             job_token = str(uuid.uuid4())
@@ -331,7 +332,7 @@ def upload():
         current_app.logger.info("Direct upload page accessed by %s (%s)", current_user.username, current_user.id)
 
         user = db_session.get(User, current_user.id)  # attaches to session
-        user_lab_unit_ids = {lu.id for lu in user.lab_units}
+        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id))
 
         lab_units = db_session.execute(
             select(LabUnit)

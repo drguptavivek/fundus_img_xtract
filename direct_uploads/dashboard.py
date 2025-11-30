@@ -26,7 +26,7 @@ from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from utils.rate_limiter import rate_limit
 from utils.fileUtils import abs_from_parts
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.thumbnail_cleanup import add_thumbnail_cleanup_to_direct_upload_deletion
 
 
@@ -109,22 +109,25 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
         )
 
 @bp.route("/direct/dashboard", methods=["GET", "POST"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 @rate_limit("10000 per hour, 500 per minute", methods=["GET"])  # More permissive for pagination/browsing
 @rate_limit("3000 per hour, 60 per minute", methods=["POST"])   # More restrictive for operations
 def dashboard():
     with get_db_session() as db_session:
-        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
         allowed_lab_unit_ids_list = list(allowed_lab_unit_ids)
-        is_admin_like = current_user.has_role("admin", "data_manager")
+        can_manage_others = current_user.has_role(
+            "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
+        )
 
-        if not allowed_lab_unit_ids_list and not is_admin_like:
+        if not allowed_lab_unit_ids_list:
             flash("You do not have access to any lab units.", "warning")
             if request.method == "POST":
                 return redirect(url_for("direct_uploads.dashboard"), code=303)
+            return redirect(url_for("home.index"))
 
         allowed_hospital_ids: set[int] = set()
-        if allowed_lab_unit_ids_list and not is_admin_like:
+        if allowed_lab_unit_ids_list:
             allowed_hospital_ids = {
                 hid for hid, in db_session.execute(
                     select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids_list))
@@ -160,20 +163,19 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                if not is_admin_like and allowed_lab_unit_ids_list:
+                if allowed_lab_unit_ids_list:
                     q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
 
-                # Non-admins can only edit their own uploads
-                if not is_admin_like:
+                if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
                     
                 rows = db_session.execute(q).scalars().all()
 
-                if not is_admin_like and allowed_lab_unit_ids_list and not rows:
+                if allowed_lab_unit_ids_list and not rows:
                     flash("No uploads matched your selection and permissions.", "warning")
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-                if new_lab_unit_id and not is_admin_like:
+                if new_lab_unit_id and not can_manage_others:
                     try:
                         new_lab_unit_id_int = int(new_lab_unit_id)
                     except (TypeError, ValueError):
@@ -183,7 +185,7 @@ def dashboard():
                         flash("You cannot assign uploads to that lab unit.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-                if new_hospital_id and not is_admin_like:
+                if new_hospital_id and not can_manage_others:
                     try:
                         new_hospital_id_int = int(new_hospital_id)
                     except (TypeError, ValueError):
@@ -407,11 +409,10 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                if not is_admin_like and allowed_lab_unit_ids_list:
+                if allowed_lab_unit_ids_list:
                     q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
 
-                # Non-admins can only delete their own uploads
-                if not is_admin_like:
+                if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
                     
                 rows = db_session.execute(q).scalars().all()
@@ -637,11 +638,10 @@ def dashboard():
             page = 1
 
         q = select(DirectImageUpload)
-        if not is_admin_like:
-            if allowed_lab_unit_ids_list:
-                q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
-            else:
-                q = q.where(DirectImageUpload.id == -1)
+        if allowed_lab_unit_ids_list:
+            q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
+        else:
+            q = q.where(DirectImageUpload.id == -1)
 
         # Date filters
         if f_date_from:
@@ -673,8 +673,8 @@ def dashboard():
         elif f_pregraded == "no":
             q = q.where(DirectImageUpload.is_pregraded.is_(False))
 
-        # RBAC: only admins/managers can filter by uploader; other roles already scoped by lab-unit
-        if is_admin_like and f_uploader_id is not None:
+        # RBAC: only managers/admins can filter by uploader; others are scoped by lab-unit and ownership
+        if can_manage_others and f_uploader_id is not None:
             q = q.where(DirectImageUpload.uploader_id == f_uploader_id)
 
         # ---- Build filtered ID subquery (no ORDER BY here) ----
@@ -741,19 +741,15 @@ def dashboard():
         areas     = {a.id: a for a in db_session.execute(select(Area).where(Area.id.in_(ids("area_id")))).scalars().all()} if uploads else {}
         users     = {u.id: u for u in db_session.execute(select(User).where(User.id.in_({u.uploader_id for u in uploads}))).scalars().all()} if uploads else {}
 
-        # Full lists for filters
-        if is_admin_like:
-            all_lab_units = db_session.execute(select(LabUnit).order_by(LabUnit.name)).scalars().all()
-            all_hospitals = db_session.execute(select(Hospital).order_by(Hospital.name)).scalars().all()
-        else:
-            all_lab_units = db_session.execute(
-                select(LabUnit).where(LabUnit.id.in_(allowed_lab_unit_ids_list)).order_by(LabUnit.name)
-            ).scalars().all() if allowed_lab_unit_ids_list else []
+        # Full lists for filters scoped to allowed lab units/hospitals
+        all_lab_units = db_session.execute(
+            select(LabUnit).where(LabUnit.id.in_(allowed_lab_unit_ids_list)).order_by(LabUnit.name)
+        ).scalars().all() if allowed_lab_unit_ids_list else []
 
-            allowed_hospital_ids_local = {lu.hospital_id for lu in all_lab_units if lu.hospital_id is not None}
-            all_hospitals = db_session.execute(
-                select(Hospital).where(Hospital.id.in_(allowed_hospital_ids_local)).order_by(Hospital.name)
-            ).scalars().all() if allowed_hospital_ids_local else []
+        allowed_hospital_ids_local = {lu.hospital_id for lu in all_lab_units if lu.hospital_id is not None}
+        all_hospitals = db_session.execute(
+            select(Hospital).where(Hospital.id.in_(allowed_hospital_ids_local)).order_by(Hospital.name)
+        ).scalars().all() if allowed_hospital_ids_local else []
         all_cameras   = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
         all_diseases  = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         all_areas     = db_session.execute(select(Area).order_by(Area.name)).scalars().all()

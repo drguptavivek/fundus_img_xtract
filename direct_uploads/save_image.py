@@ -9,6 +9,7 @@ from db_transaction_manager import get_db_session
 from auth.roles import roles_required
 from models import DirectImageUpload, BASE_DIR, GradingTask
 from utils.fileUtils import abs_from_parts
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 editing_logger = logging.getLogger("editing")
@@ -22,7 +23,7 @@ def _normalize_task_state(state):
     return state.strip().lower()
 
 @bp.route("/direct/upload/save_image/<int:upload_id>", methods=["POST"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def save_edited_image(upload_id: int):
     with get_db_session() as db:
         try:
@@ -34,9 +35,18 @@ def save_edited_image(upload_id: int):
                 editing_logger.warning("Upload not found for id: %s", upload_id)
                 return jsonify({"error": "Upload not found."}), 404
 
-            if not (current_user.has_role('admin', 'data_manager') or upload.uploader_id == current_user.id):
+            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+            can_manage_others = current_user.has_role(
+                "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
+            )
+
+            if upload.lab_unit_id not in allowed_lab_unit_ids:
+                editing_logger.warning("User %s lacks lab unit access for %s", current_user.id, upload_id)
+                return jsonify({"error": "You don't have permission to edit this upload."}), 403
+
+            if not (can_manage_others or upload.uploader_id == current_user.id):
                 editing_logger.warning("User %s lacks permission to edit %s", current_user.id, upload_id)
-                return jsonify({"error": "You don't have permission to edit this upload."}, 403)
+                return jsonify({"error": "You don't have permission to edit this upload."}), 403
 
             task_states = db.execute(
                 select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
@@ -47,12 +57,12 @@ def save_edited_image(upload_id: int):
                     upload_id,
                     task_states,
                 )
-                return jsonify({"error": "Cannot edit image while grading tasks are in progress."}, 409)
+                return jsonify({"error": "Cannot edit image while grading tasks are in progress."}), 409
 
             image_data = request.get_json().get('image_data') if request.is_json else request.form.get('image_data')
             if not image_data:
                 editing_logger.warning("No image data for upload %s", upload_id)
-                return jsonify({"error": "No image data provided."}, 400)
+                return jsonify({"error": "No image data provided."}), 400
 
             if image_data.startswith('data:image'):
                 image_data = image_data.split(',')[1]
@@ -61,7 +71,7 @@ def save_edited_image(upload_id: int):
                 image_bytes = base64.b64decode(image_data)
             except Exception as e:
                 editing_logger.error("Base64 decode error for upload %s: %s", upload_id, e)
-                return jsonify({"error": "Invalid image data provided."}, 400)
+                return jsonify({"error": "Invalid image data provided."}), 400
 
             # Correctly determine the path for the new edited file
             edited_basename = f"edited_{upload.filename}"
@@ -101,4 +111,4 @@ def save_edited_image(upload_id: int):
             db.rollback()
             editing_logger.error("Error saving edited image for upload %s:\n%s",
                                      upload_id, traceback.format_exc())
-            return jsonify({"error": "An error occurred while saving the image."}, 500)
+            return jsonify({"error": "An error occurred while saving the image."}), 500

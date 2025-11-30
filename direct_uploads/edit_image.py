@@ -7,11 +7,11 @@ from flask_login import current_user
 from werkzeug.exceptions import NotFound
 from . import bp
 from db_transaction_manager import get_db_session
-from utils.utils import require_owner_or_roles
 from auth.roles import roles_required
 from sqlalchemy import select
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
 from utils.fileUtils import abs_from_parts
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 editing_logger = logging.getLogger("editing")
@@ -85,7 +85,7 @@ def _log_allowed_edit(upload: DirectImageUpload, task_states: list[str]) -> None
         )
 
 @bp.route("/direct/upload/edit_image/<int:upload_id>", methods=["GET"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def edit_image(upload_id: int):
     with get_db_session() as db:
         try:
@@ -94,7 +94,16 @@ def edit_image(upload_id: int):
                 flash("Upload not found.", "danger")
                 return redirect(flask_url_for("direct_uploads.dashboard"))
 
-            if not require_owner_or_roles(upload, 'admin', 'data_manager'):
+            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+            can_manage_others = current_user.has_role(
+                "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
+            )
+
+            if upload.lab_unit_id not in allowed_lab_unit_ids:
+                flash("You don't have permission to edit this upload.", "danger")
+                return redirect(flask_url_for("direct_uploads.dashboard"))
+
+            if not (can_manage_others or upload.uploader_id == current_user.id):
                 flash("You don't have permission to edit this upload.", "danger")
                 return redirect(flask_url_for("direct_uploads.dashboard"))
 
@@ -151,7 +160,7 @@ def edit_image(upload_id: int):
             return redirect(flask_url_for("direct_uploads.dashboard"))
 
 @bp.route("/direct/upload/restore_original/<int:upload_id>", methods=["POST"])
-@roles_required('fileUploader', 'optometrist', 'data_manager', 'admin')
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def restore_original(upload_id: int):
     with get_db_session() as db:
         try:
@@ -159,7 +168,15 @@ def restore_original(upload_id: int):
             if not upload:
                 return jsonify({"error": "Upload not found."}), 404
 
-            if not require_owner_or_roles(upload, 'admin', 'data_manager'):
+            allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+            can_manage_others = current_user.has_role(
+                "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
+            )
+
+            if upload.lab_unit_id not in allowed_lab_unit_ids:
+                return jsonify({"error": "Forbidden"}), 403
+
+            if not (can_manage_others or upload.uploader_id == current_user.id):
                 return jsonify({"error": "Permission denied."}), 403
 
             raw_states = db.execute(

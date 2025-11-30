@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from utils.fileUtils import abs_from_parts
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 from . import bp
 from db_transaction_manager import get_db_session
@@ -121,7 +122,7 @@ def _require_entity(db, model, pk: int | None, label: str):
 
 
 @bp.route("/direct/upload/edit/<int:upload_id>", methods=["GET", "POST"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def edit_upload(upload_id):
     with get_db_session() as db:
         upload = db.get(DirectImageUpload, upload_id)
@@ -135,12 +136,23 @@ def edit_upload(upload_id):
         except Exception:
             file_path = None
 
-        is_admin = current_user.has_role("admin")
-        is_manager = current_user.has_role("data_manager")
-        can_choose_any = is_admin or is_manager
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        allowed_hospital_ids = {
+            hid for hid, in db.execute(
+                select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids))
+            )
+            if hid is not None
+        }
+        can_manage_others = current_user.has_role(
+            "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
+        )
 
-        # can edit if admin/manager OR owner
-        if not (can_choose_any or upload.uploader_id == current_user.id):
+        # Require lab unit eligibility and either ownership or elevated edit permission
+        if upload.lab_unit_id not in allowed_lab_unit_ids:
+            flash("You don't have permission to edit this upload.", "danger")
+            return redirect(url_for("direct_uploads.dashboard"))
+
+        if not (can_manage_others or upload.uploader_id == current_user.id):
             flash("You don't have permission to edit this upload.", "danger")
             return redirect(url_for("direct_uploads.dashboard"))
 
@@ -166,18 +178,6 @@ def edit_upload(upload_id):
 
         pending_tasks = [task for task, state in zip(task_rows, normalized_task_states) if state == "pending"]
 
-        # Build allowed sets for users without elevated privileges
-        allowed_lab_unit_ids = set()
-        allowed_hospital_ids = set()
-        if not can_choose_any:
-            user_db = db.execute(
-                select(User)
-                .options(selectinload(User.lab_units))
-                .where(User.id == current_user.id)
-            ).scalar_one()
-            allowed_lab_unit_ids = {lu.id for lu in user_db.lab_units}
-            allowed_hospital_ids = {lu.hospital_id for lu in user_db.lab_units}
-
         if request.method == "POST":
             req = request.form
 
@@ -192,11 +192,10 @@ def edit_upload(upload_id):
                 flash("All fields are required.", "danger")
                 return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)
 
-            # RBAC: restricted users must stay within their own assignments
-            if not can_choose_any:
-                if lid not in allowed_lab_unit_ids or hid not in allowed_hospital_ids:
-                    flash("You cannot assign this hospital or lab unit.", "danger")
-                    return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)
+            # RBAC: all users must stay within their own assignments
+            if lid not in allowed_lab_unit_ids or hid not in allowed_hospital_ids:
+                flash("You cannot assign this hospital or lab unit.", "danger")
+                return redirect(url_for("direct_uploads.edit_upload", upload_id=upload_id), code=303)
 
             # Validate entities robustly
             try:
@@ -332,21 +331,16 @@ def edit_upload(upload_id):
             )
             return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-        # GET options: admins/managers see all; restricted users see only their own
-        if can_choose_any:
-            hospitals = db.scalars(select(Hospital).order_by(Hospital.name)).all()
-            lab_units = db.scalars(select(LabUnit).order_by(LabUnit.name)).all()
-        else:
-            hospitals = db.scalars(
-                select(Hospital)
-                .where(Hospital.id.in_(allowed_hospital_ids))
-                .order_by(Hospital.name)
-            ).all()
-            lab_units = db.scalars(
-                select(LabUnit)
-                .where(LabUnit.id.in_(allowed_lab_unit_ids))
-                .order_by(LabUnit.name)
-            ).all()
+        hospitals = db.scalars(
+            select(Hospital)
+            .where(Hospital.id.in_(allowed_hospital_ids))
+            .order_by(Hospital.name)
+        ).all()
+        lab_units = db.scalars(
+            select(LabUnit)
+            .where(LabUnit.id.in_(allowed_lab_unit_ids))
+            .order_by(LabUnit.name)
+        ).all()
 
         cameras = db.scalars(select(Camera).order_by(Camera.name)).all()
         diseases = db.scalars(select(Disease).order_by(Disease.name)).all()

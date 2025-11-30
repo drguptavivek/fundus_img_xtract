@@ -21,7 +21,7 @@ from . import bp
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.fileUtils import get_upload_dirs
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.utils2 import uniquify
 from models import (
     User,
@@ -53,9 +53,14 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 
 
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
-@roles_required("fileUploader", "optometrist", "data_manager", "admin")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def pregraded_upload():
     with get_db_session() as db_session:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            flash("You are not mapped to any lab units.", "warning")
+            return redirect(url_for("home.index"))
+
         if request.method == "POST":
             hospital_id = _to_int(request.form.get("hospital_id"))
             lab_unit_id = _to_int(request.form.get("lab_unit_id"))
@@ -130,13 +135,9 @@ def pregraded_upload():
                 )
                 return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
-            is_admin = current_user.has_role("admin")
-            is_manager = current_user.has_role("data_manager")
-            if not (is_admin or is_manager):
-                allowed_lab_units = get_user_lab_unit_ids(current_user.id)
-                if lab_unit.id not in allowed_lab_units:
-                    flash("You don't have access to the selected lab unit.", "danger")
-                    return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
+            if lab_unit.id not in allowed_lab_units:
+                flash("You don't have access to the selected lab unit.", "danger")
+                return redirect(url_for("direct_uploads.pregraded_upload"), code=303)
 
             job_token = str(uuid.uuid4())
             new_job = Job(
@@ -401,13 +402,10 @@ def pregraded_upload():
             "last_job_images": last_job_images,
         })
 
-        user = db_session.get(User, current_user.id)
-        user_lab_unit_ids = {lu.id for lu in user.lab_units}
-
         lab_units = (
             db_session.execute(
                 select(LabUnit)
-                .where(LabUnit.id.in_(user_lab_unit_ids))
+                .where(LabUnit.id.in_(allowed_lab_units))
                 .order_by(LabUnit.id)
             )
             .scalars()

@@ -84,3 +84,16 @@ Allow review submissions on `/review/reviewTaskDetails/<id>` to update the final
 
   - Analytics/queries that group on consensus_method should be reviewed to accept task_review; not adjusted yet.
   - No automated tests were run; please run your suite or a targeted check.
+
+• Implemented next batch of changes:
+
+  - Fixed the consensus confirmation JS to use the serialized grading_features data (prevents the DiseaseGrading
+    JSON error).
+  - Added human-friendly labels for the new task_review method across key templates: review discrepancy list,
+    grading task view, analytics task details/results, and review task detail.
+  - Cleaned review/task_review.py imports and kept consensus override logic intact.
+
+  Pending: run the new migration (d7e3fb45da1d_allow_task_review_consensus_method.py) via alembic/compose to update
+  the DB check constraint if you haven’t already. No tests executed yet; please spot-check the review flow and
+  consensus modal.
+  

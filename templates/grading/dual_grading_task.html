@@ -81,7 +81,12 @@
         {% if task.consensus %}
         <div class="mb-3 small text-muted">Consensus: 
           <strong>{{ task.consensus.final_label.impression }}</strong>
-          <div class="small">Method: {{ task.consensus.method }}</div>
+          {% set method_label = {
+            'match': 'Match',
+            'adjudication': 'Adjudication',
+            'task_review': 'Review override'
+          }.get(task.consensus.method, task.consensus.method) %}
+          <div class="small">Method: {{ method_label }}</div>
           {% if task.consensus.decided_by %}
           <div class="small">Decided by: {{ task.consensus.decided_by.full_name or task.consensus.decided_by.username }}</div>
           {% endif %}

@@ -497,8 +497,13 @@
                 </td>
                 <td>
                   {% if task.consensus %}
+                    {% set method_label = {
+                      'match': 'Match',
+                      'adjudication': 'Adjudication',
+                      'task_review': 'Review override'
+                    }.get(task.consensus.method, task.consensus.method) %}
                     <span class="badge bg-success">{{ task.consensus.impression or '-' }}</span>
-                    <small class="text-muted d-block">{{ task.consensus.method or '' }}</small>
+                    <small class="text-muted d-block">{{ method_label or '' }}</small>
                   {% else %}
                     <span class="text-muted">No consensus</span>
                   {% endif %}

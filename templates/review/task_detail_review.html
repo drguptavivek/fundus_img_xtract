@@ -218,7 +218,12 @@
         <div class="card-body">
           <div class="row">
             <div class="col-sm-6">
-              <p><strong>Method:</strong> {{ existing_consensus.method }}</p>
+              {% set method_label = {
+                'match': 'Match',
+                'adjudication': 'Adjudication',
+                'task_review': 'Review override'
+              }.get(existing_consensus.method, existing_consensus.method) %}
+              <p><strong>Method:</strong> {{ method_label }}</p>
             </div>
             <div class="col-sm-6">
               <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if existing_consensus.decided_at else 'N/A' }}</p>

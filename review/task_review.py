@@ -7,15 +7,7 @@ from json import JSONDecodeError
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
-from models import (
-    GradingTask,
-    LabUnit,
-    Grade,
-    DiseaseGrading,
-    GradingsFeatures,
-    Consensus,
-    Session as DBSession,
-)
+from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus
 from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task

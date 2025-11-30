@@ -135,7 +135,12 @@
                                   </div>
                                   {% if task.consensus %}
                                   <div class="small text-muted mt-2">
-                                    Consensus: {{ task.consensus.impression or '—' }} ({{ task.consensus.method|capitalize }}{% if task.consensus.decided_by %} • {{ task.consensus.decided_by }}{% endif %})
+                                    {% set method_label = {
+                                      'match': 'Match',
+                                      'adjudication': 'Adjudication',
+                                      'task_review': 'Review override'
+                                    }.get(task.consensus.method, task.consensus.method) %}
+                                    Consensus: {{ task.consensus.impression or '—' }} ({{ method_label }}{% if task.consensus.decided_by %} • {{ task.consensus.decided_by }}{% endif %})
                                   </div>
                                   {% endif %}
                                   {% if task.ai_grades %}

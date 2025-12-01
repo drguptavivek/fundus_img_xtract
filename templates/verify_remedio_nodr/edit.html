@@ -63,12 +63,12 @@
     </div>
   </form>
 
-  <div class="card shadow-sm">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <strong>Encounter Images</strong>
-      <span class="small text-muted">Right / Left / Cannot tell</span>
-    </div>
-    <div class="card-body">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Encounter Images</strong>
+        <span class="small text-muted">Laterality + Centering (Macula/Disk/Cannot tell)</span>
+      </div>
+      <div class="card-body">
       {% if encounter.encounter_files %}
         <div class="row g-3">
           {% for ef in encounter.encounter_files if ef.file_type == 'image' %}
@@ -84,6 +84,14 @@
                 <button name="side" value="right" type="submit" class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
                 <button name="side" value="left" type="submit" class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
                 <button name="side" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
+              </form>
+              <form method="post" action="{{ url_for('verify_remedio_nodr.nodr_mark_eye', encounter_id=encounter.id) }}" class="mt-2 d-flex gap-2 flex-nowrap center-mark-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="ef_id" value="{{ ef.id }}">
+                {% set csel = (ef.centering or '') %}
+                <button name="centering" value="macula" type="submit" class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
+                <button name="centering" value="disk" type="submit" class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
+                <button name="centering" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
               </form>
             </div>
           </div>

@@ -293,13 +293,31 @@ def nodr_edit(encounter_id: int):
 @bp.route("/edit/<int:encounter_id>/mark_eye", methods=["POST"])
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def nodr_mark_eye(encounter_id: int):
-    side = (request.form.get("side") or "").strip().lower()
+    side_raw = (request.form.get("side") or "").strip().lower()
+    centering_raw = (request.form.get("centering") or "").strip().lower()
     ef_id = request.form.get("ef_id")
-    if side not in {"right", "left", "cannot_tell"}:
+
+    allowed_sides = {"right", "left", "cannot_tell"}
+    allowed_centering = {"macula", "disk", "cannot_tell"}
+
+    if not side_raw and not centering_raw:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "missing_fields"}, 400
+        flash("Please choose Right/Left/Cannot tell and/or Centering.", "danger")
+        return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
+
+    if side_raw and side_raw not in allowed_sides:
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": False, "error": "invalid_side"}, 400
         flash("Invalid selection.", "danger")
         return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
+
+    if centering_raw and centering_raw not in allowed_centering:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "invalid_centering"}, 400
+        flash("Invalid centering selection.", "danger")
+        return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
+
     try:
         ef_id_int = int(ef_id)
     except Exception:
@@ -326,12 +344,15 @@ def nodr_mark_eye(encounter_id: int):
                 return {"ok": False, "error": "not_found"}, 404
             flash("Image not found for this encounter.", "danger")
             return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
-        ef.eye_side = side
+        if side_raw:
+            ef.eye_side = side_raw
+        if centering_raw:
+            ef.centering = centering_raw
         db.add(ef)
         db.commit()
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-            return {"ok": True, "ef_id": ef.id, "side": ef.eye_side}
-        flash("Image laterality updated.", "success")
+            return {"ok": True, "ef_id": ef.id, "side": ef.eye_side, "centering": ef.centering}
+        flash("Image details updated.", "success")
     finally:
         db.close()
     return redirect(url_for("verify_remedio_nodr.nodr_edit", encounter_id=encounter_id))
@@ -351,9 +372,17 @@ def nodr_verify(encounter_id: int):
             flash("You don't have permission to verify this encounter.", "danger")
             return redirect(url_for("verify_remedio_nodr.nodr_list"))
 
-        missing = [ef for ef in encounter.encounter_files if ef.file_type == 'image' and (ef.eye_side not in {'right', 'left', 'cannot_tell'})]
+        missing = [
+            ef
+            for ef in encounter.encounter_files
+            if ef.file_type == 'image'
+            and (
+                ef.eye_side not in {'right', 'left', 'cannot_tell'}
+                or ef.centering not in {'macula', 'disk', 'cannot_tell'}
+            )
+        ]
         if missing:
-            msg = f"{len(missing)} image(s) still untagged; cannot verify."
+            msg = f"{len(missing)} image(s) still untagged; cannot verify. Please mark laterality and centering."
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "incomplete", "message": msg}, 400
             flash(msg, "danger")

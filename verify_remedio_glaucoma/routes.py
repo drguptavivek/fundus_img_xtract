@@ -670,13 +670,18 @@ def glaucoma_edit(clean_id: int):
                   .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
                   .filter(EncounterFile.file_type == 'image')
                   .filter(
-                      (EncounterFile.eye_side.is_(None)) |
-                      (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+                      (EncounterFile.eye_side.is_(None))
+                      | (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+                      | (EncounterFile.centering.is_(None))
+                      | (~EncounterFile.centering.in_(['macula','disk','cannot_tell']))
                   )
                   .count()
             )
             if missing and missing > 0:
-                flash(f"Saved. {missing} image(s) still untagged. Please mark Right/Left/Cannot tell.", "danger")
+                flash(
+                    f"Saved. {missing} image(s) still untagged. Please mark Right/Left/Cannot tell and Centering.",
+                    "danger",
+                )
             else:
                 flash("Saved. All images are tagged.", "success")
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=row.id))
@@ -779,18 +784,21 @@ def glaucoma_verify(clean_id: int):
             db.add(enc)
         db.add(row)
         db.commit()
-        # Ensure all images are tagged before verification
+        # Ensure all images are tagged before verification (laterality + centering)
         missing = (
             db.query(EncounterFile)
               .filter(EncounterFile.patient_encounter_id == row.patient_encounter_id)
               .filter(EncounterFile.file_type == 'image')
               .filter(
-                  (EncounterFile.eye_side.is_(None)) | (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+                  (EncounterFile.eye_side.is_(None))
+                  | (~EncounterFile.eye_side.in_(['right','left','cannot_tell']))
+                  | (EncounterFile.centering.is_(None))
+                  | (~EncounterFile.centering.in_(['macula','disk','cannot_tell']))
               )
               .count()
         )
         if missing:
-            msg = f"{missing} image(s) still untagged; cannot verify."
+            msg = f"{missing} image(s) still untagged; cannot verify. Please mark laterality and centering."
             if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
                 return {"ok": False, "error": "incomplete", "message": msg}, 400
             flash(msg, "danger")
@@ -927,14 +935,32 @@ def glaucoma_unverify(clean_id: int):
 @bp.route("/edit/<int:clean_id>/mark_eye", methods=["POST"])
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def glaucoma_mark_eye(clean_id: int):
-    side = (request.form.get("side") or "").strip().lower()
+    side_raw = (request.form.get("side") or "").strip().lower()
+    centering_raw = (request.form.get("centering") or "").strip().lower()
     ef_id = request.form.get("ef_id")
-    if side not in {"right", "left", "cannot_tell"}:
+
+    allowed_sides = {"right", "left", "cannot_tell"}
+    allowed_centering = {"macula", "disk", "cannot_tell"}
+
+    if not side_raw and not centering_raw:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "missing_fields"}, 400
+        flash("Please choose Right/Left/Cannot tell and/or Centering.", "danger")
+        return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
+
+    if side_raw and side_raw not in allowed_sides:
         # AJAX response if requested
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": False, "error": "invalid_side"}, 400
-        flash("Invalid selection.", "danger")
+        flash("Invalid laterality selection.", "danger")
         return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
+
+    if centering_raw and centering_raw not in allowed_centering:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
+            return {"ok": False, "error": "invalid_centering"}, 400
+        flash("Invalid centering selection.", "danger")
+        return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
+
     try:
         ef_id_int = int(ef_id)
     except Exception:
@@ -961,13 +987,16 @@ def glaucoma_mark_eye(clean_id: int):
                 return {"ok": False, "error": "not_found"}, 404
             flash("Image not found for this encounter.", "danger")
             return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))
-        ef.eye_side = side
+        if side_raw:
+            ef.eye_side = side_raw
+        if centering_raw:
+            ef.centering = centering_raw
         db.add(ef)
         db.commit()
         # AJAX response: avoid full page reload
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
-            return {"ok": True, "ef_id": ef.id, "side": ef.eye_side}
-        flash("Image laterality updated.", "success")
+            return {"ok": True, "ef_id": ef.id, "side": ef.eye_side, "centering": ef.centering}
+        flash("Image details updated.", "success")
     finally:
         db.close()
     return redirect(url_for("verify_remedio_glaucoma.glaucoma_edit", clean_id=clean_id))

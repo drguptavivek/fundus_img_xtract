@@ -261,6 +261,7 @@ class EncounterFile(Base):
     ocr_processed: Mapped[bool] = mapped_column(default=False, nullable=False)
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    centering: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")

@@ -11,6 +11,23 @@
       }
     });
   }
+  function updateCenterButtons(form, centering){
+    const btns = form.querySelectorAll('button[name=\"centering\"]');
+    btns.forEach(btn => {
+      btn.classList.remove('btn-primary','btn-outline-primary','btn-outline-secondary');
+      if (btn.value === centering) {
+        btn.classList.add('btn-primary');
+      } else {
+        if (btn.value === 'cannot_tell') btn.classList.add('btn-outline-secondary');
+        else btn.classList.add('btn-outline-primary');
+      }
+    });
+  }
+
+  const csrfToken = (() => {
+    const meta = document.querySelector('meta[name=\"csrf-token\"]');
+    return meta ? meta.getAttribute('content') : null;
+  })();
 
   document.addEventListener('DOMContentLoaded', function(){
     // Validate Patient ID length visually (expected 8)
@@ -38,11 +55,36 @@
         fetch(form.action, {
           method: 'POST',
           body: fd,
-          headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
           credentials: 'same-origin'
         }).then(res => res.json()).then(json => {
           if (json && json.ok) updateButtons(form, side);
         }).catch(err => console.error('Laterality update failed', err));
+      });
+    });
+    document.querySelectorAll('.center-mark-form').forEach(form => {
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        const submitter = e.submitter;
+        const fd = new FormData(form);
+        if (submitter && submitter.name) fd.set(submitter.name, submitter.value);
+        const centering = (submitter && submitter.value) || fd.get('centering');
+        fetch(form.action, {
+          method: 'POST',
+          body: fd,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
+          },
+          credentials: 'same-origin'
+        }).then(res => res.json()).then(json => {
+          if (json && json.ok) updateCenterButtons(form, centering);
+        }).catch(err => console.error('Centering update failed', err));
       });
     });
 
@@ -130,4 +172,3 @@
     }
   });
 })();
-

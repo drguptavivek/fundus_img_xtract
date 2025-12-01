@@ -123,6 +123,7 @@ MCP server configuration for Playwright integration.
   - If multiple heads exist, merge them first (e.g., `... exec web uv run alembic merge -m "merge heads" head1 head2`) then generate your migration from the unified head.
   - Generate with Alembic (not manually): `... exec web uv run alembic revision -m "message" --autogenerate`.
   - Apply with: `... exec web uv run alembic upgrade head`.
+- **CSRF in JS:** include the token from `<meta name="csrf-token">` on AJAX calls via `X-CSRFToken` (see docs/10-DEVELOP/JavaScript_Guidance.md).
 - **Reusable Partials:** -  _forms.html for CSRF, _viewer_card.html
 - **Environment:**  .env and .env.example
 - **Materialized Views:** Advanced analytics with disease-specific pivot views
@@ -463,4 +464,3 @@ This project is a comprehensive system for an eye hospital to manage retinal fun
 - Generation of curated datasets for training, dual grading by resident and ophthalmologist with arbitration
 - Capturing Artificial Intelligence (AI) models grades for core diseases: Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD)
 - Advanced analytics platform with disease-specific materialized views for research and quality assurance 
-

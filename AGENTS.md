@@ -127,6 +127,13 @@ MCP server configuration for Playwright integration.
 - `uv pip install` - Install dependencies with uv
 - `npn run build:css` - Build Theme 
 
+- Alembic migrations:
+  - Check heads before creating: `docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec web uv run alembic heads` (should be a single head).
+  - If multiple heads exist, create a merge revision first (e.g., `... exec web uv run alembic merge -m "merge heads" head1 head2`), then generate your migration from the unified head.
+  - Generate with Alembic (not manual files): `... exec web uv run alembic revision -m "message" --autogenerate`.
+  - Apply with: `... exec web uv run alembic upgrade head`.
+- CSRF for JS: include the token from `<meta name="csrf-token">` in AJAX requests via `X-CSRFToken` (see docs/10-DEVELOP/JavaScript_Guidance.md).
+
 - PORT 5001
 - use virtual enviroinment .venv
 
@@ -167,5 +174,3 @@ This project is a comprehensive system for an eye hospital to manage retinal fun
 - Scoping source of images, type of camera, Type of image
 generation of curated datasets for training, cuual grading by resiednt and ophthalmologist wioth arbiotration
 Capturing  Artificial Intelligence (AI) models grades for core diseases Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). 
-
-

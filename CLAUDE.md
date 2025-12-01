@@ -118,6 +118,11 @@ MCP server configuration for Playwright integration.
 - **Database:** SQLAlchemy with PostgreSQL production support
 - **Custom JS:** Flash-Toasts.js, photoswipe, edit_image.js, app.js, etc in /static/js
 -  **CSS:**  Bootstrap 5.3 via SCSS. Overides in app.css
+- **Alembic migrations:** 
+  - Check for a single head before creating migrations: `docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec web uv run alembic heads`.
+  - If multiple heads exist, merge them first (e.g., `... exec web uv run alembic merge -m "merge heads" head1 head2`) then generate your migration from the unified head.
+  - Generate with Alembic (not manually): `... exec web uv run alembic revision -m "message" --autogenerate`.
+  - Apply with: `... exec web uv run alembic upgrade head`.
 - **Reusable Partials:** -  _forms.html for CSRF, _viewer_card.html
 - **Environment:**  .env and .env.example
 - **Materialized Views:** Advanced analytics with disease-specific pivot views
@@ -458,5 +463,4 @@ This project is a comprehensive system for an eye hospital to manage retinal fun
 - Generation of curated datasets for training, dual grading by resident and ophthalmologist with arbitration
 - Capturing Artificial Intelligence (AI) models grades for core diseases: Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD)
 - Advanced analytics platform with disease-specific materialized views for research and quality assurance 
-
 

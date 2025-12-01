@@ -372,6 +372,195 @@
     }
   }
 
+  function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  function formatMetric(val) {
+    if (val === null || val === undefined) return '-';
+    const num = Number(val);
+    return Number.isFinite(num) ? num.toFixed(3) : '-';
+  }
+
+  function initThresholdExplorer() {
+    const openBtn = document.getElementById('threshold-explorer-open');
+    const modalEl = document.getElementById('thresholdExplorerModal');
+    const form = document.getElementById('threshold-explorer-form');
+    const alertBox = document.getElementById('threshold-explorer-alert');
+    const resultsEl = document.getElementById('threshold-explorer-results');
+    const resultsBody = document.querySelector('#threshold-explorer-table tbody');
+    const metaEl = document.getElementById('threshold-explorer-meta');
+    const aucEl = document.getElementById('threshold-explorer-auc');
+    const submitBtn = document.getElementById('threshold-explorer-submit');
+    const spinner = document.getElementById('threshold-explorer-spinner');
+    const diseaseEl = document.getElementById('filter-disease');
+    const modelEl = document.getElementById('filter-model');
+    const referenceEl = document.getElementById('filter-reference');
+    const uploadTypeEl = document.getElementById('filter-upload-type');
+    const cameraEl = document.getElementById('filter-camera');
+    const ModalCtor = window.bootstrap ? window.bootstrap.Modal : null;
+    const modal = (modalEl && ModalCtor) ? ModalCtor.getOrCreateInstance(modalEl) : null;
+
+    if (!openBtn || !modalEl || !form || !resultsBody) return;
+
+    const resetUI = () => {
+      if (alertBox) {
+        alertBox.classList.add('d-none');
+        alertBox.textContent = '';
+      }
+      if (resultsEl) resultsEl.classList.add('d-none');
+      if (resultsBody) resultsBody.innerHTML = '';
+      if (metaEl) metaEl.textContent = '';
+      if (aucEl) aucEl.textContent = '';
+    };
+
+    openBtn.addEventListener('click', () => {
+      resetUI();
+      if (modal) {
+        modal.show();
+      } else if (modalEl) {
+        // Fallback in case bootstrap JS is unavailable
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.removeAttribute('aria-hidden');
+      }
+    });
+
+    function setLoading(state) {
+      if (!submitBtn || !spinner) return;
+      submitBtn.disabled = state;
+      if (state) spinner.classList.remove('d-none');
+      else spinner.classList.add('d-none');
+    }
+
+    function selectedLabUnits() {
+      const checks = document.querySelectorAll('input[name="lab_unit_id"]:checked');
+      return Array.from(checks).map((c) => Number(c.value)).filter((v) => !Number.isNaN(v));
+    }
+
+    function renderResults(rows, auc, sampleSize, probabilitiesPresent, positiveClass) {
+      if (!resultsBody || !resultsEl) return;
+      resultsBody.innerHTML = '';
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        const cells = [
+          row.threshold?.toFixed ? row.threshold.toFixed(3) : row.threshold,
+          formatMetric(row.sensitivity),
+          formatMetric(row.specificity),
+          formatMetric(row.ppv),
+          formatMetric(row.npv),
+          formatMetric(row.f1),
+          formatMetric(row.accuracy),
+          formatMetric(row.balanced_accuracy),
+          row.fp ?? '-',
+          row.fn ?? '-',
+          row.tp ?? '-',
+          row.tn ?? '-',
+          row.support ?? '-',
+        ];
+        cells.forEach((val) => {
+          const td = document.createElement('td');
+          td.className = 'text-end';
+          td.textContent = typeof val === 'number' ? val.toString() : String(val);
+          tr.appendChild(td);
+        });
+        tr.firstChild.className = 'text-start'; // threshold column left-aligned
+        resultsBody.appendChild(tr);
+      });
+      resultsEl.classList.remove('d-none');
+      if (metaEl) {
+        const probText = probabilitiesPresent ? 'AI probabilities parsed' : 'No AI probabilities parsed (threshold acts on label only)';
+        metaEl.textContent = `Thresholds evaluated: ${rows.length}; Positive class: ${positiveClass || '-'}; Sample size: ${sampleSize}. ${probText}.`;
+      }
+      if (aucEl) {
+        aucEl.textContent = auc !== null && auc !== undefined ? `AUC: ${auc.toFixed(3)} (constant across thresholds)` : 'AUC unavailable (no probability scores).';
+      }
+    }
+
+    form.addEventListener('submit', (evt) => {
+      evt.preventDefault();
+      resetUI();
+      const thresholdMin = Number(document.getElementById('te-min')?.value || 0);
+      const thresholdMax = Number(document.getElementById('te-max')?.value || 0);
+      const thresholdDelta = Number(document.getElementById('te-delta')?.value || 0);
+      if ([thresholdMin, thresholdMax, thresholdDelta].some((n) => Number.isNaN(n))) {
+        if (alertBox) {
+          alertBox.textContent = 'Please enter numeric thresholds.';
+          alertBox.classList.remove('d-none');
+        }
+        return;
+      }
+      const maxPoints = Math.floor(((thresholdMax - thresholdMin) / thresholdDelta)) + 1;
+      if (thresholdDelta <= 0 || thresholdMin < 0 || thresholdMax > 1 || thresholdMin > thresholdMax || maxPoints > 25) {
+        if (alertBox) {
+          alertBox.textContent = 'Check thresholds: 0-1 range, min ≤ max, delta > 0, and max 25 values.';
+          alertBox.classList.remove('d-none');
+        }
+        return;
+      }
+
+      const payload = {
+        disease_id: diseaseEl ? Number(diseaseEl.value) : null,
+        ai_model_id: modelEl ? Number(modelEl.value) : null,
+        reference_source: referenceEl ? referenceEl.value : 'consensus',
+        upload_type: uploadTypeEl ? uploadTypeEl.value : '',
+        camera_id: cameraEl && cameraEl.value ? Number(cameraEl.value) : null,
+        threshold_min: thresholdMin,
+        threshold_max: thresholdMax,
+        threshold_delta: thresholdDelta,
+        class_map: parseJSONSafe(openBtn.dataset.classMap || '{}', {}),
+        positive_class: openBtn.dataset.positiveClass || '',
+        lab_unit_id: selectedLabUnits(),
+      };
+
+      if (!payload.positive_class) {
+        if (alertBox) {
+          alertBox.textContent = 'Positive class is required to explore thresholds.';
+          alertBox.classList.remove('d-none');
+        }
+        return;
+      }
+
+      setLoading(true);
+      fetch('/analytics/model-performance/threshold-explorer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCsrfToken(),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data?.error || 'Threshold explorer failed.');
+          }
+          return data;
+        })
+        .then((data) => {
+          if (!data.thresholds || !Array.isArray(data.thresholds)) {
+            throw new Error('No thresholds returned.');
+          }
+          renderResults(
+            data.thresholds,
+            data.auc,
+            data.sample_size,
+            data.probabilities_present,
+            data.positive_class
+          );
+        })
+        .catch((err) => {
+          if (alertBox) {
+            alertBox.textContent = err.message || 'Threshold explorer failed.';
+            alertBox.classList.remove('d-none');
+          }
+        })
+        .finally(() => setLoading(false));
+    });
+  }
+
   function initRocChart() {
     const canvas = document.getElementById('roc-chart');
     if (!canvas || typeof Chart === 'undefined') return;
@@ -534,6 +723,7 @@
     initConfusionPercents();
     initMismatchFilter();
     initLabUnitDropdown();
+    initThresholdExplorer();
   }
 
   if (document.readyState === 'loading') {

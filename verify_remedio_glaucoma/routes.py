@@ -32,12 +32,17 @@ def glaucoma_results():
             return redirect(url_for("home.index"))
 
         # Totals (use cleaned table)
-        total_reports = db.query(func.count(GlaucomaResultsCleaned.id)).filter(
-            GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units)
-        ).scalar() or 0
+        total_reports = (
+            db.query(func.count(GlaucomaResultsCleaned.id))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+            .scalar()
+            or 0
+        )
         total_with_pdf = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
             .filter(GlaucomaResultsCleaned.report_file_name != "")
             .scalar()
@@ -52,7 +57,7 @@ def glaucoma_results():
                 PatientEncounters,
                 GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id,
             )
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .scalar()
             or 0
         )
@@ -72,14 +77,16 @@ def glaucoma_results():
         # Grouped KPIs from cleaned snapshot
         result_counts = (
             db.query(GlaucomaResultsCleaned.result, func.count(GlaucomaResultsCleaned.id))
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .group_by(GlaucomaResultsCleaned.result)
             .order_by(func.count(GlaucomaResultsCleaned.id).desc())
             .all()
         )
         qualitative_counts = (
             db.query(GlaucomaResultsCleaned.qualitative_result, func.count(GlaucomaResultsCleaned.id))
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.qualitative_result.isnot(None))
             .group_by(GlaucomaResultsCleaned.qualitative_result)
             .order_by(func.count(GlaucomaResultsCleaned.id).desc())
@@ -90,14 +97,16 @@ def glaucoma_results():
         raw_right_vals = [
             float(r[0])
             for r in db.query(GlaucomaResultsCleaned.vcdr_right_num)
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.vcdr_right_num.isnot(None))
             .all()
         ]
         raw_left_vals = [
             float(r[0])
             for r in db.query(GlaucomaResultsCleaned.vcdr_left_num)
-            .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+            .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
             .filter(GlaucomaResultsCleaned.vcdr_left_num.isnot(None))
             .all()
         ]
@@ -181,6 +190,11 @@ def glaucoma_list():
 
     db = Session()
     try:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+
         # Build ordered list of distinct dates with data
         date_rows = (
             db.query(PatientEncounters.capture_date_dt)
@@ -341,18 +355,21 @@ def glaucoma_clean_workflow():
         )
         cleaned_total_before = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .scalar() or 0
         )
         cleaned_missing_num_before = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
               .scalar() or 0
         )
         cleaned_with_pdf_before = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
               .filter(GlaucomaResultsCleaned.report_file_name != "")
               .scalar() or 0
@@ -415,18 +432,21 @@ def glaucoma_clean_workflow():
         # --- AFTER metrics ---
         cleaned_total_after = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .scalar() or 0
         )
         cleaned_missing_num_after = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter((GlaucomaResultsCleaned.vcdr_right_num.is_(None)) | (GlaucomaResultsCleaned.vcdr_left_num.is_(None)))
               .scalar() or 0
         )
         cleaned_with_pdf_after = (
             db.query(func.count(GlaucomaResultsCleaned.id))
-              .filter(GlaucomaResultsCleaned.lab_unit_id.in_(allowed_lab_units))
+              .join(PatientEncounters, GlaucomaResultsCleaned.patient_encounter_id == PatientEncounters.id)
+              .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
               .filter(GlaucomaResultsCleaned.report_file_name.isnot(None))
               .filter(GlaucomaResultsCleaned.report_file_name != "")
               .scalar() or 0

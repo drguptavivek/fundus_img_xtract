@@ -234,6 +234,13 @@
             </div>
           </div>
           {% if performance.binary_metrics and not performance.multi_class %}
+          <div class="alert alert-info m-3 mb-0 small">
+            Threshold only changes the binary counts (TP/FP/TN/FN) by comparing AI probabilities to the cutoff.
+            The predicted label/class you see is fixed from the AI grade; the threshold can still flip a case between positive/negative in this table if its probability crosses the cutoff.
+            If no AI probabilities are parsed, the threshold has no effect (predicted positive defaults to “predicted class == positive class”).
+            ROC/AUC sweep all thresholds and do not depend on this cutoff.
+          </div>
+          <div class="border-top my-0"></div>
           <div class="table-responsive">
             <table class="table table-sm mb-0 align-middle">
               <thead>
@@ -271,6 +278,19 @@
                 </tr>
                 {% endfor %}
                 <tr>
+                  <th scope="row">AUC (ROC)</th>
+                  <td class="text-end">
+                    {% if performance.auc is not none %}
+                      {{ '%.3f'|format(performance.auc) }}
+                    {% else %}-{% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if performance.auc_ci and performance.auc_ci[0] is not none and performance.auc_ci[1] is not none %}
+                      {{ '%.3f'|format(performance.auc_ci[0]) }} - {{ '%.3f'|format(performance.auc_ci[1]) }}
+                    {% else %}-{% endif %}
+                  </td>
+                </tr>
+                <tr>
                   <th scope="row">Support</th>
                   <td class="text-end">{{ performance.binary_metrics.support }}</td>
                   <td class="text-end">TP: {{ performance.binary_metrics.tp }}, FP: {{ performance.binary_metrics.fp }}, TN: {{ performance.binary_metrics.tn }}, FN: {{ performance.binary_metrics.fn }}</td>
@@ -278,6 +298,11 @@
               </tbody>
             </table>
           </div>
+          {% if not performance.roc_available %}
+            <div class="alert alert-info m-3 mb-0">
+              AUC/ROC needs AI probability scores; none were parsed from the grades, so ROC was skipped.
+            </div>
+          {% endif %}
           {% if not performance.binary_ci_computed %}
             <div class="alert alert-warning m-3 mb-0">
               95% CIs not computed (need at least 20 cases); current sample size: {{ performance.binary_sample_size }}.
@@ -378,7 +403,23 @@
       <div class="col-12 col-lg-6">
         <div class="card h-100 shadow-sm">
           <div class="card-header">
-            <h2 class="h5 mb-0">ROC Curve</h2>
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+              <div>
+                <h2 class="h5 mb-0">ROC Curve</h2>
+                <p class="mb-0 text-muted small">
+                  AUC:
+                  {% if performance.auc is not none %}
+                    {{ '%.3f'|format(performance.auc) }}
+                    {% if performance.auc_ci and performance.auc_ci[0] is not none and performance.auc_ci[1] is not none %}
+                      (95% CI {{ '%.3f'|format(performance.auc_ci[0]) }} - {{ '%.3f'|format(performance.auc_ci[1]) }})
+                    {% endif %}
+                  {% else %}
+                    not available (probability scores missing)
+                  {% endif %}
+                </p>
+              </div>
+              <div class="text-muted small">ROC sample size: {{ performance.binary_sample_size }}</div>
+            </div>
           </div>
           {% if performance.roc_available and performance.roc_points %}
             <div class="p-3" style="height: 480px;">

@@ -1284,7 +1284,8 @@ You can use a more specific selector like html[data-theme='dark'] or a class on 
   background-repeat: no-repeat;
   background-size: 200% 200%;
   background-position: center;
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
+  background-color: #000;
 }
 
 [data-bs-theme="dark"] .imggr-loupe {

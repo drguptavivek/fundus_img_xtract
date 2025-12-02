@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 import logging
 import json
 from json import JSONDecodeError
+import re
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -17,6 +18,12 @@ from . import bp
 
 # Initialize grades logger for review grade submissions
 grades_logger = logging.getLogger("grades")
+
+AI_REVIEW_STATUS_LABELS: dict[str, str] = {
+    "ok": "OK",
+    "minor_miss": "Minor miss",
+    "major_miss": "Major miss",
+}
 
 
 def _parse_selected_features(selected_features_json: str | None) -> list[dict[str, object] | str]:
@@ -32,6 +39,14 @@ def _parse_selected_features(selected_features_json: str | None) -> list[dict[st
         grades_logger.warning("Failed to parse stored review selected_features_json", exc_info=True)
 
     return []
+
+
+def _extract_ai_probability(comment: str | None) -> str | None:
+    """Pull AI probability substring from a stored comment, if present."""
+    if not comment:
+        return None
+    match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
+    return match.group(1) if match else None
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -86,6 +101,35 @@ def review_task_details(task_id: int):
         existing_selected_features = _parse_selected_features(
             existing_review_grade.selected_features_json if existing_review_grade else None
         )
+
+        ai_grades = (
+            db.query(Grade)
+            .filter(Grade.task_id == task_id, Grade.role_slot == "ai")
+            .options(joinedload(Grade.ai_model), joinedload(Grade.label))
+            .all()
+        )
+
+        ai_grades_for_display: list[dict[str, object]] = []
+        for ai_grade in ai_grades:
+            ai_grades_for_display.append(
+                {
+                    "id": ai_grade.id,
+                    "impression": ai_grade.grade_name
+                    or (ai_grade.label.impression if ai_grade.label else None),
+                    "comment": ai_grade.comment,
+                    "ai_model_name": ai_grade.ai_model_name
+                    or (ai_grade.ai_model.name if ai_grade.ai_model else None),
+                    "ai_model_version": ai_grade.ai_model_version
+                    or (ai_grade.ai_model.version if ai_grade.ai_model else None),
+                    "ai_probability": _extract_ai_probability(ai_grade.comment),
+                    "review_status": ai_grade.ai_review_status,
+                    "review_comment": ai_grade.ai_review_comment,
+                }
+            )
+
+        ai_grade_meta: dict[int, dict[str, object]] = {
+            entry["id"]: entry for entry in ai_grades_for_display if isinstance(entry.get("id"), int)
+        }
 
         # Handle POST request for submitting review grade
         if request.method == 'POST' and can_review:
@@ -180,12 +224,14 @@ def review_task_details(task_id: int):
             log_message = f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] [Task ID: {task_id}] [Slot Type: review] [Disease ID: {task.disease_id}] [Grade: {grading_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
             if comment:
                 log_message += f" [Comments - {comment}]"
-                
+
             # If this is a revision, also log the previous grade and comment
             if is_revision and prev_grade_id is not None:
                 prev_comment_display = prev_comment if prev_comment else "None"
                 log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
-            
+
+            ai_feedback_logs: list[str] = []
+
             # Log using dedicated grades logger
             grades_logger.info(log_message)
             
@@ -233,6 +279,37 @@ def review_task_details(task_id: int):
                     grading_id,
                     previous_consensus_method,
                     previous_consensus_grade_id,
+                )
+
+            allowed_ai_statuses = set(AI_REVIEW_STATUS_LABELS.keys())
+            for ai_grade in ai_grades:
+                status_field = f"ai_review_status_{ai_grade.id}"
+                comment_field = f"ai_review_comment_{ai_grade.id}"
+                submitted_status = (request.form.get(status_field) or "").strip().lower() or None
+                submitted_comment = (request.form.get(comment_field) or "").strip() or None
+
+                if submitted_status and submitted_status not in allowed_ai_statuses:
+                    flash('Invalid AI review selection submitted.', 'error')
+                    return redirect(url_for('review.review_task_details', task_id=task_id))
+
+                if submitted_status is None and submitted_comment is None:
+                    continue
+
+                ai_grade.ai_review_status = submitted_status
+                ai_grade.ai_review_comment = submitted_comment
+                ai_grade.ai_reviewed_by_user_id = current_user.id
+                ai_grade.ai_reviewed_at = datetime.now(timezone.utc)
+
+                ai_feedback_logs.append(
+                    f"AI grade {ai_grade.id} status={submitted_status or 'none'} model={ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'unknown')}"
+                )
+
+            if ai_feedback_logs:
+                grades_logger.info(
+                    "AI review feedback [user_id: %s] [task_id: %s] %s",
+                    current_user.id,
+                    task_id,
+                    "; ".join(ai_feedback_logs),
                 )
 
             db.commit()
@@ -297,4 +374,7 @@ def review_task_details(task_id: int):
             existing_selected_features=existing_selected_features,
             role_feature_map=role_feature_map,
             existing_consensus=existing_consensus,
+            ai_grades=ai_grades_for_display,
+            ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+            ai_grade_meta=ai_grade_meta,
         )

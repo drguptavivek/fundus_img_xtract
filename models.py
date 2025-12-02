@@ -576,6 +576,12 @@ class Grade(Base):
     start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # When grading started
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    ai_review_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ai_review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_reviewed_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True
+    )
+    ai_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # Denormalized fields for data integrity and historical preservation
     disease_name: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Copy of disease.name at time of grading
@@ -588,12 +594,17 @@ class Grade(Base):
     ai_model_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     
     task: Mapped['GradingTask'] = relationship('GradingTask', back_populates='grades')
-    grader: Mapped['User'] = relationship('User')
+    grader: Mapped['User'] = relationship('User', foreign_keys=[grader_user_id])
     label: Mapped['DiseaseGrading'] = relationship('DiseaseGrading')
     ai_model: Mapped[Optional["AIModel"]] = relationship("AIModel", back_populates="grades")
+    ai_reviewed_by: Mapped['User | None'] = relationship('User', foreign_keys=[ai_reviewed_by_user_id])
 
     __table_args__ = (
         CheckConstraint("role_slot IN ('resident','resident2','arbitrator','ai','review')", name='ck_grade_role_slot_valid'),
+        CheckConstraint(
+            "ai_review_status IS NULL OR ai_review_status IN ('ok','minor_miss','major_miss')",
+            name='ck_grade_ai_review_status_valid',
+        ),
         Index('ix_grade_task_slot', 'task_id', 'role_slot'),
         Index('ix_grade_user_slot', 'grader_user_id', 'role_slot'),
         UniqueConstraint('task_id', 'grader_user_id', 'role_slot', name='uq_grade_task_user_slot'),

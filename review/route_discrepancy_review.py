@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import jsonify, render_template, request
@@ -339,6 +340,19 @@ def get_disease_grading_id_by_impression(db: Session, impression: str) -> int | 
     return grading.id if grading else None
 
 
+def _extract_ai_probability(comment: Optional[str], provided: Optional[Any] = None) -> Optional[str]:
+    """Return AI probability from provided value or parsed comment."""
+    if provided is not None:
+        try:
+            return str(provided)
+        except Exception:
+            return None
+    if not comment:
+        return None
+    match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
+    return match.group(1) if match else None
+
+
 def _resolve_disease_key(db: Session, disease_id: int) -> str:
     """Map disease to mvw_image_listing_all column prefix."""
     disease = db.get(Disease, disease_id)
@@ -374,4 +388,7 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
         if role == "ai":
             result[role]["ai_model_name"] = item.get("ai_model_name")
             result[role]["ai_model_version"] = item.get("ai_model_version")
+            result[role]["ai_probability"] = _extract_ai_probability(
+                item.get("comment"), item.get("ai_probability")
+            )
     return result

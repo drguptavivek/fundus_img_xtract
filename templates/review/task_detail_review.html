@@ -60,10 +60,20 @@
                 {% if grade.role_slot == "resident" %}bg-secondary
                 {% elif grade.role_slot == "resident2" %}bg-info
                 {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
+                {% elif grade.role_slot == "ai" %}bg-primary
                 {% else %}bg-light text-dark{% endif %}">
                 {{ grade.role_slot|title }}
               </span>
               <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
+              {% if grade.role_slot == "ai" %}
+                {% set ai_meta = ai_grade_meta.get(grade.id) if ai_grade_meta else None %}
+                {% if ai_meta %}
+                <div class="small text-muted ms-2">
+                  {% if ai_meta.ai_model_name %}Model: {{ ai_meta.ai_model_name }}{% if ai_meta.ai_model_version %} v{{ ai_meta.ai_model_version }}{% endif %}{% endif %}
+                  {% if ai_meta.ai_probability %}<span class="ms-2">Prob: {{ ai_meta.ai_probability }}</span>{% endif %}
+                </div>
+                {% endif %}
+              {% endif %}
               {% set feature_list = role_feature_map.get(grade.role_slot) if role_feature_map else [] %}
               {% if feature_list %}
                 <div class="small text-muted ms-2">
@@ -137,6 +147,47 @@
           <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}" id="review-form">
             {{ csrf_field() }}
             
+            {% if ai_grades %}
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="mb-0">AI Grade Feedback</h6>
+                <span class="text-muted small">One entry per AI model</span>
+              </div>
+              {% for ai_grade in ai_grades %}
+              <div class="border rounded p-3 mb-3">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <div>
+                    <div class="fw-semibold">{{ ai_grade.impression or 'AI Grade' }}</div>
+                    <div class="text-muted small">
+                      {% if ai_grade.ai_model_name %}Model: {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version %} v{{ ai_grade.ai_model_version }}{% endif %}{% endif %}
+                      {% if ai_grade.ai_probability %}<span class="ms-2">Prob: {{ ai_grade.ai_probability }}</span>{% endif %}
+                    </div>
+                    {% if ai_grade.comment %}
+                    <div class="small text-muted">AI note: {{ ai_grade.comment }}</div>
+                    {% endif %}
+                  </div>
+                  <span class="badge bg-light text-dark">ID: {{ ai_grade.id }}</span>
+                </div>
+                <div class="row mt-2 g-2">
+                  <div class="col-md-4">
+                    <label class="form-label mb-1" for="ai-status-{{ ai_grade.id }}">Assessment</label>
+                    <select class="form-select form-select-sm" name="ai_review_status_{{ ai_grade.id }}" id="ai-status-{{ ai_grade.id }}">
+                      <option value="">No assessment</option>
+                      {% for status_key, status_label in ai_review_status_labels.items() %}
+                      <option value="{{ status_key }}" {% if ai_grade.review_status == status_key %}selected{% endif %}>{{ status_label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-8">
+                    <label class="form-label mb-1" for="ai-comment-{{ ai_grade.id }}">Doctor comment</label>
+                    <textarea class="form-control" name="ai_review_comment_{{ ai_grade.id }}" id="ai-comment-{{ ai_grade.id }}" rows="2" placeholder="Notes on AI performance">{{ ai_grade.review_comment or '' }}</textarea>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+
             <div class="row">
               <div class="col-md-8">
                 <div class="mb-3">

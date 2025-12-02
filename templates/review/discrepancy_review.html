@@ -458,6 +458,7 @@
                   {% if ai_grade %}
                     <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
                     {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} v{{ ai_grade.ai_model_version or '' }}</small>{% endif %}
+                    {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ ai_grade.ai_probability }}</small>{% endif %}
                     {% if ai_grade.comment %}<small class="text-muted d-block">Note: {{ ai_grade.comment[:30] }}{% if ai_grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
                   {% else %}
                     <span class="text-muted">No AI grade</span>

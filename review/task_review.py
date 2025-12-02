@@ -6,7 +6,6 @@ import json
 from json import JSONDecodeError
 import re
 import threading
-from urllib.parse import urlparse, parse_qs
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -16,7 +15,6 @@ from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
-from utils.review_navigation import get_next_review_tasks
 from datetime import datetime, timezone
 from . import bp
 
@@ -69,36 +67,6 @@ def _parse_queue(raw_queue: str | None) -> list[int]:
     return ids
 
 
-def _extract_discrepancy_filters(return_to: str | None) -> dict[str, object]:
-    """Extract discrepancy filter params from a return_to URL."""
-    if not return_to:
-        return {}
-    parsed = urlparse(return_to)
-    qs = parse_qs(parsed.query)
-
-    def _get_int(name: str) -> int | None:
-        val = qs.get(name, [None])[0]
-        try:
-            return int(val) if val is not None else None
-        except (TypeError, ValueError):
-            return None
-
-    def _get_list(name: str) -> list[str]:
-        vals = qs.get(name, [])
-        return [v for v in vals if v]
-
-    return {
-        "lab_unit_id": _get_int("lab_unit_id"),
-        "has_consensus": qs.get("has_consensus", [None])[0],
-        "has_review": qs.get("has_review", [None])[0],
-        "has_ai_grade": qs.get("has_ai_grade", [None])[0],
-        "ai_model_id": _get_int("ai_model_id"),
-        "ai_grades": _get_list("ai_grade"),
-        "resident_grades": _get_list("resident_grade"),
-        "resident2_grades": _get_list("resident2_grade"),
-        "arbitrator_grades": _get_list("arbitrator_grade"),
-        "final_grades": _get_list("final_grade"),
-    }
 
 
 def _kick_off_mv_refresh(app) -> None:
@@ -189,33 +157,6 @@ def review_task_details(task_id: int):
             except ValueError:
                 # current task not in queue; keep provided next ids if any
                 pass
-
-        discrepancy_filters = _extract_discrepancy_filters(return_to)
-        nav_next = {}
-        try:
-            nav_next = get_next_review_tasks(
-                db,
-                current_task_id=task_id,
-                disease_id=task.disease_id,
-                lab_unit_ids=list(user_lab_unit_ids),
-                lab_unit_id=discrepancy_filters.get("lab_unit_id"),
-                has_consensus=discrepancy_filters.get("has_consensus"),
-                has_review=discrepancy_filters.get("has_review"),
-                has_ai_grade=discrepancy_filters.get("has_ai_grade"),
-                ai_model_id=ai_model_id_filter or discrepancy_filters.get("ai_model_id"),
-                ai_grades=discrepancy_filters.get("ai_grades"),
-                resident_grades=discrepancy_filters.get("resident_grades"),
-                resident2_grades=discrepancy_filters.get("resident2_grades"),
-                arbitrator_grades=discrepancy_filters.get("arbitrator_grades"),
-                final_grades=discrepancy_filters.get("final_grades"),
-                limit=50,
-            )
-        except Exception:
-            grades_logger.warning("Failed to compute next review task via navigation util", exc_info=True)
-            nav_next = {}
-
-        next_task_id = nav_next.get("next_task_id") or next_task_id
-        next_after_task_id = nav_next.get("next_after_task_id") or next_after_task_id
 
         redirect_kwargs: dict[str, object] = {"task_id": task_id}
         ai_grades_query = (

@@ -535,7 +535,7 @@
                   <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                   {% endif %}
                   {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None) %}
-                  <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param, return_to=request.full_path, next_task_id=task.next_task_id, next_after_task_id=task.next_after_task_id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                  <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param, return_to=request.full_path, next_task_id=task.next_task_id, next_after_task_id=task.next_after_task_id, task_queue=queue_str) }}" class="btn btn-sm btn-outline-secondary">Review</a>
                 </td>
                 </td>
               </tr>

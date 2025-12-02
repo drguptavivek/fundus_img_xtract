@@ -150,11 +150,11 @@
             {% if ai_grades %}
             <div class="mb-3">
               <div class="d-flex align-items-center justify-content-between mb-2">
-                <h6 class="mb-0">AI Grade Feedback</h6>
-                <span class="text-muted small">One entry per AI model</span>
+                <h6 class="mb-0">AI Model's Grade Feedback</h6>
+                <span class="text-muted small">Use if you feel AI model result has error</span>
               </div>
               <div class="alert alert-info small mb-3">
-                <strong>When to use:</strong> If the human grade looks correct but the AI output seems off, record whether the AI was OK, a minor miss, or a major miss, and add a short rationale. This does <em>not</em> change the final grade.
+                <strong>When to use:</strong> If the  AI output seems off, record whether the AI was OK, a minor miss, or a major miss, and add a short rationale. This does <em>not</em> change the final grade.
               </div>
               {% for ai_grade in ai_grades %}
               <div class="border rounded p-3 mb-3">
@@ -201,7 +201,7 @@
           </div>
 
                   <div class="alert alert-warning py-2 px-3 small mt-2 mb-2">
-                    <strong>Grade revisions:</strong> Pick a new grade when the image was graded incorrectly . This updates the review grade and, if the task is final, overwrites the consensus.
+                    <strong>When to use:</strong> Pick a new grade when the image was graded incorrectly . This updates the review grade and, if the task is final, overwrites the consensus.
                   </div>
                   <div class="d-flex flex-column gap-2" role="group" aria-label="Review Grade">
                     {% for grade in available_grades %}
@@ -223,7 +223,7 @@
               
               <div class="col-md-4">
                 <div class="mb-3">
-                  <label class="form-label">Comments (optional)</label>
+                  <label class="form-label">Comments on why Human Grade is being revised</label>
                   <textarea name="comment" class="form-control" rows="4" placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
                 </div>
                 

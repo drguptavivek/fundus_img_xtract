@@ -64,7 +64,10 @@
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
     <h3>Discrepancy Review</h3>
-    {% include "components/mv_refresh_button.html" with context %}
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.my_reviews') }}">My Reviews</a>
+      {% include "components/mv_refresh_button.html" with context %}
+    </div>
   </div>
 
   <!-- Filter Section -->
@@ -532,7 +535,7 @@
                   <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                   {% endif %}
                   {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None) %}
-                  <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                  <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param, return_to=request.full_path) }}" class="btn btn-sm btn-outline-secondary">Review</a>
                 </td>
                 </td>
               </tr>

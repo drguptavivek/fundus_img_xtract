@@ -235,12 +235,18 @@
                        </a>
                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
                          <li>
-                           <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
-                             href="{{ url_for('grading.index') }}">Image Grading</a>
+                          <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
+                            href="{{ url_for('grading.index') }}">Image Grading</a>
                          </li>
                   
                           <li>
                             <a class="dropdown-item" href = "{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
+                         </li>
+
+                         <li>
+                           <a class="dropdown-item {{ 'active' if request.endpoint == 'review.my_reviews' else '' }}" href="{{ url_for('review.my_reviews') }}">
+                             My Reviews
+                           </a>
                          </li>
 
                           <li>

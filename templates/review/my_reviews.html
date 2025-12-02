@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}My Reviews{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
+    <h3 class="mb-0">My Reviews</h3>
+    <div class="d-flex align-items-center gap-2">
+      <label for="review-date-filter" class="form-label mb-0 small text-muted">Filter by date</label>
+      <input type="date" id="review-date-filter" class="form-control form-control-sm" value="{{ filter_date or '' }}" style="width: 200px;">
+      <button class="btn btn-sm btn-outline-secondary" id="clear-date-filter">Clear</button>
+    </div>
+  </div>
+
+  {% if reviews %}
+  <div class="table-responsive mb-3">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Task</th>
+          <th scope="col">Disease</th>
+          <th scope="col">Grade</th>
+          <th scope="col">Comment</th>
+          <th scope="col">Lab / Hospital</th>
+          <th scope="col">Updated</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reviews %}
+        <tr>
+          <td class="text-nowrap">
+            {% if r.task_id %}
+              <code>{{ r.task_id }}</code>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>{{ r.disease_name or '—' }}</td>
+          <td>
+            <span class="badge bg-primary">{{ r.grade_impression or '—' }}</span>
+          </td>
+          <td class="text-muted">
+            {% if r.comment %}{{ r.comment }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            <div>{{ r.lab_unit_name or '—' }}</div>
+            <div class="small text-muted">{{ r.hospital_name or '' }}</div>
+          </td>
+          <td class="text-nowrap">{{ (r.updated_at or r.created_at).strftime('%Y-%m-%d %H:%M') if (r.updated_at or r.created_at) else '—' }}</td>
+          <td class="text-end">
+            {% if r.task_id %}
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('review.review_task_details', task_id=r.task_id, return_to=request.full_path) }}">Open</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="small text-muted">
+      Page {{ page }} of {{ total_pages or 1 }}
+    </div>
+    <div class="btn-group btn-group-sm" role="group">
+      <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{% if has_prev %}{{ url_for('review.my_reviews', page=page-1, date=filter_date) }}{% else %}#{% endif %}">Prev</a>
+      <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{% if has_next %}{{ url_for('review.my_reviews', page=page+1, date=filter_date) }}{% else %}#{% endif %}">Next</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-info">You have not submitted any review grades yet.</div>
+  {% endif %}
+</div>
+
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+document.addEventListener('DOMContentLoaded', function() {
+  const dateInput = document.getElementById('review-date-filter');
+  const clearBtn = document.getElementById('clear-date-filter');
+
+  if (dateInput) {
+    dateInput.addEventListener('change', () => {
+      const url = new URL(window.location);
+      if (dateInput.value) {
+        url.searchParams.set('date', dateInput.value);
+      } else {
+        url.searchParams.delete('date');
+      }
+      url.searchParams.delete('page');
+      window.location = url.toString();
+    });
+  }
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      const url = new URL(window.location);
+      url.searchParams.delete('date');
+      url.searchParams.delete('page');
+      window.location = url.toString();
+    });
+  }
+});
+</script>
+{% endblock %}

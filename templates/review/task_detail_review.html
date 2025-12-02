@@ -144,7 +144,7 @@
           {% endif %}
         </div>
         <div class="card-body">
-          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id) }}" id="review-form">
+          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_model_id_filter, return_to=return_to) }}" id="review-form">
             {{ csrf_field() }}
             
             {% if ai_grades %}
@@ -192,9 +192,14 @@
               <div class="col-md-8">
                 <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center">
-                    <label class="form-label mb-0">Review and Revise Grade for <strong>{{ task.disease }}</strong></label>
+                    <label class="form-label mb-0">Review and Revise Human Grade for <strong>{{ task.disease }}</strong></label>
                     <span class="small text-muted">Use this only when revising the human/consensus grade.</span>
                   </div>
+                            <div class="row">
+
+                      <p>Current Human Grader Impression:  <strong>{{ existing_consensus.final_grade_name or 'N/A' }}</strong></p>
+          </div>
+
                   <div class="alert alert-warning py-2 px-3 small mt-2 mb-2">
                     <strong>Grade revisions:</strong> Pick a new grade when the image was graded incorrectly . This updates the review grade and, if the task is final, overwrites the consensus.
                   </div>
@@ -275,21 +280,21 @@
         <div class="card-body">
           <div class="row">
             <div class="col-sm-6">
-              {% set method_label = {
-                'match': 'Match',
-                'adjudication': 'Adjudication',
-                'task_review': 'Review override'
-              }.get(existing_consensus.method, existing_consensus.method) %}
-              <p><strong>Method:</strong> {{ method_label }}</p>
+                    {% set method_label = {
+                      'match': 'Match',
+                      'adjudication': 'Adjudication',
+                      'task_review': 'Review override'
+                    }.get(existing_consensus.method, existing_consensus.method) %}
+                    <p><strong>Method:</strong> {{ method_label }}</p>
             </div>
             <div class="col-sm-6">
-              <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if existing_consensus.decided_at else 'N/A' }}</p>
+                  <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if existing_consensus.decided_at else 'N/A' }}</p>
             </div>
-          </div>
-          <p><strong>Final Impression:</strong> {{ existing_consensus.final_grade_name or 'N/A' }}</p>
+                      <p><strong>Final Impression:</strong> {{ existing_consensus.final_grade_name or 'N/A' }}</p>
           {% if existing_consensus.decided_by %}
             <p><strong>Decided By:</strong> {{ existing_consensus.decided_by.username }}</p>
           {% endif %}
+          </div>
         </div>
       </div>
     </div>

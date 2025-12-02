@@ -1,10 +1,11 @@
-from flask import render_template, request, flash, redirect, url_for
+from flask import render_template, request, flash, redirect, url_for, current_app
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 import logging
 import json
 from json import JSONDecodeError
 import re
+import threading
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -13,6 +14,7 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
+from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
 from datetime import datetime, timezone
 from . import bp
 
@@ -47,6 +49,25 @@ def _extract_ai_probability(comment: str | None) -> str | None:
         return None
     match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
     return match.group(1) if match else None
+
+
+def _kick_off_mv_refresh(app) -> None:
+    """Trigger materialized view refresh asynchronously to avoid blocking response."""
+    try:
+        from utils.materialized_view_scheduler import refresh_materialized_view
+    except Exception:
+        grades_logger.warning("Materialized view scheduler import failed", exc_info=True)
+        return
+
+    def _worker():
+        try:
+            with app.app_context():
+                refresh_materialized_view(app, "manual")
+        except Exception:
+            grades_logger.warning("Materialized view refresh after review failed", exc_info=True)
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
 
 
 @bp.route("/reviewTaskDetails/<int:task_id>", methods=["GET", "POST"])
@@ -103,6 +124,7 @@ def review_task_details(task_id: int):
         )
 
         ai_model_id_filter = request.args.get("ai_model_id", type=int)
+        return_to = request.args.get("return_to")
         redirect_kwargs: dict[str, object] = {"task_id": task_id}
         ai_grades_query = (
             db.query(Grade)
@@ -112,6 +134,8 @@ def review_task_details(task_id: int):
         if ai_model_id_filter:
             ai_grades_query = ai_grades_query.filter(Grade.ai_model_id == ai_model_id_filter)
             redirect_kwargs["ai_model_id"] = ai_model_id_filter
+        if return_to:
+            redirect_kwargs["return_to"] = return_to
         ai_grades = ai_grades_query.all()
 
         ai_grades_for_display: list[dict[str, object]] = []
@@ -319,7 +343,13 @@ def review_task_details(task_id: int):
 
             db.commit()
             flash('Review grade submitted successfully', 'success')
-            return redirect(url_for('review.review_task_details', **redirect_kwargs))
+            try:
+                _kick_off_mv_refresh(current_app._get_current_object())
+            except Exception:
+                grades_logger.warning("Post-review MV refresh trigger failed", exc_info=True)
+            if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+                return redirect(return_to)
+            return redirect(url_for('review.discrepancy_review'))
         
         # Get available grades for the disease
         available_grades = fetch_active_disease_gradings(db, task.disease_id)
@@ -382,4 +412,39 @@ def review_task_details(task_id: int):
             ai_grades=ai_grades_for_display,
             ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
             ai_grade_meta=ai_grade_meta,
+            ai_model_id_filter=ai_model_id_filter,
+            return_to=return_to,
+        )
+
+
+@bp.route("/my-reviews")
+@roles_required("admin", "local_admin", "data_manager", "optometrist")
+def my_reviews():
+    """List review grades submitted by the current user."""
+    page = request.args.get("page", 1, type=int)
+    per_page = 20
+    filter_date = request.args.get("date")
+
+    with get_db_session() as db:
+        reviews, total_count = get_user_gradings_with_details(
+            db,
+            user_id=current_user.id,
+            page=page,
+            per_page=per_page,
+            role_slot="review",
+            filter_date=filter_date,
+        )
+
+        total_pages = (total_count + per_page - 1) // per_page
+        has_prev = page > 1
+        has_next = page < total_pages
+
+        return render_template(
+            "review/my_reviews.html",
+            reviews=reviews,
+            page=page,
+            total_pages=total_pages,
+            has_prev=has_prev,
+            has_next=has_next,
+            filter_date=filter_date,
         )

@@ -6,6 +6,7 @@ import json
 from json import JSONDecodeError
 import re
 import threading
+from urllib.parse import urlparse, parse_qs
 
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
@@ -15,6 +16,7 @@ from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
+from utils.review_navigation import get_next_review_tasks
 from datetime import datetime, timezone
 from . import bp
 
@@ -49,6 +51,54 @@ def _extract_ai_probability(comment: str | None) -> str | None:
         return None
     match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
     return match.group(1) if match else None
+
+
+def _parse_queue(raw_queue: str | None) -> list[int]:
+    """Parse comma-separated task ids into an int list."""
+    if not raw_queue:
+        return []
+    ids: list[int] = []
+    for part in raw_queue.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            continue
+    return ids
+
+
+def _extract_discrepancy_filters(return_to: str | None) -> dict[str, object]:
+    """Extract discrepancy filter params from a return_to URL."""
+    if not return_to:
+        return {}
+    parsed = urlparse(return_to)
+    qs = parse_qs(parsed.query)
+
+    def _get_int(name: str) -> int | None:
+        val = qs.get(name, [None])[0]
+        try:
+            return int(val) if val is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    def _get_list(name: str) -> list[str]:
+        vals = qs.get(name, [])
+        return [v for v in vals if v]
+
+    return {
+        "lab_unit_id": _get_int("lab_unit_id"),
+        "has_consensus": qs.get("has_consensus", [None])[0],
+        "has_review": qs.get("has_review", [None])[0],
+        "has_ai_grade": qs.get("has_ai_grade", [None])[0],
+        "ai_model_id": _get_int("ai_model_id"),
+        "ai_grades": _get_list("ai_grade"),
+        "resident_grades": _get_list("resident_grade"),
+        "resident2_grades": _get_list("resident2_grade"),
+        "arbitrator_grades": _get_list("arbitrator_grade"),
+        "final_grades": _get_list("final_grade"),
+    }
 
 
 def _kick_off_mv_refresh(app) -> None:
@@ -125,6 +175,48 @@ def review_task_details(task_id: int):
 
         ai_model_id_filter = request.args.get("ai_model_id", type=int)
         return_to = request.args.get("return_to")
+        task_queue_raw = request.args.get("task_queue")
+        task_queue_ids = _parse_queue(task_queue_raw)
+        next_task_id = request.args.get("next_task_id", type=int)
+        next_after_task_id = request.args.get("next_after_task_id", type=int)
+
+        # Derive next tasks from queue if present
+        if task_queue_ids:
+            try:
+                current_index = task_queue_ids.index(task_id)
+                next_task_id = task_queue_ids[current_index + 1] if current_index + 1 < len(task_queue_ids) else None
+                next_after_task_id = task_queue_ids[current_index + 2] if current_index + 2 < len(task_queue_ids) else None
+            except ValueError:
+                # current task not in queue; keep provided next ids if any
+                pass
+
+        discrepancy_filters = _extract_discrepancy_filters(return_to)
+        nav_next = {}
+        try:
+            nav_next = get_next_review_tasks(
+                db,
+                current_task_id=task_id,
+                disease_id=task.disease_id,
+                lab_unit_ids=list(user_lab_unit_ids),
+                lab_unit_id=discrepancy_filters.get("lab_unit_id"),
+                has_consensus=discrepancy_filters.get("has_consensus"),
+                has_review=discrepancy_filters.get("has_review"),
+                has_ai_grade=discrepancy_filters.get("has_ai_grade"),
+                ai_model_id=ai_model_id_filter or discrepancy_filters.get("ai_model_id"),
+                ai_grades=discrepancy_filters.get("ai_grades"),
+                resident_grades=discrepancy_filters.get("resident_grades"),
+                resident2_grades=discrepancy_filters.get("resident2_grades"),
+                arbitrator_grades=discrepancy_filters.get("arbitrator_grades"),
+                final_grades=discrepancy_filters.get("final_grades"),
+                limit=50,
+            )
+        except Exception:
+            grades_logger.warning("Failed to compute next review task via navigation util", exc_info=True)
+            nav_next = {}
+
+        next_task_id = nav_next.get("next_task_id") or next_task_id
+        next_after_task_id = nav_next.get("next_after_task_id") or next_after_task_id
+
         redirect_kwargs: dict[str, object] = {"task_id": task_id}
         ai_grades_query = (
             db.query(Grade)
@@ -136,6 +228,12 @@ def review_task_details(task_id: int):
             redirect_kwargs["ai_model_id"] = ai_model_id_filter
         if return_to:
             redirect_kwargs["return_to"] = return_to
+        if next_task_id:
+            redirect_kwargs["next_task_id"] = next_task_id
+        if next_after_task_id:
+            redirect_kwargs["next_after_task_id"] = next_after_task_id
+        if task_queue_raw:
+            redirect_kwargs["task_queue"] = task_queue_raw
         ai_grades = ai_grades_query.all()
 
         ai_grades_for_display: list[dict[str, object]] = []
@@ -164,7 +262,65 @@ def review_task_details(task_id: int):
         if request.method == 'POST' and can_review:
             grading_id = request.form.get('grading_id', type=int)
             comment = request.form.get('comment', '')
+            action = request.form.get('action') or 'save'
+            form_next_task_id = request.form.get('next_task_id', type=int)
+            form_next_after_task_id = request.form.get('next_after_task_id', type=int)
+            target_next_task_id = form_next_task_id or next_task_id
+            target_next_after_task_id = form_next_after_task_id or next_after_task_id
             raw_selected_features = request.form.getlist('selected_features')
+            task_queue_raw = request.form.get("task_queue") or task_queue_raw
+
+            ai_feedback_payload: list[dict[str, object]] = []
+            ai_feedback_present = False
+            allowed_ai_statuses = set(AI_REVIEW_STATUS_LABELS.keys())
+            for ai_grade in ai_grades:
+                status_field = f"ai_review_status_{ai_grade.id}"
+                comment_field = f"ai_review_comment_{ai_grade.id}"
+                submitted_status = (request.form.get(status_field) or "").strip().lower() or None
+                submitted_comment = (request.form.get(comment_field) or "").strip() or None
+
+                if submitted_status and submitted_status not in allowed_ai_statuses:
+                    flash('Invalid AI review selection submitted.', 'error')
+                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
+
+                if submitted_status is None and submitted_comment is None:
+                    continue
+
+                ai_feedback_present = True
+                ai_feedback_payload.append(
+                    {
+                        "grade_obj": ai_grade,
+                        "status": submitted_status,
+                        "comment": submitted_comment,
+                    }
+                )
+
+            if action == "cancel_next":
+                if return_to and return_to.startswith("/") and not return_to.startswith("//") and target_next_task_id:
+                    return redirect(
+                        url_for(
+                            'review.review_task_details',
+                            task_id=target_next_task_id,
+                            ai_model_id=ai_model_id_filter,
+                            return_to=return_to,
+                            next_task_id=target_next_after_task_id,
+                            task_queue=task_queue_raw,
+                        )
+                    )
+                if target_next_task_id:
+                    return redirect(
+                        url_for(
+                            'review.review_task_details',
+                            task_id=target_next_task_id,
+                            ai_model_id=ai_model_id_filter,
+                            next_task_id=target_next_after_task_id,
+                            task_queue=task_queue_raw,
+                        )
+                    )
+                if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+                    return redirect(return_to)
+                return redirect(url_for('review.discrepancy_review'))
+
             selected_feature_ids: list[int] = []
             for raw_feature in raw_selected_features:
                 if raw_feature is None or raw_feature == "":
@@ -184,26 +340,28 @@ def review_task_details(task_id: int):
 
             selected_features_json: str | None = None
 
-            if not grading_id:
+            if not grading_id and not ai_feedback_present:
                 flash('Please select a grade', 'error')
                 return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             # Get the disease grading
-            disease_grading = (
-                db.query(DiseaseGrading)
-                .filter(
-                    DiseaseGrading.id == grading_id,
-                    DiseaseGrading.disease_id == task.disease_id,
-                    DiseaseGrading.is_active.is_(True),
+            disease_grading = None
+            if grading_id:
+                disease_grading = (
+                    db.query(DiseaseGrading)
+                    .filter(
+                        DiseaseGrading.id == grading_id,
+                        DiseaseGrading.disease_id == task.disease_id,
+                        DiseaseGrading.is_active.is_(True),
+                    )
+                    .first()
                 )
-                .first()
-            )
-            
-            if not disease_grading:
-                flash('Invalid grade selected', 'error')
-                return redirect(url_for('review.review_task_details', **redirect_kwargs))
+                
+                if not disease_grading:
+                    flash('Invalid grade selected', 'error')
+                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
-            if unique_feature_ids:
+            if grading_id and unique_feature_ids:
                 available_features = (
                     db.query(GradingsFeatures)
                     .filter(GradingsFeatures.disease_grading_id == grading_id)
@@ -265,72 +423,61 @@ def review_task_details(task_id: int):
             grades_logger.info(log_message)
             
             # Create or update review grade
-            if existing_review_grade:
-                existing_review_grade.disease_grading_id = grading_id
-                existing_review_grade.comment = comment
-                existing_review_grade.grade_name = disease_grading.impression
-                existing_review_grade.disease_name = task.disease.name if task.disease else None
-                existing_review_grade.grade_description = disease_grading.guidelines
-                existing_review_grade.selected_features_json = selected_features_json
-                existing_review_grade.updated_at = datetime.now(timezone.utc)
-            else:
-                new_review_grade = Grade(
-                    task_id=task_id,
-                    grader_user_id=current_user.id,
-                    role_slot='review',
-                    disease_grading_id=grading_id,
-                    comment=comment,
-                    grade_name=disease_grading.impression,
-                    disease_name=task.disease.name if task.disease else None,
-                    grade_description=disease_grading.guidelines,
-                    selected_features_json=selected_features_json,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc)
-                )
-                db.add(new_review_grade)
+            if grading_id and disease_grading:
+                if existing_review_grade:
+                    existing_review_grade.disease_grading_id = grading_id
+                    existing_review_grade.comment = comment
+                    existing_review_grade.grade_name = disease_grading.impression
+                    existing_review_grade.disease_name = task.disease.name if task.disease else None
+                    existing_review_grade.grade_description = disease_grading.guidelines
+                    existing_review_grade.selected_features_json = selected_features_json
+                    existing_review_grade.updated_at = datetime.now(timezone.utc)
+                else:
+                    new_review_grade = Grade(
+                        task_id=task_id,
+                        grader_user_id=current_user.id,
+                        role_slot='review',
+                        disease_grading_id=grading_id,
+                        comment=comment,
+                        grade_name=disease_grading.impression,
+                        disease_name=task.disease.name if task.disease else None,
+                        grade_description=disease_grading.guidelines,
+                        selected_features_json=selected_features_json,
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc)
+                    )
+                    db.add(new_review_grade)
 
-            # If task already final, overwrite/create consensus with review grade
-            if task.state == "final":
-                consensus_record = previous_consensus or Consensus(task_id=task_id)
-                consensus_record.final_disease_grading_id = grading_id
-                consensus_record.method = "task_review"
-                consensus_record.decided_by_user_id = current_user.id
-                consensus_record.decided_at = datetime.now(timezone.utc)
-                consensus_record.final_disease_name = task.disease.name if task.disease else None
-                consensus_record.final_grade_name = disease_grading.impression
-                consensus_record.final_grade_description = disease_grading.guidelines
-                db.add(consensus_record)
-                grades_logger.info(
-                    "Consensus override via review [user_id: %s] [task_id: %s] [new_grade_id: %s] "
-                    "[prev_method: %s] [prev_grade_id: %s]",
-                    current_user.id,
-                    task_id,
-                    grading_id,
-                    previous_consensus_method,
-                    previous_consensus_grade_id,
-                )
+                # If task already final, overwrite/create consensus with review grade
+                if task.state == "final":
+                    consensus_record = previous_consensus or Consensus(task_id=task_id)
+                    consensus_record.final_disease_grading_id = grading_id
+                    consensus_record.method = "task_review"
+                    consensus_record.decided_by_user_id = current_user.id
+                    consensus_record.decided_at = datetime.now(timezone.utc)
+                    consensus_record.final_disease_name = task.disease.name if task.disease else None
+                    consensus_record.final_grade_name = disease_grading.impression
+                    consensus_record.final_grade_description = disease_grading.guidelines
+                    db.add(consensus_record)
+                    grades_logger.info(
+                        "Consensus override via review [user_id: %s] [task_id: %s] [new_grade_id: %s] "
+                        "[prev_method: %s] [prev_grade_id: %s]",
+                        current_user.id,
+                        task_id,
+                        grading_id,
+                        previous_consensus_method,
+                        previous_consensus_grade_id,
+                    )
 
-            allowed_ai_statuses = set(AI_REVIEW_STATUS_LABELS.keys())
-            for ai_grade in ai_grades:
-                status_field = f"ai_review_status_{ai_grade.id}"
-                comment_field = f"ai_review_comment_{ai_grade.id}"
-                submitted_status = (request.form.get(status_field) or "").strip().lower() or None
-                submitted_comment = (request.form.get(comment_field) or "").strip() or None
-
-                if submitted_status and submitted_status not in allowed_ai_statuses:
-                    flash('Invalid AI review selection submitted.', 'error')
-                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
-
-                if submitted_status is None and submitted_comment is None:
-                    continue
-
-                ai_grade.ai_review_status = submitted_status
-                ai_grade.ai_review_comment = submitted_comment
-                ai_grade.ai_reviewed_by_user_id = current_user.id
-                ai_grade.ai_reviewed_at = datetime.now(timezone.utc)
+            for payload in ai_feedback_payload:
+                ai_grade_obj = payload["grade_obj"]
+                ai_grade_obj.ai_review_status = payload["status"]
+                ai_grade_obj.ai_review_comment = payload["comment"]
+                ai_grade_obj.ai_reviewed_by_user_id = current_user.id
+                ai_grade_obj.ai_reviewed_at = datetime.now(timezone.utc)
 
                 ai_feedback_logs.append(
-                    f"AI grade {ai_grade.id} status={submitted_status or 'none'} model={ai_grade.ai_model_name or (ai_grade.ai_model.name if ai_grade.ai_model else 'unknown')}"
+                    f"AI grade {ai_grade_obj.id} status={payload['status'] or 'none'} model={ai_grade_obj.ai_model_name or (ai_grade_obj.ai_model.name if ai_grade_obj.ai_model else 'unknown')}"
                 )
 
             if ai_feedback_logs:
@@ -342,13 +489,35 @@ def review_task_details(task_id: int):
                 )
 
             db.commit()
-            flash('Review grade submitted successfully', 'success')
+            success_message = 'Review grade submitted successfully' if grading_id else 'AI feedback submitted successfully'
+            flash(success_message, 'success')
             try:
                 _kick_off_mv_refresh(current_app._get_current_object())
             except Exception:
                 grades_logger.warning("Post-review MV refresh trigger failed", exc_info=True)
             if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+                if action in {"save_next", "cancel_next"} and target_next_task_id:
+                    return redirect(
+                        url_for(
+                            'review.review_task_details',
+                            task_id=target_next_task_id,
+                            ai_model_id=ai_model_id_filter,
+                            return_to=return_to,
+                            next_task_id=target_next_after_task_id,
+                            task_queue=task_queue_raw,
+                        )
+                    )
                 return redirect(return_to)
+            if action in {"save_next", "cancel_next"} and target_next_task_id:
+                return redirect(
+                    url_for(
+                        'review.review_task_details',
+                        task_id=target_next_task_id,
+                        ai_model_id=ai_model_id_filter,
+                        next_task_id=target_next_after_task_id,
+                        task_queue=task_queue_raw,
+                    )
+                )
             return redirect(url_for('review.discrepancy_review'))
         
         # Get available grades for the disease
@@ -414,6 +583,9 @@ def review_task_details(task_id: int):
             ai_grade_meta=ai_grade_meta,
             ai_model_id_filter=ai_model_id_filter,
             return_to=return_to,
+            next_task_id=next_task_id,
+            next_after_task_id=next_after_task_id,
+            task_queue_raw=task_queue_raw,
         )
 
 

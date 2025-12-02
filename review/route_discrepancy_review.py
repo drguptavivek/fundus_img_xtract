@@ -26,6 +26,7 @@ from utils.upload_eligibility import (
     get_user_lab_unit_ids,
     get_user_lab_unit_ids_no_admin_override,
 )
+from utils.review_navigation import get_next_review_tasks
 from . import bp
 
 
@@ -278,6 +279,23 @@ def discrepancy_review():
         processed_tasks = []
         for row in rows:
             grades_by_role = _extract_grades_by_role(row.grading_details_json or "[]")
+            nav_next = get_next_review_tasks(
+                db,
+                current_task_id=row.task_id,
+                disease_id=disease_id,
+                lab_unit_ids=allowed_lab_units,
+                lab_unit_id=lab_unit_id,
+                has_consensus=has_consensus,
+                has_review=has_review,
+                has_ai_grade=has_ai_grade,
+                ai_model_id=selected_ai_model_id,
+                ai_grades=ai_grades,
+                resident_grades=resident_grades,
+                resident2_grades=resident2_grades,
+                arbitrator_grades=arbitrator_grades,
+                final_grades=final_grades,
+                limit=50,
+            )
             task_data = {
                 "id": row.task_id,
                 "state": row.state,
@@ -288,6 +306,8 @@ def discrepancy_review():
                 "direct_image_uuid": row.direct_image_uuid,
                 "grades": grades_by_role,
                 "consensus": None,
+                "next_task_id": nav_next.get("next_task_id"),
+                "next_after_task_id": nav_next.get("next_after_task_id"),
             }
             if row.consensus_id:
                 task_data["consensus"] = {

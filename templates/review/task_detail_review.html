@@ -6,7 +6,11 @@
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
     <h3>Task Details</h3>
+    {% if return_to %}
+    <a href="{{ return_to }}" class="btn btn-sm btn-outline-secondary">Back to list</a>
+    {% else %}
     <button onclick="window.history.back();" class="btn btn-sm btn-outline-secondary">Back</button>
+    {% endif %}
   </div>
 
   <div class="row g-3">
@@ -144,8 +148,11 @@
           {% endif %}
         </div>
         <div class="card-body">
-          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_model_id_filter, return_to=return_to) }}" id="review-form">
+          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_model_id_filter, return_to=return_to, next_task_id=next_task_id, next_after_task_id=next_after_task_id, task_queue=task_queue_raw) }}" id="review-form">
             {{ csrf_field() }}
+            <input type="hidden" name="next_task_id" value="{{ next_task_id or '' }}">
+            <input type="hidden" name="next_after_task_id" value="{{ next_after_task_id or '' }}">
+            <input type="hidden" name="task_queue" value="{{ task_queue_raw or '' }}">
             
             {% if ai_grades %}
             <div class="mb-3">
@@ -206,7 +213,7 @@
                   <div class="d-flex flex-column gap-2" role="group" aria-label="Review Grade">
                     {% for grade in available_grades %}
                       {% set oid = 'review-grade-' ~ grade.id %}
-                      <input type="radio" class="btn-check" name="grading_id" id="{{ oid }}" value="{{ grade.id }}" autocomplete="off" required {% if existing_review_grade and existing_review_grade.disease_grading_id == grade.id %}checked{% endif %}>
+                      <input type="radio" class="btn-check" name="grading_id" id="{{ oid }}" value="{{ grade.id }}" autocomplete="off" {% if existing_review_grade and existing_review_grade.disease_grading_id == grade.id %}checked{% endif %}>
                       <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
                         <span>{{ grade.impression }}</span>
                         <span class="sel-icon d-none">✓</span>
@@ -228,9 +235,17 @@
                 </div>
                 
                 <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-primary">
+                  <button type="submit" name="action" value="save" class="btn btn-primary">
                     {% if existing_review_grade %}Update Review{% else %}Submit Review{% endif %}
                   </button>
+                  {% if next_task_id %}
+                  <button type="submit" name="action" value="save_next" class="btn btn-outline-primary">
+                    Save &amp; Next
+                  </button>
+                  <button type="submit" name="action" value="cancel_next" class="btn btn-outline-secondary">
+                    Cancel &amp; Next
+                  </button>
+                  {% endif %}
                 </div>
               </div>
             </div>
@@ -275,7 +290,7 @@
     <div class="col-12">
       <div class="card shadow-sm mb-1">
         <div class="card-header">
-          <h5 class="card-title mb-0">Consensus Information  - Task ID: {{ task.id }}</h5>
+          <h5 class="card-title mb-0">Task ID: {{ task.id }}</h5>
         </div>
         <div class="card-body">
           <div class="row">
@@ -514,6 +529,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const overrideModal = new bootstrap.Modal(overrideModalEl);
     reviewForm.addEventListener('submit', function(event) {
       if (pendingSubmit) {
+        return;
+      }
+      const submitter = event.submitter;
+      const actionValue = submitter && submitter.getAttribute('value');
+      if (actionValue === 'cancel_next') {
         return;
       }
       const selectedRadio = document.querySelector('input[name="grading_id"]:checked');

@@ -458,8 +458,7 @@
                   {% if ai_grade %}
                     <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
                     {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} v{{ ai_grade.ai_model_version or '' }}</small>{% endif %}
-                    {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ ai_grade.ai_probability }}</small>{% endif %}
-                    {% if ai_grade.comment %}<small class="text-muted d-block">Note: {{ ai_grade.comment[:30] }}{% if ai_grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                    {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</small>{% endif %}
                   {% else %}
                     <span class="text-muted">No AI grade</span>
                   {% endif %}
@@ -532,7 +531,8 @@
                   </div>
                   <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
                   {% endif %}
-                  <a href="{{ url_for('review.review_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                  {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None) %}
+                  <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param) }}" class="btn btn-sm btn-outline-secondary">Review</a>
                 </td>
                 </td>
               </tr>

@@ -15,7 +15,7 @@
       <div class="card shadow-sm mb-1 h-100">
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">Task Information</h5>
-          <span class="badge bg-primary">ID: {{ task.id }}</span>
+          <span class="badge bg-primary">Task ID: {{ task.id }}</span>
         </div>
         <div class="card-body">
           <div class="row">
@@ -70,7 +70,7 @@
                 {% if ai_meta %}
                 <div class="small text-muted ms-2">
                   {% if ai_meta.ai_model_name %}Model: {{ ai_meta.ai_model_name }}{% if ai_meta.ai_model_version %} v{{ ai_meta.ai_model_version }}{% endif %}{% endif %}
-                  {% if ai_meta.ai_probability %}<span class="ms-2">Prob: {{ ai_meta.ai_probability }}</span>{% endif %}
+                  {% if ai_meta.ai_probability %}<span class="ms-2">Prob: {{ "%.3f"|format(ai_meta.ai_probability|float) }}</span>{% endif %}
                 </div>
                 {% endif %}
               {% endif %}
@@ -153,24 +153,24 @@
                 <h6 class="mb-0">AI Grade Feedback</h6>
                 <span class="text-muted small">One entry per AI model</span>
               </div>
+              <div class="alert alert-info small mb-3">
+                <strong>When to use:</strong> If the human grade looks correct but the AI output seems off, record whether the AI was OK, a minor miss, or a major miss, and add a short rationale. This does <em>not</em> change the final grade.
+              </div>
               {% for ai_grade in ai_grades %}
               <div class="border rounded p-3 mb-3">
                 <div class="d-flex justify-content-between align-items-start gap-2">
                   <div>
-                    <div class="fw-semibold">{{ ai_grade.impression or 'AI Grade' }}</div>
+                    <div class="fw-semibold">AI Model's Grading of image: <b> {{ ai_grade.impression or 'AI Grade' }}</b></div>
                     <div class="text-muted small">
                       {% if ai_grade.ai_model_name %}Model: {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version %} v{{ ai_grade.ai_model_version }}{% endif %}{% endif %}
-                      {% if ai_grade.ai_probability %}<span class="ms-2">Prob: {{ ai_grade.ai_probability }}</span>{% endif %}
+                      {% if ai_grade.ai_probability %}<span class="ms-2">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</span>{% endif %}
                     </div>
-                    {% if ai_grade.comment %}
-                    <div class="small text-muted">AI note: {{ ai_grade.comment }}</div>
-                    {% endif %}
                   </div>
-                  <span class="badge bg-light text-dark">ID: {{ ai_grade.id }}</span>
+                  <span class="badge bg-light text-dark">AI Grade ID: {{ ai_grade.id }}</span>
                 </div>
                 <div class="row mt-2 g-2">
                   <div class="col-md-4">
-                    <label class="form-label mb-1" for="ai-status-{{ ai_grade.id }}">Assessment</label>
+                    <label class="form-label mb-1" for="ai-status-{{ ai_grade.id }}">Assessment of Quality of AI Model's Grade</label>
                     <select class="form-select form-select-sm" name="ai_review_status_{{ ai_grade.id }}" id="ai-status-{{ ai_grade.id }}">
                       <option value="">No assessment</option>
                       {% for status_key, status_label in ai_review_status_labels.items() %}
@@ -179,7 +179,7 @@
                     </select>
                   </div>
                   <div class="col-md-8">
-                    <label class="form-label mb-1" for="ai-comment-{{ ai_grade.id }}">Doctor comment</label>
+                    <label class="form-label mb-1" for="ai-comment-{{ ai_grade.id }}">Comments on AI Model's Grade</label>
                     <textarea class="form-control" name="ai_review_comment_{{ ai_grade.id }}" id="ai-comment-{{ ai_grade.id }}" rows="2" placeholder="Notes on AI performance">{{ ai_grade.review_comment or '' }}</textarea>
                   </div>
                 </div>
@@ -191,7 +191,13 @@
             <div class="row">
               <div class="col-md-8">
                 <div class="mb-3">
-                  <label class="form-label">Select a Grade for <strong>{{ task.disease }}</strong></label>
+                  <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-0">Review and Revise Grade for <strong>{{ task.disease }}</strong></label>
+                    <span class="small text-muted">Use this only when revising the human/consensus grade.</span>
+                  </div>
+                  <div class="alert alert-warning py-2 px-3 small mt-2 mb-2">
+                    <strong>Grade revisions:</strong> Pick a new grade when the image was graded incorrectly . This updates the review grade and, if the task is final, overwrites the consensus.
+                  </div>
                   <div class="d-flex flex-column gap-2" role="group" aria-label="Review Grade">
                     {% for grade in available_grades %}
                       {% set oid = 'review-grade-' ~ grade.id %}
@@ -264,7 +270,7 @@
     <div class="col-12">
       <div class="card shadow-sm mb-1">
         <div class="card-header">
-          <h5 class="card-title mb-0">Consensus Information</h5>
+          <h5 class="card-title mb-0">Consensus Information  - Task ID: {{ task.id }}</h5>
         </div>
         <div class="card-body">
           <div class="row">

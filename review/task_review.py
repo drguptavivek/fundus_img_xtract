@@ -102,12 +102,17 @@ def review_task_details(task_id: int):
             existing_review_grade.selected_features_json if existing_review_grade else None
         )
 
-        ai_grades = (
+        ai_model_id_filter = request.args.get("ai_model_id", type=int)
+        redirect_kwargs: dict[str, object] = {"task_id": task_id}
+        ai_grades_query = (
             db.query(Grade)
             .filter(Grade.task_id == task_id, Grade.role_slot == "ai")
             .options(joinedload(Grade.ai_model), joinedload(Grade.label))
-            .all()
         )
+        if ai_model_id_filter:
+            ai_grades_query = ai_grades_query.filter(Grade.ai_model_id == ai_model_id_filter)
+            redirect_kwargs["ai_model_id"] = ai_model_id_filter
+        ai_grades = ai_grades_query.all()
 
         ai_grades_for_display: list[dict[str, object]] = []
         for ai_grade in ai_grades:
@@ -144,7 +149,7 @@ def review_task_details(task_id: int):
                     selected_feature_ids.append(int(raw_feature))
                 except (TypeError, ValueError):
                     flash('Invalid feature selection submitted.', 'error')
-                    return redirect(url_for('review.review_task_details', task_id=task_id))
+                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             unique_feature_ids: list[int] = []
             seen_feature_ids: set[int] = set()
@@ -157,7 +162,7 @@ def review_task_details(task_id: int):
 
             if not grading_id:
                 flash('Please select a grade', 'error')
-                return redirect(url_for('review.review_task_details', task_id=task_id))
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             # Get the disease grading
             disease_grading = (
@@ -172,7 +177,7 @@ def review_task_details(task_id: int):
             
             if not disease_grading:
                 flash('Invalid grade selected', 'error')
-                return redirect(url_for('review.review_task_details', task_id=task_id))
+                return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
             if unique_feature_ids:
                 available_features = (
@@ -184,7 +189,7 @@ def review_task_details(task_id: int):
                 invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
                 if invalid_features:
                     flash('One or more selected features are not valid for the chosen grade.', 'error')
-                    return redirect(url_for('review.review_task_details', task_id=task_id))
+                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
                 selected_feature_entities = sorted(
                     (features_by_id[fid] for fid in unique_feature_ids),
@@ -290,7 +295,7 @@ def review_task_details(task_id: int):
 
                 if submitted_status and submitted_status not in allowed_ai_statuses:
                     flash('Invalid AI review selection submitted.', 'error')
-                    return redirect(url_for('review.review_task_details', task_id=task_id))
+                    return redirect(url_for('review.review_task_details', **redirect_kwargs))
 
                 if submitted_status is None and submitted_comment is None:
                     continue
@@ -314,7 +319,7 @@ def review_task_details(task_id: int):
 
             db.commit()
             flash('Review grade submitted successfully', 'success')
-            return redirect(url_for('review.review_task_details', task_id=task_id))
+            return redirect(url_for('review.review_task_details', **redirect_kwargs))
         
         # Get available grades for the disease
         available_grades = fetch_active_disease_gradings(db, task.disease_id)

@@ -489,7 +489,9 @@ def format_direct_image_with_tasks(
 def format_zip_image_with_tasks(
     item: EncounterFile,
     task_payload: Dict[str, Any],
-    db_session: Session
+    has_dr_report: bool,
+    has_glaucoma_report: bool,
+    disease_name_to_id: Dict[str, int],
 ) -> Dict[str, Any]:
     """Format ZIP image with pre-fetched task information.
     
@@ -501,21 +503,9 @@ def format_zip_image_with_tasks(
     Returns:
         Formatted image dictionary
     """
-    # Get report status (still need to query individually for this)
-    has_dr_report = db_session.query(DiabeticRetinopathyReport).filter(
-        DiabeticRetinopathyReport.patient_encounter_id == item.patient_encounter.id,
-        DiabeticRetinopathyReport.uuid.isnot(None)
-    ).first() is not None
-
-    has_glaucoma_report = db_session.query(GlaucomaResultsCleaned).filter(
-        GlaucomaResultsCleaned.patient_encounter_id == item.patient_encounter.id,
-        GlaucomaResultsCleaned.report_uuid.isnot(None)
-    ).first() is not None
-
-    # Determine source disease id from reports via Diseases master
-    disease_map = {d.name.strip().lower(): d.id for d in db_session.query(Disease).all()}
-    zip_source_name = 'glaucoma' if has_glaucoma_report else ('dr' if has_dr_report else 'dr')
-    zip_source_disease_id = disease_map.get(zip_source_name)
+    # Determine source disease id from reports via provided map
+    zip_source_name = "glaucoma" if has_glaucoma_report else ("dr" if has_dr_report else "dr")
+    zip_source_disease_id = disease_name_to_id.get(zip_source_name)
     
     task_list = task_payload.get('tasks', []) if isinstance(task_payload, dict) else (task_payload or [])
     ai_ids = task_payload.get('ai_disease_ids', []) if isinstance(task_payload, dict) else []
@@ -709,6 +699,9 @@ def search_images_strict(
         all_results = []
         total_count = 0
         
+        # Limit how many rows we pull from each scope to reduce memory/latency.
+        fetch_limit = offset + per_page
+
         if search_scope in ['direct_only', 'both']:
             # Build and execute direct image query
             direct_query = build_direct_query(db_session, filters, user_lab_unit_ids, is_admin)
@@ -716,10 +709,11 @@ def search_images_strict(
             total_count += direct_count
             
             if direct_count > 0:
-                # Get all results (no pagination yet)
-                direct_results = direct_query.order_by(
-                    DirectImageUpload.created_at.desc()
-                ).all()
+                direct_results = (
+                    direct_query.order_by(DirectImageUpload.created_at.desc())
+                    .limit(fetch_limit)
+                    .all()
+                )
                 
                 # Get task information for direct images
                 direct_image_ids = [img.id for img in direct_results]
@@ -737,10 +731,36 @@ def search_images_strict(
             total_count += zip_count
             
             if zip_count > 0:
-                # Get all results (no pagination yet)
-                zip_results = zip_query.order_by(
-                    ZipFile.upload_date.desc().nulls_last()
-                ).all()
+                zip_results = (
+                    zip_query.order_by(ZipFile.upload_date.desc().nulls_last())
+                    .limit(fetch_limit)
+                    .all()
+                )
+                
+                # Preload reports in bulk to avoid per-row queries
+                encounter_ids = [img.patient_encounter_id for img in zip_results if img.patient_encounter_id]
+                has_dr_ids = set()
+                has_glaucoma_ids = set()
+                if encounter_ids:
+                    has_dr_ids = {
+                        rid
+                        for rid, in db_session.query(DiabeticRetinopathyReport.patient_encounter_id)
+                        .filter(
+                            DiabeticRetinopathyReport.patient_encounter_id.in_(encounter_ids),
+                            DiabeticRetinopathyReport.uuid.isnot(None),
+                        )
+                        .all()
+                    }
+                    has_glaucoma_ids = {
+                        rid
+                        for rid, in db_session.query(GlaucomaResultsCleaned.patient_encounter_id)
+                        .filter(
+                            GlaucomaResultsCleaned.patient_encounter_id.in_(encounter_ids),
+                            GlaucomaResultsCleaned.report_uuid.isnot(None),
+                        )
+                        .all()
+                    }
+                disease_name_to_id = {d.name.strip().lower(): d.id for d in db_session.query(Disease).all()}
                 
                 # Get task information for ZIP images
                 zip_image_ids = [img.id for img in zip_results]
@@ -748,7 +768,14 @@ def search_images_strict(
                 
                 # Format results
                 for img in zip_results:
-                    formatted = format_zip_image_with_tasks(img, zip_tasks.get(img.id, { 'tasks': [], 'ai_disease_ids': [], 'ai_diseases': [] }), db_session)
+                    encounter_id = img.patient_encounter_id
+                    formatted = format_zip_image_with_tasks(
+                        img,
+                        zip_tasks.get(img.id, { 'tasks': [], 'ai_disease_ids': [], 'ai_diseases': [] }),
+                        has_dr_report=encounter_id in has_dr_ids,
+                        has_glaucoma_report=encounter_id in has_glaucoma_ids,
+                        disease_name_to_id=disease_name_to_id,
+                    )
                     all_results.append(formatted)
         
         # Sort combined results by upload_date (most recent first)

@@ -137,7 +137,10 @@ def create_app():
 
     # Materialized View Scheduler Configuration
     app.config["MATERIALIZED_VIEW_SCHEDULE_ENABLED"] = str(os.getenv("MATERIALIZED_VIEW_SCHEDULE_ENABLED", "true")).lower() in ("1", "true", "yes")
-    app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv("MATERIALIZED_VIEW_SCHEDULE_TIMES", "07:00,13:30,19:00,01:30").split(",")
+    app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv(
+        "MATERIALIZED_VIEW_SCHEDULE_TIMES",
+        ",".join([f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]),
+    ).split(",")
     app.config["MATERIALIZED_VIEW_TIMEZONE"] = os.getenv("MATERIALIZED_VIEW_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"])
     app.config["MATERIALIZED_VIEW_RETRY_ATTEMPTS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_ATTEMPTS", "3"))
     app.config["MATERIALIZED_VIEW_RETRY_DELAY_SECONDS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_DELAY_SECONDS", "60"))

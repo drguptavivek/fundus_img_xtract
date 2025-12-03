@@ -173,7 +173,10 @@ def run_scheduler_thread(app):
     """
     timezone_str = app.config.get("MATERIALIZED_VIEW_TIMEZONE", app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata"))
     tz = pytz.timezone(timezone_str)
-    schedule_times = app.config.get("MATERIALIZED_VIEW_SCHEDULE_TIMES", ["07:00", "13:30", "19:00", "01:30"])
+    schedule_times = app.config.get(
+        "MATERIALIZED_VIEW_SCHEDULE_TIMES",
+        [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)],
+    )
 
     # Handle both string and list inputs
     if isinstance(schedule_times, str):
@@ -184,14 +187,21 @@ def run_scheduler_thread(app):
 
     logger.info(f"Materialized view scheduler started - Times: {schedule_times}, Timezone: {timezone_str}")
 
+    last_trigger_time = None
+    last_trigger_date = None
+
     while True:
         try:
             current_ist = datetime.now(tz)
             current_time_str = current_ist.strftime("%H:%M")
-            current_minute = current_ist.minute
 
             # Check if current time matches any scheduled time (on the hour)
-            if current_time_str in schedule_times and current_minute == 0:
+            if (
+                current_time_str in schedule_times
+                and (last_trigger_time != current_time_str or last_trigger_date != current_ist.date())
+            ):
+                last_trigger_time = current_time_str
+                last_trigger_date = current_ist.date()
                 logger.info(f"Scheduled refresh time reached: {current_time_str} IST")
 
                 # Retry logic with exponential backoff

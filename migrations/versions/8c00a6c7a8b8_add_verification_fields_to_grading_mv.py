@@ -175,6 +175,9 @@ def upgrade() -> None:
     op.execute("CREATE INDEX idx_mvw_grading_verification_id ON mvw_grading_data_all(verification_id);")
     op.execute("CREATE INDEX idx_mvw_grading_verified_status ON mvw_grading_data_all(direct_image_verified_status);")
 
+    # Unique index to allow concurrent refreshes
+    op.execute("CREATE UNIQUE INDEX idx_mvw_grading_unique_task_grade ON mvw_grading_data_all(task_id, grade_id);")
+
 
 def downgrade() -> None:
     op.execute("DROP MATERIALIZED VIEW IF EXISTS mvw_grading_data_all;")

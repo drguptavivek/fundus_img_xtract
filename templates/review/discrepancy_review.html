@@ -428,13 +428,13 @@
             <thead>
               <tr>
                 <th>Task ID</th>
-                <th>AI Grade</th>
                 <th>Resident Grade</th>
                 <th>Resident2 Grade</th>
                 <th>Arbitrator Grade</th>
                 <th>Review</th>
                 <th>Final Grade</th>
                 <th>Status</th>
+                <th>AI Grade</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -442,26 +442,6 @@
               {% for task in tasks %}
               <tr>
                 <td>{{ task.id }}</td>
-                <td>
-                  {% set ai_grade = task.grades.get('ai') %}
-                  {% if ai_grade %}
-                    <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
-                    {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} Ver: {{ ai_grade.ai_model_version or '' }}</small>{% endif %}
-                    {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</small>{% endif %}
-                    {% if ai_grade.ai_review_statuses %}
-                      {% for review_status in ai_grade.ai_review_statuses %}
-                        <small class="text-muted d-block">AI review status: {{ review_status }}</small>
-                      {% endfor %}
-                    {% endif %}
-                    {% if ai_grade.ai_review_comments %}
-                      {% for review_comment in ai_grade.ai_review_comments %}
-                        <strong>AI review: </strong> <small class="text-muted d-block">{{ review_comment }}</small>
-                      {% endfor %}
-                    {% endif %}
-                  {% else %}
-                    <span class="text-muted">No AI grade</span>
-                  {% endif %}
-                </td>
                 <td>
                   {% set grade = task.grades.get('resident') %}
                   {% if grade %}
@@ -522,14 +502,28 @@
                   </span>
                 </td>
                 <td>
-                  {% if task.encounter_file_uuid or task.direct_image_uuid %}
-                  {% set image_uuid = task.encounter_file_uuid or task.direct_image_uuid %}
-                  {% set gallery_id = 'discrepancy-gallery-' ~ task.id %}
-                  <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid) }}" data-pswp-type="image" title="{{ task.disease_name or 'Image' }}"></a>
-                  </div>
-                  <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+                  {% set ai_grade = task.grades.get('ai') %}
+                  {% if ai_grade %}
+                    <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
+                    {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} Ver: {{ ai_grade.ai_model_version or '' }}</small>{% endif %}
+                    {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</small>{% endif %}
+                    {% if ai_grade.ai_review_statuses %}
+                      {% for review_status in ai_grade.ai_review_statuses %}
+                        <small class="text-muted d-block">AI review status: {{ review_status }}</small>
+                      {% endfor %}
+                    {% endif %}
+                    {% if ai_grade.ai_review_comments %}
+                      {% for review_comment in ai_grade.ai_review_comments %}
+                        <strong>AI review: </strong> <small class="text-muted d-block">{{ review_comment }}</small>
+                      {% endfor %}
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">No AI grade</span>
                   {% endif %}
+                </td>
+                <td>
+                  
+                 
                   {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None) %}
                   <a href="{{ url_for('review.review_task_details',
                     task_id=task.id,
@@ -546,6 +540,15 @@
                     final_grade=filters.final_grade or [],
                     ai_grade=filters.ai_grade or []
                   ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
+                   <div class="mt-1">&nbsp;</div>
+                   {% if task.encounter_file_uuid or task.direct_image_uuid %}
+                  {% set image_uuid = task.encounter_file_uuid or task.direct_image_uuid %}
+                  {% set gallery_id = 'discrepancy-gallery-' ~ task.id %}
+                  <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                    <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image_uuid) }}" data-pswp-type="image" title="{{ task.disease_name or 'Image' }}"></a>
+                  </div>
+                  <a href="#" class="btn btn-sm btn-outline-primary" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View</a>
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}

@@ -224,6 +224,7 @@ def review_task_details(task_id: int):
             form_next_task_id = request.form.get('next_task_id', type=int)
             target_next_task_id = form_next_task_id or next_task_id
             raw_selected_features = request.form.getlist('selected_features')
+            effective_next_task_id = target_next_task_id or nav_result.get("next_task_id")
             next_redirect_params: dict[str, object] = {
                 k: v for k, v in navigation_params.items() if v not in (None, "", [])
             }
@@ -231,6 +232,17 @@ def review_task_details(task_id: int):
                 next_redirect_params["ai_model_id"] = ai_model_id_filter
             if return_to:
                 next_redirect_params["return_to"] = return_to
+
+            grades_logger.info(
+                "Review submit navigation context",
+                extra={
+                    "action": action,
+                    "target_next_task_id": target_next_task_id,
+                    "fallback_next_task_id": nav_result.get("next_task_id"),
+                    "return_to": return_to,
+                    "navigation_params": next_redirect_params,
+                },
+            )
 
             ai_feedback_payload: list[dict[str, object]] = []
             ai_feedback_present = False
@@ -258,19 +270,19 @@ def review_task_details(task_id: int):
                 )
 
             if action == "cancel_next":
-                if return_to and return_to.startswith("/") and not return_to.startswith("//") and target_next_task_id:
+                if return_to and return_to.startswith("/") and not return_to.startswith("//") and effective_next_task_id:
                     return redirect(
                         url_for(
                             'review.review_task_details',
-                            task_id=target_next_task_id,
+                            task_id=effective_next_task_id,
                             **next_redirect_params,
                         )
                     )
-                if target_next_task_id:
+                if effective_next_task_id:
                     return redirect(
                         url_for(
                             'review.review_task_details',
-                            task_id=target_next_task_id,
+                            task_id=effective_next_task_id,
                             **next_redirect_params,
                         )
                     )
@@ -453,20 +465,20 @@ def review_task_details(task_id: int):
             except Exception:
                 grades_logger.warning("Post-review MV refresh trigger failed", exc_info=True)
             if return_to and return_to.startswith("/") and not return_to.startswith("//"):
-                if action in {"save_next", "cancel_next"} and target_next_task_id:
+                if action in {"save_next", "cancel_next"} and effective_next_task_id:
                     return redirect(
                         url_for(
                             'review.review_task_details',
-                            task_id=target_next_task_id,
+                            task_id=effective_next_task_id,
                             **next_redirect_params,
                         )
                     )
                 return redirect(return_to)
-            if action in {"save_next", "cancel_next"} and target_next_task_id:
+            if action in {"save_next", "cancel_next"} and effective_next_task_id:
                 return redirect(
                     url_for(
                         'review.review_task_details',
-                        task_id=target_next_task_id,
+                        task_id=effective_next_task_id,
                         **next_redirect_params,
                     )
                 )

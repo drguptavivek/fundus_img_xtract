@@ -164,6 +164,7 @@
             ai_grade=request.args.getlist('ai_grade')
           ) }}" id="review-form">
             {{ csrf_field() }}
+            <input type="hidden" id="action-field" name="action" value="">
             <input type="hidden" name="next_task_id" value="{{ next_task_id or '' }}">
             
             {% if ai_grades %}
@@ -505,6 +506,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const newFinalSummary = document.getElementById('new-final-summary');
   const reviewCommentBlock = document.getElementById('review-comment-block');
   const reviewComment = document.getElementById('review-comment');
+  const actionField = document.getElementById('action-field');
   let pendingSubmit = false;
 
   function updateReviewCommentVisibility() {
@@ -568,6 +570,9 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       const submitter = event.submitter;
       const actionValue = submitter && submitter.getAttribute('value');
+      if (actionField) {
+        actionField.value = actionValue || 'save';
+      }
       if (actionValue === 'cancel_next') {
         return;
       }
@@ -599,6 +604,9 @@ document.addEventListener('DOMContentLoaded', function() {
     confirmOverrideBtn.addEventListener('click', function() {
       pendingSubmit = true;
       overrideModal.hide();
+      if (actionField && !actionField.value) {
+        actionField.value = 'save';
+      }
       reviewForm.submit();
     });
   }

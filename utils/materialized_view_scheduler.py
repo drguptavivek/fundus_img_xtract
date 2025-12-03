@@ -102,9 +102,9 @@ def refresh_materialized_view(app, schedule_time="manual"):
 
                         logger.info(f"Successfully refreshed {view_description} in {view_duration:.2f} seconds")
 
-        except Exception as view_error:
-            logger.exception("Failed to refresh %s (%s)", view_description, view_name)
-            # Continue with other views even if one fails
+                    except Exception as view_error:
+                        logger.exception("Failed to refresh %s (%s)", view_description, view_name)
+                        # Continue with other views even if one fails
 
                 overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
 

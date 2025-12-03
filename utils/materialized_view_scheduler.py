@@ -102,9 +102,9 @@ def refresh_materialized_view(app, schedule_time="manual"):
 
                         logger.info(f"Successfully refreshed {view_description} in {view_duration:.2f} seconds")
 
-                    except Exception as view_error:
-                        logger.error(f"Failed to refresh {view_description} ({view_name}): {str(view_error)}")
-                        # Continue with other views even if one fails
+        except Exception as view_error:
+            logger.exception("Failed to refresh %s (%s)", view_description, view_name)
+            # Continue with other views even if one fails
 
                 overall_duration = (datetime.now(pytz.UTC) - start_time).total_seconds()
 
@@ -133,7 +133,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
                 return success
 
     except Exception as e:
-        logger.error(f"Failed to refresh materialized view - Schedule: {schedule_time}, Error: {str(e)}")
+        logger.exception("Failed to refresh materialized views - Schedule: %s", schedule_time)
 
         # Update log entry with failure if we have a log_id
         if log_id:
@@ -160,7 +160,7 @@ def refresh_materialized_view(app, schedule_time="manual"):
                             }
                         )
             except Exception as log_error:
-                logger.error(f"Failed to update refresh log: {str(log_error)}")
+                logger.exception("Failed to update refresh log")
 
         return False
 
@@ -358,18 +358,39 @@ def get_last_refresh_info(app):
                 ).fetchone()
 
                 if result:
+                    mapping = result._mapping if hasattr(result, "_mapping") else None
+                    def _get(key, fallback=None):
+                        if mapping is not None:
+                            return mapping.get(key, fallback)
+                        try:
+                            # fallback to tuple unpacking by index order
+                            columns = [
+                                "refresh_type",
+                                "refresh_started_at",
+                                "refresh_completed_at",
+                                "refresh_duration_seconds",
+                                "success",
+                                "error_message",
+                                "created_at",
+                                "updated_at",
+                            ]
+                            idx = columns.index(key)
+                            return result[idx]
+                        except Exception:
+                            return fallback
+
                     # Parse timestamps
                     timezone_str = app.config.get("DEFAULT_DISPLAY_TIMEZONE", "Asia/Kolkata")
                     tz = pytz.timezone(timezone_str)
 
-                    refresh_started_utc = result['refresh_started_at']
+                    refresh_started_utc = _get('refresh_started_at')
                     if refresh_started_utc:
                         if hasattr(refresh_started_utc, 'astimezone'):
                             refresh_started_utc = refresh_started_utc.astimezone(tz)
                         else:
                             refresh_started_utc = pytz.utc.localize(refresh_started_utc).astimezone(tz)
 
-                    refresh_completed_utc = result['refresh_completed_at']
+                    refresh_completed_utc = _get('refresh_completed_at')
                     if refresh_completed_utc:
                         if hasattr(refresh_completed_utc, 'astimezone'):
                             refresh_completed_utc = refresh_completed_utc.astimezone(tz)
@@ -378,15 +399,15 @@ def get_last_refresh_info(app):
 
                     return {
                         'has_data': True,
-                        'refresh_type': result['refresh_type'],
+                        'refresh_type': _get('refresh_type'),
                         'refresh_started_at': refresh_started_utc.strftime('%Y-%m-%d %H:%M:%S %Z') if refresh_started_utc else None,
                         'refresh_completed_at': refresh_completed_utc.strftime('%Y-%m-%d %H:%M:%S %Z') if refresh_completed_utc else None,
-                        'refresh_duration_seconds': result['refresh_duration_seconds'],
-                        'success': result['success'],
-                        'error_message': result['error_message'],
+                        'refresh_duration_seconds': _get('refresh_duration_seconds'),
+                        'success': _get('success'),
+                        'error_message': _get('error_message'),
                         'ist_time': refresh_completed_utc.strftime('%Y-%m-%d %H:%M:%S IST') if refresh_completed_utc else None,
-                        'utc_time': result['refresh_completed_at'].strftime('%Y-%m-%d %H:%M:%S UTC') if result['refresh_completed_at'] else None,
-                        'data_freshness_minutes': round((datetime.now(pytz.UTC) - result['refresh_completed_at'].astimezone(pytz.UTC)).total_seconds() / 60, 1) if result['refresh_completed_at'] else None
+                        'utc_time': _get('refresh_completed_at').strftime('%Y-%m-%d %H:%M:%S UTC') if _get('refresh_completed_at') else None,
+                        'data_freshness_minutes': round((datetime.now(pytz.UTC) - _get('refresh_completed_at').astimezone(pytz.UTC)).total_seconds() / 60, 1) if _get('refresh_completed_at') else None
                     }
                 else:
                     return {

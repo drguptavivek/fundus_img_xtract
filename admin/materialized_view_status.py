@@ -194,7 +194,7 @@ def manual_refresh():
             'message': result['message']
         })
     except Exception as e:
-        current_app.logger.error(f"Error in manual refresh: {str(e)}")
+        current_app.logger.exception("Error in manual refresh")
         return jsonify({
             'success': False,
             'error': str(e)

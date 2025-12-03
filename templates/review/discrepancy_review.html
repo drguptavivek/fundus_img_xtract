@@ -448,9 +448,14 @@
                     <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
                     {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} Ver: {{ ai_grade.ai_model_version or '' }}</small>{% endif %}
                     {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</small>{% endif %}
+                    {% if ai_grade.ai_review_statuses %}
+                      {% for review_status in ai_grade.ai_review_statuses %}
+                        <small class="text-muted d-block">AI review status: {{ review_status }}</small>
+                      {% endfor %}
+                    {% endif %}
                     {% if ai_grade.ai_review_comments %}
                       {% for review_comment in ai_grade.ai_review_comments %}
-                        <strong>AI review: </strong> <small class="text-muted d-block">AI review: {{ review_comment }}</small>
+                        <strong>AI review: </strong> <small class="text-muted d-block">{{ review_comment }}</small>
                       {% endfor %}
                     {% endif %}
                   {% else %}

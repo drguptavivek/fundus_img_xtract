@@ -279,22 +279,28 @@ def discrepancy_review():
         processed_tasks = []
         queue_ids = [row.task_id for row in rows]
         ai_review_comments: Dict[int, List[str]] = defaultdict(list)
+        ai_review_statuses: Dict[int, List[str]] = defaultdict(list)
         if queue_ids:
             ai_review_rows = (
-                db.query(Grade.task_id, Grade.ai_review_comment)
+                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
                 .filter(Grade.role_slot == "ai", Grade.task_id.in_(queue_ids))
-                .filter(Grade.ai_review_comment.isnot(None))
+                .filter(or_(Grade.ai_review_comment.isnot(None), Grade.ai_review_status.isnot(None)))
                 .all()
             )
-            for task_id, comment in ai_review_rows:
+            for task_id, comment, status in ai_review_rows:
                 if comment:
                     ai_review_comments[task_id].append(comment)
+                if status:
+                    ai_review_statuses[task_id].append(status)
 
         queue_len = len(queue_ids)
         for idx, row in enumerate(rows):
             grades_by_role = _extract_grades_by_role(row.grading_details_json or "[]")
-            if "ai" in grades_by_role and ai_review_comments.get(row.task_id):
-                grades_by_role["ai"]["ai_review_comments"] = ai_review_comments[row.task_id]
+            if "ai" in grades_by_role:
+                if ai_review_comments.get(row.task_id):
+                    grades_by_role["ai"]["ai_review_comments"] = ai_review_comments[row.task_id]
+                if ai_review_statuses.get(row.task_id):
+                    grades_by_role["ai"]["ai_review_statuses"] = ai_review_statuses[row.task_id]
             next_task_id = queue_ids[idx + 1] if idx + 1 < queue_len else None
             next_after_task_id = queue_ids[idx + 2] if idx + 2 < queue_len else None
             task_data = {

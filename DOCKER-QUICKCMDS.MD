@@ -16,11 +16,24 @@ docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env buil
 
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up  web -d
 
+
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   stop web
+
+docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   start web
+
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs web  --tail=20 -f
+
+docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web  uv run alembic upgrade head
+
+# Alembic Commnsa
+uv run alembic  history
+uv run alembic heads
+uv run alembic current
+
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web  uv run 
+
 
 uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
@@ -58,5 +71,7 @@ docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up
 
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web -d
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   logs web -f
+
+
 
 ``

@@ -15,6 +15,7 @@ from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
+from utils.review_navigation import get_next_review_tasks
 from datetime import datetime, timezone
 from . import bp
 
@@ -49,24 +50,6 @@ def _extract_ai_probability(comment: str | None) -> str | None:
         return None
     match = re.search(r"AI probability:\s*([0-9.]+)", comment, flags=re.IGNORECASE)
     return match.group(1) if match else None
-
-
-def _parse_queue(raw_queue: str | None) -> list[int]:
-    """Parse comma-separated task ids into an int list."""
-    if not raw_queue:
-        return []
-    ids: list[int] = []
-    for part in raw_queue.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            ids.append(int(part))
-        except ValueError:
-            continue
-    return ids
-
-
 
 
 def _kick_off_mv_refresh(app) -> None:
@@ -144,22 +127,59 @@ def review_task_details(task_id: int):
 
         ai_model_id_filter = request.args.get("ai_model_id", type=int)
         return_to = request.args.get("return_to")
-        task_queue_raw = request.args.get("task_queue")
-        task_queue_ids = _parse_queue(task_queue_raw)
-        next_task_id = request.args.get("next_task_id", type=int)
-        next_after_task_id = request.args.get("next_after_task_id", type=int)
 
-        # Derive next tasks from queue if present
-        if task_queue_ids:
-            try:
-                current_index = task_queue_ids.index(task_id)
-                next_task_id = task_queue_ids[current_index + 1] if current_index + 1 < len(task_queue_ids) else None
-                next_after_task_id = task_queue_ids[current_index + 2] if current_index + 2 < len(task_queue_ids) else None
-            except ValueError:
-                # current task not in queue; keep provided next ids if any
-                pass
+        lab_unit_id_filter = request.args.get("lab_unit_id", type=int)
+        has_consensus = request.args.get("has_consensus")
+        has_review = request.args.get("has_review")
+        has_ai_grade = request.args.get("has_ai_grade")
+        resident_grades = request.args.getlist("resident_grade")
+        resident2_grades = request.args.getlist("resident2_grade")
+        arbitrator_grades = request.args.getlist("arbitrator_grade")
+        final_grades = request.args.getlist("final_grade")
+        ai_grades = request.args.getlist("ai_grade")
+
+        navigation_params: dict[str, object] = {
+            "disease_id": task.disease_id,
+            "lab_unit_id": lab_unit_id_filter,
+            "has_consensus": has_consensus,
+            "has_review": has_review,
+            "has_ai_grade": has_ai_grade,
+        }
+        if ai_model_id_filter:
+            navigation_params["ai_model_id"] = ai_model_id_filter
+        for key, values in {
+            "resident_grade": resident_grades,
+            "resident2_grade": resident2_grades,
+            "arbitrator_grade": arbitrator_grades,
+            "final_grade": final_grades,
+            "ai_grade": ai_grades,
+        }.items():
+            if values:
+                navigation_params[key] = values
+
+        nav_result = get_next_review_tasks(
+            db,
+            current_task_id=task_id,
+            disease_id=task.disease_id,
+            lab_unit_ids=list(user_lab_unit_ids),
+            lab_unit_id=lab_unit_id_filter,
+            has_consensus=has_consensus,
+            has_review=has_review,
+            has_ai_grade=has_ai_grade,
+            ai_model_id=ai_model_id_filter,
+            ai_grades=ai_grades or None,
+            resident_grades=resident_grades or None,
+            resident2_grades=resident2_grades or None,
+            arbitrator_grades=arbitrator_grades or None,
+            final_grades=final_grades or None,
+            limit=50,
+        )
+        next_task_id = nav_result.get("next_task_id")
 
         redirect_kwargs: dict[str, object] = {"task_id": task_id}
+        for key, value in navigation_params.items():
+            if value not in (None, "", []):
+                redirect_kwargs[key] = value
         ai_grades_query = (
             db.query(Grade)
             .filter(Grade.task_id == task_id, Grade.role_slot == "ai")
@@ -172,10 +192,6 @@ def review_task_details(task_id: int):
             redirect_kwargs["return_to"] = return_to
         if next_task_id:
             redirect_kwargs["next_task_id"] = next_task_id
-        if next_after_task_id:
-            redirect_kwargs["next_after_task_id"] = next_after_task_id
-        if task_queue_raw:
-            redirect_kwargs["task_queue"] = task_queue_raw
         ai_grades = ai_grades_query.all()
 
         ai_grades_for_display: list[dict[str, object]] = []
@@ -206,11 +222,15 @@ def review_task_details(task_id: int):
             comment = request.form.get('comment', '')
             action = request.form.get('action') or 'save'
             form_next_task_id = request.form.get('next_task_id', type=int)
-            form_next_after_task_id = request.form.get('next_after_task_id', type=int)
             target_next_task_id = form_next_task_id or next_task_id
-            target_next_after_task_id = form_next_after_task_id or next_after_task_id
             raw_selected_features = request.form.getlist('selected_features')
-            task_queue_raw = request.form.get("task_queue") or task_queue_raw
+            next_redirect_params: dict[str, object] = {
+                k: v for k, v in navigation_params.items() if v not in (None, "", [])
+            }
+            if ai_model_id_filter:
+                next_redirect_params["ai_model_id"] = ai_model_id_filter
+            if return_to:
+                next_redirect_params["return_to"] = return_to
 
             ai_feedback_payload: list[dict[str, object]] = []
             ai_feedback_present = False
@@ -243,10 +263,7 @@ def review_task_details(task_id: int):
                         url_for(
                             'review.review_task_details',
                             task_id=target_next_task_id,
-                            ai_model_id=ai_model_id_filter,
-                            return_to=return_to,
-                            next_task_id=target_next_after_task_id,
-                            task_queue=task_queue_raw,
+                            **next_redirect_params,
                         )
                     )
                 if target_next_task_id:
@@ -254,9 +271,7 @@ def review_task_details(task_id: int):
                         url_for(
                             'review.review_task_details',
                             task_id=target_next_task_id,
-                            ai_model_id=ai_model_id_filter,
-                            next_task_id=target_next_after_task_id,
-                            task_queue=task_queue_raw,
+                            **next_redirect_params,
                         )
                     )
                 if return_to and return_to.startswith("/") and not return_to.startswith("//"):
@@ -443,10 +458,7 @@ def review_task_details(task_id: int):
                         url_for(
                             'review.review_task_details',
                             task_id=target_next_task_id,
-                            ai_model_id=ai_model_id_filter,
-                            return_to=return_to,
-                            next_task_id=target_next_after_task_id,
-                            task_queue=task_queue_raw,
+                            **next_redirect_params,
                         )
                     )
                 return redirect(return_to)
@@ -455,9 +467,7 @@ def review_task_details(task_id: int):
                     url_for(
                         'review.review_task_details',
                         task_id=target_next_task_id,
-                        ai_model_id=ai_model_id_filter,
-                        next_task_id=target_next_after_task_id,
-                        task_queue=task_queue_raw,
+                        **next_redirect_params,
                     )
                 )
             return redirect(url_for('review.discrepancy_review'))
@@ -526,8 +536,6 @@ def review_task_details(task_id: int):
             ai_model_id_filter=ai_model_id_filter,
             return_to=return_to,
             next_task_id=next_task_id,
-            next_after_task_id=next_after_task_id,
-            task_queue_raw=task_queue_raw,
         )
 
 

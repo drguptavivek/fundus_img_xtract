@@ -340,7 +340,6 @@ def discrepancy_review():
             total_pages=total_pages,
             has_prev=has_prev,
             has_next=has_next,
-            queue_str=",".join(str(i) for i in queue_ids),
             filters={
                 "disease_id": disease_id,
                 "lab_unit_id": lab_unit_id,

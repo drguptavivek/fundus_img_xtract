@@ -148,11 +148,23 @@
           {% endif %}
         </div>
         <div class="card-body">
-          <form method="post" action="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_model_id_filter, return_to=return_to, next_task_id=next_task_id, next_after_task_id=next_after_task_id, task_queue=task_queue_raw) }}" id="review-form">
+          <form method="post" action="{{ url_for('review.review_task_details',
+            task_id=task.id,
+            ai_model_id=ai_model_id_filter,
+            return_to=return_to,
+            disease_id=task.disease_id,
+            lab_unit_id=request.args.get('lab_unit_id'),
+            has_consensus=request.args.get('has_consensus'),
+            has_review=request.args.get('has_review'),
+            has_ai_grade=request.args.get('has_ai_grade'),
+            resident_grade=request.args.getlist('resident_grade'),
+            resident2_grade=request.args.getlist('resident2_grade'),
+            arbitrator_grade=request.args.getlist('arbitrator_grade'),
+            final_grade=request.args.getlist('final_grade'),
+            ai_grade=request.args.getlist('ai_grade')
+          ) }}" id="review-form">
             {{ csrf_field() }}
             <input type="hidden" name="next_task_id" value="{{ next_task_id or '' }}">
-            <input type="hidden" name="next_after_task_id" value="{{ next_after_task_id or '' }}">
-            <input type="hidden" name="task_queue" value="{{ task_queue_raw or '' }}">
             
             {% if ai_grades %}
             <div class="mb-3">

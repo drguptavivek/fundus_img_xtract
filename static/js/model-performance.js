@@ -399,8 +399,11 @@
     const referenceEl = document.getElementById('filter-reference');
     const uploadTypeEl = document.getElementById('filter-upload-type');
     const cameraEl = document.getElementById('filter-camera');
+    const chartWrapper = document.getElementById('threshold-explorer-chart-wrapper');
+    const chartCanvas = document.getElementById('threshold-explorer-chart');
     const ModalCtor = window.bootstrap ? window.bootstrap.Modal : null;
     const modal = (modalEl && ModalCtor) ? ModalCtor.getOrCreateInstance(modalEl) : null;
+    let thresholdChart = null;
 
     if (!openBtn || !modalEl || !form || !resultsBody) return;
 
@@ -413,6 +416,11 @@
       if (resultsBody) resultsBody.innerHTML = '';
       if (metaEl) metaEl.textContent = '';
       if (aucEl) aucEl.textContent = '';
+      if (thresholdChart) {
+        thresholdChart.destroy();
+        thresholdChart = null;
+      }
+      if (chartWrapper) chartWrapper.classList.add('d-none');
     };
 
     openBtn.addEventListener('click', () => {
@@ -437,6 +445,52 @@
     function selectedLabUnits() {
       const checks = document.querySelectorAll('input[name="lab_unit_id"]:checked');
       return Array.from(checks).map((c) => Number(c.value)).filter((v) => !Number.isNaN(v));
+    }
+
+    function renderChart(rows) {
+      if (!chartCanvas || typeof Chart === 'undefined') return;
+      const labels = rows.map((r) => (r.threshold?.toFixed ? r.threshold.toFixed(3) : r.threshold));
+      const toVals = (key) => rows.map((r) => {
+        const v = r[key];
+        const num = Number(v);
+        return Number.isFinite(num) ? num : null;
+      });
+
+      const datasets = [
+        {label: 'Sensitivity', data: toVals('sensitivity'), borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.12)'},
+        {label: 'Specificity', data: toVals('specificity'), borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.12)'},
+        {label: 'Accuracy', data: toVals('accuracy'), borderColor: '#6f42c1', backgroundColor: 'rgba(111,66,193,0.12)'},
+      ];
+
+      if (thresholdChart) {
+        thresholdChart.destroy();
+        thresholdChart = null;
+      }
+      thresholdChart = new Chart(chartCanvas, {
+        type: 'line',
+        data: {labels, datasets},
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {min: 0, max: 1, ticks: {stepSize: 0.1}, title: {display: true, text: 'Metric'}},
+            x: {title: {display: true, text: 'Threshold'}},
+          },
+          plugins: {
+            legend: {position: 'bottom'},
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const val = ctx.parsed.y;
+                  const thr = labels[ctx.dataIndex];
+                  return `${ctx.dataset.label}: ${Number.isFinite(val) ? val.toFixed(3) : '-'}, thr ${thr}`;
+                },
+              },
+            },
+          },
+        },
+      });
+      if (chartWrapper) chartWrapper.classList.remove('d-none');
     }
 
     function renderResults(rows, auc, sampleSize, probabilitiesPresent, positiveClass) {
@@ -476,6 +530,7 @@
       if (aucEl) {
         aucEl.textContent = auc !== null && auc !== undefined ? `AUC: ${auc.toFixed(3)} (constant across thresholds)` : 'AUC unavailable (no probability scores).';
       }
+      renderChart(rows);
     }
 
     form.addEventListener('submit', (evt) => {

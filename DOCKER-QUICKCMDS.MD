@@ -29,7 +29,8 @@ docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec
 uv run alembic  history
 uv run alembic heads
 uv run alembic current
-
+ uv run alembic upgrade head
+ 
 
 # User Creation
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash

@@ -428,9 +428,6 @@
             <thead>
               <tr>
                 <th>Task ID</th>
-                <th>Image UUID</th>
-                <th>Disease</th>
-                <th>Lab Unit</th>
                 <th>AI Grade</th>
                 <th>Resident Grade</th>
                 <th>Resident2 Grade</th>
@@ -446,22 +443,16 @@
               <tr>
                 <td>{{ task.id }}</td>
                 <td>
-                  {% if task.encounter_file_uuid %}
-                    <code>{{ task.encounter_file_uuid[:8] }}...</code>
-                  {% elif task.direct_image_uuid %}
-                    <code>{{ task.direct_image_uuid[:8] }}...</code>
-                  {% else %}
-                    -
-                  {% endif %}
-                </td>
-                <td>{{ task.disease_name or '-' }}</td>
-                <td>{{ task.lab_unit_name or '-' }}<br><small class="text-muted">{{ task.hospital_name or '' }}</small></td>
-                <td>
                   {% set ai_grade = task.grades.get('ai') %}
                   {% if ai_grade %}
                     <span class="badge bg-primary">{{ ai_grade.impression or '-' }}</span>
-                    {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} v{{ ai_grade.ai_model_version or '' }}</small>{% endif %}
+                    {% if ai_grade.ai_model_name %}<small class="text-muted d-block">{{ ai_grade.ai_model_name }} Ver: {{ ai_grade.ai_model_version or '' }}</small>{% endif %}
                     {% if ai_grade.ai_probability %}<small class="text-muted d-block">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</small>{% endif %}
+                    {% if ai_grade.ai_review_comments %}
+                      {% for review_comment in ai_grade.ai_review_comments %}
+                        <strong>AI review: </strong> <small class="text-muted d-block">AI review: {{ review_comment }}</small>
+                      {% endfor %}
+                    {% endif %}
                   {% else %}
                     <span class="text-muted">No AI grade</span>
                   {% endif %}
@@ -497,7 +488,7 @@
                   {% set review_grade = task.grades.get('review') %}
                   {% if review_grade %}
                     <span class="badge bg-info">{{ review_grade.impression or '-' }}</span>
-                    {% if review_grade.comment %}<small class="text-muted d-block">Note: {{ review_grade.comment[:30] }}{% if review_grade.comment|length > 30 %}...{% endif %}</small>{% endif %}
+                    {% if review_grade.comment %}<small class="text-muted d-block">Review comment: {{ review_grade.comment }}</small>{% endif %}
                   {% else %}
                     <span class="text-muted">No review</span>
                   {% endif %}
@@ -536,7 +527,6 @@
                   {% endif %}
                   {% set ai_param = (filters.ai_model_id[0] if filters.ai_model_id and filters.ai_model_id[0] else None) %}
                   <a href="{{ url_for('review.review_task_details', task_id=task.id, ai_model_id=ai_param, return_to=request.full_path, next_task_id=task.next_task_id, next_after_task_id=task.next_after_task_id, task_queue=queue_str) }}" class="btn btn-sm btn-outline-secondary">Review</a>
-                </td>
                 </td>
               </tr>
               {% endfor %}

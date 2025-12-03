@@ -229,9 +229,9 @@
               </div>
               
               <div class="col-md-4">
-                <div class="mb-3">
+                <div class="mb-3" id="review-comment-block" style="{% if existing_review_grade %}display: block;{% else %}display: none;{% endif %}">
                   <label class="form-label">Comments on why Human Grade is being revised</label>
-                  <textarea name="comment" class="form-control" rows="4" placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
+                  <textarea id="review-comment" name="comment" class="form-control" rows="4" placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
                 </div>
                 
                 <div class="d-flex gap-2">
@@ -491,7 +491,19 @@ document.addEventListener('DOMContentLoaded', function() {
   const confirmOverrideBtn = document.getElementById('confirm-review-override');
   const currentFinalSummary = document.getElementById('current-final-summary');
   const newFinalSummary = document.getElementById('new-final-summary');
+  const reviewCommentBlock = document.getElementById('review-comment-block');
+  const reviewComment = document.getElementById('review-comment');
   let pendingSubmit = false;
+
+  function updateReviewCommentVisibility() {
+    if (!reviewCommentBlock || !reviewComment) {
+      return;
+    }
+    const hasSelection = Boolean(document.querySelector('input[name="grading_id"]:checked'));
+    const shouldShow = hasSelection || existingReviewGradeId !== null;
+    reviewCommentBlock.style.display = shouldShow ? 'block' : 'none';
+    reviewComment.disabled = !shouldShow;
+  }
 
   radioInputs.forEach(input => {
     input.addEventListener('change', function() {
@@ -509,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
           renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
         }
       }
+      updateReviewCommentVisibility();
     });
 
     if (input.checked) {
@@ -524,6 +537,16 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   });
+
+  if (!document.querySelector('input[name="grading_id"]:checked') && existingReviewGradeId !== null) {
+    const matchingExisting = document.querySelector(`input[name="grading_id"][value="${existingReviewGradeId}"]`);
+    if (matchingExisting) {
+      matchingExisting.checked = true;
+      matchingExisting.dispatchEvent(new Event('change'));
+    }
+  }
+
+  updateReviewCommentVisibility();
 
   if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
     const overrideModal = new bootstrap.Modal(overrideModalEl);

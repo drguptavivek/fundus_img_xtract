@@ -128,14 +128,15 @@ def review_task_details(task_id: int):
             get_user_eligibility_for_task(db, current_user.id, task_id, 'arbitrator')
         )
         
-        # Get existing review grade if any
+        # Get latest existing review grade if any (any reviewer)
         existing_review_grade = None
         if can_review:
-            existing_review_grade = db.query(Grade).filter(
-                Grade.task_id == task_id,
-                Grade.grader_user_id == current_user.id,
-                Grade.role_slot == 'review'
-            ).first()
+            existing_review_grade = (
+                db.query(Grade)
+                .filter(Grade.task_id == task_id, Grade.role_slot == "review")
+                .order_by(Grade.updated_at.desc().nullslast(), Grade.id.desc())
+                .first()
+            )
 
         existing_selected_features = _parse_selected_features(
             existing_review_grade.selected_features_json if existing_review_grade else None

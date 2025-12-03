@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import jsonify, render_template, request
@@ -277,9 +278,23 @@ def discrepancy_review():
 
         processed_tasks = []
         queue_ids = [row.task_id for row in rows]
+        ai_review_comments: Dict[int, List[str]] = defaultdict(list)
+        if queue_ids:
+            ai_review_rows = (
+                db.query(Grade.task_id, Grade.ai_review_comment)
+                .filter(Grade.role_slot == "ai", Grade.task_id.in_(queue_ids))
+                .filter(Grade.ai_review_comment.isnot(None))
+                .all()
+            )
+            for task_id, comment in ai_review_rows:
+                if comment:
+                    ai_review_comments[task_id].append(comment)
+
         queue_len = len(queue_ids)
         for idx, row in enumerate(rows):
             grades_by_role = _extract_grades_by_role(row.grading_details_json or "[]")
+            if "ai" in grades_by_role and ai_review_comments.get(row.task_id):
+                grades_by_role["ai"]["ai_review_comments"] = ai_review_comments[row.task_id]
             next_task_id = queue_ids[idx + 1] if idx + 1 < queue_len else None
             next_after_task_id = queue_ids[idx + 2] if idx + 2 < queue_len else None
             task_data = {

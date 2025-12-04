@@ -1,5 +1,5 @@
 # jobs/routes.py
-from flask import jsonify, render_template, redirect, url_for, flash
+from flask import flash, jsonify, redirect, render_template, url_for
 from flask_login import login_required, current_user
 from auth.roles import roles_required
 from job_store import db_get_job_payload
@@ -8,6 +8,7 @@ from sqlalchemy import select
 from models import Job, JobItem, LabUnit
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from review.discrepancy_export import EXPORT_DIR
 
 from . import jobs_bp
 
@@ -149,6 +150,8 @@ def job_status_json(job_token: str):
             
         # Add upload_type to the payload
         payload["upload_type"] = job.upload_type
+        if job.upload_type == "discrepancy_export":
+            payload["export_files"] = _list_export_files(job.token)
         return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
@@ -186,3 +189,14 @@ def upload_results(job_token):
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
 def upload_processing(job_id):
     return render_template("jobs/jobs_processing.html", job_id=job_id)
+
+
+def _list_export_files(job_token: str) -> list[str]:
+    export_dir = (EXPORT_DIR / job_token).resolve()
+    if not export_dir.exists() or not export_dir.is_dir():
+        return []
+    try:
+        files = [p.name for p in export_dir.iterdir() if p.is_file()]
+        return sorted(files)
+    except Exception:
+        return []

@@ -5,12 +5,13 @@ import re
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from flask import jsonify, render_template, request
+from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
 from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
+from job_store import db_create_job
 from models import (
     AIModel,
     Consensus,
@@ -18,6 +19,7 @@ from models import (
     DiseaseGrading,
     Grade,
     GradingTask,
+    Job,
     Hospital,
     LabUnit,
     Session,
@@ -27,6 +29,7 @@ from utils.upload_eligibility import (
     get_user_lab_unit_ids,
     get_user_lab_unit_ids_no_admin_override,
 )
+from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 
 
@@ -358,7 +361,85 @@ def discrepancy_review():
         db.close()
 
 
+@bp.route("/discrepancy-export", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager")
+def discrepancy_export():
+    """Queue a background export for the current discrepancy filters."""
+    db = Session()
+    try:
+        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not user_lab_unit_ids:
+            from flask import flash, redirect, url_for
+            flash("No lab units available for export.", "error")
+            return redirect(url_for("review.discrepancy_review"))
+        disease_id = request.form.get("disease_id", type=int)
+        if not disease_id:
+            from flask import flash, redirect, url_for
+            flash("Disease selection is required for export.", "error")
+            return redirect(url_for("review.discrepancy_review", **request.args))
 
+        lab_unit_id = request.form.get("lab_unit_id", type=int)
+        if lab_unit_id and lab_unit_id not in user_lab_unit_ids:
+            from flask import flash, redirect, url_for
+            flash("You are not allowed to export for this lab unit.", "error")
+            return redirect(url_for("review.discrepancy_review", **request.args))
+
+        filters = {
+            "disease_id": disease_id,
+            "lab_unit_id": lab_unit_id,
+            "resident_grade": request.form.getlist("resident_grade"),
+            "resident2_grade": request.form.getlist("resident2_grade"),
+            "arbitrator_grade": request.form.getlist("arbitrator_grade"),
+            "final_grade": request.form.getlist("final_grade"),
+            "has_ai_grade": request.form.get("has_ai_grade", type=str),
+            "has_review": request.form.get("has_review", type=str),
+            "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
+            "ai_model_id": request.form.getlist("ai_model_id"),
+            "ai_grade": request.form.getlist("ai_grade"),
+            "allowed_lab_units": list(user_lab_unit_ids),
+        }
+
+        xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        ip = xff or (request.remote_addr or "-")
+        uploader_username = getattr(current_user, "username", None)
+        uploader_user_id = getattr(current_user, "id", None)
+        job_token = db_create_job(
+            ["discrepancy_export"],
+            [],
+            uploader_user_id=uploader_user_id,
+            uploader_username=uploader_username,
+            uploader_ip=ip,
+            lab_unit_id=lab_unit_id,
+            upload_type="discrepancy_export",
+        )
+        from flask import current_app, flash, redirect, url_for
+
+        enqueue_discrepancy_export(current_app._get_current_object(), job_token, filters, {"user_id": current_user.id})
+        flash("Export queued. You can monitor progress in Jobs.", "info")
+        return redirect(url_for("jobs.job_status_page", job_token=job_token))
+    finally:
+        db.close()
+
+@bp.route("/discrepancy-export/<job_token>/<path:filename>", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager")
+def discrepancy_export_download(job_token: str, filename: str):
+    """Serve generated export artifacts (Excel or zip) for authorized users."""
+    with Session() as db:
+        job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "discrepancy_export").first()
+        if not job:
+            abort(404)
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if job.lab_unit_id is None and job.uploader_user_id != current_user.id:
+            abort(404)
+        if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
+            abort(404)
+
+    export_dir = (EXPORT_DIR / job_token).resolve()
+    target = (export_dir / filename).resolve()
+    if not str(target).startswith(str(export_dir)) or not target.is_file():
+        abort(404)
+
+    return send_file(target, as_attachment=True)
 
 def get_disease_grading_id_by_impression(db: Session, impression: str) -> int | None:
     """Helper function to get disease grading ID by impression."""

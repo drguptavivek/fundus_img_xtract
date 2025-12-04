@@ -283,7 +283,9 @@ def create_app():
     thumbnail_maintenance_logger = loggers["thumbnail_maintenance"]
     startup_env_logger = loggers["startup_env"]
 
-    run_startup_env_checks(app, startup_env_logger)
+    # Ensure services used during startup (e.g., email decryption) have app context
+    with app.app_context():
+        run_startup_env_checks(app, startup_env_logger)
 
     def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
         level = logging.INFO
@@ -900,7 +902,8 @@ def create_app():
     # Initialize email configuration from database
     try:
         from utils.email_config import EmailConfigService
-        EmailConfigService.update_flask_config()
+        with app.app_context():
+            EmailConfigService.update_flask_config()
         app.logger.info("Email configuration initialized from database or environment")
     except Exception as e:
         app.logger.warning(f"Failed to initialize email configuration: {e}")

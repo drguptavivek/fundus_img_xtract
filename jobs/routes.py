@@ -20,17 +20,6 @@ def list_recent_jobs():
     
     with get_db_session() as db:
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
-            return render_template(
-                "jobs/jobs_list.html",
-                jobs=[],
-                rejections={},
-                totals={},
-                successes={},
-                job_types=[],
-                selected_job_type="",
-                pagination={"page": 1, "per_page": 20, "total_count": 0, "total_pages": 1, "has_prev": False, "has_next": False, "prev_num": None, "next_num": None},
-            )
 
         # Get filter and pagination parameters
         job_type_filter = request.args.get('job_type', '')
@@ -40,11 +29,16 @@ def list_recent_jobs():
         # Limit per_page to reasonable values
         per_page = min(max(per_page, 10), 100)
         
-        # Build the base query
+        # Build the base query: show jobs in allowed labs OR created by the user OR lab_unit_id is NULL
+        visibility_filter = (
+            (Job.lab_unit_id.in_(allowed_lab_units)) |
+            (Job.lab_unit_id.is_(None)) |
+            (Job.uploader_user_id == current_user.id)
+        )
         query = (
             db.query(Job)
             .options(selectinload(Job.lab_unit).selectinload(LabUnit.hospital))
-            .filter(Job.lab_unit_id.in_(allowed_lab_units))
+            .filter(visibility_filter)
         )
         
         # Apply job type filter if specified
@@ -141,7 +135,7 @@ def job_status_json(job_token: str):
         if not job:
             return jsonify({"error": "job not found"}), 404
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
+        if job.lab_unit_id not in allowed_lab_units and job.lab_unit_id is not None and job.uploader_user_id != current_user.id:
             return jsonify({"error": "job not found"}), 404
         
         payload = db_get_job_payload(job_token)
@@ -152,6 +146,7 @@ def job_status_json(job_token: str):
         payload["upload_type"] = job.upload_type
         if job.upload_type == "discrepancy_export":
             payload["export_files"] = _list_export_files(job.token)
+            payload["download_base"] = url_for("review.discrepancy_export_download", job_token=job.token, filename="", _external=True)
         return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])

@@ -309,6 +309,8 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
 
 
 def _resolve_disease_key(db: Session, disease_id: int) -> str:
+    if not disease_id:
+        return "dr"
     disease = db.get(Disease, disease_id)
     if not disease:
         return "dr"
@@ -451,7 +453,13 @@ def _write_excel(rows: List[Dict[str, Any]], filters: Dict[str, Any], export_dir
     sanitized_rows = [{k: v for k, v in row.items() if k != "image_path"} for row in rows]
     df = pd.DataFrame(sanitized_rows)
     filters_df = pd.DataFrame(
-        [{"filter": k, "value": ", ".join(v) if isinstance(v, list) else v} for k, v in filters.items()]
+        [
+            {
+                "filter": k,
+                "value": ", ".join([str(item) for item in v]) if isinstance(v, list) else v,
+            }
+            for k, v in filters.items()
+        ]
     )
     excel_path = export_dir / "data.xlsx"
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
@@ -461,6 +469,20 @@ def _write_excel(rows: List[Dict[str, Any]], filters: Dict[str, Any], export_dir
     # Also provide .xls naming for compatibility (same content, xlsx format)
     xls_path = export_dir / "data.xls"
     xls_path.write_bytes(excel_path.read_bytes())
+
+    # Write filters.txt
+    filters_txt = export_dir / "filters.txt"
+    try:
+        filters_txt.write_text(
+            "\n".join(
+                f"{k}: {', '.join([str(item) for item in v]) if isinstance(v, list) else v}"
+                for k, v in filters.items()
+            ),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
     return excel_path
 
 

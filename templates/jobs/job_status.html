@@ -42,6 +42,11 @@
         <h6 class="mb-2">Files</h6>
         <ul id="items" class="list-group mb-3"></ul>
 
+        <div id="exportFiles" class="mb-3" style="display: none;">
+          <h6 class="mb-2">Exports</h6>
+          <ul id="exportList" class="list-group"></ul>
+        </div>
+
         <h6 class="mb-2">Rejected (client-side checks)</h6>
         <ul id="rejected" class="list-group"></ul>
 
@@ -88,6 +93,8 @@
       const upIpEl = document.getElementById('uploader_ip');
       const labUnitEl = document.getElementById('lab_unit');
       const uploadTypeEl = document.getElementById('upload_type');
+      const exportWrap = document.getElementById('exportFiles');
+      const exportList = document.getElementById('exportList');
 
       // header status
       statusEl.className = `badge bg-${badgeClassForState(data.status)}`;
@@ -135,6 +142,25 @@
         `;
         listEl.appendChild(li);
       });
+
+      // export files (for discrepancy_export)
+      exportList.innerHTML = '';
+      exportWrap.style.display = 'none';
+      if ((data.upload_type || '').toLowerCase() === 'discrepancy_export' && data.export_files && data.export_files.length) {
+        exportWrap.style.display = 'block';
+        const base = (data.download_base || '').replace(/\/$/, '');
+        data.export_files.forEach((fname) => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between align-items-center';
+          const link = document.createElement('a');
+          link.href = `${base}/${encodeURIComponent(fname)}`;
+          link.textContent = fname;
+          link.rel = 'noopener';
+          link.className = 'text-decoration-none';
+          li.appendChild(link);
+          exportList.appendChild(li);
+        });
+      }
 
       // rejected (single summary)
       rejEl.innerHTML = '';

@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Dataset {{ dataset.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+      <h3 class="mb-0">{{ dataset.name }}</h3>
+      <p class="text-muted mb-0 small">{{ dataset.purpose }}</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.dataset_curation') }}">Back</a>
+      {% if include_count > 0 %}
+      <form method="POST" action="{{ url_for('review.dataset_export', dataset_uuid=dataset.uuid) }}">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-primary btn-sm">Export ({{ include_count }})</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="small text-muted">Disease</div>
+          <div class="fw-semibold">{{ dataset.disease.name }}</div>
+          {% if next_meta.hospital or next_meta.lab_unit %}
+          <div class="small text-muted mt-2">Location</div>
+          <div class="fw-semibold">{{ next_meta.hospital or '—' }}{% if next_meta.lab_unit %} / {{ next_meta.lab_unit }}{% endif %}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="small text-muted">Included</div>
+          <div class="fw-semibold text-success">{{ include_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="small text-muted">Excluded</div>
+          <div class="fw-semibold text-danger">{{ exclude_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <div class="small text-muted">Created</div>
+          <div class="fw-semibold">{{ dataset.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          <div class="small text-muted mt-2">Matches current filters</div>
+          <div class="fw-semibold">{{ total_matching }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filters</h5>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Lab Unit</div>
+          <div class="fw-semibold">
+            {% if filters_display.lab_unit_id %}{{ filters_display.lab_unit_id }}{% else %}All{% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Consensus</div>
+          <div class="fw-semibold">{{ filters_display.has_consensus or 'all' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Has Review</div>
+          <div class="fw-semibold">{{ filters_display.has_review or 'all' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Has AI Grade</div>
+          <div class="fw-semibold">{{ filters_display.has_ai_grade or 'all' }}</div>
+        </div>
+      </div>
+      <div class="row g-3 mt-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Resident Grades</div>
+          <div class="fw-semibold">{{ filters_display.resident_grade | join(', ') if filters_display.resident_grade else 'All' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Resident2 Grades</div>
+          <div class="fw-semibold">{{ filters_display.resident2_grade | join(', ') if filters_display.resident2_grade else 'All' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Arbitrator Grades</div>
+          <div class="fw-semibold">{{ filters_display.arbitrator_grade | join(', ') if filters_display.arbitrator_grade else 'All' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Final Grades</div>
+          <div class="fw-semibold">{{ filters_display.final_grade | join(', ') if filters_display.final_grade else 'All' }}</div>
+        </div>
+      </div>
+      <div class="row g-3 mt-3">
+        <div class="col-md-4">
+          <div class="small text-muted">AI Models</div>
+          <div class="fw-semibold">{{ filters_display.ai_model_id | join(', ') if filters_display.ai_model_id else 'All' }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">AI Grades</div>
+          <div class="fw-semibold">{{ filters_display.ai_grade | join(', ') if filters_display.ai_grade else 'All' }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">AI Review Status</div>
+          <div class="fw-semibold">{{ filters_display.ai_review_status | join(', ') if filters_display.ai_review_status else 'All' }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Selected Tasks</h5>
+      <small class="text-muted">Included vs excluded based on your decisions.</small>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-lg-6">
+          <h6>Included ({{ included_rows|length }})</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Task ID</th>
+                  <th>Final</th>
+                  <th>AI</th>
+                  <th>Lab Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in included_rows %}
+                <tr>
+                  <td>{{ row.task_id }}</td>
+                  <td>{{ row.final_impression or '—' }}</td>
+                  <td>{{ row.grading_details_json | safe }}</td>
+                  <td>{{ row.lab_unit }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-center">No tasks included yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <h6>Excluded ({{ excluded_rows|length }})</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Task ID</th>
+                  <th>Final</th>
+                  <th>AI</th>
+                  <th>Lab Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in excluded_rows %}
+                <tr>
+                  <td>{{ row.task_id }}</td>
+                  <td>{{ row.final_impression or '—' }}</td>
+                  <td>{{ row.grading_details_json | safe }}</td>
+                  <td>{{ row.lab_unit }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-center">No tasks excluded yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <h5 class="card-title mb-0">Manual Screening</h5>
+      <small class="text-muted">Decide include / exclude then move to the next image.</small>
+    </div>
+    <div class="card-body">
+      {% if next_row %}
+        <div class="row g-3">
+          <div class="col-lg-7">
+            {% set image = next_image %}
+            {% set image_uuid = next_row.encounter_file_uuid or next_row.direct_image_uuid %}
+            {% include "partials/_viewer_card.html" with context %}
+          </div>
+          <div class="col-lg-5 d-flex flex-column gap-3">
+            <div class="card">
+              <div class="card-body">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <div class="small text-muted">Task ID</div>
+                    <div class="fw-semibold">{{ next_row.task_id }}</div>
+                  </div>
+                  <div>
+                    <div class="small text-muted">State</div>
+                    <div class="fw-semibold">{{ next_row.state }}</div>
+                  </div>
+                </div>
+                <div class="mt-2 small text-muted">Consensus</div>
+                <div class="fw-semibold">{{ next_row.consensus_status or '—' }} {% if next_row.final_impression %} ({{ next_row.final_impression }}){% endif %}</div>
+                <div class="mt-3">
+                  <div class="small text-muted">Resident</div>
+                  {% set res = next_grades.get('resident') %}
+                  <div class="fw-semibold">{{ res.impression if res else '—' }}</div>
+                  <div class="text-muted small">{{ res.comment if res and res.comment else '' }}</div>
+                </div>
+                <div class="mt-2">
+                  <div class="small text-muted">Resident2</div>
+                  {% set res2 = next_grades.get('resident2') %}
+                  <div class="fw-semibold">{{ res2.impression if res2 else '—' }}</div>
+                  <div class="text-muted small">{{ res2.comment if res2 and res2.comment else '' }}</div>
+                </div>
+                <div class="mt-2">
+                  <div class="small text-muted">Arbitrator</div>
+                  {% set arb = next_grades.get('arbitrator') %}
+                  <div class="fw-semibold">{{ arb.impression if arb else '—' }}</div>
+                  <div class="text-muted small">{{ arb.comment if arb and arb.comment else '' }}</div>
+                </div>
+                <div class="mt-2">
+                  <div class="small text-muted">Review</div>
+                  {% set rev = next_grades.get('review') %}
+                  <div class="fw-semibold">{{ rev.impression if rev else '—' }}</div>
+                  <div class="text-muted small">{{ rev.comment if rev and rev.comment else '' }}</div>
+                </div>
+                <div class="mt-2">
+                  <div class="small text-muted">AI Grade</div>
+                  <div class="fw-semibold">
+                    {% set ai = next_grades.get('ai') %}
+                    {% if ai %}
+                      {{ ai.impression or '—' }}
+                      {% if ai.ai_model_name %}<span class="text-muted small">({{ ai.ai_model_name }} v{{ ai.ai_model_version }})</span>{% endif %}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </div>
+                  {% if ai and ai.ai_probability %}
+                  <div class="small text-muted">AI Probability: {{ ai.ai_probability }}</div>
+                  {% endif %}
+                  {% if ai and ai.ai_review_statuses %}
+                  <div class="small text-muted mt-1">AI Review Status</div>
+                  <div class="fw-semibold">{{ ai.ai_review_statuses | join(', ') }}</div>
+                  {% endif %}
+                  {% if ai and ai.ai_review_comments %}
+                  <div class="small text-muted mt-1">AI Review Comments</div>
+                  <div class="text-muted small">{{ ai.ai_review_comments | join('; ') }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            <form method="POST">
+              {{ csrf_field() }}
+              <input type="hidden" name="task_id" value="{{ next_row.task_id }}">
+              <div class="d-flex gap-2">
+                <button type="submit" name="decision" value="include" class="btn btn-success w-100">Include &amp; Next</button>
+                <button type="submit" name="decision" value="exclude" class="btn btn-outline-secondary w-100">Exclude &amp; Next</button>
+              </div>
+            </form>
+            <div class="d-flex justify-content-end">
+              <a class="btn btn-link btn-sm" href="{{ url_for('review.dataset_curation') }}">Complete selection</a>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <div class="text-center py-4 text-muted">
+          All tasks for this dataset have been screened or no tasks match the filters.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

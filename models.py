@@ -635,6 +635,56 @@ class Consensus(Base):
     )
 
 
+class CuratedDataset(Base):
+    """Dataset definition that captures filter criteria and selected tasks."""
+
+    __tablename__ = "curated_datasets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid4()), nullable=False, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    filters_json: Mapped[str] = mapped_column(Text, nullable=False)
+    disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[disease_id], lazy="selectin")
+    created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id], lazy="selectin")
+    items: Mapped[List["CuratedDatasetItem"]] = relationship(
+        "CuratedDatasetItem",
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class CuratedDatasetItem(Base):
+    """Individual task membership within a curated dataset."""
+
+    __tablename__ = "curated_dataset_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(ForeignKey("curated_datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("grading_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    include_in_export: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    selection_method: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)
+    selected_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    selected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    dataset: Mapped["CuratedDataset"] = relationship("CuratedDataset", back_populates="items")
+    task: Mapped["GradingTask"] = relationship("GradingTask", lazy="selectin")
+    selected_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[selected_by_user_id], lazy="selectin")
+
+    __table_args__ = (
+        UniqueConstraint("dataset_id", "task_id", name="uq_curated_dataset_items_dataset_task"),
+        CheckConstraint("selection_method IN ('auto','manual')", name="ck_curated_dataset_items_method"),
+    )
+
+
 class UserDiseaseUnitRole(Base):
     __tablename__ = 'user_disease_unit_role'
     id: Mapped[int] = mapped_column(primary_key=True)

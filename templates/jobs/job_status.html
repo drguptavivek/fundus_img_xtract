@@ -143,10 +143,11 @@
         listEl.appendChild(li);
       });
 
-      // export files (for discrepancy_export)
+      // export files (for discrepancy_export / dataset_export)
       exportList.innerHTML = '';
       exportWrap.style.display = 'none';
-      if ((data.upload_type || '').toLowerCase() === 'discrepancy_export' && data.export_files && data.export_files.length) {
+      const uploadType = (data.upload_type || '').toLowerCase();
+      if ((uploadType === 'discrepancy_export' || uploadType === 'dataset_export') && data.export_files && data.export_files.length) {
         exportWrap.style.display = 'block';
         const base = (data.download_base || '').replace(/\/$/, '');
         data.export_files.forEach((fname) => {

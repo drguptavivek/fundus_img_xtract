@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block title %}Dataset Curation{% endblock %}
+
+{% block styles %}
+{{ super() }}
+<style>
+.dropdown-menu .form-check {
+  display: block;
+  padding: 0.25rem 1rem;
+  clear: both;
+  font-weight: 400;
+  color: var(--bs-dropdown-color);
+  text-decoration: none;
+  text-align: inherit;
+  white-space: nowrap;
+  background-color: transparent;
+  border: 0;
+  margin-left: 1rem;
+}
+.dropdown-menu .form-check .form-check-input { float: none; margin-left: 0; margin-right: 0.5rem; position: relative; top: 0.125rem; }
+.dropdown-menu .form-check-label { display: inline; margin-bottom: 0; width: calc(100% - 2rem); cursor: pointer; }
+.dropdown-menu .form-check-input { border-color: var(--bs-gray-600) !important; background-color: var(--bs-white) !important; }
+.dropdown-menu .form-check-input:checked { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+      <h3 class="mb-0">Dataset Curation</h3>
+      <p class="text-muted mb-0 small">Use discrepancy filters, add purpose, optionally auto-select a batch, then screen images manually.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.discrepancy_review') }}">Back to Discrepancy Review</a>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Filters & Dataset Details</h5>
+    </div>
+    <div class="card-body">
+      <form method="POST">
+        {{ csrf_field() }}
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label for="diseaseSelect" class="form-label">Disease <span class="text-danger">*</span></label>
+            <select class="form-select" id="diseaseSelect" name="disease_id" required>
+              <option value="">Select Disease</option>
+              {% for disease in diseases %}
+                <option value="{{ disease.id }}">{{ disease.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="labUnitSelect" class="form-label">Lab Unit</label>
+            <select class="form-select" id="labUnitSelect" name="lab_unit_id">
+              <option value="">All Lab Units</option>
+              {% for lab_unit in lab_units %}
+                <option value="{{ lab_unit.id }}">{{ lab_unit.hospital.name }} - {{ lab_unit.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="hasConsensusSelect" class="form-label">Consensus</label>
+            <select class="form-select" id="hasConsensusSelect" name="has_consensus">
+              <option value="has_consensus">Has Consensus</option>
+              <option value="">All Tasks</option>
+              <option value="no">No Consensus yet</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label for="hasReviewSelect" class="form-label">Has Review</label>
+            <select class="form-select" id="hasReviewSelect" name="has_review">
+              <option value="">All Tasks</option>
+              <option value="yes">Has Review</option>
+              <option value="no">No Review</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2" id="gradeFiltersRow" style="display: none;">
+          <div class="col-md-3">
+            <label class="form-label">Resident Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="residentGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="residentGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="residentGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="resident_grade">
+                    <label class="form-check-label" for="resident_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">{{ grade.impression }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Resident2 Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="resident2GradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="resident2GradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="resident2GradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="resident2_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="resident2_grade">
+                    <label class="form-check-label" for="resident2_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">{{ grade.impression }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Arbitrator Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="arbitratorGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="arbitratorGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="arbitratorGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="arbitrator_grade">
+                    <label class="form-check-label" for="arbitrator_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">{{ grade.impression }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Final Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="finalGradeText">All Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="finalGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="final_grade">
+                    <label class="form-check-label" for="final_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">{{ grade.impression }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-2">
+          <div class="col-md-3">
+            <label for="hasAiGradeSelect" class="form-label">Has AI Grade</label>
+            <select class="form-select" id="hasAiGradeSelect" name="has_ai_grade">
+              <option value="">All Tasks</option>
+              <option value="yes">Has AI Grade</option>
+              <option value="no">No AI Grade</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">AI Models</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiModelDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="aiModelText">All Models</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="aiModelList">
+                {% for model in ai_models %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input ai-model-checkbox" type="radio" value="{{ model.id }}" id="ai_model_{{ model.id }}" name="ai_model_id">
+                    <label class="form-check-label" for="ai_model_{{ model.id }}">{{ model.name }} v{{ model.version }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">AI Grades</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="aiGradeText">All AI Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="aiGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input ai-grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="ai_grade_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="ai_grade">
+                    <label class="form-check-label" for="ai_grade_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">{{ grade.impression }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">AI Review Status</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiReviewStatusDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="aiReviewStatusText">All AI Review Statuses</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="aiReviewStatusList">
+                {% for status_key, status_label in ai_review_status_labels.items() %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input ai-review-status-checkbox" type="checkbox" value="{{ status_key }}" id="ai_review_status_{{ status_key }}" name="ai_review_status">
+                    <label class="form-check-label" for="ai_review_status_{{ status_key }}">{{ status_label }}</label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-4">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Dataset Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="dataset_name" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Purpose <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="dataset_purpose" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Auto-select count (optional)</label>
+            <input type="number" min="1" class="form-control" name="auto_select_count" placeholder="e.g., 200">
+            <div class="form-text">If provided, picks the first N tasks that match filters.</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">Create Dataset</button>
+          <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <h5 class="card-title mb-0">Recent Datasets</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Purpose</th>
+              <th>Disease</th>
+              <th>Selected</th>
+              <th>Skipped</th>
+              <th>Created By</th>
+              <th>Created At</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ds in datasets %}
+            {% set stats = dataset_stats.get(ds.id, {"include":0, "exclude":0}) %}
+            <tr>
+              <td>{{ ds.name }}</td>
+              <td>{{ ds.purpose }}</td>
+              <td>{{ ds.disease.name }}</td>
+              <td>{{ stats.include }}</td>
+              <td>{{ stats.exclude }}</td>
+              <td>{{ ds.created_by.full_name or ds.created_by.username if ds.created_by else "—" }}</td>
+              <td>{{ ds.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('review.dataset_detail', dataset_uuid=ds.uuid) }}">Screen</a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center py-3 text-muted">No datasets yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+function clearFilters() {
+  document.getElementById('diseaseSelect').value = '';
+  document.getElementById('labUnitSelect').value = '';
+  document.getElementById('hasAiGradeSelect').value = '';
+  document.getElementById('hasReviewSelect').value = '';
+  document.getElementById('hasConsensusSelect').value = '';
+  document.getElementById('gradeFiltersRow').style.display = 'none';
+  document.querySelectorAll('.grade-checkbox').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.ai-model-checkbox').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.ai-grade-checkbox').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.ai-review-status-checkbox').forEach(cb => cb.checked = false);
+  document.getElementById('residentGradeText').textContent = 'All Grades';
+  document.getElementById('resident2GradeText').textContent = 'All Grades';
+  document.getElementById('arbitratorGradeText').textContent = 'All Grades';
+  document.getElementById('finalGradeText').textContent = 'All Grades';
+  document.getElementById('aiModelText').textContent = 'All Models';
+  document.getElementById('aiGradeText').textContent = 'All AI Grades';
+  document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
+}
+
+let diseasesData = null;
+fetch('/api/diseases-with-gradings')
+  .then(resp => resp.json())
+  .then(data => { diseasesData = data.diseases; })
+  .catch(err => console.error('Failed to load diseases', err));
+
+document.addEventListener('DOMContentLoaded', function() {
+  const diseaseSelect = document.getElementById('diseaseSelect');
+  const residentGradeList = document.getElementById('residentGradeList');
+  const resident2GradeList = document.getElementById('resident2GradeList');
+  const arbitratorGradeList = document.getElementById('arbitratorGradeList');
+  const finalGradeList = document.getElementById('finalGradeList');
+  const aiGradeList = document.getElementById('aiGradeList');
+
+  const allGradeOptions = {
+    resident: Array.from(residentGradeList.querySelectorAll('li')),
+    resident2: Array.from(resident2GradeList.querySelectorAll('li')),
+    arbitrator: Array.from(arbitratorGradeList.querySelectorAll('li')),
+    final: Array.from(finalGradeList.querySelectorAll('li')),
+    ai: Array.from(aiGradeList.querySelectorAll('li')),
+  };
+
+  function updateGradeOptions() {
+    const diseaseId = parseInt(diseaseSelect.value);
+    const gradeFiltersRow = document.getElementById('gradeFiltersRow');
+    if (diseaseId && diseasesData) {
+      gradeFiltersRow.style.display = 'flex';
+      const selectedDisease = diseasesData.find(d => d.id === diseaseId);
+      if (selectedDisease) {
+        updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
+        updateGradeCheckboxes(resident2GradeList, selectedDisease.gradings, allGradeOptions.resident2);
+        updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
+        updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
+        updateGradeCheckboxes(aiGradeList, selectedDisease.gradings, allGradeOptions.ai, 'AI Grades');
+      }
+    } else {
+      gradeFiltersRow.style.display = 'none';
+    }
+  }
+
+  diseaseSelect.addEventListener('change', updateGradeOptions);
+  if (diseaseSelect.value) {
+    setTimeout(updateGradeOptions, 100);
+  }
+});
+
+function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All Grades') {
+  const checkedValues = Array.from(gradeList.querySelectorAll('input:checked')).map(input => input.value);
+  gradeList.innerHTML = '';
+  const gradeImpressions = new Set((grades || []).map(g => g.impression));
+  const added = new Set();
+  allOptions.forEach(li => {
+    const gradeValue = li.querySelector('input').value;
+    if (gradeImpressions.has(gradeValue) && !added.has(gradeValue)) {
+      const newLi = li.cloneNode(true);
+      if (checkedValues.includes(gradeValue)) newLi.querySelector('input').checked = true;
+      gradeList.appendChild(newLi);
+      added.add(gradeValue);
+    }
+  });
+  updateDropdownText(gradeList, defaultLabel);
+}
+
+function updateDropdownText(gradeList, defaultLabel='All Grades') {
+  const dropdownId = gradeList.id.replace('List', 'Text');
+  const selectedCount = gradeList.querySelectorAll('.grade-checkbox:checked, .ai-grade-checkbox:checked, .ai-review-status-checkbox:checked').length;
+  const dropdownText = document.getElementById(dropdownId);
+  if (selectedCount === 0) {
+    dropdownText.textContent = defaultLabel;
+  } else if (selectedCount === 1) {
+    const checkedBox = gradeList.querySelector('.grade-checkbox:checked, .ai-grade-checkbox:checked, .ai-review-status-checkbox:checked');
+    dropdownText.textContent = checkedBox.value || checkedBox.nextElementSibling.textContent.trim();
+  } else {
+    dropdownText.textContent = `${selectedCount} selected`;
+  }
+}
+
+document.querySelectorAll('.dropdown-menu').forEach(menu => {
+  menu.addEventListener('change', function(e) {
+    if (e.target.classList.contains('grade-checkbox')) {
+      updateDropdownText(menu, 'All Grades');
+    }
+    if (e.target.classList.contains('ai-model-checkbox')) {
+      document.querySelectorAll('.ai-model-checkbox').forEach(cb => { if (cb !== e.target) cb.checked = false; });
+      const dropdownText = document.getElementById(menu.id.replace('List', 'Text'));
+      const checked = menu.querySelector('.ai-model-checkbox:checked');
+      dropdownText.textContent = checked ? checked.nextElementSibling.textContent : 'All Models';
+    }
+    if (e.target.classList.contains('ai-grade-checkbox')) {
+      const dropdownText = document.getElementById(menu.id.replace('List', 'Text'));
+      const checked = menu.querySelectorAll('.ai-grade-checkbox:checked');
+      if (checked.length === 0) dropdownText.textContent = 'All AI Grades';
+      else if (checked.length === 1) dropdownText.textContent = checked[0].value;
+      else dropdownText.textContent = `${checked.length} AI grades selected`;
+    }
+    if (e.target.classList.contains('ai-review-status-checkbox')) {
+      const dropdownText = document.getElementById(menu.id.replace('List', 'Text'));
+      const checked = menu.querySelectorAll('.ai-review-status-checkbox:checked');
+      if (checked.length === 0) dropdownText.textContent = 'All AI Review Statuses';
+      else if (checked.length === 1) dropdownText.textContent = checked[0].nextElementSibling.textContent.trim();
+      else dropdownText.textContent = `${checked.length} AI review statuses selected`;
+    }
+  });
+});
+
+function toggleAiControls() {
+  const hasAi = document.getElementById('hasAiGradeSelect').value === 'yes';
+  ['aiModelDropdown','aiGradeDropdown','aiReviewStatusDropdown'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !hasAi;
+  });
+  document.querySelectorAll('.ai-model-checkbox, .ai-grade-checkbox, .ai-review-status-checkbox').forEach(cb => {
+    cb.disabled = !hasAi;
+    if (!hasAi) cb.checked = false;
+  });
+  if (!hasAi) {
+    document.getElementById('aiModelText').textContent = 'All Models';
+    document.getElementById('aiGradeText').textContent = 'All AI Grades';
+    document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
+  }
+}
+document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
+toggleAiControls();
+</script>
+{% endblock %}

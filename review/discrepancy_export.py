@@ -18,8 +18,8 @@ from models import (
     IMAGE_DIR,
     Disease,
     Grade,
-    Hospital,
     LabUnit,
+    GradingTask,
     Session,
     ZipFile as ZipUpload,
     EncounterFile,
@@ -61,6 +61,18 @@ class ExportTaskRow:
 def enqueue_discrepancy_export(app, job_token: str, filters: Dict[str, Any], user_context: Dict[str, Any]) -> None:
     executor = app.config["EXECUTOR"]
     executor.submit(_run_export_job, app, job_token, filters, user_context)
+
+
+def enqueue_dataset_export(
+    app,
+    job_token: str,
+    dataset_id: int,
+    task_ids: Sequence[int],
+    metadata: Dict[str, Any] | None = None,
+) -> None:
+    """Queue export for a curated dataset using explicit task ids."""
+    executor = app.config["EXECUTOR"]
+    executor.submit(_run_dataset_export_job, app, job_token, dataset_id, list(task_ids), metadata or {})
 
 
 def _cleanup_old_exports() -> None:
@@ -107,6 +119,49 @@ def _run_export_job(app, job_token: str, filters: Dict[str, Any], user_context: 
             db_set_item_state(job_token, "discrepancy_export", "error", str(exc))
 
 
+def _run_dataset_export_job(
+    app,
+    job_token: str,
+    dataset_id: int,
+    task_ids: Sequence[int],
+    metadata: Dict[str, Any],
+) -> None:
+    """Export a curated dataset using existing discrepancy export pipeline."""
+    with app.app_context():
+        db_set_job_status(job_token, "processing")
+        db_set_item_state(job_token, "dataset_export", "processing")
+
+        try:
+            _cleanup_old_exports()
+            rows = _fetch_rows_by_task_ids(task_ids, metadata.get("disease_id"))
+            if not rows:
+                db_set_job_status(job_token, "error", error="No tasks to export")
+                db_set_item_state(job_token, "dataset_export", "error", "No tasks to export")
+                return
+
+            export_dir = EXPORT_DIR / job_token
+            export_dir.mkdir(parents=True, exist_ok=True)
+
+            graded_rows = _build_task_payload(rows)
+            export_filters = {"dataset_id": dataset_id, **(metadata or {})}
+            excel_path = _write_excel(graded_rows, export_filters, export_dir)
+            zip_paths, warnings = _write_zips(graded_rows, export_dir)
+
+            if warnings:
+                (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
+
+            db_set_job_status(job_token, "done")
+            db_set_item_state(
+                job_token,
+                "dataset_export",
+                "completed",
+                f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}",
+            )
+        except Exception as exc:
+            db_set_job_status(job_token, "error", error=str(exc))
+            db_set_item_state(job_token, "dataset_export", "error", str(exc))
+
+
 def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
     db = Session()
     try:
@@ -121,6 +176,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         has_consensus = filters.get("has_consensus", "has_consensus")
         ai_model_ids = filters.get("ai_model_id", [])
         ai_grades = filters.get("ai_grade", [])
+        ai_review_statuses = filters.get("ai_review_status", [])
         allowed_lab_units: List[int] = filters.get("allowed_lab_units", [])
         if not allowed_lab_units:
             return []
@@ -157,6 +213,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         else:
             ai_model_ids = []
             ai_grades = []
+            ai_review_statuses = []
 
         role_grade_filters = [
             ("resident", resident_grades),
@@ -202,6 +259,15 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                     "WHERE elem->>'role_slot' = 'ai' AND elem->>'grade_name' = ANY(:ai_grade_names))"
                 )
                 params["ai_grade_names"] = valid_ai_grades
+
+        if ai_review_statuses:
+            valid_statuses = [s for s in ai_review_statuses if s]
+            if valid_statuses:
+                where_clauses.append(
+                    "EXISTS (SELECT 1 FROM grades g WHERE g.task_id = gt.id AND g.role_slot = 'ai' "
+                    "AND g.ai_review_status = ANY(:ai_review_statuses))"
+                )
+                params["ai_review_statuses"] = valid_statuses
 
         if final_grades:
             valid_final_grades = [g for g in final_grades if g]
@@ -273,8 +339,6 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
 
         results: List[ExportTaskRow] = []
         disease_map = {d.id: d.name for d in db.query(Disease).all()}
-        lab_unit_map = {lu.id: lu.name for lu in db.query(LabUnit).all()}
-        hospital_map = {h.id: h.name for h in db.query(Hospital).all()}
         disease_name = disease_map.get(disease_id, "")
 
         for row in rows:
@@ -406,6 +470,119 @@ def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
             }
         )
     return data
+
+
+def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] = None) -> List[ExportTaskRow]:
+    """Fetch tasks by explicit ids for dataset export."""
+    db = Session()
+    try:
+        if not task_ids:
+            return []
+
+        # Use provided disease_id to pick MV columns; dataset is disease-specific
+        if disease_id is None:
+            disease_id = (
+                db.query(GradingTask.disease_id).filter(GradingTask.id.in_(task_ids)).limit(1).scalar()
+            )
+
+        disease_key = _resolve_disease_key(db, disease_id)
+        mv_detail_col = f"{disease_key}_grading_details_json"
+        mv_ai_count_col = f"{disease_key}_ai_grading_count"
+        mv_consensus_col = f"{disease_key}_consensus_status"
+
+        params: Dict[str, Any] = {"task_ids": list(task_ids)}
+
+        base_query = f"""
+            FROM mvw_image_listing_all v
+            JOIN grading_tasks gt ON (
+                (v.direct_image_upload_id IS NOT NULL AND gt.direct_image_upload_id = v.direct_image_upload_id) OR
+                (v.encounter_file_id IS NOT NULL AND gt.encounter_file_id = v.encounter_file_id)
+            )
+            LEFT JOIN lab_units lu ON gt.lab_unit_id = lu.id
+            LEFT JOIN hospitals h ON lu.hospital_id = h.id
+            LEFT JOIN encounter_files ef ON gt.encounter_file_id = ef.id
+            LEFT JOIN patient_encounters pe ON ef.patient_encounter_id = pe.id
+            LEFT JOIN zip_files zf ON pe.zip_file_id = zf.id
+            LEFT JOIN direct_image_uploads diu ON gt.direct_image_upload_id = diu.id
+            LEFT JOIN consensus c ON gt.id = c.task_id
+            LEFT JOIN disease_gradings dg ON c.final_disease_grading_id = dg.id
+            WHERE gt.id = ANY(:task_ids)
+        """
+
+        data_sql = f"""
+            SELECT
+                gt.id AS task_id,
+                gt.uuid AS task_uuid,
+                gt.state AS task_state,
+                lu.name AS lab_unit_name,
+                h.name AS hospital_name,
+                {mv_detail_col} AS grading_details_json,
+                {mv_consensus_col} AS consensus_status,
+                {mv_ai_count_col} AS ai_grading_count,
+                c.id AS consensus_id,
+                dg.impression AS final_impression,
+                c.method AS consensus_method,
+                gt.encounter_file_id,
+                ef.uuid AS encounter_file_uuid,
+                ef.filename AS encounter_filename,
+                zf.upload_date AS encounter_upload_date,
+                gt.direct_image_upload_id,
+                diu.uuid AS direct_image_uuid,
+                diu.filename AS direct_filename,
+                diu.folder_rel AS direct_folder_rel
+            {base_query}
+        """
+
+        rows = db.execute(text(data_sql), params).fetchall()
+        task_ids_result = [row.task_id for row in rows]
+
+        ai_review_comments: Dict[int, List[str]] = {}
+        ai_review_statuses: Dict[int, List[str]] = {}
+        if task_ids_result:
+            ai_review_rows = (
+                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
+                .filter(Grade.role_slot == "ai", Grade.task_id.in_(task_ids_result))
+                .filter(or_(Grade.ai_review_comment.isnot(None), Grade.ai_review_status.isnot(None)))
+                .all()
+            )
+            for task_id, comment, status in ai_review_rows:
+                if comment:
+                    ai_review_comments.setdefault(task_id, []).append(comment)
+                if status:
+                    ai_review_statuses.setdefault(task_id, []).append(status)
+
+        disease_map = {d.id: d.name for d in db.query(Disease).all()}
+        disease_name = disease_map.get(disease_id, "")
+
+        results: List[ExportTaskRow] = []
+        for row in rows:
+            results.append(
+                ExportTaskRow(
+                    task_id=row.task_id,
+                    task_uuid=str(row.task_uuid),
+                    disease=disease_name,
+                    lab_unit=row.lab_unit_name,
+                    hospital=row.hospital_name,
+                    state=row.task_state,
+                    consensus_status=row.consensus_status,
+                    consensus_method=row.consensus_method,
+                    final_impression=row.final_impression,
+                    grading_details_json=row.grading_details_json or "[]",
+                    ai_review_comments=ai_review_comments.get(row.task_id, []),
+                    ai_review_statuses=ai_review_statuses.get(row.task_id, []),
+                    encounter_file_id=row.encounter_file_id,
+                    encounter_file_uuid=row.encounter_file_uuid,
+                    encounter_filename=row.encounter_filename,
+                    encounter_upload_date=row.encounter_upload_date,
+                    direct_image_upload_id=row.direct_image_upload_id,
+                    direct_image_uuid=row.direct_image_uuid,
+                    direct_filename=row.direct_filename,
+                    direct_folder_rel=row.direct_folder_rel,
+                )
+            )
+        return results
+    finally:
+        db.close()
 
 
 def _load_encounter_paths(encounter_ids: Sequence[int]) -> Dict[int, tuple[Path, str]]:

@@ -144,9 +144,14 @@ def job_status_json(job_token: str):
             
         # Add upload_type to the payload
         payload["upload_type"] = job.upload_type
-        if job.upload_type == "discrepancy_export":
+        if job.upload_type in ("discrepancy_export", "dataset_export"):
             payload["export_files"] = _list_export_files(job.token)
-            payload["download_base"] = url_for("review.discrepancy_export_download", job_token=job.token, filename="", _external=True)
+            download_endpoint = (
+                "review.discrepancy_export_download"
+                if job.upload_type == "discrepancy_export"
+                else "review.dataset_export_download"
+            )
+            payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
         return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])

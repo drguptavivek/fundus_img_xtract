@@ -258,6 +258,27 @@
           </div>
         </div>
 
+        <div class="col-md-3">
+          <label class="form-label">AI Review Status</label>
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiReviewStatusDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+              <span id="aiReviewStatusText">All AI Review Statuses</span>
+            </button>
+            <ul class="dropdown-menu w-100" id="aiReviewStatusList">
+              {% for status_key, status_label in ai_review_status_labels.items() %}
+              <li>
+                <div class="form-check ms-4 px-3 py-1">
+                  <input class="form-check-input ai-review-status-checkbox" type="checkbox" value="{{ status_key }}" id="ai_review_status_{{ status_key }}" name="ai_review_status" {% if status_key in (filters.ai_review_status if filters.ai_review_status else []) %}checked{% endif %}>
+                  <label class="form-check-label" for="ai_review_status_{{ status_key }}">
+                    {{ status_label }}
+                  </label>
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+
         <div class="col-md-3 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">Apply Filters</button>
             <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">Clear Filters</button>
@@ -673,6 +694,9 @@ function clearFilters() {
   document.querySelectorAll('.ai-model-checkbox').forEach(checkbox => {
     checkbox.checked = false;
   });
+  document.querySelectorAll('.ai-review-status-checkbox').forEach(checkbox => {
+    checkbox.checked = false;
+  });
   
   // Update dropdown text to show "All Grades"
   document.getElementById('residentGradeText').textContent = 'All Grades';
@@ -681,6 +705,7 @@ function clearFilters() {
   document.getElementById('finalGradeText').textContent = 'All Grades';
   document.getElementById('aiModelText').textContent = 'All Models';
   document.getElementById('aiGradeText').textContent = 'All AI Grades';
+   document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
   
   // Remove page parameter from URL so it defaults to page 1
   const form = document.getElementById('filterForm');
@@ -922,16 +947,47 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
         dropdownText.textContent = `${selectedCount} AI grades selected`;
       }
     }
+
+    if (e.target.classList.contains('ai-review-status-checkbox')) {
+      const dropdownId = menu.id.replace('List', 'Text');
+      const selectedCount = menu.querySelectorAll('.ai-review-status-checkbox:checked').length;
+      const dropdownText = document.getElementById(dropdownId);
+      if (selectedCount === 0) {
+        dropdownText.textContent = 'All AI Review Statuses';
+      } else if (selectedCount === 1) {
+        const checkedBox = menu.querySelector('.ai-review-status-checkbox:checked');
+        dropdownText.textContent = checkedBox.nextElementSibling.textContent.trim();
+      } else {
+        dropdownText.textContent = `${selectedCount} AI review statuses selected`;
+      }
+    }
   });
 });
+
+function updateAiReviewStatusDropdown() {
+  const menu = document.getElementById('aiReviewStatusList');
+  if (!menu) return;
+  const selectedCount = menu.querySelectorAll('.ai-review-status-checkbox:checked').length;
+  const dropdownText = document.getElementById('aiReviewStatusText');
+  if (selectedCount === 0) {
+    dropdownText.textContent = 'All AI Review Statuses';
+  } else if (selectedCount === 1) {
+    const checkedBox = menu.querySelector('.ai-review-status-checkbox:checked');
+    dropdownText.textContent = checkedBox ? checkedBox.nextElementSibling.textContent.trim() : 'All AI Review Statuses';
+  } else {
+    dropdownText.textContent = `${selectedCount} AI review statuses selected`;
+  }
+}
 
 // Disable AI controls unless "Has AI Grade" is Yes
 function toggleAiControls() {
   const hasAi = document.getElementById('hasAiGradeSelect').value === 'yes';
   const aiModelDropdown = document.getElementById('aiModelDropdown');
   const aiGradeDropdown = document.getElementById('aiGradeDropdown');
+  const aiReviewStatusDropdown = document.getElementById('aiReviewStatusDropdown');
   aiModelDropdown.disabled = !hasAi;
   aiGradeDropdown.disabled = !hasAi;
+  aiReviewStatusDropdown.disabled = !hasAi;
   document.querySelectorAll('.ai-model-checkbox').forEach(cb => {
     cb.disabled = !hasAi;
     if (!hasAi) cb.checked = false;
@@ -940,15 +996,22 @@ function toggleAiControls() {
     cb.disabled = !hasAi;
     if (!hasAi) cb.checked = false;
   });
+  document.querySelectorAll('.ai-review-status-checkbox').forEach(cb => {
+    cb.disabled = !hasAi;
+    if (!hasAi) cb.checked = false;
+  });
   if (!hasAi) {
     document.getElementById('aiModelText').textContent = 'All Models';
     document.getElementById('aiGradeText').textContent = 'All AI Grades';
+    document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
   }
+  updateAiReviewStatusDropdown();
 }
 
 document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
 // Initialize on load
 toggleAiControls();
+document.addEventListener('DOMContentLoaded', updateAiReviewStatusDropdown);
 </script>
 
 <script src="{{ url_for('static', filename='js/mv-refresh.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>

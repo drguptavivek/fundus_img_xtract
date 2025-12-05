@@ -31,6 +31,7 @@ from utils.upload_eligibility import (
 )
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
+from .task_review import AI_REVIEW_STATUS_LABELS
 
 
 @bp.route("/discrepancy-review", methods=["GET"])
@@ -106,11 +107,17 @@ def discrepancy_review():
 
         # AI grade filter (multi-select, optional)
         ai_grades = request.args.getlist("ai_grade")
+        ai_review_statuses = [
+            status
+            for status in request.args.getlist("ai_review_status")
+            if status in AI_REVIEW_STATUS_LABELS
+        ]
 
         # If user didn't request AI-grade-only records, ignore AI-specific filters
         if has_ai_grade != "yes":
             ai_model_ids = []
             ai_grades = []
+            ai_review_statuses = []
 
         # Figure out which MV columns to use based on disease
         disease_key = _resolve_disease_key(db, disease_id)
@@ -220,6 +227,14 @@ def discrepancy_review():
                     "WHERE elem->>'role_slot' = 'ai' AND elem->>'grade_name' = ANY(:ai_grade_names))"
                 )
                 params["ai_grade_names"] = valid_ai_grades
+
+        # AI review status filter (based on Grade.ai_review_status)
+        if ai_review_statuses:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM grades g WHERE g.task_id = gt.id AND g.role_slot = 'ai' "
+                "AND g.ai_review_status = ANY(:ai_review_statuses))"
+            )
+            params["ai_review_statuses"] = ai_review_statuses
 
         # Final grade filter via consensus
         if final_grades:
@@ -343,6 +358,7 @@ def discrepancy_review():
             total_pages=total_pages,
             has_prev=has_prev,
             has_next=has_next,
+            ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
             filters={
                 "disease_id": disease_id,
                 "lab_unit_id": lab_unit_id,
@@ -355,6 +371,7 @@ def discrepancy_review():
                 "has_consensus": has_consensus,
                 "ai_model_id": ai_model_ids,
                 "ai_grade": ai_grades,
+                "ai_review_status": ai_review_statuses,
             },
         )
     finally:
@@ -396,6 +413,11 @@ def discrepancy_export():
             "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
+            "ai_review_status": [
+                status
+                for status in request.form.getlist("ai_review_status")
+                if status in AI_REVIEW_STATUS_LABELS
+            ],
             "allowed_lab_units": list(user_lab_unit_ids),
         }
 

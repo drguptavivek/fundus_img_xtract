@@ -173,6 +173,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         final_grades = filters.get("final_grade", [])
         has_ai_grade = filters.get("has_ai_grade")
         has_review = filters.get("has_review")
+        review_grades = filters.get("review_grade", [])
         has_consensus = filters.get("has_consensus", "has_consensus")
         ai_model_ids = filters.get("ai_model_id", [])
         ai_grades = filters.get("ai_grade", [])
@@ -202,9 +203,20 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
             where_clauses.append("c.id IS NULL")
 
         if has_review == "yes":
-            where_clauses.append(f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')")
+            where_clauses.append(
+                f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
+            )
+            valid_review_grades = [g for g in review_grades if g]
+            if valid_review_grades:
+                where_clauses.append(
+                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
+                    "WHERE elem->>'role_slot' = 'review' AND elem->>'grade_name' = ANY(:review_grades))"
+                )
+                params["review_grades"] = valid_review_grades
         elif has_review == "no":
-            where_clauses.append(f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')")
+            where_clauses.append(
+                f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
+            )
 
         if has_ai_grade == "yes":
             where_clauses.append(f"{mv_ai_count_col} > 0")

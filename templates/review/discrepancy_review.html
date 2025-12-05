@@ -335,6 +335,7 @@
           {% if filters.has_consensus %}<input type="hidden" name="has_consensus" value="{{ filters.has_consensus }}">{% endif %}
           {% for mid in filters.ai_model_id or [] %}<input type="hidden" name="ai_model_id" value="{{ mid }}">{% endfor %}
           {% for g in filters.ai_grade or [] %}<input type="hidden" name="ai_grade" value="{{ g }}">{% endfor %}
+          {% for status in filters.ai_review_status or [] %}<input type="hidden" name="ai_review_status" value="{{ status }}">{% endfor %}
           <button type="submit" class="btn btn-outline-primary btn-sm" {% if not filters.disease_id %}disabled{% endif %}>
             Export ZIP
           </button>

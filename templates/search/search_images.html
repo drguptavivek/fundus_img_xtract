@@ -1,347 +1,329 @@
 {% extends "base.html" %}
 {% block title %}Search Images{% endblock %}
 
-{% block head %}
-<meta name="api-lab-units-url" content="{{ api_lab_units_url.replace('/0', '') }}">
-{% endblock %}
-
 {% block content %}
 <div class="container py-4">
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
     <div>
       <h1 class="h3 mb-1">Search Images</h1>
-      <p class="text-muted mb-0">Filter images by source, lab, camera, disease, verification status, and date ranges.</p>
+      <p class="text-muted mb-0">Reuse the discrepancy filters to find images across lab units.</p>
     </div>
   </div>
-  
-  <form method="get">
-    <!-- Common Filters Section -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <div class="d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Common Filters</h5>
-          <a href="{{ url_for('search.search_images_route') }}" class="btn btn-outline-secondary btn-sm">Clear Filters</a>
-        </div>
-      </div>  
-      <div class="card-body">
-        <div class="row gy-2 gx-2 align-items-end">
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-source">Source</label>
-            <select class="form-select" id="filter-source" name="source">
-              <option value="all" {% if filters.source == 'all' %}selected{% endif %}>All</option>
-              <option value="zip" {% if filters.source == 'zip' %}selected{% endif %}>ZIP Images</option>
-              <option value="direct" {% if filters.source == 'direct' %}selected{% endif %}>Direct Uploads</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-hospital">Hospital</label>
-            <select class="form-select" id="filter-hospital" name="hospital_id">
-              <option value="">All</option>
-              {% for hospital in hospitals %}
-              <option value="{{ hospital.id }}" {% if filters.hospital_id|int == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-lab">Lab Unit</label>
-            <select class="form-select" id="filter-lab" name="lab_unit_id">
-              <option value="">All</option>
-              {% for lab in lab_units %}
-              <option value="{{ lab.id }}" {% if filters.lab_unit_id|int == lab.id %}selected{% endif %}>{{ lab.name }}{% if lab.hospital %} — {{ lab.hospital.name }}{% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-upload-start">Uploaded After</label>
-            <input type="date" class="form-control" id="filter-upload-start" name="upload_start" value="{{ filters.upload_start }}">
-          </div>
-          <div class="col-12 col-md-3">
-            <label class="form-label mb-1" for="filter-upload-end">Uploaded Before</label>
-            <input type="date" class="form-control" id="filter-upload-end" name="upload_end" value="{{ filters.upload_end }}">
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Image-Specific Filters Section -->
-    <div class="card" id="image-specific-filters-card" style="{% if filters.source == 'all' %}display:none{% endif %}">
-      <div class="card-header">
-        <div class="d-flex justify-content-between align-items-center">
-          <h5 class="mb-0">Image-Specific Filters</h5>
-          <a href="{{ url_for('search.search_images_route') }}" class="btn btn-outline-secondary btn-sm">Clear Filters</a>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="row gy-2 gx-2 align-items-end">
-          <!-- Direct Upload Filters -->
-          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-camera">Camera (Direct)</label>
-            <select class="form-select" id="filter-camera" name="camera_id">
-              <option value="">All</option>
-              {% for camera in cameras %}
-              <option value="{{ camera.id }}" {% if filters.camera_id|int == camera.id %}selected{% endif %}>{{ camera.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-disease">Disease (Direct)</label>
-            <select class="form-select" id="filter-disease" name="disease_id">
-              <option value="">All</option>
-              {% for disease in diseases %}
-              <option value="{{ disease.id }}" {% if filters.disease_id|int == disease.id %}selected{% endif %}>{{ disease.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-area">Area (Direct)</label>
-            <select class="form-select" id="filter-area" name="area_id">
-              <option value="">All</option>
-              {% for area in areas %}
-              <option value="{{ area.id }}" {% if filters.area_id|int == area.id %}selected{% endif %}>{{ area.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12 col-md-3 direct-only-filter" style="{% if filters.source == 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-mydriatic">Mydriatic (Direct)</label>
-            <select class="form-select" id="filter-mydriatic" name="is_mydriatic">
-              <option value="" {% if filters.is_mydriatic == None %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.is_mydriatic == True %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.is_mydriatic == False %}selected{% endif %}>No</option>
-            </select>
-          </div>
-          <!-- ZIP Image Filters -->
-          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-has-dr">Has DR Report (ZIP)</label>
-            <select class="form-select" id="filter-has-dr" name="has_dr_report">
-              <option value="" {% if filters.has_dr_report == None %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.has_dr_report == True %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.has_dr_report == False %}selected{% endif %}>No</option>
-            </select>
-          </div>
-          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-has-gl">Has Glaucoma Report (ZIP)</label>
-            <select class="form-select" id="filter-has-gl" name="has_glaucoma_report">
-              <option value="" {% if filters.has_glaucoma_report == None %}selected{% endif %}>All</option>
-              <option value="true" {% if filters.has_glaucoma_report == True %}selected{% endif %}>Yes</option>
-              <option value="false" {% if filters.has_glaucoma_report == False %}selected{% endif %}>No</option>
-            </select>
-          </div>
-          <!-- ZIP Image Date Filters -->
-          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-capture-start">Capture Date From (ZIP)</label>
-            <input type="date" class="form-control" id="filter-capture-start" name="capture_start" value="{{ filters.capture_start }}">
-          </div>
-          <div class="col-12 col-md-3 zip-only-filter" style="{% if filters.source != 'zip' %}display:none{% endif %}">
-            <label class="form-label mb-1" for="filter-capture-end">Capture Date To (ZIP)</label>
-            <input type="date" class="form-control" id="filter-capture-end" name="capture_end" value="{{ filters.capture_end }}">
-          </div>
-        </div>
-      </div>
+  <form method="get" class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Filters</h5>
+      <a href="{{ url_for('search.search_images_route') }}" class="btn btn-outline-secondary btn-sm">Clear Filters</a>
     </div>
-    
-    <div class="row gy-2 gx-2 align-items-end">
-      <div class="col-12 col-md-3">
-        <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label">Disease <span class="text-danger">*</span></label>
+          <select class="form-select" name="disease_id" id="diseaseSelect" required>
+            <option value="">Select disease</option>
+            {% for disease in diseases %}
+              <option value="{{ disease.id }}" {% if filters.disease_id == disease.id %}selected{% endif %}>{{ disease.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Lab Unit</label>
+          <select class="form-select" name="lab_unit_id">
+            <option value="">All</option>
+            {% for lab_unit in lab_units %}
+              <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.hospital.name if lab_unit.hospital else '' }} {{ lab_unit.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Consensus</label>
+          <select class="form-select" name="has_consensus">
+            <option value="has_consensus" {% if filters.has_consensus == 'has_consensus' %}selected{% endif %}>Has Consensus</option>
+            <option value="" {% if not filters.has_consensus %}selected{% endif %}>All</option>
+            <option value="no" {% if filters.has_consensus == 'no' %}selected{% endif %}>No Consensus</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Has Review</label>
+          <select class="form-select" name="has_review" id="hasReviewSelect">
+            <option value="" {% if not filters.has_review %}selected{% endif %}>All</option>
+            <option value="yes" {% if filters.has_review == 'yes' %}selected{% endif %}>Has Review</option>
+            <option value="no" {% if filters.has_review == 'no' %}selected{% endif %}>No Review</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-3">
+          <label class="form-label d-block">Resident Grades</label>
+          <div id="residentGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="res_{{ loop.index }}" name="resident_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.resident_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="res_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">Resident2 Grades</label>
+          <div id="resident2GradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="res2_{{ loop.index }}" name="resident2_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.resident2_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="res2_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">Arbitrator Grades</label>
+          <div id="arbitratorGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="arb_{{ loop.index }}" name="arbitrator_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.arbitrator_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="arb_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">Review Grades</label>
+          <div id="reviewGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="rev_{{ loop.index }}" name="review_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.review_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="rev_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-3">
+          <label class="form-label d-block">Final Grades</label>
+          <div id="finalGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="final_{{ loop.index }}" name="final_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.final_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="final_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Has AI Grade</label>
+          <select class="form-select" name="has_ai_grade" id="hasAiGradeSelect">
+            <option value="" {% if not filters.has_ai_grade %}selected{% endif %}>All</option>
+            <option value="yes" {% if filters.has_ai_grade == 'yes' %}selected{% endif %}>Has AI Grade</option>
+            <option value="no" {% if filters.has_ai_grade == 'no' %}selected{% endif %}>No AI Grade</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">AI Model</label>
+          <select class="form-select" name="ai_model_id">
+            <option value="">All</option>
+            {% for model in ai_models %}
+              <option value="{{ model.id }}" {% if model.id|string in (filters.ai_model_id or []) %}selected{% endif %}>{{ model.name }} v{{ model.version }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label d-block">AI Grades</label>
+          <div id="aiGradeContainer" class="border rounded p-2 bg-light-subtle" style="max-height: 170px; overflow:auto;">
+            {% for grade in grade_options %}
+              <div class="form-check">
+                <input class="form-check-input ai-dependent" type="checkbox" id="ai_grade_{{ loop.index }}" name="ai_grade" value="{{ grade.impression }}" {% if grade.impression in (filters.ai_grade or []) %}checked{% endif %}>
+                <label class="form-check-label" for="ai_grade_{{ loop.index }}">{{ grade.impression }}</label>
+              </div>
+            {% endfor %}
+            {% if grade_options|length == 0 %}<div class="text-muted small">Select a disease to load grades.</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-3">
+          <label class="form-label">AI Review Status</label>
+          <select class="form-select ai-dependent" multiple name="ai_review_status" id="aiReviewStatusSelect">
+            {% for status_key, status_label in ai_review_status_labels.items() %}
+              <option value="{{ status_key }}" {% if status_key in (filters.ai_review_status or []) %}selected{% endif %}>{{ status_label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Image UUID</label>
+          <input type="text" class="form-control" name="image_uuid" value="{{ filters.image_uuid or '' }}" placeholder="Exact UUID">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Upload After</label>
+          <input type="date" class="form-control" name="upload_after" value="{{ filters.upload_after }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Upload Before</label>
+          <input type="date" class="form-control" name="upload_before" value="{{ filters.upload_before }}">
+        </div>
+      </div>
+
+      <div class="row g-3 mt-1">
+        <div class="col-md-3">
+          <label class="form-label">Encounter Date From</label>
+          <input type="date" class="form-control" name="encounter_after" value="{{ filters.encounter_after }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Encounter Date To</label>
+          <input type="date" class="form-control" name="encounter_before" value="{{ filters.encounter_before }}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Per Page</label>
+          <select class="form-select" name="per_page">
+            {% set per_options = [25, 50, 100, 200] %}
+            {% for opt in per_options %}
+              <option value="{{ opt }}" {% if (filters.per_page or 25)|int == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Offset</label>
+          <input type="number" min="0" class="form-control" name="offset" value="{{ filters.offset or 0 }}" readonly>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Apply Filters</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('search.search_images_route') }}">Reset</a>
       </div>
     </div>
   </form>
 
-
-
-  <!-- Results Section -->
   {% if not rows %}
     <div class="alert alert-info">No images matched the selected filters.</div>
   {% else %}
-    <div class="card mt-2">
-      <div class="card-header">
-        <h2 class="h4 mb-1">Search Results</h2>
-        <p class="text-muted mb-0">Found {{ total }} images matching your criteria</p>
-      </div>
-
-    <!-- Pagination -->
-    <div class="mx-2 d-flex justify-content-between align-items-center mt-4">
-      <div class="text-muted small">Page {{ page }} of {{ total_pages }} ({{ total }} images)</div>
-      <div class="btn-group" role="group" aria-label="Pagination">
-        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
-        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
-      </div>
-    </div>
-    <!-- Wide Cards Layout -->
-    <div class="row g-2 p-2">
-      {% for row in rows %}
-      <div class="col-12">
-        <div class="card shadow-sm h-100">
-          <div class="card-body">
-            <div class="row align-items-center">
-              <!-- Left column with main info -->
-              <div class="col-md-8">
-                <div class="row g-3">
-                  <!-- Serial Number -->
-                  <div class="col-sm-6 col-lg-2">
-                    <small class="text-muted d-block">Sr No</small>
-                    <span class="fw-bold">{{ row.sr_no }}</span>
-                  </div>
-                  <!-- UUID and Source -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">UUID</small>
-                    <code class="small">{{ row.uuid or '—' }}</code>
-                  </div>
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Source</small>
-                    <span class="badge bg-primary text-capitalize">{{ row.source }}</span>
-                  </div>
-                  
-                  <!-- Hospital and Lab Unit -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Hospital</small>
-                    <span>{{ row.hospital_name or '—' }}</span>
-                  </div>
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Lab Unit</small>
-                    <span>{{ row.lab_unit_name or '—' }}</span>
-                  </div>
-                  
-                  <!-- Camera and Disease -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Camera (Direct)</small>
-                    <span>{{ row.camera_name or '—' }}</span>
-                  </div>
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Disease (Direct)</small>
-                    <span>{{ row.disease_name or '—' }}</span>
-                  </div>
-                  
-                  <!-- Area and Mydriatic -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Area (Direct)</small>
-                    <span>{{ row.area_name or '—' }}</span>
-                  </div>
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Mydriatic (Direct)</small>
-                    {% if row.is_mydriatic is none %}
-                      <span class="text-muted">—</span>
-                    {% elif row.is_mydriatic %}
-                      <span class="badge bg-success">Yes</span>
-                    {% else %}
-                      <span class="badge bg-secondary">No</span>
-                    {% endif %}
-                  </div>
-                  
-                  <!-- Dates -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Uploaded</small>
-                    {% if row.created_at %}
-                      <span>{{ row.created_at|user_datetime('%Y-%m-%d %H:%M') }}</span>
-                    {% else %}
-                      <span class="text-muted">—</span>
-                    {% endif %}
-                  </div>
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Capture Date</small>
-                    {% if row.capture_date %}
-                      <span>{{ row.capture_date|user_datetime('%Y-%m-%d %H:%M') }}</span>
-                    {% else %}
-                      <span class="text-muted">—</span>
-                    {% endif %}
-                  </div>
-                  
-                  <!-- Encounter ID -->
-                  <div class="col-sm-6 col-lg-3">
-                    <small class="text-muted d-block">Encounter ID</small>
-                    {% if row.source == 'zip' and row.encounter_id %}
-                      <span class="badge bg-info">{{ row.encounter_id }}</span>
-                    {% elif row.source == 'direct' %}
-                      <span class="text-muted">—</span>
-                    {% else %}
-                      <span class="text-muted">—</span>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Right column with reports, tasks and actions -->
-              <div class="col-md-4 border-start">
-                <div class="row g-3 h-100 align-items-center">
-                  <!-- Reports -->
-                  <div class="col-12">
-                    <small class="text-muted d-block mb-2">Reports</small>
-                    <div class="d-flex gap-2">
-                      <div>
-                        <small class="text-muted d-block">DR</small>
-                        {% if row.has_dr %}
-                          <span class="badge bg-success">Yes</span>
-                        {% else %}
-                          <span class="badge bg-secondary">No</span>
-                        {% endif %}
-                      </div>
-                      <div>
-                        <small class="text-muted d-block">Glaucoma</small>
-                        {% if row.has_glaucoma %}
-                          <span class="badge bg-success">Yes</span>
-                        {% else %}
-                          <span class="badge bg-secondary">No</span>
-                        {% endif %}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <!-- Tasks -->
-                  <div class="col-12">
-                    <small class="text-muted d-block mb-2">Tasks</small>
-                    {% if row.tasks_for_diseases %}
-                      {% for task in row.tasks_for_diseases %}
-                        {% if task.disease and task.status %}
-                          <span class="badge bg-info me-1">{{ task.disease }}: {{ task.status }}</span>
-                        {% else %}
-                          <span class="badge bg-info me-1">{{ task.disease or 'Unknown' }}</span>
-                        {% endif %}
-                      {% endfor %}
-                    {% else %}
-                      <span class="text-muted">No tasks</span>
-                    {% endif %}
-                  </div>
-                  
-                  <!-- Actions -->
-                  <div class="col-12">
-                    <small class="text-muted d-block mb-2">Actions</small>
-                    {% if row.uuid %}
-                      {% set gallery_id = 'search-gallery-' ~ loop.index0 %}
-                      <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=row.uuid) }}" data-pswp-type="image" title=""></a>
-                      </div>
-                      <a class="btn btn-primary" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
-                    {% else %}
-                      <span class="text-muted">—</span>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <h2 class="h5 mb-0">Results</h2>
+          <small class="text-muted">Showing page {{ page }} of {{ total_pages }} ({{ total }} results)</small>
+        </div>
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
+          <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
         </div>
       </div>
-      {% endfor %}
-    </div>
-    </div>
-    <!-- Pagination -->
-    <div class="d-flex justify-content-between align-items-center mt-4">
-      <div class="text-muted small">Page {{ page }} of {{ total_pages }} ({{ total }} images)</div>
-      <div class="btn-group" role="group" aria-label="Pagination">
-        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
-        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Task ID</th>
+              <th>Image UUID</th>
+              <th>Lab / Hospital</th>
+              <th>Resident</th>
+              <th>Resident2</th>
+              <th>Arbitrator</th>
+              <th>Review</th>
+              <th>Final</th>
+              <th>AI Grade</th>
+              <th>Upload Date</th>
+              <th>Encounter Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.task_id }}</td>
+                <td>
+                  {% if row.encounter_file_uuid %}
+                    <div><small class="text-muted">Encounter</small><div class="fw-semibold">{{ row.encounter_file_uuid }}</div></div>
+                  {% endif %}
+                  {% if row.direct_image_uuid %}
+                    <div><small class="text-muted">Direct</small><div class="fw-semibold">{{ row.direct_image_uuid }}</div></div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="fw-semibold">{{ row.lab_unit_name or '—' }}</div>
+                  <div class="text-muted small">{{ row.hospital_name or '' }}</div>
+                </td>
+                <td>
+                  {% set g = row.grades.get('resident') %}
+                  {% if g %}<span class="badge bg-secondary">{{ g.impression }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% set g = row.grades.get('resident2') %}
+                  {% if g %}<span class="badge bg-info text-dark">{{ g.impression }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% set g = row.grades.get('arbitrator') %}
+                  {% if g %}<span class="badge bg-warning text-dark">{{ g.impression }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% set g = row.grades.get('review') %}
+                  {% if g %}<span class="badge bg-primary">{{ g.impression }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% if row.final_impression %}
+                    <span class="badge bg-success">{{ row.final_impression }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% set g = row.grades.get('ai') %}
+                  {% if g %}
+                    <div><span class="badge bg-dark">{{ g.impression }}</span></div>
+                    {% if g.ai_model_name %}<small class="text-muted">{{ g.ai_model_name }} v{{ g.ai_model_version }}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.upload_date or '—' }}</td>
+                <td>{{ row.capture_date or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
-    <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
   {% endif %}
 </div>
 
-<!-- Include JavaScript for dynamic LabUnit filtering -->
-<script src="{{ url_for('static', filename='js/search_images.js') }}"></script>
+<script id="disease-grade-map" type="application/json">{{ disease_grade_map|default({})|tojson }}</script>
 {% endblock %}
 
 {% block page_scripts %}
   {{ super() }}
-  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+  <script src="{{ url_for('static', filename='js/search-images-filters.js') }}?v={{ config.ASSETS_VERSION|default('') }}"></script>
+  <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+    if (window.SearchImagesFilters) {
+      SearchImagesFilters.init({
+        diseaseSelectId: "diseaseSelect",
+        hasReviewSelectId: "hasReviewSelect",
+        hasAiSelectId: "hasAiGradeSelect",
+        gradeMapElementId: "disease-grade-map",
+        apiUrl: "{{ url_for('fundus_api.diseases_with_gradings') if fundus_api_disease_endpoint else '/api/diseases-with-gradings' }}",
+        containers: {
+          resident: "residentGradeContainer",
+          resident2: "resident2GradeContainer",
+          arbitrator: "arbitratorGradeContainer",
+          review: "reviewGradeContainer",
+          final: "finalGradeContainer",
+          ai: "aiGradeContainer",
+        }
+      });
+    }
+    // Fallback: ensure AI controls enabled if already set to yes
+    (function forceAiEnableIfNeeded() {
+      const hasAi = document.getElementById("hasAiGradeSelect");
+      if (hasAi && hasAi.value === "yes") {
+        document.querySelectorAll(".ai-dependent").forEach((el) => {
+          el.disabled = false;
+        });
+      }
+    })();
+  </script>
 {% endblock %}

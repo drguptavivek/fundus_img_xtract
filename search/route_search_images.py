@@ -2,40 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date as _date, time, timezone
-from typing import Any, List, Optional
+from datetime import datetime, date as _date
+from typing import Any, List, Optional, Dict
+from types import SimpleNamespace
 
 from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
 
 from . import bp
-from models import (
-    Area,
-    Camera,
-    Disease,
-    Hospital,
-    LabUnit,
-    DirectImageUpload,
-)
+from models import Disease, LabUnit, DiseaseGrading, AIModel
 from sqlalchemy.orm import joinedload
-from utils.imageSearchUtil import search_images_strict, ImageSearchError
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from db_transaction_manager import get_db_session
-
-
-def _parse_bool_param(value: str | None) -> bool | None:
-    """Parse a boolean parameter from request args."""
-    if value is None or value == "":
-        return None
-    lowered = value.strip().lower()
-    if lowered in {"all", "any", "*"}:
-        return None
-    if lowered in {"1", "true", "yes", "y"}:
-        return True
-    if lowered in {"0", "false", "no", "n"}:
-        return False
-    return None
+from utils.mvw_all_img_search import (
+    MVImageFilters,
+    search_mvw_images,
+)
+from review.task_review import AI_REVIEW_STATUS_LABELS
 
 
 def _parse_date(value: str | None) -> _date | None:
@@ -60,158 +44,57 @@ def _parse_date(value: str | None) -> _date | None:
     "optometrist",
 )
 def search_images_route() -> str:
-    """Search images using the centralized search_images function from utils.imageSearchUtil."""
-    page = request.args.get("page", default=1, type=int) or 1
-    source = (request.args.get("source") or "all").strip().lower()
-    if source not in {"all", "zip", "direct"}:
-        source = "all"
+    """Search images using the MV-backed discrepancy filters for reuse."""
+    page = max(1, request.args.get("page", default=1, type=int) or 1)
+    per_page = request.args.get("per_page", default=25, type=int)
+    per_page = per_page if isinstance(per_page, int) and per_page > 0 else 25
+    explicit_offset = request.args.get("offset", type=int)
+    offset = explicit_offset if explicit_offset is not None and explicit_offset >= 0 else (page - 1) * per_page
 
-    hospital_id = request.args.get("hospital_id", type=int)
-    lab_unit_id = request.args.get("lab_unit_id", type=int)
-    camera_id = request.args.get("camera_id", type=int)
     disease_id = request.args.get("disease_id", type=int)
-    area_id = request.args.get("area_id", type=int)
-    is_mydriatic = _parse_bool_param(request.args.get("is_mydriatic"))
-    search_query = request.args.get("search_query", "").strip() or None
-    has_dr_report = _parse_bool_param(request.args.get("has_dr_report"))  # Get the DR report filter
-    has_glaucoma_report = _parse_bool_param(request.args.get("has_glaucoma_report"))  # Get the Glaucoma report filter
-    
-    # Parse date filters
-    upload_start = _parse_date(request.args.get("upload_start"))
-    upload_end = _parse_date(request.args.get("upload_end"))
-    capture_start = _parse_date(request.args.get("capture_start"))
-    capture_end = _parse_date(request.args.get("capture_end"))
-
-    page = max(1, page)
-    per_page = current_app.config.get("ANALYTICS_SEARCH_IMAGES_PAGE_SIZE", 50)
-    per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
+    lab_unit_id = request.args.get("lab_unit_id", type=int)
+    has_consensus = request.args.get("has_consensus", type=str)
+    if has_consensus is None:
+        has_consensus = "has_consensus"
+    has_review = request.args.get("has_review", type=str)
+    review_grades = request.args.getlist("review_grade")
+    resident_grades = request.args.getlist("resident_grade")
+    resident2_grades = request.args.getlist("resident2_grade")
+    arbitrator_grades = request.args.getlist("arbitrator_grade")
+    final_grades = request.args.getlist("final_grade")
+    has_ai_grade = request.args.get("has_ai_grade", type=str)
+    ai_model_ids = request.args.getlist("ai_model_id")
+    ai_grades = request.args.getlist("ai_grade")
+    ai_review_statuses = [
+        status for status in request.args.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
+    ]
+    image_uuid = (request.args.get("image_uuid") or "").strip() or None
+    upload_after = _parse_date(request.args.get("upload_after"))
+    upload_before = _parse_date(request.args.get("upload_before"))
+    encounter_after = _parse_date(request.args.get("encounter_after"))
+    encounter_before = _parse_date(request.args.get("encounter_before"))
 
     with get_db_session() as db:
-        # Check user permissions for lab unit access (no admin override)
         allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
         if not allowed_lab_unit_ids:
             flash("No lab unit access.", "warning")
             return redirect(url_for("home.index"))
-        allowed_hospital_ids = {
-            hid
-            for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(allowed_lab_unit_ids))
-            if hid is not None
-        }
 
-        # Prepare filter parameters for the search_images function
-        lab_unit_ids = None
-        if lab_unit_id:
-            if lab_unit_id not in allowed_lab_unit_ids:
-                from flask import abort
-                abort(403, description="Access denied to this lab unit")
-            lab_unit_ids = [lab_unit_id]
-        else:
-            lab_unit_ids = list(allowed_lab_unit_ids)
+        disease_grade_map: Dict[int, List[str]] = {}
+        all_grade_rows = (
+            db.query(DiseaseGrading.disease_id, DiseaseGrading.impression)
+            .distinct(DiseaseGrading.disease_id, DiseaseGrading.impression)
+            .order_by(DiseaseGrading.disease_id, DiseaseGrading.impression)
+            .all()
+        )
+        for d_id, impression in all_grade_rows:
+            disease_grade_map.setdefault(d_id, []).append(impression)
+        grade_options = [
+            SimpleNamespace(impression=imp) for imp in disease_grade_map.get(disease_id, [])
+        ]
+        ai_models = db.query(AIModel).order_by(AIModel.name, AIModel.version).all()
+        diseases_all = db.query(Disease).order_by(Disease.name).all()
 
-        if hospital_id and hospital_id not in allowed_hospital_ids:
-            from flask import abort
-            abort(403, description="Access denied to this hospital")
-        
-        # Convert single IDs to lists for the search function
-        camera_ids = [camera_id] if camera_id else None
-        disease_ids = [disease_id] if disease_id else None
-        area_ids = [area_id] if area_id else None
-        
-        # Convert source to image_type
-        image_type = None if source == "all" else source
-        
-        # Use the new search_images_strict function with improved filter separation
-        try:
-            # Debug logging for pagination
-            import logging
-            debug_logger = logging.getLogger("pagination_debug")
-            debug_logger.info(f"Search request - Page: {page}, Per page: {per_page}")
-            debug_logger.info(f"Filters - source: {source}, hospital_id: {hospital_id}, lab_unit_id: {lab_unit_id}")
-            debug_logger.info(f"Boolean filters - is_mydriatic: {is_mydriatic}, has_dr_report: {has_dr_report}, has_glaucoma_report: {has_glaucoma_report}")
-            
-            images, total = search_images_strict(
-                db_session=db,
-                page=page,
-                per_page=per_page,
-                hospital_id=hospital_id,
-                lab_unit_ids=lab_unit_ids,
-                upload_start=upload_start,
-                upload_end=upload_end,
-                # Direct image filters
-                camera_ids=camera_ids,
-                disease_ids=disease_ids,
-                area_ids=area_ids,
-                is_mydriatic=is_mydriatic,
-                # ZIP image filters
-                has_dr_report=has_dr_report,
-                has_glaucoma_report=has_glaucoma_report,
-                capture_start=capture_start,
-                capture_end=capture_end,
-                # Additional options
-                search_query=search_query,
-                user_id=current_user.id,  # Explicit user ID for scoping
-                image_type=image_type  # Pass the source parameter to restrict search scope
-            )
-            
-            debug_logger.info(f"Search results - Total: {total}, Images returned: {len(images)}")
-            debug_logger.info(f"Total pages calculated: {max(1, (total + per_page - 1) // per_page) if total else 1}")
-            
-        except ImageSearchError as e:
-            # Handle filter conflicts and other search errors gracefully
-            from flask import flash
-            flash(f"Search error: {str(e)}", "error")
-            images, total = [], 0
-        
-        # Convert image data to the format expected by the template
-        records = []
-        for img in images:
-            # Debug logging for first few images
-            if len(records) < 3:
-                import logging
-                runtime_logger = logging.getLogger("runtime_debug")
-                runtime_logger.info(f"Image {img.get('uuid')}: has_dr_report = {img.get('has_dr_report')}")
-                runtime_logger.info(f"Image {img.get('uuid')}: has_glaucoma_report = {img.get('has_glaucoma_report')}")
-                runtime_logger.info(f"Image {img.get('uuid')}: has_reports = {img.get('has_reports', {})}")
-                runtime_logger.info(f"Image {img.get('uuid')}: type = {img.get('type')}")
-            
-            # Convert the image dict to match the template format
-            record = {
-                "uuid": img.get("uuid"),
-                "source": img.get("type"),
-                "hospital_name": img.get("hospital"),
-                "lab_unit_name": img.get("lab_unit"),
-                "camera_name": img.get("camera"),
-                "disease_name": img.get("disease"),
-                "area_name": img.get("area"),
-                "record_date": img.get("upload_date"),  # Use new field
-                "created_at": img.get("upload_date"),   # Use new field
-                "upload_date": img.get("upload_date"),  # New field
-                "capture_date": img.get("capture_date"), # Use new field
-                "encounter_id": img.get("encounter_id"), # Include encounter ID for ZIP images
-                # Fix DR report mapping - use direct fields for ZIP images, fallback to has_reports for direct images
-                "has_dr": img.get("has_dr_report", img.get("has_reports", {}).get("DR", False)),
-                "has_glaucoma": img.get("has_glaucoma_report", img.get("has_reports", {}).get("Glaucoma", False)),
-                "is_mydriatic": img.get("is_mydriatic"),
-                "view_url": None,  # Will be set below
-                "uploader": img.get("uploader"),  # Include uploader information for direct images
-                "file_hash": img.get("file_hash"),  # Include file hash for direct images
-                "tasks_for_diseases": img.get("tasks_for_diseases", []),  # Include task disease information
-            }
-            
-            # Set the appropriate view URL based on image type
-            if img.get("type") == "direct":
-                record["view_url"] = url_for("analytics.view_upload", uuid_str=img.get("uuid"))
-            elif img.get("type") == "zip":
-                # For ZIP images, we need to find the encounter ID
-                # This is a limitation of the current search_images function
-                # We would need to modify it to include encounter_id for ZIP images
-                record["view_url"] = None
-            
-            records.append(record)
-
-        # Filter hospitals, lab units, etc. to only show those the user has access to
-        # Use joinedload to eagerly load relationships to prevent DetachedInstanceError
-        
         lab_unit_objs = (
             db.query(LabUnit)
             .options(joinedload(LabUnit.hospital))
@@ -219,106 +102,194 @@ def search_images_route() -> str:
             .order_by(LabUnit.name)
             .all()
         )
-        hospital_ids = [lu.hospital_id for lu in lab_unit_objs if lu.hospital_id]
-        hospital_objs = (
-            db.query(Hospital)
-            .options(joinedload(Hospital.lab_units))
-            .filter(Hospital.id.in_(hospital_ids))
-            .order_by(Hospital.name)
-            .all()
+
+        if lab_unit_id and lab_unit_id not in allowed_lab_unit_ids:
+            from flask import abort
+            abort(403, description="Access denied to this lab unit")
+
+        if not disease_id:
+            flash("Disease selection is required to search images.", "error")
+            return render_template(
+                "search/search_images.html",
+                rows=[],
+                page=page,
+                total=0,
+                total_pages=0,
+                prev_url=None,
+                next_url=None,
+                filters={
+                    "disease_id": disease_id,
+                    "lab_unit_id": lab_unit_id,
+                    "has_consensus": has_consensus,
+                    "has_review": has_review,
+                    "review_grade": review_grades,
+                    "resident_grade": resident_grades,
+                    "resident2_grade": resident2_grades,
+                    "arbitrator_grade": arbitrator_grades,
+                    "final_grade": final_grades,
+                    "has_ai_grade": has_ai_grade,
+                    "ai_model_id": ai_model_ids,
+                    "ai_grade": ai_grades,
+                    "ai_review_status": ai_review_statuses,
+                    "image_uuid": image_uuid,
+                    "upload_after": request.args.get("upload_after", ""),
+                    "upload_before": request.args.get("upload_before", ""),
+                    "encounter_after": request.args.get("encounter_after", ""),
+                    "encounter_before": request.args.get("encounter_before", ""),
+                    "per_page": per_page,
+                    "offset": offset,
+                },
+                grade_options=grade_options,
+                ai_models=ai_models,
+                lab_units=lab_unit_objs,
+                diseases=diseases_all,
+                ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+                disease_grade_map=disease_grade_map,
+                fundus_api_disease_endpoint="fundus_api.diseases_with_gradings" in current_app.view_functions,
+            )
+
+        filters = MVImageFilters(
+            disease_id=disease_id,
+            allowed_lab_units=list(allowed_lab_unit_ids),
+            lab_unit_id=lab_unit_id,
+            resident_grades=resident_grades,
+            resident2_grades=resident2_grades,
+            arbitrator_grades=arbitrator_grades,
+            review_grades=review_grades,
+            final_grades=final_grades,
+            has_ai_grade=has_ai_grade,
+            has_review=has_review,
+            has_consensus=has_consensus,
+            ai_model_ids=ai_model_ids,
+            ai_grades=ai_grades,
+            ai_review_statuses=ai_review_statuses,
+            image_uuid=image_uuid,
+            upload_after=upload_after,
+            upload_before=upload_before,
+            encounter_after=encounter_after,
+            encounter_before=encounter_before,
         )
-        camera_objs = (
-            db.query(Camera)
-            .join(DirectImageUpload, DirectImageUpload.camera_id == Camera.id)
-            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
-            .distinct()
-            .order_by(Camera.name)
-            .all()
+
+        rows, total = search_mvw_images(db, filters, per_page=per_page, offset=offset)
+
+        processed_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            grades = _extract_grades_by_role(row.grading_details_json or "[]")
+            processed_rows.append(
+                {
+                    "task_id": row.task_id,
+                    "task_uuid": row.task_uuid,
+                    "lab_unit_name": row.lab_unit_name,
+                    "hospital_name": row.hospital_name,
+                    "encounter_file_uuid": row.encounter_file_uuid,
+                    "direct_image_uuid": row.direct_image_uuid,
+                    "grades": grades,
+                    "consensus_status": row.consensus_status,
+                    "consensus_method": row.consensus_method,
+                    "final_impression": row.final_impression,
+                    "ai_grading_count": row.ai_grading_count,
+                    "upload_date": row.upload_date,
+                    "capture_date": row.capture_date,
+                }
+            )
+
+        total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
+        current_page = offset // per_page + 1
+
+        def _filter_kwargs(target_page: int) -> dict[str, Any]:
+            params: dict[str, Any] = {
+                "page": target_page,
+                "per_page": per_page,
+                "offset": (target_page - 1) * per_page,
+            }
+            params.update(
+                {
+                    "disease_id": disease_id,
+                    "lab_unit_id": lab_unit_id,
+                    "has_consensus": has_consensus,
+                    "has_review": has_review,
+                    "has_ai_grade": has_ai_grade,
+                    "image_uuid": image_uuid or "",
+                    "upload_after": request.args.get("upload_after", ""),
+                    "upload_before": request.args.get("upload_before", ""),
+                    "encounter_after": request.args.get("encounter_after", ""),
+                    "encounter_before": request.args.get("encounter_before", ""),
+                }
+            )
+            for key in ["resident_grade", "resident2_grade", "arbitrator_grade", "review_grade", "final_grade", "ai_grade", "ai_review_status", "ai_model_id"]:
+                for value in request.args.getlist(key):
+                    params.setdefault(key, []).append(value)
+            return params
+
+        prev_url = (
+            url_for("search.search_images_route", **_filter_kwargs(current_page - 1)) if current_page > 1 else None
         )
-        disease_objs = (
-            db.query(Disease)
-            .join(DirectImageUpload, DirectImageUpload.disease_id == Disease.id)
-            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
-            .distinct()
-            .order_by(Disease.name)
-            .all()
+        next_url = (
+            url_for("search.search_images_route", **_filter_kwargs(current_page + 1))
+            if current_page < total_pages
+            else None
         )
-        area_objs = (
-            db.query(Area)
-            .join(DirectImageUpload, DirectImageUpload.area_id == Area.id)
-            .filter(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids))
-            .distinct()
-            .order_by(Area.name)
-            .all()
+
+        return render_template(
+            "search/search_images.html",
+            rows=processed_rows,
+            page=current_page,
+            total=total,
+            total_pages=total_pages,
+            prev_url=prev_url,
+            next_url=next_url,
+            filters={
+                "disease_id": disease_id,
+                "lab_unit_id": lab_unit_id,
+                "has_consensus": has_consensus,
+                "has_review": has_review,
+                "review_grade": review_grades,
+                "resident_grade": resident_grades,
+                "resident2_grade": resident2_grades,
+                "arbitrator_grade": arbitrator_grades,
+                "final_grade": final_grades,
+                "has_ai_grade": has_ai_grade,
+                "ai_model_id": ai_model_ids,
+                "ai_grade": ai_grades,
+                "ai_review_status": ai_review_statuses,
+                "image_uuid": image_uuid,
+                "upload_after": request.args.get("upload_after", ""),
+                "upload_before": request.args.get("upload_before", ""),
+                "encounter_after": request.args.get("encounter_after", ""),
+                "encounter_before": request.args.get("encounter_before", ""),
+                "per_page": per_page,
+                "offset": offset,
+            },
+            grade_options=grade_options,
+            ai_models=ai_models,
+            lab_units=lab_unit_objs,
+            diseases=diseases_all,
+            ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
+            disease_grade_map=disease_grade_map,
+            fundus_api_disease_endpoint="fundus_api.diseases_with_gradings" in current_app.view_functions,
         )
-        
-        # Convert SQLAlchemy objects to dictionaries to prevent DetachedInstanceError
-        hospitals = [{"id": h.id, "name": h.name} for h in hospital_objs]
-        lab_units = [{"id": lu.id, "name": lu.name, "hospital_name": lu.hospital.name if lu.hospital else None} for lu in lab_unit_objs]
-        cameras = [{"id": c.id, "name": c.name} for c in camera_objs]
-        diseases_all = [{"id": d.id, "name": d.name} for d in disease_objs]
-        areas = [{"id": a.id, "name": a.name} for a in area_objs]
 
 
-
-    total_pages = max(1, (total + per_page - 1) // per_page) if total else 1
-
-    filter_params = {
-        "source": source,
-        "hospital_id": hospital_id,
-        "lab_unit_id": lab_unit_id,
-        "camera_id": camera_id,
-        "disease_id": disease_id,
-        "area_id": area_id,
-        "upload_start": request.args.get("upload_start", ""),
-        "upload_end": request.args.get("upload_end", ""),
-        "capture_start": request.args.get("capture_start", ""),
-        "capture_end": request.args.get("capture_end", ""),
-        "is_mydriatic": is_mydriatic,
-        "search_query": request.args.get("search_query", ""),
-        "has_dr_report": has_dr_report,
-        "has_glaucoma_report": has_glaucoma_report,
-    }
-
-    def _filter_kwargs(target_page: int) -> dict[str, Any]:
-        params: dict[str, Any] = {"page": target_page}
-        # Include all filter parameters to maintain state in pagination
-        # This ensures filters are preserved when navigating between pages
-        for key, value in filter_params.items():
-            # Only include boolean parameters if they have an actual value (True or False)
-            if key in ["has_dr_report", "has_glaucoma_report", "is_mydriatic"]:
-                if value is not None:
-                    params[key] = str(value).lower()
-            # For search_query, only include if it has a value
-            elif key == "search_query":
-                if value:
-                    params[key] = value
-            # Include all other parameters as empty strings if not set
-            else:
-                params[key] = value if value is not None else ""
-        return params
-
-    prev_url = url_for("search.search_images_route", **_filter_kwargs(page - 1)) if page > 1 else None
-    next_url = url_for("search.search_images_route", **_filter_kwargs(page + 1)) if page < total_pages else None
-
-    # Calculate serial numbers for each record
-    start_serial = (page - 1) * per_page + 1
-    for idx, record in enumerate(records):
-        record['sr_no'] = start_serial + idx
-
-    return render_template(
-        "search/search_images.html",
-        rows=records,
-        page=page,
-        total=total,
-        total_pages=total_pages,
-        prev_url=prev_url,
-        next_url=next_url,
-        filters=filter_params,
-        hospitals=hospitals,
-        lab_units=lab_units,
-        cameras=cameras,
-        diseases=diseases_all,
-        areas=areas,
-        api_lab_units_url=url_for("fundus_api.get_lab_units_by_hospital", hospital_id="0")
-    )
+def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
+    """Parse MV JSON details into role-keyed dict for templates."""
+    import json
+    if isinstance(details_json, str):
+        try:
+            grades = json.loads(details_json)
+        except Exception:
+            return {}
+    else:
+        grades = details_json or []
+    result: Dict[str, Dict[str, Any]] = {}
+    for item in grades or []:
+        role = item.get("role_slot")
+        if not role:
+            continue
+        result[role] = {
+            "impression": item.get("grade_name"),
+            "comment": item.get("comment"),
+            "ai_model_name": item.get("ai_model_name"),
+            "ai_model_version": item.get("ai_model_version"),
+            "ai_probability": item.get("ai_probability"),
+        }
+    return result

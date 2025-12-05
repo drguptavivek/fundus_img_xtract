@@ -22,7 +22,7 @@ from admin.thumbnail_management import (
 )
 from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
-from models import Grade, GradingTask
+from models import Grade, GradingTask, Consensus, DiseaseGrading
 
 
 @roles_required('admin', 'data_manager')
@@ -88,6 +88,14 @@ def admin_status():
         current_app.logger.error(f"Error computing grading inconsistencies: {e}")
         grading_inconsistency_count = 0
 
+    # Review vs consensus inconsistencies (review grade differs/missing consensus)
+    try:
+        with transaction_scope() as db:
+            review_consensus_mismatch_count = _get_review_consensus_mismatch_count(db)
+    except Exception as e:
+        current_app.logger.error(f"Error computing review/consensus inconsistencies: {e}")
+        review_consensus_mismatch_count = 0
+
     # Get recent activity data
     recent_activity = get_recent_activity()
 
@@ -103,6 +111,7 @@ def admin_status():
         recent_activity=recent_activity,
         sequence_report=sequence_report,
         grading_inconsistency_count=grading_inconsistency_count,
+        review_consensus_mismatch_count=review_consensus_mismatch_count,
         current_time=datetime.now(pytz.UTC)
     )
 
@@ -320,6 +329,39 @@ def get_management_tools_status():
             'status': 'error',
             'message': f'Database connection failed: {str(e)}'
         }
+
+def _get_review_consensus_mismatch_count(db) -> int:
+    """Count tasks where latest review grade differs from consensus (or consensus missing)."""
+    latest_review = (
+        db.query(
+            Grade.task_id.label("task_id"),
+            Grade.disease_grading_id.label("review_grading_id"),
+            sa.func.row_number()
+            .over(
+                partition_by=Grade.task_id,
+                order_by=[Grade.updated_at.desc().nullslast(), Grade.id.desc()],
+            )
+            .label("rn"),
+        )
+        .filter(Grade.role_slot == "review")
+        .subquery()
+    )
+
+    q = (
+        db.query(sa.func.count())
+        .select_from(GradingTask)
+        .join(latest_review, latest_review.c.task_id == GradingTask.id)
+        .outerjoin(Consensus, Consensus.task_id == GradingTask.id)
+        .outerjoin(DiseaseGrading, DiseaseGrading.id == Consensus.final_disease_grading_id)
+        .filter(latest_review.c.rn == 1)
+        .filter(
+            sa.or_(
+                Consensus.final_disease_grading_id.is_(None),
+                Consensus.final_disease_grading_id != latest_review.c.review_grading_id,
+            )
+        )
+    )
+    return q.scalar() or 0
 
     # File system access
     try:

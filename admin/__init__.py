@@ -22,6 +22,7 @@ from .status import (
     refresh_sequences,
     api_sequences_status,
 )
+from .task_review_inconsistency import task_review_inconsistency, apply_review_as_final
 from .app_settings import upload_settings, admin_settings
 from .upload_quotas import list_upload_quotas, update_upload_quota, upload_quota_redirect
 from .email_settings import (
@@ -83,6 +84,18 @@ admin_bp.add_url_rule(
     view_func=grading_state_inconsistencies,
     methods=["GET", "POST"],
     endpoint="grading_state_inconsistencies",
+)
+admin_bp.add_url_rule(
+    "/task_review_inconsistency",
+    view_func=task_review_inconsistency,
+    methods=["GET"],
+    endpoint="task_review_inconsistency",
+)
+admin_bp.add_url_rule(
+    "/task_review_inconsistency/<int:task_id>/apply",
+    view_func=apply_review_as_final,
+    methods=["POST"],
+    endpoint="apply_review_as_final",
 )
 admin_bp.add_url_rule(
     "/upload-quotas/<int:user_id>/update",

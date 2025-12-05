@@ -303,7 +303,7 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('data_exporter') or current_user_has('local_admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}" href="#"
               id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -330,6 +330,12 @@
               <li><hr class="dropdown-divider"></li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.model_performance' else '' }}" href="{{ url_for('analytics.model_performance') }}">Model Performance</a>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) in ['review.dataset_curation', 'review.dataset_detail'] else '' }}" href="{{ url_for('review.dataset_curation') }}">
+                  Curated Datasets
+                </a>
               </li>
             </ul>
           </li>

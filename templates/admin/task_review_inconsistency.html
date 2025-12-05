@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Task Review Inconsistencies{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-1">Task Review Inconsistencies</h4>
+      <p class="text-muted mb-0">Latest review grade differs from consensus (or consensus missing). Max 200 rows shown.</p>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.admin_status') }}">Back to Admin Status</a>
+  </div>
+
+  <form class="row g-2 mb-3" method="GET">
+    <div class="col-md-3">
+      <label class="form-label">Disease</label>
+      <select class="form-select" name="disease_id">
+        <option value="">All</option>
+        {% for d in diseases %}
+        <option value="{{ d.id }}" {% if selected_disease_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Lab Unit</label>
+      <select class="form-select" name="lab_unit_id">
+        <option value="">All</option>
+        {% for lu in lab_units %}
+        <option value="{{ lu.id }}" {% if selected_lab_unit_id == lu.id %}selected{% endif %}>{{ lu.hospital_name }} {{ lu.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Task State</label>
+      <select class="form-select" name="state">
+        <option value="" {% if not selected_state %}selected{% endif %}>Any</option>
+        {% for st in ['new','pending','review','final'] %}
+        <option value="{{ st }}" {% if selected_state == st %}selected{% endif %}>{{ st|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end gap-2">
+      <button class="btn btn-primary" type="submit">Apply Filters</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('admin.task_review_inconsistency') }}">Reset</a>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">Results ({{ rows|length }})</h6>
+        <span class="text-muted small">Showing latest 200 by task id desc.</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Task</th>
+              <th>Disease</th>
+              <th>Lab Unit</th>
+              <th>State</th>
+              <th>Consensus</th>
+              <th>Review</th>
+              <th>Reviewer</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td><a href="{{ url_for('review.review_task_details', task_id=row.task_id) }}">{{ row.task_id }}</a></td>
+              <td>{{ row.disease_name or '—' }}</td>
+              <td>{{ row.lab_unit_name or '—' }}</td>
+              <td><span class="badge bg-secondary text-uppercase">{{ row.state or '—' }}</span></td>
+              <td>
+                {% if row.consensus_impression %}
+                  <div class="fw-semibold">{{ row.consensus_impression }}</div>
+                  <div class="text-muted small">{{ row.consensus_method or 'consensus' }}</div>
+                {% else %}
+                  <span class="text-muted">None</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="fw-semibold">{{ row.review_impression or '—' }}</div>
+                <div class="text-muted small">{{ row.review_updated_at|user_datetime('%Y-%m-%d %H:%M') if row.review_updated_at else '—' }}</div>
+              </td>
+              <td>
+                {{ row.reviewer_username or '—' }}
+              </td>
+              <td class="text-end">
+                <form method="POST" action="{{ url_for('admin.apply_review_as_final', task_id=row.task_id) }}">
+                  {{ csrf_field() }}
+                  <button class="btn btn-sm btn-outline-primary" type="submit">Apply Review as Final</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted">No inconsistencies found for the selected filters.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

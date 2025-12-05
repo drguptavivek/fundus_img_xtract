@@ -435,6 +435,27 @@
             </div>
         </div>
 
+        <!-- Review vs Consensus -->
+        <div class="status-card {% if review_consensus_mismatch_count > 0 %}health-warning{% else %}health-healthy{% endif %}">
+            <h5>
+                <span class="status-icon {% if review_consensus_mismatch_count > 0 %}warning{% else %}healthy{% endif %}">
+                    <i class="fas fa-gavel"></i>
+                </span>
+                Review vs Consensus
+            </h5>
+            <div class="status-value">
+                {{ review_consensus_mismatch_count }}
+            </div>
+            <p class="status-details">
+                Tasks where latest review grade differs or consensus is missing
+            </p>
+            <div class="status-actions">
+                <a href="{{ url_for('admin.task_review_inconsistency') }}" class="btn-management btn-sm">
+                    <i class="fas fa-adjust"></i> View &amp; Apply
+                </a>
+            </div>
+        </div>
+
         <!-- System Storage -->
         <div class="status-card health-info">
             <h5>

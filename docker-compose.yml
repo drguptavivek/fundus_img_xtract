@@ -21,7 +21,7 @@ services:
       REDIS_DB: ${REDIS_DB}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
-      - "5001:5001"
+      - "${FLASK_PORT}:${FLASK_PORT}"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs

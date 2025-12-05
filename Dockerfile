@@ -1,51 +1,81 @@
-FROM python:3.13.9-slim AS base
+# ======================================================================
+# BASE — Debian 13 trixie 
+# ======================================================================
+FROM python:3.13.3-slim-trixie AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     UV_PROJECT_ENVIRONMENT=/app/.venv
 
-# Add PostgreSQL repository for PostgreSQL 18
-RUN apt-get update && \
+WORKDIR /app
+
+# ======================================================================
+# OS PACKAGES + Postgres repo + OCR libs
+# ======================================================================
+# ======================================================================
+# FIX APT MIRRORS → FORCE HTTPS (critical!)
+# ======================================================================
+RUN set -eux; \
+    printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
+deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
+deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
+    > /etc/apt/sources.list; \
+    apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gnupg \
         logrotate \
         cron \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt/ $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && \
-    apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
-        postgresql-client-18 \
         tesseract-ocr \
         libtesseract-dev \
         poppler-utils \
         ghostscript \
         libgl1 \
         libglib2.0-0 \
-        libmagic1 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+        libmagic1; \
+    \
+    install -d /usr/share/postgresql-common/pgdg; \
+    curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
+        https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+        https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends postgresql-client-18; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Copy dependency manifests first for better caching
+# ======================================================================
+# UV + dependency installation
+# ======================================================================
 COPY pyproject.toml uv.lock ./
 
-# Install uv and sync dependencies
 RUN pip install --no-cache-dir uv && \
     uv sync --frozen --no-dev
 
-# Copy application code
+# ======================================================================
+# Application code
+# ======================================================================
 COPY . .
 
-# Ensure runtime directories exist
-RUN mkdir -p /app/logs /app/files /var/log/fundus-img-xtract /var/run/fundus-img-xtract && \
-    chmod 755 /app/logs /app/files /var/log/fundus-img-xtract /var/run/fundus-img-xtract
+RUN mkdir -p \
+        /app/logs \
+        /app/files \
+        /var/log/fundus-img-xtract \
+        /var/run/fundus-img-xtract \
+    && chmod 755 \
+        /app/logs \
+        /app/files \
+        /var/log/fundus-img-xtract \
+        /var/run/fundus-img-xtract
 
-# Set up logrotate configuration and cron job
+# ======================================================================
+# Logrotate + Cron setup
+# ======================================================================
 RUN cp /app/docker/logrotate.conf /etc/logrotate.d/fundus-img-xtract && \
     cp /app/docker/logrotate.cron /etc/cron.d/fundus-img-xtract && \
     chmod 0644 /etc/logrotate.d/fundus-img-xtract && \

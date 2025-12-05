@@ -98,6 +98,7 @@ def discrepancy_review():
         
         # Get review grade filter
         has_review = request.args.get("has_review", type=str)
+        review_grades = request.args.getlist("review_grade")
         
         # Get consensus filter
         has_consensus = request.args.get("has_consensus", default="has_consensus", type=str)
@@ -178,6 +179,13 @@ def discrepancy_review():
             where_clauses.append(
                 f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
             )
+            valid_review_grades = [g for g in review_grades if g]
+            if valid_review_grades:
+                where_clauses.append(
+                    f"EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem "
+                    "WHERE elem->>'role_slot' = 'review' AND elem->>'grade_name' = ANY(:review_grades))"
+                )
+                params["review_grades"] = valid_review_grades
         elif has_review == "no":
             where_clauses.append(
                 f"NOT EXISTS (SELECT 1 FROM jsonb_array_elements({mv_detail_col}::jsonb) elem WHERE elem->>'role_slot' = 'review')"
@@ -368,6 +376,7 @@ def discrepancy_review():
                 "final_grade": final_grades,
                 "has_ai_grade": has_ai_grade,
                 "has_review": has_review,
+                "review_grade": review_grades,
                 "has_consensus": has_consensus,
                 "ai_model_id": ai_model_ids,
                 "ai_grade": ai_grades,
@@ -410,6 +419,7 @@ def discrepancy_export():
             "final_grade": request.form.getlist("final_grade"),
             "has_ai_grade": request.form.get("has_ai_grade", type=str),
             "has_review": request.form.get("has_review", type=str),
+            "review_grade": request.form.getlist("review_grade"),
             "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),

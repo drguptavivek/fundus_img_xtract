@@ -125,7 +125,7 @@
             <label class="form-label">Resident Grade</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="residentGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="residentGradeText">All Grades</span>
+                <span id="residentGradeText" data-default-label="All Grades">All Grades</span>
               </button>
               <ul class="dropdown-menu w-100" id="residentGradeList">
                 {% for grade in grade_options %}
@@ -146,7 +146,7 @@
             <label class="form-label">Resident2 Grade</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="resident2GradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="resident2GradeText">All Grades</span>
+                <span id="resident2GradeText" data-default-label="All Grades">All Grades</span>
               </button>
               <ul class="dropdown-menu w-100" id="resident2GradeList">
                 {% for grade in grade_options %}
@@ -167,7 +167,7 @@
             <label class="form-label">Arbitrator Grade</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="arbitratorGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="arbitratorGradeText">All Grades</span>
+                <span id="arbitratorGradeText" data-default-label="All Grades">All Grades</span>
               </button>
               <ul class="dropdown-menu w-100" id="arbitratorGradeList">
                 {% for grade in grade_options %}
@@ -185,10 +185,31 @@
           </div>
           
           <div class="col-md-3">
+            <label class="form-label">Review Grade</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="reviewGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                <span id="reviewGradeText" data-default-label="All Review Grades">All Review Grades</span>
+              </button>
+              <ul class="dropdown-menu w-100" id="reviewGradeList">
+                {% for grade in grade_options %}
+                <li>
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input grade-checkbox" type="checkbox" value="{{ grade.impression }}" id="review_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}" name="review_grade" {% if grade.impression in (filters.review_grade if filters.review_grade else []) %}checked{% endif %}>
+                    <label class="form-check-label" for="review_{{ grade.impression|replace(' ', '_')|replace('+', '_') }}">
+                      {{ grade.impression }}
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-md-3">
             <label class="form-label">Final Grade</label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <span id="finalGradeText">All Grades</span>
+                <span id="finalGradeText" data-default-label="All Grades">All Grades</span>
               </button>
               <ul class="dropdown-menu w-100" id="finalGradeList">
                 {% for grade in grade_options %}
@@ -241,7 +262,7 @@
           <label class="form-label">AI Grades</label>
           <div class="dropdown">
             <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="aiGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-              <span id="aiGradeText">All AI Grades</span>
+              <span id="aiGradeText" data-default-label="All AI Grades">All AI Grades</span>
             </button>
             <ul class="dropdown-menu w-100" id="aiGradeList">
               {% for grade in grade_options %}
@@ -307,6 +328,7 @@
           {% for g in filters.resident_grade or [] %}<input type="hidden" name="resident_grade" value="{{ g }}">{% endfor %}
           {% for g in filters.resident2_grade or [] %}<input type="hidden" name="resident2_grade" value="{{ g }}">{% endfor %}
           {% for g in filters.arbitrator_grade or [] %}<input type="hidden" name="arbitrator_grade" value="{{ g }}">{% endfor %}
+          {% for g in filters.review_grade or [] %}<input type="hidden" name="review_grade" value="{{ g }}">{% endfor %}
           {% for g in filters.final_grade or [] %}<input type="hidden" name="final_grade" value="{{ g }}">{% endfor %}
           {% if filters.has_ai_grade %}<input type="hidden" name="has_ai_grade" value="{{ filters.has_ai_grade }}">{% endif %}
           {% if filters.has_review %}<input type="hidden" name="has_review" value="{{ filters.has_review }}">{% endif %}
@@ -328,6 +350,7 @@
                   resident_grade=filters.resident_grade or [],
                   resident2_grade=filters.resident2_grade or [],
                   arbitrator_grade=filters.arbitrator_grade or [],
+                  review_grade=filters.review_grade or [],
                   final_grade=filters.final_grade or [],
                   has_ai_grade=filters.has_ai_grade,
                   has_review=filters.has_review,
@@ -350,6 +373,7 @@
                       resident_grade=filters.resident_grade or [],
                       resident2_grade=filters.resident2_grade or [],
                       arbitrator_grade=filters.arbitrator_grade or [],
+                      review_grade=filters.review_grade or [],
                       final_grade=filters.final_grade or [],
                       has_ai_grade=filters.has_ai_grade,
                       has_review=filters.has_review,
@@ -375,6 +399,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
@@ -400,6 +425,7 @@
                       resident_grade=filters.resident_grade or [],
                       resident2_grade=filters.resident2_grade or [],
                       arbitrator_grade=filters.arbitrator_grade or [],
+                      review_grade=filters.review_grade or [],
                       final_grade=filters.final_grade or [],
                       has_ai_grade=filters.has_ai_grade,
                       has_review=filters.has_review,
@@ -425,6 +451,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
@@ -441,14 +468,15 @@
                 <a class="page-link" href="{{ url_for('review.discrepancy_review',
                   disease_id=filters.disease_id,
                   lab_unit_id=filters.lab_unit_id,
-                  resident_grade=filters.resident_grade or [],
-                  resident2_grade=filters.resident2_grade or [],
-                  arbitrator_grade=filters.arbitrator_grade or [],
-                  final_grade=filters.final_grade or [],
-                  has_ai_grade=filters.has_ai_grade,
-                  has_review=filters.has_review,
-                  has_consensus=filters.has_consensus,
-                  ai_model_id=filters.ai_model_id or [],
+                      resident_grade=filters.resident_grade or [],
+                      resident2_grade=filters.resident2_grade or [],
+                      arbitrator_grade=filters.arbitrator_grade or [],
+                      review_grade=filters.review_grade or [],
+                      final_grade=filters.final_grade or [],
+                      has_ai_grade=filters.has_ai_grade,
+                      has_review=filters.has_review,
+                      has_consensus=filters.has_consensus,
+                      ai_model_id=filters.ai_model_id or [],
                   ai_grade=filters.ai_grade or [],
                   page=page+1) if has_next else '#' }}">
                   Next
@@ -575,6 +603,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     ai_grade=filters.ai_grade or []
                   ) }}" class="btn btn-sm btn-outline-secondary">Review</a>
@@ -606,6 +635,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
@@ -628,6 +658,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
@@ -646,6 +677,7 @@
                     resident_grade=filters.resident_grade or [],
                     resident2_grade=filters.resident2_grade or [],
                     arbitrator_grade=filters.arbitrator_grade or [],
+                    review_grade=filters.review_grade or [],
                     final_grade=filters.final_grade or [],
                     has_ai_grade=filters.has_ai_grade,
                     has_review=filters.has_review,
@@ -702,10 +734,17 @@ function clearFilters() {
   document.getElementById('residentGradeText').textContent = 'All Grades';
   document.getElementById('resident2GradeText').textContent = 'All Grades';
   document.getElementById('arbitratorGradeText').textContent = 'All Grades';
+  document.getElementById('reviewGradeText').textContent = 'All Review Grades';
   document.getElementById('finalGradeText').textContent = 'All Grades';
   document.getElementById('aiModelText').textContent = 'All Models';
   document.getElementById('aiGradeText').textContent = 'All AI Grades';
-   document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
+  document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
+  if (typeof toggleAiControls === 'function') {
+    toggleAiControls();
+  }
+  if (typeof toggleReviewGradeControls === 'function') {
+    toggleReviewGradeControls();
+  }
   
   // Remove page parameter from URL so it defaults to page 1
   const form = document.getElementById('filterForm');
@@ -739,6 +778,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const residentGradeList = document.getElementById('residentGradeList');
   const resident2GradeList = document.getElementById('resident2GradeList');
   const arbitratorGradeList = document.getElementById('arbitratorGradeList');
+  const reviewGradeList = document.getElementById('reviewGradeList');
   const finalGradeList = document.getElementById('finalGradeList');
   const aiGradeList = document.getElementById('aiGradeList');
   
@@ -747,6 +787,7 @@ document.addEventListener('DOMContentLoaded', function() {
     resident: Array.from(residentGradeList.querySelectorAll('li')),
     resident2: Array.from(resident2GradeList.querySelectorAll('li')),
     arbitrator: Array.from(arbitratorGradeList.querySelectorAll('li')),
+    review: Array.from(reviewGradeList.querySelectorAll('li')),
     final: Array.from(finalGradeList.querySelectorAll('li')),
     ai: Array.from(aiGradeList.querySelectorAll('li'))
   };
@@ -768,8 +809,9 @@ document.addEventListener('DOMContentLoaded', function() {
         updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
         updateGradeCheckboxes(resident2GradeList, selectedDisease.gradings, allGradeOptions.resident2);
         updateGradeCheckboxes(arbitratorGradeList, selectedDisease.gradings, allGradeOptions.arbitrator);
+        updateGradeCheckboxes(reviewGradeList, selectedDisease.gradings, allGradeOptions.review, 'All Review Grades');
         updateGradeCheckboxes(finalGradeList, selectedDisease.gradings, allGradeOptions.final);
-        updateGradeCheckboxes(aiGradeList, selectedDisease.gradings, allGradeOptions.ai, 'AI Grades');
+        updateGradeCheckboxes(aiGradeList, selectedDisease.gradings, allGradeOptions.ai, 'All AI Grades');
       }
     } else {
       // Hide the grade filters row
@@ -810,6 +852,17 @@ document.addEventListener('DOMContentLoaded', function() {
         arbitratorGradeList.appendChild(newLi);
       });
       
+      reviewGradeList.innerHTML = '';
+      allGradeOptions.review.forEach(li => {
+        const existingChecked = reviewGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
+        const isChecked = existingChecked ? existingChecked.checked : false;
+        const newLi = li.cloneNode(true);
+        if (isChecked) {
+          newLi.querySelector('input').checked = true;
+        }
+        reviewGradeList.appendChild(newLi);
+      });
+
       finalGradeList.innerHTML = '';
       allGradeOptions.final.forEach(li => {
         const existingChecked = finalGradeList.querySelector(`input[value="${li.querySelector('input').value}"]`);
@@ -831,8 +884,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         aiGradeList.appendChild(newLi);
       });
-      updateDropdownText(aiGradeList, 'AI Grades');
+      updateDropdownText(aiGradeList, 'All AI Grades');
+      updateDropdownText(reviewGradeList, 'All Review Grades');
     }
+    toggleReviewGradeControls();
   }
 
   // Update grade options when disease selection changes
@@ -844,6 +899,17 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(updateGradeOptions, 100);
   }
 });
+
+function getDefaultLabel(textElement, fallback='All Grades') {
+  if (!textElement) return fallback;
+  const candidate = (textElement.dataset.defaultLabel || textElement.textContent || fallback || '').trim();
+  return candidate || fallback;
+}
+
+function getSelectionLabel(defaultLabel) {
+  const cleaned = defaultLabel.replace(/^All\s+/i, '').trim();
+  return cleaned || 'grades';
+}
 
 // Function to update grade checkboxes based on available grades
 function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All Grades') {
@@ -882,37 +948,35 @@ function updateGradeCheckboxes(gradeList, grades, allOptions, defaultLabel='All 
 }
 
 // Function to update dropdown text based on selected checkboxes
-function updateDropdownText(gradeList, defaultLabel='All Grades') {
+function updateDropdownText(gradeList, providedDefaultLabel) {
   const dropdownId = gradeList.id.replace('List', 'Text');
-  const selectedCount = gradeList.querySelectorAll('.grade-checkbox:checked, .ai-grade-checkbox:checked').length;
   const dropdownText = document.getElementById(dropdownId);
-  
-  if (selectedCount === 0) {
-    dropdownText.textContent = defaultLabel;
-  } else if (selectedCount === 1) {
-    const checkedBox = gradeList.querySelector('.grade-checkbox:checked, .ai-grade-checkbox:checked');
-    dropdownText.textContent = checkedBox.value;
-  } else {
-    dropdownText.textContent = `${selectedCount} ${defaultLabel.toLowerCase()} selected`;
+  if (!dropdownText) {
+    return;
   }
+  const defaultLabel = getDefaultLabel(dropdownText, providedDefaultLabel || 'All Grades');
+  const selectionLabel = getSelectionLabel(defaultLabel).toLowerCase();
+  const selectedBoxes = gradeList.querySelectorAll('.grade-checkbox:checked, .ai-grade-checkbox:checked');
+
+  if (selectedBoxes.length === 0) {
+    dropdownText.textContent = defaultLabel;
+    return;
+  }
+
+  if (selectedBoxes.length === 1) {
+    const checkedBox = selectedBoxes[0];
+    dropdownText.textContent = checkedBox.value || defaultLabel;
+    return;
+  }
+
+  dropdownText.textContent = `${selectedBoxes.length} ${selectionLabel} selected`;
 }
 
 // Update text when checkboxes are selected
 document.querySelectorAll('.dropdown-menu').forEach(menu => {
   menu.addEventListener('change', function(e) {
-    if (e.target.classList.contains('grade-checkbox')) {
-      const dropdownId = menu.id.replace('List', 'Text');
-      const selectedCount = menu.querySelectorAll('.grade-checkbox:checked').length;
-      const dropdownText = document.getElementById(dropdownId);
-      
-      if (selectedCount === 0) {
-        dropdownText.textContent = 'All Grades';
-      } else if (selectedCount === 1) {
-        const checkedBox = menu.querySelector('.grade-checkbox:checked');
-        dropdownText.textContent = checkedBox.value;
-      } else {
-        dropdownText.textContent = `${selectedCount} grades selected`;
-      }
+    if (e.target.classList.contains('grade-checkbox') || e.target.classList.contains('ai-grade-checkbox')) {
+      updateDropdownText(menu);
     }
     
     if (e.target.classList.contains('ai-model-checkbox')) {
@@ -931,20 +995,6 @@ document.querySelectorAll('.dropdown-menu').forEach(menu => {
         dropdownText.textContent = checkedBox.nextElementSibling.textContent;
       } else {
         dropdownText.textContent = `1 model selected`;
-      }
-    }
-
-    if (e.target.classList.contains('ai-grade-checkbox')) {
-      const dropdownId = menu.id.replace('List', 'Text');
-      const selectedCount = menu.querySelectorAll('.ai-grade-checkbox:checked').length;
-      const dropdownText = document.getElementById(dropdownId);
-      if (selectedCount === 0) {
-        dropdownText.textContent = 'All AI Grades';
-      } else if (selectedCount === 1) {
-        const checkedBox = menu.querySelector('.ai-grade-checkbox:checked');
-        dropdownText.textContent = checkedBox.value;
-      } else {
-        dropdownText.textContent = `${selectedCount} AI grades selected`;
       }
     }
 
@@ -979,11 +1029,26 @@ function updateAiReviewStatusDropdown() {
   }
 }
 
+function toggleReviewGradeControls() {
+  const hasReview = document.getElementById('hasReviewSelect').value === 'yes';
+  const reviewGradeDropdown = document.getElementById('reviewGradeDropdown');
+  const reviewGradeList = document.getElementById('reviewGradeList');
+  reviewGradeDropdown.disabled = !hasReview;
+  reviewGradeList.querySelectorAll('.grade-checkbox').forEach(cb => {
+    cb.disabled = !hasReview;
+    if (!hasReview) {
+      cb.checked = false;
+    }
+  });
+  updateDropdownText(reviewGradeList, 'All Review Grades');
+}
+
 // Disable AI controls unless "Has AI Grade" is Yes
 function toggleAiControls() {
   const hasAi = document.getElementById('hasAiGradeSelect').value === 'yes';
   const aiModelDropdown = document.getElementById('aiModelDropdown');
   const aiGradeDropdown = document.getElementById('aiGradeDropdown');
+  const aiGradeList = document.getElementById('aiGradeList');
   const aiReviewStatusDropdown = document.getElementById('aiReviewStatusDropdown');
   aiModelDropdown.disabled = !hasAi;
   aiGradeDropdown.disabled = !hasAi;
@@ -1002,15 +1067,17 @@ function toggleAiControls() {
   });
   if (!hasAi) {
     document.getElementById('aiModelText').textContent = 'All Models';
-    document.getElementById('aiGradeText').textContent = 'All AI Grades';
     document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
   }
+  updateDropdownText(aiGradeList, 'All AI Grades');
   updateAiReviewStatusDropdown();
 }
 
 document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
+document.getElementById('hasReviewSelect').addEventListener('change', toggleReviewGradeControls);
 // Initialize on load
 toggleAiControls();
+toggleReviewGradeControls();
 document.addEventListener('DOMContentLoaded', updateAiReviewStatusDropdown);
 </script>
 

@@ -103,7 +103,7 @@ def _fetch_options(db: Session, allowed_lab_units: Iterable[int]) -> Tuple[List[
 
 
 @bp.route("/dataset-curation", methods=["GET", "POST"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_curation():
     """Create curated datasets using discrepancy-style filters."""
     db = Session()
@@ -201,7 +201,7 @@ def dataset_curation():
 
 
 @bp.route("/dataset-curation/<dataset_uuid>", methods=["GET", "POST"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_detail(dataset_uuid: str):
     """Manual screening page for a curated dataset."""
     db = Session()
@@ -328,7 +328,7 @@ def dataset_detail(dataset_uuid: str):
 
 
 @bp.route("/dataset-export/<dataset_uuid>", methods=["POST"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_export(dataset_uuid: str):
     """Queue export for a curated dataset."""
     db = Session()
@@ -389,7 +389,7 @@ def dataset_export(dataset_uuid: str):
 
 
 @bp.route("/dataset-export/<job_token>/<path:filename>", methods=["GET"])
-@roles_required("admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_export_download(job_token: str, filename: str):
     """Serve dataset export artifacts."""
     with Session() as db:

@@ -14,7 +14,7 @@ from . import jobs_bp
 
 @jobs_bp.route("/", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def list_recent_jobs():
     from flask import request
     
@@ -128,7 +128,7 @@ def list_recent_jobs():
 
 @jobs_bp.route("/<job_token>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_json(job_token: str):
     with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token).first()
@@ -156,14 +156,14 @@ def job_status_json(job_token: str):
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_page(job_token: str):
     # simple HTML page that polls <token> JSON
     return render_template("jobs/job_status.html", job_id=job_token)
 
 @jobs_bp.route("/results/details/<job_token>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def upload_results(job_token):
     with get_db_session() as db:
         job = db.query(Job).filter_by(token=job_token).first()
@@ -186,7 +186,7 @@ def upload_results(job_token):
 
 @jobs_bp.route("/processing/<job_id>", methods=["GET"])
 @login_required
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def upload_processing(job_id):
     return render_template("jobs/jobs_processing.html", job_id=job_id)
 

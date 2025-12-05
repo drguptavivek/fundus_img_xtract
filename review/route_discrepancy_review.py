@@ -35,7 +35,7 @@ from .task_review import AI_REVIEW_STATUS_LABELS
 
 
 @bp.route("/discrepancy-review", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin",  "discrepancy_reviewer", "data_exporter")
 def discrepancy_review():
     """Main page for discrepancy review process.
 
@@ -379,7 +379,7 @@ def discrepancy_review():
 
 
 @bp.route("/discrepancy-export", methods=["POST"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin", "data_manager",  "data_exporter")
 def discrepancy_export():
     """Queue a background export for the current discrepancy filters."""
     db = Session()
@@ -443,7 +443,7 @@ def discrepancy_export():
         db.close()
 
 @bp.route("/discrepancy-export/<job_token>/<path:filename>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin",  "data_manager", "data_exporter")
 def discrepancy_export_download(job_token: str, filename: str):
     """Serve generated export artifacts (Excel or zip) for authorized users."""
     with Session() as db:

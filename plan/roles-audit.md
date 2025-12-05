@@ -1,5 +1,7 @@
 # Roles and LabUnit Audit
 
+New roles added: `discrepancy_reviewer` (access to discrepancy review + exports) and `data_exporter` (dataset/discrepancy exports, job monitoring). Included in DEFAULT_ROLES so `ensure_roles` will seed them.
+
 ## api blueprint (implemented)
 - Changes: Scoped `/api/hospitals*` and `/api/labunits*` to `get_user_lab_unit_ids_no_admin_override`, returning only hospitals/lab units tied to the caller; detail endpoints now 403 when outside scope. Direct uploads endpoints now only allow the caller to fetch their own lab units and block hospital lookup for lab units outside scope. `/api/eligibleLabUnit` no longer accepts a `user_id` override and uses no-admin-override helper. Added `roles_required` with full allowed set (`admin`, `local_admin`, `fileUploader`, `ophthalmologist`, `data_manager`, `resident`, `optometrist`) across these API routes.
 - Status: Implemented in `api/hospitals.py`, `api/labUnits.py`, `api/direct_uploads.py`, `api/userUtils.py`.
@@ -10,8 +12,16 @@
 - Notes: Admin/local_admin can view job status for other users if the job’s lab unit is in their scope. Admin/local_admin/fileUploader/optometrist/data_manager can manage others’ items (edit/bulk actions/edit image/save) within scoped lab units; all actions remain lab-unit scoped with no global override.
 
 ## jobs blueprint (implemented)
-- Changes: Added login + role gates (`admin`, `local_admin`, `fileUploader`, `optometrist`, `data_manager`) to all routes. Scoped job listings and detail endpoints to the caller’s assigned lab units via `get_user_lab_unit_ids_no_admin_override`; owners can still access their jobs. Admin/local_admin/fileUploader/optometrist/data_manager can view other users’ jobs only when the job’s lab unit is within their scope.
+- Changes: Added login + role gates (`admin`, `local_admin`, `fileUploader`, `optometrist`, `data_manager`, `discrepancy_reviewer`, `data_exporter`) to all routes. Scoped job listings and detail endpoints to the caller’s assigned lab units via `get_user_lab_unit_ids_no_admin_override`; owners can still access their jobs. Admin/local_admin/fileUploader/optometrist/data_manager/discrepancy_reviewer/data_exporter can view other users’ jobs only when the job’s lab unit is within their scope.
 - Status: Implemented in `jobs/routes.py`.
+
+## review blueprint — discrepancy
+- Changes: Role gates now: review UI (`admin`, `discrepancy_reviewer`, `data_exporter`), export queue (`admin`, `data_manager`, `data_exporter`), export downloads (`admin`, `data_manager`, `data_exporter`). Lab-unit scoping and disease-required behavior unchanged; `local_admin` access was removed per updated requirements.
+- Status: Implemented in `review/route_discrepancy_review.py`.
+
+## review blueprint — curated dataset/export
+- Changes: Dataset curation, detail/manual include/exclude, export queueing, and export downloads permit `admin`, `local_admin`, `data_manager`, `data_exporter`; lab-unit scoping enforced via stored filters and `get_user_lab_unit_ids_no_admin_override`.
+- Status: Implemented in `review/route_dataset_curation.py`.
 
 ## verify_remedio_glaucoma blueprint (implemented)
 - Changes: Roles aligned to `admin/local_admin/fileUploader/optometrist/data_manager`; all pages/actions scoped with `get_user_lab_unit_ids_no_admin_override`. Results/list/clean workflows, detail/edit, verify/unverify, mark_eye, navigation (prev/next/back) all filtered to allowed lab units; users without lab units are blocked.

@@ -9,7 +9,17 @@ from sqlalchemy import select
 from models import Role
 from db_transaction_manager import get_db_session, transaction_scope
 
-DEFAULT_ROLES = ["admin", "local_admin", "fileUploader", "ophthalmologist", "data_manager", "resident", "optometrist"]
+DEFAULT_ROLES = [
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+    "discrepancy_reviewer",
+    "data_exporter",
+]
 
 # Role constants for use in decorators (these can be referenced in code)
 ROLE_ADMIN = "admin"
@@ -19,6 +29,8 @@ ROLE_OPHTHALMOLOGIST = "ophthalmologist"
 ROLE_DATA_MANAGER = "data_manager"
 ROLE_RESIDENT = "resident"
 ROLE_OPTOMETRIST = "optometrist"
+ROLE_DISCREPANCY_REVIEWER = "discrepancy_reviewer"
+ROLE_DATA_EXPORTER = "data_exporter"
 
 def ensure_roles(db, names: Iterable[str] = DEFAULT_ROLES) -> None:
     """Ensure all specified roles exist in the database.

@@ -149,7 +149,7 @@ def job_status_json(job_token: str):
             download_endpoint = (
                 "review.discrepancy_export_download"
                 if job.upload_type == "discrepancy_export"
-                else "review.dataset_export_download"
+                else "analytics.dataset_export_download"
             )
             payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
         return jsonify(payload)

@@ -9,9 +9,9 @@
       <p class="text-muted mb-0 small">{{ dataset.purpose }}</p>
     </div>
     <div class="d-flex gap-2">
-      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.dataset_curation') }}">Back</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('analytics.dataset_curation') }}">Back</a>
       {% if include_count > 0 %}
-      <form method="POST" action="{{ url_for('review.dataset_export', dataset_uuid=dataset.uuid) }}">
+      <form method="POST" action="{{ url_for('analytics.dataset_export', dataset_uuid=dataset.uuid) }}">
         {{ csrf_field() }}
         <button type="submit" class="btn btn-primary btn-sm">Export ({{ include_count }})</button>
       </form>
@@ -120,70 +120,6 @@
     </div>
   </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="card-title mb-0">Selected Tasks</h5>
-      <small class="text-muted">Included vs excluded based on your decisions.</small>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div class="col-lg-6">
-          <h6>Included ({{ included_rows|length }})</h6>
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th>Task ID</th>
-                  <th>Final</th>
-                  <th>AI</th>
-                  <th>Lab Unit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in included_rows %}
-                <tr>
-                  <td>{{ row.task_id }}</td>
-                  <td>{{ row.final_impression or '—' }}</td>
-                  <td>{{ row.grading_details_json | safe }}</td>
-                  <td>{{ row.lab_unit }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4" class="text-muted text-center">No tasks included yet.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="col-lg-6">
-          <h6>Excluded ({{ excluded_rows|length }})</h6>
-          <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th>Task ID</th>
-                  <th>Final</th>
-                  <th>AI</th>
-                  <th>Lab Unit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in excluded_rows %}
-                <tr>
-                  <td>{{ row.task_id }}</td>
-                  <td>{{ row.final_impression or '—' }}</td>
-                  <td>{{ row.grading_details_json | safe }}</td>
-                  <td>{{ row.lab_unit }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="4" class="text-muted text-center">No tasks excluded yet.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <div class="card shadow-sm">
     <div class="card-header d-flex align-items-center justify-content-between">
@@ -271,7 +207,7 @@
               </div>
             </form>
             <div class="d-flex justify-content-end">
-              <a class="btn btn-link btn-sm" href="{{ url_for('review.dataset_curation') }}">Complete selection</a>
+              <a class="btn btn-link btn-sm" href="{{ url_for('analytics.dataset_curation') }}">Complete selection</a>
             </div>
           </div>
         </div>
@@ -282,5 +218,72 @@
       {% endif %}
     </div>
   </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Selected Tasks</h5>
+      <small class="text-muted">Included vs excluded based on your decisions.</small>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-lg-6">
+          <h6>Included ({{ included_rows|length }})</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Task ID</th>
+                  <th>Final</th>
+                  <th>AI</th>
+                  <th>Lab Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in included_rows %}
+                <tr>
+                  <td>{{ row.task_id }}</td>
+                  <td>{{ row.final_impression or '—' }}</td>
+                  <td>{{ row.ai_summary or '—' }}</td>
+                  <td>{{ row.lab_unit }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-center">No tasks included yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <h6>Excluded ({{ excluded_rows|length }})</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Task ID</th>
+                  <th>Final</th>
+                  <th>AI</th>
+                  <th>Lab Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in excluded_rows %}
+                <tr>
+                  <td>{{ row.task_id }}</td>
+                  <td>{{ row.final_impression or '—' }}</td>
+                  <td>{{ row.ai_summary or '—' }}</td>
+                  <td>{{ row.lab_unit }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-muted text-center">No tasks excluded yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
 </div>
 {% endblock %}

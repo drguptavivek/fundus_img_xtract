@@ -333,7 +333,7 @@
               </li>
               <li><hr class="dropdown-divider"></li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) in ['review.dataset_curation', 'review.dataset_detail'] else '' }}" href="{{ url_for('review.dataset_curation') }}">
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) in ['analytics.dataset_curation', 'analytics.dataset_detail'] else '' }}" href="{{ url_for('analytics.dataset_curation') }}">
                   Curated Datasets
                 </a>
               </li>

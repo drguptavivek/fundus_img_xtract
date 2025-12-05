@@ -31,7 +31,7 @@
       <h3 class="mb-0">Dataset Curation</h3>
       <p class="text-muted mb-0 small">Use discrepancy filters, add purpose, optionally auto-select a batch, then screen images manually.</p>
     </div>
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.discrepancy_review') }}">Back to Discrepancy Review</a>
+
   </div>
 
   <div class="card shadow-sm mb-4">
@@ -274,7 +274,7 @@
               <td>{{ ds.created_by.full_name or ds.created_by.username if ds.created_by else "—" }}</td>
               <td>{{ ds.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
               <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('review.dataset_detail', dataset_uuid=ds.uuid) }}">Screen</a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=ds.uuid) }}">Screen</a>
               </td>
             </tr>
             {% else %}

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import sqlalchemy as sa
-from flask import abort, flash, redirect, render_template, request, url_for, send_file
+from flask import abort, flash, redirect, render_template, request, url_for, send_file, current_app
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
@@ -24,14 +26,14 @@ from models import (
 )
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from . import bp
-from .discrepancy_export import (
+from review.discrepancy_export import (
     ExportTaskRow,
     enqueue_dataset_export,
     _fetch_filtered_rows,
     _fetch_rows_by_task_ids,
 )
-from .task_review import AI_REVIEW_STATUS_LABELS
-from .discrepancy_export import EXPORT_DIR
+from review.task_review import AI_REVIEW_STATUS_LABELS
+from review.discrepancy_export import EXPORT_DIR
 
 
 def _build_filters_from_request(req) -> Dict[str, Any]:
@@ -102,6 +104,46 @@ def _fetch_options(db: Session, allowed_lab_units: Iterable[int]) -> Tuple[List[
     return diseases, lab_units, grade_options, ai_models
 
 
+def _ai_summary(row: ExportTaskRow) -> str:
+    """Return concise AI info: grade, probability, model, review statuses/comments."""
+    grade = None
+    prob = None
+    model = None
+    try:
+        details = json.loads(row.grading_details_json or "[]")
+        for item in details:
+            if item.get("role_slot") == "ai":
+                grade = item.get("grade_name") or item.get("impression")
+                prob = item.get("ai_probability") or item.get("ai_prob") or item.get("probability")
+                model = item.get("ai_model_name")
+                break
+    except Exception:
+        pass
+
+    if not prob and row.ai_review_comments:
+        prob_re = re.compile(r"(?:ai\s*prob(?:ability)?|prob(?:ability)?)[:=]?\s*([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
+        for comment in row.ai_review_comments:
+            m = prob_re.search(comment or "")
+            if m:
+                prob = m.group(1)
+                break
+
+    statuses = row.ai_review_statuses or []
+    comments = row.ai_review_comments or []
+    parts: list[str] = []
+    if grade:
+        parts.append(grade)
+    if prob:
+        parts.append(f"p={prob}")
+    if model:
+        parts.append(model)
+    if statuses:
+        parts.append("review: " + ", ".join(statuses))
+    if comments:
+        parts.append("comment: " + "; ".join(comments))
+    return " ; ".join(parts) if parts else "—"
+
+
 @bp.route("/dataset-curation", methods=["GET", "POST"])
 @roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_curation():
@@ -119,14 +161,14 @@ def dataset_curation():
             filters = _build_filters_from_request(request.form)
             if not filters.get("disease_id"):
                 flash("Disease selection is required to create a dataset.", "error")
-                return redirect(url_for("review.dataset_curation", **request.args))
+                return redirect(url_for("analytics.dataset_curation", **request.args))
 
             dataset_name = (request.form.get("dataset_name") or "").strip()
             purpose = (request.form.get("dataset_purpose") or "").strip()
             auto_select_count = request.form.get("auto_select_count", type=int)
             if not dataset_name or not purpose:
                 flash("Dataset name and purpose are required.", "error")
-                return redirect(url_for("review.dataset_curation", **request.args))
+                return redirect(url_for("analytics.dataset_curation", **request.args))
 
             filters = _filters_with_allowed(filters, allowed_lab_units)
             dataset = CuratedDataset(
@@ -158,7 +200,7 @@ def dataset_curation():
                 f"Dataset created. Auto-selected {len(selected_rows)} tasks." if selected_rows else "Dataset created.",
                 "success",
             )
-            return redirect(url_for("review.dataset_detail", dataset_uuid=dataset.uuid))
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
 
         datasets = (
             db.query(CuratedDataset)
@@ -167,6 +209,7 @@ def dataset_curation():
             .all()
         )
         dataset_stats: Dict[int, Dict[str, int]] = {}
+        dataset_jobs: Dict[str, Dict[str, str]] = {}
         if datasets:
             dataset_ids = [d.id for d in datasets]
             rows = (
@@ -186,6 +229,29 @@ def dataset_curation():
                 else:
                     ds_stats["exclude"] += count
 
+            # Find latest dataset_export job per dataset (within retention window)
+            retention_hours = getattr(current_app.config, "EXPORT_RETENTION_HOURS", 24)
+            cutoff_dt = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
+            job_rows = (
+                db.query(Job)
+                .filter(Job.upload_type == "dataset_export")
+                .filter(Job.created_at >= cutoff_dt)
+                .order_by(Job.created_at.desc())
+                .all()
+            )
+            for job in job_rows:
+                try:
+                    payload = job.payload or {}
+                    meta = payload.get("metadata") or {}
+                    ds_uuid = meta.get("dataset_uuid") or meta.get("dataset_id")
+                    if ds_uuid:
+                        dataset_jobs[str(ds_uuid)] = {
+                            "job_token": job.token,
+                            "created_at": job.created_at,
+                        }
+                except Exception:
+                    continue
+
         return render_template(
             "review/dataset_curation.html",
             diseases=diseases,
@@ -195,6 +261,7 @@ def dataset_curation():
             ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
             datasets=datasets,
             dataset_stats=dataset_stats,
+            dataset_jobs=dataset_jobs,
         )
     finally:
         db.close()
@@ -215,14 +282,14 @@ def dataset_detail(dataset_uuid: str):
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
             flash("You do not have access to the lab units for this dataset.", "error")
-            return redirect(url_for("review.dataset_curation"))
+            return redirect(url_for("analytics.dataset_curation"))
         filters = _filters_with_allowed(stored_filters, allowed_lab_units)
         if not filters.get("allowed_lab_units"):
             flash("No permitted lab units available for this dataset.", "error")
-            return redirect(url_for("review.dataset_curation"))
+            return redirect(url_for("analytics.dataset_curation"))
         if not filters.get("disease_id"):
             flash("Dataset is missing a disease filter; cannot proceed.", "error")
-            return redirect(url_for("review.dataset_curation"))
+            return redirect(url_for("analytics.dataset_curation"))
 
         # Track decisions
         items = (
@@ -239,6 +306,24 @@ def dataset_detail(dataset_uuid: str):
         total_matching = len(matching_rows)
         included_rows: List[ExportTaskRow] = _fetch_rows_by_task_ids(included_task_ids, dataset.disease_id) if included_task_ids else []
         excluded_rows: List[ExportTaskRow] = _fetch_rows_by_task_ids(excluded_task_ids, dataset.disease_id) if excluded_task_ids else []
+        included_display = [
+            {
+                "task_id": r.task_id,
+                "final_impression": r.final_impression,
+                "lab_unit": r.lab_unit,
+                "ai_summary": _ai_summary(r),
+            }
+            for r in included_rows
+        ]
+        excluded_display = [
+            {
+                "task_id": r.task_id,
+                "final_impression": r.final_impression,
+                "lab_unit": r.lab_unit,
+                "ai_summary": _ai_summary(r),
+            }
+            for r in excluded_rows
+        ]
 
         if request.method == "POST":
             task_id = request.form.get("task_id", type=int)
@@ -270,7 +355,7 @@ def dataset_detail(dataset_uuid: str):
                 db.commit()
                 decided_task_ids.add(task_id)
                 flash("Decision saved.", "success")
-                return redirect(url_for("review.dataset_detail", dataset_uuid=dataset_uuid))
+                return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         next_row = _get_next_pending_row(filters, decided_task_ids)
         next_image = None
@@ -320,8 +405,8 @@ def dataset_detail(dataset_uuid: str):
             ai_review_status_labels=AI_REVIEW_STATUS_LABELS,
             total_matching=total_matching,
             filters_display=filters,
-            included_rows=included_rows,
-            excluded_rows=excluded_rows,
+            included_rows=included_display,
+            excluded_rows=excluded_display,
         )
     finally:
         db.close()
@@ -340,12 +425,12 @@ def dataset_export(dataset_uuid: str):
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
         if not allowed_lab_units:
             flash("You are not allowed to export datasets.", "error")
-            return redirect(url_for("review.dataset_curation"))
+            return redirect(url_for("analytics.dataset_curation"))
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
             flash("You do not have access to the lab units for this dataset.", "error")
-            return redirect(url_for("review.dataset_curation"))
+            return redirect(url_for("analytics.dataset_curation"))
 
         items = (
             db.query(CuratedDatasetItem)
@@ -358,7 +443,7 @@ def dataset_export(dataset_uuid: str):
         task_ids = [item.task_id for item in items]
         if not task_ids:
             flash("No tasks selected for export in this dataset.", "error")
-            return redirect(url_for("review.dataset_detail", dataset_uuid=dataset_uuid))
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
         ip = xff or (request.remote_addr or "-")

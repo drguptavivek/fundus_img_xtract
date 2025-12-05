@@ -410,6 +410,21 @@ def discrepancy_export():
             flash("You are not allowed to export for this lab unit.", "error")
             return redirect(url_for("review.discrepancy_review", **request.args))
 
+        ai_review_statuses = [
+            status for status in request.form.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
+        ]
+        if not ai_review_statuses:
+            ai_review_statuses = [
+                status for status in request.args.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
+            ]
+        if not ai_review_statuses and request.referrer:
+            from urllib.parse import urlparse, parse_qs
+            parsed_referrer = urlparse(request.referrer)
+            qs_params = parse_qs(parsed_referrer.query or "")
+            ai_review_statuses = [
+                status for status in qs_params.get("ai_review_status", []) if status in AI_REVIEW_STATUS_LABELS
+            ]
+
         filters = {
             "disease_id": disease_id,
             "lab_unit_id": lab_unit_id,
@@ -423,11 +438,7 @@ def discrepancy_export():
             "has_consensus": request.form.get("has_consensus", default="has_consensus", type=str),
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
-            "ai_review_status": [
-                status
-                for status in request.form.getlist("ai_review_status")
-                if status in AI_REVIEW_STATUS_LABELS
-            ],
+            "ai_review_status": ai_review_statuses,
             "allowed_lab_units": list(user_lab_unit_ids),
         }
 

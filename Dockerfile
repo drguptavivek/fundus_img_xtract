@@ -1,7 +1,7 @@
 # ======================================================================
 # BASE — Debian 13 trixie 
 # ======================================================================
-FROM python:3.13.3-slim-trixie AS base
+FROM python:3.13.9-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -17,6 +17,8 @@ WORKDIR /app
 # FIX APT MIRRORS → FORCE HTTPS (critical!)
 # ======================================================================
 RUN set -eux; \
+    rm -f /etc/apt/sources.list.d/debian.sources;\
+    \
     printf "deb https://deb.debian.org/debian trixie main contrib non-free non-free-firmware\n\
 deb https://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware\n\
 deb https://deb.debian.org/debian-security trixie-security main contrib non-free non-free-firmware\n" \
@@ -42,7 +44,7 @@ deb https://deb.debian.org/debian-security trixie-security main contrib non-free
     curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail \
         https://www.postgresql.org/media/keys/ACCC4CF8.asc; \
     echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
-        https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list; \
     apt-get update; \
     apt-get install -y --no-install-recommends postgresql-client-18; \

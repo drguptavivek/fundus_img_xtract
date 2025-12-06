@@ -1,3 +1,22 @@
+# Force LF for all text files
+* text=auto eol=lf
+
+# Particularly important for scripts
 *.sh text eol=lf
-Dockerfile text eol=lf
 *.py text eol=lf
+Dockerfile text eol=lf
+*.env text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.sql text eol=lf
+*.env text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.jsx text eol=lf
+*.tsx text eol=lf
+*.ini text eol=lf

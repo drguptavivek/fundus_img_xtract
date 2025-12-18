@@ -665,7 +665,7 @@ def _render_page(
 
 
 @bp.route("/direct/pregraded/grades", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin","pregarded_uploader")
 def pregraded_grades():
     with get_db_session() as db_session:
         resident_graders = _eligible_graders(db_session, ["resident", "ophthalmologist"])
@@ -1053,7 +1053,7 @@ def pregraded_grades():
 
 
 @bp.route("/direct/pregraded/grades/recent", methods=["GET"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "pregarded_uploader")
 def recent_pregraded_grades():
     """Display a list of recent Excel grading files that were uploaded."""
     with get_db_session() as db_session:

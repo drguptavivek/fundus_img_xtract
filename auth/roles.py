@@ -19,6 +19,7 @@ DEFAULT_ROLES = [
     "optometrist",
     "discrepancy_reviewer",
     "data_exporter",
+    "pregarded_uploader",
 ]
 
 # Role constants for use in decorators (these can be referenced in code)
@@ -31,6 +32,7 @@ ROLE_RESIDENT = "resident"
 ROLE_OPTOMETRIST = "optometrist"
 ROLE_DISCREPANCY_REVIEWER = "discrepancy_reviewer"
 ROLE_DATA_EXPORTER = "data_exporter"
+ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 
 def ensure_roles(db, names: Iterable[str] = DEFAULT_ROLES) -> None:
     """Ensure all specified roles exist in the database.

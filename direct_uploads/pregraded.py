@@ -53,7 +53,7 @@ def _to_int(value: Optional[str]) -> Optional[int]:
 
 
 @bp.route("/direct/pregraded", methods=["GET", "POST"])
-@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@roles_required("admin", "local_admin", "pregarded_uploader")
 def pregraded_upload():
     with get_db_session() as db_session:
         allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)

@@ -107,7 +107,7 @@
           
           {% endif %}
 
-          {% if current_user_has('optometrist') or current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['uploads','uploaded_zips','jobs'] or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
               href="#" id="uploadMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -136,7 +136,7 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-                        {% if current_user_has('data_manager') or current_user_has('admin') %}
+         
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
@@ -145,7 +145,7 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>
-
+                  {% if  current_user_has('pregarded_uploader') or current_user_has('admin') %}
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -165,7 +165,7 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-                        {% endif %}
+                       {% endif %}
 
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
@@ -175,7 +175,7 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('fileUploader') or current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if  current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] or (request.endpoint|default('', true)) == 'results.images_without_tasks') else '' }}" href="#"
               id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -227,7 +227,7 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('data_manager')%}
+          {% if current_user_has('ophthalmologist') or current_user_has('admin')  %}
                      <li class="nav-item dropdown">
                        <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
                          id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -238,7 +238,7 @@
                           <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
                             href="{{ url_for('grading.index') }}">Image Grading</a>
                          </li>
-                  
+                    {% if current_user_has('discrepancy_reviewer') %}
                           <li>
                             <a class="dropdown-item" href = "{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
                          </li>
@@ -248,7 +248,7 @@
                              My Reviews
                            </a>
                          </li>
-
+   {% endif %}
                           <li>
                             <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
                               <span>My Intra-Rater Tasks</span>
@@ -266,7 +266,7 @@
               Tasks and Images
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
-              {% if current_user_has('data_manager') or current_user_has('admin') %}
+  
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.all_tasks' else '' }}"
                   href="{{ url_for('tasks.all_tasks') }}">All Tasks</a>
@@ -288,16 +288,16 @@
                 <hr class="dropdown-divider">
               </li>
 
-              {% if current_user_has('admin') or current_user_has('data_manager') %}
+ 
               <li>
                 <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_admin' else '' }}" href="{{ url_for('tasks.intra_rater_admin') }}">
                   <span>Intra-Rater Batch Creator</span>
                   <span class="badge text-bg-secondary">Admin</span>
                 </a>
               </li>
-              {% endif %}
 
-              {% endif %}
+
+
 
             </ul>
           </li>

@@ -124,6 +124,8 @@ def add_user():
                 timezone=pre_timezone or default_tz,
             )
 
+            db.add(user)
+
             if pre_roles:
                 role_objs = db.execute(select(Role).where(Role.name.in_(pre_roles))).scalars().all()
                 for r in role_objs: user.roles.append(r)
@@ -131,8 +133,6 @@ def add_user():
             if pre_lab_unit_ids:
                 lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
                 for lu in lab_unit_objs: user.lab_units.append(lu)
-
-            db.add(user)
 
         flash(f"User '{username}' created.", "success")
         return redirect(url_for("admin.users_list"))

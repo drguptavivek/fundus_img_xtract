@@ -146,6 +146,7 @@ def edit_upload(upload_id):
         can_manage_others = current_user.has_role(
             "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
         )
+        can_choose_any = current_user.has_role("admin", "data_manager", "local_admin")
 
         # Require lab unit eligibility and either ownership or elevated edit permission
         if upload.lab_unit_id not in allowed_lab_unit_ids:

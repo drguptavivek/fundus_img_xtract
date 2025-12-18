@@ -235,8 +235,12 @@
                        </a>
                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
                          <li>
-                          <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
-                            href="{{ url_for('grading.index') }}">Image Grading</a>
+                         <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
+                           href="{{ url_for('grading.index') }}">Image Grading</a>
+                         </li>
+                         <li>
+                          <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.inter_rater_compare' else '' }}"
+                            href="{{ url_for('grading.inter_rater_compare') }}">My Inter-Rater</a>
                          </li>
                     {% if current_user_has('discrepancy_reviewer') %}
                           <li>

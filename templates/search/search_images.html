@@ -231,6 +231,7 @@
               <th>AI Grade</th>
               <th>Upload Date</th>
               <th>Encounter Date</th>
+              <th>View</th>
             </tr>
           </thead>
           <tbody>
@@ -276,13 +277,49 @@
                   {% set g = row.grades.get('ai') %}
                   {% if g %}
                     <div><span class="badge bg-dark">{{ g.impression }}</span></div>
-                    {% if g.ai_model_name %}<small class="text-muted">{{ g.ai_model_name }} v{{ g.ai_model_version }}</small>{% endif %}
+                    {% if g.ai_model_name %}
+                      <small class="text-muted">
+                        {{ g.ai_model_name }}{% if g.ai_model_version %} v{{ g.ai_model_version }}{% endif %}
+                      </small>
+                    {% endif %}
+                    {% if g.ai_probability is not none %}
+                      <div class="mt-1">
+                        <span class="badge bg-info text-dark">
+                          {% if g.ai_probability is number %}
+                            Prob: {{ "%.3f"|format(g.ai_probability) }}
+                          {% else %}
+                            Prob: {{ g.ai_probability }}
+                          {% endif %}
+                        </span>
+                      </div>
+                    {% endif %}
+                    {% if g.comment %}
+                      <div class="small text-muted mt-1">{{ g.comment }}</div>
+                    {% endif %}
+                    {% if g.ai_review_statuses %}
+                      <div class="small mt-1">
+                        <span class="text-muted">Status:</span>
+                        {{ g.ai_review_statuses|join(', ') }}
+                      </div>
+                    {% endif %}
+                    {% if g.ai_review_comments %}
+                      <div class="small text-muted mt-1">
+                        {% for comment in g.ai_review_comments %}
+                          <div>{{ comment }}</div>
+                        {% endfor %}
+                      </div>
+                    {% endif %}
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
                 <td>{{ row.upload_date or '—' }}</td>
                 <td>{{ row.capture_date or '—' }}</td>
+                <td>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('search.search_image_detail', task_id=row.task_id, return_to=request.full_path) }}">
+                    View Image
+                  </a>
+                </td>
               </tr>
             {% endfor %}
           </tbody>

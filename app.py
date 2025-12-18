@@ -833,6 +833,13 @@ def create_app():
     def homepage():
         from home import homepage as home_page
         return home_page()
+
+    # Alias endpoint so existing redirects to home.index keep working
+    @app.route("/home", endpoint="home.index")
+    @rate_limit("60 per minute")
+    def home_index_alias():
+        from home import homepage as home_page
+        return home_page()
     # -------------------------------
 
     # -------------------------------

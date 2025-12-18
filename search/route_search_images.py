@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime, date as _date
+import re
 from typing import Any, List, Optional, Dict
 from types import SimpleNamespace
 
-from flask import current_app, render_template, request, url_for, flash, redirect
+from flask import abort, current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
 from auth.roles import roles_required
 
 from . import bp
-from models import Disease, LabUnit, DiseaseGrading, AIModel
+from models import Disease, LabUnit, DiseaseGrading, AIModel, Grade, GradingTask
 from sqlalchemy.orm import joinedload
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from db_transaction_manager import get_db_session
@@ -19,6 +20,7 @@ from utils.mvw_all_img_search import (
     MVImageFilters,
     search_mvw_images,
 )
+from utils.taskUtils import get_task_detail
 from review.task_review import AI_REVIEW_STATUS_LABELS
 
 
@@ -173,8 +175,33 @@ def search_images_route() -> str:
         rows, total = search_mvw_images(db, filters, per_page=per_page, offset=offset)
 
         processed_rows: List[Dict[str, Any]] = []
+        task_ids = [row.task_id for row in rows]
+        ai_review_comments: Dict[int, List[str]] = {}
+        ai_review_statuses: Dict[int, List[str]] = {}
+        if task_ids:
+            comment_rows = (
+                db.query(Grade.task_id, Grade.ai_review_comment, Grade.ai_review_status)
+                .filter(Grade.role_slot == "ai", Grade.task_id.in_(task_ids))
+                .filter(
+                    (Grade.ai_review_comment.isnot(None))
+                    | (Grade.ai_review_status.isnot(None))
+                )
+                .all()
+            )
+            for task_id, comment, status in comment_rows:
+                if comment:
+                    ai_review_comments.setdefault(task_id, []).append(comment)
+                if status:
+                    ai_review_statuses.setdefault(task_id, []).append(status)
+
         for row in rows:
             grades = _extract_grades_by_role(row.grading_details_json or "[]")
+            ai_grade = grades.get("ai")
+            if ai_grade:
+                if ai_review_comments.get(row.task_id):
+                    ai_grade["ai_review_comments"] = ai_review_comments[row.task_id]
+                if ai_review_statuses.get(row.task_id):
+                    ai_grade["ai_review_statuses"] = ai_review_statuses[row.task_id]
             processed_rows.append(
                 {
                     "task_id": row.task_id,
@@ -270,6 +297,56 @@ def search_images_route() -> str:
         )
 
 
+@bp.route("/images/<int:task_id>/view", methods=["GET"])
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
+def search_image_detail(task_id: int) -> str:
+    """Read-only task detail view for search results with inline image viewer."""
+    with get_db_session() as db:
+        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        if not allowed_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+
+        task = (
+            db.query(GradingTask)
+            .options(
+                joinedload(GradingTask.disease),
+                joinedload(GradingTask.lab_unit).joinedload(LabUnit.hospital),
+                joinedload(GradingTask.encounter_file),
+                joinedload(GradingTask.direct_image),
+                joinedload(GradingTask.grades),
+            )
+            .filter(GradingTask.id == task_id, GradingTask.lab_unit_id.in_(allowed_lab_unit_ids))
+            .first()
+        )
+        if not task:
+            abort(404, description="Task not found or access denied")
+
+        task_details = get_task_detail(db, task_id)
+        if not task_details:
+            abort(404, description="Task not found or access denied")
+
+        image_object = task.encounter_file if task.encounter_file else task.direct_image
+        grade_by_role = {grade.role_slot: grade for grade in task.grades or []}
+
+        return render_template(
+            "search/search_image_detail.html",
+            task=task_details,
+            original_task=task,
+            image_object=image_object,
+            grade_by_role=grade_by_role,
+            return_to=request.args.get("return_to"),
+        )
+
+
 def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
     """Parse MV JSON details into role-keyed dict for templates."""
     import json
@@ -285,11 +362,53 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
         role = item.get("role_slot")
         if not role:
             continue
-        result[role] = {
+        grade_entry: Dict[str, Any] = {
             "impression": item.get("grade_name"),
             "comment": item.get("comment"),
             "ai_model_name": item.get("ai_model_name"),
             "ai_model_version": item.get("ai_model_version"),
-            "ai_probability": item.get("ai_probability"),
         }
+        if role == "ai":
+            comment = item.get("comment") or ""
+            provided_prob = (
+                item.get("ai_probability")
+                or item.get("ai_prob")
+                or item.get("probability")
+            )
+            prob_value = _extract_ai_probability(comment, provided_prob)
+            if prob_value is None and comment:
+                fallback_match = re.search(r"([0-9]+(?:\.[0-9]+)?)", comment)
+                if fallback_match:
+                    try:
+                        prob_value = float(fallback_match.group(1))
+                    except Exception:
+                        prob_value = fallback_match.group(1)
+            grade_entry["ai_probability"] = prob_value
+            grade_entry["comment"] = comment
+        result[role] = grade_entry
     return result
+
+
+def _extract_ai_probability(comment: str | None, provided: Any | None) -> float | str | None:
+    """
+    Extract AI probability, normalising to float when possible.
+
+    Priority order:
+    1. Explicit provided value (ai_probability / ai_prob / probability)
+    2. Parse from comment if it contains a numeric "AI probability" fragment.
+    """
+    candidate = provided
+    if candidate is None and comment:
+        match = re.search(
+            r"AI\s*probability\s*[:=]?\s*([0-9]*\.?[0-9]+)",
+            comment,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            candidate = match.group(1)
+    if candidate is None:
+        return None
+    try:
+        return float(candidate)
+    except Exception:
+        return str(candidate)

@@ -89,7 +89,7 @@
         <label class="form-label mb-1">Class Builder</label>
         <div class="card border shadow-sm">
           <div class="card-body">
-            <p class="text-muted small mb-2">Drag labels into classes. Unassigned labels are ignored in metrics. Pick one positive class.</p>
+            <p class="text-muted small mb-2">Drag labels into classes. Unassigned labels are ignored in metrics. <b>Pick one positive class.</b></p>
             <div id="class-builder" class="row g-3" data-class-map='{{ class_map_json|e }}' data-positive-class='{{ positive_class or "" }}' data-available-labels='{{ labels_for_disease|tojson|safe }}'>
               <div class="col-12 col-lg-4">
                 <div class="border rounded p-2 h-100">
@@ -156,15 +156,16 @@
       Filters applied: Disease = {{ selected_disease_name or '-' }}, Model = {{ selected_model_name or '-' }}{% if selected_model_version %} v{{ selected_model_version }}{% endif %}.
       {% if selected_lab_units %}Lab Units: {{ selected_lab_units|join(', ') }}. {% else %}Lab Units: all permitted.{% endif %}
       Reference: {{ reference_source }}. Threshold: {{ threshold }}. Bootstrap: {{ bootstrap_samples }} (capped at 10,000).
-      {% if positive_class %} Positive class: {{ positive_class }}.{% endif %}
+      
     </div>
 
     {% if performance.class_definitions %}
     <div class="alert alert-info small">
       Class composition:
       {% for cname, members in performance.class_definitions.items() %}
-        <span class="badge text-bg-light border me-1">{{ cname }} = {{ members|join(', ') }}</span>
+        <span class="badge text-bg-light border me-1">{{ cname }} = {{ members|join(', ') }}</span> 
       {% endfor %}
+      <span class="badge text-bg-danger border me-1">{% if positive_class %}  Sn/Sp etc for Positive class: {{ positive_class }}.{% endif %}</span>
     </div>
     {% endif %}
 
@@ -568,13 +569,13 @@
               <td class="text-muted small">{{ row.lab_unit or '-' }}</td>
               <td class="text-muted small">{{ row.camera_id or '-' }}</td>
               <td class="text-end">
-                {% if row.image_uuid %}
-                  {% set gallery_id = 'mm-gallery-' ~ loop.index0 %}
-                  {% set image_href = url_for('media._imgForGradingByUUID', uuid_str=row.image_uuid) %}
-                  <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                    <a href="{{ image_href }}" data-pswp-type="image" title="{{ row.image_uuid }}"></a>
-                  </div>
-                  <button class="btn btn-sm btn-outline-primary" type="button" onclick="openPswpGallery('{{ gallery_id }}', 0)">View</button>
+                {% if row.image_uuid and row.task_id %}
+                  <a class="btn btn-sm btn-outline-primary"
+                     href="{{ url_for('search.search_image_detail', task_id=row.task_id, return_to=request.full_path) }}">
+                    View Image
+                  </a>
+                {% elif row.image_uuid %}
+                  <span class="text-muted">Image only</span>
                 {% else %}
                   <span class="text-muted">No image</span>
                 {% endif %}
@@ -675,7 +676,6 @@
         </div>
       </div>
     </div>
-    <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
   {% endif %}
 </div>
 {% endblock %}
@@ -684,7 +684,4 @@
   {{ super() }}
   <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}?v={{ v }}"></script>
   <script src="{{ url_for('static', filename='js/model-performance.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
 {% endblock %}

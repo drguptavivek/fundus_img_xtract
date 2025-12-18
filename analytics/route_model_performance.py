@@ -810,6 +810,7 @@ def model_performance() -> str:
                     task_id = row["task_id"]
                     if task_id not in tasks:
                         tasks[task_id] = {
+                            "task_id": task_id,
                             "task_created_at": row["task_created_at"],
                             "image_uuid": row["image_uuid"],
                             "image_source": row["image_source"],
@@ -943,6 +944,7 @@ def model_performance() -> str:
                                 fn_count += 1
                         mismatches.append(
                             {
+                                "task_id": data.get("task_id"),
                                 "image_uuid": data.get("image_uuid"),
                                 "reference_class": ref_class,
                                 "reference_label": ref_label,

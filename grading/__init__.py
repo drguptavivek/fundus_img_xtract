@@ -38,6 +38,7 @@ from .dual_grading import register_routes as register_dual_grading_routes
 from .start_grading import register_routes as register_start_grading_routes
 from .intra_rater import register_routes as register_intra_rater_routes
 from .inter_rater_compare import register_routes as register_inter_rater_routes
+from .grader_statistics import register_routes as register_grader_statistics_routes
 
 # Register routes with the blueprint
 bp.add_url_rule("/", view_func=index, methods=["GET"])
@@ -53,3 +54,4 @@ register_intra_rater_routes(bp)
 
 # Register inter-rater comparison routes
 register_inter_rater_routes(bp)
+register_grader_statistics_routes(bp)

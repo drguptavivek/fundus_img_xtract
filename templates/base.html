@@ -227,13 +227,14 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('ophthalmologist') or current_user_has('admin')  %}
+          {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
                      <li class="nav-item dropdown">
                        <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
                          id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                          Grade
                        </a>
                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
+                    {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
                          <li>
                          <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
                            href="{{ url_for('grading.index') }}">Image Grading</a>
@@ -257,6 +258,11 @@
                             <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
                               <span>My Intra-Rater Tasks</span>
                             </a>
+                          </li>
+                    {% endif %}
+                          <li>
+                            <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.grader_statistics' else '' }}"
+                              href="{{ url_for('grading.grader_statistics') }}">Grader Statistics</a>
                           </li>
 
                        </ul>

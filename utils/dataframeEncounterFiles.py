@@ -3,7 +3,7 @@ Utility functions for generating pandas dataframes for Encounter file uplaods.
 """
 
 import pandas as pd
-from datetime import datetime, timedelta, date as _date
+from datetime import datetime, timedelta, date as _date, timezone
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy import and_, or_
@@ -14,6 +14,17 @@ from models import (
     LabUnit, Hospital, User, GradingTask, Grade, Consensus, Job, JobItem
 )
 from db_transaction_manager import get_db_session
+
+
+def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
+    """Normalize date/datetime values to timezone-aware UTC datetimes."""
+    if not value:
+        return None
+    if isinstance(value, _date) and not isinstance(value, datetime):
+        return datetime.combine(value, datetime.min.time(), tzinfo=timezone.utc)
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    return None
 
 
 @get_db_session()
@@ -123,21 +134,23 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         # Case 1: No report and encounter verified
         if not dr_report and not glaucoma_report and encounter.encounter_verified_status == 'verified':
             completely_verified = True
-            completely_verified_date = encounter.encounter_verified_at
+            completely_verified_date = _to_aware_datetime(encounter.encounter_verified_at)
         # Case 2: Only DR report and DR verified
         elif dr_report and not glaucoma_report and encounter.dr_verified_status == 'verified':
             completely_verified = True
-            completely_verified_date = encounter.dr_verified_at
+            completely_verified_date = _to_aware_datetime(encounter.dr_verified_at)
         # Case 3: Only glaucoma report and glaucoma verified
         elif not dr_report and glaucoma_report and encounter.glaucoma_verified_status == 'verified':
             completely_verified = True
-            completely_verified_date = encounter.glaucoma_verified_at
+            completely_verified_date = _to_aware_datetime(encounter.glaucoma_verified_at)
         # Case 4: Both DR and glaucoma reports and both verified
         elif dr_report and glaucoma_report and encounter.dr_verified_status == 'verified' and encounter.glaucoma_verified_status == 'verified':
             completely_verified = True
+            dr_verified = _to_aware_datetime(encounter.dr_verified_at)
+            glaucoma_verified = _to_aware_datetime(encounter.glaucoma_verified_at)
             completely_verified_date = max(
-                encounter.dr_verified_at or datetime.min,
-                encounter.glaucoma_verified_at or datetime.min
+                [dt for dt in (dr_verified, glaucoma_verified) if dt],
+                default=None
             )
             
         encounter_data.update({
@@ -151,24 +164,19 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         verification_hours = None
         
         if encounter.zip_file and encounter.zip_file.upload_date:
-            zip_upload_date = datetime.combine(encounter.zip_file.upload_date, datetime.min.time())
-            if encounter.capture_date_dt:
-                # Convert capture_date_dt to datetime if it's a date object
-                capture_datetime = encounter.capture_date_dt
-                if isinstance(capture_datetime, _date) and not isinstance(capture_datetime, datetime):
-                    capture_datetime = datetime.combine(capture_datetime, datetime.min.time())
+            zip_upload_date = _to_aware_datetime(encounter.zip_file.upload_date)
+            capture_datetime = _to_aware_datetime(encounter.capture_date_dt)
+            if zip_upload_date and capture_datetime:
                 # Calculate hours from capture to upload (should be positive)
                 upload_to_processing_hours = (zip_upload_date - capture_datetime).total_seconds() / 3600
         
         if completely_verified_date and encounter.zip_file and encounter.zip_file.upload_date:
-            zip_upload_date = datetime.combine(encounter.zip_file.upload_date, datetime.min.time())
-            processing_completion_hours = (completely_verified_date - zip_upload_date).total_seconds() / 3600
-            
-            # Convert capture_date_dt to datetime if it's a date object
-            if encounter.capture_date_dt:
-                capture_datetime = encounter.capture_date_dt
-                if isinstance(capture_datetime, _date) and not isinstance(capture_datetime, datetime):
-                    capture_datetime = datetime.combine(capture_datetime, datetime.min.time())
+            zip_upload_date = _to_aware_datetime(encounter.zip_file.upload_date)
+            if zip_upload_date:
+                processing_completion_hours = (completely_verified_date - zip_upload_date).total_seconds() / 3600
+
+            capture_datetime = _to_aware_datetime(encounter.capture_date_dt)
+            if capture_datetime:
                 verification_hours = (completely_verified_date - capture_datetime).total_seconds() / 3600
         
         encounter_data.update({
@@ -193,4 +201,3 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         df['quarter'] = pd.to_datetime(df['upload_date']).dt.quarter if df['upload_date'].notna().any() else None
     
     return df
-

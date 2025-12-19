@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Grader Statistics{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 align-items-lg-center mb-4">
+    <div>
+      <h1 class="h4 mb-1">Grader Statistics</h1>
+      <p class="text-muted mb-0">
+        Counts by grader, disease, and lab unit. Monthly window: {{ month_label }}.
+      </p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="small text-muted">Scope</div>
+          <div>Lab units accessible to you</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Monthly Window</div>
+          <div>{{ month_start.strftime('%Y-%m-%d') if month_start else '—' }} to today (UTC)</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Cumulative</div>
+          <div>All-time grades in scope</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-4">
+    <h2 class="h6 mb-3">Human Grades</h2>
+    {% if human_data %}
+      {% for disease_name, rows in human_data.items() %}
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">{{ disease_name }}</div>
+            <small class="text-muted">
+              Total: {{ human_totals[disease_name].month }} (monthly) · {{ human_totals[disease_name].total }} (cumulative)
+            </small>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th>Grader</th>
+                  <th>Role</th>
+                  <th>Lab Unit</th>
+                  <th class="text-end">Last 30 days</th>
+                  <th class="text-end">Cumulative</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td>{{ row.grader_name }}</td>
+                  <td>{{ row.role_label }}</td>
+                  <td>{{ row.lab_unit_name }}</td>
+                  <td class="text-end">{{ row.month_count }}</td>
+                  <td class="text-end">{{ row.total_count }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="table-light fw-semibold">
+                  <td colspan="3">Total</td>
+                  <td class="text-end">{{ human_totals[disease_name].month }}</td>
+                  <td class="text-end">{{ human_totals[disease_name].total }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info">No human grades found for your lab units.</div>
+    {% endif %}
+  </div>
+
+  <div class="mb-4">
+    <h2 class="h6 mb-3">AI Grades</h2>
+    {% if ai_data %}
+      {% for disease_name, rows in ai_data.items() %}
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">{{ disease_name }}</div>
+            <small class="text-muted">
+              Total: {{ ai_totals[disease_name].month }} (monthly) · {{ ai_totals[disease_name].total }} (cumulative)
+            </small>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+              <thead>
+                <tr>
+                  <th>Grader</th>
+                  <th>Role</th>
+                  <th>Lab Unit</th>
+                  <th class="text-end">Last 30 days</th>
+                  <th class="text-end">Cumulative</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in rows %}
+                <tr>
+                  <td>{{ row.grader_name }}</td>
+                  <td>{{ row.role_label }}</td>
+                  <td>{{ row.lab_unit_name }}</td>
+                  <td class="text-end">{{ row.month_count }}</td>
+                  <td class="text-end">{{ row.total_count }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="table-light fw-semibold">
+                  <td colspan="3">Total</td>
+                  <td class="text-end">{{ ai_totals[disease_name].month }}</td>
+                  <td class="text-end">{{ ai_totals[disease_name].total }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info">No AI grades found for your lab units.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -33,7 +33,7 @@ def verify_password(stored_hash: str, plain: str) -> bool:
         return False
     
 
-USERNAME_REGEX = re.compile(r"^[A-Za-z0-9]+$")
+USERNAME_REGEX = re.compile(r"^[A-Za-z0-9_]+$")
 PASSWORD_ALLOWED_REGEX = re.compile(r"^[A-Za-z0-9@#!&]+$")
 COMMON_WEAK_SUBSTRINGS = ("123", "qwerty", "abcd", "xyz", "password", "aiims")
 
@@ -46,7 +46,7 @@ def validate_username(name: str, min_len: int = 3, max_len: int = 150) -> tuple[
     if not (min_len <= len(name) <= max_len):
         return False, f"Username length should be {min_len}–{max_len} characters."
     if not USERNAME_REGEX.fullmatch(name):
-        return False, "Username may contain only English letters (A–Z, a–z) and digits (0–9)."
+        return False, "Username may contain only English letters (A–Z, a–z), digits (0–9), and underscore (_)."
     return True, ""
 
 def check_password_strength(pw: str, min_len: int = 10) -> tuple[bool, str]:

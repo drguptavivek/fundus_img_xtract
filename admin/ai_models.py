@@ -1,9 +1,36 @@
+import secrets
+
 from flask import render_template, request, redirect, url_for, flash
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 from auth.roles import roles_required
-from models import AIModel
+from auth.security import hash_password
+from models import AIModel, User
 from db_transaction_manager import transaction_scope, get_db_session
+
+
+def _create_ai_model_user(db_session: Session, model: AIModel) -> User:
+    username = f"aimodel_{model.id}"
+    existing = db_session.execute(
+        select(User).where(User.username == username)
+    ).scalar_one_or_none()
+    if existing:
+        return existing
+
+    display_parts = [part for part in [model.name, model.version] if part]
+    display_name = "AI Model"
+    if display_parts:
+        display_name = f"AI Model: {' '.join(display_parts)}"
+
+    user = User(
+        username=username,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        is_active=False,
+        full_name=display_name,
+        designation="AI Model",
+    )
+    db_session.add(user)
+    return user
 
 
 @roles_required("admin")
@@ -29,7 +56,10 @@ def list_and_create_ai_model():
                 if exists:
                     flash(f"AI Model '{name}' version '{version}' already exists.", "warning")
                 else:
-                    db.add(AIModel(name=name, version=version, description=description))
+                    model = AIModel(name=name, version=version, description=description)
+                    db.add(model)
+                    db.flush()
+                    _create_ai_model_user(db, model)
                     flash(f"AI Model '{name}' version '{version}' added successfully.", "success")
 
         return redirect(url_for("admin.list_and_create_ai_model"))

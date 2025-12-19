@@ -1,4 +1,5 @@
 import json
+import secrets
 import uuid
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -7,11 +8,12 @@ import pandas as pd
 from flask import current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user
 from sqlalchemy import and_, select, func 
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import Session, selectinload
 
 
 from . import bp
 from auth.roles import roles_required
+from auth.security import hash_password
 from models import (
     Area,
     DirectImageUpload,
@@ -53,6 +55,37 @@ ROLE_DISPLAY_NAME = {
     ROLE_RESIDENT2: "Resident 2",
     ROLE_AI: "AI",
 }
+
+
+def _get_or_create_ai_model_user(
+    db_session: Session,
+    *,
+    ai_model_id: int,
+    ai_model_name: Optional[str],
+    ai_model_version: Optional[str],
+) -> User:
+    username = f"aimodel_{ai_model_id}"
+    user = db_session.execute(
+        select(User).where(User.username == username)
+    ).scalar_one_or_none()
+    if user:
+        return user
+
+    display_name_parts = [part for part in [ai_model_name, ai_model_version] if part]
+    display_name = "AI Model"
+    if display_name_parts:
+        display_name = f"AI Model: {' '.join(display_name_parts)}"
+
+    user = User(
+        username=username,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        is_active=False,
+        full_name=display_name,
+        designation="AI Model",
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
 
 
 @dataclass
@@ -858,7 +891,6 @@ def pregraded_grades():
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
         if form_role == ROLE_AI:
-            effective_grader_id = current_user.id
             ai_model_id = request.form.get("ai_model_id", type=int)
             ai_model_name = (request.form.get("ai_model_name") or "").strip()
             ai_model_version = (request.form.get("ai_model_version") or "").strip()
@@ -905,6 +937,14 @@ def pregraded_grades():
                     ai_model_id = model.id
                     ai_model_name_value = model.name
                     ai_model_version_value = model.version
+
+            ai_user = _get_or_create_ai_model_user(
+                db_session,
+                ai_model_id=ai_model_id,
+                ai_model_name=ai_model_name_value,
+                ai_model_version=ai_model_version_value,
+            )
+            effective_grader_id = ai_user.id
         else:
             ai_model_id = None
             ai_model_name_value = None

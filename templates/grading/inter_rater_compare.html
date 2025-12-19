@@ -81,7 +81,30 @@
         ] %}
         {% for field, label, cid in selectors2 %}
         <div class="col-md-3">
-          <label class="form-label">{{ label }}</label>
+          <label class="form-label d-flex align-items-center gap-2">
+            {{ label }}
+            {% if field == 'review_grade' %}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="tooltip"
+                title="Review grades are submitted by a reviewer (role_slot=review)."
+                aria-label="Review grades are submitted by a reviewer"
+              >
+                i
+              </button>
+            {% elif field == 'final_grade' %}
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="tooltip"
+                title="Final grades come from consensus (match, adjudication, or review override)."
+                aria-label="Final grades come from consensus"
+              >
+                i
+              </button>
+            {% endif %}
+          </label>
           <div class="border rounded p-2 bg-light-subtle grade-container d-flex flex-wrap gap-2 align-items-start" data-field="{{ field }}" id="{{ cid }}" style="max-height: 140px; overflow:auto;">
             {% for grade in grade_options %}
               <div class="form-check form-check-inline me-2 mb-1">
@@ -299,6 +322,13 @@
           }
         });
       });
+
+      if (window.bootstrap) {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+          new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+      }
     })();
   </script>
 {% endblock %}

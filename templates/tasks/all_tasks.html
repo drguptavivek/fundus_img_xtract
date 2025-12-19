@@ -27,7 +27,18 @@
 <div class="container-fluid">
   <div class="row">
     <div class="col-12">
-      <h2 class="mb-4">Tasks</h2>
+      <h2 class="mb-4 d-flex align-items-center gap-2">
+        Tasks
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-secondary"
+          data-bs-toggle="tooltip"
+          title="Task list: one row per task; images with multiple tasks appear multiple times. Eg. AdHoc tasks of DR for galucoma"
+          aria-label="Task list appears once per task"
+        >
+          i
+        </button>
+      </h2>
       
       <!-- Filters -->
       <div class="card mb-4">
@@ -368,6 +379,13 @@
           e.stopPropagation();
         });
       });
+
+      if (window.bootstrap) {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+          new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+      }
     });
   </script>
 {% endblock %}

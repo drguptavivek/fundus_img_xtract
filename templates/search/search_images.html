@@ -5,7 +5,18 @@
 <div class="container py-4">
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
     <div>
-      <h1 class="h3 mb-1">Search Images</h1>
+      <h1 class="h3 mb-1 d-flex align-items-center gap-2">
+        Search Images
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-secondary"
+          data-bs-toggle="tooltip"
+          title="Image list: each image appears once even if it has multiple tasks."
+          aria-label="Image list appears once per image"
+        >
+          i
+        </button>
+      </h1>
       <p class="text-muted mb-0">Reuse the discrepancy filters to find images across lab units.</p>
     </div>
   </div>
@@ -362,5 +373,11 @@
         });
       }
     })();
+    if (window.bootstrap) {
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+    }
   </script>
 {% endblock %}

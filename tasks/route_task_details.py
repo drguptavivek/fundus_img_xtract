@@ -1,5 +1,6 @@
 from flask import render_template
 from flask_login import current_user
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
@@ -65,3 +66,41 @@ def view_task_details(task_id: int):
             original_task=task,  # For additional properties not in summary
             image_object=image_object
         )
+
+
+@bp.route("/all-tasks/viewer/<string:image_uuid>", methods=["GET"])
+@roles_required(
+    "admin",
+    "local_admin",
+    "fileUploader",
+    "ophthalmologist",
+    "data_manager",
+    "resident",
+    "optometrist",
+)
+def all_tasks_viewer(image_uuid: str):
+    """Serve the grading viewer card for the all-tasks list."""
+    with get_db_session() as db:
+        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not user_lab_unit_ids:
+            from flask import abort
+            abort(403, description="No lab unit access")
+
+        task = (
+            db.query(GradingTask)
+            .filter(
+                GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)),
+                or_(
+                    GradingTask.encounter_file.has(uuid=image_uuid),
+                    GradingTask.direct_image.has(uuid=image_uuid),
+                ),
+            )
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+            .first()
+        )
+        if not task:
+            from flask import abort
+            abort(404, description="Task not found or access denied")
+
+        image_object = task.encounter_file if task.encounter_file else task.direct_image
+        return render_template("grading/_viewer_card.html", image=image_object, image_uuid=image_uuid)

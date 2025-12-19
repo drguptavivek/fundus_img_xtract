@@ -2,6 +2,27 @@
 
 {% block title %}All Tasks{% endblock %}
 
+{% block extra_styles %}
+<style>
+  .all-tasks-viewer #allTasksViewerWrapper {
+    height: 90vh;
+  }
+  .all-tasks-viewer #allTasksViewerWrapper .card {
+    height: 100%;
+  }
+  .all-tasks-viewer #allTasksViewerWrapper .imggr-viewer-root,
+  .all-tasks-viewer #allTasksViewerWrapper .imggr-stage,
+  .all-tasks-viewer #allTasksViewerWrapper .imggr-main {
+    min-height: 60vh;
+    max-height: calc(90vh - 180px);
+  }
+  .all-tasks-viewer #allTasksViewerWrapper .imggr-main-img {
+    max-height: 100%;
+    width: auto;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid">
   <div class="row">
@@ -143,54 +164,80 @@
         </p>
       </div>
       
-      <!-- Task Cards -->
-      <div class="row">
+      <div class="row g-3">
         {% if tasks %}
-          {% for task in tasks %}
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 task-card">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <h5 class="card-title">Task #{{ task.id }}</h5>
-                  <span class="badge 
-                    {% if task.status == 'pending' %}bg-secondary
-                    {% elif task.status == 'resident_done' %}bg-info
-                    {% elif task.status == 'resident2_done' %}bg-warning
-                    {% elif task.status == 'arbitration' %}bg-primary
-                    {% elif task.status == 'final' %}bg-success
-                    {% else %}bg-light text-dark
-                    {% endif %}">
-                    {{ task.status.replace('_', ' ').title() }}
-                  </span>
+        <div class="col-lg-5">
+          <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <div>
+                <h2 class="h6 mb-0">Results</h2>
+                <small class="text-muted">Page {{ current_page }} of {{ total_pages }}</small>
+              </div>
+              <div class="btn-group btn-group-sm" role="group">
+                <a class="btn btn-outline-secondary {% if current_page <= 1 %}disabled{% endif %}" href="{% if current_page > 1 %}{{ url_for('tasks.all_tasks', page=current_page-1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}{% else %}#{% endif %}">Prev</a>
+                <a class="btn btn-outline-secondary {% if current_page >= total_pages %}disabled{% endif %}" href="{% if current_page < total_pages %}{{ url_for('tasks.all_tasks', page=current_page+1, status=status_filter, disease=disease_filter, search=search_query, per_page=per_page) }}{% else %}#{% endif %}">Next</a>
+              </div>
+            </div>
+            <div class="list-group list-group-flush" id="allTasksResultList" style="max-height: 90vh; overflow: auto;">
+              {% for task in tasks %}
+                {% set has_image = task.image_uuid and task.image_uuid != 'Unknown' %}
+                <div
+                  class="list-group-item list-group-item-action all-tasks-row d-flex justify-content-between align-items-start"
+                  role="button"
+                  data-image-uuid="{{ task.image_uuid if has_image else '' }}"
+                  {% if has_image %}
+                    hx-get="{{ url_for('tasks.all_tasks_viewer', image_uuid=task.image_uuid) }}"
+                    hx-target="#allTasksViewerWrapper"
+                    hx-swap="innerHTML"
+                  {% endif %}
+                >
+                  <div class="me-auto">
+                    <div class="fw-semibold">Task #{{ task.id }}</div>
+                    <div class="small text-muted">{{ task.disease }}</div>
+                    <div class="small text-muted">{{ task.lab_unit }} · {{ task.hospital }}</div>
+                    <div class="small text-muted">Image: {{ task.image_uuid if has_image else 'N/A' }}</div>
+                    <div class="small text-muted">Created: {{ task.created_at | user_datetime }}</div>
+                    <div class="mt-1">
+                      {% if task.image_type == 'direct' %}
+                        <span class="badge bg-primary">Direct Upload</span>
+                      {% elif task.image_type == 'zip' %}
+                        <span class="badge bg-secondary">ZIP Upload</span>
+                      {% else %}
+                        <span class="badge bg-light text-dark">Unknown</span>
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="text-end">
+                    <span class="badge 
+                      {% if task.status == 'pending' %}bg-secondary
+                      {% elif task.status == 'resident_done' %}bg-info
+                      {% elif task.status == 'resident2_done' %}bg-warning
+                      {% elif task.status == 'arbitration' %}bg-primary
+                      {% elif task.status == 'final' %}bg-success
+                      {% else %}bg-light text-dark
+                      {% endif %}">
+                      {{ task.status.replace('_', ' ').title() }}
+                    </span>
+                    <div>
+                      <a href="{{ url_for('tasks.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-primary mt-2 all-tasks-open">View Details</a>
+                    </div>
+                  </div>
                 </div>
-                
-                <p class="card-text">
-                  <strong>Disease:</strong> {{ task.disease }}<br>
-                  <strong>Lab Unit:</strong> {{ task.lab_unit }}<br>
-                  <strong>Image UUID:</strong> {{ task.image_uuid if task.image_uuid != 'Unknown' else 'N/A' }}<br>
-                  <strong>Source:</strong> 
-                  {% if task.image_type == 'direct' %}
-                    <span class="badge bg-primary">Direct Upload</span>
-                  {% elif task.image_type == 'zip' %}
-                    <span class="badge bg-secondary">ZIP Upload</span>
-                  {% else %}
-                    <span class="badge bg-light text-dark">Unknown</span>
-                  {% endif %}<br>
-                  <strong>Created:</strong> {{ task.created_at | user_datetime }}
-                </p>
-              </div>
-              <div class="card-footer bg-transparent">
-                <a href="{{ url_for('tasks.view_task_details', task_id=task.id) }}" class="btn btn-sm btn-outline-primary">View Details</a>
-              </div>
+              {% endfor %}
             </div>
           </div>
-          {% endfor %}
+        </div>
+        <div class="col-lg-7 all-tasks-viewer">
+          <div id="allTasksViewerWrapper" style="max-height: 90vh; overflow: auto;">
+            <div class="alert alert-info">Select a task to view the image.</div>
+          </div>
+        </div>
         {% else %}
-          <div class="col-12">
-            <div class="alert alert-info">
-              <p class="mb-0">No tasks found matching your criteria.</p>
-            </div>
+        <div class="col-12">
+          <div class="alert alert-info">
+            <p class="mb-0">No tasks found matching your criteria.</p>
           </div>
+        </div>
         {% endif %}
       </div>
       
@@ -262,53 +309,65 @@
     </div>
   </div>
 </div>
+{% endblock %}
 
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
-  document.addEventListener('DOMContentLoaded', function() {
-    const hospitalFilter = document.getElementById('hospitalFilter');
-    const labUnitFilter = document.getElementById('labUnitFilter');
-    
-    // Function to filter lab units based on selected hospital
-    function filterLabUnits() {
-      const selectedHospitalId = hospitalFilter.value;
-      
-      // Show all lab units if no hospital is selected
-      if (!selectedHospitalId) {
-        Array.from(labUnitFilter.options).forEach(option => {
-          option.style.display = 'block';
-        });
-        return;
-      }
-      
-      // Otherwise, show only lab units that belong to the selected hospital
-      Array.from(labUnitFilter.options).forEach(option => {
-        const optionHospitalId = option.getAttribute('data-hospital-id');
-        if (!optionHospitalId || optionHospitalId === selectedHospitalId) {
-          option.style.display = 'block';
-        } else {
-          option.style.display = 'none';
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+  <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+    document.addEventListener('DOMContentLoaded', function() {
+      const hospitalFilter = document.getElementById('hospitalFilter');
+      const labUnitFilter = document.getElementById('labUnitFilter');
+
+      function filterLabUnits() {
+        const selectedHospitalId = hospitalFilter.value;
+
+        if (!selectedHospitalId) {
+          Array.from(labUnitFilter.options).forEach(option => {
+            option.style.display = 'block';
+          });
+          return;
         }
-      });
-      
-      // If the currently selected lab unit is not valid for the selected hospital,
-      // reset the lab unit selection
-      const selectedLabUnit = labUnitFilter.value;
-      if (selectedLabUnit) {
-        const selectedOption = labUnitFilter.querySelector(`option[value="${selectedLabUnit}"]`);
-        if (selectedOption) {
-          const optionHospitalId = selectedOption.getAttribute('data-hospital-id');
-          if (optionHospitalId && optionHospitalId !== selectedHospitalId) {
-            labUnitFilter.value = ''; // Reset to show all options
+
+        Array.from(labUnitFilter.options).forEach(option => {
+          const optionHospitalId = option.getAttribute('data-hospital-id');
+          if (!optionHospitalId || optionHospitalId === selectedHospitalId) {
+            option.style.display = 'block';
+          } else {
+            option.style.display = 'none';
+          }
+        });
+
+        const selectedLabUnit = labUnitFilter.value;
+        if (selectedLabUnit) {
+          const selectedOption = labUnitFilter.querySelector(`option[value="${selectedLabUnit}"]`);
+          if (selectedOption) {
+            const optionHospitalId = selectedOption.getAttribute('data-hospital-id');
+            if (optionHospitalId && optionHospitalId !== selectedHospitalId) {
+              labUnitFilter.value = '';
+            }
           }
         }
       }
-    }
-    
-    // Initial filtering when page loads
-    filterLabUnits();
-    
-    // Add event listener to hospital filter
-    hospitalFilter.addEventListener('change', filterLabUnits);
-  });
-</script>
+
+      filterLabUnits();
+      hospitalFilter.addEventListener('change', filterLabUnits);
+
+      document.querySelectorAll('.all-tasks-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+          if (!row.dataset.imageUuid) {
+            return;
+          }
+          document.querySelectorAll('.all-tasks-row.active').forEach(el => el.classList.remove('active'));
+          row.classList.add('active');
+        });
+      });
+
+      document.querySelectorAll('.all-tasks-open').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          e.stopPropagation();
+        });
+      });
+    });
+  </script>
 {% endblock %}

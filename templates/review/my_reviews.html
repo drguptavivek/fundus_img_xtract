@@ -1,6 +1,27 @@
 {% extends "base.html" %}
 {% block title %}My Reviews{% endblock %}
 
+{% block extra_styles %}
+<style>
+  .my-reviews-viewer #reviewViewerWrapper {
+    height: 90vh;
+  }
+  .my-reviews-viewer #reviewViewerWrapper .card {
+    height: 100%;
+  }
+  .my-reviews-viewer #reviewViewerWrapper .imggr-viewer-root,
+  .my-reviews-viewer #reviewViewerWrapper .imggr-stage,
+  .my-reviews-viewer #reviewViewerWrapper .imggr-main {
+    min-height: 60vh;
+    max-height: calc(90vh - 180px);
+  }
+  .my-reviews-viewer #reviewViewerWrapper .imggr-main-img {
+    max-height: 100%;
+    width: auto;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-3">
@@ -13,59 +34,58 @@
   </div>
 
   {% if reviews %}
-  <div class="table-responsive mb-3">
-    <table class="table table-sm align-middle">
-      <thead>
-        <tr>
-          <th scope="col">Task</th>
-          <th scope="col">Disease</th>
-          <th scope="col">Grade</th>
-          <th scope="col">Comment</th>
-          <th scope="col">Lab / Hospital</th>
-          <th scope="col">Updated</th>
-          <th scope="col"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in reviews %}
-        <tr>
-          <td class="text-nowrap">
-            {% if r.task_id %}
-              <code>{{ r.task_id }}</code>
-            {% else %}
-              <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-          <td>{{ r.disease_name or '—' }}</td>
-          <td>
-            <span class="badge bg-primary">{{ r.grade_impression or '—' }}</span>
-          </td>
-          <td class="text-muted">
-            {% if r.comment %}{{ r.comment }}{% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td>
-            <div>{{ r.lab_unit_name or '—' }}</div>
-            <div class="small text-muted">{{ r.hospital_name or '' }}</div>
-          </td>
-          <td class="text-nowrap">{{ (r.updated_at or r.created_at).strftime('%Y-%m-%d %H:%M') if (r.updated_at or r.created_at) else '—' }}</td>
-          <td class="text-end">
-            {% if r.task_id %}
-            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('review.review_task_details', task_id=r.task_id, return_to=request.full_path) }}">Open</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="d-flex justify-content-between align-items-center">
-    <div class="small text-muted">
-      Page {{ page }} of {{ total_pages or 1 }}
+  <div class="row g-3">
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h2 class="h6 mb-0">Results</h2>
+            <small class="text-muted">Page {{ page }} of {{ total_pages or 1 }}</small>
+          </div>
+          <div class="btn-group btn-group-sm" role="group">
+            <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{% if has_prev %}{{ url_for('review.my_reviews', page=page-1, date=filter_date) }}{% else %}#{% endif %}">Prev</a>
+            <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{% if has_next %}{{ url_for('review.my_reviews', page=page+1, date=filter_date) }}{% else %}#{% endif %}">Next</a>
+          </div>
+        </div>
+        <div class="list-group list-group-flush" id="reviewResultList" style="max-height: 90vh; overflow: auto;">
+          {% for r in reviews %}
+            <div
+              class="list-group-item list-group-item-action review-row d-flex justify-content-between align-items-start"
+              role="button"
+              data-image-uuid="{{ r.image_uuid or '' }}"
+              {% if r.image_uuid %}
+                hx-get="{{ url_for('review.my_reviews_viewer', image_uuid=r.image_uuid) }}"
+                hx-target="#reviewViewerWrapper"
+                hx-swap="innerHTML"
+              {% endif %}
+            >
+              <div class="me-auto">
+                <div class="fw-semibold">Task #{{ r.task_id or '—' }}</div>
+                <div class="small text-muted">{{ r.disease_name or '—' }}</div>
+                <div class="mt-1">
+                  <span class="badge bg-primary">{{ r.grade_impression or '—' }}</span>
+                </div>
+                {% if r.comment %}
+                  <div class="small text-muted mt-1">{{ r.comment }}</div>
+                {% endif %}
+              </div>
+              <div class="text-end small">
+                <div class="text-muted">{{ r.lab_unit_name or '—' }}</div>
+                <div class="text-muted">{{ r.hospital_name or '' }}</div>
+                <div class="text-muted">{{ (r.updated_at or r.created_at).strftime('%Y-%m-%d %H:%M') if (r.updated_at or r.created_at) else '—' }}</div>
+                {% if r.task_id %}
+                  <a class="btn btn-sm btn-outline-primary mt-2 review-open" href="{{ url_for('review.review_task_details', task_id=r.task_id) }}">Update Review</a>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
-    <div class="btn-group btn-group-sm" role="group">
-      <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{% if has_prev %}{{ url_for('review.my_reviews', page=page-1, date=filter_date) }}{% else %}#{% endif %}">Prev</a>
-      <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{% if has_next %}{{ url_for('review.my_reviews', page=page+1, date=filter_date) }}{% else %}#{% endif %}">Next</a>
+    <div class="col-lg-7 my-reviews-viewer">
+      <div id="reviewViewerWrapper" style="max-height: 90vh; overflow: auto;">
+        <div class="alert alert-info">Click on a Row to view the image. Click 'Update Review' to edit.</div>
+      </div>
     </div>
   </div>
   {% else %}
@@ -73,32 +93,53 @@
   {% endif %}
 </div>
 
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
-document.addEventListener('DOMContentLoaded', function() {
-  const dateInput = document.getElementById('review-date-filter');
-  const clearBtn = document.getElementById('clear-date-filter');
+{% endblock %}
 
-  if (dateInput) {
-    dateInput.addEventListener('change', () => {
-      const url = new URL(window.location);
-      if (dateInput.value) {
-        url.searchParams.set('date', dateInput.value);
-      } else {
-        url.searchParams.delete('date');
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+  <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+    document.addEventListener('DOMContentLoaded', function() {
+      const dateInput = document.getElementById('review-date-filter');
+      const clearBtn = document.getElementById('clear-date-filter');
+
+      if (dateInput) {
+        dateInput.addEventListener('change', () => {
+          const url = new URL(window.location);
+          if (dateInput.value) {
+            url.searchParams.set('date', dateInput.value);
+          } else {
+            url.searchParams.delete('date');
+          }
+          url.searchParams.delete('page');
+          window.location = url.toString();
+        });
       }
-      url.searchParams.delete('page');
-      window.location = url.toString();
-    });
-  }
 
-  if (clearBtn) {
-    clearBtn.addEventListener('click', () => {
-      const url = new URL(window.location);
-      url.searchParams.delete('date');
-      url.searchParams.delete('page');
-      window.location = url.toString();
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          const url = new URL(window.location);
+          url.searchParams.delete('date');
+          url.searchParams.delete('page');
+          window.location = url.toString();
+        });
+      }
+
+      document.querySelectorAll('.review-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+          if (!row.dataset.imageUuid) {
+            return;
+          }
+          document.querySelectorAll('.review-row.active').forEach(el => el.classList.remove('active'));
+          row.classList.add('active');
+        });
+      });
+
+      document.querySelectorAll('.review-open').forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          e.stopPropagation();
+        });
+      });
     });
-  }
-});
-</script>
+  </script>
 {% endblock %}

@@ -1,5 +1,6 @@
 from flask import render_template, request, flash, redirect, url_for, current_app
 from flask_login import current_user
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 import logging
 import json
@@ -582,3 +583,31 @@ def my_reviews():
             has_next=has_next,
             filter_date=filter_date,
         )
+
+
+@bp.route("/my-reviews/viewer/<string:image_uuid>")
+@roles_required("admin", "local_admin", "data_manager", "optometrist")
+def my_reviews_viewer(image_uuid: str):
+    """Serve the grading viewer card for a review image UUID."""
+    with get_db_session() as db:
+        allowed_lab_unit_ids = set(get_user_lab_unit_ids(current_user.id) or [])
+        if not allowed_lab_unit_ids:
+            return ("", 403)
+
+        task = (
+            db.query(GradingTask)
+            .filter(
+                GradingTask.lab_unit_id.in_(allowed_lab_unit_ids),
+                or_(
+                    GradingTask.encounter_file.has(uuid=image_uuid),
+                    GradingTask.direct_image.has(uuid=image_uuid),
+                ),
+            )
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+            .first()
+        )
+        if not task:
+            return ("Not found", 404)
+
+        image_obj = task.encounter_file or task.direct_image
+        return render_template("grading/_viewer_card.html", image=image_obj, image_uuid=image_uuid)

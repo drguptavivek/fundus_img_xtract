@@ -185,7 +185,18 @@
           </div>
           
           <div class="col-md-3">
-            <label class="form-label">Review Grade</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Review Grade
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="tooltip"
+                title="Review grades are submitted by a reviewer (role_slot=review)."
+                aria-label="Review grades are submitted by a reviewer"
+              >
+                i
+              </button>
+            </label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="reviewGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="reviewGradeText" data-default-label="All Review Grades">All Review Grades</span>
@@ -206,7 +217,18 @@
           </div>
 
           <div class="col-md-3">
-            <label class="form-label">Final Grade</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Final Grade
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="tooltip"
+                title="Final grade comes from consensus (match, adjudication, or review override)."
+                aria-label="Final grade comes from consensus"
+              >
+                i
+              </button>
+            </label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="finalGradeText" data-default-label="All Grades">All Grades</span>
@@ -1089,6 +1111,12 @@ document.addEventListener('DOMContentLoaded', function() {
     MVRefresh.init({
       buttonSelector: '#mv-refresh-btn',
       statusSelector: '#mv-refresh-status'
+    });
+  }
+  if (window.bootstrap) {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      new bootstrap.Tooltip(tooltipTriggerEl);
     });
   }
 });

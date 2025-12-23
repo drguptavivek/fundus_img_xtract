@@ -21,7 +21,7 @@ from app_cache import cache
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TIMEOUT = 15 * 60  # 15 minutes
+_CACHE_TIMEOUT = 30 * 60  # 30 minutes
 _PAGE_CACHE_KEY = "public:analytics:page:v1"
 _KPI_CACHE_KEY = "public:analytics:kpi:v1"
 _CHART_CACHE_KEY = "public:analytics:charts:v1"

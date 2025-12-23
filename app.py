@@ -908,10 +908,7 @@ def create_app():
     def healthz():
         db = Session()
         try:
-            total = db.query(Job).count()
-            queued = db.query(Job).filter(Job.status == "queued").count()
-            processing = db.query(Job).filter(Job.status == "processing").count()
-            errors = db.query(Job).filter(Job.status == "error").count()
+            db.query(Job).count()
             return jsonify({
                 "status": "ok"
                 }

@@ -184,6 +184,7 @@ def verify_dr_detail(report_id: int):
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.encounter_files),
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.dr_reports),
                 joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.glaucoma_reports),
+                joinedload(DiabeticRetinopathyReport.patient_encounter).selectinload(PatientEncounters.encounter_file_pdfs),
                 joinedload(DiabeticRetinopathyReport.patient_encounter).joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
             .filter(DiabeticRetinopathyReport.id == report_id)
@@ -196,6 +197,7 @@ def verify_dr_detail(report_id: int):
         if row.patient_encounter.lab_unit_id not in allowed_lab_units:
             from flask import abort
             abort(404)
+        restricted_lab_units = allowed_lab_units
 
         enc = row.patient_encounter
 

@@ -583,7 +583,69 @@
             </div>
         </div>
 
-        <div class="col-lg-4">
+    </div>
+
+        <div class="row">
+
+            
+        <div class="col-lg-12">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3 class="h5 mb-3">User Activity</h3>
+                    <form id="user-activity-filters" class="row g-2" hx-get="/api/admin/users" hx-target="#login-activity-container" hx-swap="innerHTML">
+                        <input type="hidden" name="types" value="login_success,login_failure,ip_locked">
+                        <input type="hidden" name="limit" value="10">
+                        <input type="hidden" name="view" value="login">
+                        <div class="col-12">
+                            <label class="form-label small" for="user-filter-id">User</label>
+                            <select class="form-select form-select-sm" id="user-filter-id" name="user_id">
+                                <option value="">All scoped users</option>
+                                {% for user in scoped_users %}
+                                <option value="{{ user.id }}">{{ user.username }} ({{ user.id }})</option>
+                                {% endfor %}
+                            </select>
+                            {% if not scoped_users %}
+                            <div class="form-text">No users available for your lab units.</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small" for="user-filter-start">Start date</label>
+                            <input type="date" class="form-control form-control-sm" id="user-filter-start" name="start_date">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small" for="user-filter-end">End date</label>
+                            <input type="date" class="form-control form-control-sm" id="user-filter-end" name="end_date">
+                        </div>
+                        <div class="col-12 d-flex gap-2 mt-2">
+                            <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-user-filters">Clear</button>
+                        </div>
+                    </form>
+
+                    <div class="user-activity-container mt-3" id="login-activity-container"
+                         hx-get="/api/admin/users?types=login_success,login_failure,ip_locked&limit=10&view=login"
+                         hx-trigger="load"
+                         hx-target="this"
+                         hx-include="#user-activity-filters"
+                         hx-swap="innerHTML">
+                        <div class="text-muted">Loading…</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h3 class="h5 mb-3">Recent User Creations</h3>
+                    <div class="user-activity-container" id="user-created-container"
+                         hx-get="/api/admin/users?types=user_created&limit=10&view=created"
+                         hx-trigger="load"
+                         hx-target="this"
+                         hx-swap="innerHTML">
+                        <div class="text-muted">Loading…</div>
+                    </div>
+                </div>
+            </div>
+
             <h3 class="h4 mb-3">Recent Activity</h3>
             <div class="recent-activity">
                 {% if recent_activity %}
@@ -616,7 +678,9 @@
                 {% endif %}
             </div>
         </div>
-    </div>
+
+        </div>
+
 </div>
 
 <!-- Sequence details modal -->
@@ -700,6 +764,18 @@ document.addEventListener('DOMContentLoaded', function() {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
     }
+    const clearButton = document.getElementById("clear-user-filters");
+    if (clearButton) {
+        clearButton.addEventListener("click", function () {
+            document.getElementById("user-filter-id").value = "";
+            document.getElementById("user-filter-start").value = "";
+            document.getElementById("user-filter-end").value = "";
+            if (window.htmx) {
+                htmx.trigger("#user-activity-filters", "submit");
+            }
+        });
+    }
 });
 </script>
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
 {% endblock %}

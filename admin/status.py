@@ -22,7 +22,8 @@ from admin.thumbnail_management import (
 )
 from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
-from models import Grade, GradingTask, Consensus, DiseaseGrading
+from models import Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit
+from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 
 
 @roles_required('admin', 'data_manager')
@@ -102,6 +103,26 @@ def admin_status():
     # Get sequence diagnostics
     sequence_report = get_sequence_report()
 
+    # Scoped users for filters (based on current user's lab units)
+    scoped_users = []
+    try:
+        with transaction_scope() as db:
+            lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id))
+            if lab_unit_ids:
+                scoped_users = [
+                    {"id": user.id, "username": user.username}
+                    for user in (
+                        db.query(User)
+                        .join(User.lab_units)
+                        .filter(LabUnit.id.in_(lab_unit_ids))
+                        .distinct()
+                        .order_by(User.username.asc())
+                        .all()
+                    )
+                ]
+    except Exception as e:
+        current_app.logger.error(f"Error loading scoped users: {e}")
+
     return render_template(
         'admin/status.html',
         thumbnail_stats=thumbnail_stats,
@@ -110,6 +131,7 @@ def admin_status():
         system_stats=system_stats,
         recent_activity=recent_activity,
         sequence_report=sequence_report,
+        scoped_users=scoped_users,
         grading_inconsistency_count=grading_inconsistency_count,
         review_consensus_mismatch_count=review_consensus_mismatch_count,
         current_time=datetime.now(pytz.UTC)
@@ -170,7 +192,7 @@ def api_sequences_status():
         return jsonify({"success": True, "data": report})
     except Exception as exc:
         current_app.logger.exception("Failed to get sequence diagnostics")
-        return jsonify({"success": False, "error": str(exc)}), 500
+    return jsonify({"success": False, "error": str(exc)}), 500
 
 
 def get_system_statistics():

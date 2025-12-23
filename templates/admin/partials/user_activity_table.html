@@ -1,0 +1,71 @@
+{% set is_login = view == "login" %}
+{% set types = "login_success,login_failure,ip_locked" if is_login else "user_created" %}
+{% set prev_offset = (offset - limit) if offset - limit > 0 else 0 %}
+{% set next_offset = offset + limit %}
+{% set start_num = 0 if total == 0 else offset + 1 %}
+{% set end_num = (offset + limit) if (offset + limit) < total else total %}
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead>
+      <tr>
+        {% if is_login %}
+        <th>Event</th>
+        {% endif %}
+        <th>Username</th>
+        <th>IP</th>
+        <th>Date/Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if items %}
+        {% for item in items %}
+        <tr>
+          {% if is_login %}
+          <td>
+            {% if item.event_type == "login_success" %}Login Success{% endif %}
+            {% if item.event_type == "login_failure" %}Login Failure{% endif %}
+            {% if item.event_type == "ip_locked" %}IP Locked{% endif %}
+          </td>
+          {% endif %}
+          <td>{{ item.username or "-" }}</td>
+          <td>{{ item.ip_address or "-" }}</td>
+          <td>
+            {% if item.event_time %}
+              {{ item.event_time|user_datetime('%Y-%m-%d %H:%M:%S') }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="{{ 4 if is_login else 3 }}" class="text-muted">No activity found</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mt-2">
+  <button
+    class="btn btn-sm btn-outline-secondary"
+    {% if offset == 0 %}disabled{% endif %}
+    hx-get="/api/admin/users?types={{ types }}&limit={{ limit }}&offset={{ prev_offset }}&view={{ view }}"
+    hx-target="closest .user-activity-container"
+    {% if is_login %}hx-include="#user-activity-filters"{% endif %}
+  >
+    Prev
+  </button>
+  <div class="small text-muted">{{ start_num }}–{{ end_num }} of {{ total }}</div>
+  <button
+    class="btn btn-sm btn-outline-secondary"
+    {% if next_offset >= total %}disabled{% endif %}
+    hx-get="/api/admin/users?types={{ types }}&limit={{ limit }}&offset={{ next_offset }}&view={{ view }}"
+    hx-target="closest .user-activity-container"
+    {% if is_login %}hx-include="#user-activity-filters"{% endif %}
+  >
+    Next
+  </button>
+</div>

@@ -120,6 +120,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_handler = _make_handler("materialized_view.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     thumbnail_maintenance_handler = _make_handler("thumbnail_maintenance.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     startup_env_handler = _make_handler("startup_env_error.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+    db_query_handler = _make_handler("db_query.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
 
     debug_handler = None
     console_handler = None
@@ -146,6 +147,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_logger = _configure_logger("materialized_view", logging.INFO, materialized_view_handler)
     thumbnail_maintenance_logger = _configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
     startup_env_logger = _configure_logger("startup_env", logging.INFO, startup_env_handler)
+    db_query_logger = _configure_logger("db_query", logging.INFO, db_query_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = _make_handler("email_debug.log", logging.DEBUG, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
@@ -203,6 +205,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
     thumbnail_maintenance_logger.info("Thumbnail maintenance logger initialized at %s", str(log_dir / "thumbnail_maintenance.log"))
     startup_env_logger.info("Startup environment logger initialized at %s", str(log_dir / "startup_env_error.log"))
+    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
 
     return {
         "http_error": http_error_logger,
@@ -222,7 +225,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         "materialized_view": materialized_view_logger,
         "thumbnail_maintenance": thumbnail_maintenance_logger,
         "startup_env": startup_env_logger,
+        "db_query": db_query_logger,
         "app": app_logger,
         "debug": debug_logger,
     }
-

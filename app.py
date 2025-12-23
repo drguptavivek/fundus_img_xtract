@@ -30,6 +30,7 @@ from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
 from app_cache import cache
+from utils.db_query_logger import init_db_query_logger
 
 
 csrf = CSRFProtect()
@@ -108,6 +109,7 @@ def create_app():
     app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD")
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
     app.config["SMTP_USE_SSL"] = str(os.getenv("SMTP_USE_SSL", "false")).lower() in ("1", "true", "yes")
+    app.config["DB_QUERY_LOGGING"] = _env_bool("DB_QUERY_LOGGING", "false")
 
     # Session cookie hygiene - configurable via env with simple parsing
     app.config.update(
@@ -267,6 +269,7 @@ def create_app():
         
 
     loggers = configure_logging(app)
+    init_db_query_logger(app, engine)
     http_error_logger = loggers["http_error"]
     runtime_error_logger = loggers["runtime_error"]
     grades_logger = loggers["grades"]

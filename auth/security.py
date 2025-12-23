@@ -1,6 +1,9 @@
 # auth/security.py — Argon2id helpers
 from datetime import date, datetime
 import os
+import secrets
+import string
+import random
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 import re
@@ -70,6 +73,32 @@ def check_password_strength(pw: str, min_len: int = 10) -> tuple[bool, str]:
     if not re.search(r"[@#!&]", pw):
         return False, "Include at least one special character: @ # ! &."
     return True, ""
+
+
+def generate_strong_password(length: int = 12) -> str:
+    """
+    Generate a strong password that satisfies the app policy.
+    """
+    min_len = 10
+    if length < min_len:
+        length = min_len
+
+    upper = string.ascii_uppercase
+    lower = string.ascii_lowercase
+    digits = string.digits
+    specials = "@#!&"
+    all_chars = upper + lower + digits + specials
+
+    required = [
+        secrets.choice(upper),
+        secrets.choice(lower),
+        secrets.choice(digits),
+        secrets.choice(specials),
+    ]
+    remaining = [secrets.choice(all_chars) for _ in range(length - len(required))]
+    password_chars = required + remaining
+    random.SystemRandom().shuffle(password_chars)
+    return "".join(password_chars)
 
 
 

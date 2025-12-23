@@ -24,6 +24,7 @@ from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
 from utils.security_middleware import PayloadSizeValidator
 from utils.env_loader import load_environment
+from utils.env_loader import get_env
 from utils.redis_connection import build_redis_url
 from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
@@ -60,6 +61,7 @@ def create_app():
     # Static cache age (seconds) — tweak per env
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))  # 7 days
     app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
+    app.config["BASE_URL"] = (get_env("BASE_URL") or "").rstrip("/")
     # Flask-Caching (Redis backend) shared across the app
     app.config.setdefault("CACHE_TYPE", "RedisCache")
     app.config.setdefault("CACHE_REDIS_URL", os.getenv("CACHE_REDIS_URL") or build_redis_url())
@@ -585,9 +587,9 @@ def create_app():
             or path=="/test-rate-limit"
             or path=="/refresh-captcha"
             or path=="/captcha-audio"
-            or path.startswith("/docs/")
-            or path.startswith("/help/")
+            or path.startswith("/help")
             or path == "/analytics"
+            or path=="/sitemap.xml"
             or path.startswith("/api/analytics/")
         ):
             return  # allowed without auth
@@ -825,6 +827,40 @@ def create_app():
     @rate_limit("100 per minute")
     def _robots():
         return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
+
+    @app.get("/sitemap.xml")
+    @rate_limit("100 per minute")
+    def sitemap():
+        base_url = (current_app.config.get("BASE_URL") or "").rstrip("/")
+        if not base_url:
+            base_url = request.url_root.rstrip("/")
+
+        urls = [
+            (f"{base_url}/", "daily", "1.0"),
+            (f"{base_url}/help", "weekly", "0.4"),
+            (f"{base_url}/help/", "weekly", "0.4"),
+            (f"{base_url}/analytics", "weekly", "0.3"),
+            (f"{base_url}/style_guide", "monthly", "0.2"),
+            (f"{base_url}/robots.txt", "yearly", "0.1"),
+        ]
+
+        xml_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ]
+        for loc, changefreq, priority in urls:
+            xml_lines.append("  <url>")
+            xml_lines.append(f"    <loc>{loc}</loc>")
+            xml_lines.append(f"    <changefreq>{changefreq}</changefreq>")
+            xml_lines.append(f"    <priority>{priority}</priority>")
+            xml_lines.append("  </url>")
+        xml_lines.append("</urlset>")
+
+        response = current_app.response_class(
+            "\n".join(xml_lines),
+            mimetype="application/xml",
+        )
+        return response
 
     # -------------------------------
     # New homepage route

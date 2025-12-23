@@ -36,7 +36,8 @@ def read_markdown_file(relative_path):
         return None, str(e)
 
 
-@bp.route("/")
+@bp.route("", strict_slashes=False)
+@bp.route("/", strict_slashes=False)
 @rate_limit("120 per minute")
 def index():
     """Main help page - shows the user guide README."""

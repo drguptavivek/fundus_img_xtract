@@ -12,9 +12,8 @@
         <div class="card-body">
 
 
-            <form method="post" action="{{ url_for('admin.add_user') }}" novalidate data-password-policy="1"
-                data-username-policy="1" data-username-min="3" data-minlen="10"
-                data-commons="123,qwerty,abcd,xyz,password,aiims" data-allowed-specials="@#!&">
+            <form method="post" action="{{ url_for('admin.add_user') }}" novalidate
+                data-username-policy="1" data-username-min="3">
 
                 {{ csrf_field() }}
 
@@ -80,22 +79,10 @@
                         {% endif %}
                     </div>
 
-                    <div class="col-md-6">
-                        <label for="new_password" class="form-label">Password <span class="text-danger">*</span></label>
-                        <!-- Password -->
-                        <input type="password" class="form-control" id="new_password" name="new_password" required
-                            minlength="10" pattern="[A-Za-z0-9@#!&]+"
-                            title="Use only letters, digits, and @ # ! &; must include uppercase, lowercase, and one of @ # ! &.">
-
-                        <div class="form-text">Minimum 10 characters. Use only letters, digits, and @ # ! &; must
-                            include uppercase, lowercase, and one of @ # ! &</div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <label for="confirm_password" class="form-label">Confirm Password <span
-                                class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="confirm_password" name="confirm_password"
-                            required minlength="10" pattern="[A-Za-z0-9@#!&]+" autocomplete="new-password">
+                    <div class="col-12">
+                        <div class="alert alert-info mb-0" role="alert">
+                            A strong password is auto-generated after creation and shown to the admin.
+                        </div>
                     </div>
                 </div>
                 <div class="row g-3">
@@ -153,6 +140,4 @@
 
 
 
-{% block page_scripts %}
-<script src="{{ url_for('static', filename='js/password-policy.js') }}?v={{ v }}" defer></script>
-{% endblock %}
+{% block page_scripts %}{% endblock %}

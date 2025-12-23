@@ -47,11 +47,10 @@ Disallow: /*.sql$
 # Crawl delay to be respectful of server resources
 Crawl-delay: 1
 
-# Sitemap location (if you have one)
-# Sitemap: https://eye.epidemiology.tech/sitemap.xml
+# Sitemap location
+Sitemap: https://eyeimg.aiims.edu.in/sitemap.xml
 
 # Medical imaging application - restrict to index only public pages
 # Allow homepage and help documentation for SEO
 Allow: /$
 Allow: /help/
-Allow: /docs/

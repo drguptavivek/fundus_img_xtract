@@ -3,12 +3,26 @@
 
 <head>
   <meta charset="utf-8">
-  <title>{% block title %}ZIP → Extract → OCR{% endblock %}</title>
+  <title>{% block title %}Eye Image Manager{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   {% block meta_description %}
-  <meta name="description" content="{% block meta_content %}Eye Image Manager - Comprehensive eye image management platform for diabetic retinopathy, glaucoma, and AMD screening with capabilities of dual grading, arbitration, intra-rated grading, and consuming and comparing AI grades analysis{% endblock %}">
+  <meta name="description" content="{% block meta_content %}Eye Image Manager - An application that allows users to upload eye images, anonymize, grade, arbitrate and review grades them using attribute classification to generate golden datasets. Extensible with custom diseases, grades, features. Generate inter-rator and intra-rator statistics and AI model performance statistics by comparing AI grades with golden grades.{% endblock %}">
   {% endblock %}
+  {% set canonical_base = (config.get('BASE_URL') or '').rstrip('/') %}
+  {% set page_title = (self.title() | striptags) %}
+  {% set page_description = (self.meta_content() | striptags) %}
+  <link rel="canonical" href="{{ canonical_base }}{{ request.path }}">
+  <meta property="og:site_name" content="Eye Image Manager">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ page_title }}">
+  <meta property="og:description" content="{{ page_description }}">
+  <meta property="og:url" content="{{ canonical_base }}{{ request.path }}">
+  <meta property="og:image" content="{{ canonical_base }}{{ url_for('static', filename='retina_svg_logo.svg') }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ page_title }}">
+  <meta name="twitter:description" content="{{ page_description }}">
+  <meta name="twitter:image" content="{{ canonical_base }}{{ url_for('static', filename='retina_svg_logo.svg') }}">
 
   {% set v = (config.get('ASSETS_VERSION') or '') %}
   <!-- Favicons -->

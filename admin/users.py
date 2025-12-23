@@ -4,7 +4,16 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from flask_login import current_user
 from auth.roles import roles_required
-from auth.security import hash_password, check_password_strength, validate_username, validate_email, validate_phone, parse_iso_date
+from auth.security import (
+    hash_password,
+    check_password_strength,
+    validate_username,
+    validate_email,
+    validate_phone,
+    parse_iso_date,
+    generate_strong_password,
+)
+from utils.emails import send_email_sync
 from models import User, Role, Hospital, LabUnit
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.timezone_choices import (
@@ -27,6 +36,14 @@ def users_list():
         # Render template within the same session to avoid detached instance errors
         return render_template("admin/users.html", users=users)
 
+def _default_last_date_of_service(created_on: date) -> date:
+    """
+    Return a date two years after the provided date, handling leap days.
+    """
+    try:
+        return created_on.replace(year=created_on.year + 2)
+    except ValueError:
+        return created_on.replace(month=2, day=28, year=created_on.year + 2)
 
 def add_user():
     pre_username = (request.form.get("username") or request.args.get("username") or "").strip()
@@ -40,44 +57,42 @@ def add_user():
     pre_designation = (request.form.get("designation") or "").strip()
     pre_email = (request.form.get("email") or "").strip()
     pre_yj = (request.form.get("year_of_joining") or "").strip()
+    default_ldos = _default_last_date_of_service(date.today())
+    default_ldos_str = default_ldos.isoformat()
     pre_ldos = (request.form.get("last_date_of_service") or "").strip()
+    if request.method != "POST" and not pre_ldos:
+        pre_ldos = default_ldos_str
     pre_file_upload_quota = int(request.form.get("file_upload_quota") or 0) if request.method == "POST" else 0
     pre_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units")) if request.method == "POST" else set()
 
     if request.method == "POST":
         username = pre_username
-        password = request.form.get("new_password") or ""
-        confirm = request.form.get("confirm_password") or ""
+        password = generate_strong_password(12)
         default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
 
         ok, msg = validate_username(username)
         if not ok: return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
-                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                         pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = check_password_strength(password, min_len=10)
         if not ok: return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
-                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                        pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
-
-        if password != confirm:
-            return _add_user_err("Passwords do not match.", None, None, None, username, pre_active, pre_roles,
-                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = validate_email(pre_email)
         if not ok: return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
-                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                         pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         ok, msg = validate_phone(pre_phone)
         if not ok: return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
-                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                        pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                         pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         if pre_timezone and pre_timezone not in TIMEZONE_VALUES:
             return _add_user_err("Please select a valid timezone.", None, None, None, username, pre_active, pre_roles,
-                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         yj_int = None
@@ -85,19 +100,22 @@ def add_user():
             current_year = date.today().year
             if not pre_yj.isdigit() or not (1970 <= int(pre_yj) <= current_year + 1):
                 return _add_user_err("Year of joining must be a valid year.", None, None, None, username, pre_active, pre_roles,
-                                      pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                      pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                       pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
             yj_int = int(pre_yj)
 
-        ok, msg, ldos_date = parse_iso_date(pre_ldos)
-        if not ok:
-            return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
-                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
-                                 pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+        if pre_ldos:
+            ok, msg, ldos_date = parse_iso_date(pre_ldos)
+            if not ok:
+                return _add_user_err(msg, None, None, None, username, pre_active, pre_roles,
+                                     pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                     pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+        else:
+            ldos_date = default_ldos
 
         if pre_file_upload_quota < 0:
             return _add_user_err("File upload quota cannot be negative.", None, None, None, username, pre_active, pre_roles,
-                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                 pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                  pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
         with transaction_scope() as db:
@@ -106,7 +124,7 @@ def add_user():
             ).scalar_one_or_none()
             if exists:
                 return _add_user_err("Username already exists.", None, None, None, username, pre_active, pre_roles,
-                                     pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos,
+                                     pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
                                      pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
 
             user = User(
@@ -134,7 +152,29 @@ def add_user():
                 lab_unit_objs = db.execute(select(LabUnit).where(LabUnit.id.in_(pre_lab_unit_ids))).scalars().all()
                 for lu in lab_unit_objs: user.lab_units.append(lu)
 
-        flash(f"User '{username}' created.", "success")
+        email_sent = None
+        if pre_email:
+            subject = "Your Eye Image Manager account"
+            login_url = url_for("auth.login", _external=True)
+            body = f"""
+Hello {pre_full_name or username},
+
+Your Eye Image Manager account has been created.
+
+Username: {username}
+Password: {password}
+Login: {login_url}
+
+Please keep this information secure.
+"""
+            email_sent = send_email_sync(pre_email, subject, body)
+
+        flash(f"User '{username}' created. Auto-generated password: {password}", "success")
+        if pre_email:
+            if email_sent:
+                flash(f"Account details sent to {pre_email}.", "info")
+            else:
+                flash(f"Failed to send account details to {pre_email}.", "warning")
         return redirect(url_for("admin.users_list"))
 
     # Fetch roles, hospitals, and lab_units in the same session that will be used for rendering

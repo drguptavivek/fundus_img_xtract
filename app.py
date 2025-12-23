@@ -908,7 +908,7 @@ def create_app():
     def healthz():
         db = Session()
         try:
-            db.query(Job).count()
+            db.query(Job.id).limit(1).first()
             return jsonify({
                 "status": "ok"
                 }

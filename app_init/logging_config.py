@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from pathlib import Path
 from typing import Dict, List
 
@@ -120,7 +120,26 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_handler = _make_handler("materialized_view.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     thumbnail_maintenance_handler = _make_handler("thumbnail_maintenance.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     startup_env_handler = _make_handler("startup_env_error.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
-    db_query_handler = _make_handler("db_query.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+    db_query_handler = TimedRotatingFileHandler(
+        log_dir / "db_query.log",
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+        delay=True,
+    )
+    db_query_handler.setLevel(logging.INFO)
+    db_query_handler.setFormatter(detailed_format)
+    db_query_slow_handler = TimedRotatingFileHandler(
+        log_dir / "db_query_slow.log",
+        when="midnight",
+        interval=1,
+        backupCount=7,
+        encoding="utf-8",
+        delay=True,
+    )
+    db_query_slow_handler.setLevel(logging.WARNING)
+    db_query_slow_handler.setFormatter(detailed_format)
 
     debug_handler = None
     console_handler = None
@@ -148,6 +167,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     thumbnail_maintenance_logger = _configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
     startup_env_logger = _configure_logger("startup_env", logging.INFO, startup_env_handler)
     db_query_logger = _configure_logger("db_query", logging.INFO, db_query_handler)
+    db_query_slow_logger = _configure_logger("db_query_slow", logging.WARNING, db_query_slow_handler)
 
     if app.config.get("EMAIL_DEBUG_LOGGING"):
         email_debug_handler = _make_handler("email_debug.log", logging.DEBUG, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
@@ -226,6 +246,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         "thumbnail_maintenance": thumbnail_maintenance_logger,
         "startup_env": startup_env_logger,
         "db_query": db_query_logger,
+        "db_query_slow": db_query_slow_logger,
         "app": app_logger,
         "debug": debug_logger,
     }

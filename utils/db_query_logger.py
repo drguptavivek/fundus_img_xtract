@@ -1,43 +1,31 @@
-"""Debug-only SQLAlchemy query logging for slow and frequent queries."""
+"""Debug-only SQLAlchemy query logging with buffered flush."""
 from __future__ import annotations
 
 import inspect
 import logging
 import threading
 import time
-from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import List, Optional
 
 from flask import has_request_context, request
 from sqlalchemy import event
-
-
-@dataclass
-class QueryStats:
-    count: int = 0
-    total_ms: float = 0.0
-    max_ms: float = 0.0
-    last_seen: float = 0.0
-    last_route: str = "-"
-    last_endpoint: str = "-"
-    last_caller: str = "-"
 
 
 class QueryLogger:
     def __init__(
         self,
         logger: logging.Logger,
+        slow_logger: logging.Logger,
         slow_threshold_ms: int,
-        window_seconds: int,
-        top_n: int,
         flush_interval_seconds: int,
+        max_sql_length: int = 500,
     ) -> None:
         self._logger = logger
+        self._slow_logger = slow_logger
         self._slow_threshold_ms = slow_threshold_ms
-        self._window_seconds = window_seconds
-        self._top_n = top_n
         self._flush_interval_seconds = flush_interval_seconds
-        self._stats: Dict[str, QueryStats] = {}
+        self._max_sql_length = max_sql_length
+        self._buffer: List[str] = []
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._flush_loop, daemon=True)
@@ -51,8 +39,8 @@ class QueryLogger:
 
     def record(self, statement: str, duration_ms: float) -> None:
         normalized = " ".join(statement.split())
-        if len(normalized) > 500:
-            normalized = normalized[:500] + "..."
+        if len(normalized) > self._max_sql_length:
+            normalized = normalized[: self._max_sql_length] + "..."
 
         route = "-"
         endpoint = "-"
@@ -63,28 +51,17 @@ class QueryLogger:
         caller = _find_caller()
         now = time.time()
 
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+        line = (
+            "ts=%s | ms=%.1f | route=%s | endpoint=%s | caller=%s | sql=%s"
+            % (timestamp, duration_ms, route, endpoint, caller, normalized)
+        )
+
         if duration_ms >= self._slow_threshold_ms:
-            self._logger.warning(
-                "Slow query %dms route=%s endpoint=%s caller=%s sql=%s",
-                int(duration_ms),
-                route,
-                endpoint,
-                caller,
-                normalized,
-            )
+            self._slow_logger.warning(line)
 
         with self._lock:
-            stats = self._stats.get(normalized)
-            if stats is None:
-                stats = QueryStats()
-                self._stats[normalized] = stats
-            stats.count += 1
-            stats.total_ms += duration_ms
-            stats.max_ms = max(stats.max_ms, duration_ms)
-            stats.last_seen = now
-            stats.last_route = route
-            stats.last_endpoint = endpoint
-            stats.last_caller = caller
+            self._buffer.append(line)
 
     def _flush_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -94,41 +71,12 @@ class QueryLogger:
             self.flush()
 
     def flush(self) -> None:
-        cutoff = time.time() - self._window_seconds
         with self._lock:
-            active = {
-                sql: stats for sql, stats in self._stats.items() if stats.last_seen >= cutoff
-            }
-            stale_keys = [sql for sql, stats in self._stats.items() if stats.last_seen < cutoff]
-            for sql in stale_keys:
-                del self._stats[sql]
+            pending = self._buffer
+            self._buffer = []
 
-        if not active:
-            return
-
-        top_items = sorted(active.items(), key=lambda item: item[1].count, reverse=True)[: self._top_n]
-        lines = []
-        for sql, stats in top_items:
-            avg_ms = stats.total_ms / stats.count if stats.count else 0.0
-            lines.append(
-                "count=%d avg_ms=%.1f max_ms=%.1f route=%s endpoint=%s caller=%s sql=%s"
-                % (
-                    stats.count,
-                    avg_ms,
-                    stats.max_ms,
-                    stats.last_route,
-                    stats.last_endpoint,
-                    stats.last_caller,
-                    sql,
-                )
-            )
-
-        self._logger.info(
-            "Top %d frequent queries (window=%ds)\n%s",
-            self._top_n,
-            self._window_seconds,
-            "\n".join(lines),
-        )
+        for line in pending:
+            self._logger.info(line)
 
 
 def _find_caller() -> str:
@@ -147,20 +95,18 @@ def init_db_query_logger(
     engine,
     *,
     slow_threshold_ms: int = 200,
-    window_seconds: int = 24 * 60 * 60,
-    top_n: int = 20,
-    flush_interval_seconds: int = 30,
+    flush_interval_seconds: int = 60,
 ) -> Optional[QueryLogger]:
     enabled = bool(app.debug or app.config.get("DB_QUERY_LOGGING", False))
     if not enabled:
         return None
 
     logger = logging.getLogger("db_query")
+    slow_logger = logging.getLogger("db_query_slow")
     query_logger = QueryLogger(
         logger=logger,
+        slow_logger=slow_logger,
         slow_threshold_ms=slow_threshold_ms,
-        window_seconds=window_seconds,
-        top_n=top_n,
         flush_interval_seconds=flush_interval_seconds,
     )
     query_logger.start()

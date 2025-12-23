@@ -307,12 +307,16 @@ def create_app():
     @app.context_processor
     def inject_acl():
         from flask_login import current_user as cu
+        from utils.notifications import get_unread_notifications_count_cached
         def current_user_has(*roles):
             try:
                 return cu.is_authenticated and cu.has_role(*roles)
             except Exception:
                 return False
-        return dict(current_user_has=current_user_has)
+        unread_count = 0
+        if cu.is_authenticated:
+            unread_count = get_unread_notifications_count_cached(cu.id)
+        return dict(current_user_has=current_user_has, unread_notification_count=unread_count)
 
     # Security headers and CSP nonces
     register_csp(app)

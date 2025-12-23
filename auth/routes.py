@@ -6,6 +6,7 @@ import logging
 import base64
 from flask import render_template, request, redirect, session, url_for, flash, current_app, abort, Response
 from flask_login import login_user, logout_user, LoginManager, login_required, current_user
+from sqlalchemy.orm import noload, selectinload
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 from . import auth_bp
@@ -17,7 +18,8 @@ from utils.security_middleware import protect_form_submission, validate_payload_
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
-from models import engine, User, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
+from models import engine, User, Role, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
+from app_cache import cache
 from server_side_session import mark_session_ended
 from db_transaction_manager import get_db_session, transaction_scope
 
@@ -39,18 +41,71 @@ LOCKOUT_HOURS = 4
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"  # where to redirect if not logged in
 
+_USER_CACHE_TTL_SECONDS = 300
+
+def _serialize_user_for_cache(user: User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+        "timezone": user.timezone,
+        "is_active": user.is_active,
+        "is_locked_until": user.is_locked_until,
+        "designation": user.designation,
+        "phone": user.phone,
+        "roles": [role.name for role in (user.roles or [])],
+    }
+
+
+def _build_user_from_cache(payload: dict) -> User:
+    user = User()
+    user.id = payload.get("id")
+    user.username = payload.get("username")
+    user.email = payload.get("email")
+    user.full_name = payload.get("full_name")
+    user.timezone = payload.get("timezone")
+    user.is_active = payload.get("is_active", True)
+    user.is_locked_until = payload.get("is_locked_until")
+    user.designation = payload.get("designation")
+    user.phone = payload.get("phone")
+    roles = [Role(name=name) for name in payload.get("roles", [])]
+    user.roles = roles
+    return user
+
+
 @login_manager.user_loader
 def load_user(user_id: str):
+    cache_key = f"auth:user:{user_id}"
+    try:
+        cached = cache.get(cache_key)
+    except Exception:
+        cached = None
+    if cached:
+        return _build_user_from_cache(cached)
+
     # Use a fresh session that won't be closed immediately
     # Flask-Login needs to user object to remain bound to a session
     from models import Session as DbSession
     db = DbSession()
     try:
-        user = db.get(User, int(user_id))
+        user = db.execute(
+            select(User)
+            .options(
+                selectinload(User.roles),
+                noload(User.notifications),
+                noload(User.sent_notifications),
+            )
+            .where(User.id == int(user_id))
+        ).scalar_one_or_none()
         # Expunge the user from session to prevent detached instance issues
         # but keep it as a persistent object with identity
         if user:
             db.expunge(user)
+            try:
+                cache.set(cache_key, _serialize_user_for_cache(user), timeout=_USER_CACHE_TTL_SECONDS)
+            except Exception:
+                pass
         return user
     finally:
         db.close()

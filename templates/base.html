@@ -480,7 +480,14 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item" href="{{ url_for('notifications.notifications') }}">Notifications</a></li>
+              <li>
+                <a class="dropdown-item d-flex justify-content-between align-items-center" href="{{ url_for('notifications.notifications') }}">
+                  <span>Notifications</span>
+                  {% if unread_notification_count %}
+                  <span class="badge bg-danger ms-2">{{ unread_notification_count }}</span>
+                  {% endif %}
+                </a>
+              </li>
               <li><a class="dropdown-item" href="{{ url_for('account.profile') }}">My profile</a></li>
               <li><a class="dropdown-item" href="{{ url_for('account.change_password_self') }}">Change password</a></li>
               <li>

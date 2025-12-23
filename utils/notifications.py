@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Optional, Union
 
-from sqlalchemy import select
+from sqlalchemy import select, func
+from app_cache import cache
 
 from db_transaction_manager import transaction_scope
 from models import Notification, NotificationRead, NotificationType, Role, User
 
 MAX_TITLE_LENGTH = 200
 MAX_MESSAGE_LENGTH = 2000
+_UNREAD_CACHE_TTL_SECONDS = 60
 
 
 def _clean_text(value: str) -> str:
@@ -38,6 +40,61 @@ def _normalize_type(notification_type: Union[NotificationType, str]) -> Notifica
         return NotificationType(notification_type)
     except ValueError:
         return NotificationType.INFO
+
+
+def _unread_cache_key(user_id: int) -> str:
+    return f"notifications:unread:{user_id}"
+
+
+def clear_unread_notifications_cache(user_id: int) -> None:
+    try:
+        cache.delete(_unread_cache_key(user_id))
+    except Exception:
+        pass
+
+
+def get_unread_notifications_count(user_id: int) -> int:
+    with transaction_scope() as db:
+        user_unread = db.execute(
+            select(func.count())
+            .select_from(Notification)
+            .where(
+                Notification.recipient_user_id == user_id,
+                Notification.is_read.is_(False),
+            )
+        ).scalar() or 0
+
+        system_read_subq = (
+            select(NotificationRead.notification_id)
+            .where(NotificationRead.user_id == user_id)
+            .subquery()
+        )
+        system_unread = db.execute(
+            select(func.count())
+            .select_from(Notification)
+            .where(
+                Notification.recipient_user_id.is_(None),
+                Notification.id.not_in(system_read_subq),
+            )
+        ).scalar() or 0
+
+        return int(user_unread + system_unread)
+
+
+def get_unread_notifications_count_cached(user_id: int) -> int:
+    key = _unread_cache_key(user_id)
+    try:
+        cached = cache.get(key)
+    except Exception:
+        cached = None
+    if cached is not None:
+        return int(cached)
+    count = get_unread_notifications_count(user_id)
+    try:
+        cache.set(key, int(count), timeout=_UNREAD_CACHE_TTL_SECONDS)
+    except Exception:
+        pass
+    return int(count)
 
 
 def send_notification_to_user(
@@ -76,6 +133,7 @@ def send_notification_to_user(
         db.add(notification)
         db.flush()  # Get the ID without committing
 
+        clear_unread_notifications_cache(user_id)
         return notification
 
 
@@ -130,6 +188,8 @@ def send_notification_to_admins(
             notifications.append(notification)
 
         # transaction_scope will auto-commit on success
+        for admin_user in admin_users:
+            clear_unread_notifications_cache(admin_user.id)
         return notifications
 
 
@@ -220,6 +280,7 @@ def mark_notification_as_read(notification_id: int, user_id: int) -> bool:
             if existing:
                 return True
             db.add(NotificationRead(notification_id=notification_id, user_id=user_id))
+            clear_unread_notifications_cache(user_id)
             # transaction_scope will auto-commit on success
             return True
 
@@ -230,6 +291,7 @@ def mark_notification_as_read(notification_id: int, user_id: int) -> bool:
             return True
 
         notification.mark_as_read()
+        clear_unread_notifications_cache(user_id)
         # transaction_scope will auto-commit on success
         return True
 
@@ -271,3 +333,4 @@ def mark_all_user_notifications_as_read(user_id: int):
                 db.add(NotificationRead(notification_id=notification_id, user_id=user_id))
 
         # transaction_scope will auto-commit on success
+        clear_unread_notifications_cache(user_id)

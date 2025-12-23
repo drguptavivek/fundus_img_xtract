@@ -1,7 +1,7 @@
 # account/routes.py
 from __future__ import annotations
 
-from flask import render_template, request, redirect, url_for, flash, current_app
+from flask import render_template, request, redirect, url_for, flash, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -15,12 +15,13 @@ from utils.timezone_choices import (
 )
 
 from auth.security import (
-    check_password_strength,
     validate_email,
     validate_phone,
     hash_password,
     verify_password,
+    generate_strong_password,
 )
+from utils.emails import send_email_sync
 from . import account_bp
 
 
@@ -146,12 +147,11 @@ def profile():
 def change_password_self():
     """
     Let the logged-in user change their own password.
-    Requires current password; enforces strength policy.
+    Requires current password; generates a strong password automatically.
     """
     if request.method == "POST":
         current_pw = request.form.get("current_password") or ""
-        new_pw     = request.form.get("new_password") or ""
-        confirm_pw = request.form.get("confirm_password") or ""
+        new_pw = generate_strong_password(12)
 
         # Verify current password
         with get_db_session() as db:
@@ -165,27 +165,63 @@ def change_password_self():
                 # Render template within the same session to avoid detached instance errors
                 return render_template("account/change_password.html")
 
-            ok, msg = check_password_strength(new_pw, min_len=10)
-            if not ok:
-                flash(msg, "danger")
-                return render_template("account/change_password.html")
-
-            if new_pw != confirm_pw:
-                flash("Passwords do not match.", "danger")
-                return render_template("account/change_password.html")
-
             # Set new password + clear any lock
             user.password_hash = hash_password(new_pw)
             user.is_locked_until = None
             db.add(user)
+            username = user.username
+            full_name = user.full_name
+            email = user.email or ""
 
         try:
             current_app.logger.info("User '%s' changed their password", getattr(current_user, "username", "unknown"))
         except Exception:
             pass
 
-        flash("Password changed.", "success")
-        return redirect(url_for("account.change_password_self"))
+        email_sent = None
+        if email:
+            subject = "Your Eye Image Manager password"
+            login_url = url_for("auth.login", _external=True)
+            display_name = full_name or username
+            body = f"""
+Hello {display_name},
+
+Your Eye Image Manager password has been reset.
+
+Username: {username}
+Password: {new_pw}
+Login: {login_url}
+
+Please keep this information secure.
+"""
+            email_sent = send_email_sync(email, subject, body)
+
+        session["password_change_info"] = {
+            "username": username,
+            "password": new_pw,
+            "email": email,
+            "email_sent": bool(email_sent) if email else None,
+        }
+        return redirect(url_for("account.password_changed"))
 
     # GET
-    return render_template("account/change_password.html")
+    return render_template("account/change_password.html", username=current_user.username)
+
+
+@account_bp.route("/password-changed", methods=["GET"])
+@login_required
+def password_changed():
+    info = session.pop("password_change_info", None)
+    if not info:
+        flash("No recent password change details found.", "warning")
+        return redirect(url_for("account.change_password_self"))
+
+    if info.get("email"):
+        if info.get("email_sent") is True:
+            flash(f"Password details sent to {info['email']}.", "info")
+        elif info.get("email_sent") is False:
+            flash(f"Failed to send password details to {info['email']}.", "warning")
+    else:
+        flash("No email address on file. Please share the password securely.", "warning")
+
+    return render_template("account/password_changed.html", info=info)

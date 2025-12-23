@@ -54,6 +54,8 @@ class DatabaseSessionInterface(SessionInterface):
         # Skip session handling for static files to improve performance and avoid database issues
         if request.path and request.path.startswith('/static/'):
             return None
+        if request.path in ("/healthz", "/healthz/"):
+            return None
 
         # Get client IP address
         def get_client_ip():

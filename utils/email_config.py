@@ -4,6 +4,8 @@ Provides a unified interface for email configuration management.
 """
 
 import logging
+import threading
+import time
 from typing import Optional, Dict, Any
 from flask import current_app
 from db_transaction_manager import transaction_scope
@@ -24,6 +26,32 @@ class EmailConfigService:
     Fallback to environment variables when no database configuration exists.
     """
 
+    _cache_lock = threading.Lock()
+    _cache_data: Optional[Dict[str, Any]] = None
+    _cache_expires_at: float = 0.0
+    _cache_ttl_seconds: int = 300
+
+    @classmethod
+    def _get_cached_config(cls) -> Optional[Dict[str, Any]]:
+        now = time.monotonic()
+        with cls._cache_lock:
+            if cls._cache_data and cls._cache_expires_at > now:
+                return dict(cls._cache_data)
+        return None
+
+    @classmethod
+    def _set_cached_config(cls, config: Dict[str, Any]) -> None:
+        now = time.monotonic()
+        with cls._cache_lock:
+            cls._cache_data = dict(config)
+            cls._cache_expires_at = now + cls._cache_ttl_seconds
+
+    @classmethod
+    def _clear_cached_config(cls) -> None:
+        with cls._cache_lock:
+            cls._cache_data = None
+            cls._cache_expires_at = 0.0
+
     @staticmethod
     def get_email_config() -> Dict[str, Any]:
         """
@@ -35,6 +63,9 @@ class EmailConfigService:
         Raises:
             EmailConfigError: If no valid email configuration is found
         """
+        cached = EmailConfigService._get_cached_config()
+        if cached:
+            return cached
         try:
             # Try to get active settings from database first
             with transaction_scope() as db:
@@ -45,6 +76,7 @@ class EmailConfigService:
                     config['source'] = 'database'
                     config['password'] = email_settings._get_password_for_use()  # Include decrypted password for email sending
                     logger.info(f"Using email configuration from database (ID: {email_settings.id})")
+                    EmailConfigService._set_cached_config(config)
                     return config
 
         except Exception as e:
@@ -55,6 +87,7 @@ class EmailConfigService:
             env_config = EmailConfigService._get_env_fallback_config()
             if env_config:
                 logger.info("Using email configuration from environment variables (fallback)")
+                EmailConfigService._set_cached_config(env_config)
                 return env_config
 
         except Exception as e:
@@ -254,6 +287,7 @@ class EmailConfigService:
                 settings_id = email_settings.id
 
                 logger.info(f"Created email settings with ID {settings_id}")
+                EmailConfigService._clear_cached_config()
                 return settings_id
 
         except Exception as e:
@@ -295,6 +329,7 @@ class EmailConfigService:
                 email_settings.updated_by = updated_by
 
                 logger.info(f"Updated email settings with ID {settings_id}")
+                EmailConfigService._clear_cached_config()
                 return email_settings
 
         except Exception as e:

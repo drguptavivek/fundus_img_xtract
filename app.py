@@ -218,6 +218,8 @@ def create_app():
         @app.before_request
         def _redirect_insecure_requests():
             """Force HTTPS to avoid dropping secure cookies/CSRF tokens behind a proxy."""
+            if request.path in ("/healthz", "/healthz/"):
+                return None
             if request.is_secure:
                 return None
             forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()

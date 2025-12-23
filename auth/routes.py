@@ -9,7 +9,7 @@ from flask_login import login_user, logout_user, LoginManager, login_required, c
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 from . import auth_bp
-from .security import verify_password, hash_password
+from .security import verify_password, hash_password, generate_strong_password, validate_username
 from .utils import utcnow, get_client_ip
 from flask import flash
 from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback, rate_limit
@@ -466,7 +466,7 @@ def forgot_password():
     from utils.emails import send_otp_email
     from sqlalchemy import and_
     
-    def email_callback(success):
+    def email_callback(success, session_id):
         result = {
             'success': success,
             'timestamp': datetime.now(timezone.utc),
@@ -478,23 +478,31 @@ def forgot_password():
             result['message'] = "Email sending failed due to server error. Please contact support."
         
         # Push to user-specific queue using session ID as user identifier
-        session_id = session.get('_id', 'unknown')
         _push_email_result(session_id, result)
     
     if request.method == "POST":
         # Flask-WTF CSRF protection is automatically applied
         # No need for manual validation here
         email = request.form.get("email", "").strip()
+        username = request.form.get("username", "").strip()
         ip = get_client_ip()
         
         # Validate email format
         if not email or "@" not in email:
             flash("Please enter a valid email address.", "error")
             return render_template("auth/forgot_password.html")
+
+        is_valid_username, username_error = validate_username(username)
+        if not is_valid_username:
+            flash(username_error, "error")
+            return render_template("auth/forgot_password.html")
         
         with transaction_scope() as db:
             # Find user by email
-            user = db.query(User).filter(func.lower(User.email) == func.lower(email)).first()
+            user = db.query(User).filter(
+                func.lower(User.email) == func.lower(email),
+                func.lower(User.username) == func.lower(username),
+            ).first()
             
             # Check if there have been too many reset attempts today
             reset_attempts_today = _recent_password_reset_attempts_by_email(db, email)
@@ -518,8 +526,13 @@ def forgot_password():
                 session['password_reset_user_id'] = user.id  # Store user ID for verification
                 
                 # Send email with OTP asynchronously
-                send_otp_email(email, user.username, otp,
-                              callback=email_callback)
+                session_id = session.get('_id', 'unknown')
+                send_otp_email(
+                    email,
+                    user.username,
+                    otp,
+                    callback=lambda success: email_callback(success, session_id),
+                )
                 
                 # To prevent user enumeration, always show the same initial message regardless of email sending result
                 flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
@@ -543,26 +556,17 @@ def reset_password():
     Route to handle password reset with OTP verification.
     """
     from datetime import datetime, timezone
+    from utils.emails import send_password_reset_email
     
     if request.method == "POST":
         # Flask-WTF CSRF protection is automatically applied
         # No need for manual validation here
         ip = get_client_ip()
         otp = request.form.get("otp", "").strip()
-        new_password = request.form.get("new_password", "")
-        confirm_password = request.form.get("confirm_password", "")
         
         # Validate inputs
-        if not otp or not new_password or not confirm_password:
-            flash("Please fill in all fields.", "error")
-            return render_template("auth/reset_password.html")
-        
-        if new_password != confirm_password:
-            flash("Passwords do not match.", "error")
-            return render_template("auth/reset_password.html")
-        
-        if len(new_password) < 8:
-            flash("Password must be at least 8 characters long.", "error")
+        if not otp:
+            flash("Please enter the OTP.", "error")
             return render_template("auth/reset_password.html")
         
         # Verify OTP from session
@@ -609,7 +613,8 @@ def reset_password():
                 session.pop('password_reset_user_id', None)
                 return redirect(url_for("auth.forgot_password"))
 
-            user.password_hash = hash_password(new_password)
+            generated_password = generate_strong_password()
+            user.password_hash = hash_password(generated_password)
             user.updated_at = datetime.now(timezone.utc)
             db.add(user)
 
@@ -627,8 +632,13 @@ def reset_password():
         session_id = session.get('_id', 'unknown')
         auth_logger.info(f"Password reset successful - User: {username}, Email: {email}, IP: {ip}, SessionID: {session_id}, UserID: {user_id}")
 
-        flash("Password updated. You can now log in with your new password.", "success")
-        return redirect(url_for("auth.login"))
+        send_password_reset_email(email, username, generated_password)
+
+        return render_template(
+            "auth/reset_password_success.html",
+            username=username,
+            generated_password=generated_password,
+        )
 
     return render_template("auth/reset_password.html")
 
@@ -652,7 +662,7 @@ def email_sse():
 
 
 @auth_bp.route("/check-email-status")
-@rate_limit("30 per minute")  # Status check endpoint
+@rate_limit("60 per minute")  # Status check endpoint
 def check_email_status():
     """Check for any email sending status updates."""
     session_id = session.get('_id', 'unknown')

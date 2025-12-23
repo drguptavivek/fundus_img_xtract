@@ -4,7 +4,8 @@ from flask import render_template, request, redirect, url_for, flash, current_ap
 from sqlalchemy import select, func
 from flask_login import current_user
 from auth.roles import roles_required
-from auth.security import hash_password, check_password_strength
+from auth.security import hash_password, generate_strong_password
+from utils.emails import send_password_reset_email
 from auth.route_analyzer import analyze_all_routes, get_role_usage_statistics, get_routes_by_role
 from models import User, Role
 from db_transaction_manager import transaction_scope, get_db_session
@@ -17,28 +18,12 @@ def change_password():
     """
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
-        new_pw = request.form.get("new_password") or ""
-        confirm_pw = request.form.get("confirm_password") or ""
 
         # Basic validation
         if not username:
             flash("Username is required.", "danger")
-            return render_template("admin/change_password.html", username=username)
+            return render_template("admin/change_password.html", username=username, email="")
 
-        if len(new_pw) < 10:
-            flash("Password should be at least 10 characters.", "danger")
-            return render_template("admin/change_password.html", username=username)
-        
-        ok, msg = check_password_strength(new_pw, min_len=10)
-        if not ok:
-            flash(msg, "danger")
-            return render_template("admin/change_password.html", username=username)
-
-        if new_pw != confirm_pw:
-            flash("Passwords do not match.", "danger")
-            return render_template("admin/change_password.html", username=username)
-
-        # Update in DB
         with transaction_scope() as db:
             user = db.execute(
                 select(User).where(func.lower(User.username) == username.lower())
@@ -46,11 +31,33 @@ def change_password():
 
             if not user:
                 flash("User not found.", "danger")
-                return render_template("admin/change_password.html", username=username)
+                return render_template("admin/change_password.html", username=username, email="")
 
-            user.password_hash = hash_password(new_pw)
+            if not user.email:
+                flash("User does not have an email address on file.", "danger")
+                return render_template(
+                    "admin/change_password.html",
+                    username=username,
+                    email=user.email or "",
+                )
+
+            generated_password = generate_strong_password()
+            user.password_hash = hash_password(generated_password)
             user.is_locked_until = None  # optional: clear any lockouts
             db.add(user)
+
+            email = user.email
+
+        send_password_reset_email(email, username, generated_password)
+
+        return render_template(
+            "admin/password_reset_done.html",
+            info={
+                "username": username,
+                "email": email,
+                "password": generated_password,
+            },
+        )
 
         # Audit (no secrets)
         try:
@@ -63,10 +70,21 @@ def change_password():
             pass
 
         flash(f"Password updated for '{username}'.", "success")
-        return redirect(url_for("admin.change_password"))
+        return redirect(url_for("admin.change_password", username=username))
 
     # GET
-    return render_template("admin/change_password.html")
+    username = (request.args.get("username") or "").strip()
+    email = ""
+    if username:
+        with get_db_session() as db:
+            user = db.execute(
+                select(User).where(func.lower(User.username) == username.lower())
+            ).scalar_one_or_none()
+            if user:
+                email = user.email or ""
+            else:
+                flash("User not found.", "danger")
+    return render_template("admin/change_password.html", username=username, email=email)
 
 
 def manage_roles():

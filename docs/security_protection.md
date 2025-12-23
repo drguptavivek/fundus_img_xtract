@@ -108,7 +108,7 @@ Stricter rate limits have been applied to vulnerable endpoints:
 
 4. **`/check-email-status`**
    - CSRF protection: Required
-   - Rate limiting: 20 per minute
+   - Rate limiting: 60 per minute
 
 5. **`/email-sse`**
    - CSRF protection: Required

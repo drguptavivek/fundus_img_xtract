@@ -224,6 +224,7 @@ class TestForgotPasswordRoute:
             with patch('utils.emails.send_otp_email') as mock_email:
                 mock_email.return_value = None
                 response = client.post("/forgot-password", data={
+                    "username": test_users["admin"].username,
                     "email": test_users["admin"].email
                 }, follow_redirects=False)
                 # Either redirects or shows success message
@@ -234,6 +235,7 @@ class TestForgotPasswordRoute:
         """Test forgot password with invalid email format"""
         with app.test_client() as client:
             response = client.post("/forgot-password", data={
+                "username": "test_user",
                 "email": "invalid-email"
             })
             assert response.status_code == 200
@@ -244,6 +246,7 @@ class TestForgotPasswordRoute:
         with app.test_client() as client:
             with patch('utils.emails.send_otp_email') as mock_email:
                 response = client.post("/forgot-password", data={
+                    "username": "test_user",
                     "email": "nonexistent@example.com"
                 }, follow_redirects=True)
                 assert response.status_code == 200
@@ -257,6 +260,7 @@ class TestForgotPasswordRoute:
             # Make multiple requests quickly
             for _ in range(5):
                 response = client.post("/forgot-password", data={
+                    "username": test_users["admin"].username,
                     "email": test_users["admin"].email
                 })
                 # First few should succeed
@@ -289,10 +293,9 @@ class TestResetPasswordRoute:
             
             response = client.post("/reset-password", data={
                 "otp": "TEST1234",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
-            }, follow_redirects=False)
-            assert response.status_code == 302  # Should redirect to login
+            }, follow_redirects=True)
+            assert response.status_code == 200
+            assert b"password reset successful" in response.data.lower()
     
     def test_reset_password_with_invalid_otp(self, app, test_users):
         """Test password reset with invalid OTP"""
@@ -306,8 +309,6 @@ class TestResetPasswordRoute:
             
             response = client.post("/reset-password", data={
                 "otp": "INVALID123",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
             })
             # Either shows error message or redirects
             assert response.status_code in [200, 302]
@@ -324,47 +325,16 @@ class TestResetPasswordRoute:
             
             response = client.post("/reset-password", data={
                 "otp": "EXPIRED12",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
             }, follow_redirects=True)
             assert response.status_code == 200
             assert b"expired" in response.data.lower()
-    
-    def test_reset_password_mismatched_passwords(self, app, test_users):
-        """Test password reset with mismatched passwords"""
+
+    def test_reset_password_missing_otp(self, app):
+        """Test password reset with missing OTP"""
         with app.test_client() as client:
-            with client.session_transaction() as sess:
-                # Set up valid OTP in session
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
-                sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
-                sess['password_reset_user_id'] = test_users["admin"].id
-            
-            response = client.post("/reset-password", data={
-                "otp": "TEST1234",
-                "new_password": "NewPassword123!",
-                "confirm_password": "DifferentPassword123!"
-            })
+            response = client.post("/reset-password", data={})
             assert response.status_code == 200
-            assert b"do not match" in response.data.lower()
-    
-    def test_reset_password_short_password(self, app, test_users):
-        """Test password reset with too short password"""
-        with app.test_client() as client:
-            with client.session_transaction() as sess:
-                # Set up valid OTP in session
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
-                sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
-                sess['password_reset_user_id'] = test_users["admin"].id
-            
-            response = client.post("/reset-password", data={
-                "otp": "TEST1234",
-                "new_password": "short",
-                "confirm_password": "short"
-            })
-            assert response.status_code == 200
-            assert b"at least 8 characters" in response.data.lower()
+            assert b"please enter the otp" in response.data.lower()
 
 
 class TestAuthHelperRoutes:

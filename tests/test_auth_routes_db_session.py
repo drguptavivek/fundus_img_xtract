@@ -85,6 +85,7 @@ class TestAuthRoutesSessionManagement:
                 mock_email.return_value = None
                 
                 response = client.post("/forgot-password", data={
+                    "username": test_users["admin"].username,
                     "email": test_users["admin"].email
                 }, follow_redirects=False)
                 
@@ -104,6 +105,7 @@ class TestAuthRoutesSessionManagement:
             # Make multiple requests to test rate limiting
             for i in range(6):
                 response = client.post("/forgot-password", data={
+                    "username": test_users["admin"].username,
                     "email": test_users["admin"].email
                 })
                 
@@ -134,12 +136,10 @@ class TestAuthRoutesSessionManagement:
             # Test password reset
             response = client.post("/reset-password", data={
                 "otp": "TEST1234",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
             }, follow_redirects=False)
             
-            # Should redirect to login on success
-            assert response.status_code == 302
+            # Should return success page on success
+            assert response.status_code == 200
             
             # Verify password was actually changed in database
             with get_db_session() as db:
@@ -161,8 +161,6 @@ class TestAuthRoutesSessionManagement:
             # Try to reset with invalid OTP
             response = client.post("/reset-password", data={
                 "otp": "INVALID123",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
             })
             
             # Should show error, not redirect

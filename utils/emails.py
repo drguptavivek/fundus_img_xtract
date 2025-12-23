@@ -33,7 +33,7 @@ def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger
     )
 
 
-def send_email_sync(to_email: str, subject: str, body: str) -> bool:
+def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = False) -> bool:
     """
     Synchronous function to send an email to the specified recipient.
 
@@ -101,7 +101,7 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
 
         # Send the email
         with smtp_class(smtp_server, smtp_port, **server_kwargs) as server:
-            server.set_debuglevel(1 if debug_logger else 0)
+            server.set_debuglevel(1 if (debug_logger and not sensitive) else 0)
 
             if debug_logger:
                 debug_logger.debug("SMTP connected to %s:%d", smtp_server, smtp_port)
@@ -156,10 +156,11 @@ def send_email_sync(to_email: str, subject: str, body: str) -> bool:
 
 
 def send_email(
-        to_email: str, 
-        subject: str, 
-        body: str, 
-        callback: Optional[Callable[[bool], None]] = None
+        to_email: str,
+        subject: str,
+        body: str,
+        callback: Optional[Callable[[bool], None]] = None,
+        sensitive: bool = False,
         ) -> Thread:
     """
     Asynchronously send an email to the specified recipient.
@@ -181,7 +182,7 @@ def send_email(
 
     def send_email_task():
         def _execute() -> bool:
-            return send_email_sync(to_email, subject, body)
+            return send_email_sync(to_email, subject, body, sensitive=sensitive)
 
         if app is not None:
             with app.app_context():
@@ -228,7 +229,7 @@ The System Administrator
         if callback:
             callback(success)
     
-    return send_email(to_email, subject, body, otp_callback)
+    return send_email(to_email, subject, body, otp_callback, sensitive=True)
 
 
 def send_otp_email_sync(to_email: str, username: str, otp: str) -> bool:
@@ -256,4 +257,34 @@ This OTP is valid for 10 minutes. If you did not request this, please ignore thi
 Thank you,
 The System Administrator
 """
-    return send_email_sync(to_email, subject, body)
+    return send_email_sync(to_email, subject, body, sensitive=True)
+
+
+def send_password_reset_email(
+    to_email: str,
+    username: str,
+    new_password: str,
+    callback: Optional[Callable[[bool], None]] = None,
+) -> Thread:
+    """
+    Asynchronously send a password reset confirmation email with the new password.
+    """
+    subject = "Your Password Has Been Reset"
+    body = f"""
+Hello {username},
+
+Your password has been reset successfully. Your new password is:
+
+{new_password}
+
+Please log in and change it after your next sign-in if required.
+
+Thank you,
+The System Administrator
+"""
+
+    def reset_callback(success):
+        if callback:
+            callback(success)
+
+    return send_email(to_email, subject, body, reset_callback, sensitive=True)

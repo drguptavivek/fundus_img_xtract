@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}User Created{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">User Created</h1>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.users_list') }}">Back to Users</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div class="alert alert-success" role="alert">
+        The user account has been created successfully.
+      </div>
+
+      <div class="mb-3">
+        <div class="text-muted small">Username</div>
+        <div class="fw-semibold">{{ info.username }}</div>
+      </div>
+
+      <div class="mb-3">
+        <div class="text-muted small">Auto-generated password</div>
+        <div class="p-2 bg-light border rounded font-monospace" id="generated-password">{{ info.password }}</div>
+        <button type="button" class="btn btn-outline-secondary btn-sm mt-2" id="copy-password" data-copy-target="generated-password">
+          Copy password
+        </button>
+        <div class="form-text">Copy and store this password securely.</div>
+      </div>
+
+      {% if info.email %}
+      <div class="mb-3">
+        <div class="text-muted small">Email</div>
+        <div>{{ info.email }}</div>
+      </div>
+      {% endif %}
+
+      <div class="mt-3">
+        <a class="btn btn-primary" href="{{ url_for('admin.users_list') }}">Go to Users</a>
+        <a class="btn btn-outline-primary" href="{{ url_for('admin.add_user') }}">Create Another User</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script defer>
+  (function () {
+    var button = document.getElementById("copy-password");
+    if (!button) return;
+    button.addEventListener("click", function () {
+      var targetId = button.getAttribute("data-copy-target");
+      var target = document.getElementById(targetId);
+      var text = target ? target.textContent : "";
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = "Copied";
+        setTimeout(function () {
+          button.textContent = "Copy password";
+        }, 1500);
+      });
+    });
+  })();
+</script>
+{% endblock %}

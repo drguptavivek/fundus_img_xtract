@@ -1,5 +1,5 @@
 from datetime import date
-from flask import render_template, request, redirect, url_for, flash, current_app
+from flask import render_template, request, redirect, url_for, flash, current_app, session
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from flask_login import current_user
@@ -169,13 +169,13 @@ Please keep this information secure.
 """
             email_sent = send_email_sync(pre_email, subject, body)
 
-        flash(f"User '{username}' created. Auto-generated password: {password}", "success")
-        if pre_email:
-            if email_sent:
-                flash(f"Account details sent to {pre_email}.", "info")
-            else:
-                flash(f"Failed to send account details to {pre_email}.", "warning")
-        return redirect(url_for("admin.users_list"))
+        session["user_created_info"] = {
+            "username": username,
+            "password": password,
+            "email": pre_email or "",
+            "email_sent": bool(email_sent) if pre_email else None,
+        }
+        return redirect(url_for("admin.user_created"))
 
     # Fetch roles, hospitals, and lab_units in the same session that will be used for rendering
     with get_db_session() as db:
@@ -216,6 +216,21 @@ def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_r
                                timezone_labels=TIMEZONE_LABELS,
                                selected_timezone=timezone_value or default_tz,
                                default_timezone=default_tz)
+
+
+def user_created():
+    info = session.pop("user_created_info", None)
+    if not info:
+        flash("No recent user creation details found.", "warning")
+        return redirect(url_for("admin.users_list"))
+
+    if info.get("email"):
+        if info.get("email_sent") is True:
+            flash(f"Account details sent to {info['email']}.", "info")
+        elif info.get("email_sent") is False:
+            flash(f"Failed to send account details to {info['email']}.", "warning")
+
+    return render_template("admin/user_created.html", info=info)
 
 
 def edit_user(user_id: int):

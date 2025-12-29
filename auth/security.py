@@ -78,27 +78,32 @@ def check_password_strength(pw: str, min_len: int = 10) -> tuple[bool, str]:
 def generate_strong_password(length: int = 12) -> str:
     """
     Generate a strong password that satisfies the app policy.
+    Format: three words + 4 digits, shuffled, joined by one allowed special char.
     """
-    min_len = 10
-    if length < min_len:
-        length = min_len
+    from faker import Faker
 
-    upper = string.ascii_uppercase
-    lower = string.ascii_lowercase
-    digits = string.digits
     specials = "@#!&"
-    all_chars = upper + lower + digits + specials
+    separator = secrets.choice(specials)
+    faker = Faker()
 
-    required = [
-        secrets.choice(upper),
-        secrets.choice(lower),
-        secrets.choice(digits),
-        secrets.choice(specials),
-    ]
-    remaining = [secrets.choice(all_chars) for _ in range(length - len(required))]
-    password_chars = required + remaining
-    random.SystemRandom().shuffle(password_chars)
-    return "".join(password_chars)
+    def normalize_word(word: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z]", "", word or "")
+        return cleaned.lower()
+
+    words: list[str] = []
+    while len(words) < 3:
+        candidate = normalize_word(faker.word())
+        if candidate:
+            words.append(candidate)
+
+    # Capitalize one word to satisfy uppercase requirement.
+    cap_index = secrets.randbelow(len(words))
+    words[cap_index] = words[cap_index].capitalize()
+
+    digits = "".join(secrets.choice(string.digits) for _ in range(4))
+    parts = words + [digits]
+    random.SystemRandom().shuffle(parts)
+    return separator.join(parts)
 
 
 

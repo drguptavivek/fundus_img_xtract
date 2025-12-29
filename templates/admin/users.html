@@ -11,12 +11,29 @@
     </div>
   </div>
 
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <label for="user-filter" class="form-label">Filter by username</label>
+      <input
+        type="search"
+        class="form-control"
+        id="user-filter"
+        placeholder="Type a username..."
+        autocomplete="off"
+      >
+    </div>
+  </div>
+
   {% if not users %}
     <div class="alert alert-info">No users yet.</div>
   {% else %}
     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
       {% for u in users %}
-      <div class="col">
+      <div class="col"
+           data-username="{{ u.username|lower }}"
+           data-user-id="{{ u.id }}"
+           data-full-name="{{ (u.full_name or '')|lower }}"
+           data-email="{{ (u.email or '')|lower }}">
         <div class="card h-100 shadow-sm">
           <div class="card-header bg-white py-2">
             <div class="d-flex justify-content-between align-items-start">
@@ -24,6 +41,9 @@
                 <h6 class="mb-0 text-truncate">{{ u.username }}</h6>
                 {% if u.full_name %}
                   <small class="text-muted">{{ u.full_name }}</small>
+                {% endif %}
+                {% if u.email %}
+                  <div class="small text-muted text-truncate">{{ u.email }}</div>
                 {% endif %}
               </div>
               <div>
@@ -119,6 +139,35 @@
 {% block page_scripts %}
 <script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
 document.addEventListener('DOMContentLoaded', function() {
+  const filterInput = document.getElementById('user-filter');
+  const userCards = Array.from(document.querySelectorAll('[data-username]'));
+
+  if (filterInput && userCards.length > 0) {
+    const applyFilter = () => {
+      const query = filterInput.value.trim().toLowerCase();
+      userCards.forEach(card => {
+        if (!query) {
+          card.hidden = false;
+          return;
+        }
+
+        const username = card.dataset.username || '';
+        const userId = card.dataset.userId || '';
+        const fullName = card.dataset.fullName || '';
+        const email = card.dataset.email || '';
+        const matches = (
+          username.includes(query) ||
+          userId.includes(query) ||
+          fullName.includes(query) ||
+          email.includes(query)
+        );
+        card.hidden = !matches;
+      });
+    };
+
+    filterInput.addEventListener('input', applyFilter);
+  }
+
   // Fetch grading eligibility for all users with resident or ophthalmologist roles
   const gradingEligibilityElements = document.querySelectorAll('.grading-eligibility');
   

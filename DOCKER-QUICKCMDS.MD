@@ -63,6 +63,7 @@ sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 
 
 ```bash
+cp develop.config.env.example develop.config.env
 cp docker-compose.override.yml.example docker-compose.override.yml 
 
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   build  web

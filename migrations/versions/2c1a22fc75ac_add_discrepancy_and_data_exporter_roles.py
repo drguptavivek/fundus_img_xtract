@@ -21,11 +21,19 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Add discrepancy/data exporter roles if missing."""
     bind = op.get_bind()
+    bind.execute(
+        sa.text(
+            "SELECT setval("
+            "pg_get_serial_sequence('roles', 'id'), "
+            "COALESCE((SELECT MAX(id) FROM roles), 1), "
+            "true)"
+        )
+    )
     for role in ("discrepancy_reviewer", "data_exporter"):
         bind.execute(
             sa.text(
-                "INSERT INTO roles (name) "
-                "SELECT :name WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = :name)"
+                "INSERT INTO roles (name) VALUES (:name) "
+                "ON CONFLICT (name) DO NOTHING"
             ),
             {"name": role},
         )

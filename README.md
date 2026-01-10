@@ -161,6 +161,7 @@ Has specific workflows for Remedio FOP zip files that get downloaded from the re
 For a Docker-based stack (Flask app, PostgreSQL, Redis) review [Docker Compose Deployment](docs/deployment/docker-compose.md). It covers the two-file environment setup 
 - `deploy.config.env` for non-sensitive settings
 - `deploy.secrets.env` for credentials)
+Dev overrides live in `develop.config.env` and are loaded by the Docker override file when present.
 
 It persistent bind mounts for `./files`, `./logs`.
 It also allows for reverse-proxy integration.

@@ -1,5 +1,9 @@
 services:
   web:
+    env_file:
+      - deploy.config.env
+      - deploy.secrets.env
+      - develop.config.env
     command:
       - uv
       - run

@@ -1,12 +1,14 @@
 # Docker Compose Deployment
 
 This stack runs the Fundus Image Manager, PostgreSQL, and Redis in containers. The application container listens on port 5001 and is intended to sit behind an existing reverse proxy that terminates TLS.
+For Docker-based development, `develop.config.env` can be used as an override and is loaded via `docker-compose.override.yml` when present.
 
 ## 1. Prepare environment variables
 
 1. Copy `deploy.config.env.example` to `deploy.config.env` (non-sensitive runtime config).
 2. Copy `deploy.secrets.env.example` to `deploy.secrets.env` and fill in strong credentials.
 3. Keep `deploy.secrets.env` restricted (permissions 600) and out of version control.
+4. (Development only) Copy `develop.config.env.example` to `develop.config.env` for dev overrides.
 
 
 

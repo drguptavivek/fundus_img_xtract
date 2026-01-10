@@ -216,7 +216,7 @@ def _cleanup_task_tracker_with_session(task_id: int, user_id: int, role_slot: st
             logging.info(f"No task tracker found to cleanup - Task ID: {task_id}, "
                         f"User ID: {user_id}, "
                         f"Role: {role_slot}")
-            return True  # Consider it successful if no record exists to cleanup
+            return False
             
     except Exception as e:
         logging.error(f"Error during task tracker cleanup: {str(e)}")

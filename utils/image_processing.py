@@ -170,7 +170,7 @@ def generate_thumbnail_from_bytes(
     size: Tuple[int, int] = THUMBNAIL_SIZE,
     quality: int = THUMBNAIL_QUALITY,
     format_override: Optional[str] = None
-) -> bool:
+) -> tuple[bool, str]:
     """
     Generate a thumbnail from image data (bytes).
 
@@ -184,13 +184,14 @@ def generate_thumbnail_from_bytes(
         format_override: Force output format (auto-detected if None)
 
     Returns:
-        True if thumbnail was generated successfully, False otherwise
+        (success, message) with a human-readable reason.
     """
     try:
         # Check data size
         if len(image_data) > MAX_IMAGE_SIZE:
-            logger.error(f"Image data too large: {len(image_data)} bytes")
-            return False
+            message = f"Image data too large: {len(image_data)} bytes"
+            logger.error(message)
+            return False, message
 
         # Create BytesIO object from image data
         with BytesIO(image_data) as img_stream:
@@ -198,25 +199,28 @@ def generate_thumbnail_from_bytes(
             with Image.open(img_stream) as img:
                 # Use existing generate_thumbnail function with a temporary file
                 import tempfile
-
+                temp_path = None
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
                     temp_file.write(image_data)
                     temp_path = temp_file.name
 
                 try:
-                    return generate_thumbnail(
+                    success = generate_thumbnail(
                         temp_path, output_path, size, quality, format_override
                     )
+                    return success, "Thumbnail generated successfully" if success else "Thumbnail generation failed"
                 finally:
                     # Clean up temporary file
-                    try:
-                        os.unlink(temp_path)
-                    except OSError:
-                        pass
+                    if temp_path:
+                        try:
+                            os.unlink(temp_path)
+                        except OSError:
+                            pass
 
-    except Exception as e:
-        logger.error(f"Failed to generate thumbnail from bytes: {str(e)}")
-        return False
+    except (OSError, ValueError) as e:
+        message = f"Failed to generate thumbnail from bytes: {str(e)}"
+        logger.error(message)
+        return False, message
 
 
 def get_thumbnail_filename(original_filename: str) -> str:

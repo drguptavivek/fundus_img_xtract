@@ -49,7 +49,7 @@ def edit_hospital(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(Hospital, item_id)
         if not item:
-            flash("Item not found.", "danger")
+            flash("Hospital not found.", "danger")
             return redirect(url_for(LIST_ENDPOINT))
 
         if request.method == "GET":
@@ -84,7 +84,7 @@ def delete_hospital(item_id: int) -> ResponseReturnValue:
     with transaction_scope() as db:
         item = db.get(Hospital, item_id)
         if not item:
-            flash("Item not found.", "danger")
+            flash("Hospital not found.", "danger")
             return redirect(url_for(LIST_ENDPOINT))
 
         related_lab_units = db.execute(

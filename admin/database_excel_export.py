@@ -150,7 +150,7 @@ def _export_table_to_excel(table_name):
                     try:
                         if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
-                    except:
+                    except (TypeError, ValueError):
                         pass
                 adjusted_width = min(max_length + 2, 50)
                 ws.column_dimensions[column_letter].width = adjusted_width

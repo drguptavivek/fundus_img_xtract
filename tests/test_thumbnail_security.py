@@ -163,7 +163,7 @@ class TestThumbnailSecurity:
             'COM1', 'COM2', 'LPT1', 'LPT2',  # More Windows reserved
         ]
 
-        for malicious_filename in malicious_filename:
+        for malicious_filename in malicious_filenames:
             # Test image format validation
             file_ext = malicious_filename.split('.')[-1] if '.' in malicious_filename else ''
             is_valid_ext = is_valid_image_format(f'image/{file_ext}')

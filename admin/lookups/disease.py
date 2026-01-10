@@ -55,7 +55,7 @@ def edit_disease(item_id: int) -> ResponseReturnValue:
     with get_db_session() as db:
         item = db.get(Disease, item_id)
         if not item:
-            flash("Item not found.", "danger")
+            flash("Disease not found.", "danger")
             return redirect(url_for(LIST_ENDPOINT))
 
         if request.method == "GET":

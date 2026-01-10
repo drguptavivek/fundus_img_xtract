@@ -19,6 +19,7 @@ from utils.fileUtils import (
     thumbnail_exists_direct,
     get_thumbnail_filename
 )
+from models import IMAGE_DIR
 
 
 class TestThumbnailFileManagementSimple:
@@ -87,25 +88,31 @@ class TestThumbnailFileManagementSimple:
     def test_get_thumbnail_path_encounter(self, temp_dir, sample_uuids):
         """Test encounter file thumbnail path generation."""
         test_uuid = sample_uuids[0]
+        encounter_file = Path(IMAGE_DIR) / f"{test_uuid}.jpg"
 
         # Test basic path generation
-        path = get_thumbnail_path_encounter(test_uuid, 'jpg')
-        assert 'thm_' in path
-        assert test_uuid in path
-        assert path.endswith('.jpg')
-        assert 'encounter_files' in path
+        path = get_thumbnail_path_encounter(encounter_file)
+        path_str = str(path)
+        assert 'thm_' in path_str
+        assert test_uuid in path_str
+        assert path_str.endswith('.jpg')
+        assert 'encounter_files' in path_str
 
         # Test different extensions
-        path_webp = get_thumbnail_path_encounter(test_uuid, 'webp')
-        assert path_webp.endswith('.webp')
-        assert test_uuid in path_webp
+        encounter_webp = Path(IMAGE_DIR) / f"{test_uuid}.webp"
+        path_webp = get_thumbnail_path_encounter(encounter_webp)
+        path_webp_str = str(path_webp)
+        assert path_webp_str.endswith('.webp')
+        assert test_uuid in path_webp_str
 
         # Test that direct and encounter paths are different
         direct_path = get_thumbnail_path_direct(test_uuid, 'jpg')
-        encounter_path = get_thumbnail_path_encounter(test_uuid, 'jpg')
-        assert direct_path != encounter_path
-        assert 'direct_uploads' in direct_path
-        assert 'encounter_files' in encounter_path
+        encounter_path = get_thumbnail_path_encounter(encounter_file)
+        direct_path_str = str(direct_path)
+        encounter_path_str = str(encounter_path)
+        assert direct_path_str != encounter_path_str
+        assert 'direct_uploads' in direct_path_str
+        assert 'encounter_files' in encounter_path_str
 
     def test_validate_thumbnail_filename(self):
         """Test thumbnail filename validation."""
@@ -165,11 +172,13 @@ class TestThumbnailFileManagementSimple:
             assert 'direct_uploads' in direct_path
 
             # Test encounter file paths
-            encounter_path = get_thumbnail_path_encounter(test_uuid, 'png')
-            assert 'thm_' in encounter_path
-            assert test_uuid in encounter_path
-            assert encounter_path.endswith('.png')
-            assert 'encounter_files' in encounter_path
+            encounter_file = Path(IMAGE_DIR) / f"{test_uuid}.png"
+            encounter_path = get_thumbnail_path_encounter(encounter_file)
+            encounter_path_str = str(encounter_path)
+            assert 'thm_' in encounter_path_str
+            assert test_uuid in encounter_path_str
+            assert encounter_path_str.endswith('.png')
+            assert 'encounter_files' in encounter_path_str
 
             # Paths should be different for different types
             assert direct_path != encounter_path
@@ -268,13 +277,14 @@ class TestThumbnailFileManagementSimple:
         assert path1 == path2 == path3
 
         # Same for encounter files
-        epath1 = get_thumbnail_path_encounter(test_uuid, ext)
-        epath2 = get_thumbnail_path_encounter(test_uuid, ext)
+        encounter_file = Path(IMAGE_DIR) / f"{test_uuid}.{ext}"
+        epath1 = get_thumbnail_path_encounter(encounter_file)
+        epath2 = get_thumbnail_path_encounter(encounter_file)
 
-        assert epath1 == epath2
+        assert str(epath1) == str(epath2)
 
         # But direct and encounter should be different
-        assert path1 != epath1
+        assert str(path1) != str(epath1)
 
 
 if __name__ == '__main__':

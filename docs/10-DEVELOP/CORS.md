@@ -6,18 +6,19 @@ This document details the Cross-Origin Resource Sharing (CORS) configuration in 
 
 ## Current Configuration
 
-The application uses Flask-CORS v6.0.1 to handle cross-origin requests for API endpoints. The configuration is set up in `app.py` with the following settings:
+The application uses Flask-CORS v6.0.1 to handle cross-origin requests. The configuration is set up in `app.py` with the following settings:
 
 ### Configuration Code
 
 ```python
 # Initialize CORS for API endpoints
-# Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
+# Allow credentials from same origin to handle session cookies
+cors_origins = app.config["CORS_ALLOWED_ORIGINS"]
 CORS(app, resources={
-    r"/api/*": {
-        "origins": ["http://localhost:5000", "http://127.0.0.1:5000"],
-        "supports_credentials": True
-    }
+    r"/api/*": {"origins": cors_origins, "supports_credentials": True},
+    r"/check-email-status": {"origins": cors_origins, "supports_credentials": True},
+    r"/email-sse": {"origins": cors_origins, "supports_credentials": True},
+    r"/check-session": {"origins": cors_origins, "supports_credentials": True},
 }, supports_credentials=True)
 ```
 
@@ -25,8 +26,8 @@ CORS(app, resources={
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `resources` | `r"/api/*": {...}` | Restricts CORS to API endpoints only |
-| `origins` | `["http://localhost:5000", "http://127.0.0.1:5000"]` | Allows requests from localhost development servers |
+| `resources` | `r"/api/*": {...}` | Restricts CORS to API endpoints plus auth status endpoints |
+| `origins` | `["http://localhost:5001", "http://127.0.0.1:5001"]` | Allows requests from localhost development servers |
 | `supports_credentials` | `True` | Enables cookies and authentication headers |
 | `global supports_credentials` | `True` | Global setting for credential support |
 
@@ -34,8 +35,8 @@ CORS(app, resources={
 
 ### Current Security Posture
 
-1. **Restricted Origins**: Only allows requests from localhost development servers
-2. **API-Only Configuration**: CORS is restricted to `/api/*` endpoints
+1. **Restricted Origins**: Only allows requests from configured origins
+2. **Scoped Endpoints**: CORS is restricted to `/api/*` plus auth status endpoints
 3. **Credential Support**: Enables session cookies for authenticated requests
 4. **Same-Source Policy**: Maintains security by limiting origins
 
@@ -44,13 +45,8 @@ CORS(app, resources={
 For production deployment, the origins list should be updated to include the production domain:
 
 ```python
-# Production configuration example
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://yourdomain.com", "https://www.yourdomain.com"],
-        "supports_credentials": True
-    }
-}, supports_credentials=True)
+# Production configuration example (set env var)
+CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
 
 ## Request Handling
@@ -68,7 +64,7 @@ The application automatically handles CORS preflight requests (`OPTIONS` method)
 Flask-CORS automatically adds the following headers to responses:
 
 ```http
-Access-Control-Allow-Origin: http://localhost:5000
+Access-Control-Allow-Origin: http://localhost:5001
 Access-Control-Allow-Credentials: true
 Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
 Access-Control-Allow-Headers: Content-Type, Authorization, X-CSRFToken
@@ -134,19 +130,7 @@ To add more allowed origins, you can simply extend the origins list in the CORS 
 
 ```python
 # Current configuration with additional origins
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "http://localhost:5000",
-            "http://127.0.0.1:5000",
-            "https://yourdomain.com",
-            "https://www.yourdomain.com",
-            "https://admin.yourdomain.com",
-            "https://staging.yourdomain.com"
-        ],
-        "supports_credentials": True
-    }
-}, supports_credentials=True)
+CORS_ALLOWED_ORIGINS=http://localhost:5001,http://127.0.0.1:5001,https://yourdomain.com,https://www.yourdomain.com
 ```
 
 ### Environment-Based Configuration
@@ -162,8 +146,8 @@ def create_app():
     app = Flask(__name__)
     
     # Get origins from environment variable or use defaults
-    allowed_origins = os.getenv("CORS_ORIGINS",
-        "http://localhost:5000,http://127.0.0.1:5000"
+    allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS",
+        "http://localhost:5001,http://127.0.0.1:5001"
     ).split(",")
     
     # Apply CORS configuration
@@ -185,13 +169,13 @@ Add to your `.env` file:
 
 ```bash
 # Development
-CORS_ORIGINS=http://localhost:5000,http://127.0.0.1:5000
+CORS_ALLOWED_ORIGINS=http://localhost:5001,http://127.0.0.1:5001
 
 # Production (example)
-CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com,https://admin.yourdomain.com
+CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com,https://admin.yourdomain.com
 
 # Staging
-CORS_ORIGINS=https://staging.yourdomain.com,https://test.yourdomain.com
+CORS_ALLOWED_ORIGINS=https://staging.yourdomain.com,https://test.yourdomain.com
 ```
 
 ### Configuration File Approach
@@ -201,27 +185,27 @@ For more complex scenarios, use a configuration file:
 ```python
 # config.py
 class Config:
-    CORS_ORIGINS = [
-        "http://localhost:5000",
-        "http://127.0.0.1:5000"
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5001",
+        "http://127.0.0.1:5001"
     ]
 
 class DevelopmentConfig(Config):
-    CORS_ORIGINS = [
-        "http://localhost:5000",
-        "http://127.0.0.1:5000",
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5001",
+        "http://127.0.0.1:5001",
         "http://localhost:3000"  # React development server
     ]
 
 class ProductionConfig(Config):
-    CORS_ORIGINS = [
+    CORS_ALLOWED_ORIGINS = [
         "https://yourdomain.com",
         "https://www.yourdomain.com",
         "https://admin.yourdomain.com"
     ]
 
 class StagingConfig(Config):
-    CORS_ORIGINS = [
+    CORS_ALLOWED_ORIGINS = [
         "https://staging.yourdomain.com",
         "https://test.yourdomain.com"
     ]
@@ -244,7 +228,7 @@ def create_app(config_name='development'):
     # Apply CORS configuration
     CORS(app, resources={
         r"/api/*": {
-            "origins": app.config['CORS_ORIGINS'],
+            "origins": app.config['CORS_ALLOWED_ORIGINS'],
             "supports_credentials": True
         }
     })
@@ -269,7 +253,7 @@ def is_allowed_origin(origin):
     
     # Check if origin matches allowed domains
     for domain in allowed_domains:
-        if origin and (origin.endswith(domain) or origin == f"http://localhost:5000"):
+        if origin and (origin.endswith(domain) or origin == f"http://localhost:5001"):
             return True
     return False
 
@@ -302,7 +286,7 @@ def load_cors_origins():
         return config.get(environment, config.get("default", []))
     except (FileNotFoundError, json.JSONDecodeError):
         # Fallback to default origins
-        return ["http://localhost:5000", "http://127.0.0.1:5000"]
+        return ["http://localhost:5001", "http://127.0.0.1:5001"]
 
 # In app.py
 CORS(app, resources={
@@ -318,12 +302,12 @@ CORS(app, resources={
 ```json
 {
     "default": [
-        "http://localhost:5000",
-        "http://127.0.0.1:5000"
+        "http://localhost:5001",
+        "http://127.0.0.1:5001"
     ],
     "development": [
-        "http://localhost:5000",
-        "http://127.0.0.1:5000",
+        "http://localhost:5001",
+        "http://127.0.0.1:5001",
         "http://localhost:3000",
         "http://localhost:8080"
     ],
@@ -412,7 +396,7 @@ def create_app():
     
     # Environment-specific origins
     if app.debug:
-        allowed_origins = ["http://localhost:5000", "http://127.0.0.1:5000"]
+        allowed_origins = ["http://localhost:5001", "http://127.0.0.1:5001"]
     else:
         allowed_origins = [os.getenv("FRONTEND_URL", "https://yourdomain.com")]
     
@@ -433,8 +417,8 @@ def create_app():
 
 ### Local Testing
 
-1. Start the Flask application on localhost:5000
-2. Test API endpoints from a frontend on localhost:5000
+1. Start the Flask application on localhost:5001
+2. Test API endpoints from a frontend on localhost:5001
 3. Verify preflight requests are handled correctly
 
 ### Cross-Origin Testing
@@ -443,7 +427,7 @@ For testing cross-origin requests:
 
 ```javascript
 // Test from different origin (e.g., different port)
-fetch('http://localhost:5000/api/hospitals', {
+fetch('http://localhost:5001/api/hospitals', {
     method: 'GET',
     credentials: 'include'
 })

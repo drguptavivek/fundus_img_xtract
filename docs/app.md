@@ -24,8 +24,8 @@ The primary component of `app.py` is the `create_app()` function, which follows 
     *   Custom error handler for CSRF failures that redirects users with a helpful flash message.
 
 3.  **CORS Configuration:**
-    *   Initializes Flask-CORS for API endpoints, allowing credentials from same-origin requests to handle session cookies properly.
-    *   Configured to allow requests from localhost for development purposes.
+    *   Initializes Flask-CORS for API endpoints and auth status endpoints, allowing credentials for session cookies.
+    *   Allowed origins are loaded from `CORS_ALLOWED_ORIGINS` with a default of `http://localhost:5001,http://127.0.0.1:5001`.
 
 4.  **Environment and Database Setup:**
     *   Calls `setup_environment()` to ensure that all necessary directories (e.g., for uploads, logs) exist.

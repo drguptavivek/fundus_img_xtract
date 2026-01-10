@@ -22,6 +22,7 @@ from auth.security import (
     generate_strong_password,
 )
 from utils.emails import send_email_sync
+from utils.rate_limiter import rate_limit
 from . import account_bp
 
 PROFILE_TEMPLATE = "account/profile.html"
@@ -153,48 +154,55 @@ def profile():
     return _render_profile_get()
 
 
-@account_bp.route("/change-password", methods=["GET", "POST"])
+@account_bp.route("/change-password", methods=["GET"])
 @login_required
 def change_password_self():
+    """Render the change password form for the logged-in user."""
+    return render_template("account/change_password.html", username=current_user.username)
+
+
+@account_bp.route("/change-password/submit", methods=["POST"])
+@rate_limit("10 per minute")
+@login_required
+def change_password_submit():
     """
     Let the logged-in user change their own password.
     Requires current password; generates a strong password automatically.
     """
-    if request.method == "POST":
-        current_pw = request.form.get("current_password") or ""
-        new_pw = generate_strong_password(12)
+    current_pw = request.form.get("current_password") or ""
+    new_pw = generate_strong_password(12)
 
-        # Verify current password
-        with get_db_session() as db:
-            user = db.get(User, current_user.id)
-            if not user:
-                flash("User not found.", "danger")
-                return redirect(url_for("homepage"))
+    # Verify current password
+    with get_db_session() as db:
+        user = db.get(User, current_user.id)
+        if not user:
+            flash("User not found.", "danger")
+            return redirect(url_for("homepage"))
 
-            if not verify_password(user.password_hash, current_pw):
-                flash("Current password is incorrect.", "danger")
-                # Render template within the same session to avoid detached instance errors
-                return render_template("account/change_password.html")
+        if not verify_password(user.password_hash, current_pw):
+            flash("Current password is incorrect.", "danger")
+            # Render template within the same session to avoid detached instance errors
+            return render_template("account/change_password.html")
 
-            # Set new password + clear any lock
-            user.password_hash = hash_password(new_pw)
-            user.is_locked_until = None
-            db.add(user)
-            username = user.username
-            full_name = user.full_name
-            email = user.email or ""
+        # Set new password + clear any lock
+        user.password_hash = hash_password(new_pw)
+        user.is_locked_until = None
+        db.add(user)
+        username = user.username
+        full_name = user.full_name
+        email = user.email or ""
 
-        try:
-            current_app.logger.info("User '%s' changed their password", getattr(current_user, "username", "unknown"))
-        except Exception:
-            pass
+    try:
+        current_app.logger.info("User '%s' changed their password", getattr(current_user, "username", "unknown"))
+    except Exception:
+        pass
 
-        email_sent = None
-        if email:
-            subject = "Your Eye Image Manager password"
-            login_url = url_for("auth.login", _external=True)
-            display_name = full_name or username
-            body = f"""
+    email_sent = None
+    if email:
+        subject = "Your Eye Image Manager password"
+        login_url = url_for("auth.login", _external=True)
+        display_name = full_name or username
+        body = f"""
 Hello {display_name},
 
 Your Eye Image Manager password has been reset.
@@ -205,18 +213,15 @@ Login: {login_url}
 
 Please keep this information secure.
 """
-            email_sent = send_email_sync(email, subject, body)
+        email_sent = send_email_sync(email, subject, body)
 
-        session["password_change_info"] = {
-            "username": username,
-            "password": new_pw,
-            "email": email,
-            "email_sent": bool(email_sent) if email else None,
-        }
-        return redirect(url_for("account.password_changed"))
-
-    # GET
-    return render_template("account/change_password.html", username=current_user.username)
+    session["password_change_info"] = {
+        "username": username,
+        "password": new_pw,
+        "email": email,
+        "email_sent": bool(email_sent) if email else None,
+    }
+    return redirect(url_for("account.password_changed"))
 
 
 @account_bp.route("/password-changed", methods=["GET"])

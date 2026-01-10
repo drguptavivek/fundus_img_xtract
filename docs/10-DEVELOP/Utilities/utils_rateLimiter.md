@@ -165,6 +165,9 @@ account
 ├── account.change_password_self: /account/change-password
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
+├── account.change_password_submit: /account/change-password/submit
+│   ├── 10 per minute
+│   └── 500 per 1 hour
 └── account.profile: /account/profile
     ├── 2000 per 1 day
     └── 500 per 1 hour

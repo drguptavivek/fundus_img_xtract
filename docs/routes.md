@@ -79,7 +79,8 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 |------------|--------------|----------|-------------|
 | `/` | GET | account.profile | User profile page |
 | `/profile` | GET, POST | account.profile | User profile management |
-| `/change-password` | GET, POST | account.change_password_self | Change user password |
+| `/change-password` | GET | account.change_password_self | Change user password |
+| `/change-password/submit` | POST | account.change_password_submit | Change user password |
 
 ---
 

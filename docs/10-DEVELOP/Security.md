@@ -303,7 +303,7 @@ The system distinguishes between different types of errors:
 - **Form Protection**: CSRF tokens automatically included in all forms using `{% csrf_field()}` macro
 - **Token Validation**: Automatic validation on all state-changing requests
 - **Error Handling**: Custom CSRF error handler with user-friendly messages
-- **API Endpoints**: CORS configured for API endpoints with same-origin credentials
+- **API Endpoints**: CORS configured via `CORS_ALLOWED_ORIGINS` to allow credentials for API and auth status endpoints
 
 ### Error Handling
 - Generic error messages prevent information disclosure

@@ -49,69 +49,97 @@ def _env_domain(key: str) -> str | None:
     return None
 
 
-def create_app():
-    # Always load environment configuration
-    load_environment()
-    
-    app = Flask(
-        __name__,
-        static_folder="static",         # default, explicit for clarity
-        static_url_path="/static"       # default path)
-    )
+def _parse_cors_origins() -> list[str]:
+    raw = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    if not raw:
+        return ["http://localhost:5001", "http://127.0.0.1:5001"]
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
-    # Static cache age (seconds) — tweak per env
-    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))  # 7 days
+
+def _configure_base_settings(app: Flask) -> None:
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = int(os.getenv("STATIC_MAX_AGE", 60 * 60 * 24 * 7))
     app.config["ASSETS_VERSION"] = os.getenv("ASSETS_VERSION", "")
     app.config["BASE_URL"] = (get_env("BASE_URL") or "").rstrip("/")
-    # Flask-Caching (Redis backend) shared across the app
     app.config.setdefault("CACHE_TYPE", "RedisCache")
     app.config.setdefault("CACHE_REDIS_URL", os.getenv("CACHE_REDIS_URL") or build_redis_url())
-    app.config.setdefault("CACHE_DEFAULT_TIMEOUT", 15 * 60)  # 15 minutes
+    app.config.setdefault("CACHE_DEFAULT_TIMEOUT", 15 * 60)
     app.config.setdefault("CACHE_KEY_PREFIX", os.getenv("CACHE_KEY_PREFIX", "fim:cache:"))
-
     app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret")
-
     app.config.setdefault(
         "DEFAULT_DISPLAY_TIMEZONE",
-        os.getenv("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
+        os.getenv("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE),
     )
-    app.jinja_env.filters["user_datetime"] = format_user_datetime
-    
-    # Add from_json filter for parsing JSON in templates
-    def from_json(value):
-        import json
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-    
-    app.jinja_env.filters["from_json"] = from_json
-
-    @app.context_processor
-    def inject_default_theme():
-        from flask import request
-        default_theme = "dark" if request.blueprint == "grading" else "auto"
-        return {"default_theme": default_theme}
-
-    # Allow larger upload envelopes by default (1GB), overridable via env
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 1024 * 1024 * 1024))
     app.config["PER_FILE_MAX_BYTES"] = int(os.getenv("PER_FILE_MAX_BYTES", 10 * 1024 * 1024))
     app.config["MAX_FILES_PER_UPLOAD"] = int(os.getenv("MAX_FILES_PER_UPLOAD", 50))
     app.config["WORKERS"] = int(os.getenv("WORKERS", "4"))
     app.config["UPLOADED_RESULTS_PAGE_SIZE"] = int(os.getenv("UPLOADED_RESULTS_PAGE_SIZE", 50))
     app.config["SCREENINGS_PAGE_SIZE"] = int(os.getenv("SCREENINGS_PAGE_SIZE", 50))
-    # Keep legacy environment variable email config for fallback compatibility
-    app.config["EMAIL_DEBUG_LOGGING"] = str(os.getenv("EMAIL_DEBUG_LOGGING", "false")).lower() in ("1", "true", "yes")
+    app.config["EMAIL_DEBUG_LOGGING"] = _env_bool("EMAIL_DEBUG_LOGGING", "false")
     app.config["SMTP_SERVER"] = os.getenv("SMTP_SERVER")
     smtp_port_env = os.getenv("SMTP_PORT")
     app.config["SMTP_PORT"] = int(smtp_port_env) if smtp_port_env and smtp_port_env.isdigit() else None
     app.config["SMTP_USERNAME"] = os.getenv("SMTP_USERNAME")
     app.config["SMTP_PASSWORD"] = os.getenv("SMTP_PASSWORD")
     app.config["FROM_EMAIL"] = os.getenv("FROM_EMAIL")
-    app.config["SMTP_USE_SSL"] = str(os.getenv("SMTP_USE_SSL", "false")).lower() in ("1", "true", "yes")
+    app.config["SMTP_USE_SSL"] = _env_bool("SMTP_USE_SSL", "false")
     app.config["DB_QUERY_LOGGING"] = _env_bool("DB_QUERY_LOGGING", "false")
+    app.config["MATERIALIZED_VIEW_SCHEDULE_ENABLED"] = _env_bool("MATERIALIZED_VIEW_SCHEDULE_ENABLED", "true")
+    app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv(
+        "MATERIALIZED_VIEW_SCHEDULE_TIMES",
+        ",".join([f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]),
+    ).split(",")
+    app.config["MATERIALIZED_VIEW_TIMEZONE"] = os.getenv(
+        "MATERIALIZED_VIEW_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"]
+    )
+    app.config["MATERIALIZED_VIEW_RETRY_ATTEMPTS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_ATTEMPTS", "3"))
+    app.config["MATERIALIZED_VIEW_RETRY_DELAY_SECONDS"] = int(
+        os.getenv("MATERIALIZED_VIEW_RETRY_DELAY_SECONDS", "60")
+    )
+    app.config["THUMBNAIL_MAINTENANCE_ENABLED"] = _env_bool("THUMBNAIL_MAINTENANCE_ENABLED", "false")
+    app.config["THUMBNAIL_MAINTENANCE_TIMEZONE"] = os.getenv(
+        "THUMBNAIL_MAINTENANCE_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"]
+    )
+    app.config["THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES"] = os.getenv(
+        "THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES",
+        "02:30,07:00,13:30,19:00,01:30",
+    ).split(",")
+    app.config["THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT"] = int(
+        os.getenv("THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT", "1000")
+    )
+    app.config["THUMBNAIL_MAINTENANCE_REGENERATION_LIMIT"] = int(
+        os.getenv("THUMBNAIL_MAINTENANCE_REGENERATION_LIMIT", "100")
+    )
+    app.config["THUMBNAIL_MAINTENANCE_VALIDATION_SAMPLE_SIZE"] = int(
+        os.getenv("THUMBNAIL_MAINTENANCE_VALIDATION_SAMPLE_SIZE", "200")
+    )
+    app.config["THUMBNAIL_MAINTENANCE_LOG_LEVEL"] = os.getenv("THUMBNAIL_MAINTENANCE_LOG_LEVEL", "INFO")
+    app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60
+    app.config["CORS_ALLOWED_ORIGINS"] = _parse_cors_origins()
 
-    # Session cookie hygiene - configurable via env with simple parsing
+
+def _register_template_filters(app: Flask) -> None:
+    app.jinja_env.filters["user_datetime"] = format_user_datetime
+
+    def from_json(value):
+        import json
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    app.jinja_env.filters["from_json"] = from_json
+
+
+def _register_default_theme_context(app: Flask) -> None:
+    @app.context_processor
+    def inject_default_theme():
+        from flask import request
+        default_theme = "dark" if request.blueprint == "grading" else "auto"
+        return {"default_theme": default_theme}
+
+
+def _configure_session_and_proxy(app: Flask) -> bool:
     app.config.update(
         SESSION_COOKIE_HTTPONLY=_env_bool("SESSION_COOKIE_HTTPONLY", "true"),
         SESSION_COOKIE_SAMESITE=os.getenv("SESSION_COOKIE_SAMESITE", "Lax"),
@@ -124,176 +152,116 @@ def create_app():
             "https" if _env_bool("FORCE_HTTPS", "false") else "http",
         ),
     )
-    # --- Inactivity timeout (sliding) ---
     app.config["INACTIVITY_TIMEOUT_MINUTES"] = int(os.getenv("INACTIVITY_TIMEOUT_MINUTES", 30))
     app.config["INACTIVITY_WARNING_LEAD_MINUTES"] = int(os.getenv("INACTIVITY_WARNING_LEAD_MINUTES", 2))
-    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta( minutes=app.config["INACTIVITY_TIMEOUT_MINUTES"])
-    # refresh cookie each request (sliding window)
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=app.config["INACTIVITY_TIMEOUT_MINUTES"])
     app.config["SESSION_REFRESH_EACH_REQUEST"] = True
     force_https = _env_bool("FORCE_HTTPS", "false")
     proxy_hops = int(os.getenv("TRUST_PROXY_HOPS", "1"))
+    app.wsgi_app = ProxyFix(
+        app.wsgi_app,
+        x_for=proxy_hops,
+        x_proto=proxy_hops,
+        x_host=proxy_hops,
+        x_prefix=proxy_hops,
+    )
+    return force_https
 
-    # Respect proxy headers so request.is_secure reflects original scheme
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops, x_host=proxy_hops, x_prefix=proxy_hops)
 
-    # Thread pool (shared via app.config)
+def _configure_executors(app: Flask) -> None:
     app.config["EXECUTOR"] = ThreadPoolExecutor(max_workers=app.config["WORKERS"])
 
-    # Materialized View Scheduler Configuration
-    app.config["MATERIALIZED_VIEW_SCHEDULE_ENABLED"] = str(os.getenv("MATERIALIZED_VIEW_SCHEDULE_ENABLED", "true")).lower() in ("1", "true", "yes")
-    app.config["MATERIALIZED_VIEW_SCHEDULE_TIMES"] = os.getenv(
-        "MATERIALIZED_VIEW_SCHEDULE_TIMES",
-        ",".join([f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]),
-    ).split(",")
-    app.config["MATERIALIZED_VIEW_TIMEZONE"] = os.getenv("MATERIALIZED_VIEW_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"])
-    app.config["MATERIALIZED_VIEW_RETRY_ATTEMPTS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_ATTEMPTS", "3"))
-    app.config["MATERIALIZED_VIEW_RETRY_DELAY_SECONDS"] = int(os.getenv("MATERIALIZED_VIEW_RETRY_DELAY_SECONDS", "60"))
 
-    # Thumbnail Maintenance Scheduler configuration
-    app.config["THUMBNAIL_MAINTENANCE_ENABLED"] = _env_bool("THUMBNAIL_MAINTENANCE_ENABLED", "false")
-    app.config["THUMBNAIL_MAINTENANCE_TIMEZONE"] = os.getenv("THUMBNAIL_MAINTENANCE_TIMEZONE", app.config["DEFAULT_DISPLAY_TIMEZONE"])
-    app.config["THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES"] = os.getenv(
-        "THUMBNAIL_MAINTENANCE_SCHEDULE_TIMES",
-        "02:30,07:00,13:30,19:00,01:30",
-    ).split(",")
-    app.config["THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT"] = int(os.getenv("THUMBNAIL_MAINTENANCE_CLEANUP_LIMIT", "1000"))
-    app.config["THUMBNAIL_MAINTENANCE_REGENERATION_LIMIT"] = int(os.getenv("THUMBNAIL_MAINTENANCE_REGENERATION_LIMIT", "100"))
-    app.config["THUMBNAIL_MAINTENANCE_VALIDATION_SAMPLE_SIZE"] = int(os.getenv("THUMBNAIL_MAINTENANCE_VALIDATION_SAMPLE_SIZE", "200"))
-    app.config["THUMBNAIL_MAINTENANCE_LOG_LEVEL"] = os.getenv("THUMBNAIL_MAINTENANCE_LOG_LEVEL", "INFO")
-
-    app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60  # 1 hour
-    
-
-    # Add CSRF logging
-    @csrf.exempt
-    def csrf_logging():
-        """Log CSRF token information for debugging"""
-        pass
-    
-    # Hook into CSRF validation
+def _register_csrf_protection(app: Flask) -> None:
     def csrf_protect():
         auth_logger = logging.getLogger("auth")
+        if not auth_logger.isEnabledFor(logging.DEBUG):
+            return None
         if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
-            auth_logger.info(f"CSRF Check - Method: {request.method}, Path: {request.path}")
-            auth_logger.info(f"CSRF Check - Form has CSRF token: {'csrf_token' in request.form}")
-            auth_logger.info(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
-            
-            # Log session information
+            auth_logger.debug(f"CSRF Check - Method: {request.method}, Path: {request.path}")
+            auth_logger.debug(f"CSRF Check - Form has CSRF token: {'csrf_token' in request.form}")
+            auth_logger.debug(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
+
             try:
                 session_keys = list(session.keys()) if session else []
-                auth_logger.info(f"CSRF Check - Session keys: {session_keys}")
+                auth_logger.debug(f"CSRF Check - Session keys: {session_keys}")
                 if 'csrf_token' in session:
-                    auth_logger.info(f"CSRF Check - Session CSRF token exists: True")
+                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: True")
                 else:
-                    auth_logger.info(f"CSRF Check - Session CSRF token exists: False")
-                
-                # Log session ID if available
+                    auth_logger.debug(f"CSRF Check - Session CSRF token exists: False")
+
                 if hasattr(session, 'session_id'):
-                    auth_logger.info(f"CSRF Check - Session ID: {session.session_id}")
-                
-                # Log cookie information
+                    auth_logger.debug(f"CSRF Check - Session ID: {session.session_id}")
+
                 cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
                 session_cookie = request.cookies.get(cookie_name)
-                auth_logger.info(f"CSRF Check - Session cookie exists: {session_cookie is not None}")
+                auth_logger.debug(f"CSRF Check - Session cookie exists: {session_cookie is not None}")
                 if session_cookie:
-                    auth_logger.info(f"CSRF Check - Session cookie value: {session_cookie[:50]}...")
-                    
+                    auth_logger.debug(f"CSRF Check - Session cookie value: {session_cookie[:50]}...")
+
             except Exception as e:
                 auth_logger.error(f"CSRF Check - Error checking session: {e}")
-            
+
             if request.form:
-                auth_logger.info(f"CSRF Check - Form keys: {list(request.form.keys())}")
+                auth_logger.debug(f"CSRF Check - Form keys: {list(request.form.keys())}")
                 if 'csrf_token' in request.form:
-                    auth_logger.info(f"CSRF Check - Form CSRF token value: {request.form['csrf_token'][:50]}...")
+                    auth_logger.debug(f"CSRF Check - Form CSRF token value: {request.form['csrf_token'][:50]}...")
             if request.headers:
                 csrf_headers = {k: v for k, v in request.headers.items() if 'csrf' in k.lower()}
-                auth_logger.info(f"CSRF Check - CSRF Headers: {csrf_headers}")
-    
-    # Register the CSRF protection with logging
+                auth_logger.debug(f"CSRF Check - CSRF Headers: {csrf_headers}")
+
     app.before_request(csrf_protect)
     csrf.init_app(app)
-    cache.init_app(app)
-    app.session_interface = DatabaseSessionInterface()
-    if force_https:
-        @app.before_request
-        def _redirect_insecure_requests():
-            """Force HTTPS to avoid dropping secure cookies/CSRF tokens behind a proxy."""
-            if request.path in ("/healthz", "/healthz/"):
-                return None
-            if request.is_secure:
-                return None
-            forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
-            if forwarded_proto == "https":
-                return None  # ProxyFix already marked it secure
-            https_url = request.url.replace("http://", "https://", 1)
-            return redirect(https_url, code=301)
-    
-    # Initialize rate limiting
+
+
+def _register_https_redirect(app: Flask) -> None:
+    @app.before_request
+    def _redirect_insecure_requests():
+        """Force HTTPS to avoid dropping secure cookies/CSRF tokens behind a proxy."""
+        if request.path in ("/healthz", "/healthz/"):
+            return None
+        if request.is_secure:
+            return None
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip().lower()
+        if forwarded_proto == "https":
+            return None
+        https_url = request.url.replace("http://", "https://", 1)
+        return redirect(https_url, code=301)
+
+
+def _initialize_middleware(app: Flask) -> None:
     init_rate_limiting(app)
-    
-    # Initialize security middleware for payload protection
-    payload_validator = PayloadSizeValidator(app)
-    
-    # Initialize CORS for API endpoints and auth status endpoints
-    # Allow credentials from same origin (localhost/127.0.0.1) to handle session cookies
-    # Include production domains for live server
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
-            "supports_credentials": True
-        },
-        r"/check-email-status": {
-            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
-            "supports_credentials": True
-        },
-        r"/email-sse": {
-            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
-            "supports_credentials": True
-        },
-        r"/check-session": {
-            "origins": ["http://localhost:5001", "http://127.0.0.1:5001", "https://eyeimg.aiims.edu.in", "https://eyeimg.aiims.edu"],
-            "supports_credentials": True
-        }
-    }, supports_credentials=True)
+    PayloadSizeValidator(app)
+    cors_origins = app.config.get("CORS_ALLOWED_ORIGINS", [])
+    cors_resources = {
+        r"/api/*": {"origins": cors_origins, "supports_credentials": True},
+        r"/check-email-status": {"origins": cors_origins, "supports_credentials": True},
+        r"/email-sse": {"origins": cors_origins, "supports_credentials": True},
+        r"/check-session": {"origins": cors_origins, "supports_credentials": True},
+    }
+    CORS(app, resources=cors_resources, supports_credentials=True)
 
-    # Ensure folders (idempotent)
-    setup_environment()
-    # Tables are now managed by Alembic migrations, not created automatically
-    # Base.metadata.create_all(engine)
 
-    # --- RBAC: seed core roles once ---
+def _ensure_core_roles() -> None:
     from sqlalchemy.orm import sessionmaker
     from auth.roles import ensure_roles, DEFAULT_ROLES
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     with SessionLocal() as db:
         ensure_roles(db, DEFAULT_ROLES)
-        # Ensure core diseases are always present
-        
 
+
+def _configure_logging_services(app: Flask) -> dict[str, logging.Logger]:
     loggers = configure_logging(app)
     init_db_query_logger(app, engine)
-    http_error_logger = loggers["http_error"]
-    runtime_error_logger = loggers["runtime_error"]
-    grades_logger = loggers["grades"]
-    pregraded_processing_logger = loggers["pregraded_processing"]
-    auth_logger = loggers["auth"]
-    editing_logger = loggers["editing"]
-    consensus_logger = loggers["consensus"]
-    email_success_logger = loggers["email_success"]
-    email_error_logger = loggers["email_error"]
-    rate_limit_logger = loggers["rate_limit"]
-    flask_limiter_logger = loggers["flask_limiter"]
-    intra_rater_debug_logger = loggers["intra_rater_debug"]
-    sqlalchemy_failure_logger = loggers["sqlalchemy_failure"]
-    flash_logger = loggers["flash"]
-    materialized_view_logger = loggers["materialized_view"]
-    thumbnail_maintenance_logger = loggers["thumbnail_maintenance"]
-    startup_env_logger = loggers["startup_env"]
+    return loggers
 
-    # Ensure services used during startup (e.g., email decryption) have app context
+
+def _run_startup_checks(app: Flask, startup_env_logger: logging.Logger) -> None:
     with app.app_context():
         run_startup_env_checks(app, startup_env_logger)
 
+
+def _register_flash_logging(app: Flask, flash_logger: logging.Logger) -> None:
     def _log_flash_message(sender, message, category, **extra):  # pragma: no cover - wiring
         level = logging.INFO
         normalized = (category or "").lower()
@@ -305,7 +273,8 @@ def create_app():
 
     message_flashed.connect(_log_flash_message, app)
 
-    # Expose a template helper: {{ current_user_has('admin') }}
+
+def _register_acl_context(app: Flask) -> None:
     @app.context_processor
     def inject_acl():
         from flask_login import current_user as cu
@@ -320,24 +289,109 @@ def create_app():
             unread_count = get_unread_notifications_count_cached(cu.id)
         return dict(current_user_has=current_user_has, unread_notification_count=unread_count)
 
-    # Security headers and CSP nonces
-    register_csp(app)
 
+def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> None:
     @app.before_request
     def start_timer():
         request.start_time = time.time()
 
-    # Inactivity auto-logout (must be registered before the global auth guard)
+    @app.after_request
+    def log_response(response):
+        duration_ms = None
+        if hasattr(request, "start_time"):
+            duration_ms = int((time.time() - request.start_time) * 1000)
+
+        forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        client_ip = forwarded_for or request.remote_addr or "-"
+        ua = request.headers.get("User-Agent", "-")
+        full_url = request.url
+
+        if request.path == "/login" and response.status_code == 200:
+            if hasattr(response, 'headers'):
+                set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
+                auth_logger = logging.getLogger("auth")
+                if set_cookie_headers:
+                    auth_logger.info(f"Login response - Setting cookies: {set_cookie_headers}")
+                else:
+                    auth_logger.info("Login response - No cookies being set")
+
+        line = (
+            f"{client_ip} {request.method} {full_url} "
+            f"{response.status_code} "
+            f"UA={ua} "
+            f"duration={duration_ms if duration_ms is not None else '-'}ms"
+        )
+
+        if response.status_code >= 400:
+            http_error_logger.warning(line)
+
+        try:
+            if hasattr(response, 'headers') and not response.headers.get('X-RateLimit-Limit'):
+                from flask import g
+                if hasattr(g, 'limiter_limit') and hasattr(g, 'limiter_remaining'):
+                    response.headers['X-RateLimit-Limit'] = str(g.limiter_limit)
+                    response.headers['X-RateLimit-Remaining'] = str(g.limiter_remaining)
+                    if hasattr(g, 'limiter_reset'):
+                        response.headers['X-RateLimit-Reset'] = str(g.limiter_reset)
+        except Exception as e:
+            rate_limit_logger = logging.getLogger("rate_limit")
+            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+
+        return response
+
+
+def _register_response_headers(app: Flask) -> None:
+    @app.after_request
+    def prevent_duplicate_headers(response):
+        if 'Date' in response.headers:
+            del response.headers['Date']
+        if 'Server' in response.headers:
+            del response.headers['Server']
+        return response
+
+    @app.after_request
+    def add_rate_limit_headers(response):
+        try:
+            from flask import g
+
+            if hasattr(g, '_rate_limit_limit'):
+                response.headers['X-RateLimit-Limit'] = str(g._rate_limit_limit)
+            if hasattr(g, '_rate_limit_remaining'):
+                response.headers['X-RateLimit-Remaining'] = str(g._rate_limit_remaining)
+            if hasattr(g, '_rate_limit_reset'):
+                response.headers['X-RateLimit-Reset'] = str(g._rate_limit_reset)
+
+            if not response.headers.get('X-RateLimit-Limit'):
+                try:
+                    from utils.rate_limiter import limiter
+                    key = limiter.key_func()
+                    if key:
+                        storage = limiter.storage
+                        if storage:
+                            window = storage.get_window(key)
+                            if window:
+                                response.headers['X-RateLimit-Limit'] = str(window.limit)
+                                response.headers['X-RateLimit-Remaining'] = str(window.remaining)
+                                response.headers['X-RateLimit-Reset'] = str(window.reset_time)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            rate_limit_logger = logging.getLogger("rate_limit")
+            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+
+        return response
+
+
+def _register_inactivity_timeout(app: Flask) -> None:
     @app.before_request
     def _enforce_inactivity_timeout():
         from flask_login import current_user, logout_user
-        # skip static & login
         p = request.path or "/"
         if p.startswith("/static/") or p == "/login":
             return
         if not current_user.is_authenticated:
             return
-        # check idle time
         try:
             last = int(session.get("last_active", 0))
         except Exception:
@@ -346,14 +400,15 @@ def create_app():
         now = int(_t.time())
         timeout_s = app.config.get("INACTIVITY_TIMEOUT_MINUTES", 30) * 60
         if last and (now - last) > timeout_s:
-            # Log session timeout
-            from flask_login import current_user
             from auth.utils import get_client_ip
             username = getattr(current_user, 'username', 'Unknown') if current_user.is_authenticated else 'Unknown'
             ip = get_client_ip()
             auth_logger = logging.getLogger("auth")
-            auth_logger.info(f"Session timeout - User: {username}, IP: {ip}, Last active: {last}, Timeout duration: {timeout_s // 60} minutes")
-            
+            auth_logger.info(
+                f"Session timeout - User: {username}, IP: {ip}, Last active: {last}, "
+                f"Timeout duration: {timeout_s // 60} minutes"
+            )
+
             cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
             prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
             try:
@@ -369,205 +424,78 @@ def create_app():
         session["last_active"] = now
         session.modified = True
 
-    @app.after_request
-    def log_response(response):
-        # Duration in ms
-        duration_ms = None
-        if hasattr(request, "start_time"):
-            duration_ms = int((time.time() - request.start_time) * 1000)
 
-        # Get client IP (prefer X-Forwarded-For if present from proxy)
-        forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        client_ip = forwarded_for or request.remote_addr or "-"
-
-        # User agent
-        ua = request.headers.get("User-Agent", "-")
-
-        # Full URL
-        full_url = request.url
-
-        # Log cookie setting for login page
-        if request.path == "/login" and response.status_code == 200:
-            if hasattr(response, 'headers'):
-                set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
-                if set_cookie_headers:
-                    auth_logger.info(f"Login response - Setting cookies: {set_cookie_headers}")
-                else:
-                    auth_logger.info(f"Login response - No cookies being set")
-        
-        # Build log line
-        line = (
-            f"{client_ip} {request.method} {full_url} "
-            f"{response.status_code} "
-            f"UA={ua} "
-            f"duration={duration_ms if duration_ms is not None else '-'}ms"
-        )
-
-        if response.status_code >= 400:
-            http_error_logger.warning(line)
-
-        # Add rate limit information to headers if available
-        try:
-            # Check if Flask-Limiter has set rate limit info in the response
-            if hasattr(response, 'headers') and not response.headers.get('X-RateLimit-Limit'):
-                # Get rate limit info from Flask-Limiter if available
-                from flask import g
-                if hasattr(g, 'limiter_limit') and hasattr(g, 'limiter_remaining'):
-                    # Add rate limit info as custom headers (using different names to avoid conflicts)
-                    response.headers['X-RateLimit-Limit'] = str(g.limiter_limit)
-                    response.headers['X-RateLimit-Remaining'] = str(g.limiter_remaining)
-                    if hasattr(g, 'limiter_reset'):
-                        response.headers['X-RateLimit-Reset'] = str(g.limiter_reset)
-        except Exception as e:
-            # Log the error but don't fail the request
-            import logging
-            rate_limit_logger = logging.getLogger("rate_limit")
-            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
-
-        return response
-    @app.after_request
-    def prevent_duplicate_headers(response):
-        """Remove headers that nginx-proxy-manager will add to prevent duplicates."""
-        # Remove Date header to let nginx handle it
-        if 'Date' in response.headers:
-            del response.headers['Date']
-        
-        # Also remove Server header to prevent conflicts
-        if 'Server' in response.headers:
-            del response.headers['Server']
-        
-        return response
-
-    @app.after_request
-    def add_rate_limit_headers(response):
-        """Add rate limit information to response headers."""
-        try:
-            # Check if Flask-Limiter has set rate limit info in the response or g context
-            from flask import g
-            
-            # Try to get rate limit info from Flask-Limiter's internal storage
-            if hasattr(g, '_rate_limit_limit'):
-                response.headers['X-RateLimit-Limit'] = str(g._rate_limit_limit)
-            if hasattr(g, '_rate_limit_remaining'):
-                response.headers['X-RateLimit-Remaining'] = str(g._rate_limit_remaining)
-            if hasattr(g, '_rate_limit_reset'):
-                response.headers['X-RateLimit-Reset'] = str(g._rate_limit_reset)
-                
-            # Alternative: try to get from limiter directly
-            if not response.headers.get('X-RateLimit-Limit'):
-                try:
-                    from utils.rate_limiter import limiter
-                    # Get the current limit key
-                    key = limiter.key_func()
-                    if key:
-                        # Try to get the current limit state
-                        storage = limiter.storage
-                        if storage:
-                            # Get the limit window for this key
-                            window = storage.get_window(key)
-                            if window:
-                                response.headers['X-RateLimit-Limit'] = str(window.limit)
-                                response.headers['X-RateLimit-Remaining'] = str(window.remaining)
-                                response.headers['X-RateLimit-Reset'] = str(window.reset_time)
-                except Exception:
-                    # If we can't get the info, just skip it
-                    pass
-                    
-        except Exception as e:
-            # Log the error but don't fail the request
-            import logging
-            rate_limit_logger = logging.getLogger("rate_limit")
-            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
-        
-        return response
-
-    #  relative imports
+def _register_blueprints(app: Flask) -> None:
     from jobs import jobs_bp
-    app.register_blueprint(jobs_bp)
-    
     from uploaded_zips import bp as uploaded_zips_bp
-    app.register_blueprint(uploaded_zips_bp)
-
     from screenings import bp as screenings_bp
-    app.register_blueprint(screenings_bp)
-
     from reports import bp as reports_bp
-    app.register_blueprint(reports_bp)
-
     from analytics import bp as analytics_bp
-    app.register_blueprint(analytics_bp)
-
     from search import bp as search_bp
-    app.register_blueprint(search_bp)
-
     from verify_remedio_glaucoma import bp as verify_remedio_glaucoma_bp
-    app.register_blueprint(verify_remedio_glaucoma_bp)
-
-    # DR blueprint removed as it's no longer needed
-
     from verify_remedio_dr import bp as verify_remedio_dr_bp
-    app.register_blueprint(verify_remedio_dr_bp)
-
     from verify_remedio_nodr import bp as verify_remedio_nodr_bp
-    app.register_blueprint(verify_remedio_nodr_bp)
-
     from media import bp as media_bp
-    app.register_blueprint(media_bp)
-
     from account import account_bp
-    app.register_blueprint(account_bp)
-
     from audit import bp as audit_bp
-    app.register_blueprint(audit_bp)
-
     from grading import bp as grading_bp
-    app.register_blueprint(grading_bp)
-
     from direct_uploads import bp as direct_uploads_bp
-    app.register_blueprint(direct_uploads_bp)
-
     from remedio_zip_uploads import bp as remedio_zip_uploads_bp
-    app.register_blueprint(remedio_zip_uploads_bp)
-
     from preprocess import bp as preprocess_bp
-    app.register_blueprint(preprocess_bp)
-
     from notifications import bp as notifications_bp
-    app.register_blueprint(notifications_bp)
-
-   
-
     from tasks import bp as tasks_bp
-    app.register_blueprint(tasks_bp)
-
-    # Ad-hoc tasks blueprint
     from tasks.ad_hoc import bp as ad_hoc_tasks_bp
-    app.register_blueprint(ad_hoc_tasks_bp)
-
     from help import bp as help_bp
-    app.register_blueprint(help_bp)
-
     from review import bp as review_bp
-    app.register_blueprint(review_bp)
-
-    # -------- Public routes (no auth required) --------
     from public import bp as public_bp
-    app.register_blueprint(public_bp)          # /analytics
+    from admin import admin_bp
+    from admin.rate_limit_admin import rate_limit_admin_bp
+    from dashboard import dashboard_bp
+    from api import api_bp
+    from docs import docs_bp
 
-        # -------- Auth blueprint + Flask-Login --------
-    # (Requires the auth/ package provided earlier)
+    app.register_blueprint(jobs_bp)
+    app.register_blueprint(uploaded_zips_bp)
+    app.register_blueprint(screenings_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(analytics_bp)
+    app.register_blueprint(search_bp)
+    app.register_blueprint(verify_remedio_glaucoma_bp)
+    app.register_blueprint(verify_remedio_dr_bp)
+    app.register_blueprint(verify_remedio_nodr_bp)
+    app.register_blueprint(media_bp)
+    app.register_blueprint(account_bp)
+    app.register_blueprint(audit_bp)
+    app.register_blueprint(grading_bp)
+    app.register_blueprint(direct_uploads_bp)
+    app.register_blueprint(remedio_zip_uploads_bp)
+    app.register_blueprint(preprocess_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(tasks_bp)
+    app.register_blueprint(ad_hoc_tasks_bp)
+    app.register_blueprint(help_bp)
+    app.register_blueprint(review_bp)
+    app.register_blueprint(public_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(rate_limit_admin_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(api_bp)
+    app.register_blueprint(docs_bp)
+
+
+def _register_auth(app: Flask) -> None:
     from auth.routes import auth_bp, login_manager
-    app.register_blueprint(auth_bp)            # /login, /logout
+    app.register_blueprint(auth_bp)
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
 
-    # Global guard: require login for everything except login page, static, favicon
+
+def _register_login_guard(app: Flask) -> None:
     @app.before_request
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
         path = request.path or "/"
 
-        # Detect stale client sessions (e.g., after server restart with old cookie)
         try:
             has_client_session = bool(session.get("_user_id"))
         except Exception:
@@ -588,22 +516,21 @@ def create_app():
             or path == "/favicon.ico"
             or path == "/robots.txt"
             or path == "/style_guide"
-            or path== "/forgot-password"
+            or path == "/forgot-password"
             or path == "/reset-password"
             or path == "/healthz"
             or path == "/check-email-status"
             or path == "/email-sse"
-            or path=="/test-rate-limit"
-            or path=="/refresh-captcha"
-            or path=="/captcha-audio"
+            or path == "/test-rate-limit"
+            or path == "/refresh-captcha"
+            or path == "/captcha-audio"
             or path.startswith("/help")
             or path == "/analytics"
-            or path=="/sitemap.xml"
+            or path == "/sitemap.xml"
             or path.startswith("/api/analytics/")
         ):
-            return  # allowed without auth
+            return
         if not current_user.is_authenticated:
-            # Clear any stale session to avoid repeated forbidden responses
             prior_session_id = getattr(session, "session_id", None)
             session.clear()
             session.modified = True
@@ -623,16 +550,12 @@ def create_app():
             flash("Your account is inactive. Please contact an administrator.", "warning")
             return redirect(url_for("auth.login"))
 
-    # Global stack trace handler - captures stack traces for all requests
+
+def _register_stack_trace_handlers(app: Flask) -> None:
     @app.before_request
     def _global_stack_trace_handler_alt():
-        """Global handler to capture stack traces for all requests in debug mode."""
-        # Store request start time for performance tracking
-        import time
-        request._start_time = time.time()
-        
-        # Log the incoming request in debug mode
-        import logging
+        import time as _t
+        request._start_time = _t.time()
         runtime_logger = logging.getLogger("runtime_error")
         if runtime_logger.isEnabledFor(logging.DEBUG):
             from utils.stack_trace_handler import log_current_stack
@@ -640,67 +563,65 @@ def create_app():
 
     @app.after_request
     def _global_stack_trace_after_handler_alt(response):
-        """Global handler to capture performance and completion info for all requests."""
-        import time
-        import logging
+        import time as _t
         runtime_logger = logging.getLogger("runtime_error")
-        
-        # Calculate request duration
         duration = None
         if hasattr(request, '_start_time'):
-            duration = time.time() - request._start_time
-            
-        # Log completion in debug mode
+            duration = _t.time() - request._start_time
         if runtime_logger.isEnabledFor(logging.DEBUG):
             runtime_logger.debug(
                 f"Request completed: {request.method} {request.url} "
                 f"Status: {response.status_code} Duration: {duration:.3f}s"
             )
-            
         return response
 
-    # Global exception handler - captures stack traces for all unhandled exceptions
     @app.errorhandler(Exception)
     def _global_exception_handler_alt(e):
-        """Global handler to capture stack traces for all unhandled exceptions."""
-        import logging
-        runtime_logger = logging.getLogger("runtime_error")
-        
-        # Log the exception with full stack trace
         from utils.stack_trace_handler import log_stack_trace
         log_stack_trace(
             message=f"Global exception handler caught: {type(e).__name__}",
-            exception=e
+            exception=e,
         )
-        
-        # Also log to the standard app logger
         current_app.logger.exception("Unhandled exception in request: %s", e)
-        
-        # Don't re-raise here as this is meant to be the catch-all handler
         return render_template("errors/500.html"), 500
 
-    from admin import admin_bp
-    app.register_blueprint(admin_bp)
-    
-    # Register rate limit admin blueprint
-    from admin.rate_limit_admin import rate_limit_admin_bp
-    app.register_blueprint(rate_limit_admin_bp)
+    @app.before_request
+    def _global_stack_trace_handler():
+        import time as _t
+        request._start_time = _t.time()
+        runtime_logger = logging.getLogger("runtime_error")
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            from utils.stack_trace_handler import log_current_stack
+            log_current_stack(f"Processing request: {request.method} {request.url}")
 
-    from dashboard import dashboard_bp
-    app.register_blueprint(dashboard_bp)
+    @app.after_request
+    def _global_stack_trace_after_handler(response):
+        import time as _t
+        runtime_logger = logging.getLogger("runtime_error")
+        duration = None
+        if hasattr(request, '_start_time'):
+            duration = _t.time() - request._start_time
+        if runtime_logger.isEnabledFor(logging.DEBUG):
+            runtime_logger.debug(
+                f"Request completed: {request.method} {request.url} "
+                f"Status: {response.status_code} Duration: {duration:.3f}s"
+            )
+        return response
 
-    from api import api_bp
-    app.register_blueprint(api_bp)
+    @app.errorhandler(Exception)
+    def _global_exception_handler(e):
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message=f"Global exception handler caught: {type(e).__name__}",
+            exception=e,
+        )
+        current_app.logger.exception("Unhandled exception in request: %s", e)
+        return render_template("errors/500.html"), 500
 
-    from docs import docs_bp
-    app.register_blueprint(docs_bp)
 
-
-
-
+def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
-        # Log detailed CSRF error information
         auth_logger = logging.getLogger("auth")
         auth_logger.error(f"CSRF Error - Message: {e.description or 'Unknown CSRF error'}")
         auth_logger.error(f"CSRF Error - Request: {request.method} {request.url}")
@@ -708,12 +629,10 @@ def create_app():
         auth_logger.error(f"CSRF Error - Referer: {request.headers.get('Referer', 'None')}")
         auth_logger.error(f"CSRF Error - Form data keys: {list(request.form.keys()) if request.form else 'None'}")
         auth_logger.error(f"CSRF Error - Headers: {dict(request.headers)}")
-        
+
         flash(e.description or "Security check failed. Please try again.", "danger")
-        # send them back or home
         return redirect(request.referrer or url_for("homepage")), 400
 
-    # ---- Custom error pages ----
     @app.errorhandler(404)
     def handle_404(e):
         return render_template("errors/404.html"), 404
@@ -729,36 +648,25 @@ def create_app():
     @app.errorhandler(500)
     def handle_500(e):
         current_app.logger.exception("Unhandled exception: %s", e)
-        # Log the stack trace using our stack trace handler
         from utils.stack_trace_handler import log_stack_trace
         log_stack_trace(
             message="500 Internal Server Error",
-            exception=e
+            exception=e,
         )
         return render_template("errors/500.html"), 500
 
     @app.errorhandler(Exception)
     def handle_generic_exception(e):
-        """Handle any unhandled exceptions globally."""
-        import logging
-        runtime_logger = logging.getLogger("runtime_error")
-        
-        # Log the exception with full stack trace
         from utils.stack_trace_handler import log_stack_trace
         log_stack_trace(
             message=f"Unhandled exception: {type(e).__name__}",
-            exception=e
+            exception=e,
         )
-        
-        # Also log to the standard app logger
         current_app.logger.exception("Unhandled exception: %s", e)
-        
-        # Return a generic error response
         return render_template("errors/500.html"), 500
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):
-        # Fallback renderer for HTTP errors without a dedicated template
         return (
             render_template(
                 "errors/error.html",
@@ -769,69 +677,13 @@ def create_app():
             getattr(e, "code", 500),
         )
 
-    # Global stack trace handler - captures stack traces for all requests
-    @app.before_request
-    def _global_stack_trace_handler():
-        """Global handler to capture stack traces for all requests in debug mode."""
-        # Store request start time for performance tracking
-        import time
-        request._start_time = time.time()
-        
-        # Log the incoming request in debug mode
-        import logging
-        runtime_logger = logging.getLogger("runtime_error")
-        if runtime_logger.isEnabledFor(logging.DEBUG):
-            from utils.stack_trace_handler import log_current_stack
-            log_current_stack(f"Processing request: {request.method} {request.url}")
 
-    @app.after_request
-    def _global_stack_trace_after_handler(response):
-        """Global handler to capture performance and completion info for all requests."""
-        import time
-        import logging
-        runtime_logger = logging.getLogger("runtime_error")
-        
-        # Calculate request duration
-        duration = None
-        if hasattr(request, '_start_time'):
-            duration = time.time() - request._start_time
-            
-        # Log completion in debug mode
-        if runtime_logger.isEnabledFor(logging.DEBUG):
-            runtime_logger.debug(
-                f"Request completed: {request.method} {request.url} "
-                f"Status: {response.status_code} Duration: {duration:.3f}s"
-            )
-            
-        return response
-
-    # Global exception handler - captures stack traces for all unhandled exceptions
-    @app.errorhandler(Exception)
-    def _global_exception_handler(e):
-        """Global handler to capture stack traces for all unhandled exceptions."""
-        import logging
-        runtime_logger = logging.getLogger("runtime_error")
-        
-        # Log the exception with full stack trace
-        from utils.stack_trace_handler import log_stack_trace
-        log_stack_trace(
-            message=f"Global exception handler caught: {type(e).__name__}",
-            exception=e
-        )
-        
-        # Also log to the standard app logger
-        current_app.logger.exception("Unhandled exception in request: %s", e)
-        
-        # Don't re-raise here as this is meant to be the catch-all handler
-        return render_template("errors/500.html"), 500
-
-    # Serve classic /favicon.ico path for browsers that request it directly
+def _register_utility_routes(app: Flask) -> None:
     @app.get('/favicon.ico')
     @rate_limit("100 per minute")
     def _favicon():
         return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-    # Serve robots.txt for search engine crawlers
     @app.get('/robots.txt')
     @rate_limit("100 per minute")
     def _robots():
@@ -871,37 +723,27 @@ def create_app():
         )
         return response
 
-    # -------------------------------
-    # New homepage route
     @app.route("/")
-    @rate_limit("60 per minute")  # Homepage - moderate limit for regular access
+    @rate_limit("60 per minute")
     def homepage():
         from home import homepage as home_page
         return home_page()
 
-    # Alias endpoint so existing redirects to home.index keep working
     @app.route("/home", endpoint="home.index")
     @rate_limit("60 per minute")
     def home_index_alias():
         from home import homepage as home_page
         return home_page()
-    # -------------------------------
 
-    # -------------------------------
-    # Style Guide
     @app.route("/style_guide")
-    @rate_limit("30 per minute")  # Style guide - moderate limit
+    @rate_limit("30 per minute")
     def style_guide():
         return render_template("style_guide.html")
-    # -------------------------------
 
-    # -------------------------------
-    # Test endpoint for rate limiting
     @app.route("/test-rate-limit")
-    @rate_limit("10 per minute")  # Test endpoint - restrictive but not too limiting
+    @rate_limit("10 per minute")
     def test_rate_limit():
         return jsonify({"message": "Rate limit test endpoint", "timestamp": time.time()})
-    # -------------------------------
 
     @app.route("/healthz", methods=["GET"])
     @rate_limit("100 per minute")
@@ -918,7 +760,12 @@ def create_app():
         finally:
             db.close()
 
-    # Initialize Materialized View Scheduler
+
+def _initialize_schedulers(
+    app: Flask,
+    materialized_view_logger: logging.Logger,
+    thumbnail_maintenance_logger: logging.Logger,
+) -> None:
     if app.config.get("MATERIALIZED_VIEW_SCHEDULE_ENABLED", False):
         try:
             from utils.materialized_view_scheduler import initialize_scheduler
@@ -933,7 +780,6 @@ def create_app():
     else:
         materialized_view_logger.info("Materialized view scheduler disabled by configuration")
 
-    # Initialize Thumbnail Maintenance Scheduler
     if app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False):
         try:
             from utils.thumbnail_maintenance_scheduler import initialize_scheduler
@@ -948,7 +794,8 @@ def create_app():
     else:
         thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled by configuration")
 
-    # Initialize email configuration from database
+
+def _initialize_email_config(app: Flask) -> None:
     try:
         from utils.email_config import EmailConfigService
         with app.app_context():
@@ -956,6 +803,50 @@ def create_app():
         app.logger.info("Email configuration initialized from database or environment")
     except Exception as e:
         app.logger.warning(f"Failed to initialize email configuration: {e}")
+
+
+def create_app():
+    load_environment()
+
+    app = Flask(
+        __name__,
+        static_folder="static",
+        static_url_path="/static",
+    )
+
+    _configure_base_settings(app)
+    _register_template_filters(app)
+    _register_default_theme_context(app)
+    force_https = _configure_session_and_proxy(app)
+    _configure_executors(app)
+    _register_csrf_protection(app)
+    cache.init_app(app)
+    app.session_interface = DatabaseSessionInterface()
+    if force_https:
+        _register_https_redirect(app)
+
+    _initialize_middleware(app)
+    setup_environment()
+    _ensure_core_roles()
+
+    loggers = _configure_logging_services(app)
+    _run_startup_checks(app, loggers["startup_env"])
+    _register_flash_logging(app, loggers["flash"])
+    _register_acl_context(app)
+    register_csp(app)
+    _register_request_timing(app, loggers["http_error"])
+    _register_inactivity_timeout(app)
+    _register_response_headers(app)
+
+    _register_blueprints(app)
+    _register_auth(app)
+    _register_login_guard(app)
+    _register_stack_trace_handlers(app)
+    _register_error_handlers(app)
+    _register_utility_routes(app)
+
+    _initialize_schedulers(app, loggers["materialized_view"], loggers["thumbnail_maintenance"])
+    _initialize_email_config(app)
 
     return app
 

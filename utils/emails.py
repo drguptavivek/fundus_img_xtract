@@ -33,6 +33,14 @@ def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger
     )
 
 
+def _build_tls_context() -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.check_hostname = True
+    context.verify_mode = ssl.CERT_REQUIRED
+    return context
+
+
 def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = False) -> bool:
     """
     Synchronous function to send an email to the specified recipient.
@@ -58,7 +66,6 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
         from_email = config['from_email']
         use_tls = config['use_tls']
         use_ssl = config['use_ssl']
-        verify_certificates = config['verify_certificates']
         connection_timeout = config.get('connection_timeout', 30)
 
         if debug_logger:
@@ -87,16 +94,13 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
         # Choose SMTP class and create SSL context
         if use_ssl:
             smtp_class = smtplib.SMTP_SSL
-            if verify_certificates:
-                context = ssl.create_default_context()
-            else:
-                context = ssl._create_unverified_context()
+            context = _build_tls_context()
             server_kwargs = {"context": context, "timeout": connection_timeout}
         else:
             smtp_class = smtplib.SMTP
             server_kwargs = {"timeout": connection_timeout}
-            if verify_certificates:
-                context = ssl.create_default_context()
+            context = _build_tls_context()
+            if use_tls:
                 server_kwargs["context"] = context
 
         # Send the email
@@ -107,7 +111,7 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
                 debug_logger.debug("SMTP connected to %s:%d", smtp_server, smtp_port)
 
             if use_tls and not use_ssl:
-                server.starttls()  # Enable encryption
+                server.starttls(context=context)  # Enable encryption
                 if debug_logger:
                     debug_logger.debug("SMTP starttls complete")
 

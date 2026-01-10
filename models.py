@@ -1190,50 +1190,6 @@ class EmailSettings(Base):
         """Get the currently active email settings."""
         return db_session.query(cls).filter(cls.is_active == True).first()
 
-    def test_connection(self) -> tuple[bool, str]:
-        """
-        Test the SMTP connection with current settings.
-
-        Returns:
-            tuple[bool, str]: (success, message)
-        """
-        import smtplib
-        import ssl
-
-        def _build_tls_context(verify: bool) -> ssl.SSLContext:
-            context = ssl.create_default_context()
-            context.minimum_version = ssl.TLSVersion.TLSv1_2
-            if not verify:
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-            return context
-
-        try:
-            # Choose SMTP class based on security settings
-            if self.use_ssl:
-                smtp_class = smtplib.SMTP_SSL
-                context = _build_tls_context(self.verify_certificates)
-                server_kwargs = {"context": context}
-            else:
-                smtp_class = smtplib.SMTP
-                server_kwargs = {}
-                context = _build_tls_context(self.verify_certificates)
-                if self.use_tls:
-                    server_kwargs["context"] = context
-
-            # Test connection
-            with smtp_class(self.smtp_server, self.smtp_port, **server_kwargs) as server:
-                server.set_debuglevel(self.debug_logging)
-
-                if self.use_tls and not self.use_ssl:
-                    server.starttls(context=context)
-
-                server.login(self.smtp_username, self._get_password_for_use())
-
-            return True, "Connection test successful"
-
-        except Exception as e:
-            return False, f"Connection failed: {str(e)}"
 
     def _get_password_for_use(self) -> str:
         """

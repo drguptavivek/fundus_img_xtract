@@ -115,16 +115,11 @@
                                 <div class="row mb-3">
                                     <div class="col-md-6">
                                         <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="verify_certificates" name="verify_certificates"
-                                                   {% if form_data.verify_certificates is defined %}
-                                                       {% if form_data.verify_certificates %}checked{% endif %}
-                                                   {% else %}
-                                                       {% if email_settings.verify_certificates is not defined or email_settings.verify_certificates %}checked{% endif %}
-                                                   {% endif %}>
+                                            <input class="form-check-input" type="checkbox" id="verify_certificates" checked disabled>
                                             <label class="form-check-label" for="verify_certificates">
                                                 <strong>Verify SSL Certificates</strong>
                                             </label>
-                                            <div class="form-text">Validate server SSL certificates (recommended)</div>
+                                            <div class="form-text">Server certificate validation is enforced.</div>
                                         </div>
                                     </div>
                                     <div class="col-md-6">

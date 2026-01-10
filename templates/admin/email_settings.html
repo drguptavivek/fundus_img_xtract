@@ -66,7 +66,7 @@
                             <p>
                                 {% if current_config.use_tls %}<span class="badge bg-success me-1">TLS</span>{% endif %}
                                 {% if current_config.use_ssl %}<span class="badge bg-info me-1">SSL</span>{% endif %}
-                                {% if current_config.verify_certificates %}<span class="badge bg-secondary me-1">Verify Certs</span>{% endif %}
+                                <span class="badge bg-secondary me-1">Verify Certs</span>
                                 {% if current_config.debug_logging %}<span class="badge bg-warning me-1">Debug</span>{% endif %}
                             </p>
 
@@ -179,7 +179,7 @@
                                     <td>
                                         {% if settings.use_tls %}<span class="badge bg-success me-1" title="TLS">T</span>{% endif %}
                                         {% if settings.use_ssl %}<span class="badge bg-info me-1" title="SSL">S</span>{% endif %}
-                                        {% if not settings.verify_certificates %}<span class="badge bg-warning me-1" title="No Verify">NV</span>{% endif %}
+                                        <span class="badge bg-secondary me-1" title="Verify Certificates">V</span>
                                     </td>
                                     <td>
                                         {% if settings.is_active %}
@@ -227,7 +227,7 @@
                         <ul class="mb-0">
                             <li>Passwords are stored in the database (consider encryption for production)</li>
                             <li>TLS (StartTLS) and SSL are mutually exclusive security options</li>
-                            <li>Certificate verification is recommended for production environments</li>
+                            <li>Certificate verification is enforced for all connections</li>
                             <li>Only one configuration can be active at a time</li>
                         </ul>
                     </div>

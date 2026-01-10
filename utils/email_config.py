@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from flask import current_app
 from db_transaction_manager import transaction_scope
 from models import EmailSettings
+from utils.email_connection import test_smtp_connection
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class EmailConfigService:
 
                 if email_settings:
                     config = email_settings.to_dict()
+                    config['verify_certificates'] = True
                     config['source'] = 'database'
                     config['password'] = email_settings._get_password_for_use()  # Include decrypted password for email sending
                     logger.info(f"Using email configuration from database (ID: {email_settings.id})")
@@ -180,7 +182,7 @@ class EmailConfigService:
             email_settings.debug_logging = config['debug_logging']
             email_settings.connection_timeout = config['connection_timeout']
 
-            return email_settings.test_connection()
+            return test_smtp_connection(email_settings)
 
         except EmailConfigError as e:
             return False, f"Configuration error: {str(e)}"
@@ -247,7 +249,7 @@ class EmailConfigService:
             from_email: Default sender email address
             use_tls: Use StartTLS encryption
             use_ssl: Use SSL/TLS encryption
-            verify_certificates: Verify SSL certificates
+            verify_certificates: Ignored; server certificate validation is enforced
             debug_logging: Enable debug logging
             connection_timeout: Connection timeout in seconds
             created_by: User ID who created the settings
@@ -256,6 +258,7 @@ class EmailConfigService:
             int: ID of created email settings
         """
         try:
+            verify_certificates = True
             with transaction_scope() as db:
                 # Deactivate existing settings
                 existing_settings = EmailSettings.get_active_settings(db)
@@ -312,6 +315,7 @@ class EmailConfigService:
             EmailSettings: Updated email settings
         """
         try:
+            kwargs["verify_certificates"] = True
             with transaction_scope() as db:
                 email_settings = db.get(EmailSettings, settings_id)
                 if not email_settings:

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.email_config import EmailConfigService, EmailConfigError
+from utils.email_connection import test_smtp_connection
 from utils.emails import send_email_sync
 from models import EmailSettings, User
 from db_transaction_manager import transaction_scope, get_db_session
@@ -57,7 +58,7 @@ def create_email_settings():
         from_email = request.form.get("from_email", "").strip()
         use_tls = request.form.get("use_tls") == "on"
         use_ssl = request.form.get("use_ssl") == "on"
-        verify_certificates = request.form.get("verify_certificates") == "on"
+        verify_certificates = True
         debug_logging = request.form.get("debug_logging") == "on"
         connection_timeout = request.form.get("connection_timeout", "30").strip()
 
@@ -168,7 +169,7 @@ def edit_email_settings(settings_id: int):
             from_email = request.form.get("from_email", "").strip()
             use_tls = request.form.get("use_tls") == "on"
             use_ssl = request.form.get("use_ssl") == "on"
-            verify_certificates = request.form.get("verify_certificates") == "on"
+            verify_certificates = True
             debug_logging = request.form.get("debug_logging") == "on"
             connection_timeout = request.form.get("connection_timeout", "30").strip()
             is_active = request.form.get("is_active") == "on"
@@ -283,7 +284,7 @@ def test_email_settings(settings_id: int):
             return jsonify({"success": False, "message": "Email settings not found"}), 404
 
         try:
-            success, message = email_settings.test_connection()
+            success, message = test_smtp_connection(email_settings)
 
             # Log test result (without password)
             logger.info(

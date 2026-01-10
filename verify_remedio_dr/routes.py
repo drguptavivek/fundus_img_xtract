@@ -7,7 +7,8 @@ from datetime import datetime, date as _date
 from auth.roles import roles_required
 from . import bp
 
-from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, utcnow, LabUnit, Disease
+from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, LabUnit, Disease
+from auth.utils import utcnow
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from process_pdfs import DR_PDF_DIR
 

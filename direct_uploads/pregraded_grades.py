@@ -29,8 +29,8 @@ from models import (
     User,
     Grade,
     AIModel,
-    utcnow,
 )
+from auth.utils import utcnow
 from services.taskCreationServices import ensure_task
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override

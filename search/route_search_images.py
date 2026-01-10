@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, date as _date
 import re
 from typing import Any, List, Optional, Dict
 from types import SimpleNamespace
@@ -21,17 +20,8 @@ from utils.mvw_all_img_search import (
     search_mvw_images,
 )
 from utils.taskUtils import get_task_detail
+from utils.date_utils import parse_date_yyyy_mm_dd
 from review.task_review import AI_REVIEW_STATUS_LABELS
-
-
-def _parse_date(value: str | None) -> _date | None:
-    """Parse a date parameter from request args."""
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return None
 
 
 @bp.route("/images", methods=["GET"])
@@ -71,10 +61,10 @@ def search_images_route() -> str:
         status for status in request.args.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
     ]
     image_uuid = (request.args.get("image_uuid") or "").strip() or None
-    upload_after = _parse_date(request.args.get("upload_after"))
-    upload_before = _parse_date(request.args.get("upload_before"))
-    encounter_after = _parse_date(request.args.get("encounter_after"))
-    encounter_before = _parse_date(request.args.get("encounter_before"))
+    upload_after = parse_date_yyyy_mm_dd(request.args.get("upload_after"))
+    upload_before = parse_date_yyyy_mm_dd(request.args.get("upload_before"))
+    encounter_after = parse_date_yyyy_mm_dd(request.args.get("encounter_after"))
+    encounter_before = parse_date_yyyy_mm_dd(request.args.get("encounter_before"))
 
     with get_db_session() as db:
         allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])

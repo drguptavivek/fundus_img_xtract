@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, date as _date
-from typing import Any
 
 from flask import current_app, render_template, request, url_for, flash, redirect
 from flask_login import current_user
@@ -14,17 +12,9 @@ from db_transaction_manager import get_db_session
 from . import bp
 from api.kpis.encounter_files_kpis import get_filtered_encounter_dataframe
 from api.kpis.kpiutils import parse_filter_params, get_user_permissions
+from analytics.utils import build_pagination_params
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-
-
-def _parse_date(value: str | None) -> _date | None:
-    """Parse date string from form input."""
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return None
+from utils.date_utils import parse_date_yyyy_mm_dd
 
 
 @bp.route("/encounter-files", methods=["GET"])
@@ -45,8 +35,8 @@ def encounter_files() -> str:
     end_date_str = (request.args.get("end_date") or "").strip() or None
     
     # Parse date filters
-    start_date = _parse_date(start_date_str)
-    end_date = _parse_date(end_date_str)
+    start_date = parse_date_yyyy_mm_dd(start_date_str)
+    end_date = parse_date_yyyy_mm_dd(end_date_str)
     
     page = max(1, page)
     per_page = current_app.config.get("REPORT_ENCOUNTER_FILES_PAGE_SIZE", 50)
@@ -98,16 +88,16 @@ def encounter_files() -> str:
         "end_date": end_date_str,
     }
 
-    def _filter_kwargs(target_page: int) -> dict[str, int | str]:
-        params: dict[str, int | str] = {"page": target_page}
-        for key, value in filter_params.items():
-            if not value:
-                continue
-            params[key] = value
-        return params
-
-    prev_url = url_for("analytics.encounter_files", **_filter_kwargs(page - 1)) if page > 1 else None
-    next_url = url_for("analytics.encounter_files", **_filter_kwargs(page + 1)) if page < total_pages else None
+    prev_url = (
+        url_for("analytics.encounter_files", **build_pagination_params(filter_params, page - 1))
+        if page > 1
+        else None
+    )
+    next_url = (
+        url_for("analytics.encounter_files", **build_pagination_params(filter_params, page + 1))
+        if page < total_pages
+        else None
+    )
 
     return render_template(
         "analytics/encounter_files_kpi_display.html",

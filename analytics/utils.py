@@ -401,3 +401,16 @@ def build_encounter_result_payload(
         )
 
     return payload
+
+
+def build_pagination_params(
+    filter_params: Dict[str, int | str | None],
+    target_page: int,
+) -> Dict[str, int | str]:
+    """Build pagination params while skipping empty filters."""
+    params: Dict[str, int | str] = {"page": target_page}
+    for key, value in filter_params.items():
+        if not value:
+            continue
+        params[key] = value
+    return params

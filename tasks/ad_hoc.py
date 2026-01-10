@@ -10,7 +10,8 @@ from datetime import timezone
 import json
 from uuid import uuid4
 
-from models import Session, AdHocTaskCreation, GradingTask, utcnow, Disease
+from models import Session, AdHocTaskCreation, GradingTask, Disease
+from auth.utils import utcnow
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.imageSearchUtil import search_images_strict, ImageSearchError
@@ -30,6 +31,13 @@ def _allowed_lab_units() -> set[int]:
     if not allowed:
         abort(403, description="No lab unit access")
     return allowed
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value) if value not in (None, "", "null", "None") else None
+    except Exception:
+        return None
 
 
 @bp.get('')
@@ -305,14 +313,6 @@ def preview():
     # Fetch candidates using search util, cap to max_images
     page = 1
     per_page = max_images
-    # Translate flat filter form into arguments expected by search_images_strict
-    # Accept both flat ids and arrays from UI
-    def _int_or_none(v: Any) -> int | None:
-        try:
-            return int(v) if v not in (None, '', 'null', 'None') else None
-        except Exception:
-            return None
-
     source = (filters.get('source') or 'all').strip().lower()
     hospital_id = _int_or_none(filters.get('hospital_id'))
     lab_unit_id = _int_or_none(filters.get('lab_unit_id'))
@@ -464,12 +464,6 @@ def create():
 
     # Persist batch record
     # Normalize filters to persist consistent snapshot with batch record
-    def _int_or_none(v: Any) -> int | None:
-        try:
-            return int(v) if v not in (None, '', 'null', 'None') else None
-        except Exception:
-            return None
-
     source = (filters.get('source') or 'all').strip().lower()
     filters_norm = {
         'hospital_id': _int_or_none(filters.get('hospital_id')),

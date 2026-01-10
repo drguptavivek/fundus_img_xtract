@@ -553,39 +553,6 @@ def _register_login_guard(app: Flask) -> None:
 
 def _register_stack_trace_handlers(app: Flask) -> None:
     @app.before_request
-    def _global_stack_trace_handler_alt():
-        import time as _t
-        request._start_time = _t.time()
-        runtime_logger = logging.getLogger("runtime_error")
-        if runtime_logger.isEnabledFor(logging.DEBUG):
-            from utils.stack_trace_handler import log_current_stack
-            log_current_stack(f"Processing request: {request.method} {request.url}")
-
-    @app.after_request
-    def _global_stack_trace_after_handler_alt(response):
-        import time as _t
-        runtime_logger = logging.getLogger("runtime_error")
-        duration = None
-        if hasattr(request, '_start_time'):
-            duration = _t.time() - request._start_time
-        if runtime_logger.isEnabledFor(logging.DEBUG):
-            runtime_logger.debug(
-                f"Request completed: {request.method} {request.url} "
-                f"Status: {response.status_code} Duration: {duration:.3f}s"
-            )
-        return response
-
-    @app.errorhandler(Exception)
-    def _global_exception_handler_alt(e):
-        from utils.stack_trace_handler import log_stack_trace
-        log_stack_trace(
-            message=f"Global exception handler caught: {type(e).__name__}",
-            exception=e,
-        )
-        current_app.logger.exception("Unhandled exception in request: %s", e)
-        return render_template("errors/500.html"), 500
-
-    @app.before_request
     def _global_stack_trace_handler():
         import time as _t
         request._start_time = _t.time()

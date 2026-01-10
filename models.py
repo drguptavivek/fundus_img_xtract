@@ -9,6 +9,7 @@ from typing import Optional, List
 from uuid import uuid4
 
 from utils.env_loader import load_environment
+from auth.utils import utcnow
 
 load_environment()
 
@@ -65,9 +66,6 @@ GLAUCOMA_PDF_DIR = BASE_DIR / os.getenv("GLAUCOMA_PDF_DIR", "files/glaucoma_pdfs
 SUCCESS_LOG = BASE_DIR / os.getenv("SUCCESS_LOG", "logs/process_pdf_success_log.txt")
 ERROR_LOG   = BASE_DIR / os.getenv("ERROR_LOG", "logs/process_pdf_error_log.txt")
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
-
-def utcnow():    
-    return datetime.now(timezone.utc)
 
 class Base(DeclarativeBase):
     pass

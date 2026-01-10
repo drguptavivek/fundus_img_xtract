@@ -26,17 +26,9 @@ from models import (
     PatientEncounters,
 )
 from db_transaction_manager import get_db_session
-from analytics.utils import build_encounter_result_payload, fetch_image_task_details
+from analytics.utils import build_encounter_result_payload, fetch_image_task_details, build_pagination_params
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
-
-
-def _parse_date(value: str | None) -> _date | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return None
+from utils.date_utils import parse_date_yyyy_mm_dd
 
 
 def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
@@ -68,10 +60,7 @@ def encounter_results() -> str:
     capture_date_str = (request.args.get("capture_date") or "").strip() or None
     capture_date = None
     if capture_date_str:
-        try:
-            capture_date = datetime.strptime(capture_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            capture_date = None
+        capture_date = parse_date_yyyy_mm_dd(capture_date_str)
 
     page = max(1, page)
     per_page = current_app.config.get("REPORT_ENCOUNTER_RESULTS_PAGE_SIZE", 10)
@@ -183,16 +172,16 @@ def encounter_results() -> str:
             "capture_date": capture_date_str,
         }
 
-        def _enc_filter_kwargs(target_page: int) -> dict[str, int | str]:
-            params: dict[str, int | str] = {"page": target_page}
-            for key, value in filter_params.items():
-                if not value:
-                    continue
-                params[key] = value
-            return params
-
-        prev_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page - 1)) if page > 1 else None
-        next_url = url_for("analytics.encounter_results", **_enc_filter_kwargs(page + 1)) if page < total_pages else None
+        prev_url = (
+            url_for("analytics.encounter_results", **build_pagination_params(filter_params, page - 1))
+            if page > 1
+            else None
+        )
+        next_url = (
+            url_for("analytics.encounter_results", **build_pagination_params(filter_params, page + 1))
+            if page < total_pages
+            else None
+        )
 
         # Render template while session is still active
         return render_template(

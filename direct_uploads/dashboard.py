@@ -18,8 +18,8 @@ from models import (
     Grade,
     GradingTask,
     DiseaseGrading,
-    utcnow,
 )
+from auth.utils import utcnow
 
 from . import bp
 from db_transaction_manager import get_db_session

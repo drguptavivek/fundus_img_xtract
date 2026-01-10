@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, date as _date
+from datetime import date as _date, datetime
 from typing import Any, Dict, List, Tuple
 
 from flask import current_app, render_template, request, url_for
@@ -15,6 +15,8 @@ from db_transaction_manager import get_db_session
 from . import bp
 from api.kpis.direct_files_kpis import get_filtered_direct_image_dataframe
 from api.kpis.kpiutils import parse_filter_params, get_user_permissions
+from analytics.utils import build_pagination_params
+from utils.date_utils import parse_date_yyyy_mm_dd
 
 DISPLAY_COLUMNS: Tuple[str, ...] = (
     "image_uuid",
@@ -36,16 +38,6 @@ DISPLAY_COLUMNS: Tuple[str, ...] = (
 )
 
 
-def _parse_date(value: str | None) -> _date | None:
-    """Parse date string from form input."""
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
-
 @bp.route("/direct-files", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager")
 def direct_files() -> str:
@@ -56,8 +48,8 @@ def direct_files() -> str:
     end_date_str = (request.args.get("end_date") or "").strip() or None
     
     # Parse date filters
-    start_date = _parse_date(start_date_str)
-    end_date = _parse_date(end_date_str)
+    start_date = parse_date_yyyy_mm_dd(start_date_str)
+    end_date = parse_date_yyyy_mm_dd(end_date_str)
     
     page = max(1, page)
     per_page = current_app.config.get("REPORT_DIRECT_FILES_PAGE_SIZE", 50)
@@ -91,16 +83,16 @@ def direct_files() -> str:
         "end_date": end_date_str,
     }
 
-    def _filter_kwargs(target_page: int) -> dict[str, int | str]:
-        params: dict[str, int | str] = {"page": target_page}
-        for key, value in filter_params.items():
-            if not value:
-                continue
-            params[key] = value
-        return params
-
-    prev_url = url_for("analytics.direct_files", **_filter_kwargs(page - 1)) if page > 1 else None
-    next_url = url_for("analytics.direct_files", **_filter_kwargs(page + 1)) if page < total_pages else None
+    prev_url = (
+        url_for("analytics.direct_files", **build_pagination_params(filter_params, page - 1))
+        if page > 1
+        else None
+    )
+    next_url = (
+        url_for("analytics.direct_files", **build_pagination_params(filter_params, page + 1))
+        if page < total_pages
+        else None
+    )
 
     return render_template(
         "analytics/direct_files_kpi_display.html",

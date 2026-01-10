@@ -25,8 +25,8 @@ from models import (
     Area,
     User,
     GradingTask,
-    utcnow,
 )
+from auth.utils import utcnow
 
 editing_logger = logging.getLogger("editing")
 

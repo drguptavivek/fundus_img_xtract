@@ -1200,17 +1200,25 @@ class EmailSettings(Base):
         import smtplib
         import ssl
 
+        def _build_tls_context(verify: bool) -> ssl.SSLContext:
+            context = ssl.create_default_context()
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
+            if not verify:
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
+            return context
+
         try:
             # Choose SMTP class based on security settings
             if self.use_ssl:
                 smtp_class = smtplib.SMTP_SSL
-                context = ssl.create_default_context() if self.verify_certificates else ssl._create_unverified_context()
+                context = _build_tls_context(self.verify_certificates)
                 server_kwargs = {"context": context}
             else:
                 smtp_class = smtplib.SMTP
                 server_kwargs = {}
-                if self.verify_certificates:
-                    context = ssl.create_default_context()
+                context = _build_tls_context(self.verify_certificates)
+                if self.use_tls:
                     server_kwargs["context"] = context
 
             # Test connection
@@ -1218,7 +1226,7 @@ class EmailSettings(Base):
                 server.set_debuglevel(self.debug_logging)
 
                 if self.use_tls and not self.use_ssl:
-                    server.starttls()
+                    server.starttls(context=context)
 
                 server.login(self.smtp_username, self._get_password_for_use())
 

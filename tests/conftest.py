@@ -1,8 +1,15 @@
-"""Pytest configuration and fixtures for the fundus image management application."""
+"""
+Pytest configuration with PostgreSQL test database.
+
+This conftest.py provides fixtures for the restructured test suite with:
+- PostgreSQL test database (instead of SQLite)
+- Transaction-based test isolation
+- Category-specific fixtures
+- Test data factories and utilities
+"""
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 # Add the project root directory to Python path
@@ -10,89 +17,111 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import pytest
-from flask import Flask
-from flask_login import FlaskLoginClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+from flask_login import FlaskLoginClient
 
-from models import Base, Session, User, Role, Hospital, LabUnit, Disease, UserDiseaseUnitRole
-from auth.security import hash_password
+from models import Base
 from app import create_app
 
 
+# ==============================================================================
+# Database Configuration
+# ==============================================================================
+
+# Test database URL - uses dedicated test-db container
+# From inside docker, connect to 'test-db' service (not localhost)
+# From host, use localhost:5433
+TEST_DATABASE_URL = os.getenv(
+    'TEST_DATABASE_URL',
+    'postgresql://test_user:test_password_change_in_production@test-db:5432/fundus_test'
+)
+
+
+# ==============================================================================
+# Session-Scoped Fixtures (created once per test session)
+# ==============================================================================
+
 @pytest.fixture(scope="session")
-def test_db():
-    """Create a test database."""
-    # Create a temporary database file
-    db_fd, db_path = tempfile.mkstemp()
-    test_db_url = f"sqlite:///{db_path}"
+def test_engine():
+    """
+    Create a test database engine (session-scoped).
+    Creates all tables at the start of test session and drops them at the end.
+    """
+    engine = create_engine(
+        TEST_DATABASE_URL,
+        poolclass=NullPool,  # No connection pooling for tests
+        echo=False,  # Set to True for SQL debugging
+    )
     
-    # Create engine and session
-    engine = create_engine(test_db_url)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
     
-    # Create all tables with error handling
-    try:
-        Base.metadata.create_all(bind=engine)
-    except Exception as e:
-        # If there are constraint issues, try without them
-        print(f"Warning: Database setup had issues: {e}")
-        # Remove problematic constraints and try again
-        if "direct_image_uploads" in Base.metadata.tables:
-            original_constraints = Base.metadata.tables["direct_image_uploads"].constraints.copy()
-            # Filter out problematic constraints
-            Base.metadata.tables["direct_image_uploads"].constraints = [
-                c for c in original_constraints
-                if not hasattr(c, 'name') or "ck_diu_" not in str(c.name)
-            ]
-            try:
-                Base.metadata.create_all(bind=engine, checkfirst=True)
-            except Exception as e2:
-                print(f"Warning: Second attempt also failed: {e2}")
-                # Final fallback: create without any constraints on this table
-                Base.metadata.tables["direct_image_uploads"].constraints = []
-                Base.metadata.create_all(bind=engine, checkfirst=True)
-            # Restore original constraints (won't affect created DB)
-            Base.metadata.tables["direct_image_uploads"].constraints = original_constraints
+    yield engine
     
-    yield TestingSessionLocal
-    
-    # Clean up
-    os.close(db_fd)
-    os.unlink(db_path)
+    # Cleanup: Drop all tables after test session
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
-@pytest.fixture
-def db_session(test_db):
-    """Create a database session for testing."""
-    session = test_db()
-    try:
-        yield session
-    finally:
-        session.close()
+# ==============================================================================
+# Function-Scoped Fixtures (created for each test)
+# ==============================================================================
+
+@pytest.fixture(scope="function")
+def db_session(test_engine):
+    """
+    Create a database session for each test function.
+    Uses transactions with automatic rollback for isolation.
+    
+    This ensures:
+    - Each test starts with a clean state
+    - Tests don't interfere with each other
+    - Fast cleanup (rollback instead of DELETE)
+    """
+    connection = test_engine.connect()
+    transaction = connection.begin()
+    
+    # Create session bound to this connection
+    TestingSessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=connection
+    )
+    session = TestingSessionLocal()
+    
+    yield session
+    
+    # Rollback transaction to cleanup
+    session.close()
+    transaction.rollback()
+    connection.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def app(db_session):
-    """Create a Flask app for testing."""
-    # Create a test app
+    """
+    Create a Flask app configured for testing.
+    Uses the test database and in-memory rate limiting.
+    """
     app = create_app()
     app.config.update(
         TESTING=True,
         SECRET_KEY="test-secret-key",
         WTF_CSRF_ENABLED=False,
-        SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
+        SQLALCHEMY_DATABASE_URI=TEST_DATABASE_URL,
         LOGIN_DISABLED=False,
-        # Enable rate limiting for testing
-        RATELIMIT_ENABLED='true',
+        # Rate limiting for tests
+        RATELIMIT_ENABLED=True,
         RATELIMIT_STORAGE_URI='memory://',
-        REDIS_URL='memory://',  # Override Redis URL to use memory
+        REDIS_URL='memory://',
         RATELIMIT_DEFAULT='500 per hour, 50 per minute',
         RATELIMIT_APPLICATION='1000 per hour, 100 per minute',
-        RATELIMIT_SWALLOW_ERRORS='false'  # Don't swallow errors so we can see what's happening
+        RATELIMIT_SWALLOW_ERRORS=False,
     )
     
-    # Re-initialize rate limiting with updated config
+    # Re-initialize rate limiting with test config
     from utils.rate_limiter import init_rate_limiting
     init_rate_limiting(app)
     
@@ -103,257 +132,114 @@ def app(db_session):
         yield app
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client(app):
-    """Create a test client."""
+    """Create a test client for making HTTP requests"""
     return app.test_client()
 
 
-@pytest.fixture
-def admin_user(db_session):
-    """Create an admin user for testing."""
-    # Check if admin role exists
-    admin_role = db_session.query(Role).filter(Role.name == "admin").first()
-    if not admin_role:
-        admin_role = Role(name="admin")
-        db_session.add(admin_role)
-        db_session.commit()
+# ==============================================================================
+# SQLite Compatibility Fixtures (for unit tests that need simple DB)
+# ==============================================================================
+
+@pytest.fixture(scope="function")
+def sqlite_session():
+    """
+    Simple in-memory SQLite session for pure unit tests.
+    Use this only when you need a very lightweight DB for mocking.
     
-    # Create or get admin user
-    admin_user = db_session.query(User).filter(User.username == "test_admin").first()
-    if not admin_user:
-        admin_user = User(
-            username="test_admin",
-            password_hash=hash_password("Test@2026"),
-            is_active=True,
-            full_name="Test Admin",
-            roles=[admin_role]
-        )
-        db_session.add(admin_user)
-        db_session.commit()
+    Note: Some features may not work due to SQLite limitations.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
     
-    yield admin_user
+    engine = create_engine('sqlite:///:memory:')
     
-    # Cleanup is handled by the test_db fixture
+    # Try to create tables, skip constraints that fail
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        # Log warning but continue - some tables may have been created
+        print(f"Warning: SQLite table creation had issues: {e}")
+    
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    yield session
+    
+    session.close()
+    engine.dispose()
+
+
+# ==============================================================================
+# Cleanup and Utility Fixtures
+# ==============================================================================
+
+@pytest.fixture(autouse=True, scope="function")
+def reset_sequences(request, db_session):
+    """
+    Reset sequences after each test for consistent IDs.
+    Only runs for tests marked with @pytest.mark.reset_sequences
+    """
+    # This runs after the test
+    yield
+    
+    # Check if test requested sequence reset
+    if 'reset_sequences' in request.keywords:
+        from tests.helpers.db_utils import reset_all_sequences
+        reset_all_sequences(db_session)
 
 
 @pytest.fixture
-def app_factory():
-    """Create an app factory for testing."""
-    def _create_app():
-        app = Flask(__name__)
-        app.config.update(
-            TESTING=True,
-            SECRET_KEY="test-secret-key",
-            WTF_CSRF_ENABLED=False,
-            SQLALCHEMY_DATABASE_URI="sqlite:///:memory:",
-            # Rate limiting configuration for testing
-            RATELIMIT_ENABLED='true',
-            RATELIMIT_STORAGE_URI='memory://',
-            REDIS_URL='memory://',  # Override Redis URL to use memory
-            RATELIMIT_DEFAULT='500 per hour, 50 per minute',
-            RATELIMIT_APPLICATION='1000 per hour, 100 per minute',
-            RATELIMIT_SWALLOW_ERRORS='false'  # Don't swallow errors so we can see what's happening
-        )
+def db_utils(db_session):
+    """
+    Provide database utilities for tests.
+    Usage: db_utils.truncate_tables(['users', 'roles'])
+    """
+    from tests.helpers import db_utils as utils
+    
+    class DBUtils:
+        def truncate_tables(self, table_names=None):
+            return utils.truncate_tables(db_session, table_names)
         
-        # Initialize rate limiting
-        from utils.rate_limiter import init_rate_limiting
-        init_rate_limiting(app)
+        def reset_sequences(self):
+            return utils.reset_all_sequences(db_session)
         
-        return app
-    return _create_app
+        def get_row_count(self, table_name):
+            return utils.get_table_row_count(db_session, table_name)
+        
+        def get_all_counts(self):
+            return utils.get_all_table_counts(db_session)
+    
+    return DBUtils()
 
+
+# ==============================================================================
+# Legacy Fixtures (for backward compatibility)
+# ==============================================================================
 
 @pytest.fixture
-def test_users(db_session):
-    """Create test users with different roles."""
-    # Use core entities from setup_core_entities.py and initial_setup.py
-    # Hospitals (ID 1: RPC AIIMS, ID 2: GTB Hospital)
-    hospital = db_session.query(Hospital).filter(Hospital.id == 1).first()
-    if not hospital:
-        hospital = Hospital(id=1, name="RPC AIIMS")
-        db_session.add(hospital)
-        db_session.commit()
-    
-    # Lab Units (ID 1: Community Ophthalmology, ID 2: Retina Lab, ID 3: Glaucoma Lab)
-    lab_unit1 = db_session.query(LabUnit).filter(LabUnit.id == 1).first()
-    if not lab_unit1:
-        lab_unit1 = LabUnit(id=1, name="Community Ophthalmology", hospital_id=1)
-        db_session.add(lab_unit1)
-        db_session.commit()
-    
-    lab_unit2 = db_session.query(LabUnit).filter(LabUnit.id == 2).first()
-    if not lab_unit2:
-        lab_unit2 = LabUnit(id=2, name="Retina Lab", hospital_id=1)
-        db_session.add(lab_unit2)
-        db_session.commit()
-    
-    # Diseases (ID 1: Glaucoma, ID 2: DR, ID 3: AMD)
-    glaucoma = db_session.query(Disease).filter(Disease.id == 1).first()
-    if not glaucoma:
-        glaucoma = Disease(id=1, name="Glaucoma")
-        db_session.add(glaucoma)
-        db_session.commit()
-    
-    dr = db_session.query(Disease).filter(Disease.id == 2).first()
-    if not dr:
-        dr = Disease(id=2, name="DR")
-        db_session.add(dr)
-        db_session.commit()
-    
-    # Get or create ophthalmologist role
-    oph_role = db_session.query(Role).filter(Role.name == "ophthalmologist").first()
-    if not oph_role:
-        oph_role = Role(name="ophthalmologist")
-        db_session.add(oph_role)
-        db_session.commit()
-    
-    # Create test users
-    users = {}
-    
-    # Admin user
-    admin_role = db_session.query(Role).filter(Role.name == "admin").first()
-    if not admin_role:
-        admin_role = Role(name="admin")
-        db_session.add(admin_role)
-        db_session.commit()
-    
-    users["admin"] = db_session.query(User).filter(User.username == "test_admin").first()
-    if not users["admin"]:
-        users["admin"] = User(
-            username="test_admin",
-            password_hash=hash_password("Test@2026"),
-            is_active=True,
-            full_name="Test Admin",
-            roles=[admin_role]
-        )
-        db_session.add(users["admin"])
-        db_session.commit()
-    
-    # resident2 user
-    users["resident2"] = db_session.query(User).filter(User.username == "test_resident2").first()
-    if not users["resident2"]:
-        users["resident2"] = User(
-            username="test_resident2",
-            password_hash=hash_password("Test@2026"),
-            is_active=True,
-            full_name="Test resident2",
-            roles=[oph_role]
-        )
-        db_session.add(users["resident2"])
-        db_session.commit()
-        
-        # Add lab unit
-        users["resident2"].lab_units.append(lab_unit1)
-        db_session.commit()
-    
-    # Resident user
-    users["resident"] = db_session.query(User).filter(User.username == "test_resident").first()
-    if not users["resident"]:
-        users["resident"] = User(
-            username="test_resident",
-            password_hash=hash_password("TestPassword123!"),
-            is_active=True,
-            full_name="Test Resident",
-            roles=[oph_role]
-        )
-        db_session.add(users["resident"])
-        db_session.commit()
-        
-        # Add lab unit
-        users["resident"].lab_units.append(lab_unit1)
-        db_session.commit()
-    
-    # Test resident2 user (testresident2) - with resident2 slot
-    users["testresident2"] = db_session.query(User).filter(User.username == "testresident2").first()
-    if not users["testresident2"]:
-        users["testresident2"] = User(
-            username="testresident2",
-            password_hash=hash_password("TestPassword123!"),
-            is_active=True,
-            full_name="Test resident2 User",
-            roles=[oph_role]
-        )
-        db_session.add(users["testresident2"])
-        db_session.commit()
-        
-        # Add to both lab units
-        users["testresident2"].lab_units.append(lab_unit1)
-        users["testresident2"].lab_units.append(lab_unit2)
-        db_session.commit()
-        
-        # Add resident2 slot permissions for both diseases in both lab units
-        for disease in [glaucoma, dr]:
-            for unit in [lab_unit1, lab_unit2]:
-                resident2_role = UserDiseaseUnitRole(
-                    user_id=users["testresident2"].id,
-                    disease_id=disease.id,
-                    lab_unit_id=unit.id,
-                    can_grade_resident2=True
-                )
-                db_session.add(resident2_role)
-        db_session.commit()
-    
-    # Test Resident user (testResident) - with resident slot
-    users["testResident"] = db_session.query(User).filter(User.username == "testResident").first()
-    if not users["testResident"]:
-        users["testResident"] = User(
-            username="testResident",
-            password_hash=hash_password("TestPassword123!"),
-            is_active=True,
-            full_name="Test Resident User",
-            roles=[oph_role]
-        )
-        db_session.add(users["testResident"])
-        db_session.commit()
-        
-        # Add to both lab units
-        users["testResident"].lab_units.append(lab_unit1)
-        users["testResident"].lab_units.append(lab_unit2)
-        db_session.commit()
-        
-        # Add resident slot permissions for both diseases in both lab units
-        for disease in [glaucoma, dr]:
-            for unit in [lab_unit1, lab_unit2]:
-                resident_role = UserDiseaseUnitRole(
-                    user_id=users["testResident"].id,
-                    disease_id=disease.id,
-                    lab_unit_id=unit.id,
-                    can_grade_resident=True
-                )
-                db_session.add(resident_role)
-        db_session.commit()
-    
-    # Test Arbitrator user (testArbitrator) - with arbitrator slot
-    users["testArbitrator"] = db_session.query(User).filter(User.username == "testArbitrator").first()
-    if not users["testArbitrator"]:
-        users["testArbitrator"] = User(
-            username="testArbitrator",
-            password_hash=hash_password("TestPassword123!"),
-            is_active=True,
-            full_name="Test Arbitrator User",
-            roles=[oph_role]
-        )
-        db_session.add(users["testArbitrator"])
-        db_session.commit()
-        
-        # Add to both lab units
-        users["testArbitrator"].lab_units.append(lab_unit1)
-        users["testArbitrator"].lab_units.append(lab_unit2)
-        db_session.commit()
-        
-        # Add arbitrator slot permissions for both diseases in both lab units
-        for disease in [glaucoma, dr]:
-            for unit in [lab_unit1, lab_unit2]:
-                arbitrator_role = UserDiseaseUnitRole(
-                    user_id=users["testArbitrator"].id,
-                    disease_id=disease.id,
-                    lab_unit_id=unit.id,
-                    can_arbitrate=True
-                )
-                db_session.add(arbitrator_role)
-        db_session.commit()
-    
-    yield users
-    
-    # Cleanup is handled by the test_db fixture
+def test_db(test_engine):
+    """
+    Legacy fixture for backward compatibility.
+    Returns a session factory.
+    """
+    return sessionmaker(bind=test_engine)
+
+
+# ==============================================================================
+# Configuration
+# ==============================================================================
+
+def pytest_configure(config):
+    """Pytest configuration hook"""
+    # Add custom markers if not already present
+    config.addinivalue_line(
+        "markers", "reset_sequences: Reset database sequences after test"
+    )
+    config.addinivalue_line(
+        "markers", "skip_postgres: Skip test if using PostgreSQL"
+    )
+    config.addinivalue_line(
+        "markers", "skip_sqlite: Skip test if using SQLite"
+    )

@@ -139,6 +139,143 @@ def client(app):
 
 
 # ==============================================================================
+# Test Data Fixtures
+# ==============================================================================
+
+@pytest.fixture(scope="session")
+def core_test_data(test_engine):
+    """
+    Create core test data once per session (hospitals, lab units, diseases, roles).
+    This persists for the entire test session for efficiency.
+    """
+    from tests.helpers.factories import CoreEntityFactory
+    from sqlalchemy.orm import sessionmaker
+    
+    Session = sessionmaker(bind=test_engine)
+    session = Session()
+    
+    try:
+        entities = CoreEntityFactory.setup_core_entities(session)
+        session.commit()
+        yield entities
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def admin_user(db_session, core_test_data):
+    """Create an admin user for testing"""
+    from tests.helpers.factories import UserFactory
+    
+    user = UserFactory.create_admin(db_session)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def ophthalmologist_user(db_session, core_test_data):
+    """Create an ophthalmologist user with lab unit assignment"""
+    from tests.helpers.factories import UserFactory
+    from models import LabUnit
+    
+    # Merge lab_unit into current session
+    lab_unit = db_session.merge(core_test_data['lab_unit'])
+    user = UserFactory.create_ophthalmologist(
+        db_session,
+        lab_units=[lab_unit]
+    )
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def resident_user(db_session, core_test_data):
+    """Create a resident user with grading permissions"""
+    from tests.helpers.factories import UserFactory
+    
+    user = UserFactory.create_with_permissions(
+        db_session,
+        role_name='resident',
+        disease_id=core_test_data['glaucoma'].id,
+        lab_unit_id=core_test_data['lab_unit'].id,
+        can_grade_resident=True
+    )
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def arbitrator_user(db_session, core_test_data):
+    """Create an arbitrator user with arbitration permissions"""
+    from tests.helpers.factories import UserFactory
+    
+    user = UserFactory.create_with_permissions(
+        db_session,
+        role_name='ophthalmologist',
+        username='test_arbitrator',
+        disease_id=core_test_data['glaucoma'].id,
+        lab_unit_id=core_test_data['lab_unit'].id,
+        can_arbitrate=True
+    )
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def test_users(db_session, core_test_data):
+    """
+    Create a complete set of test users for comprehensive testing.
+    Returns a dict with all user types.
+    """
+    from tests.helpers.factories import UserFactory
+    from models import LabUnit, Disease
+    
+    # Merge entities into current session
+    lab_unit = db_session.merge(core_test_data['lab_unit'])
+    glaucoma = db_session.merge(core_test_data['glaucoma'])
+    
+    users = {
+        'admin': UserFactory.create_admin(db_session, username='test_admin'),
+        'ophthalmologist': UserFactory.create_ophthalmologist(
+            db_session, 
+            username='test_ophthalmologist',
+            lab_units=[lab_unit]
+        ),
+        'resident': UserFactory.create_with_permissions(
+            db_session,
+            role_name='resident',
+            username='test_resident',
+            disease_id=glaucoma.id,
+            lab_unit_id=lab_unit.id,
+            can_grade_resident=True
+        ),
+        'arbitrator': UserFactory.create_with_permissions(
+            db_session,
+            role_name='ophthalmologist',
+            username='test_arbitrator',
+            disease_id=glaucoma.id,
+            lab_unit_id=lab_unit.id,
+            can_arbitrate=True
+        ),
+    }
+    
+    db_session.flush()
+    return users
+
+
+@pytest.fixture
+def authenticated_client(client, admin_user):
+    """
+    Create a client that's authenticated as admin user.
+    Useful for integration tests that need authenticated requests.
+    """
+    with client.session_transaction() as sess:
+        sess['user_id'] = admin_user.id
+        sess['_fresh'] = True
+    return client
+
+
+# ==============================================================================
 # SQLite Compatibility Fixtures (for unit tests that need simple DB)
 # ==============================================================================
 

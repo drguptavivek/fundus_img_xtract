@@ -24,6 +24,7 @@ from utils.env_loader import get_env
 from db_transaction_manager import transaction_scope
 from models import Grade, GradingTask, Consensus, DiseaseGrading, User, LabUnit
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 
 
 @roles_required('admin', 'data_manager')
@@ -35,7 +36,10 @@ def admin_status():
     try:
         thumbnail_stats = get_thumbnail_statistics()
     except Exception as e:
-        current_app.logger.error(f"Error getting thumbnail stats: {e}")
+        current_app.logger.error(
+            "Error getting thumbnail stats: %s",
+            sanitize_log_value(e),
+        )
         thumbnail_stats = {
             'direct_uploads': {'total': 0, 'with_original_thumbnails': 0, 'with_edited_thumbnails': 0, 'missing_thumbnails': 0},
             'encounter_files': {'total': 0, 'with_thumbnails': 0, 'missing_thumbnails': 0},
@@ -46,7 +50,10 @@ def admin_status():
     try:
         maintenance_status = get_maintenance_status()
     except Exception as e:
-        current_app.logger.error(f"Error getting maintenance status: {e}")
+        current_app.logger.error(
+            "Error getting maintenance status: %s",
+            sanitize_log_value(e),
+        )
         maintenance_status = {
             'currently_running': False,
             'last_run': None,
@@ -58,7 +65,10 @@ def admin_status():
     try:
         health_status = get_system_health()
     except Exception as e:
-        current_app.logger.error(f"Error getting health status: {e}")
+        current_app.logger.error(
+            "Error getting health status: %s",
+            sanitize_log_value(e),
+        )
         health_status = {
             'status': 'error',
             'issues': [f"Health check failed: {str(e)}"],
@@ -86,7 +96,10 @@ def admin_status():
                 .count()
             )
     except Exception as e:
-        current_app.logger.error(f"Error computing grading inconsistencies: {e}")
+        current_app.logger.error(
+            "Error computing grading inconsistencies: %s",
+            sanitize_log_value(e),
+        )
         grading_inconsistency_count = 0
 
     # Review vs consensus inconsistencies (review grade differs/missing consensus)
@@ -94,7 +107,10 @@ def admin_status():
         with transaction_scope() as db:
             review_consensus_mismatch_count = _get_review_consensus_mismatch_count(db)
     except Exception as e:
-        current_app.logger.error(f"Error computing review/consensus inconsistencies: {e}")
+        current_app.logger.error(
+            "Error computing review/consensus inconsistencies: %s",
+            sanitize_log_value(e),
+        )
         review_consensus_mismatch_count = 0
 
     # Get recent activity data
@@ -121,7 +137,10 @@ def admin_status():
                     )
                 ]
     except Exception as e:
-        current_app.logger.error(f"Error loading scoped users: {e}")
+        current_app.logger.error(
+            "Error loading scoped users: %s",
+            sanitize_log_value(e),
+        )
 
     return render_template(
         'admin/status.html',
@@ -159,7 +178,10 @@ def api_admin_status():
         })
 
     except Exception as e:
-        current_app.logger.error(f"Error getting admin status: {e}")
+        current_app.logger.error(
+            "Error getting admin status: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e),
@@ -245,7 +267,10 @@ def get_system_statistics():
             }
 
     except Exception as e:
-        current_app.logger.error(f"Error getting system statistics: {e}")
+        current_app.logger.error(
+            "Error getting system statistics: %s",
+            sanitize_log_value(e),
+        )
         return {
             'users': {'total': 0, 'active': 0},
             'images': {'direct_uploads': 0, 'encounter_files': 0, 'total': 0},

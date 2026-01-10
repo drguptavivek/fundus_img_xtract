@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session as OrmSession, selectinload
 from models import IntraRaterTask
 from services.intra_rater_service import STATE_PENDING
 from utils.utils import get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 # Set up logger for intra-rater task debugging
 intra_rater_logger = logging.getLogger("intra_rater_debug")
@@ -42,7 +43,11 @@ def get_next_intra_rater_task(
             return get_next_intra_rater_task(user_id, disease_id, db=new_session)
 
     try:
-        intra_rater_logger.info(f"Searching for intra-rater task - user_id: {user_id}, disease_id: {disease_id}")
+        intra_rater_logger.info(
+            "Searching for intra-rater task - user_id: %s, disease_id: %s",
+            sanitize_log_value(user_id),
+            sanitize_log_value(disease_id),
+        )
         
         # First, let's check if any intra-rater tasks exist for this user at all
         all_user_tasks = (
@@ -50,12 +55,21 @@ def get_next_intra_rater_task(
             .filter(IntraRaterTask.grader_user_id == user_id)
             .all()
         )
-        intra_rater_logger.info(f"Total intra-rater tasks for user {user_id}: {len(all_user_tasks)}")
+        intra_rater_logger.info(
+            "Total intra-rater tasks for user %s: %s",
+            sanitize_log_value(user_id),
+            sanitize_log_value(len(all_user_tasks)),
+        )
         
         # Check tasks by state
         pending_tasks = [t for t in all_user_tasks if t.state == STATE_PENDING]
         completed_tasks = [t for t in all_user_tasks if t.state != STATE_PENDING]
-        intra_rater_logger.info(f"User {user_id} has {len(pending_tasks)} pending, {len(completed_tasks)} completed tasks")
+        intra_rater_logger.info(
+            "User %s has %s pending, %s completed tasks",
+            sanitize_log_value(user_id),
+            sanitize_log_value(len(pending_tasks)),
+            sanitize_log_value(len(completed_tasks)),
+        )
         
         # Check disease-specific tasks
         disease_tasks = (
@@ -66,10 +80,20 @@ def get_next_intra_rater_task(
             )
             .all()
         )
-        intra_rater_logger.info(f"User {user_id} has {len(disease_tasks)} total tasks for disease {disease_id}")
+        intra_rater_logger.info(
+            "User %s has %s total tasks for disease %s",
+            sanitize_log_value(user_id),
+            sanitize_log_value(len(disease_tasks)),
+            sanitize_log_value(disease_id),
+        )
         
         disease_pending_tasks = [t for t in disease_tasks if t.state == STATE_PENDING]
-        intra_rater_logger.info(f"User {user_id} has {len(disease_pending_tasks)} pending tasks for disease {disease_id}")
+        intra_rater_logger.info(
+            "User %s has %s pending tasks for disease %s",
+            sanitize_log_value(user_id),
+            sanitize_log_value(len(disease_pending_tasks)),
+            sanitize_log_value(disease_id),
+        )
         
         task = (
             session.query(IntraRaterTask)
@@ -88,9 +112,18 @@ def get_next_intra_rater_task(
         )
 
         if task:
-            intra_rater_logger.info(f"Found intra-rater task: ID={task.id}, UUID={task.uuid}, created_at={task.created_at}")
+            intra_rater_logger.info(
+                "Found intra-rater task: ID=%s, UUID=%s, created_at=%s",
+                sanitize_log_value(task.id),
+                sanitize_log_value(task.uuid),
+                sanitize_log_value(task.created_at),
+            )
         else:
-            intra_rater_logger.warning(f"No intra-rater task found for user_id={user_id}, disease_id={disease_id}")
+            intra_rater_logger.warning(
+                "No intra-rater task found for user_id=%s, disease_id=%s",
+                sanitize_log_value(user_id),
+                sanitize_log_value(disease_id),
+            )
 
         if task and close_db:
             # Detach so callers can access the identity after closing the helper-owned session.

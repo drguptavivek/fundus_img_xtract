@@ -28,6 +28,7 @@ from utils.rate_limiter import rate_limit
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.thumbnail_cleanup import add_thumbnail_cleanup_to_direct_upload_deletion
+from utils.log_sanitize import sanitize_log_value
 
 
 editing_logger = logging.getLogger("editing")
@@ -563,19 +564,23 @@ def dashboard():
                             deleted_task_count += 1
                             editing_logger.info(
                                 "Deleted %s grading task (state=%s) for upload_id=%s before deletion",
-                                task.id, task.state, task.direct_image_upload_id
+                                sanitize_log_value(task.id),
+                                sanitize_log_value(task.state),
+                                sanitize_log_value(task.direct_image_upload_id),
                             )
                         else:
                             editing_logger.warning(
                                 "Cannot delete upload_id=%s: grading task %s has state='%s'",
-                                task.direct_image_upload_id, task.id, task.state
+                                sanitize_log_value(task.direct_image_upload_id),
+                                sanitize_log_value(task.id),
+                                sanitize_log_value(task.state),
                             )
 
                     if deleted_task_count > 0:
                         editing_logger.info(
                             "Deleted %s grading tasks (pending/completed) for removed images by user_id=%s",
-                            deleted_task_count,
-                            current_user.id,
+                            sanitize_log_value(deleted_task_count),
+                            sanitize_log_value(current_user.id),
                         )
 
                 # Now clean up associated thumbnails
@@ -583,14 +588,28 @@ def dashboard():
                     try:
                         thumbnail_results = add_thumbnail_cleanup_to_direct_upload_deletion(u, editing_logger)
                         if thumbnail_results['original_deleted']:
-                            editing_logger.info(f"Deleted original thumbnail for upload_id={u.id}")
+                            editing_logger.info(
+                                "Deleted original thumbnail for upload_id=%s",
+                                sanitize_log_value(u.id),
+                            )
                         if thumbnail_results['edited_deleted']:
-                            editing_logger.info(f"Deleted edited thumbnail for upload_id={u.id}")
+                            editing_logger.info(
+                                "Deleted edited thumbnail for upload_id=%s",
+                                sanitize_log_value(u.id),
+                            )
                         if thumbnail_results['errors']:
                             for error in thumbnail_results['errors']:
-                                editing_logger.warning(f"Thumbnail cleanup error for upload_id={u.id}: {error}")
+                                editing_logger.warning(
+                                    "Thumbnail cleanup error for upload_id=%s: %s",
+                                    sanitize_log_value(u.id),
+                                    sanitize_log_value(error),
+                                )
                     except Exception as e:
-                        editing_logger.warning(f"Failed to clean up thumbnails for upload_id={u.id}: {e}")
+                        editing_logger.warning(
+                            "Failed to clean up thumbnails for upload_id=%s: %s",
+                            sanitize_log_value(u.id),
+                            sanitize_log_value(e),
+                        )
 
                 # Finally delete the DirectImageUpload records (now safe)
                 for u in deletable_uploads:
@@ -600,10 +619,10 @@ def dashboard():
                 db_session.commit()
                 editing_logger.info(
                     "Bulk delete removed %s record(s), %s file(s), and %s pending task(s) by user_id=%s",
-                    deleted_rows,
-                    deleted_files,
-                    deleted_task_count,
-                    current_user.id,
+                    sanitize_log_value(deleted_rows),
+                    sanitize_log_value(deleted_files),
+                    sanitize_log_value(deleted_task_count),
+                    sanitize_log_value(current_user.id),
                 )
                 
                 # Success message (we already showed warning about blocked uploads if needed)

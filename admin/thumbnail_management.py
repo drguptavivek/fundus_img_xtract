@@ -25,6 +25,7 @@ import pytz
 from db_transaction_manager import transaction_scope
 from models import DirectImageUpload, EncounterFile
 from sqlalchemy import text, func
+from utils.log_sanitize import sanitize_log_value
 
 
 @login_required
@@ -117,7 +118,10 @@ def get_thumbnail_statistics():
         )
 
     except Exception as e:
-        current_app.logger.error(f"Error calculating thumbnail statistics: {str(e)}")
+        current_app.logger.error(
+            "Error calculating thumbnail statistics: %s",
+            sanitize_log_value(e),
+        )
 
     return stats
 
@@ -174,7 +178,10 @@ def api_thumbnail_stats():
             'stats': stats
         })
     except Exception as e:
-        current_app.logger.error(f"Error getting thumbnail stats: {str(e)}")
+        current_app.logger.error(
+            "Error getting thumbnail stats: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -192,7 +199,10 @@ def api_maintenance_status():
             'status': status
         })
     except Exception as e:
-        current_app.logger.error(f"Error getting maintenance status: {str(e)}")
+        current_app.logger.error(
+            "Error getting maintenance status: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -214,7 +224,10 @@ def api_manual_maintenance():
             'result': result
         })
     except Exception as e:
-        current_app.logger.error(f"Error triggering manual maintenance: {str(e)}")
+        current_app.logger.error(
+            "Error triggering manual maintenance: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e),
@@ -233,7 +246,10 @@ def api_cleanup_orphaned():
             'result': result
         })
     except Exception as e:
-        current_app.logger.error(f"Error running orphaned cleanup: {str(e)}")
+        current_app.logger.error(
+            "Error running orphaned cleanup: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -254,7 +270,10 @@ def api_regenerate_missing():
             'result': result
         })
     except Exception as e:
-        current_app.logger.error(f"Error regenerating missing thumbnails: {str(e)}")
+        current_app.logger.error(
+            "Error regenerating missing thumbnails: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -275,7 +294,10 @@ def api_validate_integrity():
             'result': result
         })
     except Exception as e:
-        current_app.logger.error(f"Error validating thumbnail integrity: {str(e)}")
+        current_app.logger.error(
+            "Error validating thumbnail integrity: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -293,7 +315,10 @@ def api_full_maintenance():
             'result': result
         })
     except Exception as e:
-        current_app.logger.error(f"Error running full maintenance: {str(e)}")
+        current_app.logger.error(
+            "Error running full maintenance: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -353,7 +378,10 @@ def get_system_health():
         return health_status
 
     except Exception as e:
-        current_app.logger.error(f"Error getting system health: {str(e)}")
+        current_app.logger.error(
+            "Error getting system health: %s",
+            sanitize_log_value(e),
+        )
         return {
             'status': 'error',
             'issues': [f"Health check failed: {str(e)}"],
@@ -420,7 +448,10 @@ def api_thumbnail_health_check():
         })
 
     except Exception as e:
-        current_app.logger.error(f"Error in thumbnail health check: {str(e)}")
+        current_app.logger.error(
+            "Error in thumbnail health check: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e),

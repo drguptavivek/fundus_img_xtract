@@ -11,6 +11,7 @@ from typing import Callable, Optional
 from flask import request, session, current_app, jsonify, abort
 from functools import wraps
 from urllib.parse import urlparse
+from utils.log_sanitize import sanitize_log_value
 
 # Configure logger
 csrf_logger = logging.getLogger("csrf")
@@ -45,7 +46,10 @@ class CSRFTokenManager:
             
             # Check token age
             if time.time() - timestamp > max_age:
-                csrf_logger.warning(f"CSRF token expired - Age: {time.time() - timestamp}s")
+                csrf_logger.warning(
+                    "CSRF token expired - Age: %ss",
+                    sanitize_log_value(f"{time.time() - timestamp}"),
+                )
                 return False
             
             # Recreate expected token
@@ -65,7 +69,10 @@ class CSRFTokenManager:
             return is_valid
             
         except Exception as e:
-            csrf_logger.error(f"CSRF token validation error: {str(e)}")
+            csrf_logger.error(
+                "CSRF token validation error: %s",
+                sanitize_log_value(e),
+            )
             return False
     
     @staticmethod
@@ -189,7 +196,10 @@ def add_csrf_token_to_response(response):
             samesite='Strict'
         )
     except Exception as e:
-        csrf_logger.error(f"Failed to add CSRF token to response: {str(e)}")
+        csrf_logger.error(
+            "Failed to add CSRF token to response: %s",
+            sanitize_log_value(e),
+        )
     
     return response
 
@@ -227,7 +237,10 @@ def validate_origin_for_api() -> Callable:
                         )
                         abort(403, description="Invalid origin")
                 except Exception as e:
-                    csrf_logger.error(f"Origin validation error: {str(e)}")
+                    csrf_logger.error(
+                        "Origin validation error: %s",
+                        sanitize_log_value(e),
+                    )
                     abort(403, description="Invalid origin")
             
             # Validate referer if no origin
@@ -241,11 +254,17 @@ def validate_origin_for_api() -> Callable:
                         )
                         abort(403, description="Invalid referer")
                 except Exception as e:
-                    csrf_logger.error(f"Referer validation error: {str(e)}")
+                    csrf_logger.error(
+                        "Referer validation error: %s",
+                        sanitize_log_value(e),
+                    )
                     abort(403, description="Invalid referer")
             
             # Log successful validation for debugging
-            csrf_logger.debug(f"Origin/Referer validated for {request.path}")
+            csrf_logger.debug(
+                "Origin/Referer validated for %s",
+                sanitize_log_value(request.path),
+            )
             
             return f(*args, **kwargs)
         

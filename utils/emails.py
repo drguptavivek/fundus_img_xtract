@@ -12,6 +12,7 @@ from threading import Thread
 from typing import Callable, Optional
 
 from utils.email_config import EmailConfigService, EmailConfigError
+from utils.log_sanitize import sanitize_log_value
 
 
 def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger | None]:
@@ -126,36 +127,46 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
         # Log successful email
         success_logger.info(
             "Email sent - To: %s Subject: %s From: %s Headers: %s Source: %s",
-            to_email,
-            subject,
-            from_email,
-            headers,
-            config.get('source', 'unknown'),
+            sanitize_log_value(to_email),
+            sanitize_log_value(subject),
+            sanitize_log_value(from_email),
+            sanitize_log_value(headers),
+            sanitize_log_value(config.get('source', 'unknown')),
         )
         if current_app:
-            current_app.logger.info(f"Email sent successfully to {to_email}")
+            current_app.logger.info(
+                "Email sent successfully to %s",
+                sanitize_log_value(to_email),
+            )
         return True
 
     except EmailConfigError as e:
         error_logger.error(
             "Email configuration error - To: %s Subject: %s Error: %s",
-            to_email,
-            subject,
-            str(e),
+            sanitize_log_value(to_email),
+            sanitize_log_value(subject),
+            sanitize_log_value(e),
         )
         if current_app:
-            current_app.logger.error(f"Email configuration error: {e}")
+            current_app.logger.error(
+                "Email configuration error: %s",
+                sanitize_log_value(e),
+            )
         return False
     except Exception as e:
         # Log failed email
         error_logger.error(
             "Email send failed - To: %s Subject: %s Error: %s",
-            to_email,
-            subject,
-            str(e),
+            sanitize_log_value(to_email),
+            sanitize_log_value(subject),
+            sanitize_log_value(e),
         )
         if current_app:
-            current_app.logger.error(f"Failed to send email to {to_email}: {e}")
+            current_app.logger.error(
+                "Failed to send email to %s: %s",
+                sanitize_log_value(to_email),
+                sanitize_log_value(e),
+            )
         return False
 
 

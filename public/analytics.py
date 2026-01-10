@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import logging
 
 from app_cache import cache
+from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,10 @@ def public_analytics():
     try:
         return render_template("public/analytics.html")
     except Exception as e:
-        current_app.logger.error(f"Error rendering public analytics page: {str(e)}")
+        current_app.logger.error(
+            "Error rendering public analytics page: %s",
+            sanitize_log_value(e),
+        )
         return render_template("public/analytics_error.html", error=str(e)), 500
 
 
@@ -314,7 +318,10 @@ def api_analytics_kpi():
                 })
 
     except Exception as e:
-        current_app.logger.error(f"Error fetching analytics KPI data: {str(e)}")
+        current_app.logger.error(
+            "Error fetching analytics KPI data: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -392,7 +399,10 @@ def api_analytics_chart_data():
                 })
 
     except Exception as e:
-        current_app.logger.error(f"Error fetching chart data: {str(e)}")
+        current_app.logger.error(
+            "Error fetching chart data: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)

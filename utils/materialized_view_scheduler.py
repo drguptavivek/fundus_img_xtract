@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 
 import pytz
 from sqlalchemy import text
+from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger("materialized_view")
 
@@ -57,9 +58,18 @@ def refresh_materialized_view(app, schedule_time="manual"):
 
         with app.app_context():
             with transaction_scope() as db:
-                logger.info(f"Starting materialized view refresh - Schedule: {schedule_time}")
-                logger.info(f"IST Time: {ist_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-                logger.info(f"UTC Time: {start_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                logger.info(
+                    "Starting materialized view refresh - Schedule: %s",
+                    sanitize_log_value(schedule_time),
+                )
+                logger.info(
+                    "IST Time: %s",
+                    sanitize_log_value(ist_time.strftime('%Y-%m-%d %H:%M:%S %Z')),
+                )
+                logger.info(
+                    "UTC Time: %s",
+                    sanitize_log_value(start_time.strftime('%Y-%m-%d %H:%M:%S UTC')),
+                )
 
                 # Insert log entry for refresh start
                 result = db.execute(
@@ -93,14 +103,22 @@ def refresh_materialized_view(app, schedule_time="manual"):
                     view_start_time = datetime.now(pytz.UTC)
 
                     try:
-                        logger.info(f"Refreshing {view_description} ({view_name})")
+                        logger.info(
+                            "Refreshing %s (%s)",
+                            sanitize_log_value(view_description),
+                            sanitize_log_value(view_name),
+                        )
                         db.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
 
                         view_duration = (datetime.now(pytz.UTC) - view_start_time).total_seconds()
                         total_duration += view_duration
                         successful_refreshes += 1
 
-                        logger.info(f"Successfully refreshed {view_description} in {view_duration:.2f} seconds")
+                        logger.info(
+                            "Successfully refreshed %s in %s seconds",
+                            sanitize_log_value(view_description),
+                            sanitize_log_value(f"{view_duration:.2f}"),
+                        )
 
                     except Exception as view_error:
                         logger.exception("Failed to refresh %s (%s)", view_description, view_name)
@@ -129,7 +147,13 @@ def refresh_materialized_view(app, schedule_time="manual"):
                     }
                 )
 
-                logger.info(f"Materialized view refresh completed: {successful_refreshes}/{len(views_to_refresh)} views successful in {overall_duration:.2f} seconds - Schedule: {schedule_time}")
+                logger.info(
+                    "Materialized view refresh completed: %s/%s views successful in %s seconds - Schedule: %s",
+                    sanitize_log_value(successful_refreshes),
+                    sanitize_log_value(len(views_to_refresh)),
+                    sanitize_log_value(f"{overall_duration:.2f}"),
+                    sanitize_log_value(schedule_time),
+                )
                 return success
 
     except Exception as e:
@@ -185,7 +209,11 @@ def run_scheduler_thread(app):
     retry_attempts = app.config.get("MATERIALIZED_VIEW_RETRY_ATTEMPTS", 3)
     retry_delay = app.config.get("MATERIALIZED_VIEW_RETRY_DELAY_SECONDS", 60)
 
-    logger.info(f"Materialized view scheduler started - Times: {schedule_times}, Timezone: {timezone_str}")
+    logger.info(
+        "Materialized view scheduler started - Times: %s, Timezone: %s",
+        sanitize_log_value(schedule_times),
+        sanitize_log_value(timezone_str),
+    )
 
     last_trigger_time = None
     last_trigger_date = None
@@ -202,7 +230,10 @@ def run_scheduler_thread(app):
             ):
                 last_trigger_time = current_time_str
                 last_trigger_date = current_ist.date()
-                logger.info(f"Scheduled refresh time reached: {current_time_str} IST")
+                logger.info(
+                    "Scheduled refresh time reached: %s IST",
+                    sanitize_log_value(current_time_str),
+                )
 
                 # Retry logic with exponential backoff
                 for attempt in range(retry_attempts):
@@ -210,14 +241,21 @@ def run_scheduler_thread(app):
                         break
                     elif attempt < retry_attempts - 1:
                         wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
-                        logger.warning(f"Refresh attempt {attempt + 1} failed, retrying in {wait_time} seconds...")
+                        logger.warning(
+                            "Refresh attempt %s failed, retrying in %s seconds...",
+                            sanitize_log_value(attempt + 1),
+                            sanitize_log_value(wait_time),
+                        )
                         time.sleep(wait_time)
 
             # Check every 30 seconds to catch schedule changes
             time.sleep(30)
 
         except Exception as e:
-            logger.error(f"Scheduler thread error: {str(e)}")
+            logger.error(
+                "Scheduler thread error: %s",
+                sanitize_log_value(e),
+            )
             time.sleep(60)  # Wait longer on error
 
 
@@ -426,7 +464,10 @@ def get_last_refresh_info(app):
                     }
 
     except Exception as e:
-        logger.error(f"Failed to get last refresh info: {str(e)}")
+        logger.error(
+            "Failed to get last refresh info: %s",
+            sanitize_log_value(e),
+        )
         return {
             'has_data': False,
             'error': str(e)

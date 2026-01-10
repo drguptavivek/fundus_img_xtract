@@ -15,6 +15,7 @@ from models import (
     EncounterFilePDF, DiabeticRetinopathyReport, GlaucomaReport, ZipFile
 )
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.log_sanitize import sanitize_log_value
 from utils.rate_limiter import rate_limit
  
 @bp.route("/", methods=["GET"])
@@ -296,7 +297,11 @@ def reprocess_pdf(encounter_id: int):
         
     except Exception as e:
         db.rollback()
-        current_app.logger.error(f"Error reprocessing PDF for encounter {encounter_id}: {str(e)}")
+        current_app.logger.error(
+            "Error reprocessing PDF for encounter %s: %s",
+            sanitize_log_value(encounter_id),
+            sanitize_log_value(e),
+        )
         flash(f"Error reprocessing PDF: {str(e)}", "danger")
         
     finally:
@@ -380,17 +385,27 @@ def delete_encounter(encounter_id: int):
                     img_path = IMAGE_DIR / upload_date_str / img_file.filename
                     if img_path.exists():
                         os.remove(img_path)
-                        current_app.logger.info(f"Deleted image file: {img_file.filename}")
+                        current_app.logger.info(
+                            "Deleted image file: %s",
+                            sanitize_log_value(img_file.filename),
+                        )
 
                     # Delete thumbnail file
                     thumb_filename = get_thumbnail_filename(img_file.filename)
                     thumb_path = IMAGE_DIR / upload_date_str / thumb_filename
                     if thumb_path.exists():
                         os.remove(thumb_path)
-                        current_app.logger.info(f"Deleted thumbnail file: {thumb_filename}")
+                        current_app.logger.info(
+                            "Deleted thumbnail file: %s",
+                            sanitize_log_value(thumb_filename),
+                        )
 
             except Exception as e:
-                current_app.logger.warning(f"Failed to delete image file {img_file.filename}: {e}")
+                current_app.logger.warning(
+                    "Failed to delete image file %s: %s",
+                    sanitize_log_value(img_file.filename),
+                    sanitize_log_value(e),
+                )
         
         # Delete PDF files from disk
         pdf_files = db.query(EncounterFilePDF).filter(EncounterFilePDF.patient_encounter_id == encounter_id).all()
@@ -404,7 +419,11 @@ def delete_encounter(encounter_id: int):
                     if pdf_path.exists():
                         os.remove(pdf_path)
             except Exception as e:
-                current_app.logger.warning(f"Failed to delete PDF file {pdf_file.filename}: {e}")
+                current_app.logger.warning(
+                    "Failed to delete PDF file %s: %s",
+                    sanitize_log_value(pdf_file.filename),
+                    sanitize_log_value(e),
+                )
         
         # Delete split DR and Glaucoma report files
         from models import DiabeticRetinopathyReport, GlaucomaReport, DR_PDF_DIR, GLAUCOMA_PDF_DIR
@@ -420,7 +439,11 @@ def delete_encounter(encounter_id: int):
                         if dr_pdf_path.exists():
                             os.remove(dr_pdf_path)
                 except Exception as e:
-                    current_app.logger.warning(f"Failed to delete DR report file {dr_report.report_file_name}: {e}")
+                    current_app.logger.warning(
+                        "Failed to delete DR report file %s: %s",
+                        sanitize_log_value(dr_report.report_file_name),
+                        sanitize_log_value(e),
+                    )
         
         gl_reports = db.query(GlaucomaReport).filter(GlaucomaReport.patient_encounter_id == encounter_id).all()
         for gl_report in gl_reports:
@@ -433,7 +456,11 @@ def delete_encounter(encounter_id: int):
                         if gl_pdf_path.exists():
                             os.remove(gl_pdf_path)
                 except Exception as e:
-                    current_app.logger.warning(f"Failed to delete Glaucoma report file {gl_report.report_file_name}: {e}")
+                    current_app.logger.warning(
+                        "Failed to delete Glaucoma report file %s: %s",
+                        sanitize_log_value(gl_report.report_file_name),
+                        sanitize_log_value(e),
+                    )
         
         # Delete all pending grading tasks for this encounter's images
         if encounter_file_ids:
@@ -444,7 +471,11 @@ def delete_encounter(encounter_id: int):
             
             for task in pending_tasks:
                 db.delete(task)
-                current_app.logger.info(f"Deleted pending grading task {task.id} for image {task.encounter_file_id}")
+                current_app.logger.info(
+                    "Deleted pending grading task %s for image %s",
+                    sanitize_log_value(task.id),
+                    sanitize_log_value(task.encounter_file_id),
+                )
         
         # Delete the encounter (cascade will handle related database records)
         db.delete(encounter)
@@ -460,11 +491,21 @@ def delete_encounter(encounter_id: int):
 
                 if zip_file_path.exists():
                     os.remove(zip_file_path)
-                    current_app.logger.info(f"Deleted ZIP file: {zip_file.zip_filename}")
+                    current_app.logger.info(
+                        "Deleted ZIP file: %s",
+                        sanitize_log_value(zip_file.zip_filename),
+                    )
                 else:
-                    current_app.logger.warning(f"ZIP file not found for deletion: {zip_file_path}")
+                    current_app.logger.warning(
+                        "ZIP file not found for deletion: %s",
+                        sanitize_log_value(zip_file_path),
+                    )
             except Exception as e:
-                current_app.logger.error(f"Failed to delete ZIP file {zip_file.zip_filename}: {e}")
+                current_app.logger.error(
+                    "Failed to delete ZIP file %s: %s",
+                    sanitize_log_value(zip_file.zip_filename),
+                    sanitize_log_value(e),
+                )
 
             # Delete the database record
             db.delete(zip_file)
@@ -475,7 +516,11 @@ def delete_encounter(encounter_id: int):
         
     except Exception as e:
         db.rollback()
-        current_app.logger.error(f"Error deleting encounter {encounter_id}: {str(e)}")
+        current_app.logger.error(
+            "Error deleting encounter %s: %s",
+            sanitize_log_value(encounter_id),
+            sanitize_log_value(e),
+        )
         flash(f"Error deleting screening: {str(e)}", "danger")
         
     finally:
@@ -521,7 +566,11 @@ def delete_reports(encounter_id: int):
         
     except Exception as e:
         db.rollback()
-        current_app.logger.error(f"Error deleting reports for encounter {encounter_id}: {str(e)}")
+        current_app.logger.error(
+            "Error deleting reports for encounter %s: %s",
+            sanitize_log_value(encounter_id),
+            sanitize_log_value(e),
+        )
         flash(f"Error deleting reports: {str(e)}", "danger")
         
     finally:

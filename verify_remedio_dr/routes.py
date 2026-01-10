@@ -9,6 +9,7 @@ from . import bp
 
 from models import Session, DiabeticRetinopathyReport, PatientEncounters, EncounterFile, LabUnit, Disease
 from auth.utils import utcnow
+from utils.log_sanitize import sanitize_log_value
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from process_pdfs import DR_PDF_DIR
 
@@ -495,12 +496,14 @@ def verify_dr_verify(report_id: int):
                         try:
                             ensure_task(image.uuid, dr_disease.id)
                             current_app.logger.info(
-                                "Created DR grading task for image UUID %s", image.uuid
+                                "Created DR grading task for image UUID %s",
+                                sanitize_log_value(image.uuid),
                             )
                         except Exception as task_error:
                             current_app.logger.exception(
                                 "Failed to create DR grading task for image UUID %s: %s", 
-                                image.uuid, task_error
+                                sanitize_log_value(image.uuid),
+                                sanitize_log_value(task_error),
                             )
                             # Continue with other images even if one fails
                 else:
@@ -508,7 +511,8 @@ def verify_dr_verify(report_id: int):
             except Exception as e:
                 current_app.logger.exception(
                     "Failed to create grading tasks for DR verified encounter %s: %s", 
-                    enc.id, e
+                    sanitize_log_value(enc.id),
+                    sanitize_log_value(e),
                 )
                 # Don't fail the verification if task creation fails, just log it
 
@@ -577,12 +581,14 @@ def verify_dr_unverify(report_id: int):
                             if removed_count > 0:
                                 current_app.logger.info(
                                     "Removed %d pending DR grading task(s) for unverified image UUID %s", 
-                                    removed_count, image.uuid
+                                    sanitize_log_value(removed_count),
+                                    sanitize_log_value(image.uuid),
                                 )
                         except Exception as task_error:
                             current_app.logger.exception(
                                 "Failed to remove DR grading tasks for unverified image UUID %s: %s", 
-                                image.uuid, task_error
+                                sanitize_log_value(image.uuid),
+                                sanitize_log_value(task_error),
                             )
                             # Continue with other images even if one fails
                 else:
@@ -590,7 +596,8 @@ def verify_dr_unverify(report_id: int):
             except Exception as e:
                 current_app.logger.exception(
                     "Failed to remove grading tasks for DR unverified encounter %s: %s", 
-                    enc.id, e
+                    sanitize_log_value(enc.id),
+                    sanitize_log_value(e),
                 )
                 # Don't fail the unverification if task removal fails, just log it
 

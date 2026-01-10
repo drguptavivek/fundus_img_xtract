@@ -326,7 +326,11 @@
 <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chartjs-plugin-datalabels.js') }}"></script>
 <script src="{{ url_for('static', filename='js/home-charts.js') }}"></script>
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
   // Pass data to the external JavaScript file through global variables
   {% if disease_image_distribution %}
   var diseaseImagesLabels = [{% for item in disease_image_distribution %}"{{ item.disease_name }}"{% if not loop.last %},{% endif %}{% endfor %}];

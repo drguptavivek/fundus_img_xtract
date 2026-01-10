@@ -24,6 +24,7 @@ from flask_limiter.util import get_remote_address
 from sqlalchemy import text
 from db_transaction_manager import get_db_session
 from utils.env_loader import load_environment
+from utils.log_sanitize import sanitize_log_value
 from utils.redis_connection import build_redis_url
 
 load_environment()
@@ -614,7 +615,10 @@ def clear_rate_limit(key: str = None, limit: str = None) -> bool:
                 # For Redis, we need to construct the key properly
                 storage_key = f"{limit}:{key}"
                 limiter._storage.clear(storage_key)
-                rate_limit_logger.info(f"Cleared rate limit for key: {storage_key}")
+                rate_limit_logger.info(
+                    "Cleared rate limit for key: %s",
+                    sanitize_log_value(storage_key),
+                )
             else:
                 # Clear all limits for a key
                 # For Redis storage, we need to use the Redis client directly
@@ -627,17 +631,31 @@ def clear_rate_limit(key: str = None, limit: str = None) -> bool:
                     keys = redis_client.keys(pattern)
                     if keys:
                         redis_client.delete(*keys)
-                        rate_limit_logger.info(f"Cleared {len(keys)} rate limits for key pattern: {pattern}")
+                        rate_limit_logger.info(
+                            "Cleared %s rate limits for key pattern: %s",
+                            sanitize_log_value(len(keys)),
+                            sanitize_log_value(pattern),
+                        )
                     else:
-                        rate_limit_logger.info(f"No rate limits found for key pattern: {pattern}")
+                        rate_limit_logger.info(
+                            "No rate limits found for key pattern: %s",
+                            sanitize_log_value(pattern),
+                        )
                 elif hasattr(limiter._storage, 'keys'):
                     # For storage backends that support key iteration
                     keys_to_remove = [k for k in limiter._storage.keys() if key in k]
                     for storage_key in keys_to_remove:
                         limiter._storage.clear(storage_key)
-                    rate_limit_logger.info(f"Cleared {len(keys_to_remove)} rate limits for key: {key}")
+                    rate_limit_logger.info(
+                        "Cleared %s rate limits for key: %s",
+                        sanitize_log_value(len(keys_to_remove)),
+                        sanitize_log_value(key),
+                    )
                 else:
-                    rate_limit_logger.warning(f"Storage backend does not support key clearing for key: {key}")
+                    rate_limit_logger.warning(
+                        "Storage backend does not support key clearing for key: %s",
+                        sanitize_log_value(key),
+                    )
                     return False
         else:
             # Clear all rate limits (use with caution)
@@ -655,7 +673,10 @@ def clear_rate_limit(key: str = None, limit: str = None) -> bool:
         
         return True
     except Exception as e:
-        rate_limit_logger.error(f"Failed to clear rate limit: {e}")
+        rate_limit_logger.error(
+            "Failed to clear rate limit: %s",
+            sanitize_log_value(e),
+        )
         return False
 
 def get_rate_limit_status(key: str = None) -> dict:
@@ -735,7 +756,10 @@ def get_rate_limit_status(key: str = None) -> dict:
             
             return stats
     except Exception as e:
-        rate_limit_logger.error(f"Failed to get rate limit status: {e}")
+        rate_limit_logger.error(
+            "Failed to get rate limit status: %s",
+            sanitize_log_value(e),
+        )
         return {"error": str(e)}
 
 def init_rate_limiting(app):
@@ -834,10 +858,16 @@ def init_rate_limiting(app):
             else:
                 storage_uri = f"memcached://{servers}"
             
-            rate_limit_logger.info(f"Using Memcached for rate limit storage: {servers}")
+            rate_limit_logger.info(
+                "Using Memcached for rate limit storage: %s",
+                sanitize_log_value(servers),
+            )
             storage_configured = True
         except Exception as e:
-            rate_limit_logger.error(f"Failed to connect to Memcached: {e}")
+            rate_limit_logger.error(
+                "Failed to connect to Memcached: %s",
+                sanitize_log_value(e),
+            )
             if not app.config.get('RATELIMIT_SWALLOW_ERRORS', False):
                 raise
     
@@ -848,16 +878,19 @@ def init_rate_limiting(app):
         
         if redis_url:
             storage_uri = redis_url
-            rate_limit_logger.info(f"Using Redis for rate limit storage: {redis_url}")
+            rate_limit_logger.info(
+                "Using Redis for rate limit storage: %s",
+                sanitize_log_value(redis_url),
+            )
             storage_configured = True
     
     # Check if RATELIMIT_STORAGE_URI is explicitly set
     elif app.config.get('RATELIMIT_STORAGE_URI'):
         storage_url = app.config['RATELIMIT_STORAGE_URI']
         if storage_url.startswith('memcached://'):
-            rate_limit_logger.info(f"Using Memcached for rate limit storage (explicitly configured)")
+            rate_limit_logger.info("Using Memcached for rate limit storage (explicitly configured)")
         elif storage_url.startswith('redis://'):
-            rate_limit_logger.info(f"Using Redis for rate limit storage (explicitly configured)")
+            rate_limit_logger.info("Using Redis for rate limit storage (explicitly configured)")
         elif storage_url.startswith('memory://'):
             rate_limit_logger.warning("Using memory storage for rate limiting (not suitable for production)")
         storage_uri = storage_url
@@ -872,9 +905,10 @@ def init_rate_limiting(app):
     # Log configuration
     if app.config['RATELIMIT_ENABLED']:
         rate_limit_logger.info(
-            f"Rate limiting enabled - Default: {app.config['RATELIMIT_DEFAULT']}, "
-            f"Storage: {app.config['RATELIMIT_STORAGE_URI']}, "
-            f"Headers: {app.config['RATELIMIT_HEADERS_ENABLED']}"
+            "Rate limiting enabled - Default: %s, Storage: %s, Headers: %s",
+            sanitize_log_value(app.config['RATELIMIT_DEFAULT']),
+            sanitize_log_value(app.config['RATELIMIT_STORAGE_URI']),
+            sanitize_log_value(app.config['RATELIMIT_HEADERS_ENABLED']),
         )
     else:
         rate_limit_logger.info("Rate limiting disabled")
@@ -894,7 +928,10 @@ def init_rate_limiting(app):
             import ast
             connection_pool_kwargs = ast.literal_eval(pool_kwargs_str)
         except (ValueError, SyntaxError):
-            rate_limit_logger.warning(f"Invalid RATELIMIT_REDIS_CONNECTION_POOL_KWARGS: {pool_kwargs_str}")
+            rate_limit_logger.warning(
+                "Invalid RATELIMIT_REDIS_CONNECTION_POOL_KWARGS: %s",
+                sanitize_log_value(pool_kwargs_str),
+            )
         
         # Add standard Redis connection options
         if app.config.get('RATELIMIT_REDIS_SOCKET_TIMEOUT'):
@@ -922,7 +959,10 @@ def init_rate_limiting(app):
         
         if connection_pool_kwargs:
             storage_options = connection_pool_kwargs
-            rate_limit_logger.info(f"Redis connection options configured: {list(connection_pool_kwargs.keys())}")
+            rate_limit_logger.info(
+                "Redis connection options configured: %s",
+                sanitize_log_value(list(connection_pool_kwargs.keys())),
+            )
         else:
             storage_options = {}
     
@@ -930,7 +970,10 @@ def init_rate_limiting(app):
     
     # Initialize limiter with app
     # Debug logging
-    rate_limit_logger.info(f"Creating limiter with storage_uri: {storage_uri}")
+    rate_limit_logger.info(
+        "Creating limiter with storage_uri: %s",
+        sanitize_log_value(storage_uri),
+    )
     
     try:
         # Parse default and application limits
@@ -958,11 +1001,20 @@ def init_rate_limiting(app):
         
         # Debug logging after initialization
         if limiter._storage:
-            rate_limit_logger.info(f"Limiter initialized successfully. Storage URI: {limiter._storage_uri}, Storage type: {type(limiter._storage).__name__}")
+            rate_limit_logger.info(
+                "Limiter initialized successfully. Storage URI: %s, Storage type: %s",
+                sanitize_log_value(limiter._storage_uri),
+                sanitize_log_value(type(limiter._storage).__name__),
+            )
         else:
-            rate_limit_logger.error(f"Limiter initialization failed. Storage is None")
+            rate_limit_logger.error(
+                "Limiter initialization failed. Storage is None"
+            )
     except Exception as e:
-        rate_limit_logger.error(f"Failed to initialize limiter: {e}")
+        rate_limit_logger.error(
+            "Failed to initialize limiter: %s",
+            sanitize_log_value(e),
+        )
         # Fall back to memory storage
         try:
             app.config['RATELIMIT_STORAGE_URI'] = "memory://"
@@ -977,7 +1029,10 @@ def init_rate_limiting(app):
             limiter = new_limiter
             rate_limit_logger.warning("Falling back to memory storage for rate limiting")
         except Exception as fallback_error:
-            rate_limit_logger.error(f"Failed to initialize fallback limiter: {fallback_error}")
+            rate_limit_logger.error(
+                "Failed to initialize fallback limiter: %s",
+                sanitize_log_value(fallback_error),
+            )
             limiter = None
     
     # Register custom error handler

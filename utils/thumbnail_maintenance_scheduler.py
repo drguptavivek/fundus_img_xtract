@@ -23,6 +23,7 @@ from typing import Dict, List, Any, Optional
 
 import pytz
 from sqlalchemy import text
+from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger("thumbnail_maintenance")
 
@@ -48,8 +49,10 @@ def cleanup_orphaned_thumbnails(app, schedule_time="manual"):
     local_time = datetime.now(tz)
 
     logger.info(
-        f"Starting orphaned thumbnail cleanup - IST: {local_time.strftime('%Y-%m-%d %H:%M:%S')}, "
-        f"UTC: {start_time.strftime('%Y-%m-%d %H:%M:%S')}, Schedule: {schedule_time}"
+        "Starting orphaned thumbnail cleanup - IST: %s, UTC: %s, Schedule: %s",
+        sanitize_log_value(local_time.strftime('%Y-%m-%d %H:%M:%S')),
+        sanitize_log_value(start_time.strftime('%Y-%m-%d %H:%M:%S')),
+        sanitize_log_value(schedule_time),
     )
 
     try:
@@ -61,25 +64,32 @@ def cleanup_orphaned_thumbnails(app, schedule_time="manual"):
 
         # Log detailed results
         logger.info(
-            f"Orphaned thumbnail cleanup completed - "
-            f"Duration: {duration.total_seconds():.2f}s, "
-            f"End IST: {local_time_end.strftime('%Y-%m-%d %H:%M:%S')}"
+            "Orphaned thumbnail cleanup completed - Duration: %ss, End IST: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(local_time_end.strftime('%Y-%m-%d %H:%M:%S')),
         )
 
         logger.info(
-            f"Cleanup Statistics - "
-            f"File orphans found: {cleanup_results.get('file_orphans_found', 0)}, "
-            f"File orphans removed: {cleanup_results.get('file_orphans_removed', 0)}, "
-            f"Reference thumbnails checked: {cleanup_results.get('ref_thumbnails_checked', 0)}, "
-            f"Total errors: {len(cleanup_results.get('total_errors', []))}"
+            "Cleanup Statistics - File orphans found: %s, File orphans removed: %s, "
+            "Reference thumbnails checked: %s, Total errors: %s",
+            sanitize_log_value(cleanup_results.get('file_orphans_found', 0)),
+            sanitize_log_value(cleanup_results.get('file_orphans_removed', 0)),
+            sanitize_log_value(cleanup_results.get('ref_thumbnails_checked', 0)),
+            sanitize_log_value(len(cleanup_results.get('total_errors', []))),
         )
 
         # Log any errors
         errors = cleanup_results.get('total_errors', [])
         if errors:
-            logger.warning(f"Thumbnail cleanup had {len(errors)} errors:")
+            logger.warning(
+                "Thumbnail cleanup had %s errors:",
+                sanitize_log_value(len(errors)),
+            )
             for error in errors:
-                logger.warning(f"  - {error}")
+                logger.warning(
+                    "  - %s",
+                    sanitize_log_value(error),
+                )
         else:
             logger.info("Thumbnail cleanup completed successfully with no errors")
 
@@ -98,7 +108,9 @@ def cleanup_orphaned_thumbnails(app, schedule_time="manual"):
     except Exception as e:
         duration = datetime.now(pytz.UTC) - start_time
         logger.error(
-            f"Orphaned thumbnail cleanup failed after {duration.total_seconds():.2f}s: {str(e)}"
+            "Orphaned thumbnail cleanup failed after %ss: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(e),
         )
 
         return {
@@ -226,26 +238,33 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
         local_time_end = datetime.now(tz)
 
         logger.info(
-            f"Missing thumbnail regeneration completed - "
-            f"Duration: {duration.total_seconds():.2f}s, "
-            f"End IST: {local_time_end.strftime('%Y-%m-%d %H:%M:%S')}"
+            "Missing thumbnail regeneration completed - Duration: %ss, End IST: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(local_time_end.strftime('%Y-%m-%d %H:%M:%S')),
         )
 
         logger.info(
-            f"Regeneration Statistics - "
-            f"Direct uploads processed: {stats['direct_uploads_processed']}, "
-            f"Direct uploads triggered: {stats['direct_uploads_triggered']}, "
-            f"Encounter files processed: {stats['encounter_files_processed']}, "
-            f"Encounter files triggered: {stats['encounter_files_triggered']}, "
-            f"Total triggered: {stats['total_triggered']}, "
-            f"Errors: {len(stats['errors'])}"
+            "Regeneration Statistics - Direct uploads processed: %s, Direct uploads triggered: %s, "
+            "Encounter files processed: %s, Encounter files triggered: %s, Total triggered: %s, Errors: %s",
+            sanitize_log_value(stats['direct_uploads_processed']),
+            sanitize_log_value(stats['direct_uploads_triggered']),
+            sanitize_log_value(stats['encounter_files_processed']),
+            sanitize_log_value(stats['encounter_files_triggered']),
+            sanitize_log_value(stats['total_triggered']),
+            sanitize_log_value(len(stats['errors'])),
         )
 
         # Log any errors
         if stats['errors']:
-            logger.warning(f"Thumbnail regeneration had {len(stats['errors'])} errors:")
+            logger.warning(
+                "Thumbnail regeneration had %s errors:",
+                sanitize_log_value(len(stats['errors'])),
+            )
             for error in stats['errors']:
-                logger.warning(f"  - {error}")
+                logger.warning(
+                    "  - %s",
+                    sanitize_log_value(error),
+                )
         else:
             logger.info("Thumbnail regeneration completed successfully with no errors")
 
@@ -262,7 +281,9 @@ def regenerate_missing_thumbnails(app, schedule_time="manual", limit=100):
     except Exception as e:
         duration = datetime.now(pytz.UTC) - start_time
         logger.error(
-            f"Missing thumbnail regeneration failed after {duration.total_seconds():.2f}s: {str(e)}"
+            "Missing thumbnail regeneration failed after %ss: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(e),
         )
 
         return {
@@ -440,27 +461,42 @@ def validate_thumbnail_integrity(app, schedule_time="manual", sample_size=100):
         local_time_end = datetime.now(tz)
 
         logger.info(
-            f"Thumbnail integrity validation completed - "
-            f"Duration: {duration.total_seconds():.2f}s, "
-            f"End IST: {local_time_end.strftime('%Y-%m-%d %H:%M:%S')}"
+            "Thumbnail integrity validation completed - Duration: %ss, End IST: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(local_time_end.strftime('%Y-%m-%d %H:%M:%S')),
         )
 
         logger.info(
-            f"Validation Statistics - "
-            f"Direct uploads: {stats['direct_uploads_checked']} checked, "
-            f"{stats['direct_uploads_consistent']} consistent, {stats['direct_uploads_inconsistent']} inconsistent; "
-            f"Encounter files: {stats['encounter_files_checked']} checked, "
-            f"{stats['encounter_files_consistent']} consistent, {stats['encounter_files_inconsistent']} inconsistent; "
-            f"Total: {stats['total_checked']} checked, {stats['total_consistent']} consistent, {stats['total_inconsistent']} inconsistent"
+            "Validation Statistics - Direct uploads: %s checked, %s consistent, %s inconsistent; "
+            "Encounter files: %s checked, %s consistent, %s inconsistent; "
+            "Total: %s checked, %s consistent, %s inconsistent",
+            sanitize_log_value(stats['direct_uploads_checked']),
+            sanitize_log_value(stats['direct_uploads_consistent']),
+            sanitize_log_value(stats['direct_uploads_inconsistent']),
+            sanitize_log_value(stats['encounter_files_checked']),
+            sanitize_log_value(stats['encounter_files_consistent']),
+            sanitize_log_value(stats['encounter_files_inconsistent']),
+            sanitize_log_value(stats['total_checked']),
+            sanitize_log_value(stats['total_consistent']),
+            sanitize_log_value(stats['total_inconsistent']),
         )
 
         # Log inconsistencies
         if stats['total_inconsistent'] > 0:
-            logger.warning(f"Found {stats['total_inconsistent']} thumbnail inconsistencies:")
+            logger.warning(
+                "Found %s thumbnail inconsistencies:",
+                sanitize_log_value(stats['total_inconsistent']),
+            )
             for inconsistency in stats['inconsistencies'][:10]:  # Limit to first 10 for readability
-                logger.warning(f"  - {inconsistency}")
+                logger.warning(
+                    "  - %s",
+                    sanitize_log_value(inconsistency),
+                )
             if len(stats['inconsistencies']) > 10:
-                logger.warning(f"  ... and {len(stats['inconsistencies']) - 10} more")
+                logger.warning(
+                    "  ... and %s more",
+                    sanitize_log_value(len(stats['inconsistencies']) - 10),
+                )
         else:
             logger.info("Thumbnail validation completed successfully - all thumbnails are consistent")
 
@@ -480,7 +516,9 @@ def validate_thumbnail_integrity(app, schedule_time="manual", sample_size=100):
     except Exception as e:
         duration = datetime.now(pytz.UTC) - start_time
         logger.error(
-            f"Thumbnail integrity validation failed after {duration.total_seconds():.2f}s: {str(e)}"
+            "Thumbnail integrity validation failed after %ss: %s",
+            sanitize_log_value(f"{duration.total_seconds():.2f}"),
+            sanitize_log_value(e),
         )
 
         return {
@@ -542,16 +580,28 @@ def run_maintenance_tasks(app):
 
             # Log which tasks failed
             if not results['cleanup'].get('success', False):
-                logger.warning(f"Cleanup task failed: {results['cleanup'].get('error', 'Unknown error')}")
+                logger.warning(
+                    "Cleanup task failed: %s",
+                    sanitize_log_value(results['cleanup'].get('error', 'Unknown error')),
+                )
             if not results['regeneration'].get('success', False):
-                logger.warning(f"Regeneration task failed: {results['regeneration'].get('error', 'Unknown error')}")
+                logger.warning(
+                    "Regeneration task failed: %s",
+                    sanitize_log_value(results['regeneration'].get('error', 'Unknown error')),
+                )
             if not results['validation'].get('success', False):
-                logger.warning(f"Validation task failed: {results['validation'].get('error', 'Unknown error')}")
+                logger.warning(
+                    "Validation task failed: %s",
+                    sanitize_log_value(results['validation'].get('error', 'Unknown error')),
+                )
 
         return results
 
     except Exception as e:
-        logger.error(f"Comprehensive thumbnail maintenance cycle failed: {str(e)}")
+        logger.error(
+            "Comprehensive thumbnail maintenance cycle failed: %s",
+            sanitize_log_value(e),
+        )
         results['overall_success'] = False
         results['error'] = str(e)
         results['end_time_utc'] = datetime.now(pytz.UTC).isoformat()
@@ -575,15 +625,21 @@ class ThumbnailMaintenanceScheduler:
         try:
             current_time = datetime.now(self.timezone)
             logger.info(
-                f"Executing {task_func.__name__} - IST: {current_time.strftime('%Y-%m-%d %H:%M:%S')}, "
-                f"Schedule: {schedule_time_str}"
+                "Executing %s - IST: %s, Schedule: %s",
+                sanitize_log_value(task_func.__name__),
+                sanitize_log_value(current_time.strftime('%Y-%m-%d %H:%M:%S')),
+                sanitize_log_value(schedule_time_str),
             )
 
             result = task_func(self.app, schedule_time_str)
             return result
 
         except Exception as e:
-            logger.error(f"Failed to execute {task_func.__name__}: {str(e)}")
+            logger.error(
+                "Failed to execute %s: %s",
+                sanitize_log_value(task_func.__name__),
+                sanitize_log_value(e),
+            )
             return {
                 'success': False,
                 'error': str(e),
@@ -627,7 +683,10 @@ class ThumbnailMaintenanceScheduler:
                 time.sleep(60)
 
             except Exception as e:
-                logger.error(f"Error in maintenance scheduler loop: {str(e)}")
+                logger.error(
+                    "Error in maintenance scheduler loop: %s",
+                    sanitize_log_value(e),
+                )
                 time.sleep(300)  # Wait 5 minutes before retrying
 
         logger.info("Thumbnail maintenance scheduler stopped")
@@ -669,7 +728,10 @@ def initialize_scheduler(app):
             scheduler = ThumbnailMaintenanceScheduler(app)
             return scheduler
         except Exception as e:
-            logger.error(f"Failed to initialize thumbnail maintenance scheduler: {str(e)}")
+            logger.error(
+                "Failed to initialize thumbnail maintenance scheduler: %s",
+                sanitize_log_value(e),
+            )
             return None
     else:
         logger.info("Thumbnail maintenance scheduler disabled by configuration")
@@ -727,7 +789,10 @@ def trigger_manual_maintenance(task_type="all"):
             raise ValueError(f"Invalid task type: {task_type}")
 
     except Exception as e:
-        logger.error(f"Manual maintenance task failed: {str(e)}")
+        logger.error(
+            "Manual maintenance task failed: %s",
+            sanitize_log_value(e),
+        )
         return {
             'success': False,
             'error': str(e),
@@ -754,7 +819,11 @@ def queue_missing_thumbnail_regeneration(app, schedule_time: str = "post_upload"
             # in background threads, preventing "Working outside of application context" errors
             wrapped_regenerate_thumbnails = with_app_context(app, regenerate_missing_thumbnails)
             executor.submit(wrapped_regenerate_thumbnails, app, schedule_time, limit)
-            logger.info(f"Queued missing-thumbnail regeneration (limit {limit}) via executor, schedule={schedule_time}")
+            logger.info(
+                "Queued missing-thumbnail regeneration (limit %s) via executor, schedule=%s",
+                sanitize_log_value(limit),
+                sanitize_log_value(schedule_time),
+            )
         else:
             # For threading fallback, use context wrapper as well
             wrapped_regenerate_thumbnails = with_app_context(app, regenerate_missing_thumbnails)
@@ -763,6 +832,13 @@ def queue_missing_thumbnail_regeneration(app, schedule_time: str = "post_upload"
                 args=(app, schedule_time, limit),
                 daemon=True,
             ).start()
-            logger.info(f"Started missing-thumbnail regeneration thread (limit {limit}), schedule={schedule_time}")
+            logger.info(
+                "Started missing-thumbnail regeneration thread (limit %s), schedule=%s",
+                sanitize_log_value(limit),
+                sanitize_log_value(schedule_time),
+            )
     except Exception as e:
-        logger.error(f"Failed to queue missing-thumbnail regeneration: {e}")
+        logger.error(
+            "Failed to queue missing-thumbnail regeneration: %s",
+            sanitize_log_value(e),
+        )

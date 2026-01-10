@@ -3,6 +3,7 @@ import markdown
 from flask import render_template, current_app, abort
 from . import bp
 from utils.rate_limiter import rate_limit
+from utils.log_sanitize import sanitize_log_value
 
 
 HELP_INDEX = {
@@ -66,7 +67,11 @@ def read_markdown_file(filename: str) -> tuple[str | None, str | None]:
         
         return html_content, None
     except Exception as e:
-        current_app.logger.error(f"Error reading markdown file {filename}: {str(e)}")
+        current_app.logger.error(
+            "Error reading markdown file %s: %s",
+            sanitize_log_value(filename),
+            sanitize_log_value(e),
+        )
         return None, str(e)
 
 

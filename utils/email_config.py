@@ -11,6 +11,7 @@ from flask import current_app
 from db_transaction_manager import transaction_scope
 from models import EmailSettings
 from utils.email_connection import test_smtp_connection
+from utils.log_sanitize import sanitize_log_value
 
 
 logger = logging.getLogger(__name__)
@@ -77,12 +78,18 @@ class EmailConfigService:
                     config['verify_certificates'] = True
                     config['source'] = 'database'
                     config['password'] = email_settings._get_password_for_use()  # Include decrypted password for email sending
-                    logger.info(f"Using email configuration from database (ID: {email_settings.id})")
+                    logger.info(
+                        "Using email configuration from database (ID: %s)",
+                        sanitize_log_value(email_settings.id),
+                    )
                     EmailConfigService._set_cached_config(config)
                     return config
 
         except Exception as e:
-            logger.warning(f"Failed to load email config from database: {e}")
+            logger.warning(
+                "Failed to load email config from database: %s",
+                sanitize_log_value(e),
+            )
 
         # Fallback to environment variables
         try:
@@ -93,7 +100,10 @@ class EmailConfigService:
                 return env_config
 
         except Exception as e:
-            logger.error(f"Failed to load email config from environment: {e}")
+            logger.error(
+                "Failed to load email config from environment: %s",
+                sanitize_log_value(e),
+            )
 
         raise EmailConfigError("No valid email configuration found in database or environment variables")
 
@@ -156,7 +166,10 @@ class EmailConfigService:
             with transaction_scope() as db:
                 return EmailSettings.get_active_settings(db)
         except Exception as e:
-            logger.error(f"Failed to get active email settings: {e}")
+            logger.error(
+                "Failed to get active email settings: %s",
+                sanitize_log_value(e),
+            )
             return None
 
     @staticmethod
@@ -211,18 +224,33 @@ class EmailConfigService:
                 current_app.config['SMTP_VERIFY_CERTS'] = config['verify_certificates']
                 current_app.config['SMTP_TIMEOUT'] = config['connection_timeout']
 
-                logger.info(f"Flask email config updated from {config['source']}")
+                logger.info(
+                    "Flask email config updated from %s",
+                    sanitize_log_value(config['source']),
+                )
 
         except EmailConfigError as e:
-            logger.warning(f"Could not update Flask email config: {e}")
+            logger.warning(
+                "Could not update Flask email config: %s",
+                sanitize_log_value(e),
+            )
             # Also log to startup_env_error logger for visibility
             startup_env_logger = logging.getLogger("startup_env")
-            startup_env_logger.error(f"Could not update Flask email config: {e}")
+            startup_env_logger.error(
+                "Could not update Flask email config: %s",
+                sanitize_log_value(e),
+            )
         except Exception as e:
-            logger.error(f"Error updating Flask email config: {e}")
+            logger.error(
+                "Error updating Flask email config: %s",
+                sanitize_log_value(e),
+            )
             # Also log to startup_env_error logger for visibility
             startup_env_logger = logging.getLogger("startup_env")
-            startup_env_logger.error(f"Error updating Flask email config: {e}")
+            startup_env_logger.error(
+                "Error updating Flask email config: %s",
+                sanitize_log_value(e),
+            )
 
     @staticmethod
     def create_email_settings(
@@ -289,12 +317,18 @@ class EmailConfigService:
                 db.flush()  # Get ID without committing
                 settings_id = email_settings.id
 
-                logger.info(f"Created email settings with ID {settings_id}")
+                logger.info(
+                    "Created email settings with ID %s",
+                    sanitize_log_value(settings_id),
+                )
                 EmailConfigService._clear_cached_config()
                 return settings_id
 
         except Exception as e:
-            logger.error(f"Failed to create email settings: {e}")
+            logger.error(
+                "Failed to create email settings: %s",
+                sanitize_log_value(e),
+            )
             raise EmailConfigError(f"Failed to create email settings: {str(e)}")
 
     @staticmethod
@@ -332,10 +366,16 @@ class EmailConfigService:
 
                 email_settings.updated_by = updated_by
 
-                logger.info(f"Updated email settings with ID {settings_id}")
+                logger.info(
+                    "Updated email settings with ID %s",
+                    sanitize_log_value(settings_id),
+                )
                 EmailConfigService._clear_cached_config()
                 return email_settings
 
         except Exception as e:
-            logger.error(f"Failed to update email settings: {e}")
+            logger.error(
+                "Failed to update email settings: %s",
+                sanitize_log_value(e),
+            )
             raise EmailConfigError(f"Failed to update email settings: {str(e)}")

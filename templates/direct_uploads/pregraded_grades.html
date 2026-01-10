@@ -398,7 +398,11 @@
 
 {% block page_scripts %}
 <script src="{{ url_for('static', filename='js/pregraded_grades.js') }}"></script>
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
   document.addEventListener('DOMContentLoaded', function () {
     // Grade type selector functionality
     const residentRadio = document.getElementById('residentRadio');
@@ -440,7 +444,11 @@
   });
 </script>
 {% if modal_values %}
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
   document.addEventListener('DOMContentLoaded', function () {
     const modalEl = document.getElementById('gradeMappingModal');
     if (modalEl) {

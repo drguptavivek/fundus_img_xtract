@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from flask import jsonify, request
 from flask_login import current_user
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 
 
 def create_kpi_response(data: Dict, message: str = "Data retrieved successfully", filters_applied: Dict = None) -> Dict:
@@ -99,7 +100,10 @@ def parse_filter_params() -> Dict:
     try:
         # Log raw request args for debugging
         param_logger = logging.getLogger('runtime_error')
-        param_logger.info(f"Raw request args: {dict(request.args)}")
+        param_logger.info(
+            "Raw request args: %s",
+            sanitize_log_value(dict(request.args)),
+        )
         
         # Date filters
         start_date = request.args.get('start_date')
@@ -137,15 +141,24 @@ def parse_filter_params() -> Dict:
         
         # Log successful parameter parsing
         param_logger = logging.getLogger('runtime_error')
-        param_logger.info(f"Successfully parsed filter params: {params}")
+        param_logger.info(
+            "Successfully parsed filter params: %s",
+            sanitize_log_value(params),
+        )
         
         return params
         
     except Exception as e:
         # Log parameter parsing errors
         param_logger = logging.getLogger('runtime_error')
-        param_logger.error(f"Error parsing filter params: {str(e)}")
-        param_logger.error(f"Raw request args: {dict(request.args)}")
+        param_logger.error(
+            "Error parsing filter params: %s",
+            sanitize_log_value(e),
+        )
+        param_logger.error(
+            "Raw request args: %s",
+            sanitize_log_value(dict(request.args)),
+        )
         raise
 
 
@@ -168,7 +181,11 @@ def get_user_permissions(user_id: int) -> Set[int]:
         return get_user_lab_unit_ids_no_admin_override(user_id)
     except Exception as e:
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error getting user permissions for user {user_id}: {str(e)}")
+        error_logger.error(
+            "Error getting user permissions for user %s: %s",
+            sanitize_log_value(user_id),
+            sanitize_log_value(e),
+        )
         return set()
 
 
@@ -225,7 +242,10 @@ def validate_dataframe_not_empty(df: pd.DataFrame, endpoint_name: str) -> bool:
     """
     if len(df) == 0:
         logger = logging.getLogger('runtime_error')
-        logger.warning(f"Empty DataFrame returned for {endpoint_name}")
+        logger.warning(
+            "Empty DataFrame returned for %s",
+            sanitize_log_value(endpoint_name),
+        )
         return False
     return True
 
@@ -282,7 +302,10 @@ def group_by_location(df: pd.DataFrame, group_columns: List[str], agg_columns: D
         return grouped
     except Exception as e:
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in group_by_location: {str(e)}")
+        error_logger.error(
+            "Error in group_by_location: %s",
+            sanitize_log_value(e),
+        )
         return pd.DataFrame()
 
 
@@ -314,7 +337,12 @@ def log_endpoint_usage(endpoint_name: str, record_count: int, user_id: int = Non
     """
     logger = logging.getLogger('runtime_error')
     user_info = f" for user {user_id}" if user_id else ""
-    logger.info(f"Endpoint {endpoint_name}{user_info}: processed {record_count} records")
+    logger.info(
+        "Endpoint %s%s: processed %s records",
+        sanitize_log_value(endpoint_name),
+        sanitize_log_value(user_info),
+        sanitize_log_value(record_count),
+    )
 
 
 def handle_common_exceptions(func):
@@ -334,7 +362,11 @@ def handle_common_exceptions(func):
             return create_error_response("Invalid parameters", str(e))
         except Exception as e:
             error_logger = logging.getLogger('runtime_error')
-            error_logger.error(f"Unexpected error in {func.__name__}: {str(e)}")
+            error_logger.error(
+                "Unexpected error in %s: %s",
+                sanitize_log_value(func.__name__),
+                sanitize_log_value(e),
+            )
             return create_error_response("Internal server error", str(e), 500)
     
     return wrapper
@@ -413,9 +445,18 @@ def handle_nat_values_for_json(df: pd.DataFrame) -> pd.DataFrame:
                 df_clean[col] = df_clean[col].apply(clean_value)
     except Exception as e:
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in handle_nat_values_for_json: {str(e)}")
-        error_logger.error(f"DataFrame shape: {df.shape}")
-        error_logger.error(f"DataFrame columns: {list(df.columns)}")
+        error_logger.error(
+            "Error in handle_nat_values_for_json: %s",
+            sanitize_log_value(e),
+        )
+        error_logger.error(
+            "DataFrame shape: %s",
+            sanitize_log_value(df.shape),
+        )
+        error_logger.error(
+            "DataFrame columns: %s",
+            sanitize_log_value(list(df.columns)),
+        )
         raise
     
     return df_clean

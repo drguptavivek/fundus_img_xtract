@@ -279,7 +279,11 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
 document.addEventListener('DOMContentLoaded', function() {
     const refreshStatusBtn = document.getElementById('refresh-status-btn');
     const manualRefreshBtn = document.getElementById('manual-refresh-btn');

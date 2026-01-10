@@ -15,6 +15,7 @@ from .utils import utcnow, get_client_ip
 from flask import flash
 from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback, rate_limit
 from utils.security_middleware import protect_form_submission, validate_payload_size
+from utils.log_sanitize import sanitize_log_value
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
@@ -205,7 +206,12 @@ def login():
     
     # Log at the very beginning to catch all requests
     ip = get_client_ip()
-    auth_logger.info(f"Login route accessed - Method: {request.method}, IP: {ip}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+    auth_logger.info(
+        "Login route accessed - Method: %s, IP: %s, User-Agent: %s",
+        sanitize_log_value(request.method),
+        sanitize_log_value(ip),
+        sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
+    )
     
     # If user is already logged in, redirect to homepage
     if current_user.is_authenticated:
@@ -237,25 +243,46 @@ def login():
             # Remove sensitive fields before logging
             sensitive_fields = ['password', 'csrf_token', 'new_password', 'confirm_password']
             safe_form_data = {k: v for k, v in form_data.items() if k not in sensitive_fields}
-            auth_logger.info(f"POST request received - Form data (sanitized): {safe_form_data}")
-            auth_logger.info(f"POST request headers - Content-Type: {request.content_type}, Content-Length: {request.content_length}")
+            auth_logger.info(
+                "POST request received - Form data (sanitized): %s",
+                sanitize_log_value(safe_form_data),
+            )
+            auth_logger.info(
+                "POST request headers - Content-Type: %s, Content-Length: %s",
+                sanitize_log_value(request.content_type),
+                sanitize_log_value(request.content_length),
+            )
             
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
             captcha_input = (request.form.get("captcha") or "").strip()
             
             # Log login attempt
-            auth_logger.info(f"Login attempt - User: {username}, IP: {ip}")
+            auth_logger.info(
+                "Login attempt - User: %s, IP: %s",
+                sanitize_log_value(username),
+                sanitize_log_value(ip),
+            )
             
             # Validate CAPTCHA first
-            auth_logger.info(f"CAPTCHA validation attempt - Input: '{captcha_input}'")
+            auth_logger.info(
+                "CAPTCHA validation attempt - Input: '%s'",
+                sanitize_log_value(captcha_input),
+            )
             captcha_valid, captcha_message = captcha_manager.validate_captcha(captcha_input)
-            auth_logger.info(f"CAPTCHA validation result - Valid: {captcha_valid}, Message: {captcha_message}")
+            auth_logger.info(
+                "CAPTCHA validation result - Valid: %s, Message: %s",
+                sanitize_log_value(captcha_valid),
+                sanitize_log_value(captcha_message),
+            )
             
             if not captcha_valid:
                 # Generate new CAPTCHA only when validation fails
                 captcha_data = captcha_manager.generate_captcha()
-                auth_logger.info(f"CAPTCHA validation failed - New CAPTCHA generated: {captcha_data['captcha_id']}")
+                auth_logger.info(
+                    "CAPTCHA validation failed - New CAPTCHA generated: %s",
+                    sanitize_log_value(captcha_data.get("captcha_id")),
+                )
                 return render_template("auth/login.html",
                                        error=captcha_message,
                                        captcha_image=captcha_data['image'],
@@ -334,7 +361,13 @@ def login():
 
                 # Log successful login with session ID
                 session_id = session.get('_id', 'unknown')
-                auth_logger.info(f"User login successful - User: {username}, IP: {ip}, SessionID: {session_id}, UserID: {user.id}")
+                auth_logger.info(
+                    "User login successful - User: %s, IP: %s, SessionID: %s, UserID: %s",
+                    sanitize_log_value(username),
+                    sanitize_log_value(ip),
+                    sanitize_log_value(session_id),
+                    sanitize_log_value(user.id),
+                )
 
                 # Role-based landing pages
                 if user.has_role('ophthalmologist'):
@@ -385,7 +418,10 @@ def login():
         session["_session_initialized"] = True
         session.modified = True
 
-        auth_logger.info(f"GET request - Session initialized, keys: {list(session.keys())}")
+        auth_logger.info(
+            "GET request - Session initialized, keys: %s",
+            sanitize_log_value(list(session.keys())),
+        )
         auth_logger.info(f"GET request - Session cookie will be set")
 
         return render_template("auth/login.html")
@@ -399,10 +435,16 @@ def refresh_captcha():
     
     # Log refresh request for debugging
     ip = get_client_ip()
-    auth_logger.info(f"CAPTCHA refresh request - IP: {ip}")
+    auth_logger.info(
+        "CAPTCHA refresh request - IP: %s",
+        sanitize_log_value(ip),
+    )
     
     captcha_data = captcha_manager.generate_captcha()
-    auth_logger.info(f"CAPTCHA refresh generated - ID: {captcha_data['captcha_id']}")
+    auth_logger.info(
+        "CAPTCHA refresh generated - ID: %s",
+        sanitize_log_value(captcha_data.get("captcha_id")),
+    )
     
     # Create JSON response
     response = jsonify(captcha_data)
@@ -482,7 +524,13 @@ def logout():
     ip = get_client_ip()
     cookie_name = current_app.config.get("SESSION_COOKIE_NAME", "session")
     prior_session_id = getattr(session, "session_id", None) or request.cookies.get(cookie_name)
-    auth_logger.info(f"User logout - User: {username}, UserID: {user_id}, IP: {ip}, SessionID: {prior_session_id}")
+    auth_logger.info(
+        "User logout - User: %s, UserID: %s, IP: %s, SessionID: %s",
+        sanitize_log_value(username),
+        sanitize_log_value(user_id),
+        sanitize_log_value(ip),
+        sanitize_log_value(prior_session_id),
+    )
     try:
         session_user_id = int(current_user.get_id())  # type: ignore[arg-type]
     except (TypeError, ValueError):
@@ -685,7 +733,14 @@ def reset_password():
 
         # Log successful password reset
         session_id = session.get('_id', 'unknown')
-        auth_logger.info(f"Password reset successful - User: {username}, Email: {email}, IP: {ip}, SessionID: {session_id}, UserID: {user_id}")
+        auth_logger.info(
+            "Password reset successful - User: %s, Email: %s, IP: %s, SessionID: %s, UserID: %s",
+            sanitize_log_value(username),
+            sanitize_log_value(email),
+            sanitize_log_value(ip),
+            sanitize_log_value(session_id),
+            sanitize_log_value(user_id),
+        )
 
         send_password_reset_email(email, username, generated_password)
 

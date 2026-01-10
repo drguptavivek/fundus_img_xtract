@@ -39,6 +39,7 @@ from models import (
     DiabeticRetinopathyReport,
     GlaucomaResultsCleaned
 )
+from utils.log_sanitize import sanitize_log_value
 from utils.upload_eligibility import get_user_lab_unit_ids
 
 # Configure logging
@@ -548,8 +549,12 @@ def log_search_request(
         per_page: Items per page
     """
     search_logger.info(
-        f"Image search request - User: {user_id}, Scope: {search_scope}, "
-        f"Page: {page}, Per_page: {per_page}, Filters: {filters}"
+        "Image search request - User: %s, Scope: %s, Page: %s, Per_page: %s, Filters: %s",
+        sanitize_log_value(user_id),
+        sanitize_log_value(search_scope),
+        sanitize_log_value(page),
+        sanitize_log_value(per_page),
+        sanitize_log_value(filters),
     )
 
 
@@ -568,8 +573,11 @@ def log_search_results(
         execution_time: Query execution time in seconds
     """
     search_logger.info(
-        f"Search completed - User: {user_id}, Scope: {search_scope}, "
-        f"Total: {total_count}, Time: {execution_time:.3f}s"
+        "Search completed - User: %s, Scope: %s, Total: %s, Time: %.3fs",
+        sanitize_log_value(user_id),
+        sanitize_log_value(search_scope),
+        sanitize_log_value(total_count),
+        execution_time,
     )
 
 
@@ -582,8 +590,11 @@ def log_search_error(user_id: int, error: Exception, filters: Dict[str, Any]) ->
         filters: Filters that were applied
     """
     search_logger.error(
-        f"Search error - User: {user_id}, Error: {str(error)}, "
-        f"Filters: {filters}", exc_info=True
+        "Search error - User: %s, Error: %s, Filters: %s",
+        sanitize_log_value(user_id),
+        sanitize_log_value(error),
+        sanitize_log_value(filters),
+        exc_info=True,
     )
 
 

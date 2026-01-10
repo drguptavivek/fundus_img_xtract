@@ -18,6 +18,7 @@ from flask import Blueprint, render_template, request, jsonify, session
 from flask_login import login_required
 
 from auth.roles import roles_required
+from utils.log_sanitize import sanitize_log_value
 from scripts.merge_users_from_backup import UserImporter
 
 # Create blueprint
@@ -45,13 +46,19 @@ def extract_sql_content(file_path):
 
     if file_path.suffix == '.gz':
         # Handle gzipped SQL files
-        logger.info(f"Extracting gzipped SQL file: {file_path}")
+        logger.info(
+            "Extracting gzipped SQL file: %s",
+            sanitize_log_value(file_path),
+        )
         with gzip.open(file_path, 'rt', encoding='utf-8') as f:
             return f.read()
 
     elif file_path.suffix == '.zip':
         # Handle ZIP archives
-        logger.info(f"Extracting SQL from ZIP file: {file_path}")
+        logger.info(
+            "Extracting SQL from ZIP file: %s",
+            sanitize_log_value(file_path),
+        )
         with zipfile.ZipFile(file_path, 'r') as zip_file:
             # Look for SQL files in the archive
             sql_files = [f for f in zip_file.namelist() if f.endswith('.sql')]
@@ -60,13 +67,19 @@ def extract_sql_content(file_path):
 
             # Use the first SQL file found
             sql_file = sql_files[0]
-            logger.info(f"Using SQL file from archive: {sql_file}")
+            logger.info(
+                "Using SQL file from archive: %s",
+                sanitize_log_value(sql_file),
+            )
             with zip_file.open(sql_file) as f:
                 return f.read().decode('utf-8')
 
     elif file_path.suffix == '.sql':
         # Handle plain SQL files
-        logger.info(f"Reading plain SQL file: {file_path}")
+        logger.info(
+            "Reading plain SQL file: %s",
+            sanitize_log_value(file_path),
+        )
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
 
@@ -121,7 +134,11 @@ def upload_file():
         file_path = os.path.join(temp_dir, temp_filename)
         file.save(file_path)
 
-        logger.info(f"File uploaded successfully: {filename} ({file_size} bytes)")
+        logger.info(
+            "File uploaded successfully: %s (%s bytes)",
+            sanitize_log_value(filename),
+            sanitize_log_value(file_size),
+        )
 
         # Extract SQL content for preview
         try:
@@ -167,13 +184,19 @@ def upload_file():
             })
 
         except Exception as e:
-            logger.error(f"Failed to process uploaded file: {e}")
+            logger.error(
+                "Failed to process uploaded file: %s",
+                sanitize_log_value(e),
+            )
             # Clean up temp files
             shutil.rmtree(temp_dir, ignore_errors=True)
             return jsonify({'error': f'Failed to process file: {str(e)}'}), 400
 
     except Exception as e:
-        logger.error(f"File upload failed: {e}")
+        logger.error(
+            "File upload failed: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 
@@ -196,7 +219,10 @@ def restore_database():
         if not confirm_restore:
             return jsonify({'error': 'Restore not confirmed'}), 400
 
-        logger.info(f"Starting complete database restore from: {file_path}")
+        logger.info(
+            "Starting complete database restore from: %s",
+            sanitize_log_value(file_path),
+        )
 
         try:
             # Extract SQL content
@@ -221,10 +247,16 @@ def restore_database():
                 return jsonify({'error': 'Database restore failed - see server logs for details'}), 500
 
         except Exception as e:
-            logger.error(f"Database restore failed: {e}")
+            logger.error(
+                "Database restore failed: %s",
+                sanitize_log_value(e),
+            )
             import traceback
             error_trace = traceback.format_exc()
-            logger.error(f"Full error traceback: {error_trace}")
+            logger.error(
+                "Full error traceback: %s",
+                sanitize_log_value(error_trace),
+            )
 
             # Extract more helpful error message for common issues
             error_msg = str(e)
@@ -247,7 +279,10 @@ def restore_database():
             session.pop('temp_dir', None)
 
     except Exception as e:
-        logger.error(f"Restore process failed: {e}")
+        logger.error(
+            "Restore process failed: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({'error': f'Restore process failed: {str(e)}'}), 500
 
 
@@ -261,7 +296,10 @@ def remove_user_statements(sql_content, preserve_users=True):
     """
     import re
 
-    logger.info(f"Removing user-related statements from SQL content (preserve_users={preserve_users})")
+    logger.info(
+        "Removing user-related statements from SQL content (preserve_users=%s)",
+        sanitize_log_value(preserve_users),
+    )
 
     # CRITICAL: Always remove DROP TABLE statements that would delete existing user data
     # This protects manual table destruction while allowing backup data to flow through
@@ -375,7 +413,11 @@ def remove_user_statements(sql_content, preserve_users=True):
     else:
         logger.info("Allowing user data from backup (existing users will be overwritten)")
 
-    logger.info(f"Dangerous user statements removed. Original content length: {len(sql_content)}, Modified content length: {len(modified_content)}")
+    logger.info(
+        "Dangerous user statements removed. Original content length: %s, Modified content length: %s",
+        sanitize_log_value(len(sql_content)),
+        sanitize_log_value(len(modified_content)),
+    )
 
     return modified_content
 
@@ -404,7 +446,10 @@ def restore_from_sql(sql_content):
             raise ValueError(f"Unsupported database type: {parsed.scheme}")
 
     except Exception as e:
-        logger.error(f"Database restore failed: {e}")
+        logger.error(
+            "Database restore failed: %s",
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -443,7 +488,10 @@ def restore_postgresql(sql_content, database_url):
                 '-f', temp_file_path
             ]
 
-            logger.info(f"Executing PostgreSQL restore: {' '.join(cmd)}")
+            logger.info(
+                "Executing PostgreSQL restore: %s",
+                sanitize_log_value(' '.join(cmd)),
+            )
 
             result = subprocess.run(
                 cmd,
@@ -457,7 +505,10 @@ def restore_postgresql(sql_content, database_url):
                 logger.info("PostgreSQL restore completed successfully")
                 return True
             else:
-                logger.error(f"PostgreSQL restore failed: {result.stderr}")
+                logger.error(
+                    "PostgreSQL restore failed: %s",
+                    sanitize_log_value(result.stderr),
+                )
                 return False
 
         finally:
@@ -465,7 +516,10 @@ def restore_postgresql(sql_content, database_url):
             os.unlink(temp_file_path)
 
     except Exception as e:
-        logger.error(f"PostgreSQL restore failed: {e}")
+        logger.error(
+            "PostgreSQL restore failed: %s",
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -477,7 +531,10 @@ def restore_sqlite(sql_content, database_path):
         # Create backup of current database
         backup_path = f"{database_path}.backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         shutil.copy2(database_path, backup_path)
-        logger.info(f"Created database backup: {backup_path}")
+        logger.info(
+            "Created database backup: %s",
+            sanitize_log_value(backup_path),
+        )
 
         try:
             # Connect to database and execute SQL
@@ -493,7 +550,10 @@ def restore_sqlite(sql_content, database_path):
 
         except Exception as e:
             # Restore from backup on failure
-            logger.error(f"SQLite restore failed, restoring from backup: {e}")
+            logger.error(
+                "SQLite restore failed, restoring from backup: %s",
+                sanitize_log_value(e),
+            )
             shutil.copy2(backup_path, database_path)
             return False
 
@@ -501,7 +561,10 @@ def restore_sqlite(sql_content, database_path):
             conn.close()
 
     except Exception as e:
-        logger.error(f"SQLite restore failed: {e}")
+        logger.error(
+            "SQLite restore failed: %s",
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -525,5 +588,8 @@ def cancel_restore():
         return jsonify({'success': True, 'message': 'Restore cancelled'})
 
     except Exception as e:
-        logger.error(f"Failed to cancel restore: {e}")
+        logger.error(
+            "Failed to cancel restore: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({'error': f'Failed to cancel: {str(e)}'}), 500

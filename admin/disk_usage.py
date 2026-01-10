@@ -12,6 +12,7 @@ from flask import current_app, render_template, request, jsonify, flash, redirec
 from auth.roles import roles_required
 from models import ZipFile
 from db_transaction_manager import get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 @roles_required('admin')
 def _get_directories_to_analyze() -> List[Path]:
@@ -29,9 +30,15 @@ def _get_directories_to_analyze() -> List[Path]:
     # Check if files directory exists and add to list
     if files_root.exists():
         directories.append(files_root.resolve())
-        current_app.logger.info(f"Files directory found: {files_root.resolve()}")
+        current_app.logger.info(
+            "Files directory found: %s",
+            sanitize_log_value(files_root.resolve()),
+        )
     else:
-        current_app.logger.warning(f"Files directory not found at: {files_root.resolve()}")
+        current_app.logger.warning(
+            "Files directory not found at: %s",
+            sanitize_log_value(files_root.resolve()),
+        )
     
     # Get logs directory
     configured_logs = current_app.config.get("LOG_VIEWER_ROOT")
@@ -43,9 +50,15 @@ def _get_directories_to_analyze() -> List[Path]:
     # Check if logs directory exists and add to list
     if logs_root.exists():
         directories.append(logs_root.resolve())
-        current_app.logger.info(f"Logs directory found: {logs_root.resolve()}")
+        current_app.logger.info(
+            "Logs directory found: %s",
+            sanitize_log_value(logs_root.resolve()),
+        )
     else:
-        current_app.logger.warning(f"Logs directory not found at: {logs_root.resolve()}")
+        current_app.logger.warning(
+            "Logs directory not found at: %s",
+            sanitize_log_value(logs_root.resolve()),
+        )
     
     return directories
 
@@ -185,7 +198,10 @@ def _analyze_directory(path: Path, parent_path: Path = None, level: int = 0, exp
 def disk_usage():
     """Render the disk usage analysis page for the files and logs directories."""
     directories_to_analyze = _get_directories_to_analyze()
-    current_app.logger.info(f"Directories to analyze: {[str(d) for d in directories_to_analyze]}")
+    current_app.logger.info(
+        "Directories to analyze: %s",
+        sanitize_log_value([str(d) for d in directories_to_analyze]),
+    )
     
     # Get the list of expanded directories from request args
     expanded_param = request.args.get("expanded", "")
@@ -205,7 +221,10 @@ def disk_usage():
     
     # Analyze each base directory
     for base_dir in directories_to_analyze:
-        current_app.logger.info(f"Analyzing directory: {base_dir}")
+        current_app.logger.info(
+            "Analyzing directory: %s",
+            sanitize_log_value(base_dir),
+        )
         if base_dir.exists():
             # Get size and directory count for this base directory
             dir_size = _get_directory_size(base_dir)
@@ -234,11 +253,21 @@ def disk_usage():
             )
             
             all_directories.append(base_dir_info)
-            current_app.logger.info(f"Added directory to results: {base_dir.name} ({base_dir_info['size_formatted']})")
+            current_app.logger.info(
+                "Added directory to results: %s (%s)",
+                sanitize_log_value(base_dir.name),
+                sanitize_log_value(base_dir_info['size_formatted']),
+            )
         else:
-            current_app.logger.warning(f"Directory does not exist: {base_dir}")
+            current_app.logger.warning(
+                "Directory does not exist: %s",
+                sanitize_log_value(base_dir),
+            )
     
-    current_app.logger.info(f"Total directories found: {len(all_directories)}")
+    current_app.logger.info(
+        "Total directories found: %s",
+        sanitize_log_value(len(all_directories)),
+    )
     
     # Calculate disk usage percentage for each directory
     def calculate_percentages(dirs, parent_size=None):
@@ -334,7 +363,10 @@ def delete_duplicates():
             deleted_size = 0
             
             for dupmd5_dir in dupmd5_dirs:
-                current_app.logger.info(f"Processing duplicate directory: {dupmd5_dir}")
+                current_app.logger.info(
+                    "Processing duplicate directory: %s",
+                    sanitize_log_value(dupmd5_dir),
+                )
                 
                 for file_path in dupmd5_dir.iterdir():
                     if file_path.is_file():
@@ -343,17 +375,31 @@ def delete_duplicates():
                             file_path.unlink()
                             deleted_count += 1
                             deleted_size += file_size
-                            current_app.logger.info(f"Deleted duplicate file: {file_path.name}")
+                            current_app.logger.info(
+                                "Deleted duplicate file: %s",
+                                sanitize_log_value(file_path.name),
+                            )
                         except (OSError, PermissionError) as e:
-                            current_app.logger.error(f"Failed to delete {file_path}: {e}")
+                            current_app.logger.error(
+                                "Failed to delete %s: %s",
+                                sanitize_log_value(file_path),
+                                sanitize_log_value(e),
+                            )
                 
                 # Try to remove the directory if it's empty
                 try:
                     if not any(dupmd5_dir.iterdir()):
                         dupmd5_dir.rmdir()
-                        current_app.logger.info(f"Removed empty directory: {dupmd5_dir}")
+                        current_app.logger.info(
+                            "Removed empty directory: %s",
+                            sanitize_log_value(dupmd5_dir),
+                        )
                 except (OSError, PermissionError) as e:
-                    current_app.logger.warning(f"Could not remove directory {dupmd5_dir}: {e}")
+                    current_app.logger.warning(
+                        "Could not remove directory %s: %s",
+                        sanitize_log_value(dupmd5_dir),
+                        sanitize_log_value(e),
+                    )
             
             if deleted_count > 0:
                 flash(f"Successfully deleted {deleted_count} duplicate files, freeing {_format_size(deleted_size)} of space.", "success")
@@ -361,7 +407,10 @@ def delete_duplicates():
                 flash("No duplicate files found to delete.", "info")
                 
         except Exception as e:
-            current_app.logger.error(f"Error deleting duplicates: {e}")
+            current_app.logger.error(
+                "Error deleting duplicates: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Error deleting duplicates: {str(e)}", "error")
     
     return redirect(url_for("admin.disk_usage"))
@@ -398,7 +447,10 @@ def delete_old_processed_zips():
                         dir_date = datetime.strptime(date_dir.name, "%Y_%m_%d").replace(tzinfo=timezone.utc)
                     except ValueError:
                         # Skip directories that don't match the expected format
-                        current_app.logger.warning(f"Skipping directory with unexpected format: {date_dir.name}")
+                        current_app.logger.warning(
+                            "Skipping directory with unexpected format: %s",
+                            sanitize_log_value(date_dir.name),
+                        )
                         continue
                     
                     # Check if this directory is older than 1 month
@@ -414,17 +466,31 @@ def delete_old_processed_zips():
                                 deleted_count += 1
                                 dir_size += file_size
                                 dir_file_count += 1
-                                current_app.logger.info(f"Deleted processed ZIP file: {zip_file.name}")
+                                current_app.logger.info(
+                                    "Deleted processed ZIP file: %s",
+                                    sanitize_log_value(zip_file.name),
+                                )
                             except (OSError, PermissionError) as e:
-                                current_app.logger.error(f"Failed to delete {zip_file}: {e}")
+                                current_app.logger.error(
+                                    "Failed to delete %s: %s",
+                                    sanitize_log_value(zip_file),
+                                    sanitize_log_value(e),
+                                )
                         
                         # Try to remove the directory if it's empty
                         try:
                             if not any(date_dir.iterdir()):
                                 date_dir.rmdir()
-                                current_app.logger.info(f"Removed empty directory: {date_dir}")
+                                current_app.logger.info(
+                                    "Removed empty directory: %s",
+                                    sanitize_log_value(date_dir),
+                                )
                         except (OSError, PermissionError) as e:
-                            current_app.logger.warning(f"Could not remove directory {date_dir}: {e}")
+                            current_app.logger.warning(
+                                "Could not remove directory %s: %s",
+                                sanitize_log_value(date_dir),
+                                sanitize_log_value(e),
+                            )
                         
                         if dir_file_count > 0:
                             deleted_size += dir_size
@@ -432,17 +498,27 @@ def delete_old_processed_zips():
                 
                 # Log the action
                 if deleted_count > 0:
-                    current_app.logger.info(f"Deleted {deleted_count} processed ZIP files older than 1 month, freeing {_format_size(deleted_size)} of space")
+                    current_app.logger.info(
+                        "Deleted %s processed ZIP files older than 1 month, freeing %s of space",
+                        sanitize_log_value(deleted_count),
+                        sanitize_log_value(_format_size(deleted_size)),
+                    )
                     flash(f"Successfully deleted {deleted_count} processed ZIP files from {len(deleted_dirs)} directories, freeing {_format_size(deleted_size)} of space.", "success")
                     
                     # Show which directories were cleaned
                     if deleted_dirs:
-                        current_app.logger.info(f"Cleaned directories: {', '.join(deleted_dirs)}")
+                        current_app.logger.info(
+                            "Cleaned directories: %s",
+                            sanitize_log_value(", ".join(deleted_dirs)),
+                        )
                 else:
                     flash("No processed ZIP files older than 1 month found to delete.", "info")
                 
         except Exception as e:
-            current_app.logger.error(f"Error deleting old processed ZIP files: {e}")
+            current_app.logger.error(
+                "Error deleting old processed ZIP files: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Error deleting old processed ZIP files: {str(e)}", "error")
     
     return redirect(url_for("admin.disk_usage"))

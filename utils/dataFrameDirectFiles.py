@@ -22,6 +22,7 @@ from models import (
     # Note: ImageGrading removed - now using Grade model through GradingTask
 )
 from db_transaction_manager import get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 
 @get_db_session()
@@ -87,9 +88,16 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
                 if task.grades:
                     grades_by_task[task.id] = task.grades
         
-        logger.info(f"Retrieved {len(direct_images)} direct images from database")
+        logger.info(
+            "Retrieved %s direct images from database",
+            sanitize_log_value(len(direct_images)),
+        )
         if start_date or end_date:
-            logger.info(f"Date filters applied: start_date={start_date}, end_date={end_date}")
+            logger.info(
+                "Date filters applied: start_date=%s, end_date=%s",
+                sanitize_log_value(start_date),
+                sanitize_log_value(end_date),
+            )
         
         data = []
         
@@ -213,7 +221,10 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
         import logging
         logger = logging.getLogger(__name__)
         if not df.empty:
-            logger.info(f"DEBUG DATAFRAME: Generated columns: {list(df.columns)}")
+            logger.info(
+                "DEBUG DATAFRAME: Generated columns: %s",
+                sanitize_log_value(list(df.columns)),
+            )
         
         # Ensure dataframe always has the expected columns, even when empty
         if df.empty:
@@ -248,7 +259,10 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
             
             # Create empty dataframe with expected columns
             df = pd.DataFrame(columns=expected_columns)
-            logger.info(f"DEBUG DATAFRAME: Created empty dataframe with columns: {list(df.columns)}")
+            logger.info(
+                "DEBUG DATAFRAME: Created empty dataframe with columns: %s",
+                sanitize_log_value(list(df.columns)),
+            )
         
         # Convert date columns to proper datetime objects
         if not df.empty:
@@ -260,6 +274,13 @@ def generate_direct_image_upload_df(db, start_date: Optional[datetime] = None,
         return df
         
     except Exception as e:
-        error_logger.error(f"Error in generate_direct_image_upload_df: {str(e)}")
-        error_logger.error(f"Parameters: start_date={start_date}, end_date={end_date}")
+        error_logger.error(
+            "Error in generate_direct_image_upload_df: %s",
+            sanitize_log_value(e),
+        )
+        error_logger.error(
+            "Parameters: start_date=%s, end_date=%s",
+            sanitize_log_value(start_date),
+            sanitize_log_value(end_date),
+        )
         raise

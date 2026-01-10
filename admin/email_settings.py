@@ -8,6 +8,7 @@ from sqlalchemy import select
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.email_config import EmailConfigService, EmailConfigError
+from utils.log_sanitize import sanitize_log_value
 from utils.email_connection import test_smtp_connection
 from utils.emails import send_email_sync
 from models import EmailSettings, User
@@ -138,7 +139,10 @@ def create_email_settings():
             return redirect(url_for("admin.email_settings_list"))
 
         except Exception as e:
-            logger.error(f"Failed to create email settings: {e}")
+            logger.error(
+                "Failed to create email settings: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Failed to create email settings: {str(e)}", "danger")
             return render_template(
                 "admin/email_settings_create.html",
@@ -257,7 +261,10 @@ def edit_email_settings(settings_id: int):
                 return redirect(url_for("admin.email_settings_list"))
 
             except Exception as e:
-                logger.error(f"Failed to update email settings: {e}")
+                logger.error(
+                    "Failed to update email settings: %s",
+                    sanitize_log_value(e),
+                )
                 flash(f"Failed to update email settings: {str(e)}", "danger")
                 return render_template(
                     "admin/email_settings_edit.html",
@@ -300,7 +307,10 @@ def test_email_settings(settings_id: int):
             })
 
         except Exception as e:
-            logger.error(f"Email settings test failed: {e}")
+            logger.error(
+                "Email settings test failed: %s",
+                sanitize_log_value(e),
+            )
             return jsonify({
                 "success": False,
                 "message": f"Test failed: {str(e)}"
@@ -336,7 +346,10 @@ def delete_email_settings(settings_id: int):
             flash("Email settings deleted successfully!", "success")
 
         except Exception as e:
-            logger.error(f"Failed to delete email settings: {e}")
+            logger.error(
+                "Failed to delete email settings: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Failed to delete email settings: {str(e)}", "danger")
 
         return redirect(url_for("admin.email_settings_list"))
@@ -376,7 +389,10 @@ def activate_email_settings(settings_id: int):
             flash("Email settings activated successfully!", "success")
 
         except Exception as e:
-            logger.error(f"Failed to activate email settings: {e}")
+            logger.error(
+                "Failed to activate email settings: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Failed to activate email settings: {str(e)}", "danger")
 
         return redirect(url_for("admin.email_settings_list"))
@@ -396,7 +412,10 @@ def api_test_current_email_config():
         })
 
     except Exception as e:
-        logger.error(f"Current email config test failed: {e}")
+        logger.error(
+            "Current email config test failed: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             "success": False,
             "message": f"Test failed: {str(e)}"
@@ -506,14 +525,20 @@ Fundus Image Manager Team
             })
 
         except Exception as email_error:
-            logger.error(f"Failed to send sample email: {email_error}")
+            logger.error(
+                "Failed to send sample email: %s",
+                sanitize_log_value(email_error),
+            )
             return jsonify({
                 "success": False,
                 "message": f"Failed to send email: {str(email_error)}"
             }), 500
 
     except Exception as e:
-        logger.error(f"Sample email send failed: {e}")
+        logger.error(
+            "Sample email send failed: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             "success": False,
             "message": f"An error occurred: {str(e)}"

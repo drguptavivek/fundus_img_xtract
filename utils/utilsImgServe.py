@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Tuple
-from flask import send_file, abort, flash, make_response, current_app
+from flask import send_file, abort, flash, make_response, current_app, request
 from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
@@ -9,6 +9,7 @@ from utils.fileUtils import (
     get_encounter_thumbnail_serving_path, get_direct_thumbnail_serving_path
 )
 from utils.image_processing import get_thumbnail_filename
+from utils.log_sanitize import sanitize_log_value
 from sqlalchemy import  and_, select
 from db_transaction_manager import transaction_scope
 
@@ -44,17 +45,29 @@ def encounterDrReportByUUID(uuid: str):
     with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
-        current_app.logger.info(f"DR PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        current_app.logger.info(
+            "DR PDF ACCESS REQUEST - UUID: %s, Referer: %s, User-Agent: %s",
+            sanitize_log_value(uuid),
+            sanitize_log_value(request.referrer),
+            sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
+        )
         
         result = (db.query(DiabeticRetinopathyReport, PatientEncounters, ZipFile).join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(DiabeticRetinopathyReport.uuid == uuid).first())
         if not result or not result[0].report_file_name:
-            current_app.logger.warning(f"DR PDF NOT FOUND - UUID: {uuid}")
+            current_app.logger.warning(
+                "DR PDF NOT FOUND - UUID: %s",
+                sanitize_log_value(uuid),
+            )
             abort(404)
         dr_report, patient_encounter, zip_file = result
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         pdf_path_str = str(DR_PDF_DIR / upload_date_str / dr_report.report_file_name)
         if not os.path.exists(pdf_path_str):
-            current_app.logger.error(f"DR PDF FILE MISSING - UUID: {uuid}, Path: {pdf_path_str}")
+            current_app.logger.error(
+                "DR PDF FILE MISSING - UUID: %s, Path: %s",
+                sanitize_log_value(uuid),
+                sanitize_log_value(pdf_path_str),
+            )
             flash(f"Error: DR report not found with UUID: {uuid}", "danger")
             abort(404)
         
@@ -84,24 +97,39 @@ def encounterDrReportByUUID(uuid: str):
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
-        current_app.logger.info(f"DR PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
+        current_app.logger.info(
+            "DR PDF SERVED - UUID: %s, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning",
+            sanitize_log_value(uuid),
+        )
         return response
 
 def encounterGlaucomaReportByUUID(uuid: str):
     with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
-        current_app.logger.info(f"PDF ACCESS REQUEST - UUID: {uuid}, Referer: {request.referrer}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        current_app.logger.info(
+            "PDF ACCESS REQUEST - UUID: %s, Referer: %s, User-Agent: %s",
+            sanitize_log_value(uuid),
+            sanitize_log_value(request.referrer),
+            sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
+        )
         
         result = (db.query(GlaucomaReport, PatientEncounters, ZipFile).join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(GlaucomaReport.uuid == uuid).first())
         if not result or not result[0].report_file_name:
-            current_app.logger.warning(f"PDF NOT FOUND - UUID: {uuid}")
+            current_app.logger.warning(
+                "PDF NOT FOUND - UUID: %s",
+                sanitize_log_value(uuid),
+            )
             abort(404)
         glaucoma_report, patient_encounter, zip_file = result
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         pdf_path_str = str(GLAUCOMA_PDF_DIR / upload_date_str / glaucoma_report.report_file_name)
         if not os.path.exists(pdf_path_str):
-            current_app.logger.error(f"PDF FILE MISSING - UUID: {uuid}, Path: {pdf_path_str}")
+            current_app.logger.error(
+                "PDF FILE MISSING - UUID: %s, Path: %s",
+                sanitize_log_value(uuid),
+                sanitize_log_value(pdf_path_str),
+            )
             flash(f"Error: Glaucoma report not found with UUID: {uuid}", "danger")
             abort(404)
         
@@ -134,7 +162,10 @@ def encounterGlaucomaReportByUUID(uuid: str):
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
         
-        current_app.logger.info(f"PDF SERVED - UUID: {uuid}, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning")
+        current_app.logger.info(
+            "PDF SERVED - UUID: %s, Fixed headers: CSP, CORS, SameSite=None, Anti-Partitioning",
+            sanitize_log_value(uuid),
+        )
         return response
 
 def encounterPDFByUUID(uuid: str):
@@ -297,12 +328,19 @@ def encounterImageThumbnailByUUID(uuid: str):
                 success = generate_thumbnail(original_image_path, thumbnail_path)
                 if not success:
                     # If generation fails, fall back to original image
-                    current_app.logger.warning(f"Failed to generate thumbnail for {original_image_path.name}")
+                    current_app.logger.warning(
+                        "Failed to generate thumbnail for %s",
+                        sanitize_log_value(original_image_path.name),
+                    )
                     return encounterImageByUUID(uuid)
 
             except Exception as e:
                 # If generation fails, fall back to original image
-                current_app.logger.error(f"Error generating thumbnail for {original_image_path.name}: {e}")
+                current_app.logger.error(
+                    "Error generating thumbnail for %s: %s",
+                    sanitize_log_value(original_image_path.name),
+                    sanitize_log_value(e),
+                )
                 return encounterImageByUUID(uuid)
 
         # Get thumbnail path
@@ -472,7 +510,10 @@ def directImgFinalThumbnailByUUID(uuid: str):
             response.headers["X-Thumbnail"] = "true"
             return response
         except Exception as e:
-            current_app.logger.error(f"Error serving direct thumbnail inline: {e}")
+            current_app.logger.error(
+                "Error serving direct thumbnail inline: %s",
+                sanitize_log_value(e),
+            )
             return None
 
     with transaction_scope() as db:
@@ -510,7 +551,10 @@ def directImgFinalThumbnailByUUID(uuid: str):
                             if served:
                                 return served
                 except Exception as e:
-                    current_app.logger.error(f"Error generating edited thumbnail on-demand: {e}")
+                    current_app.logger.error(
+                        "Error generating edited thumbnail on-demand: %s",
+                        sanitize_log_value(e),
+                    )
 
         # Try original image thumbnail
         if direct_image.filename:
@@ -542,7 +586,10 @@ def directImgFinalThumbnailByUUID(uuid: str):
                             if served:
                                 return served
                 except Exception as e:
-                    current_app.logger.error(f"Error generating original thumbnail on-demand: {e}")
+                    current_app.logger.error(
+                        "Error generating original thumbnail on-demand: %s",
+                        sanitize_log_value(e),
+                    )
 
         # If both fail, fallback to original image logic
         return directImgFinalByUUID(uuid)

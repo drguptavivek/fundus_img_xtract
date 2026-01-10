@@ -10,6 +10,7 @@ import ast
 import os
 from typing import Dict, List, Set, Tuple
 from flask import current_app
+from utils.log_sanitize import sanitize_log_value
 
 def extract_roles_from_decorators(file_path: str) -> List[Dict[str, any]]:
     """
@@ -38,7 +39,11 @@ def extract_roles_from_decorators(file_path: str) -> List[Dict[str, any]]:
         return routes_info
     except Exception as e:
         if current_app:
-            current_app.logger.warning(f"Failed to analyze {file_path}: {e}")
+            current_app.logger.warning(
+                "Failed to analyze %s: %s",
+                sanitize_log_value(file_path),
+                sanitize_log_value(e),
+            )
         return []
 
 def _analyze_function_decorators(function_node: ast.FunctionDef, file_path: str) -> List[Dict[str, any]]:
@@ -196,7 +201,11 @@ def analyze_all_routes(base_path: str = '.') -> List[Dict[str, any]]:
                     all_routes.extend(routes_info)
                 except Exception as e:
                     if current_app:
-                        current_app.logger.warning(f"Failed to analyze {file_path}: {e}")
+                        current_app.logger.warning(
+                            "Failed to analyze %s: %s",
+                            sanitize_log_value(file_path),
+                            sanitize_log_value(e),
+                        )
                         
     return all_routes
 

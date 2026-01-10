@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from flask import current_app
 import logging
+from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,10 @@ def _get_encryption_key(salt: str = None) -> bytes:
         return key
 
     except Exception as e:
-        logger.error(f"Failed to derive encryption key: {e}")
+        logger.error(
+            "Failed to derive encryption key: %s",
+            sanitize_log_value(e),
+        )
         raise EncryptionError(f"Failed to derive encryption key: {str(e)}")
 
 
@@ -110,7 +114,10 @@ def encrypt_password(plain_password: str) -> str:
         return base64.urlsafe_b64encode(encrypted_password).decode()
 
     except Exception as e:
-        logger.error(f"Failed to encrypt password: {e}")
+        logger.error(
+            "Failed to encrypt password: %s",
+            sanitize_log_value(e),
+        )
         raise EncryptionError(f"Failed to encrypt password: {str(e)}")
 
 
@@ -142,7 +149,10 @@ def encrypt_password_with_salt(plain_password: str, salt: str) -> str:
         return base64.urlsafe_b64encode(encrypted_password).decode()
 
     except Exception as e:
-        logger.error(f"Failed to encrypt password with salt: {e}")
+        logger.error(
+            "Failed to encrypt password with salt: %s",
+            sanitize_log_value(e),
+        )
         raise EncryptionError(f"Failed to encrypt password with salt: {str(e)}")
 
 
@@ -173,7 +183,10 @@ def decrypt_password(encrypted_password: str) -> str:
         return decrypted_password.decode()
 
     except Exception as e:
-        logger.error(f"Failed to decrypt password: {e}")
+        logger.error(
+            "Failed to decrypt password: %s",
+            sanitize_log_value(e),
+        )
         raise EncryptionError(f"Failed to decrypt password: {str(e)}")
 
 
@@ -205,7 +218,10 @@ def decrypt_password_with_salt(encrypted_password: str, salt: str) -> str:
         return decrypted_password.decode()
 
     except Exception as e:
-        logger.error(f"Failed to decrypt password with salt: {e}")
+        logger.error(
+            "Failed to decrypt password with salt: %s",
+            sanitize_log_value(e),
+        )
         raise EncryptionError(f"Failed to decrypt password with salt: {str(e)}")
 
 

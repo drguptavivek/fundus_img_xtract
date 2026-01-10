@@ -38,6 +38,7 @@ from models import (
 from services.taskCreationServices import ensure_task
 from utils.jobUtils import get_recent_zip_uploads
 from utils.env_loader import load_environment
+from utils.log_sanitize import sanitize_log_value
 from .upload import _get_int_setting, _get_csv_setting, _get_lifetime_quota
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
 
@@ -206,7 +207,10 @@ def pregraded_upload():
                                     path.write_bytes(content)
                                     state = "error"
                                     detail = "Duplicate file (already exists in database)"
-                                    current_app.logger.info("Duplicate pre-graded file: %s", filename)
+                                    current_app.logger.info(
+                                        "Duplicate pre-graded file: %s",
+                                        sanitize_log_value(filename),
+                                    )
                                 else:
                                     dest = uniquify(orig_dir, filename)
                                     dest.write_bytes(content)
@@ -265,7 +269,8 @@ def pregraded_upload():
                                     current_user.file_upload_count += 1
                             except Exception as processing_error:  # noqa: BLE001
                                 current_app.logger.exception(
-                                    "Failed to store pre-graded image %s", filename
+                                    "Failed to store pre-graded image %s",
+                                    sanitize_log_value(filename),
                                 )
                                 state = "error"
                                 detail = f"Processing failed: {processing_error}"
@@ -295,7 +300,7 @@ def pregraded_upload():
                 except Exception as task_error:  # noqa: BLE001
                     current_app.logger.exception(
                         "Failed to ensure grading task for pre-graded image %s",
-                        uuid_value,
+                        sanitize_log_value(uuid_value),
                     )
                     job_item.state = "error"
                     job_item.detail = f"Task creation failed: {task_error}"
@@ -314,7 +319,10 @@ def pregraded_upload():
             try:
                 queue_missing_thumbnail_regeneration(current_app, schedule_time="post_pregraded_upload", limit=200)
             except Exception as e:
-                current_app.logger.warning(f"Could not queue thumbnail regeneration after pregraded upload: {e}")
+                current_app.logger.warning(
+                    "Could not queue thumbnail regeneration after pregraded upload: %s",
+                    sanitize_log_value(e),
+                )
 
             flash(
                 "Pre-graded upload processed. Review job status for details.",

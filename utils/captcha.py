@@ -3,6 +3,7 @@ CAPTCHA utility module for generating and validating CAPTCHAs.
 """
 
 import logging
+from utils.log_sanitize import sanitize_log_value
 import os
 import io
 import base64
@@ -138,7 +139,10 @@ class CaptchaManager:
                             int16_array = (audio_chunk.audio_float_array * 32767).astype(np.int16)
                             audio_chunks.append(int16_array.tobytes())
                         else:
-                            auth_logger.warning(f"AudioChunk has no audio data: {audio_chunk}")
+                            auth_logger.warning(
+                                "AudioChunk has no audio data: %s",
+                                sanitize_log_value(audio_chunk),
+                            )
             
             # Combine all audio data
             audio_data = b''.join(audio_chunks)
@@ -183,7 +187,11 @@ class CaptchaManager:
         
         # Log the generated CAPTCHA code for testing
         auth_logger = logging.getLogger("auth")
-        auth_logger.info(f"Generated CAPTCHA - ID: {captcha_id}, Code: {text}")
+        auth_logger.info(
+            "Generated CAPTCHA - ID: %s, Code: %s",
+            sanitize_log_value(captcha_id),
+            sanitize_log_value(text),
+        )
         
         # Generate audio if available
         audio_data = self.generate_captcha_audio(text) if AUDIO_ENABLED else None

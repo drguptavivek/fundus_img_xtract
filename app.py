@@ -26,6 +26,7 @@ from utils.security_middleware import PayloadSizeValidator
 from utils.env_loader import load_environment
 from utils.env_loader import get_env
 from utils.redis_connection import build_redis_url
+from utils.log_sanitize import sanitize_log_value
 from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
@@ -178,37 +179,65 @@ def _register_csrf_protection(app: Flask) -> None:
         if not auth_logger.isEnabledFor(logging.DEBUG):
             return None
         if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
-            auth_logger.debug(f"CSRF Check - Method: {request.method}, Path: {request.path}")
+            auth_logger.debug(
+                "CSRF Check - Method: %s, Path: %s",
+                sanitize_log_value(request.method),
+                sanitize_log_value(request.path),
+            )
             auth_logger.debug(f"CSRF Check - Form has CSRF token: {'csrf_token' in request.form}")
             auth_logger.debug(f"CSRF Check - Headers have CSRF token: {'X-CSRFToken' in request.headers}")
 
             try:
                 session_keys = list(session.keys()) if session else []
-                auth_logger.debug(f"CSRF Check - Session keys: {session_keys}")
+                auth_logger.debug(
+                    "CSRF Check - Session keys: %s",
+                    sanitize_log_value(session_keys),
+                )
                 if 'csrf_token' in session:
                     auth_logger.debug(f"CSRF Check - Session CSRF token exists: True")
                 else:
                     auth_logger.debug(f"CSRF Check - Session CSRF token exists: False")
 
                 if hasattr(session, 'session_id'):
-                    auth_logger.debug(f"CSRF Check - Session ID: {session.session_id}")
+                    auth_logger.debug(
+                        "CSRF Check - Session ID: %s",
+                        sanitize_log_value(session.session_id),
+                    )
 
                 cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
                 session_cookie = request.cookies.get(cookie_name)
-                auth_logger.debug(f"CSRF Check - Session cookie exists: {session_cookie is not None}")
+                auth_logger.debug(
+                    "CSRF Check - Session cookie exists: %s",
+                    sanitize_log_value(session_cookie is not None),
+                )
                 if session_cookie:
-                    auth_logger.debug(f"CSRF Check - Session cookie value: {session_cookie[:50]}...")
+                    auth_logger.debug(
+                        "CSRF Check - Session cookie value: %s",
+                        sanitize_log_value(session_cookie[:50]),
+                    )
 
             except Exception as e:
-                auth_logger.error(f"CSRF Check - Error checking session: {e}")
+                auth_logger.error(
+                    "CSRF Check - Error checking session: %s",
+                    sanitize_log_value(e),
+                )
 
             if request.form:
-                auth_logger.debug(f"CSRF Check - Form keys: {list(request.form.keys())}")
+                auth_logger.debug(
+                    "CSRF Check - Form keys: %s",
+                    sanitize_log_value(list(request.form.keys())),
+                )
                 if 'csrf_token' in request.form:
-                    auth_logger.debug(f"CSRF Check - Form CSRF token value: {request.form['csrf_token'][:50]}...")
+                    auth_logger.debug(
+                        "CSRF Check - Form CSRF token value: %s",
+                        sanitize_log_value(request.form["csrf_token"][:50]),
+                    )
             if request.headers:
                 csrf_headers = {k: v for k, v in request.headers.items() if 'csrf' in k.lower()}
-                auth_logger.debug(f"CSRF Check - CSRF Headers: {csrf_headers}")
+                auth_logger.debug(
+                    "CSRF Check - CSRF Headers: %s",
+                    sanitize_log_value(csrf_headers),
+                )
 
     app.before_request(csrf_protect)
     csrf.init_app(app)
@@ -311,15 +340,17 @@ def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> N
                 set_cookie_headers = {k: v for k, v in response.headers.items() if k.lower() == 'set-cookie'}
                 auth_logger = logging.getLogger("auth")
                 if set_cookie_headers:
-                    auth_logger.info(f"Login response - Setting cookies: {set_cookie_headers}")
+                    auth_logger.info(
+                        "Login response - Setting cookies: %s",
+                        sanitize_log_value(set_cookie_headers),
+                    )
                 else:
                     auth_logger.info("Login response - No cookies being set")
 
         line = (
-            f"{client_ip} {request.method} {full_url} "
-            f"{response.status_code} "
-            f"UA={ua} "
-            f"duration={duration_ms if duration_ms is not None else '-'}ms"
+            f"{sanitize_log_value(client_ip)} {sanitize_log_value(request.method)} "
+            f"{sanitize_log_value(full_url)} {sanitize_log_value(response.status_code)} "
+            f"UA={sanitize_log_value(ua)} duration={sanitize_log_value(duration_ms if duration_ms is not None else '-')}ms"
         )
 
         if response.status_code >= 400:
@@ -335,7 +366,10 @@ def _register_request_timing(app: Flask, http_error_logger: logging.Logger) -> N
                         response.headers['X-RateLimit-Reset'] = str(g.limiter_reset)
         except Exception as e:
             rate_limit_logger = logging.getLogger("rate_limit")
-            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+            rate_limit_logger.warning(
+                "Failed to add rate limit headers: %s",
+                sanitize_log_value(e),
+            )
 
         return response
 
@@ -378,7 +412,10 @@ def _register_response_headers(app: Flask) -> None:
 
         except Exception as e:
             rate_limit_logger = logging.getLogger("rate_limit")
-            rate_limit_logger.warning(f"Failed to add rate limit headers: {e}")
+            rate_limit_logger.warning(
+                "Failed to add rate limit headers: %s",
+                sanitize_log_value(e),
+            )
 
         return response
 
@@ -570,8 +607,11 @@ def _register_stack_trace_handlers(app: Flask) -> None:
             duration = _t.time() - request._start_time
         if runtime_logger.isEnabledFor(logging.DEBUG):
             runtime_logger.debug(
-                f"Request completed: {request.method} {request.url} "
-                f"Status: {response.status_code} Duration: {duration:.3f}s"
+                "Request completed: %s %s Status: %s Duration: %.3fs",
+                sanitize_log_value(request.method),
+                sanitize_log_value(request.url),
+                sanitize_log_value(response.status_code),
+                duration or 0.0,
             )
         return response
 
@@ -590,12 +630,31 @@ def _register_error_handlers(app: Flask) -> None:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         auth_logger = logging.getLogger("auth")
-        auth_logger.error(f"CSRF Error - Message: {e.description or 'Unknown CSRF error'}")
-        auth_logger.error(f"CSRF Error - Request: {request.method} {request.url}")
-        auth_logger.error(f"CSRF Error - User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
-        auth_logger.error(f"CSRF Error - Referer: {request.headers.get('Referer', 'None')}")
-        auth_logger.error(f"CSRF Error - Form data keys: {list(request.form.keys()) if request.form else 'None'}")
-        auth_logger.error(f"CSRF Error - Headers: {dict(request.headers)}")
+        auth_logger.error(
+            "CSRF Error - Message: %s",
+            sanitize_log_value(e.description or "Unknown CSRF error"),
+        )
+        auth_logger.error(
+            "CSRF Error - Request: %s %s",
+            sanitize_log_value(request.method),
+            sanitize_log_value(request.url),
+        )
+        auth_logger.error(
+            "CSRF Error - User-Agent: %s",
+            sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
+        )
+        auth_logger.error(
+            "CSRF Error - Referer: %s",
+            sanitize_log_value(request.headers.get("Referer", "None")),
+        )
+        auth_logger.error(
+            "CSRF Error - Form data keys: %s",
+            sanitize_log_value(list(request.form.keys()) if request.form else "None"),
+        )
+        auth_logger.error(
+            "CSRF Error - Headers: %s",
+            sanitize_log_value(dict(request.headers)),
+        )
 
         flash(e.description or "Security check failed. Please try again.", "danger")
         return redirect(request.referrer or url_for("homepage")), 400
@@ -743,7 +802,10 @@ def _initialize_schedulers(
             else:
                 materialized_view_logger.info("Materialized view scheduler disabled")
         except Exception as e:
-            materialized_view_logger.error(f"Failed to start materialized view scheduler: {str(e)}")
+            materialized_view_logger.error(
+                "Failed to start materialized view scheduler: %s",
+                sanitize_log_value(e),
+            )
     else:
         materialized_view_logger.info("Materialized view scheduler disabled by configuration")
 
@@ -757,7 +819,10 @@ def _initialize_schedulers(
             else:
                 thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled")
         except Exception as e:
-            thumbnail_maintenance_logger.error(f"Failed to start thumbnail maintenance scheduler: {str(e)}")
+            thumbnail_maintenance_logger.error(
+                "Failed to start thumbnail maintenance scheduler: %s",
+                sanitize_log_value(e),
+            )
     else:
         thumbnail_maintenance_logger.info("Thumbnail maintenance scheduler disabled by configuration")
 
@@ -769,7 +834,10 @@ def _initialize_email_config(app: Flask) -> None:
             EmailConfigService.update_flask_config()
         app.logger.info("Email configuration initialized from database or environment")
     except Exception as e:
-        app.logger.warning(f"Failed to initialize email configuration: {e}")
+        app.logger.warning(
+            "Failed to initialize email configuration: %s",
+            sanitize_log_value(e),
+        )
 
 
 def create_app():
@@ -836,7 +904,10 @@ def run_stuck_task_cleanup():
             time.sleep(30 * 60)
         except Exception as e:
             import logging
-            logging.error(f"Error in stuck task cleanup thread: {str(e)}")
+            logging.error(
+                "Error in stuck task cleanup thread: %s",
+                sanitize_log_value(e),
+            )
             # Even if an error occurs, keep the thread running by sleeping a bit before continuing
             time.sleep(5 * 60)  # Wait 5 minutes before retrying
 

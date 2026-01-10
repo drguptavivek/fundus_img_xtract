@@ -17,6 +17,7 @@ from .. import api_bp
 from app_cache import cache
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
+from utils.log_sanitize import sanitize_log_value
 from models import (
     LabUnit,
     Session,
@@ -232,15 +233,21 @@ def get_filtered_direct_image_dataframe(db, params: Dict, user_lab_unit_ids: Set
 
     except Exception as e:
         app_logger = logging.getLogger(__name__)
-        app_logger.error(f"Error in get_filtered_direct_image_dataframe: {str(e)}")
-        app_logger.error(f"Params: {params}")
-        app_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        app_logger.error(
+            "Error in get_filtered_direct_image_dataframe: %s",
+            sanitize_log_value(e),
+        )
+        app_logger.error("Params: %s", sanitize_log_value(params))
+        app_logger.error("User lab unit IDs: %s", sanitize_log_value(user_lab_unit_ids))
 
         # Log to runtime_error.log
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in get_filtered_direct_image_dataframe: {str(e)}")
-        error_logger.error(f"Params: {params}")
-        error_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        error_logger.error(
+            "Error in get_filtered_direct_image_dataframe: %s",
+            sanitize_log_value(e),
+        )
+        error_logger.error("Params: %s", sanitize_log_value(params))
+        error_logger.error("User lab unit IDs: %s", sanitize_log_value(user_lab_unit_ids))
         raise
 
 
@@ -277,7 +284,11 @@ def get_filtered_direct_dataframe():
             
             # Debug logging
             error_logger = logging.getLogger('runtime_error')
-            error_logger.info(f"DEBUG: params={params}, user_lab_unit_ids={user_lab_unit_ids}")
+            error_logger.info(
+                "DEBUG: params=%s, user_lab_unit_ids=%s",
+                sanitize_log_value(params),
+                sanitize_log_value(user_lab_unit_ids),
+            )
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)
@@ -386,7 +397,11 @@ def get_filtered_direct_dataframe_excel():
             
             # Debug logging
             error_logger = logging.getLogger('runtime_error')
-            error_logger.info(f"DEBUG EXCEL: params={params}, user_lab_unit_ids={user_lab_unit_ids}")
+            error_logger.info(
+                "DEBUG EXCEL: params=%s, user_lab_unit_ids=%s",
+                sanitize_log_value(params),
+                sanitize_log_value(user_lab_unit_ids),
+            )
             
             # Get filtered dataframe using common function
             df, filters_applied = get_filtered_direct_image_dataframe(db, params, user_lab_unit_ids)

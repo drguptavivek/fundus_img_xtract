@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from utils.env_loader import load_environment
 from auth.utils import utcnow
+from utils.log_sanitize import sanitize_log_value
 
 load_environment()
 
@@ -127,7 +128,11 @@ class User(Base):
         
         # Log the result in debug mode
         if runtime_logger.isEnabledFor(logging.DEBUG):
-            runtime_logger.debug(f"Role check result for user '{self.username}': {result}")
+            runtime_logger.debug(
+                "Role check result for user '%s': %s",
+                sanitize_log_value(self.username),
+                sanitize_log_value(result),
+            )
         
         return result
     def has_all_roles(self, *names: str) -> bool:
@@ -143,7 +148,11 @@ class User(Base):
         
         # Log the result in debug mode
         if runtime_logger.isEnabledFor(logging.DEBUG):
-            runtime_logger.debug(f"All roles check result for user '{self.username}': {result}")
+            runtime_logger.debug(
+                "All roles check result for user '%s': %s",
+                sanitize_log_value(self.username),
+                sanitize_log_value(result),
+            )
         
         return result
 
@@ -1056,17 +1065,31 @@ def cleanup_direct_upload_thumbnails(mapper, connection, target):
         results = delete_thumbnails_for_direct_upload(target.id)
 
         if results['original_deleted']:
-            cleanup_logger.info(f"Cleaned up original thumbnail for DirectImageUpload {target.id}")
+            cleanup_logger.info(
+                "Cleaned up original thumbnail for DirectImageUpload %s",
+                sanitize_log_value(target.id),
+            )
         if results['edited_deleted']:
-            cleanup_logger.info(f"Cleaned up edited thumbnail for DirectImageUpload {target.id}")
+            cleanup_logger.info(
+                "Cleaned up edited thumbnail for DirectImageUpload %s",
+                sanitize_log_value(target.id),
+            )
         if results['errors']:
             for error in results['errors']:
-                cleanup_logger.warning(f"Thumbnail cleanup error for DirectImageUpload {target.id}: {error}")
+                cleanup_logger.warning(
+                    "Thumbnail cleanup error for DirectImageUpload %s: %s",
+                    sanitize_log_value(target.id),
+                    sanitize_log_value(error),
+                )
 
     except Exception as e:
         import logging
         cleanup_logger = logging.getLogger("thumbnail_cleanup")
-        cleanup_logger.error(f"Failed to clean up thumbnails for DirectImageUpload {target.id}: {e}")
+        cleanup_logger.error(
+            "Failed to clean up thumbnails for DirectImageUpload %s: %s",
+            sanitize_log_value(target.id),
+            sanitize_log_value(e),
+        )
 
 
 @event.listens_for(EncounterFile, 'before_delete')
@@ -1080,15 +1103,26 @@ def cleanup_encounter_file_thumbnails(mapper, connection, target):
         results = delete_thumbnails_for_encounter_file(target.id)
 
         if results['deleted']:
-            cleanup_logger.info(f"Cleaned up thumbnail for EncounterFile {target.id}")
+            cleanup_logger.info(
+                "Cleaned up thumbnail for EncounterFile %s",
+                sanitize_log_value(target.id),
+            )
         if results['errors']:
             for error in results['errors']:
-                cleanup_logger.warning(f"Thumbnail cleanup error for EncounterFile {target.id}: {error}")
+                cleanup_logger.warning(
+                    "Thumbnail cleanup error for EncounterFile %s: %s",
+                    sanitize_log_value(target.id),
+                    sanitize_log_value(error),
+                )
 
     except Exception as e:
         import logging
         cleanup_logger = logging.getLogger("thumbnail_cleanup")
-        cleanup_logger.error(f"Failed to clean up thumbnails for EncounterFile {target.id}: {e}")
+        cleanup_logger.error(
+            "Failed to clean up thumbnails for EncounterFile %s: %s",
+            sanitize_log_value(target.id),
+            sanitize_log_value(e),
+        )
 
 
 @event.listens_for(PatientEncounters, 'before_delete')
@@ -1102,15 +1136,27 @@ def cleanup_patient_encounter_thumbnails(mapper, connection, target):
         results = delete_thumbnails_for_patient_encounter(target.id)
 
         if results['thumbnails_deleted'] > 0:
-            cleanup_logger.info(f"Cleaned up {results['thumbnails_deleted']} thumbnails for PatientEncounter {target.id}")
+            cleanup_logger.info(
+                "Cleaned up %s thumbnails for PatientEncounter %s",
+                sanitize_log_value(results['thumbnails_deleted']),
+                sanitize_log_value(target.id),
+            )
         if results['errors']:
             for error in results['errors']:
-                cleanup_logger.warning(f"Thumbnail cleanup error for PatientEncounter {target.id}: {error}")
+                cleanup_logger.warning(
+                    "Thumbnail cleanup error for PatientEncounter %s: %s",
+                    sanitize_log_value(target.id),
+                    sanitize_log_value(error),
+                )
 
     except Exception as e:
         import logging
         cleanup_logger = logging.getLogger("thumbnail_cleanup")
-        cleanup_logger.error(f"Failed to clean up thumbnails for PatientEncounter {target.id}: {e}")
+        cleanup_logger.error(
+            "Failed to clean up thumbnails for PatientEncounter %s: %s",
+            sanitize_log_value(target.id),
+            sanitize_log_value(e),
+        )
 
 
 class EmailSettings(Base):
@@ -1208,7 +1254,11 @@ class EmailSettings(Base):
                 return decrypt_password_with_salt(self.smtp_password, self.password_salt)
             except Exception as e:
                 # Fall back to default decryption for backward compatibility
-                logging.warning(f"Failed to decrypt password with salt for email settings {self.id}, falling back to default salt: {e}")
+                logging.warning(
+                    "Failed to decrypt password with salt for email settings %s, falling back to default salt: %s",
+                    sanitize_log_value(self.id),
+                    sanitize_log_value(e),
+                )
                 pass
 
         # Try default decryption (for backward compatibility with existing passwords)
@@ -1216,7 +1266,11 @@ class EmailSettings(Base):
             return decrypt_password(self.smtp_password)
         except Exception as e:
             # If all decryption fails, assume it's plaintext (very old passwords)
-            logging.warning(f"Failed to decrypt password for email settings {self.id}, assuming plaintext: {e}")
+            logging.warning(
+                "Failed to decrypt password for email settings %s, assuming plaintext: %s",
+                sanitize_log_value(self.id),
+                sanitize_log_value(e),
+            )
             return self.smtp_password
 
     def set_password(self, plain_password: str) -> None:

@@ -12,6 +12,7 @@ from . import bp
 
 from models import Session, GlaucomaReport, PatientEncounters, GlaucomaResultsCleaned, EncounterFile, LabUnit, Disease
 from auth.utils import utcnow
+from utils.log_sanitize import sanitize_log_value
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from process_pdfs import GLAUCOMA_PDF_DIR
 
@@ -382,7 +383,10 @@ def glaucoma_clean_workflow():
             with_pdf=int(cleaned_with_pdf_before),
         )
         
-        current_app.logger.info(f"BEFORE metrics: {before}")
+        current_app.logger.info(
+            "BEFORE metrics: %s",
+            sanitize_log_value(before),
+        )
 
         # --- Upsert cleaned rows ---
         reports = (
@@ -393,7 +397,10 @@ def glaucoma_clean_workflow():
               .all()
         )
         total = len(reports)
-        current_app.logger.info(f"Found {total} glaucoma reports to process")
+        current_app.logger.info(
+            "Found %s glaucoma reports to process",
+            sanitize_log_value(total),
+        )
         
         for gr in reports:
             rnum = _parse_first_float(gr.vcdr_right)
@@ -428,7 +435,11 @@ def glaucoma_clean_workflow():
                 db.add(row)
                 inserted += 1
         db.commit()
-        current_app.logger.info(f"Committed changes: {inserted} inserted, {updated} updated")
+        current_app.logger.info(
+            "Committed changes: %s inserted, %s updated",
+            sanitize_log_value(inserted),
+            sanitize_log_value(updated),
+        )
 
         # --- AFTER metrics ---
         cleaned_total_after = (
@@ -458,7 +469,10 @@ def glaucoma_clean_workflow():
             with_pdf=int(cleaned_with_pdf_after),
         )
         
-        current_app.logger.info(f"AFTER metrics: {after}")
+        current_app.logger.info(
+            "AFTER metrics: %s",
+            sanitize_log_value(after),
+        )
         current_app.logger.info("=== GLAUCOMA CLEAN WORKFLOW COMPLETED ===")
     finally:
         db.close()
@@ -832,12 +846,14 @@ def glaucoma_verify(clean_id: int):
                         try:
                             ensure_task(image.uuid, glaucoma_disease.id)
                             current_app.logger.info(
-                                "Created glaucoma grading task for image UUID %s", image.uuid
+                                "Created glaucoma grading task for image UUID %s",
+                                sanitize_log_value(image.uuid),
                             )
                         except Exception as task_error:
                             current_app.logger.exception(
                                 "Failed to create glaucoma grading task for image UUID %s: %s", 
-                                image.uuid, task_error
+                                sanitize_log_value(image.uuid),
+                                sanitize_log_value(task_error),
                             )
                             # Continue with other images even if one fails
                 else:
@@ -845,7 +861,8 @@ def glaucoma_verify(clean_id: int):
             except Exception as e:
                 current_app.logger.exception(
                     "Failed to create grading tasks for glaucoma verified encounter %s: %s", 
-                    enc.id, e
+                    sanitize_log_value(enc.id),
+                    sanitize_log_value(e),
                 )
                 # Don't fail the verification if task creation fails, just log it
 
@@ -909,12 +926,14 @@ def glaucoma_unverify(clean_id: int):
                             if removed_count > 0:
                                 current_app.logger.info(
                                     "Removed %d pending Glaucoma grading task(s) for unverified image UUID %s", 
-                                    removed_count, image.uuid
+                                    sanitize_log_value(removed_count),
+                                    sanitize_log_value(image.uuid),
                                 )
                         except Exception as task_error:
                             current_app.logger.exception(
                                 "Failed to remove Glaucoma grading tasks for unverified image UUID %s: %s", 
-                                image.uuid, task_error
+                                sanitize_log_value(image.uuid),
+                                sanitize_log_value(task_error),
                             )
                             # Continue with other images even if one fails
                 else:
@@ -922,7 +941,8 @@ def glaucoma_unverify(clean_id: int):
             except Exception as e:
                 current_app.logger.exception(
                     "Failed to remove grading tasks for Glaucoma unverified encounter %s: %s", 
-                    enc.id, e
+                    sanitize_log_value(enc.id),
+                    sanitize_log_value(e),
                 )
                 # Don't fail the unverification if task removal fails, just log it
 

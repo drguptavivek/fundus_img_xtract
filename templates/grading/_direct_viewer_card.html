@@ -44,7 +44,11 @@
 </div>
 
 {# ensure viewer script is loaded once and scroll into view #}
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
 (function(){
   var rootId = 'imggr-view-{{ image.uuid }}';
   function run(){

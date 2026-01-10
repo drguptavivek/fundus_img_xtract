@@ -20,6 +20,7 @@ from models import (
 )
 from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 
 from . import bp
 
@@ -401,13 +402,27 @@ def nodr_verify(encounter_id: int):
                 for image in images:
                     try:
                         ensure_task(image.uuid, dr_disease.id)
-                        current_app.logger.info("Created DR grading task for image UUID %s via No-DR verification", image.uuid)
+                        current_app.logger.info(
+                            "Created DR grading task for image UUID %s via No-DR verification",
+                            sanitize_log_value(image.uuid),
+                        )
                     except Exception as task_error:
-                        current_app.logger.exception("Failed to create DR grading task for image UUID %s: %s", image.uuid, task_error)
+                        current_app.logger.exception(
+                            "Failed to create DR grading task for image UUID %s: %s",
+                            sanitize_log_value(image.uuid),
+                            sanitize_log_value(task_error),
+                        )
             else:
-                current_app.logger.warning("DR disease not found when verifying encounter %s", encounter.id)
+                current_app.logger.warning(
+                    "DR disease not found when verifying encounter %s",
+                    sanitize_log_value(encounter.id),
+                )
         except Exception as e:
-            current_app.logger.exception("Failed to create grading tasks for no-DR encounter %s: %s", encounter.id, e)
+            current_app.logger.exception(
+                "Failed to create grading tasks for no-DR encounter %s: %s",
+                sanitize_log_value(encounter.id),
+                sanitize_log_value(e),
+            )
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": encounter.encounter_verified_status, "by": encounter.encounter_verified_by}
@@ -457,13 +472,28 @@ def nodr_unverify(encounter_id: int):
                     try:
                         removed_count = remove_pending_tasks(db, kind="encounter", image_id=image.id)
                         if removed_count > 0:
-                            current_app.logger.info("Removed %d pending DR tasks for no-DR encounter image %s", removed_count, image.uuid)
+                            current_app.logger.info(
+                                "Removed %d pending DR tasks for no-DR encounter image %s",
+                                sanitize_log_value(removed_count),
+                                sanitize_log_value(image.uuid),
+                            )
                     except Exception as task_error:
-                        current_app.logger.exception("Failed to remove DR tasks for no-DR encounter image %s: %s", image.uuid, task_error)
+                        current_app.logger.exception(
+                            "Failed to remove DR tasks for no-DR encounter image %s: %s",
+                            sanitize_log_value(image.uuid),
+                            sanitize_log_value(task_error),
+                        )
             else:
-                current_app.logger.warning("DR disease not found when attempting to unverify encounter %s", encounter.id)
+                current_app.logger.warning(
+                    "DR disease not found when attempting to unverify encounter %s",
+                    sanitize_log_value(encounter.id),
+                )
         except Exception as e:
-            current_app.logger.exception("Failed to remove tasks during no-DR encounter unverification %s: %s", encounter.id, e)
+            current_app.logger.exception(
+                "Failed to remove tasks during no-DR encounter unverification %s: %s",
+                sanitize_log_value(encounter.id),
+                sanitize_log_value(e),
+            )
 
         if request.headers.get("X-Requested-With") == "XMLHttpRequest" or "application/json" in (request.headers.get("Accept") or ""):
             return {"ok": True, "status": encounter.encounter_verified_status}

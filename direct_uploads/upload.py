@@ -24,6 +24,7 @@ from utils.fileUtils import get_upload_dirs
 from utils.upload_eligibility import get_user_uploadVerify_eligibility, get_user_lab_unit_ids_no_admin_override
 from utils.jobUtils import get_recent_zip_uploads
 from utils.thumbnail_maintenance_scheduler import queue_missing_thumbnail_regeneration
+from utils.log_sanitize import sanitize_log_value
 
 
 load_environment()
@@ -139,11 +140,18 @@ def upload():
 
             current_app.logger.info(
                 "Direct upload initiated by user %s (ID: %s) from IP %s",
-                current_user.username, current_user.id, request.remote_addr
+                sanitize_log_value(current_user.username),
+                sanitize_log_value(current_user.id),
+                sanitize_log_value(request.remote_addr),
             )
             current_app.logger.info(
                 "Upload parameters - Hospital:%s LabUnit:%s Camera:%s Disease:%s Area:%s Mydriatic:%s",
-                hospital_id, lab_unit_id, camera_id, disease_id, area_id, is_mydriatic
+                sanitize_log_value(hospital_id),
+                sanitize_log_value(lab_unit_id),
+                sanitize_log_value(camera_id),
+                sanitize_log_value(disease_id),
+                sanitize_log_value(area_id),
+                sanitize_log_value(is_mydriatic),
             )
 
             # ---- limits & allowed types ----
@@ -163,8 +171,11 @@ def upload():
 
             # ---- validate required fields ----
             if not all([hospital_id, lab_unit_id, camera_id, disease_id, area_id]):
-                current_app.logger.warning("Direct upload failed: missing fields for user %s (%s)",
-                                           current_user.username, current_user.id)
+                current_app.logger.warning(
+                    "Direct upload failed: missing fields for user %s (%s)",
+                    sanitize_log_value(current_user.username),
+                    sanitize_log_value(current_user.id),
+                )
                 flash("All fields are required.", "danger")
                 return redirect(url_for("direct_uploads.upload"), code=303)
 
@@ -175,8 +186,11 @@ def upload():
             area     = db_session.get(Area,     area_id)
 
             if not all([hospital, lab_unit, camera, disease, area]):
-                current_app.logger.warning("Direct upload failed: invalid selection for user %s (%s)",
-                                           current_user.username, current_user.id)
+                current_app.logger.warning(
+                    "Direct upload failed: invalid selection for user %s (%s)",
+                    sanitize_log_value(current_user.username),
+                    sanitize_log_value(current_user.id),
+                )
                 flash("Invalid selection for one or more fields.", "danger")
                 return redirect(url_for("direct_uploads.upload"), code=303)
 
@@ -203,8 +217,12 @@ def upload():
             )
             db_session.add(new_job)
             db_session.flush()
-            current_app.logger.info("Created new job %s for user %s (%s)",
-                                    new_job.id, current_user.username, current_user.id)
+            current_app.logger.info(
+                "Created new job %s for user %s (%s)",
+                sanitize_log_value(new_job.id),
+                sanitize_log_value(current_user.username),
+                sanitize_log_value(current_user.id),
+            )
 
             # ---- dirs for this user/day ----
             orig_dir, edited_dir, dup_dir, folder_rel = get_upload_dirs(current_user.id)
@@ -216,7 +234,10 @@ def upload():
                 flash("No files selected.", "warning")
                 return redirect(url_for("direct_uploads.upload"), code=303)
 
-            current_app.logger.info("Processing %s files for upload", len(files))
+            current_app.logger.info(
+                "Processing %s files for upload",
+                sanitize_log_value(len(files)),
+            )
 
             job_items = []
 
@@ -230,16 +251,28 @@ def upload():
                 else:
                     content = file.read()
                     size = len(content)
-                    current_app.logger.info("Processing file: %s (%s bytes)", filename, size)
+                    current_app.logger.info(
+                        "Processing file: %s (%s bytes)",
+                        sanitize_log_value(filename),
+                        sanitize_log_value(size),
+                    )
 
                     if size > MAX_FILE_SIZE_BYTES:
                         state, detail = "error", f"File too large (max {MAX_FILE_SIZE_MB}MB)"
-                        current_app.logger.warning("Too large: %s bytes for %s", size, filename)
+                        current_app.logger.warning(
+                            "Too large: %s bytes for %s",
+                            sanitize_log_value(size),
+                            sanitize_log_value(filename),
+                        )
                     else:
                         mime_type = magic.from_buffer(content, mime=True)
                         if mime_type not in ALLOWED_MIMETYPES:
                             state, detail = "error", f"Invalid file type: {mime_type}. Only JPG/PNG allowed."
-                            current_app.logger.warning("Invalid type %s for %s", mime_type, filename)
+                            current_app.logger.warning(
+                                "Invalid type %s for %s",
+                                sanitize_log_value(mime_type),
+                                sanitize_log_value(filename),
+                            )
                         else:
                             md5_hash = hashlib.md5(content).hexdigest()
                             existing = db_session.execute(
@@ -251,14 +284,20 @@ def upload():
                                 path = uniquify(dup_dir, filename)
                                 path.write_bytes(content)
                                 state, detail = "error", "Duplicate file"
-                                current_app.logger.info("Duplicate: %s", filename)
+                                current_app.logger.info(
+                                    "Duplicate: %s",
+                                    sanitize_log_value(filename),
+                                )
                             else:
                                 # per-request quota (optional; your config key)
                                 lifetime_quota = _get_lifetime_quota(db_session, current_user)
                                 if lifetime_quota is not None and current_user.file_upload_count >= lifetime_quota:
                                     state, detail = "error", "Upload quota exceeded"
-                                    current_app.logger.warning("Quota exceeded for user %s (%s)",
-                                                               current_user.username, current_user.id)
+                                    current_app.logger.warning(
+                                        "Quota exceeded for user %s (%s)",
+                                        sanitize_log_value(current_user.username),
+                                        sanitize_log_value(current_user.id),
+                                    )
                                 else:
                                     # write original
                                     dest = uniquify(orig_dir, filename)
@@ -274,11 +313,21 @@ def upload():
                                         success = generate_thumbnail(dest, thumb_path)
                                         if success:
                                             thumbnail_filename = thumb_filename
-                                            current_app.logger.info(f"Generated thumbnail: {thumb_filename}")
+                                            current_app.logger.info(
+                                                "Generated thumbnail: %s",
+                                                sanitize_log_value(thumb_filename),
+                                            )
                                         else:
-                                            current_app.logger.warning(f"Failed to generate thumbnail for: {dest.name}")
+                                            current_app.logger.warning(
+                                                "Failed to generate thumbnail for: %s",
+                                                sanitize_log_value(dest.name),
+                                            )
                                     except Exception as e:
-                                        current_app.logger.error(f"Error generating thumbnail for {dest.name}: {e}")
+                                        current_app.logger.error(
+                                            "Error generating thumbnail for %s: %s",
+                                            sanitize_log_value(dest.name),
+                                            sanitize_log_value(e),
+                                        )
 
                                     # create DB row (folder-based; store basenames only)
                                     db_session.add(DirectImageUpload(
@@ -299,7 +348,10 @@ def upload():
                                     ))
                                     current_user.file_upload_count += 1
                                     state, detail = "completed", "File uploaded successfully"
-                                    current_app.logger.info("Uploaded: %s", dest.name)
+                                    current_app.logger.info(
+                                        "Uploaded: %s",
+                                        sanitize_log_value(dest.name),
+                                    )
 
                 job_items.append(JobItem(
                     job_id=new_job.id,
@@ -317,19 +369,31 @@ def upload():
 
             ok = sum(1 for i in job_items if i.state == "completed")
             err = len(job_items) - ok
-            current_app.logger.info("Job %s done. Success:%s Errors:%s", new_job.id, ok, err)
+            current_app.logger.info(
+                "Job %s done. Success:%s Errors:%s",
+                sanitize_log_value(new_job.id),
+                sanitize_log_value(ok),
+                sanitize_log_value(err),
+            )
 
             # Trigger a background missing-thumbnail regeneration to catch any gaps
             try:
                 queue_missing_thumbnail_regeneration(current_app, schedule_time="post_direct_upload", limit=200)
             except Exception as e:
-                current_app.logger.warning(f"Could not queue thumbnail regeneration after upload: {e}")
+                current_app.logger.warning(
+                    "Could not queue thumbnail regeneration after upload: %s",
+                    sanitize_log_value(e),
+                )
 
             flash("Upload process initiated. Check status for details.", "info")
             return redirect(url_for("jobs.upload_processing", job_id=new_job.token), code=303)
 
         # ---------------- GET: build form data ----------------
-        current_app.logger.info("Direct upload page accessed by %s (%s)", current_user.username, current_user.id)
+        current_app.logger.info(
+            "Direct upload page accessed by %s (%s)",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
+        )
 
         user = db_session.get(User, current_user.id)  # attaches to session
         user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id))

@@ -12,6 +12,7 @@ from flask import jsonify, request, current_app
 from auth.roles import roles_required
 from utils.materialized_view_scheduler import get_last_refresh_info, manual_refresh_now, get_scheduler_status
 from flask_login import login_required, current_user
+from utils.log_sanitize import sanitize_log_value
 
 
 @login_required
@@ -125,7 +126,10 @@ def materialized_view_status():
                 }
 
     except Exception as e:
-        current_app.logger.error(f"Error fetching materialized view status: {str(e)}")
+        current_app.logger.error(
+            "Error fetching materialized view status: %s",
+            sanitize_log_value(e),
+        )
         refresh_history = []
         refresh_stats = {
             'total_refreshes': 0,
@@ -158,7 +162,10 @@ def api_materialized_view_status():
             'data': scheduler_status
         })
     except Exception as e:
-        current_app.logger.error(f"Error in API materialized view status: {str(e)}")
+        current_app.logger.error(
+            "Error in API materialized view status: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -176,7 +183,10 @@ def api_last_refresh():
             'data': last_refresh_info
         })
     except Exception as e:
-        current_app.logger.error(f"Error in API last refresh: {str(e)}")
+        current_app.logger.error(
+            "Error in API last refresh: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)
@@ -222,7 +232,10 @@ def api_schedule_status():
             }
         })
     except Exception as e:
-        current_app.logger.error(f"Error in API schedule status: {str(e)}")
+        current_app.logger.error(
+            "Error in API schedule status: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({
             'success': False,
             'error': str(e)

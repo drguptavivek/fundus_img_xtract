@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Union
 from PIL import Image, ImageOps
 from io import BytesIO
+from utils.log_sanitize import sanitize_log_value
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -60,20 +61,29 @@ def generate_thumbnail(
     try:
         # Validate source file
         if not source_path.exists():
-            logger.error(f"Source image not found: {source_path}")
+            logger.error(
+                "Source image not found: %s",
+                sanitize_log_value(source_path),
+            )
             raise FileNotFoundError(f"Source image not found: {source_path}")
 
         # Check file size
         file_size = source_path.stat().st_size
         if file_size > MAX_IMAGE_SIZE:
-            logger.error(f"Image too large for processing: {file_size} bytes")
+            logger.error(
+                "Image too large for processing: %s bytes",
+                sanitize_log_value(file_size),
+            )
             raise ValueError(f"Image too large for processing: {file_size} bytes")
 
         # Open and process image
         with Image.open(source_path) as img:
             # Verify image format is supported
             if img.format and img.format.upper() not in SUPPORTED_FORMATS:
-                logger.error(f"Unsupported image format: {img.format}")
+                logger.error(
+                    "Unsupported image format: %s",
+                    sanitize_log_value(img.format),
+                )
                 raise ValueError(f"Unsupported image format: {img.format}")
 
             # Convert RGBA to RGB if necessary (for JPEG output)
@@ -142,19 +152,28 @@ def generate_thumbnail(
 
             # Verify thumbnail was created
             if not output_path.exists():
-                logger.error(f"Thumbnail not created: {output_path}")
+                logger.error(
+                    "Thumbnail not created: %s",
+                    sanitize_log_value(output_path),
+                )
                 return False
 
             thumbnail_size = output_path.stat().st_size
             logger.info(
-                f"Thumbnail generated successfully: {output_path} "
-                f"({thumbnail_size} bytes, {output_format})"
+                "Thumbnail generated successfully: %s (%s bytes, %s)",
+                sanitize_log_value(output_path),
+                sanitize_log_value(thumbnail_size),
+                sanitize_log_value(output_format),
             )
 
             return True
 
     except Exception as e:
-        logger.error(f"Failed to generate thumbnail from {source_path}: {str(e)}")
+        logger.error(
+            "Failed to generate thumbnail from %s: %s",
+            sanitize_log_value(source_path),
+            sanitize_log_value(e),
+        )
         # Clean up partial thumbnail if it exists
         if output_path.exists():
             try:
@@ -293,7 +312,11 @@ def get_image_info(file_path: Union[str, Path]) -> dict:
                 )
             }
     except Exception as e:
-        logger.error(f"Failed to get image info for {file_path}: {str(e)}")
+        logger.error(
+            "Failed to get image info for %s: %s",
+            sanitize_log_value(file_path),
+            sanitize_log_value(e),
+        )
         return {}
 
 
@@ -345,7 +368,11 @@ def optimize_image(
             return True
 
     except Exception as e:
-        logger.error(f"Failed to optimize image {source_path}: {str(e)}")
+        logger.error(
+            "Failed to optimize image %s: %s",
+            sanitize_log_value(source_path),
+            sanitize_log_value(e),
+        )
         return False
 
 

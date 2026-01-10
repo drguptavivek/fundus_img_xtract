@@ -24,6 +24,7 @@ from models import (
     PatientEncounters, ZipFile
 )
 from db_transaction_manager import get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 
 @get_db_session()
@@ -69,7 +70,10 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
         
         tasks = tasks_query.all()
         
-        logger.info(f"Approach 1: Retrieved {len(tasks)} tasks from database")
+        logger.info(
+            "Approach 1: Retrieved %s tasks from database",
+            sanitize_log_value(len(tasks)),
+        )
         
         data = []
         
@@ -180,7 +184,10 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
         return df
         
     except Exception as e:
-        error_logger.error(f"Error in generate_tasks_dataframe_approach1: {str(e)}")
+        error_logger.error(
+            "Error in generate_tasks_dataframe_approach1: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -220,7 +227,10 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
         if not tasks:
             return pd.DataFrame()
         
-        logger.info(f"Approach 2: Retrieved {len(tasks)} tasks from database")
+        logger.info(
+            "Approach 2: Retrieved %s tasks from database",
+            sanitize_log_value(len(tasks)),
+        )
         
         # Step 2: Batch load related data by IDs
         task_ids = [t.id for t in tasks]
@@ -370,7 +380,10 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
         return df
         
     except Exception as e:
-        error_logger.error(f"Error in generate_tasks_dataframe_approach2: {str(e)}")
+        error_logger.error(
+            "Error in generate_tasks_dataframe_approach2: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -469,7 +482,10 @@ def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None
         result = db.execute(text(sql_query), params)
         rows = result.fetchall()
         
-        logger.info(f"Approach 3: Retrieved {len(rows)} tasks from database")
+        logger.info(
+            "Approach 3: Retrieved %s tasks from database",
+            sanitize_log_value(len(rows)),
+        )
         
         # Convert to DataFrame
         df = pd.DataFrame(rows)
@@ -581,7 +597,10 @@ def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None
         return df[final_columns]
         
     except Exception as e:
-        error_logger.error(f"Error in generate_tasks_dataframe_approach3: {str(e)}")
+        error_logger.error(
+            "Error in generate_tasks_dataframe_approach3: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -674,7 +693,10 @@ def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set, appro
         
     except Exception as e:
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in get_filtered_tasks_dataframe: {str(e)}")
-        error_logger.error(f"Params: {params}")
-        error_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        error_logger.error(
+            "Error in get_filtered_tasks_dataframe: %s",
+            sanitize_log_value(e),
+        )
+        error_logger.error("Params: %s", sanitize_log_value(params))
+        error_logger.error("User lab unit IDs: %s", sanitize_log_value(user_lab_unit_ids))
         raise

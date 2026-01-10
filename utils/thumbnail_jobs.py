@@ -22,6 +22,7 @@ from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
     abs_from_parts, IMAGE_DIR
 )
+from utils.log_sanitize import sanitize_log_value
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -101,7 +102,10 @@ def create_thumbnail_job(
                 filenames.append(filename)
 
         if not filenames:
-            logger.warning(f"No valid image references for thumbnail job type {job_type.value}")
+            logger.warning(
+                "No valid image references for thumbnail job type %s",
+                sanitize_log_value(job_type.value),
+            )
             return None
 
         # Create job using existing job_store pattern
@@ -119,11 +123,18 @@ def create_thumbnail_job(
         # Store detailed image reference data for processing
         _store_job_image_references(job_token, image_references, job_type)
 
-        logger.info(f"Created thumbnail job {job_token} with {len(filenames)} items")
+        logger.info(
+            "Created thumbnail job %s with %s items",
+            sanitize_log_value(job_token),
+            sanitize_log_value(len(filenames)),
+        )
         return job_token
 
     except Exception as e:
-        logger.error(f"Failed to create thumbnail job: {str(e)}")
+        logger.error(
+            "Failed to create thumbnail job: %s",
+            sanitize_log_value(e),
+        )
         return None
 
 
@@ -170,7 +181,10 @@ def _store_job_image_references(job_token: str, image_references: List[Dict[str,
                 job.rejected_summary = json.dumps(ref_data)
                 db.add(job)
     except Exception as e:
-        logger.error(f"Failed to store job image references: {str(e)}")
+        logger.error(
+            "Failed to store job image references: %s",
+            sanitize_log_value(e),
+        )
 
 
 def _load_job_image_references(job_token: str) -> Optional[Dict[str, Any]]:
@@ -182,7 +196,10 @@ def _load_job_image_references(job_token: str) -> Optional[Dict[str, Any]]:
                 import json
                 return json.loads(job.rejected_summary)
     except Exception as e:
-        logger.error(f"Failed to load job image references: {str(e)}")
+        logger.error(
+            "Failed to load job image references: %s",
+            sanitize_log_value(e),
+        )
     return None
 
 
@@ -192,7 +209,10 @@ def process_thumbnail_job(job_token: str):
 
     This is the main worker function that processes all items in a thumbnail job.
     """
-    logger.info(f"Starting thumbnail job processing: {job_token}")
+    logger.info(
+        "Starting thumbnail job processing: %s",
+        sanitize_log_value(job_token),
+    )
     db_set_job_status(job_token, JobState.PROCESSING.value)
 
     try:
@@ -210,7 +230,11 @@ def process_thumbnail_job(job_token: str):
                 _process_single_thumbnail(job_token, ref, job_type)
             except Exception as e:
                 filename = _create_job_item_filename(ref, job_type) or "unknown"
-                logger.error(f"Failed to process thumbnail for {filename}: {str(e)}")
+                logger.error(
+                    "Failed to process thumbnail for %s: %s",
+                    sanitize_log_value(filename),
+                    sanitize_log_value(e),
+                )
                 db_set_item_state(job_token, filename, JobState.ERROR.value, str(e))
 
         # Check final job status
@@ -219,10 +243,17 @@ def process_thumbnail_job(job_token: str):
         else:
             db_set_job_status(job_token, JobState.COMPLETED.value)
 
-        logger.info(f"Completed thumbnail job processing: {job_token}")
+        logger.info(
+            "Completed thumbnail job processing: %s",
+            sanitize_log_value(job_token),
+        )
 
     except Exception as e:
-        logger.error(f"Thumbnail job failed: {job_token} - {str(e)}")
+        logger.error(
+            "Thumbnail job failed: %s - %s",
+            sanitize_log_value(job_token),
+            sanitize_log_value(e),
+        )
         db_set_job_status(job_token, JobState.ERROR.value, error=str(e))
 
 
@@ -349,7 +380,10 @@ def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
                     db.add(encounter_file)
 
     except Exception as e:
-        logger.error(f"Failed to update thumbnail record: {str(e)}")
+        logger.error(
+            "Failed to update thumbnail record: %s",
+            sanitize_log_value(e),
+        )
 
 
 def queue_thumbnail_job(job_token: str, app):
@@ -369,10 +403,17 @@ def queue_thumbnail_job(job_token: str, app):
         # in background threads, preventing "Working outside of application context" errors
         wrapped_process_thumbnail_job = with_app_context(app, process_thumbnail_job)
         executor.submit(wrapped_process_thumbnail_job, job_token)
-        logger.info(f"Queued thumbnail job for processing: {job_token}")
+        logger.info(
+            "Queued thumbnail job for processing: %s",
+            sanitize_log_value(job_token),
+        )
 
     except Exception as e:
-        logger.error(f"Failed to queue thumbnail job {job_token}: {str(e)}")
+        logger.error(
+            "Failed to queue thumbnail job %s: %s",
+            sanitize_log_value(job_token),
+            sanitize_log_value(e),
+        )
         db_set_job_status(job_token, JobState.ERROR.value, error=f"Failed to queue job: {str(e)}")
 
 
@@ -411,7 +452,10 @@ def schedule_direct_upload_thumbnails(direct_upload_id: int, app, user_context: 
                 })
 
             if not image_references:
-                logger.warning(f"No images to generate thumbnails for direct upload {direct_upload_id}")
+                logger.warning(
+                    "No images to generate thumbnails for direct upload %s",
+                    sanitize_log_value(direct_upload_id),
+                )
                 return
 
             # Create and queue job
@@ -426,12 +470,23 @@ def schedule_direct_upload_thumbnails(direct_upload_id: int, app, user_context: 
 
             if job_token:
                 queue_thumbnail_job(job_token, app)
-                logger.info(f"Scheduled thumbnails for direct upload {direct_upload_id}: job {job_token}")
+                logger.info(
+                    "Scheduled thumbnails for direct upload %s: job %s",
+                    sanitize_log_value(direct_upload_id),
+                    sanitize_log_value(job_token),
+                )
             else:
-                logger.error(f"Failed to create thumbnail job for direct upload {direct_upload_id}")
+                logger.error(
+                    "Failed to create thumbnail job for direct upload %s",
+                    sanitize_log_value(direct_upload_id),
+                )
 
     except Exception as e:
-        logger.error(f"Failed to schedule thumbnails for direct upload {direct_upload_id}: {str(e)}")
+        logger.error(
+            "Failed to schedule thumbnails for direct upload %s: %s",
+            sanitize_log_value(direct_upload_id),
+            sanitize_log_value(e),
+        )
 
 
 def schedule_encounter_thumbnails(encounter_file_ids: List[int], app, user_context: Optional[Dict[str, Any]] = None):
@@ -480,12 +535,19 @@ def schedule_encounter_thumbnails(encounter_file_ids: List[int], app, user_conte
 
             if job_token:
                 queue_thumbnail_job(job_token, app)
-                logger.info(f"Scheduled thumbnails for {len(encounter_file_ids)} encounter files: job {job_token}")
+                logger.info(
+                    "Scheduled thumbnails for %s encounter files: job %s",
+                    sanitize_log_value(len(encounter_file_ids)),
+                    sanitize_log_value(job_token),
+                )
             else:
                 logger.error(f"Failed to create thumbnail job for encounter files")
 
     except Exception as e:
-        logger.error(f"Failed to schedule thumbnails for encounter files: {str(e)}")
+        logger.error(
+            "Failed to schedule thumbnails for encounter files: %s",
+            sanitize_log_value(e),
+        )
 
 
 def get_thumbnail_job_status(job_token: str) -> Optional[Dict[str, Any]]:
@@ -502,7 +564,11 @@ def get_thumbnail_job_status(job_token: str) -> Optional[Dict[str, Any]]:
         from job_store import db_get_job_payload
         return db_get_job_payload(job_token)
     except Exception as e:
-        logger.error(f"Failed to get thumbnail job status {job_token}: {str(e)}")
+        logger.error(
+            "Failed to get thumbnail job status %s: %s",
+            sanitize_log_value(job_token),
+            sanitize_log_value(e),
+        )
         return None
 
 

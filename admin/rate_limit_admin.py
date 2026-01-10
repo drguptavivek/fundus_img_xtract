@@ -12,6 +12,7 @@ from utils.rate_limiter import (
     limiter,
 )
 from utils.redis_connection import build_redis_url
+from utils.log_sanitize import sanitize_log_value
 from auth.roles import roles_required
 
 # Create blueprint
@@ -66,8 +67,11 @@ def clear_limit():
     
     # Log the action
     rate_limit_logger.info(
-        f"Admin {current_user.username} ({current_user.id}) attempting to clear rate limit "
-        f"for key: {key}, limit: {limit or 'ALL'}"
+        "Admin %s (%s) attempting to clear rate limit for key: %s, limit: %s",
+        sanitize_log_value(current_user.username),
+        sanitize_log_value(current_user.id),
+        sanitize_log_value(key),
+        sanitize_log_value(limit or "ALL"),
     )
     
     # Attempt to clear the rate limit
@@ -76,14 +80,20 @@ def clear_limit():
     if success:
         flash(f"Rate limit cleared successfully for key: {key}", "success")
         rate_limit_logger.info(
-            f"Admin {current_user.username} ({current_user.id}) successfully cleared rate limit "
-            f"for key: {key}, limit: {limit or 'ALL'}"
+            "Admin %s (%s) successfully cleared rate limit for key: %s, limit: %s",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
+            sanitize_log_value(key),
+            sanitize_log_value(limit or "ALL"),
         )
     else:
         flash("Failed to clear rate limit. Check logs for details.", "error")
         rate_limit_logger.error(
-            f"Admin {current_user.username} ({current_user.id}) failed to clear rate limit "
-            f"for key: {key}, limit: {limit or 'ALL'}"
+            "Admin %s (%s) failed to clear rate limit for key: %s, limit: %s",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
+            sanitize_log_value(key),
+            sanitize_log_value(limit or "ALL"),
         )
     
     return redirect(url_for("rate_limit_admin.index"))
@@ -126,7 +136,9 @@ def clear_all():
     
     # Log the dangerous action
     rate_limit_logger.warning(
-        f"Admin {current_user.username} ({current_user.id}) attempting to clear ALL rate limits!"
+        "Admin %s (%s) attempting to clear ALL rate limits!",
+        sanitize_log_value(current_user.username),
+        sanitize_log_value(current_user.id),
     )
     
     # Attempt to clear all rate limits
@@ -135,12 +147,16 @@ def clear_all():
     if success:
         flash("ALL rate limits have been cleared.", "warning")
         rate_limit_logger.warning(
-            f"Admin {current_user.username} ({current_user.id}) successfully cleared ALL rate limits"
+            "Admin %s (%s) successfully cleared ALL rate limits",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
         )
     else:
         flash("Failed to clear all rate limits. Check logs for details.", "error")
         rate_limit_logger.error(
-            f"Admin {current_user.username} ({current_user.id}) failed to clear ALL rate limits"
+            "Admin %s (%s) failed to clear ALL rate limits",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
         )
     
     return redirect(url_for("rate_limit_admin.index"))
@@ -159,8 +175,10 @@ def clear_limit_ajax():
     
     # Log the action
     rate_limit_logger.info(
-        f"Admin {current_user.username} ({current_user.id}) attempting to clear rate limit "
-        f"for key: {key} via AJAX"
+        "Admin %s (%s) attempting to clear rate limit for key: %s via AJAX",
+        sanitize_log_value(current_user.username),
+        sanitize_log_value(current_user.id),
+        sanitize_log_value(key),
     )
     
     # Attempt to clear the rate limit
@@ -168,14 +186,18 @@ def clear_limit_ajax():
     
     if success:
         rate_limit_logger.info(
-            f"Admin {current_user.username} ({current_user.id}) successfully cleared rate limit "
-            f"for key: {key} via AJAX"
+            "Admin %s (%s) successfully cleared rate limit for key: %s via AJAX",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
+            sanitize_log_value(key),
         )
         return jsonify({"success": True, "message": f"Rate limit cleared successfully for key: {key}"})
     else:
         rate_limit_logger.error(
-            f"Admin {current_user.username} ({current_user.id}) failed to clear rate limit "
-            f"for key: {key} via AJAX"
+            "Admin %s (%s) failed to clear rate limit for key: %s via AJAX",
+            sanitize_log_value(current_user.username),
+            sanitize_log_value(current_user.id),
+            sanitize_log_value(key),
         )
         return jsonify({"success": False, "message": "Failed to clear rate limit. Check logs for details."}), 500
 
@@ -321,7 +343,10 @@ def get_all_rate_limits(page=1, per_page=50):
                 }
     
     except Exception as e:
-        rate_limit_logger.error(f"Failed to get rate limits: {e}")
+        rate_limit_logger.error(
+            "Failed to get rate limits: %s",
+            sanitize_log_value(e),
+        )
         return {
             "error": str(e),
             "items": [],
@@ -398,7 +423,11 @@ def parse_rate_limit_key(key):
                 'per': 'Unknown'
             }
     except Exception as e:
-        rate_limit_logger.error(f"Failed to parse rate limit key {key}: {e}")
+        rate_limit_logger.error(
+            "Failed to parse rate limit key %s: %s",
+            sanitize_log_value(key),
+            sanitize_log_value(e),
+        )
         return {
             'client_type': 'Error',
             'client_value': key,

@@ -39,6 +39,7 @@ from utils.dualGradingConsensusUtils import (
     create_or_update_consensus,
     update_task_state_based_on_grades,
 )
+from utils.log_sanitize import sanitize_log_value
 import logging
 
 
@@ -205,9 +206,9 @@ def _store_pending_import(token: str, pending: PendingImport) -> None:
     session.modified = True
     processing_logger.debug(
         "Pending import stored token=%s role=%s rows=%s",
-        token,
-        pending.role,
-        len(pending.rows),
+        sanitize_log_value(token),
+        sanitize_log_value(pending.role),
+        sanitize_log_value(len(pending.rows)),
     )
 
 
@@ -217,9 +218,15 @@ def _pop_pending_import(token: str) -> Optional[PendingImport]:
     session["pregraded_grade_imports"] = store
     session.modified = True
     if not raw:
-        processing_logger.debug("Pending import token %s not found", token)
+        processing_logger.debug(
+            "Pending import token %s not found",
+            sanitize_log_value(token),
+        )
         return None
-    processing_logger.debug("Pending import token %s restored", token)
+    processing_logger.debug(
+        "Pending import token %s restored",
+        sanitize_log_value(token),
+    )
     return PendingImport(
         role=raw["role"],
         hospital_id=raw["hospital_id"],
@@ -287,19 +294,19 @@ def _find_upload(
     if not uploads:
         processing_logger.debug(
             "No upload match for filename=%s hospital=%s lab=%s disease=%s",
-            image_name,
-            hospital_id,
-            lab_unit_id,
-            disease_id,
+            sanitize_log_value(image_name),
+            sanitize_log_value(hospital_id),
+            sanitize_log_value(lab_unit_id),
+            sanitize_log_value(disease_id),
         )
         return None
     if len(uploads) > 1:
         current_app.logger.warning(
             "Multiple pre-graded uploads matched image_name=%s (hospital=%s lab=%s disease=%s); using most recent.",
-            image_name,
-            hospital_id,
-            lab_unit_id,
-            disease_id,
+            sanitize_log_value(image_name),
+            sanitize_log_value(hospital_id),
+            sanitize_log_value(lab_unit_id),
+            sanitize_log_value(disease_id),
         )
     return uploads[0]
 
@@ -366,7 +373,7 @@ def _apply_grade(
             log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
         
         # Log using dedicated grades logger
-        grades_logger.info(log_message)
+        grades_logger.info("%s", sanitize_log_value(log_message))
 
     if existing_grade:
         existing_grade.grader_user_id = grader_user_id
@@ -411,12 +418,12 @@ def _process_rows(
 
     processing_logger.info(
         "job_id=%s role=%s start rows=%s hospital=%s lab=%s disease=%s",
-        job.id,
-        pending.role,
-        len(pending.rows),
-        pending.hospital_id,
-        pending.lab_unit_id,
-        pending.disease_id,
+        sanitize_log_value(job.id),
+        sanitize_log_value(pending.role),
+        sanitize_log_value(len(pending.rows)),
+        sanitize_log_value(pending.hospital_id),
+        sanitize_log_value(pending.lab_unit_id),
+        sanitize_log_value(pending.disease_id),
     )
 
     for row in pending.rows:
@@ -428,11 +435,11 @@ def _process_rows(
             detail = "Missing grade value"
             processing_logger.warning(
                 "job_id=%s role=%s filename=%s result=%s detail=%s",
-                job.id,
-                pending.role,
-                filename,
-                item_state,
-                detail,
+                sanitize_log_value(job.id),
+                sanitize_log_value(pending.role),
+                sanitize_log_value(filename),
+                sanitize_log_value(item_state),
+                sanitize_log_value(detail),
             )
             job_items.append(
                 JobItem(
@@ -454,11 +461,11 @@ def _process_rows(
             detail = f"No grade mapping for '{grade_text}'"
             processing_logger.warning(
                 "job_id=%s role=%s filename=%s result=%s detail=%s",
-                job.id,
-                pending.role,
-                filename,
-                item_state,
-                detail,
+                sanitize_log_value(job.id),
+                sanitize_log_value(pending.role),
+                sanitize_log_value(filename),
+                sanitize_log_value(item_state),
+                sanitize_log_value(detail),
             )
             job_items.append(
                 JobItem(
@@ -490,10 +497,10 @@ def _process_rows(
         try:
             processing_logger.info(
                 "job_id=%s role=%s filename=%s mapping_grade=%s",
-                job.id,
-                pending.role,
-                filename,
-                grade_id,
+                sanitize_log_value(job.id),
+                sanitize_log_value(pending.role),
+                sanitize_log_value(filename),
+                sanitize_log_value(grade_id),
             )
             upload = _find_upload(
                 db_session,
@@ -506,7 +513,8 @@ def _process_rows(
                 # Log the error without traceback and continue processing
                 current_app.logger.warning(
                     "Failed to import grade for %s: Image '%s' not found in pre-graded uploads for the selected hospital/lab/disease.",
-                    filename, filename
+                    sanitize_log_value(filename),
+                    sanitize_log_value(filename),
                 )
                 item_state = "error"
                 detail = f"Image '{filename}' not found in pre-graded uploads for the selected hospital/lab/disease."
@@ -525,11 +533,11 @@ def _process_rows(
                 )
                 processing_logger.info(
                     "job_id=%s role=%s filename=%s result=%s detail=%s",
-                    job.id,
-                    pending.role,
-                    filename,
-                    item_state,
-                    detail,
+                    sanitize_log_value(job.id),
+                    sanitize_log_value(pending.role),
+                    sanitize_log_value(filename),
+                    sanitize_log_value(item_state),
+                    sanitize_log_value(detail),
                 )
                 continue  # Skip to next row without processing grades
 
@@ -538,23 +546,23 @@ def _process_rows(
             except Exception as exc:  # noqa: BLE001
                 current_app.logger.warning(
                     "ensure_task failed for pre-graded import (uuid=%s): %s",
-                    upload.uuid,
-                    exc,
+                    sanitize_log_value(upload.uuid),
+                    sanitize_log_value(exc),
                 )
                 processing_logger.warning(
                     "job_id=%s role=%s filename=%s ensure_task_failed=%s",
-                    job.id,
-                    pending.role,
-                    filename,
-                    exc,
+                    sanitize_log_value(job.id),
+                    sanitize_log_value(pending.role),
+                    sanitize_log_value(filename),
+                    sanitize_log_value(exc),
                 )
             else:
                 processing_logger.info(
                     "job_id=%s role=%s filename=%s ensured_task_uuid=%s",
-                    job.id,
-                    pending.role,
-                    filename,
-                    upload.uuid,
+                    sanitize_log_value(job.id),
+                    sanitize_log_value(pending.role),
+                    sanitize_log_value(filename),
+                    sanitize_log_value(upload.uuid),
                 )
 
             task = db_session.execute(
@@ -595,7 +603,11 @@ def _process_rows(
 
             success += 1
         except Exception as exc:  # noqa: BLE001
-            current_app.logger.exception("Failed to import grade for %s: %s", filename, exc)
+            current_app.logger.exception(
+                "Failed to import grade for %s: %s",
+                sanitize_log_value(filename),
+                sanitize_log_value(exc),
+            )
             item_state = "error"
             detail = str(exc)
             failures += 1
@@ -614,19 +626,19 @@ def _process_rows(
 
         processing_logger.info(
             "job_id=%s role=%s filename=%s result=%s detail=%s",
-            job.id,
-            pending.role,
-            filename,
-            item_state,
-            detail,
+            sanitize_log_value(job.id),
+            sanitize_log_value(pending.role),
+            sanitize_log_value(filename),
+            sanitize_log_value(item_state),
+            sanitize_log_value(detail),
         )
 
     processing_logger.info(
         "job_id=%s role=%s completed success=%s failures=%s",
-        job.id,
-        pending.role,
-        success,
-        failures,
+        sanitize_log_value(job.id),
+        sanitize_log_value(pending.role),
+        sanitize_log_value(success),
+        sanitize_log_value(failures),
     )
     return success, failures, job_items
 
@@ -757,21 +769,27 @@ def pregraded_grades():
         mapping_json = request.form.get("mapping_json")
         processing_logger.info(
             "POST /direct/pregraded/grades role=%s mapping_token=%s mapping_json_len=%s",
-            form_role,
-            mapping_token or "",
-            len(mapping_json or ""),
+            sanitize_log_value(form_role),
+            sanitize_log_value(mapping_token or ""),
+            sanitize_log_value(len(mapping_json or "")),
         )
         if mapping_token:
             pending = _pop_pending_import(mapping_token)
             if not pending:
-                processing_logger.warning("Mapping token %s missing/expired", mapping_token)
+                processing_logger.warning(
+                    "Mapping token %s missing/expired",
+                    sanitize_log_value(mapping_token),
+                )
                 flash("Mapping session expired. Please upload the file again.", "warning")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
             try:
                 mapping_payload = json.loads(mapping_json or "{}")
             except json.JSONDecodeError:
-                processing_logger.error("Invalid mapping JSON for token %s", mapping_token)
+                processing_logger.error(
+                    "Invalid mapping JSON for token %s",
+                    sanitize_log_value(mapping_token),
+                )
                 flash("Invalid mapping payload.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -779,7 +797,10 @@ def pregraded_grades():
             try:
                 final_mapping = _resolve_grade_mapping(pending, mapping_payload, grade_options)
             except ValueError as exc:
-                processing_logger.warning("Mapping validation failed: %s", exc)
+                processing_logger.warning(
+                    "Mapping validation failed: %s",
+                    sanitize_log_value(exc),
+                )
                 flash(str(exc), "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -863,13 +884,20 @@ def pregraded_grades():
         
         for field_name, value in field_checks:
             if value is None:
-                processing_logger.warning("Missing field %s for role %s", field_name, form_role)
+                processing_logger.warning(
+                    "Missing field %s for role %s",
+                    sanitize_log_value(field_name),
+                    sanitize_log_value(form_role),
+                )
                 flash(f"{field_name} must be selected.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
         grades_file = request.files.get("grades_file")
         if not grades_file or not grades_file.filename:
-            processing_logger.warning("No file uploaded for role %s", form_role)
+            processing_logger.warning(
+                "No file uploaded for role %s",
+                sanitize_log_value(form_role),
+            )
             flash("Please select an Excel file to upload.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
             
@@ -884,8 +912,8 @@ def pregraded_grades():
         if lab_unit_id not in allowed_lab_units:
             processing_logger.warning(
                 "User %s attempted grade import to unauthorized lab %s",
-                current_user.id,
-                lab_unit_id,
+                sanitize_log_value(current_user.id),
+                sanitize_log_value(lab_unit_id),
             )
             flash("You do not have access to the selected lab unit.", "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
@@ -899,7 +927,10 @@ def pregraded_grades():
             if ai_model_id:
                 model = db_session.get(AIModel, ai_model_id)
                 if not model:
-                    processing_logger.warning("Selected AI model id %s not found", ai_model_id)
+                    processing_logger.warning(
+                        "Selected AI model id %s not found",
+                        sanitize_log_value(ai_model_id),
+                    )
                     flash("Selected AI model not found.", "danger")
                     return redirect(url_for("direct_uploads.pregraded_grades"))
                 ai_model_name_value = model.name
@@ -930,9 +961,9 @@ def pregraded_grades():
                     db_session.commit()
                     processing_logger.info(
                         "Created AI model id=%s name=%s version=%s",
-                        model.id,
-                        model.name,
-                        model.version,
+                        sanitize_log_value(model.id),
+                        sanitize_log_value(model.name),
+                        sanitize_log_value(model.version),
                     )
                     ai_model_id = model.id
                     ai_model_name_value = model.name
@@ -951,17 +982,26 @@ def pregraded_grades():
             ai_model_version_value = None
             grader = db_session.get(User, grader_user_id)
             if not grader:
-                processing_logger.warning("Grader user_id=%s not found", grader_user_id)
+                processing_logger.warning(
+                    "Grader user_id=%s not found",
+                    sanitize_log_value(grader_user_id),
+                )
                 flash("Selected grader not found.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
 
             role_names = {role.name.lower() for role in grader.roles}
             if form_role == ROLE_RESIDENT and not ({"resident", "ophthalmologist"} & role_names):
-                processing_logger.warning("Grader %s lacks resident role", grader_user_id)
+                processing_logger.warning(
+                    "Grader %s lacks resident role",
+                    sanitize_log_value(grader_user_id),
+                )
                 flash("Selected user is not eligible for resident grading.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
             if form_role == ROLE_RESIDENT2 and "ophthalmologist" not in role_names:
-                processing_logger.warning("Grader %s lacks resident2 eligibility", grader_user_id)
+                processing_logger.warning(
+                    "Grader %s lacks resident2 eligibility",
+                    sanitize_log_value(grader_user_id),
+                )
                 flash("Selected user is not eligible for resident2 grading.", "danger")
                 return redirect(url_for("direct_uploads.pregraded_grades"))
             effective_grader_id = grader_user_id
@@ -971,12 +1011,15 @@ def pregraded_grades():
             rows = _extract_rows(df, form_role)
             processing_logger.info(
                 "Workbook parsed for role=%s rows=%s (mapping_token=%s)",
-                form_role,
-                len(rows),
-                mapping_token or "",
+                sanitize_log_value(form_role),
+                sanitize_log_value(len(rows)),
+                sanitize_log_value(mapping_token or ""),
             )
         except ValueError as exc:
-            processing_logger.warning("Workbook validation failed: %s", exc)
+            processing_logger.warning(
+                "Workbook validation failed: %s",
+                sanitize_log_value(exc),
+            )
             flash(str(exc), "danger")
             return redirect(url_for("direct_uploads.pregraded_grades"))
 
@@ -989,9 +1032,9 @@ def pregraded_grades():
         auto_mapping, unmapped_values = _auto_map_grade_values(grade_options, unique_values)
         processing_logger.info(
             "Auto mapping generated for role=%s mapped=%s unmapped=%s",
-            form_role,
-            list(auto_mapping.keys()),
-            unmapped_values,
+            sanitize_log_value(form_role),
+            sanitize_log_value(list(auto_mapping.keys())),
+            sanitize_log_value(unmapped_values),
         )
 
         pending = PendingImport(
@@ -1061,9 +1104,9 @@ def pregraded_grades():
         _store_pending_import(token, pending)
         processing_logger.info(
             "Stored pending import token=%s role=%s unmapped_count=%s",
-            token,
-            form_role,
-            len(unmapped_values),
+            sanitize_log_value(token),
+            sanitize_log_value(form_role),
+            sanitize_log_value(len(unmapped_values)),
         )
 
         flash(

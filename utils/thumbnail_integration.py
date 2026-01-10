@@ -15,6 +15,7 @@ from utils.thumbnail_jobs import (
     schedule_encounter_thumbnails,
     create_user_context
 )
+from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +54,17 @@ def trigger_direct_upload_thumbnails(direct_upload_id: int, app=None, user_conte
 
         # Schedule thumbnail generation
         schedule_direct_upload_thumbnails(direct_upload_id, app, user_context)
-        logger.info(f"Triggered thumbnails for direct upload {direct_upload_id}")
+        logger.info(
+            "Triggered thumbnails for direct upload %s",
+            sanitize_log_value(direct_upload_id),
+        )
 
     except Exception as e:
-        logger.error(f"Failed to trigger thumbnails for direct upload {direct_upload_id}: {str(e)}")
+        logger.error(
+            "Failed to trigger thumbnails for direct upload %s: %s",
+            sanitize_log_value(direct_upload_id),
+            sanitize_log_value(e),
+        )
 
 
 def trigger_encounter_thumbnails(encounter_file_ids, app=None, user_context: Optional[Dict[str, Any]] = None):
@@ -100,10 +108,16 @@ def trigger_encounter_thumbnails(encounter_file_ids, app=None, user_context: Opt
 
         # Schedule thumbnail generation
         schedule_encounter_thumbnails(encounter_file_ids, app, user_context)
-        logger.info(f"Triggered thumbnails for {len(encounter_file_ids)} encounter files")
+        logger.info(
+            "Triggered thumbnails for %s encounter files",
+            sanitize_log_value(len(encounter_file_ids)),
+        )
 
     except Exception as e:
-        logger.error(f"Failed to trigger thumbnails for encounter files: {str(e)}")
+        logger.error(
+            "Failed to trigger thumbnails for encounter files: %s",
+            sanitize_log_value(e),
+        )
 
 
 def trigger_batch_existing_thumbnails(limit: int = 100, lab_unit_id: Optional[int] = None):
@@ -172,7 +186,10 @@ def trigger_batch_existing_thumbnails(limit: int = 100, lab_unit_id: Optional[in
             )
             if job_token:
                 queue_thumbnail_job(job_token, current_app)
-                logger.info(f"Created batch thumbnail job for direct uploads: {job_token}")
+                logger.info(
+                    "Created batch thumbnail job for direct uploads: %s",
+                    sanitize_log_value(job_token),
+                )
 
         if encounter_references:
             job_token = create_thumbnail_job(
@@ -185,13 +202,22 @@ def trigger_batch_existing_thumbnails(limit: int = 100, lab_unit_id: Optional[in
             )
             if job_token:
                 queue_thumbnail_job(job_token, current_app)
-                logger.info(f"Created batch thumbnail job for encounter files: {job_token}")
+                logger.info(
+                    "Created batch thumbnail job for encounter files: %s",
+                    sanitize_log_value(job_token),
+                )
 
         total_processed = len(direct_references) + len(encounter_references)
-        logger.info(f"Triggered batch thumbnails for {total_processed} existing images")
+        logger.info(
+            "Triggered batch thumbnails for %s existing images",
+            sanitize_log_value(total_processed),
+        )
 
     except Exception as e:
-        logger.error(f"Failed to trigger batch thumbnails: {str(e)}")
+        logger.error(
+            "Failed to trigger batch thumbnails: %s",
+            sanitize_log_value(e),
+        )
 
 
 # Decorator for automatic thumbnail triggering
@@ -223,7 +249,10 @@ def with_thumbnails(image_type: str = 'direct'):
                     elif isinstance(result, list) and all(isinstance(x, int) for x in result):
                         trigger_encounter_thumbnails(result)
             except Exception as e:
-                logger.error(f"Failed to trigger thumbnails in decorator: {str(e)}")
+                logger.error(
+                    "Failed to trigger thumbnails in decorator: %s",
+                    sanitize_log_value(e),
+                )
                 # Don't raise the error to avoid breaking the main function
 
             return result

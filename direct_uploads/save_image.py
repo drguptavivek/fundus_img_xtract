@@ -10,6 +10,7 @@ from auth.roles import roles_required
 from models import DirectImageUpload, BASE_DIR, GradingTask
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 
 
 editing_logger = logging.getLogger("editing")
@@ -27,12 +28,21 @@ def _normalize_task_state(state):
 def save_edited_image(upload_id: int):
     with get_db_session() as db:
         try:
-            editing_logger.info("Save image request for upload_id=%s", upload_id)
-            editing_logger.info("Content-Type: %s", request.content_type)
+            editing_logger.info(
+                "Save image request for upload_id=%s",
+                sanitize_log_value(upload_id),
+            )
+            editing_logger.info(
+                "Content-Type: %s",
+                sanitize_log_value(request.content_type),
+            )
 
             upload = db.get(DirectImageUpload, upload_id)
             if not upload:
-                editing_logger.warning("Upload not found for id: %s", upload_id)
+                editing_logger.warning(
+                    "Upload not found for id: %s",
+                    sanitize_log_value(upload_id),
+                )
                 return jsonify({"error": "Upload not found."}), 404
 
             allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
@@ -41,11 +51,19 @@ def save_edited_image(upload_id: int):
             )
 
             if upload.lab_unit_id not in allowed_lab_unit_ids:
-                editing_logger.warning("User %s lacks lab unit access for %s", current_user.id, upload_id)
+                editing_logger.warning(
+                    "User %s lacks lab unit access for %s",
+                    sanitize_log_value(current_user.id),
+                    sanitize_log_value(upload_id),
+                )
                 return jsonify({"error": "You don't have permission to edit this upload."}), 403
 
             if not (can_manage_others or upload.uploader_id == current_user.id):
-                editing_logger.warning("User %s lacks permission to edit %s", current_user.id, upload_id)
+                editing_logger.warning(
+                    "User %s lacks permission to edit %s",
+                    sanitize_log_value(current_user.id),
+                    sanitize_log_value(upload_id),
+                )
                 return jsonify({"error": "You don't have permission to edit this upload."}), 403
 
             task_states = db.execute(
@@ -54,14 +72,17 @@ def save_edited_image(upload_id: int):
             if any(_normalize_task_state(state) not in ("", "pending") for state in task_states):
                 editing_logger.warning(
                     "Save blocked for upload %s due to task states %s",
-                    upload_id,
-                    task_states,
+                    sanitize_log_value(upload_id),
+                    sanitize_log_value(task_states),
                 )
                 return jsonify({"error": "Cannot edit image while grading tasks are in progress."}), 409
 
             image_data = request.get_json().get('image_data') if request.is_json else request.form.get('image_data')
             if not image_data:
-                editing_logger.warning("No image data for upload %s", upload_id)
+                editing_logger.warning(
+                    "No image data for upload %s",
+                    sanitize_log_value(upload_id),
+                )
                 return jsonify({"error": "No image data provided."}), 400
 
             if image_data.startswith('data:image'):
@@ -70,7 +91,11 @@ def save_edited_image(upload_id: int):
             try:
                 image_bytes = base64.b64decode(image_data)
             except Exception as e:
-                editing_logger.error("Base64 decode error for upload %s: %s", upload_id, e)
+                editing_logger.error(
+                    "Base64 decode error for upload %s: %s",
+                    sanitize_log_value(upload_id),
+                    sanitize_log_value(e),
+                )
                 return jsonify({"error": "Invalid image data provided."}), 400
 
             # Correctly determine the path for the new edited file
@@ -93,22 +118,39 @@ def save_edited_image(upload_id: int):
                 success = generate_thumbnail(edited_path, edited_thumb_path)
                 if success:
                     edited_thumbnail_filename = edited_thumb_basename
-                    editing_logger.info(f"Generated edited image thumbnail: {edited_thumb_basename}")
+                    editing_logger.info(
+                        "Generated edited image thumbnail: %s",
+                        sanitize_log_value(edited_thumb_basename),
+                    )
                 else:
-                    editing_logger.warning(f"Failed to generate thumbnail for edited image: {edited_basename}")
+                    editing_logger.warning(
+                        "Failed to generate thumbnail for edited image: %s",
+                        sanitize_log_value(edited_basename),
+                    )
             except Exception as e:
-                editing_logger.error(f"Error generating thumbnail for edited image {edited_basename}: {e}")
+                editing_logger.error(
+                    "Error generating thumbnail for edited image %s: %s",
+                    sanitize_log_value(edited_basename),
+                    sanitize_log_value(e),
+                )
 
             # Update the database with the basename of the edited file and its thumbnail
             upload.edited_filename = edited_basename
             upload.edited_thumbnail_filename = edited_thumbnail_filename
             db.commit()
 
-            editing_logger.info("Saved edited image for upload %s by user %s", upload_id, current_user.id)
+            editing_logger.info(
+                "Saved edited image for upload %s by user %s",
+                sanitize_log_value(upload_id),
+                sanitize_log_value(current_user.id),
+            )
             return jsonify({"message": "Image saved successfully."}, 200)
 
         except Exception as e:
             db.rollback()
-            editing_logger.error("Error saving edited image for upload %s:\n%s",
-                                     upload_id, traceback.format_exc())
+            editing_logger.error(
+                "Error saving edited image for upload %s: %s",
+                sanitize_log_value(upload_id),
+                sanitize_log_value(traceback.format_exc()),
+            )
             return jsonify({"error": "An error occurred while saving the image."}), 500

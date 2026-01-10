@@ -39,6 +39,7 @@ from utils.dualGradingEligibility import (
     get_user_eligibility_for_task,
     has_user_graded_task,
 )
+from utils.log_sanitize import sanitize_log_value
 
 from utils.dualGradingFetchDetailUtils import (
     fetch_grade_with_related_data,
@@ -792,14 +793,26 @@ def dual_grading_submit():
                 # we need to commit our changes first
                 db.commit()
                 try:
-                    grades_logger.info(f"Looking for intra-rater task for user {current_user.id}, disease {disease_id}")
+                    grades_logger.info(
+                        "Looking for intra-rater task for user %s, disease %s",
+                        sanitize_log_value(current_user.id),
+                        sanitize_log_value(disease_id),
+                    )
                     intra_task = get_next_intra_rater_task(current_user.id, disease_id)
                     
                     random_value = random.random()
-                    grades_logger.info(f"Intra-rater task found: {intra_task is not None}, random value: {random_value} (needs < 0.5)")
+                    grades_logger.info(
+                        "Intra-rater task found: %s, random value: %s (needs < 0.5)",
+                        sanitize_log_value(intra_task is not None),
+                        sanitize_log_value(random_value),
+                    )
                     
                     if intra_task and random_value < 0.5:
-                        grades_logger.info(f"Redirecting to intra-rater task {intra_task.uuid} for user {current_user.id}")
+                        grades_logger.info(
+                            "Redirecting to intra-rater task %s for user %s",
+                            sanitize_log_value(intra_task.uuid),
+                            sanitize_log_value(current_user.id),
+                        )
                         flash("Grade submitted successfully.", "success")
                         return redirect(
                             url_for(
@@ -810,9 +823,16 @@ def dual_grading_submit():
                             )
                         )
                     elif intra_task:
-                        grades_logger.info(f"Intra-rater task found but random value {random_value} >= 0.5, skipping")
+                        grades_logger.info(
+                            "Intra-rater task found but random value %s >= 0.5, skipping",
+                            sanitize_log_value(random_value),
+                        )
                     else:
-                        grades_logger.warning(f"No intra-rater task found for user {current_user.id}, disease {disease_id}")
+                        grades_logger.warning(
+                            "No intra-rater task found for user %s, disease %s",
+                            sanitize_log_value(current_user.id),
+                            sanitize_log_value(disease_id),
+                        )
 
                     # Try to find the next eligible task with a new transaction scope
                     from db_transaction_manager import transaction_scope

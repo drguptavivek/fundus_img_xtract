@@ -10,6 +10,7 @@ from flask import request, jsonify, current_app, g, abort, Response
 from functools import wraps
 import json
 from werkzeug.exceptions import RequestEntityTooLarge
+from utils.log_sanitize import sanitize_log_value
 
 # Configure logger
 security_logger = logging.getLogger("security")
@@ -280,15 +281,24 @@ def protect_form_submission(max_fields: int = 100, max_field_length: int = 1024)
             if request.method == "POST":
                 # Check number of fields
                 form_data = request.form.to_dict()
-                security_logger.info(f"Form submission - IP: {request.remote_addr}, Path: {request.path}, Fields: {list(form_data.keys())}, Count: {len(form_data)}")
+                security_logger.info(
+                    "Form submission - IP: %s, Path: %s, Fields: %s, Count: %s",
+                    sanitize_log_value(request.remote_addr),
+                    sanitize_log_value(request.path),
+                    sanitize_log_value(list(form_data.keys())),
+                    sanitize_log_value(len(form_data)),
+                )
                 
                 if len(form_data) > max_fields:
                     client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
                     client_ip = client_ip or request.remote_addr or "-"
                     
                     security_logger.warning(
-                        f"Too many form fields - IP: {client_ip}, "
-                        f"Path: {request.path}, Fields: {len(form_data)}, Limit: {max_fields}"
+                        "Too many form fields - IP: %s, Path: %s, Fields: %s, Limit: %s",
+                        sanitize_log_value(client_ip),
+                        sanitize_log_value(request.path),
+                        sanitize_log_value(len(form_data)),
+                        sanitize_log_value(max_fields),
                     )
                     
                     return jsonify({"error": "Too many form fields submitted"}), 400
@@ -300,9 +310,12 @@ def protect_form_submission(max_fields: int = 100, max_field_length: int = 1024)
                         client_ip = client_ip or request.remote_addr or "-"
                         
                         security_logger.warning(
-                            f"Form field too long - IP: {client_ip}, "
-                            f"Path: {request.path}, Field: {field_name}, "
-                            f"Length: {len(str(field_value))}, Limit: {max_field_length}"
+                            "Form field too long - IP: %s, Path: %s, Field: %s, Length: %s, Limit: %s",
+                            sanitize_log_value(client_ip),
+                            sanitize_log_value(request.path),
+                            sanitize_log_value(field_name),
+                            sanitize_log_value(len(str(field_value))),
+                            sanitize_log_value(max_field_length),
                         )
                         
                         return jsonify({"error": f"Field '{field_name}' exceeds maximum length"}), 400

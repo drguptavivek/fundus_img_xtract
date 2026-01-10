@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import current_app, render_template, request, flash, redirect, url_for, send_file, jsonify
 from auth.roles import roles_required
 from utils.env_loader import get_env
+from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import get_db_session
 
 
@@ -55,7 +56,10 @@ def database_dump():
                         f.write(dump_content)
                     
                     # Log the dump operation
-                    current_app.logger.info(f"Database dump created: {filename}")
+                    current_app.logger.info(
+                        "Database dump created: %s",
+                        sanitize_log_value(filename),
+                    )
                     
                     # Send file to user
                     return send_file(
@@ -70,7 +74,11 @@ def database_dump():
                         try:
                             temp_file.unlink()
                         except Exception as e:
-                            current_app.logger.warning(f"Failed to clean up temporary file {temp_file}: {e}")
+                            current_app.logger.warning(
+                                "Failed to clean up temporary file %s: %s",
+                                sanitize_log_value(temp_file),
+                                sanitize_log_value(e),
+                            )
             else:
                 # Check if this is a version mismatch issue
                 if database_url.startswith("postgresql://"):
@@ -88,7 +96,10 @@ def database_dump():
                     flash("Failed to create database dump.", "danger")
                 
         except Exception as e:
-            current_app.logger.error(f"Error creating database dump: {str(e)}")
+            current_app.logger.error(
+                "Error creating database dump: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Error creating database dump: {str(e)}", "danger")
     
     # GET request - show the dump page
@@ -127,17 +138,26 @@ def _create_postgresql_dump(database_url):
         else:
             error_msg = result.stderr
             if "server version" in error_msg and "pg_dump version" in error_msg:
-                current_app.logger.error(f"pg_dump version mismatch: {error_msg}")
+                current_app.logger.error(
+                    "pg_dump version mismatch: %s",
+                    sanitize_log_value(error_msg),
+                )
                 return None
             else:
-                current_app.logger.error(f"pg_dump failed: {error_msg}")
+                current_app.logger.error(
+                    "pg_dump failed: %s",
+                    sanitize_log_value(error_msg),
+                )
                 return None
             
     except subprocess.TimeoutExpired:
         current_app.logger.error("Database dump timed out after 5 minutes")
         return None
     except Exception as e:
-        current_app.logger.error(f"Error running pg_dump: {str(e)}")
+        current_app.logger.error(
+            "Error running pg_dump: %s",
+            sanitize_log_value(e),
+        )
         return None
 
 
@@ -148,7 +168,10 @@ def _create_sqlite_dump(database_url):
         db_path = database_url.replace("sqlite:///", "").replace("sqlite://", "")
         
         if not os.path.exists(db_path):
-            current_app.logger.error(f"SQLite database file not found: {db_path}")
+            current_app.logger.error(
+                "SQLite database file not found: %s",
+                sanitize_log_value(db_path),
+            )
             return None
         
         # Use sqlite3 .dump command
@@ -164,14 +187,20 @@ def _create_sqlite_dump(database_url):
         if result.returncode == 0:
             return result.stdout
         else:
-            current_app.logger.error(f"sqlite3 dump failed: {result.stderr}")
+            current_app.logger.error(
+                "sqlite3 dump failed: %s",
+                sanitize_log_value(result.stderr),
+            )
             return None
             
     except subprocess.TimeoutExpired:
         current_app.logger.error("Database dump timed out after 5 minutes")
         return None
     except Exception as e:
-        current_app.logger.error(f"Error running sqlite3 dump: {str(e)}")
+        current_app.logger.error(
+            "Error running sqlite3 dump: %s",
+            sanitize_log_value(e),
+        )
         return None
 
 
@@ -204,7 +233,10 @@ def get_database_info():
                     row = result.first()
                     db_size = row[0] if row else None
             except Exception as e:
-                current_app.logger.warning(f"Could not get database size: {str(e)}")
+                current_app.logger.warning(
+                    "Could not get database size: %s",
+                    sanitize_log_value(e),
+                )
         
         return jsonify({
             "database_type": db_type,
@@ -213,7 +245,10 @@ def get_database_info():
         })
         
     except Exception as e:
-        current_app.logger.error(f"Error getting database info: {str(e)}")
+        current_app.logger.error(
+            "Error getting database info: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({"error": str(e)}), 500
 
 
@@ -273,7 +308,11 @@ def _create_sqlalchemy_dump(database_url):
                         dump_lines.append(f"-- No data found in table {table}")
                         
                 except Exception as e:
-                    current_app.logger.warning(f"Could not dump data for {table}: {e}")
+                    current_app.logger.warning(
+                        "Could not dump data for %s: %s",
+                        sanitize_log_value(table),
+                        sanitize_log_value(e),
+                    )
                 
                 dump_lines.append("")
                 dump_lines.append("")
@@ -281,5 +320,8 @@ def _create_sqlalchemy_dump(database_url):
         return '\n'.join(dump_lines)
         
     except Exception as e:
-        current_app.logger.error(f"Error creating SQLAlchemy dump: {str(e)}")
+        current_app.logger.error(
+            "Error creating SQLAlchemy dump: %s",
+            sanitize_log_value(e),
+        )
         return None

@@ -14,6 +14,7 @@ from models import GradingTask, Grade, Consensus, User, DiseaseGrading, Disease
 import logging
 from datetime import datetime
 from db_transaction_manager import transaction_scope
+from utils.log_sanitize import sanitize_log_value
 
 
 consensus_logger = logging.getLogger("consensus")
@@ -117,27 +118,36 @@ def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Conse
         if consensus:
             # Log consensus creation with task details
             consensus_logger.info(
-                f"Consensus created [Task ID: {task.id}] [Method: {consensus.method}] "
-                f"[Disease ID: {task.disease_id}] [Final Grade ID: {consensus.final_disease_grading_id}]"
+                "Consensus created [Task ID: %s] [Method: %s] [Disease ID: %s] [Final Grade ID: %s]",
+                sanitize_log_value(task.id),
+                sanitize_log_value(consensus.method),
+                sanitize_log_value(task.disease_id),
+                sanitize_log_value(consensus.final_disease_grading_id),
             )
             
             # Log grade details that contributed to consensus
             if resident_grade:
                 consensus_logger.info(
-                    f"  Resident Grade [ID: {resident_grade.id}] [Grade ID: {resident_grade.disease_grading_id}] "
-                    f"[User ID: {resident_grade.grader_user_id}]"
+                    "  Resident Grade [ID: %s] [Grade ID: %s] [User ID: %s]",
+                    sanitize_log_value(resident_grade.id),
+                    sanitize_log_value(resident_grade.disease_grading_id),
+                    sanitize_log_value(resident_grade.grader_user_id),
                 )
             
             if resident2_grade:
                 consensus_logger.info(
-                    f"  resident2 Grade [ID: {resident2_grade.id}] [Grade ID: {resident2_grade.disease_grading_id}] "
-                    f"[User ID: {resident2_grade.grader_user_id}]"
+                    "  resident2 Grade [ID: %s] [Grade ID: %s] [User ID: %s]",
+                    sanitize_log_value(resident2_grade.id),
+                    sanitize_log_value(resident2_grade.disease_grading_id),
+                    sanitize_log_value(resident2_grade.grader_user_id),
                 )
             
             if arbitrator_grade:
                 consensus_logger.info(
-                    f"  Arbitrator Grade [ID: {arbitrator_grade.id}] [Grade ID: {arbitrator_grade.disease_grading_id}] "
-                    f"[User ID: {arbitrator_grade.grader_user_id}]"
+                    "  Arbitrator Grade [ID: %s] [Grade ID: %s] [User ID: %s]",
+                    sanitize_log_value(arbitrator_grade.id),
+                    sanitize_log_value(arbitrator_grade.disease_grading_id),
+                    sanitize_log_value(arbitrator_grade.grader_user_id),
                 )
             
             db.add(consensus)
@@ -150,7 +160,11 @@ def _create_or_update_consensus_with_session(task_id: int, db) -> Optional[Conse
             
         return consensus
     except Exception as e:
-        consensus_logger.exception(f"Failed to create/update consensus for task {task_id}: {e}")
+        consensus_logger.exception(
+            "Failed to create/update consensus for task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -245,7 +259,11 @@ def _get_task_consensus_status_with_session(task_id: int, db) -> dict:
             )
         }
     except Exception as e:
-        consensus_logger.exception(f"Failed to get consensus status for task {task_id}: {e}")
+        consensus_logger.exception(
+            "Failed to get consensus status for task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(e),
+        )
         return {"error": f"Failed to get consensus status: {e}"}
 
 
@@ -294,7 +312,14 @@ def _update_task_state_based_on_grades_with_session(task_id: int, db) -> Optiona
         arbitrator_grade = next((g for g in all_grades if g.role_slot == "arbitrator"), None)
         
         # Log current state and grades for debugging
-        consensus_logger.debug(f"Task {task_id} state update: current_state={task.state}, resident_grade={resident_grade is not None}, resident2_grade={resident2_grade is not None}, arbitrator_grade={arbitrator_grade is not None}")
+        consensus_logger.debug(
+            "Task %s state update: current_state=%s, resident_grade=%s, resident2_grade=%s, arbitrator_grade=%s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(task.state),
+            sanitize_log_value(resident_grade is not None),
+            sanitize_log_value(resident2_grade is not None),
+            sanitize_log_value(arbitrator_grade is not None),
+        )
         
         # Determine new state
         if arbitrator_grade:
@@ -319,7 +344,12 @@ def _update_task_state_based_on_grades_with_session(task_id: int, db) -> Optiona
         if task.state != new_state:
             old_state = task.state
             task.state = new_state
-            consensus_logger.info(f"Task {task_id} state updated from '{old_state}' to '{new_state}'")
+            consensus_logger.info(
+                "Task %s state updated from '%s' to '%s'",
+                sanitize_log_value(task_id),
+                sanitize_log_value(old_state),
+                sanitize_log_value(new_state),
+            )
             
             # Explicitly mark the task as modified to ensure changes are persisted
             from sqlalchemy import inspect
@@ -331,7 +361,11 @@ def _update_task_state_based_on_grades_with_session(task_id: int, db) -> Optiona
         
         return task
     except Exception as e:
-        consensus_logger.exception(f"Failed to update task state for task {task_id}: {e}")
+        consensus_logger.exception(
+            "Failed to update task state for task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -370,7 +404,11 @@ def _has_consensus_with_session(task_id: int, db) -> bool:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus is not None
     except Exception as e:
-        consensus_logger.exception(f"Failed to check consensus for task {task_id}: {e}")
+        consensus_logger.exception(
+            "Failed to check consensus for task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -409,5 +447,9 @@ def _get_consensus_method_with_session(task_id: int, db) -> Optional[str]:
         consensus = db.query(Consensus).filter(Consensus.task_id == task_id).first()
         return consensus.method if consensus else None
     except Exception as e:
-        consensus_logger.exception(f"Failed to get consensus method for task {task_id}: {e}")
+        consensus_logger.exception(
+            "Failed to get consensus method for task %s: %s",
+            sanitize_log_value(task_id),
+            sanitize_log_value(e),
+        )
         return None

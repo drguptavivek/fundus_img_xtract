@@ -200,7 +200,11 @@
 </div>
 
 <!-- JavaScript to filter lab units based on hospital selection -->
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
 document.addEventListener('DOMContentLoaded', function() {
     const hospitalButtons = document.querySelectorAll('[name="hospital_id"]');
     const labUnitButtons = document.querySelectorAll('[name="lab_unit_id"]');

@@ -16,6 +16,7 @@ from .. import api_bp
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.log_sanitize import sanitize_log_value
 
 from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
 from models import (
@@ -110,9 +111,12 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
     except Exception as e:
         # Log to runtime_error.log
         error_logger = logging.getLogger('runtime_error')
-        error_logger.error(f"Error in get_filtered_encounter_dataframe: {str(e)}")
-        error_logger.error(f"Params: {params}")
-        error_logger.error(f"User lab unit IDs: {user_lab_unit_ids}")
+        error_logger.error(
+            "Error in get_filtered_encounter_dataframe: %s",
+            sanitize_log_value(e),
+        )
+        error_logger.error("Params: %s", sanitize_log_value(params))
+        error_logger.error("User lab unit IDs: %s", sanitize_log_value(user_lab_unit_ids))
         raise
 
 
@@ -963,4 +967,3 @@ def vcdr_distribution():
             return create_error_response("Invalid parameters", str(e))
         except Exception as e:
             return create_error_response("Internal server error", str(e), 500)
-

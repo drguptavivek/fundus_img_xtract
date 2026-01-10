@@ -7,6 +7,7 @@ from pathlib import Path
 from flask import current_app, render_template, request, flash, redirect, url_for, send_file, jsonify
 from auth.roles import roles_required
 from utils.env_loader import get_env
+from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import get_db_session
 from sqlalchemy import text
 import pandas as pd
@@ -43,18 +44,32 @@ def database_excel_export():
                             # Add Excel file to ZIP
                             excel_filename = f"{table_name}_{timestamp}.xlsx"
                             zip_file.writestr(excel_filename, excel_data)
-                            current_app.logger.info(f"Added {excel_filename} to export")
+                            current_app.logger.info(
+                                "Added %s to export",
+                                sanitize_log_value(excel_filename),
+                            )
                         else:
-                            current_app.logger.warning(f"No data exported for table: {table_name}")
+                            current_app.logger.warning(
+                                "No data exported for table: %s",
+                                sanitize_log_value(table_name),
+                            )
                     except Exception as e:
-                        current_app.logger.error(f"Error exporting table {table_name}: {str(e)}")
+                        current_app.logger.error(
+                            "Error exporting table %s: %s",
+                            sanitize_log_value(table_name),
+                            sanitize_log_value(e),
+                        )
                         flash(f"Error exporting table {table_name}: {str(e)}", "warning")
             
             # Reset buffer position
             zip_buffer.seek(0)
             
             # Log the export operation
-            current_app.logger.info(f"Database Excel export created: {zip_filename} with {len(selected_tables)} tables")
+            current_app.logger.info(
+                "Database Excel export created: %s with %s tables",
+                sanitize_log_value(zip_filename),
+                sanitize_log_value(len(selected_tables)),
+            )
             
             # Send ZIP file to user
             return send_file(
@@ -65,7 +80,10 @@ def database_excel_export():
             )
             
         except Exception as e:
-            current_app.logger.error(f"Error creating database Excel export: {str(e)}")
+            current_app.logger.error(
+                "Error creating database Excel export: %s",
+                sanitize_log_value(e),
+            )
             flash(f"Error creating database Excel export: {str(e)}", "danger")
     
     # GET request - show the export page
@@ -163,7 +181,11 @@ def _export_table_to_excel(table_name):
             return buffer.getvalue()
             
     except Exception as e:
-        current_app.logger.error(f"Error exporting table {table_name} to Excel: {str(e)}")
+        current_app.logger.error(
+            "Error exporting table %s to Excel: %s",
+            sanitize_log_value(table_name),
+            sanitize_log_value(e),
+        )
         return None
 
 
@@ -199,7 +221,11 @@ def get_database_tables():
                         "row_count": row_count
                     })
                 except Exception as e:
-                    current_app.logger.warning(f"Could not get row count for {table}: {e}")
+                    current_app.logger.warning(
+                        "Could not get row count for %s: %s",
+                        sanitize_log_value(table),
+                        sanitize_log_value(e),
+                    )
                     table_info.append({
                         "name": table,
                         "row_count": 0
@@ -211,5 +237,8 @@ def get_database_tables():
             })
             
     except Exception as e:
-        current_app.logger.error(f"Error getting database tables: {str(e)}")
+        current_app.logger.error(
+            "Error getting database tables: %s",
+            sanitize_log_value(e),
+        )
         return jsonify({"error": str(e)}), 500

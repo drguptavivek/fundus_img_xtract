@@ -15,6 +15,7 @@ from utils.fileUtils import (
     thumbnail_exists_direct, thumbnail_exists_encounter
 )
 from db_transaction_manager import transaction_scope
+from utils.log_sanitize import sanitize_log_value
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -57,13 +58,23 @@ def delete_thumbnails_for_direct_upload(direct_upload_id: int) -> Dict[str, Any]
                     if thumbnail_path.exists():
                         thumbnail_path.unlink()
                         results['original_deleted'] = True
-                        logger.info(f"Deleted original thumbnail for DirectImageUpload {direct_upload_id}")
+                        logger.info(
+                            "Deleted original thumbnail for DirectImageUpload %s",
+                            sanitize_log_value(direct_upload_id),
+                        )
                     else:
-                        logger.debug(f"Original thumbnail not found for DirectImageUpload {direct_upload_id}")
+                        logger.debug(
+                            "Original thumbnail not found for DirectImageUpload %s",
+                            sanitize_log_value(direct_upload_id),
+                        )
                 except Exception as e:
                     error_msg = f"Failed to delete original thumbnail: {str(e)}"
                     results['errors'].append(error_msg)
-                    logger.error(f"Failed to delete original thumbnail for DirectImageUpload {direct_upload_id}: {e}")
+                    logger.error(
+                        "Failed to delete original thumbnail for DirectImageUpload %s: %s",
+                        sanitize_log_value(direct_upload_id),
+                        sanitize_log_value(e),
+                    )
 
             # Delete edited image thumbnail
             if direct_upload.edited_thumbnail_filename and direct_upload.edited_filename:
@@ -72,13 +83,23 @@ def delete_thumbnails_for_direct_upload(direct_upload_id: int) -> Dict[str, Any]
                     if thumbnail_path.exists():
                         thumbnail_path.unlink()
                         results['edited_deleted'] = True
-                        logger.info(f"Deleted edited thumbnail for DirectImageUpload {direct_upload_id}")
+                        logger.info(
+                            "Deleted edited thumbnail for DirectImageUpload %s",
+                            sanitize_log_value(direct_upload_id),
+                        )
                     else:
-                        logger.debug(f"Edited thumbnail not found for DirectImageUpload {direct_upload_id}")
+                        logger.debug(
+                            "Edited thumbnail not found for DirectImageUpload %s",
+                            sanitize_log_value(direct_upload_id),
+                        )
                 except Exception as e:
                     error_msg = f"Failed to delete edited thumbnail: {str(e)}"
                     results['errors'].append(error_msg)
-                    logger.error(f"Failed to delete edited thumbnail for DirectImageUpload {direct_upload_id}: {e}")
+                    logger.error(
+                        "Failed to delete edited thumbnail for DirectImageUpload %s: %s",
+                        sanitize_log_value(direct_upload_id),
+                        sanitize_log_value(e),
+                    )
 
             # Clear database references
             direct_upload.thumbnail_filename = None
@@ -88,7 +109,11 @@ def delete_thumbnails_for_direct_upload(direct_upload_id: int) -> Dict[str, Any]
     except Exception as e:
         error_msg = f"Database error during thumbnail cleanup: {str(e)}"
         results['errors'].append(error_msg)
-        logger.error(f"Database error during thumbnail cleanup for DirectImageUpload {direct_upload_id}: {e}")
+        logger.error(
+            "Database error during thumbnail cleanup for DirectImageUpload %s: %s",
+            sanitize_log_value(direct_upload_id),
+            sanitize_log_value(e),
+        )
 
     return results
 
@@ -137,14 +162,24 @@ def delete_thumbnails_for_encounter_file(encounter_file_id: int) -> Dict[str, An
                         if thumbnail_path.exists():
                             thumbnail_path.unlink()
                             results['deleted'] = True
-                            logger.info(f"Deleted thumbnail for EncounterFile {encounter_file_id}")
+                            logger.info(
+                                "Deleted thumbnail for EncounterFile %s",
+                                sanitize_log_value(encounter_file_id),
+                            )
                         else:
-                            logger.debug(f"Thumbnail not found for EncounterFile {encounter_file_id}")
+                            logger.debug(
+                                "Thumbnail not found for EncounterFile %s",
+                                sanitize_log_value(encounter_file_id),
+                            )
 
                 except Exception as e:
                     error_msg = f"Failed to delete thumbnail: {str(e)}"
                     results['errors'].append(error_msg)
-                    logger.error(f"Failed to delete thumbnail for EncounterFile {encounter_file_id}: {e}")
+                    logger.error(
+                        "Failed to delete thumbnail for EncounterFile %s: %s",
+                        sanitize_log_value(encounter_file_id),
+                        sanitize_log_value(e),
+                    )
 
             # Clear database reference
             encounter_file.thumbnail_filename = None
@@ -153,7 +188,11 @@ def delete_thumbnails_for_encounter_file(encounter_file_id: int) -> Dict[str, An
     except Exception as e:
         error_msg = f"Database error during thumbnail cleanup: {str(e)}"
         results['errors'].append(error_msg)
-        logger.error(f"Database error during thumbnail cleanup for EncounterFile {encounter_file_id}: {e}")
+        logger.error(
+            "Database error during thumbnail cleanup for EncounterFile %s: %s",
+            sanitize_log_value(encounter_file_id),
+            sanitize_log_value(e),
+        )
 
     return results
 
@@ -201,9 +240,16 @@ def delete_thumbnails_for_patient_encounter(patient_encounter_id: int) -> Dict[s
                         if thumbnail_path.exists():
                             thumbnail_path.unlink()
                             results['thumbnails_deleted'] += 1
-                            logger.info(f"Deleted thumbnail for EncounterFile {encounter_file.id} (PatientEncounter {patient_encounter_id})")
+                            logger.info(
+                                "Deleted thumbnail for EncounterFile %s (PatientEncounter %s)",
+                                sanitize_log_value(encounter_file.id),
+                                sanitize_log_value(patient_encounter_id),
+                            )
                         else:
-                            logger.debug(f"Thumbnail not found for EncounterFile {encounter_file.id}")
+                            logger.debug(
+                                "Thumbnail not found for EncounterFile %s",
+                                sanitize_log_value(encounter_file.id),
+                            )
 
                     except Exception as e:
                         error_msg = f"Failed to delete thumbnail for EncounterFile {encounter_file.id}: {str(e)}"
@@ -217,7 +263,11 @@ def delete_thumbnails_for_patient_encounter(patient_encounter_id: int) -> Dict[s
     except Exception as e:
         error_msg = f"Database error during batch thumbnail cleanup: {str(e)}"
         results['errors'].append(error_msg)
-        logger.error(f"Database error during batch thumbnail cleanup for PatientEncounter {patient_encounter_id}: {e}")
+        logger.error(
+            "Database error during batch thumbnail cleanup for PatientEncounter %s: %s",
+            sanitize_log_value(patient_encounter_id),
+            sanitize_log_value(e),
+        )
 
     return results
 
@@ -318,10 +368,18 @@ def safe_delete_thumbnail_file(thumbnail_path: Path) -> bool:
             return True
         return False
     except OSError as e:
-        logger.error(f"Failed to delete thumbnail file {thumbnail_path}: {e}")
+        logger.error(
+            "Failed to delete thumbnail file %s: %s",
+            sanitize_log_value(thumbnail_path),
+            sanitize_log_value(e),
+        )
         return False
     except Exception as e:
-        logger.error(f"Unexpected error deleting thumbnail file {thumbnail_path}: {e}")
+        logger.error(
+            "Unexpected error deleting thumbnail file %s: %s",
+            sanitize_log_value(thumbnail_path),
+            sanitize_log_value(e),
+        )
         return False
 
 
@@ -346,12 +404,22 @@ def add_thumbnail_cleanup_to_direct_upload_deletion(direct_upload: DirectImageUp
     # Log results if a logger was provided
     if logger_instance:
         if results['original_deleted']:
-            logger_instance.info(f"Deleted original thumbnail for DirectImageUpload {direct_upload.id}")
+            logger_instance.info(
+                "Deleted original thumbnail for DirectImageUpload %s",
+                sanitize_log_value(direct_upload.id),
+            )
         if results['edited_deleted']:
-            logger_instance.info(f"Deleted edited thumbnail for DirectImageUpload {direct_upload.id}")
+            logger_instance.info(
+                "Deleted edited thumbnail for DirectImageUpload %s",
+                sanitize_log_value(direct_upload.id),
+            )
         if results['errors']:
             for error in results['errors']:
-                logger_instance.warning(f"Thumbnail cleanup error for DirectImageUpload {direct_upload.id}: {error}")
+                logger_instance.warning(
+                    "Thumbnail cleanup error for DirectImageUpload %s: %s",
+                    sanitize_log_value(direct_upload.id),
+                    sanitize_log_value(error),
+                )
 
     return results
 
@@ -375,10 +443,17 @@ def add_thumbnail_cleanup_to_encounter_file_deletion(encounter_file: EncounterFi
     # Log results if a logger was provided
     if logger_instance:
         if results['deleted']:
-            logger_instance.info(f"Deleted thumbnail for EncounterFile {encounter_file.id}")
+            logger_instance.info(
+                "Deleted thumbnail for EncounterFile %s",
+                sanitize_log_value(encounter_file.id),
+            )
         if results['errors']:
             for error in results['errors']:
-                logger_instance.warning(f"Thumbnail cleanup error for EncounterFile {encounter_file.id}: {error}")
+                logger_instance.warning(
+                    "Thumbnail cleanup error for EncounterFile %s: %s",
+                    sanitize_log_value(encounter_file.id),
+                    sanitize_log_value(error),
+                )
 
     return results
 
@@ -413,9 +488,15 @@ def cleanup_all_thumbnails_for_missing_images() -> Dict[str, Any]:
         'total_errors': file_results['errors'] + ref_results['errors']
     }
 
-    logger.info(f"Thumbnail cleanup completed: {combined_results['file_orphans_removed']} thumbnails removed")
+    logger.info(
+        "Thumbnail cleanup completed: %s thumbnails removed",
+        sanitize_log_value(combined_results['file_orphans_removed']),
+    )
 
     if combined_results['total_errors']:
-        logger.warning(f"Thumbnail cleanup had {len(combined_results['total_errors'])} errors")
+        logger.warning(
+            "Thumbnail cleanup had %s errors",
+            sanitize_log_value(len(combined_results['total_errors'])),
+        )
 
     return combined_results

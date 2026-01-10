@@ -9,6 +9,7 @@ from models import Grade, TaskTracker
 from sqlalchemy import and_
 import logging
 from db_transaction_manager import transaction_scope
+from utils.log_sanitize import sanitize_log_value
 
 
 def cleanup_stuck_tasks(time_limit_minutes: int = 60, db=None) -> int:
@@ -59,8 +60,12 @@ def _cleanup_stuck_tasks_with_session(time_limit_minutes: int, db) -> int:
         cleaned_up_count = 0
         for tracker in stuck_tasks:
             # We can log the stuck task for auditing purposes
-            logging.info(f"Resetting stuck task: Task ID {tracker.task_id}, "
-                        f"Started at {tracker.started_at}, assigned to user {tracker.user_id}")
+            logging.info(
+                "Resetting stuck task: Task ID %s, Started at %s, assigned to user %s",
+                sanitize_log_value(tracker.task_id),
+                sanitize_log_value(tracker.started_at),
+                sanitize_log_value(tracker.user_id),
+            )
             # In this implementation, we're just logging; in a full implementation
             # we might want to actually delete the tracker record
             cleaned_up_count += 1
@@ -69,7 +74,10 @@ def _cleanup_stuck_tasks_with_session(time_limit_minutes: int, db) -> int:
         return cleaned_up_count
         
     except Exception as e:
-        logging.error(f"Error during stuck task cleanup: {str(e)}")
+        logging.error(
+            "Error during stuck task cleanup: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -153,10 +161,16 @@ def _mark_task_started_with_session(task_id: int, user_id: int, role_slot: str, 
             else:
                 return False
         except Exception as e:
-            logging.error(f"Error handling duplicate task tracker: {str(e)}")
+            logging.error(
+                "Error handling duplicate task tracker: %s",
+                sanitize_log_value(e),
+            )
             return False
     except Exception as e:
-        logging.error(f"Error marking task started: {str(e)}")
+        logging.error(
+            "Error marking task started: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -208,18 +222,27 @@ def _cleanup_task_tracker_with_session(task_id: int, user_id: int, role_slot: st
         if tracker:
             # Remove the tracker record
             db.delete(tracker)
-            logging.info(f"Cleaned up task tracker - Task ID: {task_id}, "
-                        f"User ID: {user_id}, "
-                        f"Role: {role_slot}")
+            logging.info(
+                "Cleaned up task tracker - Task ID: %s, User ID: %s, Role: %s",
+                sanitize_log_value(task_id),
+                sanitize_log_value(user_id),
+                sanitize_log_value(role_slot),
+            )
             return True
         else:
-            logging.info(f"No task tracker found to cleanup - Task ID: {task_id}, "
-                        f"User ID: {user_id}, "
-                        f"Role: {role_slot}")
+            logging.info(
+                "No task tracker found to cleanup - Task ID: %s, User ID: %s, Role: %s",
+                sanitize_log_value(task_id),
+                sanitize_log_value(user_id),
+                sanitize_log_value(role_slot),
+            )
             return False
             
     except Exception as e:
-        logging.error(f"Error during task tracker cleanup: {str(e)}")
+        logging.error(
+            "Error during task tracker cleanup: %s",
+            sanitize_log_value(e),
+        )
         raise
 
 
@@ -268,10 +291,13 @@ def _reset_stuck_tasks_with_session(time_limit_minutes: int, db) -> int:
         
         reset_count = 0
         for tracker in stuck_trackers:
-            logging.info(f"Reset stuck task - Task ID: {tracker.task_id}, "
-                        f"User ID: {tracker.user_id}, "
-                        f"Role: {tracker.role_slot}, "
-                        f"Started at: {tracker.started_at}")
+            logging.info(
+                "Reset stuck task - Task ID: %s, User ID: %s, Role: %s, Started at: %s",
+                sanitize_log_value(tracker.task_id),
+                sanitize_log_value(tracker.user_id),
+                sanitize_log_value(tracker.role_slot),
+                sanitize_log_value(tracker.started_at),
+            )
             db.delete(tracker)
             reset_count += 1
         
@@ -279,5 +305,8 @@ def _reset_stuck_tasks_with_session(time_limit_minutes: int, db) -> int:
         return reset_count
         
     except Exception as e:
-        logging.error(f"Error during stuck task reset: {str(e)}")
+        logging.error(
+            "Error during stuck task reset: %s",
+            sanitize_log_value(e),
+        )
         raise

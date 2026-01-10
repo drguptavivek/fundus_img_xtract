@@ -38,42 +38,12 @@
                             <a href="{{ url_for('help.index') }}" class="help-nav-link {% if is_main_page %}active{% endif %}">
                                 Overview
                             </a>
-                            <a href="{{ url_for('help.view_document', doc_path='getting-started') }}" class="help-nav-link">
-                                Getting Started
+                            {% for page in help_pages %}
+                            <a href="{{ url_for('help.view_document', doc_path=page.slug) }}"
+                               class="help-nav-link {% if current_path == page.slug %}active{% endif %}">
+                                {{ page.title }}
                             </a>
-                            <a href="{{ url_for('help.view_document', doc_path='direct-uploads') }}" class="help-nav-link">
-                                Direct Uploads
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='zip-uploads') }}" class="help-nav-link">
-                                ZIP Uploads
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='pre-graded-uploads') }}" class="help-nav-link">
-                                Pre-Graded Uploads
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='verification-dr-glaucoma-zips') }}" class="help-nav-link">
-                                Verification of DR/Glaucoma
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='verification-nodr-zips') }}" class="help-nav-link">
-                                Verification of No-DR ZIPs
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='direct-image-anonymization') }}" class="help-nav-link">
-                                Image Editing
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='grading-images') }}" class="help-nav-link">
-                                Grading Images
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='viewing-analytics') }}" class="help-nav-link">
-                                Viewing Analytics
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='discrepancy-review') }}" class="help-nav-link">
-                                Discrepancy Review
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='notifications') }}" class="help-nav-link">
-                                Notifications
-                            </a>
-                            <a href="{{ url_for('help.view_document', doc_path='troubleshooting') }}" class="help-nav-link">
-                                Troubleshooting
-                            </a>
+                            {% endfor %}
                         </nav>
                     </div>
                 </div>
@@ -93,18 +63,4 @@
 </div>
 {% endblock %}
 
-{% block page_scripts %}
-<script{% if csp_script_nonce %} nonce="{{ csp_script_nonce() }}"{% endif %}>
-document.addEventListener('DOMContentLoaded', function() {
-    // Highlight current navigation item
-    const currentPath = window.location.pathname;
-    const navLinks = document.querySelectorAll('.help-nav-link');
-    
-    navLinks.forEach(link => {
-        if (link.getAttribute('href') === currentPath.split('/').pop()) {
-            link.classList.add('active');
-        }
-    });
-});
-</script>
-{% endblock %}
+{% block page_scripts %}{% endblock %}

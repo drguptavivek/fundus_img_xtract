@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
@@ -21,6 +21,9 @@ def _build_database_url(base_dir: Path) -> str:
 
     explicit_url = os.getenv("DATABASE_URL")
     if explicit_url:
+        parsed = urlparse(explicit_url)
+        if parsed.scheme.startswith("postgres") and parsed.username and parsed.password is None:
+            raise ValueError("DATABASE_URL must include a password for PostgreSQL connections.")
         return explicit_url
 
     postgres_db = (os.getenv("POSTGRES_APP_DB") or "").strip()
@@ -37,6 +40,8 @@ def _build_database_url(base_dir: Path) -> str:
         password_part = ""
         if postgres_password and postgres_password.strip():
             password_part = f":{quote(postgres_password.strip(), safe='')}"
+        else:
+            raise ValueError("POSTGRES_APP_PASSWORD must be set for PostgreSQL connections.")
 
         host_part = postgres_host or "127.0.0.1"
         port_part = f":{postgres_port}" if postgres_port else ""

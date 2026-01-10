@@ -5,8 +5,9 @@
 {% block content %}
 <div class="container mt-4">
     <h2>{{ title }}</h2>
+    {% set core_ids = core_disease_ids or [] %}
     
-    {% if model_name == 'disease' and item.id in [1, 2, 3] %}
+    {% if model_name == 'disease' and item.id in core_ids %}
     <div class="alert alert-info">
         <strong>Core Disease:</strong> This is a core disease that cannot be renamed. The name must remain "{{ item.name }}".
     </div>
@@ -14,12 +15,12 @@
 
     <div class="card">
         <div class="card-body">
-            <form method="POST" action="{{ url_for('admin.edit_lookup', model_name=model_name, item_id=item.id) }}">
+            <form method="POST" action="{{ url_for(edit_endpoint, item_id=item.id) }}">
                 {{ csrf_field() }}
                 <div class="mb-3">
                     <label for="name" class="form-label">Name</label>
                     <input type="text" class="form-control" id="name" name="name" value="{{ item.name }}" 
-                           {% if model_name == 'disease' and item.id in [1, 2, 3] %}readonly{% endif %} required>
+                           {% if model_name == 'disease' and item.id in core_ids %}readonly{% endif %} required>
                 </div>
                 {% if model_name == 'lab_unit' and hospitals %}
                 <div class="mb-3">
@@ -32,10 +33,10 @@
                 </div>
                 {% endif %}
                 <button type="submit" class="btn btn-primary"
-                        {% if model_name == 'disease' and item.id in [1, 2, 3] %}disabled{% endif %}>
+                        {% if model_name == 'disease' and item.id in core_ids %}disabled{% endif %}>
                     Save Changes
                 </button>
-                <a href="{{ url_for('admin.list_and_create_lookup', model_name=model_name) }}" class="btn btn-secondary">Cancel</a>
+                <a href="{{ url_for(list_endpoint) }}" class="btn btn-secondary">Cancel</a>
             </form>
         </div>
     </div>

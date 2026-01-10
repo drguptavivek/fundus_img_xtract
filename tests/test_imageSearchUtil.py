@@ -349,6 +349,9 @@ class TestFormatZipImageWithTasks:
         mock_image.uuid = "test-uuid-456"
         mock_image.lab_unit.hospital.name = "Test Hospital"
         mock_image.lab_unit.name = "Test Lab"
+        mock_image.lab_unit.hospital_id = 10
+        mock_image.lab_unit_id = 20
+        mock_image.id = 456
         
         mock_encounter = Mock()
         mock_zip_file = Mock()
@@ -359,16 +362,15 @@ class TestFormatZipImageWithTasks:
         mock_image.patient_encounter = mock_encounter
         
         task_diseases = [{"disease": "AMD", "status": "active"}]
+        disease_name_to_id = {"dr": 1, "glaucoma": 2}
         
-        # Mock database queries for report status
-        mock_db = Mock()
-        mock_dr_query = Mock()
-        mock_dr_query.filter.return_value.filter.return_value.first.return_value = True
-        mock_glaucoma_query = Mock()
-        mock_glaucoma_query.filter.return_value.filter.return_value.first.return_value = True
-        mock_db.query.side_effect = [mock_dr_query, mock_glaucoma_query]
-        
-        result = format_zip_image_with_tasks(mock_image, task_diseases, mock_db)
+        result = format_zip_image_with_tasks(
+            mock_image,
+            task_diseases,
+            True,
+            True,
+            disease_name_to_id,
+        )
         
         expected = {
             "uuid": "test-uuid-456",
@@ -377,10 +379,17 @@ class TestFormatZipImageWithTasks:
             "capture_date": _date(2024, 1, 13),
             "hospital": "Test Hospital",
             "lab_unit": "Test Lab",
+            "hospital_id": 10,
+            "lab_unit_id": 20,
             "has_dr_report": True,
             "has_glaucoma_report": True,
             "tasks_for_diseases": [{"disease": "AMD", "status": "active"}],
-            "encounter_id": 123
+            "tasks_for_diseases_ids": [],
+            "ai_disease_ids": [],
+            "ai_diseases": [],
+            "encounter_id": 123,
+            "encounter_file_id": 456,
+            "zip_source_disease_id": 2,
         }
         
         assert result == expected

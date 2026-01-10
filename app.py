@@ -162,7 +162,7 @@ def create_app():
     app.config["THUMBNAIL_MAINTENANCE_LOG_LEVEL"] = os.getenv("THUMBNAIL_MAINTENANCE_LOG_LEVEL", "INFO")
 
     app.config["WTF_CSRF_TIME_LIMIT"] = 60 * 60  # 1 hour
-    # app.config["WTF_CSRF_CHECK_DEFAULT"] = True  # default True
+    
 
     # Add CSRF logging
     @csrf.exempt

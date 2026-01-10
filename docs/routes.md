@@ -165,9 +165,21 @@ This document provides a comprehensive overview of all routes in the Fundus Imag
 | `/disease-gradings` | GET, POST | admin.list_disease_gradings | List/create disease gradings |
 | `/disease-gradings/<int:grading_id>/features` | GET | admin.get_grading_features | Get grading features |
 | `/disease-gradings/<int:grading_id>/delete` | POST | admin.delete_disease_grading | Delete disease grading |
-| `/<string:model_name>` | GET, POST | admin.list_and_create_lookup | List/create lookups |
-| `/<string:model_name>/<int:item_id>/edit` | GET, POST | admin.edit_lookup | Edit lookup |
-| `/<string:model_name>/<int:item_id>/delete` | POST | admin.delete_lookup | Delete lookup |
+| `/hospital` | GET, POST | admin.list_hospitals | List/create hospitals |
+| `/hospital/<int:item_id>/edit` | GET, POST | admin.edit_hospital | Edit hospital |
+| `/hospital/<int:item_id>/delete` | POST | admin.delete_hospital | Delete hospital |
+| `/lab_unit` | GET, POST | admin.list_lab_units | List/create lab units |
+| `/lab_unit/<int:item_id>/edit` | GET, POST | admin.edit_lab_unit | Edit lab unit |
+| `/lab_unit/<int:item_id>/delete` | POST | admin.delete_lab_unit | Delete lab unit |
+| `/camera` | GET, POST | admin.list_cameras | List/create cameras |
+| `/camera/<int:item_id>/edit` | GET, POST | admin.edit_camera | Edit camera |
+| `/camera/<int:item_id>/delete` | POST | admin.delete_camera | Delete camera |
+| `/disease` | GET, POST | admin.list_diseases | List/create diseases |
+| `/disease/<int:item_id>/edit` | GET, POST | admin.edit_disease | Edit disease |
+| `/disease/<int:item_id>/delete` | POST | admin.delete_disease | Delete disease |
+| `/area` | GET, POST | admin.list_areas | List/create areas |
+| `/area/<int:item_id>/edit` | GET, POST | admin.edit_area | Edit area |
+| `/area/<int:item_id>/delete` | POST | admin.delete_area | Delete area |
 | `/change-password` | GET, POST | admin.change_password | Change admin password |
 | `/logs` | GET | admin.log_viewer | System log viewer |
 | `/disk-usage` | GET | admin.disk_usage | Disk usage statistics |

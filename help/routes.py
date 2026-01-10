@@ -1,22 +1,56 @@
-import os
+from pathlib import Path
 import markdown
-from flask import render_template, request, current_app, abort
-from flask_login import login_required
+from flask import render_template, current_app, abort
 from . import bp
 from utils.rate_limiter import rate_limit
 
 
-def read_markdown_file(relative_path):
-    """Read a markdown file from the docs directory."""
+HELP_INDEX = {
+    "title": "User Guide",
+    "filename": "README.md",
+}
+
+HELP_PAGES = [
+    {"slug": "getting-started", "title": "Getting Started", "filename": "getting-started.md"},
+    {"slug": "uploading-images", "title": "Uploading Images", "filename": "uploading-images.md"},
+    {"slug": "direct-uploads", "title": "Direct Uploads", "filename": "direct-uploads.md"},
+    {"slug": "zip-uploads", "title": "ZIP Uploads", "filename": "zip-uploads.md"},
+    {"slug": "pre-graded-uploads", "title": "Pre-Graded Uploads", "filename": "pre-graded-uploads.md"},
+    {
+        "slug": "verification-dr-glaucoma-zips",
+        "title": "Verification of DR/Glaucoma",
+        "filename": "verification-dr-glaucoma-zips.md",
+    },
+    {
+        "slug": "verification-nodr-zips",
+        "title": "Verification of No-DR ZIPs",
+        "filename": "verification-nodr-zips.md",
+    },
+    {
+        "slug": "direct-image-anonymization",
+        "title": "Image Editing",
+        "filename": "direct-image-anonymization.md",
+    },
+    {"slug": "grading-images", "title": "Grading Images", "filename": "grading-images.md"},
+    {"slug": "viewing-analytics", "title": "Viewing Analytics", "filename": "viewing-analytics.md"},
+    {"slug": "discrepancy-review", "title": "Discrepancy Review", "filename": "discrepancy-review.md"},
+    {"slug": "notifications", "title": "Notifications", "filename": "notifications.md"},
+    {"slug": "troubleshooting", "title": "Troubleshooting", "filename": "troubleshooting.md"},
+]
+
+
+def _docs_file_path(filename: str) -> Path:
+    return (Path(current_app.root_path) / "docs" / "user-guide" / filename).resolve()
+
+
+def read_markdown_file(filename: str) -> tuple[str | None, str | None]:
+    """Read a markdown file from the user guide directory."""
     try:
-        # Get the absolute path to the docs directory
-        docs_dir = os.path.join(current_app.root_path, 'docs')
-        file_path = os.path.join(docs_dir, relative_path)
-        
-        if not os.path.exists(file_path):
+        file_path = _docs_file_path(filename)
+        if not file_path.is_file():
             return None, "File not found"
             
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with file_path.open('r', encoding='utf-8') as f:
             content = f.read()
             
         # Convert markdown to HTML
@@ -32,7 +66,7 @@ def read_markdown_file(relative_path):
         
         return html_content, None
     except Exception as e:
-        current_app.logger.error(f"Error reading markdown file {relative_path}: {str(e)}")
+        current_app.logger.error(f"Error reading markdown file {filename}: {str(e)}")
         return None, str(e)
 
 
@@ -41,16 +75,15 @@ def read_markdown_file(relative_path):
 @rate_limit("120 per minute")
 def index():
     """Main help page - shows the user guide README."""
-    print("Help index route called!")
-    content, error = read_markdown_file("user-guide/README.md")
+    content, error = read_markdown_file(HELP_INDEX["filename"])
     
     if error:
-        print(f"Error reading markdown: {error}")
         abort(404)
     
     return render_template("help/help_page.html",
-                         title="User Guide",
+                         title=HELP_INDEX["title"],
                          content=content,
+                         help_pages=HELP_PAGES,
                          is_main_page=True)
 
 
@@ -58,38 +91,19 @@ def index():
 @rate_limit("120 per minute")
 def view_document(doc_path):
     """View a specific documentation file."""
-    # Security check - only allow paths within user-guide directory
-    if ".." in doc_path or doc_path.startswith("/"):
-        abort(400)
-    
-    # Construct the full path
-    full_path = f"user-guide/{doc_path}"
-    
-    # If no extension provided, try .md
-    if not os.path.splitext(full_path)[1]:
-        full_path += ".md"
-    
-    content, error = read_markdown_file(full_path)
+    page_map = {page["slug"]: page for page in HELP_PAGES}
+    page = page_map.get(doc_path)
+    if not page:
+        abort(404)
+
+    content, error = read_markdown_file(page["filename"])
     
     if error:
         abort(404)
     
-    # Extract title from first heading or use filename
-    title = doc_path.replace("-", " ").replace("_", " ").title()
-    if content:
-        # Try to extract title from first # heading
-        lines = content.split('\n')
-        for line in lines:
-            if line.strip().startswith('<h1'):
-                # Extract text from h1 tag
-                import re
-                match = re.search(r'<h1[^>]*>(.*?)</h1>', line)
-                if match:
-                    title = match.group(1).strip()
-                    break
-    
     return render_template("help/help_page.html", 
-                         title=title,
+                         title=page["title"],
                          content=content,
+                         help_pages=HELP_PAGES,
                          current_path=doc_path,
                          is_main_page=False)

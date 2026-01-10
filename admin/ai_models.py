@@ -8,6 +8,8 @@ from auth.security import hash_password
 from models import AIModel, User
 from db_transaction_manager import transaction_scope, get_db_session
 
+AI_MODEL_LIST_ROUTE = "admin.list_and_create_ai_model"
+
 
 def _create_ai_model_user(db_session: Session, model: AIModel) -> User:
     username = f"aimodel_{model.id}"
@@ -62,7 +64,7 @@ def list_and_create_ai_model():
                     _create_ai_model_user(db, model)
                     flash(f"AI Model '{name}' version '{version}' added successfully.", "success")
 
-        return redirect(url_for("admin.list_and_create_ai_model"))
+        return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
     # --- Handle listing ---
     with get_db_session() as db:
@@ -83,7 +85,7 @@ def edit_ai_model(item_id):
         item = db.get(AIModel, item_id)
         if not item:
             flash("AI Model not found.", "danger")
-            return redirect(url_for("admin.list_and_create_ai_model"))
+            return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
         if request.method == "POST":
             name = request.form.get("name", "").strip()
@@ -111,7 +113,7 @@ def edit_ai_model(item_id):
                         item_to_update.version = version
                         item_to_update.description = description
                     flash(f"AI Model '{name}' updated.", "success")
-                    return redirect(url_for("admin.list_and_create_ai_model"))
+                    return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
         # Render template within the same session to avoid detached instance errors
         return render_template(
@@ -128,7 +130,7 @@ def delete_ai_model(item_id):
         item = db.get(AIModel, item_id)
         if not item:
             flash("AI Model not found.", "danger")
-            return redirect(url_for("admin.list_and_create_ai_model"))
+            return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
         # Check if the item has related records that would prevent deletion
         # (Example: Check if any Grade records reference this AI model)
@@ -139,7 +141,7 @@ def delete_ai_model(item_id):
 
         if related_grades:
             flash(f"Cannot delete AI Model '{item.name}' because it has associated grades. Remove all related grades first.", "danger")
-            return redirect(url_for("admin.list_and_create_ai_model"))
+            return redirect(url_for(AI_MODEL_LIST_ROUTE))
 
         try:
             # Use transaction_scope for delete operations
@@ -151,4 +153,4 @@ def delete_ai_model(item_id):
             # Handle any database errors gracefully and show a user-friendly message
             flash(f"Error deleting AI Model: {str(e)}", "danger")
 
-    return redirect(url_for("admin.list_and_create_ai_model"))
+    return redirect(url_for(AI_MODEL_LIST_ROUTE))

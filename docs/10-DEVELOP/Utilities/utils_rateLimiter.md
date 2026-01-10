@@ -169,13 +169,49 @@ account
     ├── 2000 per 1 day
     └── 500 per 1 hour
 admin
-├── admin.list_and_create_lookup: /admin/<string:model_name>
+├── admin.list_hospitals: /admin/hospital
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
-├── admin.delete_lookup: /admin/<string:model_name>/<int:item_id>/delete
+├── admin.edit_hospital: /admin/hospital/<int:item_id>/edit
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
-├── admin.edit_lookup: /admin/<string:model_name>/<int:item_id>/edit
+├── admin.delete_hospital: /admin/hospital/<int:item_id>/delete
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.list_lab_units: /admin/lab_unit
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.edit_lab_unit: /admin/lab_unit/<int:item_id>/edit
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.delete_lab_unit: /admin/lab_unit/<int:item_id>/delete
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.list_cameras: /admin/camera
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.edit_camera: /admin/camera/<int:item_id>/edit
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.delete_camera: /admin/camera/<int:item_id>/delete
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.list_diseases: /admin/disease
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.edit_disease: /admin/disease/<int:item_id>/edit
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.delete_disease: /admin/disease/<int:item_id>/delete
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.list_areas: /admin/area
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.edit_area: /admin/area/<int:item_id>/edit
+│   ├── 2000 per 1 day
+│   └── 500 per 1 hour
+├── admin.delete_area: /admin/area/<int:item_id>/delete
 │   ├── 2000 per 1 day
 │   └── 500 per 1 hour
 ├── admin.list_and_create_ai_model: /admin/ai-models

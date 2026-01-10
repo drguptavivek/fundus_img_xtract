@@ -3,7 +3,11 @@ from flask import Blueprint
 # Import all route handlers
 from .users import users_list, add_user, edit_user, users_update, user_created
 from .security import change_password, manage_roles, role_usage, routes_by_role
-from .lookups import list_and_create_lookup, edit_lookup, delete_lookup
+from .lookups.hospital import list_hospitals, edit_hospital, delete_hospital
+from .lookups.lab_unit import list_lab_units, edit_lab_unit, delete_lab_unit
+from .lookups.camera import list_cameras, edit_camera, delete_camera
+from .lookups.disease import list_diseases, edit_disease, delete_disease
+from .lookups.area import list_areas, edit_area, delete_area
 from .disease_gradings import list_disease_gradings, delete_disease_grading, get_grading_features
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
@@ -106,9 +110,21 @@ admin_bp.add_url_rule(
 )
 
 # Lookup table routes
-admin_bp.add_url_rule("/<string:model_name>", view_func=list_and_create_lookup, methods=["GET", "POST"])
-admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/edit", view_func=edit_lookup, methods=["GET", "POST"])
-admin_bp.add_url_rule("/<string:model_name>/<int:item_id>/delete", view_func=delete_lookup, methods=["POST"])
+admin_bp.add_url_rule("/hospital", view_func=list_hospitals, methods=["GET", "POST"])
+admin_bp.add_url_rule("/hospital/<int:item_id>/edit", view_func=edit_hospital, methods=["GET", "POST"])
+admin_bp.add_url_rule("/hospital/<int:item_id>/delete", view_func=delete_hospital, methods=["POST"])
+admin_bp.add_url_rule("/lab_unit", view_func=list_lab_units, methods=["GET", "POST"])
+admin_bp.add_url_rule("/lab_unit/<int:item_id>/edit", view_func=edit_lab_unit, methods=["GET", "POST"])
+admin_bp.add_url_rule("/lab_unit/<int:item_id>/delete", view_func=delete_lab_unit, methods=["POST"])
+admin_bp.add_url_rule("/camera", view_func=list_cameras, methods=["GET", "POST"])
+admin_bp.add_url_rule("/camera/<int:item_id>/edit", view_func=edit_camera, methods=["GET", "POST"])
+admin_bp.add_url_rule("/camera/<int:item_id>/delete", view_func=delete_camera, methods=["POST"])
+admin_bp.add_url_rule("/disease", view_func=list_diseases, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease/<int:item_id>/edit", view_func=edit_disease, methods=["GET", "POST"])
+admin_bp.add_url_rule("/disease/<int:item_id>/delete", view_func=delete_disease, methods=["POST"])
+admin_bp.add_url_rule("/area", view_func=list_areas, methods=["GET", "POST"])
+admin_bp.add_url_rule("/area/<int:item_id>/edit", view_func=edit_area, methods=["GET", "POST"])
+admin_bp.add_url_rule("/area/<int:item_id>/delete", view_func=delete_area, methods=["POST"])
 
 # Disease grading routes
 admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])

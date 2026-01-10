@@ -5,11 +5,12 @@
 {% block content %}
 <div class="container mt-4">
     <h2>Manage {{ title }}s</h2>
+    {% set core_ids = core_disease_ids or [] %}
 
     <div class="card mb-4">
         <div class="card-header">Add New {{ title }}</div>
         <div class="card-body">
-            <form method="POST" action="{{ url_for('admin.list_and_create_lookup', model_name=model_name) }}">
+            <form method="POST" action="{{ url_for(list_endpoint) }}">
                 {{ csrf_field() }}
                 <div class="row">
                     <div class="col-md-6">
@@ -52,7 +53,7 @@
                     <tr>
                         <td>
                             {{ item.name }}
-                            {% if model_name == 'disease' and item.id in [1, 2, 3] %}
+                            {% if model_name == 'disease' and item.id in core_ids %}
                             <span class="badge bg-info ms-2">Core</span>
                             {% endif %}
                         </td>
@@ -60,11 +61,11 @@
                         <td>{{ item.hospital.name if item.hospital else 'N/A' }}</td>
                         {% endif %}
                         <td class="text-end">
-                            <a href="{{ url_for('admin.edit_lookup', model_name=model_name, item_id=item.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                            {% if model_name == 'disease' and item.id in [1, 2, 3] %}
+                            <a href="{{ url_for(edit_endpoint, item_id=item.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                            {% if model_name == 'disease' and item.id in core_ids %}
                             <button class="btn btn-sm btn-secondary" disabled title="Core diseases cannot be deleted">Delete</button>
                             {% else %}
-                            <form method="POST" action="{{ url_for('admin.delete_lookup', model_name=model_name, item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure?');">
+                            <form method="POST" action="{{ url_for(delete_endpoint, item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure?');">
                                 {{ csrf_field() }}
                                 <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                             </form>

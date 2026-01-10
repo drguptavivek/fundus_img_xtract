@@ -130,53 +130,67 @@ def _resolve_setting(db_session: Session, meta: SettingMeta) -> Dict[str, Any]:
     }
 
 
+def _collect_setting_updates() -> tuple[List[str], Dict[str, str]]:
+    errors: List[str] = []
+    updates: Dict[str, str] = {}
+
+    for meta in SETTING_DEFINITIONS:
+        raw_value = request.form.get(meta["key"], "")
+        parsed, error = _coerce(meta, raw_value)
+        if error:
+            errors.append(error)
+            continue
+        updates[meta["key"]] = _stringify(meta, parsed)
+
+    return errors, updates
+
+
+def _apply_setting_updates(db_session: Session, updates: Dict[str, str]) -> None:
+    for meta in SETTING_DEFINITIONS:
+        value_str = updates[meta["key"]]
+        setting = db_session.get(AppSetting, meta["key"])
+        if setting is None:
+            setting = AppSetting(
+                key=meta["key"],
+                value=value_str,
+                value_type=meta.get("type", "string"),
+            )
+            db_session.add(setting)
+        else:
+            setting.value = value_str
+            setting.value_type = meta.get("type", "string")
+
+
+def _group_settings(db_session: Session) -> tuple[Dict[str, List[Dict[str, Any]]], List[str]]:
+    resolved_settings = [_resolve_setting(db_session, meta) for meta in SETTING_DEFINITIONS]
+    grouped_settings: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for setting in resolved_settings:
+        grouped_settings[setting.get("section", "Other")].append(setting)
+
+    section_order: List[str] = []
+    for meta in SETTING_DEFINITIONS:
+        section = meta.get("section", "Other")
+        if section not in section_order:
+            section_order.append(section)
+
+    return grouped_settings, section_order
+
+
 @roles_required("admin")
 def admin_settings():
     """View and update configuration stored in app_settings (non-secret keys)."""
     with get_db_session() as db_session:
         if request.method == "POST":
-            errors: List[str] = []
-            updates: Dict[str, str] = {}
-
-            for meta in SETTING_DEFINITIONS:
-                raw_value = request.form.get(meta["key"], "")
-                parsed, error = _coerce(meta, raw_value)
-                if error:
-                    errors.append(error)
-                    continue
-                updates[meta["key"]] = _stringify(meta, parsed)
-
+            errors, updates = _collect_setting_updates()
             if errors:
                 for err in errors:
                     flash(err, "danger")
             else:
-                for meta in SETTING_DEFINITIONS:
-                    value_str = updates[meta["key"]]
-                    setting = db_session.get(AppSetting, meta["key"])
-                    if setting is None:
-                        setting = AppSetting(
-                            key=meta["key"],
-                            value=value_str,
-                            value_type=meta.get("type", "string"),
-                        )
-                        db_session.add(setting)
-                    else:
-                        setting.value = value_str
-                        setting.value_type = meta.get("type", "string")
+                _apply_setting_updates(db_session, updates)
                 flash("Settings saved.", "success")
                 return redirect(url_for("admin.admin_settings"), code=303)
 
-        resolved_settings = [_resolve_setting(db_session, meta) for meta in SETTING_DEFINITIONS]
-        grouped_settings: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-        for setting in resolved_settings:
-            grouped_settings[setting.get("section", "Other")].append(setting)
-
-        # Maintain stable section ordering based on definitions
-        section_order: List[str] = []
-        for meta in SETTING_DEFINITIONS:
-            section = meta.get("section", "Other")
-            if section not in section_order:
-                section_order.append(section)
+        grouped_settings, section_order = _group_settings(db_session)
 
         return render_template(
             "admin/admin_settings.html",

@@ -20,3 +20,6 @@ Dockerfile text eol=lf
 *.jsx text eol=lf
 *.tsx text eol=lf
 *.ini text eol=lf
+
+# Use bd merge for beads JSONL files
+.beads/issues.jsonl merge=beads

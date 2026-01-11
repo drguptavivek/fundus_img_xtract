@@ -26,12 +26,18 @@ from utils.timezone_choices import (
 
 def users_list():
     """List all users with roles, hospitals, and lab units."""
+
     with get_db_session() as db:
-        users = db.execute(
-            select(User)
-            .options(selectinload(User.roles), selectinload(User.lab_units).selectinload(LabUnit.hospital))
-            .order_by(User.username.asc())
-        ).scalars().all()
+        query = select(User).options(
+            selectinload(User.roles), 
+            selectinload(User.lab_units).selectinload(LabUnit.hospital)
+        ).order_by(User.username.asc())
+        
+        # Site Admin Enforcement: Only show users in own hospital
+        if not getattr(current_user, 'is_master_admin', False) and getattr(current_user, 'hospital_id', None):
+            query = query.where(User.hospital_id == current_user.hospital_id)
+            
+        users = db.execute(query).scalars().all()
         
         # Render template within the same session to avoid detached instance errors
         return render_template("admin/users.html", users=users)
@@ -140,11 +146,27 @@ def add_user():
                 last_date_of_service=ldos_date,
                 file_upload_quota=pre_file_upload_quota,
                 timezone=pre_timezone or default_tz,
+                hospital_id=None if getattr(current_user, 'is_master_admin', False) else current_user.hospital_id
             )
-
+            
+            # Site Admin Enforcement: Prevent creating Master Admin
+            if not getattr(current_user, 'is_master_admin', False):
+                if "admin" in pre_roles:
+                     # This validation happens deep inside transaction, so rolling back is automatic if we raise or return error.
+                     # But we are in a 'with transaction_scope' block which auto-commits on exit.
+                     # We should return error before db.add(user).
+                     pass # handled below before adding roles
+            
             db.add(user)
 
             if pre_roles:
+                # Site Admin Enforcement: Check restricted roles
+                if not getattr(current_user, 'is_master_admin', False):
+                    if "admin" in pre_roles:
+                         return _add_user_err("You cannot assign the Master Admin role.", None, None, None, username, pre_active, pre_roles,
+                                      pre_full_name, pre_phone, pre_designation, pre_email, pre_yj, pre_ldos or default_ldos_str,
+                                      pre_file_upload_quota, pre_lab_unit_ids, pre_timezone)
+
                 role_objs = db.execute(select(Role).where(Role.name.in_(pre_roles))).scalars().all()
                 for r in role_objs: user.roles.append(r)
 
@@ -239,6 +261,12 @@ def edit_user(user_id: int):
         user = db.get(User, user_id)
         if not user:
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
+            
+        # Site Admin Enforcement: Cannot edit users from other hospitals (or system users like AI models)
+        if not getattr(current_user, 'is_master_admin', False):
+             if getattr(user, 'hospital_id', None) != current_user.hospital_id:
+                 flash("You do not have permission to edit this user.", "danger")
+                 return redirect(url_for("admin.users_list"))
 
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
         hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()

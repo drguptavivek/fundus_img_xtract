@@ -147,8 +147,13 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     
     Returns:
         Dictionary with task details or None if task not found
+        
+    Note:
+        PII (patient_id, patient_name) is masked for cross-hospital access.
+        Reference: docs/PII_Exposure_Control_Policy.md Section 4.2
     """
     from sqlalchemy.orm import joinedload
+    from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
     task = db_session.query(Task).filter(Task.id == task_id).options(
         joinedload(Task.consensus),  # Load consensus information
         joinedload(Task.grades)
@@ -162,6 +167,21 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
         user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
         if task.lab_unit_id not in user_lab_unit_ids:
             return None
+    
+    # Determine if PII should be masked based on hospital context
+    current_user_hospital_id = current_user.hospital_id if current_user.is_authenticated else None
+    task_hospital_id = task.lab_unit.hospital_id if task.lab_unit else None
+    current_user_role = None
+    if current_user.is_authenticated:
+        # Get primary role (first role in list)
+        user_roles = [r.name for r in current_user.roles]
+        current_user_role = user_roles[0] if user_roles else None
+    
+    mask_pii = should_mask_pii(
+        current_user_hospital_id=current_user_hospital_id,
+        data_hospital_id=task_hospital_id,
+        current_user_role=current_user_role
+    )
     
     # Collect grading information from the task
     grades = []
@@ -203,11 +223,14 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     # Determine image info based on which relationship exists
     image_info = {}
     if task.encounter_file:
+        raw_patient_id = task.encounter_file.patient_id if hasattr(task.encounter_file, 'patient_id') else 'Unknown'
+        raw_patient_name = task.encounter_file.patient_name if hasattr(task.encounter_file, 'patient_name') else 'Unknown'
+        
         image_info = {
             'image_uuid': task.encounter_file.uuid,
             'image_path': None,  # Doesn't exist in this model
-            'patient_id': task.encounter_file.patient_id if hasattr(task.encounter_file, 'patient_id') else 'Unknown',
-            'patient_name': task.encounter_file.patient_name if hasattr(task.encounter_file, 'patient_name') else 'Unknown'
+            'patient_id': mask_patient_id(raw_patient_id) if mask_pii else raw_patient_id,
+            'patient_name': mask_patient_name() if mask_pii else raw_patient_name
         }
     elif task.direct_image:
         image_info = {

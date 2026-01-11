@@ -89,7 +89,12 @@ class TestGetUserLabUnitsInHospital:
         from models import User, Role
         from auth.security import hash_password
         
-        role = db_session.query(Role).filter_by(name='resident').first()
+        role = db_session.query(Role).filter_by(name='ophthalmologist').first()
+        if not role:
+            role = Role(name='ophthalmologist')
+            db_session.add(role)
+            db_session.flush()
+        
         user = User(
             username='no_hospital_user',
             password_hash=hash_password('Test@2026'),
@@ -99,6 +104,7 @@ class TestGetUserLabUnitsInHospital:
         )
         db_session.add(user)
         db_session.flush()
+        db_session.refresh(user)  # Refresh to ensure it's attached to session
         
         lab_ids = get_user_lab_units_in_hospital(user.id, db=db_session)
         assert len(lab_ids) == 0
@@ -109,44 +115,48 @@ class TestValidateLabUnitHospitalMatch:
     """Test validate_lab_unit_hospital_match() function."""
     
     def test_lab_unit_from_same_hospital_is_valid(
-        self, ophthalmologist_hospital_a, test_lab_units
+        self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Lab unit from same hospital should be valid."""
-        # ophth_a is in Hospital A, lab_a2 is also in Hospital A
+        # ophth_a is in Hospital A (id=1), lab_a2 is also in Hospital A
         is_valid = validate_lab_unit_hospital_match(
             ophthalmologist_hospital_a.id,
-            test_lab_units['lab_a2'].id
+            core_test_data['lab_a2'].id,  # Hospital A lab
+            db=db_session
         )
+        
         assert is_valid is True
     
     def test_lab_unit_from_different_hospital_is_invalid(
-        self, ophthalmologist_hospital_a, test_lab_units
+        self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Lab unit from different hospital should be invalid."""
-        # ophth_a is in Hospital A, lab_b1 is in Hospital B
+        # ophth_a is in Hospital A (id=1), lab_b1 is in Hospital B (id=2)
         is_valid = validate_lab_unit_hospital_match(
             ophthalmologist_hospital_a.id,
-            test_lab_units['lab_b1'].id
+            core_test_data['lab_b1'].id,  # Hospital B lab
+            db=db_session
         )
+        
         assert is_valid is False
     
     def test_master_admin_can_access_any_lab_unit(
-        self, master_admin, test_lab_units
+        self, db_session, master_admin, core_test_data
     ):
         """Master admin should be able to access any lab unit."""
         # Master admin can access Hospital B lab unit
         is_valid = validate_lab_unit_hospital_match(
             master_admin.id,
-            test_lab_units['lab_b1'].id
+            core_test_data['lab_b1'].id,  # Hospital B lab
+            db=db_session
         )
+        
         assert is_valid is True
     
-    def test_invalid_user_raises_error(self, test_lab_units):
+    def test_invalid_user_raises_error(self, db_session, core_test_data):
         """Invalid user ID should raise ValueError."""
         with pytest.raises(ValueError, match="User .* not found"):
-            validate_lab_unit_hospital_match(99999, test_lab_units['lab_a1'].id)
-
-
+            validate_lab_unit_hospital_match(99999, core_test_data['lab_a1'].id, db=db_session)
 @pytest.mark.unit
 class TestApplyScopingHospitalBound:
     """Test apply_scoping() for hospital-bound operations."""

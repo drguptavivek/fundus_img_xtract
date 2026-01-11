@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm Password - Sensitive Operation{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="bi bi-shield-lock"></i> Password Confirmation Required
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>Sensitive Operation:</strong> {{ operation_name }}
+                    </div>
+                    
+                    <p class="text-muted">
+                        For security reasons, please re-enter your password to confirm this sensitive operation.
+                        This verification is valid for 5 minutes.
+                    </p>
+                    
+                    <form method="POST" action="{{ return_url }}">
+                        {{ csrf_field() }}
+                        
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">
+                                <strong>Your Password</strong>
+                            </label>
+                            <input 
+                                type="password" 
+                                class="form-control form-control-lg" 
+                                id="confirm_password" 
+                                name="confirm_password" 
+                                required 
+                                autofocus
+                                placeholder="Enter your password"
+                            >
+                            <div class="form-text">
+                                <i class="bi bi-info-circle"></i>
+                                Enter the password for your account: <strong>{{ current_user.username }}</strong>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-warning btn-lg">
+                                <i class="bi bi-check-circle"></i> Confirm and Proceed
+                            </button>
+                            <a href="{{ url_for('admin.index') }}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-muted">
+                    <small>
+                        <i class="bi bi-shield-check"></i>
+                        This security measure protects sensitive data from unauthorized access.
+                    </small>
+                </div>
+            </div>
+            
+            <div class="mt-3 text-center">
+                <small class="text-muted">
+                    <i class="bi bi-clock-history"></i>
+                    Logged in as <strong>{{ current_user.username }}</strong> from {{ request.remote_addr }}
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: 2px solid #ffc107;
+    }
+    
+    .card-header {
+        border-bottom: 2px solid #e0a800;
+    }
+    
+    .form-control:focus {
+        border-color: #ffc107;
+        box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    }
+    
+    .btn-warning:hover {
+        background-color: #e0a800;
+        border-color: #d39e00;
+    }
+</style>
+{% endblock %}

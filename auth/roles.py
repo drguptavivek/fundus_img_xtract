@@ -9,6 +9,12 @@ from sqlalchemy import select
 from models import Role
 from db_transaction_manager import get_db_session, transaction_scope
 
+ROLE_ADMIN = "admin"
+ROLE_LOCAL_ADMIN = "local_admin"  # Site Admin
+ROLE_OPHTHALMOLOGIST = "ophthalmologist"
+ROLE_RESIDENT = "resident"
+ROLE_OPTOMETRIST = "optometrist"
+ROLE_DATA_MANAGER = "data_manager"
 ROLE_PREGARDED_UPLOADER = "pregarded_uploader"
 ROLE_DATASET_CREATOR = "dataset_creator"
 ROLE_ANALYTICS_VIEWER = "analytics_viewer"

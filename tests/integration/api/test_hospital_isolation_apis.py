@@ -14,12 +14,11 @@ class TestEligibleLabUnitAPI:
     """Test /api/eligibleLabUnit endpoint with hospital isolation."""
     
     def test_regular_user_gets_only_own_hospital_labs(
-        self, client, hosp_a_res_1, core_test_data
+        self, app, hosp_a_res_1, core_test_data
     ):
         """Regular user should only see lab units from their hospital."""
-        # Login as Hospital A resident
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(hosp_a_res_1.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, hosp_a_res_1)
         
         response = client.get('/api/eligibleLabUnit')
         assert response.status_code == 200
@@ -37,11 +36,11 @@ class TestEligibleLabUnitAPI:
         assert 2 not in hospital_ids  # Hospital B should NOT be visible
     
     def test_master_admin_gets_all_hospitals_labs(
-        self, client, master_admin, core_test_data
+        self, app, master_admin, core_test_data
     ):
         """Master admin should see lab units from all hospitals."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(master_admin.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, master_admin)
         
         response = client.get('/api/eligibleLabUnit')
         assert response.status_code == 200
@@ -64,11 +63,11 @@ class TestEligibleLabUnitCurrentUserAPI:
     """Test /api/eligibleLabUnitCurrentUser endpoint with hospital isolation."""
     
     def test_regular_user_sees_only_own_hospital(
-        self, client, hosp_b_res_1, core_test_data
+        self, app, hosp_b_res_1, core_test_data
     ):
         """Regular user should only see their hospital in eligible_hospitals."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(hosp_b_res_1.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, hosp_b_res_1)
         
         response = client.get('/api/eligibleLabUnitCurrentUser')
         assert response.status_code == 200
@@ -90,11 +89,11 @@ class TestEligibleLabUnitCurrentUserAPI:
         assert hospital_ids == {2}
     
     def test_master_admin_sees_all_hospitals(
-        self, client, master_admin, core_test_data
+        self, app, master_admin, core_test_data
     ):
         """Master admin should see all hospitals in eligible_hospitals."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(master_admin.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, master_admin)
         
         response = client.get('/api/eligibleLabUnitCurrentUser')
         assert response.status_code == 200
@@ -115,11 +114,11 @@ class TestHospitalsAPI:
     """Test /api/hospitals endpoint with hospital isolation."""
     
     def test_regular_user_gets_only_own_hospital(
-        self, client, hosp_a_optometrist, core_test_data
+        self, app, hosp_a_optometrist, core_test_data
     ):
         """Regular user should only see their assigned hospital."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(hosp_a_optometrist.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, hosp_a_optometrist)
         
         response = client.get('/api/hospitals')
         assert response.status_code == 200
@@ -132,11 +131,11 @@ class TestHospitalsAPI:
         assert hospitals[0]['name'] == core_test_data['hospital_a'].name
     
     def test_master_admin_gets_all_hospitals(
-        self, client, master_admin, core_test_data
+        self, app, master_admin, core_test_data
     ):
         """Master admin should see all hospitals."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(master_admin.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, master_admin)
         
         response = client.get('/api/hospitals')
         assert response.status_code == 200
@@ -154,11 +153,11 @@ class TestHospitalByIdAPI:
     """Test /api/hospitals/<id> endpoint with hospital isolation."""
     
     def test_user_can_access_own_hospital(
-        self, client, hosp_a_data_manager, core_test_data
+        self, app, hosp_a_data_manager, core_test_data
     ):
         """User should be able to access their own hospital."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(hosp_a_data_manager.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, hosp_a_data_manager)
         
         # Access Hospital A (user's hospital)
         response = client.get('/api/hospitals/1')
@@ -169,11 +168,11 @@ class TestHospitalByIdAPI:
         assert hospital['name'] == core_test_data['hospital_a'].name
     
     def test_user_cannot_access_other_hospital(
-        self, client, hosp_a_data_manager
+        self, app, hosp_a_data_manager
     ):
         """User should NOT be able to access other hospitals."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(hosp_a_data_manager.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, hosp_a_data_manager)
         
         # Try to access Hospital B (not user's hospital)
         response = client.get('/api/hospitals/2')
@@ -183,11 +182,11 @@ class TestHospitalByIdAPI:
         assert 'Forbidden' in error['error']
     
     def test_master_admin_can_access_any_hospital(
-        self, client, master_admin, core_test_data
+        self, app, master_admin, core_test_data
     ):
         """Master admin should be able to access any hospital."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(master_admin.id)
+        from tests.conftest import create_authenticated_client
+        client = create_authenticated_client(app, master_admin)
         
         # Access Hospital A
         response_a = client.get('/api/hospitals/1')

@@ -275,6 +275,156 @@ def authenticated_client(client, admin_user):
     return client
 
 
+@pytest.fixture
+def login_user(client):
+    """
+    Helper fixture to perform actual login via POST to /login.
+    Returns a function that logs in a user and returns the response.
+    
+    Usage:
+        def test_something(login_user, admin_user):
+            response = login_user(admin_user.username, 'Test@2026')
+            assert response.status_code == 302
+    """
+    def do_login(username, password='Test@2026', follow_redirects=False):
+        """
+        Perform login via POST request.
+        
+        Args:
+            username: Username to login with
+            password: Password (default: 'Test@2026')
+            follow_redirects: Whether to follow redirects
+            
+        Returns:
+            Response object
+        """
+        # Get CSRF token from login page
+        login_page = client.get('/login')
+        
+        # Extract CSRF token (if CSRF is enabled)
+        csrf_token = None
+        if b'csrf_token' in login_page.data:
+            import re
+            match = re.search(rb'name="csrf_token"[^>]*value="([^"]+)"', login_page.data)
+            if match:
+                csrf_token = match.group(1).decode('utf-8')
+        
+        # Perform login
+        data = {
+            'username': username,
+            'password': password,
+        }
+        if csrf_token:
+            data['csrf_token'] = csrf_token
+        
+        response = client.post(
+            '/login',
+            data=data,
+            follow_redirects=follow_redirects
+        )
+        return response
+    
+    return do_login
+
+
+@pytest.fixture
+def logged_in_client(client, admin_user, login_user):
+    """
+    Client with admin user logged in via actual login flow.
+    Uses real login POST request (not session manipulation).
+    
+    Usage:
+        def test_something(logged_in_client):
+            response = logged_in_client.get('/admin/dashboard')
+            assert response.status_code == 200
+    """
+    login_user(admin_user.username, 'Test@2026')
+    return client
+
+
+@pytest.fixture
+def auth_client_factory(client, login_user):
+    """
+    Factory to create authenticated clients for any user.
+    
+    Usage:
+        def test_something(auth_client_factory, resident_user):
+            resident_client = auth_client_factory(resident_user)
+            response = resident_client.get('/grading/tasks')
+            assert response.status_code == 200
+    """
+    def make_auth_client(user, password='Test@2026'):
+        """Create authenticated client for given user"""
+        login_user(user.username, password)
+        return client
+    return make_auth_client
+
+
+@pytest.fixture
+def csrf_token(client):
+    """
+    Get CSRF token from the application.
+    Useful for forms that require CSRF protection.
+    
+    Usage:
+        def test_form_submission(client, csrf_token, admin_user):
+            response = client.post('/some/form', data={
+                'csrf_token': csrf_token,
+                'field': 'value'
+            })
+    """
+    response = client.get('/login')  # Or any page with CSRF token
+    
+    import re
+    match = re.search(rb'name="csrf_token"[^>]*value="([^"]+)"', response.data)
+    if match:
+        return match.group(1).decode('utf-8')
+    
+    # Fallback: try to get from meta tag
+    match = re.search(rb'<meta name="csrf-token" content="([^"]+)"', response.data)
+    if match:
+        return match.group(1).decode('utf-8')
+    
+    return None
+
+
+@pytest.fixture
+def make_request_with_auth(client, csrf_token):
+    """
+    Helper to make authenticated requests with CSRF token.
+    
+    Usage:
+        def test_post_request(make_request_with_auth, logged_in_client):
+            response = make_request_with_auth(
+                'POST', 
+                '/api/endpoint',
+                json={'data': 'value'}
+            )
+    """
+    def do_request(method, url, **kwargs):
+        """Make request with CSRF token in headers"""
+        headers = kwargs.pop('headers', {})
+        if csrf_token:
+            headers['X-CSRFToken'] = csrf_token
+        
+        kwargs['headers'] = headers
+        
+        if method.upper() == 'GET':
+            return client.get(url, **kwargs)
+        elif method.upper() == 'POST':
+            return client.post(url, **kwargs)
+        elif method.upper() == 'PUT':
+            return client.put(url, **kwargs)
+        elif method.upper() == 'DELETE':
+            return client.delete(url, **kwargs)
+        elif method.upper() == 'PATCH':
+            return client.patch(url, **kwargs)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+    
+    return do_request
+
+
 # ==============================================================================
 # SQLite Compatibility Fixtures (for unit tests that need simple DB)
 # ==============================================================================

@@ -18,11 +18,24 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+
+from sqlalchemy.sql import table, column
+
+roles_table = table('roles',
+    column('id', sa.Integer),
+    column('name', sa.String)
+)
+
 def upgrade() -> None:
     """Upgrade schema."""
-    pass
+    op.bulk_insert(roles_table,
+        [
+            {'name': 'dataset_creator'},
+            {'name': 'analytics_viewer'}
+        ]
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    pass
+    op.execute("DELETE FROM roles WHERE name IN ('dataset_creator', 'analytics_viewer')")

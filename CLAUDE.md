@@ -11,6 +11,25 @@ Medical imaging system for fundus image management with multi-disease grading (G
 - **Port**: 5001
 - **Tests**: pytest (unit), Playwright (E2E - stale)
 
+### 🚨 Docker Permission Issues
+
+**Problem**: Commands run inside Docker container create files owned by `root`, causing permission errors when editing from host.
+
+**Solution**: Always run Docker commands with your user ID (`-u $(id -u):$(id -g)`):
+
+```bash
+# WRONG - Creates root-owned files:
+$DC exec web uv run alembic revision --autogenerate -m "description"
+
+# CORRECT - Creates files with your ownership:
+$DC exec -u $(id -u):$(id -g) web uv run alembic revision --autogenerate -m "description"
+
+# Fix existing root-owned files via Docker:
+$DC exec -u root web chown -R $(id -u):$(id -g) /app/migrations/versions
+```
+
+**Common offenders**: `alembic revision`, `uv run pytest`, file creation scripts
+
 ## Essential Commands
 
 ```bash
@@ -23,9 +42,9 @@ $DC up web -d
 # Run tests
 $DC exec web uv run pytest tests/
 
-# Database migrations
-$DC exec web uv run alembic heads          # Check for conflicts
-$DC exec web uv run alembic revision --autogenerate -m "description"
+# Database migrations (NOTE: use -u flag to avoid root-owned files)
+$DC exec web uv run alembic heads
+$DC exec -u $(id -u):$(id -g) web uv run alembic revision --autogenerate -m "description"
 $DC exec web uv run alembic upgrade head
 
 # Create user
@@ -157,5 +176,68 @@ git push                     # PUSH (work NOT done until this succeeds)
 **Complete**: `bd close <id1> <id2> ...` → `bd sync`
 **Dependencies**: `bd dep add <issue> <depends-on>`
 **Rules**: Track multi-session/strategic work in beads. Use TodoWrite for single-session execution. Always add detailed descriptions (Markdown) and create corresponding GitHub issues with `gh issue create`.
+
+## Beads ↔ GitHub Sync
+
+**Automatic Sync**: Beads are automatically synced with GitHub issues every 10 minutes via cron.
+
+### Sync Scripts
+```bash
+# One-time: Create all GitHub labels
+./scripts/setup_bead_labels.sh
+
+# Manual: Force sync beads with GitHub issues
+./scripts/sync_beads_to_github.sh
+
+# View sync logs
+cat .beads/bead_sync.log
+```
+
+### How It Works
+- **Caching**: Only tracks open issues locally (`.beads/open_issues_cache.txt`)
+- **Rate Limit Protection**: Only checks cached open beads (not all 27 issues)
+- **Daily Full Check**: Once per day, checks for newly opened beads
+- **Idempotent**: Only acts when state differs
+
+### When Adding New Beads
+After creating a new bead and its GitHub issue:
+1. Get the issue number from GitHub
+2. Add to `scripts/sync_beads_to_github.sh` mapping:
+   ```bash
+   ["new_bead_id"]="XX"  # XX = GitHub issue number
+   ```
+3. Add bead ID to `scripts/setup_bead_labels.sh`:
+   ```bash
+   BEAD_IDS=("..." "new_bead_id")
+   ```
+4. Run `./scripts/setup_bead_labels.sh` to create bead label
+
+### Bead-to-Issue Mapping (Current)
+| Bead ID | Issue | Title |
+|---------|-------|-------|
+| 9rb | #22 | Enhance Test Fixtures for Hospital Isolation |
+| ugh | #23 | Add Login and Session Fixtures |
+| 5pi | #24 | Add Test User Fixtures to conftest.py |
+| s8t | #25 | Phase 2: Move Unit Tests |
+| snk | #26 | Phase 1: Test Infrastructure Setup |
+| toj | #4 | Phase 3A: Update Existing API Endpoints |
+| awm | #5 | Phase 2: Fix Remaining Hospital Scoping Tests |
+| duv | #6 | Phase 2: Hospital Scoping Utilities |
+| 4s9 | #10 | Phase 3B: Add New Hospital Context APIs |
+| b3g | #7 | Backfill Existing Users with Hospital Assignment |
+| 8r1 | #8 | Phase 4A: Update Image & Task Queries |
+| b05 | #9 | Phase 3C: Update JavaScript Files |
+| 4uu | #11 | Phase 3: Query Updates |
+| 49p | #12 | Add Hospital Scoping Integration Tests |
+| d1h | #13 | Security Audit: Verify All Routes Have Hospital Scoping |
+| 62a | #14 | Phase 5B: Implement 2-Week Cooling-Off |
+| crn | #15 | Phase 5A: Implement Optometrist PII Anonymization |
+| y7z | #16 | Phase 4B: Add New Roles |
+| ubr | #17 | Phase 6: Cleanup and Documentation |
+| jms | #18 | Phase 5: Create Specialized Test Suites |
+| mzt | #19 | Phase 4: Reorganize E2E Tests |
+| j9p | #20 | Phase 3: Move Integration Tests |
+| d18 | #21 | Phase 6: Documentation, E2E Tests & Deployment |
+| 8g7 | #27 | Code Quality & SonarQube Fixes |
 
 ---

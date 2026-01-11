@@ -547,3 +547,15 @@ from tests.fixtures.security import (
     dataset_creator,
 )
 
+
+# Import grading pool fixtures
+from tests.fixtures.hospital_grading_pools import (
+    hospital_a_grading_pool,
+    hospital_b_grading_pool,
+    hosp_a_res_1, hosp_a_res_2, hosp_a_res_3, hosp_a_res_4,
+    hosp_a_arb_1, hosp_a_arb_2,
+    hosp_b_res_1, hosp_b_res_2, hosp_b_res_3, hosp_b_res_4,
+    hosp_b_arb_1, hosp_b_arb_2,
+    cross_grader_a_to_b, cross_grader_b_to_a,
+)
+

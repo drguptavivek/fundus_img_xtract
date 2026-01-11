@@ -168,10 +168,12 @@ git push                     # PUSH (work NOT done until this succeeds)
     - Tests: X/Y passed
     - Manual verification: ...
     - Commands run: ...
+    - Docker web Container has not errors: 
 
-    ## GIT Committed
+    ## GIT Commit Deatils
      - Date, Time:
      - Commit ID: 
+     - Files Modified: 
     ```
 **Complete**: `bd close <id1> <id2> ...` → `bd sync`
 **Dependencies**: `bd dep add <issue> <depends-on>`
@@ -179,7 +181,7 @@ git push                     # PUSH (work NOT done until this succeeds)
 
 ## Beads ↔ GitHub Sync
 
-**Automatic Sync**: Beads are automatically synced with GitHub issues every 10 minutes via cron.
+**Automatic Sync**: Beads are automatically synced with GitHub issues every 30 minutes via cron.
 
 ### Sync Scripts
 ```bash
@@ -194,50 +196,70 @@ cat .beads/bead_sync.log
 ```
 
 ### How It Works
+- **Sync Interval**: Every 30 minutes via cron
 - **Caching**: Only tracks open issues locally (`.beads/open_issues_cache.txt`)
-- **Rate Limit Protection**: Only checks cached open beads (not all 27 issues)
-- **Daily Full Check**: Once per day, checks for newly opened beads
+- **Rate Limit Protection**: Only checks cached open beads (not all 48 issues)
+- **Daily Full Check**: Once per day, checks for newly opened beads & refreshes mapping
 - **Idempotent**: Only acts when state differs
 
 ### When Adding New Beads
-After creating a new bead and its GitHub issue:
-1. Get the issue number from GitHub
-2. Add to `scripts/sync_beads_to_github.sh` mapping:
-   ```bash
-   ["new_bead_id"]="XX"  # XX = GitHub issue number
-   ```
-3. Add bead ID to `scripts/setup_bead_labels.sh`:
-   ```bash
-   BEAD_IDS=("..." "new_bead_id")
-   ```
-4. Run `./scripts/setup_bead_labels.sh` to create bead label
 
-### Bead-to-Issue Mapping (Current)
-| Bead ID | Issue | Title |
-|---------|-------|-------|
-| 9rb | #22 | Enhance Test Fixtures for Hospital Isolation |
-| ugh | #23 | Add Login and Session Fixtures |
-| 5pi | #24 | Add Test User Fixtures to conftest.py |
-| s8t | #25 | Phase 2: Move Unit Tests |
-| snk | #26 | Phase 1: Test Infrastructure Setup |
-| toj | #4 | Phase 3A: Update Existing API Endpoints |
-| awm | #5 | Phase 2: Fix Remaining Hospital Scoping Tests |
-| duv | #6 | Phase 2: Hospital Scoping Utilities |
-| 4s9 | #10 | Phase 3B: Add New Hospital Context APIs |
-| b3g | #7 | Backfill Existing Users with Hospital Assignment |
-| 8r1 | #8 | Phase 4A: Update Image & Task Queries |
-| b05 | #9 | Phase 3C: Update JavaScript Files |
-| 4uu | #11 | Phase 3: Query Updates |
-| 49p | #12 | Add Hospital Scoping Integration Tests |
-| d1h | #13 | Security Audit: Verify All Routes Have Hospital Scoping |
-| 62a | #14 | Phase 5B: Implement 2-Week Cooling-Off |
-| crn | #15 | Phase 5A: Implement Optometrist PII Anonymization |
-| y7z | #16 | Phase 4B: Add New Roles |
-| ubr | #17 | Phase 6: Cleanup and Documentation |
-| jms | #18 | Phase 5: Create Specialized Test Suites |
-| mzt | #19 | Phase 4: Reorganize E2E Tests |
-| j9p | #20 | Phase 3: Move Integration Tests |
-| d18 | #21 | Phase 6: Documentation, E2E Tests & Deployment |
-| 8g7 | #27 | Code Quality & SonarQube Fixes |
+After creating a new bead and its GitHub issue, the sync is **fully automatic**:
+
+1. Create the GitHub issue (include `## Bead Reference: fundus_img_xtract-XXX` in body)
+2. Run `./scripts/setup_bead_labels.sh` to create the bead label (one-time)
+3. Done! The sync script auto-discovers the mapping daily
+
+**No manual mapping needed** - The sync script parses GitHub issue bodies to extract bead IDs and builds the mapping automatically.
+
+### Bead-to-Issue Mapping (Current: 48 beads)
+
+| ID | Issue | Title | Priority |
+|----|-------|-------|----------|
+| 9rb | #22 | Enhance Test Fixtures for Hospital Isolation | P0 |
+| ugh | #23 | Add Login and Session Fixtures | P2 |
+| 5pi | #24 | Add Test User Fixtures to conftest.py | P2 |
+| s8t | #25 | Phase 2: Move Unit Tests | P2 |
+| snk | #26 | Phase 1: Test Infrastructure Setup | P2 |
+| toj | #4 | Phase 3A: Update Existing API Endpoints | P0 |
+| awm | #5 | Phase 2: Fix Remaining Hospital Scoping Tests | P0 |
+| duv | #6 | Phase 2: Hospital Scoping Utilities | P0 |
+| 4s9 | #10 | Phase 3B: Add New Hospital Context APIs | P1 |
+| b3g | #7 | Backfill Existing Users with Hospital Assignment | P1 |
+| 8r1 | #8 | Phase 4A: Update Image & Task Queries | P1 |
+| b05 | #9 | Phase 3C: Update JavaScript Files | P1 |
+| 4uu | #11 | Phase 3: Query Updates | P1 |
+| 49p | #12 | Add Hospital Scoping Integration Tests | P2 |
+| d1h | #13 | Security Audit: Verify All Routes Have Hospital Scoping | P2 |
+| 62a | #14 | Phase 5B: Implement 2-Week Cooling-Off | P2 |
+| crn | #15 | Phase 5A: Implement Optometrist PII Anonymization Workflow | P2 |
+| y7z | #16 | Phase 4B: Add New Roles | P2 |
+| ubr | #17 | Phase 6: Cleanup and Documentation | P2 |
+| jms | #18 | Phase 5: Create Specialized Test Suites | P2 |
+| mzt | #19 | Phase 4: Reorganize E2E Tests | P2 |
+| j9p | #20 | Phase 3: Move Integration Tests | P2 |
+| d18 | #21 | Phase 6: Documentation, E2E Tests & Deployment | P3 |
+| 8g7 | #27 | Code Quality & SonarQube Fixes | P2 |
+| 3do | #28 | Phase 5A: Grading API PII Sanitization | P0 |
+| r4o | #29 | 5O: PII Masking Utility | P1 |
+| tvp | #30 | 5N-5: Integrate Re-Auth with Admin Exports | P1 |
+| 43u | #31 | 5N-2: Re-Authentication Decorator | P1 |
+| 1yu | #32 | 5N-1: SensitiveOperationAudit Model | P1 |
+| tig | #33 | 5M: Admin Export Audit & Controls | P1 |
+| f6n | #34 | 5K: Export Pipeline Sanitization | P1 |
+| dcl | #35 | 5H: KPI & Export Sanitization | P1 |
+| jx8 | #36 | 5B: Optometrist Anonymization Workflow | P1 |
+| 4g2 | #37 | 5A: Grading API Sanitization | P1 |
+| c2i | #38 | 5N-6: Sensitive Operations Dashboard | P2 |
+| cwi | #39 | 5N-4: Re-Auth Confirmation Template | P2 |
+| o25 | #40 | 5N-3: Encrypted Export Utility | P2 |
+| las | #41 | 5L: Filename Anonymization | P2 |
+| det | #42 | 5I: Screenings Hospital Verification | P2 |
+| 55n | #43 | 5G: Jobs & Review Audit | P2 |
+| 51f | #44 | 5F: Analytics Anonymization | P2 |
+| sy5 | #45 | 5E: Search & Utils Sanitization | P2 |
+| ej1 | #46 | 5D: Logging Audit | P2 |
+| e3j | #47 | 5C: UI Template Defense | P2 |
+| 57m | #48 | 5J: Image Metadata Stripping | P3 |
 
 ---

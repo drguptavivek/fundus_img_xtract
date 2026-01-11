@@ -2,6 +2,7 @@
 # Sync beads status with GitHub issues (IDEMPOTENT)
 # Run this periodically (cron) to keep GitHub issues in sync with beads
 # Maintains a local cache of open issues to avoid GitHub rate limits
+# AUTO-DISCovers bead→issue mapping from GitHub issues
 
 set -e
 
@@ -10,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_FILE="$SCRIPT_DIR/../.beads/open_issues_cache.txt"
 CACHE_DIR="$(dirname "$CACHE_FILE")"
 LOG_FILE="$CACHE_DIR/bead_sync.log"
+MAPPING_CACHE="$CACHE_DIR/bead_issue_mapping.txt"
 
 # Ensure directories exist
 mkdir -p "$CACHE_DIR" "$(dirname "$LOG_FILE")"
@@ -22,33 +24,43 @@ NC='\033[0m'
 log() { echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "$LOG_FILE"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1" | tee -a "$LOG_FILE"; }
 
-# Full mapping of all bead IDs to issue numbers
-declare -A BEAD_TO_ISSUE=(
-    ["9rb"]="22"
-    ["ugh"]="23"
-    ["5pi"]="24"
-    ["s8t"]="25"
-    ["snk"]="26"
-    ["toj"]="4"
-    ["awm"]="5"
-    ["duv"]="6"
-    ["4s9"]="10"
-    ["b3g"]="7"
-    ["8r1"]="8"
-    ["b05"]="9"
-    ["4uu"]="11"
-    ["49p"]="12"
-    ["d1h"]="13"
-    ["62a"]="14"
-    ["crn"]="15"
-    ["y7z"]="16"
-    ["ubr"]="17"
-    ["jms"]="18"
-    ["mzt"]="19"
-    ["j9p"]="20"
-    ["d18"]="21"
-    ["8g7"]="27"
-)
+# Discover bead→issue mapping from GitHub (auto-detection)
+discover_bead_mapping() {
+    local mapping_file="$MAPPING_CACHE"
+    local last_update="$CACHE_DIR/.mapping_last_update"
+    local today=$(date +%Y-%m-%d)
+    local needs_update=false
+
+    # Check if we need to refresh mapping (older than 1 day or doesn't exist)
+    if [ ! -f "$mapping_file" ]; then
+        needs_update=true
+    elif [ -f "$last_update" ] && [ "$(cat "$last_update" 2>/dev/null)" != "$today" ]; then
+        needs_update=true
+    fi
+
+    if $needs_update; then
+        log "Discovering bead→issue mapping from GitHub..."
+
+        # Get all issues and extract bead IDs from bodies
+        > "$mapping_file"
+        gh issue list --state all --limit 300 --json number,body 2>/dev/null | \
+            jq -r '.[] | select(.body | test("fundus_img_xtract-[a-z0-9]+")) |
+                   (.body | match("fundus_img_xtract-[a-z0-9]+").string | split("fundus_img_xtract-")[1]) + " " + (.number | tostring)' \
+            >> "$mapping_file" 2>/dev/null || warn "Failed to discover mapping"
+
+        # Update last check time
+        echo "$today" > "$last_update"
+
+        local count=$(wc -l < "$mapping_file" 2>/dev/null || echo "0")
+        log "Mapping discovered: $count beads"
+    fi
+
+    # Load mapping into associative array
+    declare -gA BEAD_TO_ISSUE
+    while read -r bead_id issue_num; do
+        [ -n "$bead_id" ] && [ -n "$issue_num" ] && BEAD_TO_ISSUE["$bead_id"]="$issue_num"
+    done < "$mapping_file"
+}
 
 # Initialize cache file if it doesn't exist
 init_cache() {
@@ -74,12 +86,10 @@ add_to_cache() {
     fi
 }
 
-# Get list of open beads from cache
-get_cached_open_beads() {
-    grep -v '^[[:space:]]*$' "$CACHE_FILE" 2>/dev/null || echo ""
-}
-
 log "Syncing beads with GitHub issues..."
+
+# Discover mapping from GitHub
+discover_bead_mapping
 
 # Initialize cache if needed
 init_cache
@@ -108,7 +118,7 @@ while read -r bead_id; do
         bead_status="open"
     fi
 
-    # Get issue state from GitHub (only for cached open beads)
+    # Get issue state from GitHub
     issue_state=$(gh issue view "$issue_num" --json state --jq '.state' 2>/dev/null || echo "UNKNOWN")
 
     # Sync state (idempotent)
@@ -125,8 +135,7 @@ while read -r bead_id; do
     fi
 done < "$CACHE_FILE"
 
-# Check for newly opened beads (not in cache) - only do this occasionally
-# Use a daily marker file to limit this check to once per day
+# Check for newly opened beads (not in cache) - daily check
 DAILY_CHECK_MARKER="$CACHE_DIR/.last_full_check"
 TODAY=$(date +%Y-%m-%d)
 

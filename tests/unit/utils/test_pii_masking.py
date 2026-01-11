@@ -98,12 +98,16 @@ class TestMaskEmail:
     """Tests for mask_email function."""
     
     def test_standard_email(self):
-        """Standard email should show only domain."""
-        assert mask_email("john.doe@hospital.org") == "***@hospital.org"
+        """Standard email should show first 2 chars and domain."""
+        assert mask_email("john.doe@hospital.org") == "jo***@hospital.org"
     
     def test_simple_email(self):
         """Simple email should work."""
-        assert mask_email("admin@example.com") == "***@example.com"
+        assert mask_email("admin@example.com") == "ad***@example.com"
+    
+    def test_short_local_part(self):
+        """Short local part should show all chars."""
+        assert mask_email("a@test.com") == "a***@test.com"
     
     def test_no_at_sign(self):
         """Invalid email without @ should be fully masked."""
@@ -201,7 +205,7 @@ class TestMaskDictPii:
         result = mask_dict_pii(data)
         
         assert result['phone'] == '***-***-7890'
-        assert result['email'] == '***@example.com'
+        assert result['email'] == 'te***@example.com'
     
     def test_empty_dict(self):
         """Empty dict should return empty dict."""

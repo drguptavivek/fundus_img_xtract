@@ -102,21 +102,24 @@ def mask_phone(phone: Optional[str], show_last: int = 4) -> str:
     return f"***-***-{digits[-show_last:]}"
 
 
-def mask_email(email: Optional[str]) -> str:
+def mask_email(email: Optional[str], show_first: int = 2) -> str:
     """
-    Mask email showing only the domain.
+    Mask email showing first N characters and the domain.
     
     Args:
         email: The email address to mask
+        show_first: Number of characters to show at the start (default: 2)
     
     Returns:
-        Masked email in format "***@domain.com"
+        Masked email in format "XX***@domain.com"
     
     Examples:
         >>> mask_email("john.doe@hospital.org")
-        '***@hospital.org'
+        'jo***@hospital.org'
         >>> mask_email("admin@example.com")
-        '***@example.com'
+        'ad***@example.com'
+        >>> mask_email("a@test.com")
+        'a***@test.com'
         >>> mask_email("invalid")
         '***@***.com'
     """
@@ -129,7 +132,15 @@ def mask_email(email: Optional[str]) -> str:
     if len(parts) != 2 or not parts[1]:
         return "***@***.com"
     
-    return f"***@{parts[1]}"
+    local_part = parts[0]
+    domain = parts[1]
+    
+    if len(local_part) <= show_first:
+        masked_local = f"{local_part}***"
+    else:
+        masked_local = f"{local_part[:show_first]}***"
+    
+    return f"{masked_local}@{domain}"
 
 
 def mask_username(username: Optional[str], show_first: int = 2) -> str:

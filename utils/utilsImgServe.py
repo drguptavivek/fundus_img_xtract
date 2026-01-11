@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import Tuple
 from flask import send_file, abort, flash, make_response, current_app, request
+from flask_login import current_user
+from werkzeug.exceptions import NotFound
 from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
@@ -10,6 +12,7 @@ from utils.fileUtils import (
 )
 from utils.image_processing import get_thumbnail_filename
 from utils.log_sanitize import sanitize_log_value
+from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from sqlalchemy import  and_, select
 from db_transaction_manager import transaction_scope
 
@@ -17,17 +20,38 @@ from db_transaction_manager import transaction_scope
 
 
 def encounterImageByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+        
+    context = determine_scoping_context()
+    
     with transaction_scope() as db:
-        result = (db.query(EncounterFile, PatientEncounters, ZipFile).join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(EncounterFile.uuid == uuid).first())
+        query = db.query(EncounterFile, PatientEncounters, ZipFile)
+        query = query.join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+        query = query.join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+        query = query.filter(EncounterFile.uuid == uuid)
+        
+        # Apply dynamic scoping
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        
+        result = query.first()
+
+        
         if not result or not result[0].filename:
-            flash(f"Error: Encounter image not found with UUID: {uuid}", "danger")
+            # If scoped out or not found
+            # flash message? Original code did.
+            # flash(f"Error: Encounter image not found with UUID: {uuid}", "danger")
             abort(404)
+            
         encounter_file, patient_encounter, zip_file = result
+        
         upload_date_str = zip_file.upload_date.strftime("%Y_%m_%d") if zip_file.upload_date else ""
         image_path_str = str(IMAGE_DIR / upload_date_str / encounter_file.filename)
+        
         if not os.path.exists(image_path_str):
-            flash(f"Error: Image file not found on disk: {uuid}", "danger")
+            # flash(f"Error: Image file not found on disk: {uuid}", "danger")
             abort(404)
+            
         file_extension = Path(encounter_file.filename).suffix.lower()
         mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
         mimetype = mimetype_map.get(file_extension, 'image/jpeg')
@@ -195,8 +219,16 @@ def encounterPDFByUUID(uuid: str):
         return send_file(pdf_path_str, mimetype='application/pdf', as_attachment=False, download_name=f"{uuid}.pdf")
 
 def directImgOrigByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+    
+    context = determine_scoping_context()
+        
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or not direct_image.filename:
             abort(404)
         image_path_str = str(DIRECT_UPLOAD_DIR / direct_image.folder_rel / direct_image.filename)
@@ -217,8 +249,16 @@ def directImgOrigByUUID(uuid: str):
         return response
 
 def directImgEdByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
+    context = determine_scoping_context()
+        
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or not direct_image.edited_filename:
             flash(f"Error: No Edited Image for UUID: {uuid}", "danger")
             abort(404)
@@ -240,8 +280,16 @@ def directImgEdByUUID(uuid: str):
         return response
 
 def directImgFinalByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+    
+    context = determine_scoping_context()
+        
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             flash(f"Error: Image not found with UUID: {uuid}", "danger")
             abort(404)
@@ -304,11 +352,20 @@ def imgForGradingByUUID(uuid: str):
 
 def encounterImageThumbnailByUUID(uuid: str):
     """Serve thumbnail for encounter (ZIP upload) images."""
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+        
+    context = determine_scoping_context()
+    
     with transaction_scope() as db:
-        result = (db.query(EncounterFile, PatientEncounters, ZipFile)
+        query = (db.query(EncounterFile, PatientEncounters, ZipFile)
                  .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
                  .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
-                 .filter(EncounterFile.uuid == uuid).first())
+                 .filter(EncounterFile.uuid == uuid))
+                 
+        # Apply dynamic scoping
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        result = query.first()
 
         if not result or not result[0].filename:
             abort(404)
@@ -377,8 +434,16 @@ def encounterImageThumbnailByUUID(uuid: str):
 
 def directImgOrigThumbnailByUUID(uuid: str):
     """Serve thumbnail for direct upload original images."""
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+        
+    context = determine_scoping_context()
+    
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or not direct_image.filename:
             abort(404)
 
@@ -424,8 +489,16 @@ def directImgOrigThumbnailByUUID(uuid: str):
 
 def directImgEdThumbnailByUUID(uuid: str):
     """Serve thumbnail for direct upload edited images."""
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+        
+    context = determine_scoping_context()
+    
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or not direct_image.edited_filename:
             abort(404)
 
@@ -517,7 +590,15 @@ def directImgFinalThumbnailByUUID(uuid: str):
             return None
 
     with transaction_scope() as db:
-        direct_image = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid).first()
+        if not current_user or not current_user.is_authenticated:
+            abort(401)
+            
+        context = determine_scoping_context()
+        
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid)
+        query = apply_scoping(query, DirectImageUpload, current_user, context)
+        direct_image = query.first()
+        
         if not direct_image or (not direct_image.filename and not direct_image.edited_filename):
             abort(404)
 

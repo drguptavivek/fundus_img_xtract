@@ -8,6 +8,7 @@ from typing import Any, Set
 from sqlalchemy.orm import Query
 from models import User, LabUnit
 from db_transaction_manager import get_db_session
+from flask import request
 
 
 # Cross-hospital operations (no hospital filter applied)
@@ -197,10 +198,43 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
     return query
 
 
+
+def determine_scoping_context() -> str:
+    """
+    Determine the scoping context based on the request (referrer/params).
+    
+    Returns:
+        'grading' if context implies grading application (allows cross-hospital),
+        'upload' otherwise (strict isolation).
+    """
+    try:
+        # Check if we are in a request context
+        if not request:
+            return 'upload'
+            
+        # 1. Check explicit query parameter
+        if request.args.get('context') == 'grading':
+            return 'grading'
+            
+        # 2. Check Referrer
+        referrer = request.referrer
+        if referrer:
+            # If user is coming from grading pages
+            if '/grade/' in referrer or '/grading/' in referrer:
+                return 'grading'
+    except RuntimeError:
+        # Not in a request context
+        return 'upload'
+            
+    # Default to strict isolation
+    return 'upload'
+
+
 __all__ = [
     'CROSS_HOSPITAL_OPERATIONS',
     'is_cross_hospital_operation',
     'get_user_lab_units_in_hospital',
     'validate_lab_unit_hospital_match',
     'apply_scoping',
+    'determine_scoping_context',
 ]

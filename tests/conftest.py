@@ -163,6 +163,26 @@ def core_test_data(test_engine):
 
 
 @pytest.fixture
+def run_runner_test(db_session, clean_db):
+    """Fixture to run runner tests cleanly."""
+    pass
+
+
+def create_authenticated_client(app, user):
+    """
+    Helper to create a test client authenticated as a specific user.
+    Uses Flask-Login's session management to simulate login.
+    """
+    with app.test_client() as client:
+        with client.session_transaction() as sess:
+            # Set the user_id in session directly, simulating login
+            # Flask-Login uses '_user_id' key by default
+            sess['_user_id'] = str(user.id)
+            sess['_fresh'] = True
+        return client
+
+
+@pytest.fixture
 def admin_user(db_session, core_test_data):
     """Create an admin user for testing"""
     from tests.helpers.factories import UserFactory

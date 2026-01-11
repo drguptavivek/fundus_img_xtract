@@ -445,16 +445,18 @@ class ImageFactory:
     """Factory to create DirectImageUpload instances for testing."""
     
     @staticmethod
-    def create_direct_upload(db_session, uploader, hospital_id, lab_unit_id, disease_id,
-                            camera_id=1, area_id=1, filename=None, **kwargs):
+    def create_direct_upload(db_session, hospital_id, lab_unit_id, user_id=None, image_id=None, 
+                           uploader=None, disease_id=1, camera_id=1, area_id=1, filename=None, **kwargs):
         """
         Create a DirectImageUpload with all required fields.
         
         Args:
             db_session: Database session
-            uploader: User who uploaded the image
             hospital_id: Hospital ID
             lab_unit_id: Lab unit ID
+            user_id: User who uploaded the image (optional if uploader provided)
+            image_id: Custom UUID for image (optional)
+            uploader: User object (deprecated, use user_id)
             disease_id: Disease ID
             camera_id: Camera ID (default: 1)
             area_id: Area ID (default: 1)
@@ -469,15 +471,35 @@ class ImageFactory:
         
         if filename is None:
             filename = f'test_image_{uuid.uuid4().hex[:8]}.jpg'
+            
+        # Determine uploader ID
+        final_uploader_id = user_id
+        if final_uploader_id is None and uploader:
+            final_uploader_id = uploader.id
+        if final_uploader_id is None:
+            # Fallback for old tests: try to find an admin or user
+            from models import User
+            user = db_session.query(User).first()
+            if user:
+                final_uploader_id = user.id
+            else:
+                # Create a temp uploader if absolutely needed
+                from tests.helpers.factories import UserFactory
+                user = UserFactory.create_admin(db_session)
+                db_session.flush()
+                final_uploader_id = user.id
+
+        # Determine UUID
+        final_uuid = image_id if image_id else str(uuid.uuid4())
         
         image = DirectImageUpload(
-            uuid=str(uuid.uuid4()),
+            uuid=final_uuid,
             original_filename=filename,
             filename=filename,
             folder_rel=kwargs.get('folder_rel', 'files/test'),
             file_hash=kwargs.get('file_hash', uuid.uuid4().hex),
             content_hash=kwargs.get('content_hash'),
-            uploader_id=uploader.id,
+            uploader_id=final_uploader_id,
             hospital_id=hospital_id,
             lab_unit_id=lab_unit_id,
             camera_id=camera_id,

@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENT INSTRUCTIONS
 
 ## Project Overview
 
@@ -111,6 +111,7 @@ def admin_function():
 - Efficient queries (selectinload/joinedload, avoid N+1)
 - Bootstrap 5.3 for UI, flash toasts for feedback
 - Small, focused commits with descriptive messages
+- Do not duplicate code. Create reusable utilities and functions.  
 
 ## Key Files
 **Config**: `pyproject.toml`, `alembic.ini`, `gunicorn_config.py`, `deploy.*.env`
@@ -132,6 +133,27 @@ git push                     # PUSH (work NOT done until this succeeds)
 ## Beads Workflow
 **Create**: `bd create --title="..." --type=task|bug|feature --priority=2` (0=critical, 2=medium, 4=backlog)
 **Start work**: `bd ready` → `bd show <id>` → `bd update <id> --status=in_progress`
+**Update**: **CRITICAL** - Always update beads with implementation and verification details using `bd update <id> --description="..."`:
+  - **Implementation section**: What was built/changed (files, features, configs)
+  - **Verification section**: How it was tested (test results, commands run, validation)
+  - Use Markdown format with clear headings
+  - Include specific file paths, test counts, command outputs
+  - Example format:
+    ```markdown
+    ## Implementation
+    - Created X files: file1.py, file2.py
+    - Updated Y with Z features
+    - Config changes: ...
+    
+    ## Verification
+    - Tests: X/Y passed
+    - Manual verification: ...
+    - Commands run: ...
+
+    ## GIT Committed
+     - Date, Time:
+     - Commit ID: 
+    ```
 **Complete**: `bd close <id1> <id2> ...` → `bd sync`
 **Dependencies**: `bd dep add <issue> <depends-on>`
 **Rules**: Track multi-session/strategic work in beads. Use TodoWrite for single-session execution. Always add detailed descriptions (Markdown) and create corresponding GitHub issues with `gh issue create`.

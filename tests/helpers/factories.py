@@ -322,20 +322,57 @@ class CoreEntityFactory:
     
     @staticmethod
     def setup_core_entities(db_session):
-        """Setup standard core entities for testing"""
+        """Setup standard core entities for testing with multi-hospital support."""
         from models import Camera, Area
         
-        # Check if they already exist
-        hospital = db_session.query(Hospital).filter_by(id=1).first()
-        if not hospital:
-            hospital = CoreEntityFactory.create_hospital(db_session, 'RPC AIIMS', 1)
+        # Hospitals
+        hospital_a = db_session.query(Hospital).filter_by(id=1).first()
+        if not hospital_a:
+            hospital_a = CoreEntityFactory.create_hospital(db_session, 'RPC AIIMS', 1)
         
-        lab_unit = db_session.query(LabUnit).filter_by(id=1).first()
-        if not lab_unit:
-            lab_unit = CoreEntityFactory.create_lab_unit(
+        hospital_b = db_session.query(Hospital).filter_by(id=2).first()
+        if not hospital_b:
+            hospital_b = CoreEntityFactory.create_hospital(db_session, 'Hospital B', 2)
+        
+        # Hospital A Lab Units
+        lab_a1 = db_session.query(LabUnit).filter_by(id=1).first()
+        if not lab_a1:
+            lab_a1 = CoreEntityFactory.create_lab_unit(
                 db_session, 'Community Ophthalmology', 1, 1
             )
         
+        lab_a2 = db_session.query(LabUnit).filter_by(id=2).first()
+        if not lab_a2:
+            lab_a2 = CoreEntityFactory.create_lab_unit(
+                db_session, 'Retina Lab', 1, 2
+            )
+        
+        lab_a3 = db_session.query(LabUnit).filter_by(id=3).first()
+        if not lab_a3:
+            lab_a3 = CoreEntityFactory.create_lab_unit(
+                db_session, 'Glaucoma Lab', 1, 3
+            )
+        
+        # Hospital B Lab Units
+        lab_b1 = db_session.query(LabUnit).filter_by(id=4).first()
+        if not lab_b1:
+            lab_b1 = CoreEntityFactory.create_lab_unit(
+                db_session, 'Corena Lab', 2, 4
+            )
+        
+        lab_b2 = db_session.query(LabUnit).filter_by(id=5).first()
+        if not lab_b2:
+            lab_b2 = CoreEntityFactory.create_lab_unit(
+                db_session, 'Retina', 2, 5
+            )
+        
+        lab_b3 = db_session.query(LabUnit).filter_by(id=6).first()
+        if not lab_b3:
+            lab_b3 = CoreEntityFactory.create_lab_unit(
+                db_session, 'Glaucoma', 2, 6
+            )
+        
+        # Diseases
         glaucoma = db_session.query(Disease).filter_by(id=1).first()
         if not glaucoma:
             glaucoma = CoreEntityFactory.create_disease(db_session, 'Glaucoma', 1)
@@ -344,25 +381,112 @@ class CoreEntityFactory:
         if not dr:
             dr = CoreEntityFactory.create_disease(db_session, 'DR', 2)
         
-        # Add Camera
-        camera = db_session.query(Camera).filter_by(id=1).first()
-        if not camera:
-            camera = Camera(id=1, name='Remedio FOP')
-            db_session.add(camera)
+        amd = db_session.query(Disease).filter_by(id=3).first()
+        if not amd:
+            amd = CoreEntityFactory.create_disease(db_session, 'AMD', 3)
+        
+        # Cameras
+        camera_remedio = db_session.query(Camera).filter_by(id=1).first()
+        if not camera_remedio:
+            camera_remedio = Camera(id=1, name='Remedio FOP')
+            db_session.add(camera_remedio)
             db_session.flush()
         
-        # Add Area
-        area = db_session.query(Area).filter_by(id=1).first()
-        if not area:
-            area = Area(id=1, name='Retina Disc Focus')
-            db_session.add(area)
+        camera_topcon = db_session.query(Camera).filter_by(id=2).first()
+        if not camera_topcon:
+            camera_topcon = Camera(id=2, name='Topcon')
+            db_session.add(camera_topcon)
+            db_session.flush()
+        
+        # Areas
+        area_disc = db_session.query(Area).filter_by(id=1).first()
+        if not area_disc:
+            area_disc = Area(id=1, name='Retina Disc Focus')
+            db_session.add(area_disc)
+            db_session.flush()
+        
+        area_macula = db_session.query(Area).filter_by(id=2).first()
+        if not area_macula:
+            area_macula = Area(id=2, name='Macula')
+            db_session.add(area_macula)
             db_session.flush()
         
         return {
-            'hospital': hospital,
-            'lab_unit': lab_unit,
+            # Hospitals
+            'hospital_a': hospital_a,
+            'hospital_b': hospital_b,
+            # Hospital A Labs
+            'lab_a1': lab_a1,
+            'lab_a2': lab_a2,
+            'lab_a3': lab_a3,
+            # Hospital B Labs
+            'lab_b1': lab_b1,
+            'lab_b2': lab_b2,
+            'lab_b3': lab_b3,
+            # Diseases
             'glaucoma': glaucoma,
             'dr': dr,
-            'camera': camera,
-            'area': area,
+            'amd': amd,
+            # Cameras
+            'camera_remedio': camera_remedio,
+            'camera_topcon': camera_topcon,
+            # Areas
+            'area_disc': area_disc,
+            'area_macula': area_macula,
+            # Legacy keys (for backward compatibility)
+            'hospital': hospital_a,
+            'lab_unit': lab_a1,
+            'camera': camera_remedio,
+            'area': area_disc,
         }
+
+
+class ImageFactory:
+    """Factory to create DirectImageUpload instances for testing."""
+    
+    @staticmethod
+    def create_direct_upload(db_session, uploader, hospital_id, lab_unit_id, disease_id,
+                            camera_id=1, area_id=1, filename=None, **kwargs):
+        """
+        Create a DirectImageUpload with all required fields.
+        
+        Args:
+            db_session: Database session
+            uploader: User who uploaded the image
+            hospital_id: Hospital ID
+            lab_unit_id: Lab unit ID
+            disease_id: Disease ID
+            camera_id: Camera ID (default: 1)
+            area_id: Area ID (default: 1)
+            filename: Original filename (default: auto-generated)
+            **kwargs: Additional fields
+        
+        Returns:
+            DirectImageUpload instance
+        """
+        from models import DirectImageUpload
+        import uuid
+        
+        if filename is None:
+            filename = f'test_image_{uuid.uuid4().hex[:8]}.jpg'
+        
+        image = DirectImageUpload(
+            uuid=str(uuid.uuid4()),
+            original_filename=filename,
+            filename=filename,
+            folder_rel=kwargs.get('folder_rel', 'files/test'),
+            file_hash=kwargs.get('file_hash', uuid.uuid4().hex),
+            content_hash=kwargs.get('content_hash'),
+            uploader_id=uploader.id,
+            hospital_id=hospital_id,
+            lab_unit_id=lab_unit_id,
+            camera_id=camera_id,
+            disease_id=disease_id,
+            area_id=area_id,
+            is_mydriatic=kwargs.get('is_mydriatic', False),
+            is_pregraded=kwargs.get('is_pregraded', False),
+        )
+        
+        db_session.add(image)
+        db_session.flush()
+        return image

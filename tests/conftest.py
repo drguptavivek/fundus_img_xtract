@@ -559,3 +559,14 @@ from tests.fixtures.hospital_grading_pools import (
     cross_grader_a_to_b, cross_grader_b_to_a,
 )
 
+
+# Import role-based user fixtures
+from tests.fixtures.hospital_roles import (
+    hosp_a_file_uploader, hosp_a_optometrist, hosp_a_data_manager,
+    hosp_a_data_exporter, hosp_a_analyst, hosp_a_site_admin,
+    hosp_b_file_uploader, hosp_b_optometrist, hosp_b_data_manager,
+    hosp_b_data_exporter, hosp_b_analyst, hosp_b_site_admin,
+    analytics_viewer_global,
+    all_hospital_a_users, all_hospital_b_users,
+)
+

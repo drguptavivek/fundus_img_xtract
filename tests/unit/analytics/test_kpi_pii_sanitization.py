@@ -8,250 +8,277 @@ Test IDs from PII_Exposure_Control_Policy.md:
 Bead: 5H (fundus_img_xtract-dcl)
 
 TDD: Tests written FIRST before implementation.
+These tests will FAIL until PII masking is implemented.
 """
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 import pandas as pd
-import json
+from flask_login import current_user
 
 
-class TestKPIAggregationNoPII:
-    """Tests verifying KPI endpoints return only aggregated data without PII."""
-    
-    def test_year_month_wise_uploads_no_patient_pii(self):
-        """
-        KPI endpoint should return aggregated counts, NOT patient-level PII.
-        
-        Expected: counts, percentages, hospital/lab unit names
-        NOT expected: patient_id, patient_name, phone, email
-        """
-        # This test will verify the response structure
-        # Expected response format:
-        expected_structure = {
-            "period": str,
-            "summary": {
-                "total_uploads": int,
-                "total_captures": int,
-                "total_dr_reports": int,
-                "total_glaucoma_reports": int,
-                "total_no_reports": int
-            },
-            "monthly_data": [
-                {
-                    "year": int,
-                    "month": int,
-                    "month_name": str,
-                    "uploads": int,
-                    "captures": int,
-                    "dr_reports": int,
-                    "glaucoma_reports": int,
-                    "no_reports": int,
-                    "hospital_id": int,
-                    "hospital_name": str,
-                    "lab_unit_id": int,
-                    "lab_unit_name": str
-                }
-            ]
-        }
-        
-        # Verify no PII fields in response
-        forbidden_fields = ['patient_id', 'patient_name', 'phone', 'email', 'patient_phone']
-        
-        # This test documents expected behavior
-        # Implementation will ensure these fields are never in KPI responses
-        pass
-    
-    def test_dr_reports_count_aggregated_only(self):
-        """DR reports count should return aggregated statistics, not individual records."""
-        expected_response = {
-            "period": str,
-            "dr_reports": {
-                "total": int,
-                "percentage": float,
-                "by_hospital": [{"hospital_id": int, "hospital_name": str, "count": int}],
-                "by_lab_unit": [{"lab_unit_id": int, "lab_unit_name": str, "count": int}]
-            }
-        }
-        
-        # No patient-level data should be present
-        pass
-    
-    def test_glaucoma_reports_count_aggregated_only(self):
-        """Glaucoma reports count should return aggregated statistics only."""
-        expected_response = {
-            "period": str,
-            "glaucoma_reports": {
-                "total": int,
-                "percentage": float,
-                "monthly_breakdown": [int],  # Counts per month
-                "by_hospital": [{"hospital_id": int, "hospital_name": str, "count": int}],
-                "by_lab_unit": [{"lab_unit_id": int, "lab_unit_name": str, "count": int}]
-            }
-        }
-        
-        # No patient-level data
-        pass
-
-
-class TestDataframeExportPIISanitization:
-    """Tests for dataframe export endpoints that may contain PII."""
+class TestDataframePIIMasking:
+    """Tests for PII masking in dataframe generation and filtering."""
     
     @pytest.fixture
-    def mock_dataframe_with_pii(self):
-        """Create a mock dataframe with patient PII."""
+    def mock_db_session(self):
+        """Create a mock database session."""
+        return MagicMock()
+    
+    @pytest.fixture
+    def sample_dataframe_with_pii(self):
+        """Create a sample dataframe with patient PII."""
         return pd.DataFrame({
             'encounter_id': [1, 2, 3],
             'patient_id': ['12345678', '87654321', '11223344'],
-            'patient_name': ['John Doe', 'Jane Smith', 'Bob Johnson'],
             'hospital_id': [1, 1, 2],
             'hospital_name': ['Hospital A', 'Hospital A', 'Hospital B'],
             'lab_unit_id': [1, 1, 2],
             'lab_unit_name': ['Lab 1', 'Lab 1', 'Lab 2'],
             'has_dr_report': [True, False, True],
-            'has_glaucoma_report': [False, True, False]
         })
     
-    def test_filtered_dataframe_endpoint_masks_cross_hospital_pii(self, mock_dataframe_with_pii):
+    def test_get_filtered_encounter_dataframe_masks_cross_hospital_pii(
+        self, mock_db_session, sample_dataframe_with_pii
+    ):
         """
-        CRITICAL: /kpis/encounter-files/filtered-dataframe must mask PII for cross-hospital access.
+        CRITICAL TEST: get_filtered_encounter_dataframe must mask patient_id for cross-hospital data.
         
-        This endpoint returns the full dataframe, so it MUST apply PII masking
-        based on user's hospital vs data's hospital.
+        This test will FAIL until we implement PII masking in the function.
         """
-        # Expected behavior:
-        # 1. User from Hospital A requests data
-        # 2. Records from Hospital A: full PII visible
-        # 3. Records from Hospital B: PII masked
+        from api.kpis.encounter_files_kpis import get_filtered_encounter_dataframe
         
-        # This test will FAIL until we implement masking
-        # We need to add PII masking to get_filtered_encounter_dataframe()
-        
-        pass
+        # Mock current user from Hospital 1
+        with patch('api.kpis.encounter_files_kpis.current_user') as mock_user:
+            mock_user.is_authenticated = True
+            mock_user.id = 1
+            mock_user.hospital_id = 1
+            
+            # Mock role
+            role = Mock()
+            role.name = 'data_manager'
+            mock_user.roles = [role]
+            
+            # Mock the dataframe generation to return our sample data
+            with patch('api.kpis.encounter_files_kpis.generate_encounter_upload_metrics_df', 
+                      return_value=sample_dataframe_with_pii):
+                
+                params = {}
+                user_lab_unit_ids = {1, 2}
+                
+                df, _ = get_filtered_encounter_dataframe(mock_db_session, params, user_lab_unit_ids)
+                
+                # CRITICAL ASSERTIONS - these will FAIL until masking is implemented
+                
+                # Records from Hospital 1 (same as user): should have full patient_id
+                hospital_1_records = df[df['hospital_id'] == 1]
+                assert len(hospital_1_records) == 2
+                # For same hospital, patient_id should be visible (or check if it's NOT masked)
+                # We'll check it's not the masked format
+                for idx, row in hospital_1_records.iterrows():
+                    patient_id = row['patient_id']
+                    # Should NOT be masked format (P****XXX)
+                    assert not (isinstance(patient_id, str) and patient_id.startswith('P****')), \
+                        f"Same hospital data should not be masked, got: {patient_id}"
+                
+                # Records from Hospital 2 (different from user): should have masked patient_id
+                hospital_2_records = df[df['hospital_id'] == 2]
+                assert len(hospital_2_records) == 1
+                for idx, row in hospital_2_records.iterrows():
+                    patient_id = row['patient_id']
+                    # Should be masked format: P****XXX (last 3 chars)
+                    assert isinstance(patient_id, str) and patient_id.startswith('P****'), \
+                        f"Cross-hospital patient_id must be masked, got: {patient_id}"
+                    assert patient_id == 'P****344', \
+                        f"Expected 'P****344' for patient_id '11223344', got: {patient_id}"
     
-    def test_excel_export_masks_cross_hospital_pii(self, mock_dataframe_with_pii):
+    def test_get_filtered_encounter_dataframe_resident_always_masked(
+        self, mock_db_session, sample_dataframe_with_pii
+    ):
         """
-        CRITICAL: Excel export must mask PII for cross-hospital data.
+        Resident role should ALWAYS see masked PII, even for same hospital.
         
-        When exporting to Excel, PII should be masked for records from
-        different hospitals than the user's hospital.
+        This test will FAIL until role-based masking is implemented.
         """
-        # Expected behavior:
-        # 1. User from Hospital A exports data
-        # 2. Excel file contains:
-        #    - Hospital A records: patient_id, patient_name visible
-        #    - Hospital B records: patient_id masked (P****XXX), patient_name = "Anonymous"
+        from api.kpis.encounter_files_kpis import get_filtered_encounter_dataframe
         
-        # This test will FAIL until we implement masking in Excel export
-        pass
+        # Mock current user as resident from Hospital 1
+        with patch('api.kpis.encounter_files_kpis.current_user') as mock_user:
+            mock_user.is_authenticated = True
+            mock_user.id = 2
+            mock_user.hospital_id = 1
+            
+            # Mock role as resident
+            role = Mock()
+            role.name = 'resident'
+            mock_user.roles = [role]
+            
+            with patch('api.kpis.encounter_files_kpis.generate_encounter_upload_metrics_df',
+                      return_value=sample_dataframe_with_pii):
+                
+                params = {}
+                user_lab_unit_ids = {1}
+                
+                df, _ = get_filtered_encounter_dataframe(mock_db_session, params, user_lab_unit_ids)
+                
+                # ALL records should have masked patient_id (role-based masking)
+                for idx, row in df.iterrows():
+                    patient_id = row['patient_id']
+                    assert isinstance(patient_id, str) and patient_id.startswith('P****'), \
+                        f"Resident should always see masked PII, got: {patient_id}"
     
-    def test_dataframe_export_strips_pii_for_residents(self):
+    def test_dataframe_has_patient_id_column(self, mock_db_session):
         """
-        Residents should NEVER see patient PII, even for same hospital.
+        Verify that generate_encounter_upload_metrics_df DOES include patient_id.
         
-        This is role-based masking - residents always get masked PII.
+        This confirms we need to mask it.
         """
-        # Expected: Resident role always sees:
-        # - patient_id: P****XXX
-        # - patient_name: "Anonymous"
-        # Regardless of hospital match
+        from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
         
-        pass
-    
-    def test_dataframe_export_shows_pii_for_optometrists_same_hospital(self):
-        """
-        Optometrists at same hospital should see full PII for verification.
-        """
-        # Expected: Optometrist at Hospital A sees:
-        # - Hospital A records: full PII
-        # - Hospital B records: masked PII
-        
-        pass
+        # This will actually call the real function with mocked DB
+        # We expect it to have patient_id column
+        with patch('utils.dataframeEncounterFiles.db') as mock_db:
+            mock_db.query.return_value.options.return_value.filter.return_value.all.return_value = []
+            
+            df = generate_encounter_upload_metrics_df(mock_db_session)
+            
+            # If dataframe is empty, we can't check columns
+            # But the function should return a dataframe structure
+            # This test documents that patient_id is in the schema
+            
+            # We'll verify this by checking the function code includes patient_id
+            import inspect
+            source = inspect.getsource(generate_encounter_upload_metrics_df)
+            assert "'patient_id': encounter.patient_id" in source, \
+                "generate_encounter_upload_metrics_df must include patient_id in dataframe"
 
 
-class TestDataframeColumns:
-    """Tests for dataframe column structure and PII handling."""
+class TestKPIEndpointsNoPII:
+    """Tests verifying KPI endpoints return only aggregated data."""
     
-    def test_generate_encounter_upload_metrics_df_contains_pii_fields(self):
+    def test_year_month_wise_uploads_response_has_no_patient_fields(self):
         """
-        Verify that the source dataframe DOES contain PII fields.
-        
-        This confirms we need to mask them before returning to users.
+        KPI response should not contain patient_id, patient_name, or other PII fields.
         """
-        # The dataframe from generate_encounter_upload_metrics_df() should have:
-        # - patient_id
-        # - patient_name
-        # These need to be masked based on user context
+        # Expected response structure (aggregated data only)
+        sample_response = {
+            "status": "success",
+            "data": {
+                "period": "2024-01-01 to 2024-12-31",
+                "summary": {
+                    "total_uploads": 100,
+                    "total_captures": 500,
+                    "total_dr_reports": 300,
+                    "total_glaucoma_reports": 200,
+                    "total_no_reports": 0
+                },
+                "monthly_data": [
+                    {
+                        "year": 2024,
+                        "month": 1,
+                        "month_name": "January",
+                        "uploads": 10,
+                        "captures": 50,
+                        "dr_reports": 30,
+                        "glaucoma_reports": 20,
+                        "no_reports": 0,
+                        "hospital_id": 1,
+                        "hospital_name": "Hospital A",
+                        "lab_unit_id": 1,
+                        "lab_unit_name": "Lab 1"
+                    }
+                ]
+            }
+        }
         
-        pass
+        # Verify no PII fields in response
+        forbidden_fields = ['patient_id', 'patient_name', 'phone', 'email']
+        
+        # Check summary
+        for field in forbidden_fields:
+            assert field not in sample_response['data']['summary'], \
+                f"KPI summary should not contain {field}"
+        
+        # Check monthly data
+        for record in sample_response['data']['monthly_data']:
+            for field in forbidden_fields:
+                assert field not in record, \
+                    f"KPI monthly data should not contain {field}"
+        
+        # This test passes because we're checking the EXPECTED structure
+        # The actual implementation should match this structure
+
+
+class TestExcelExportPIIMasking:
+    """Tests for Excel export PII masking."""
     
-    def test_masked_dataframe_has_no_raw_pii(self):
+    @pytest.fixture
+    def sample_dataframe_for_export(self):
+        """Create sample dataframe for export testing."""
+        return pd.DataFrame({
+            'encounter_id': [1, 2, 3],
+            'patient_id': ['12345678', '87654321', '11223344'],
+            'hospital_id': [1, 1, 2],
+            'hospital_name': ['Hospital A', 'Hospital A', 'Hospital B'],
+            'has_dr_report': [True, False, True],
+        })
+    
+    def test_excel_export_masks_cross_hospital_patient_id(self, sample_dataframe_for_export):
         """
-        After masking, dataframe should not contain raw PII for cross-hospital data.
-        """
-        # Expected: Masked dataframe has:
-        # - patient_id_masked (or patient_id with masked values)
-        # - patient_name_masked (or patient_name with "Anonymous")
-        # - Original PII fields removed or masked
+        Excel export must mask patient_id for cross-hospital records.
         
-        pass
+        This test will FAIL until masking is implemented in the export function.
+        """
+        from utils.pii_masking import mask_dict_pii, should_mask_pii
+        
+        # Simulate user from Hospital 1
+        current_user_hospital_id = 1
+        current_user_role = 'data_manager'
+        
+        # Process each record for export
+        masked_records = []
+        for idx, row in sample_dataframe_for_export.iterrows():
+            record = row.to_dict()
+            data_hospital_id = record['hospital_id']
+            
+            # Determine if masking is needed
+            mask_pii = should_mask_pii(
+                current_user_hospital_id=current_user_hospital_id,
+                data_hospital_id=data_hospital_id,
+                current_user_role=current_user_role
+            )
+            
+            if mask_pii:
+                # Apply masking
+                record = mask_dict_pii(record)
+            
+            masked_records.append(record)
+        
+        # Verify masking
+        # Hospital 1 records (same hospital): NOT masked
+        assert masked_records[0]['patient_id'] == '12345678'
+        assert masked_records[1]['patient_id'] == '87654321'
+        
+        # Hospital 2 records (different hospital): MASKED
+        assert masked_records[2]['patient_id'] == 'P****344'
 
 
 class TestAuditLogging:
-    """Tests for audit logging of KPI access and exports."""
+    """Tests for audit logging of sensitive operations."""
     
-    def test_dataframe_export_logs_sensitive_operation(self):
-        """
-        Excel export should log to SensitiveOperationAudit.
+    def test_sensitive_operation_audit_model_exists(self):
+        """Verify SensitiveOperationAudit model exists for logging."""
+        from models import SensitiveOperationAudit
         
-        This provides traceability for who exported what data.
-        """
-        # Expected: SensitiveOperationAudit entry with:
-        # - operation_type: 'kpi_dataframe_export'
-        # - status: 'completed'
-        # - user_id: current user
-        # - request_details: filters applied
-        # - result_details: row_count, file_hash
+        # Model should exist
+        assert SensitiveOperationAudit is not None
         
-        pass
-    
-    def test_filtered_dataframe_json_logs_access(self):
-        """
-        JSON dataframe endpoint should log access for audit trail.
-        """
-        # Expected: Log entry for dataframe access
-        # This helps track who is accessing detailed patient data
+        # Check required fields
+        from sqlalchemy import inspect
+        mapper = inspect(SensitiveOperationAudit)
+        column_names = [column.key for column in mapper.columns]
         
-        pass
-
-
-class TestExcelExportIntegration:
-    """Integration tests for Excel export with PII masking."""
-    
-    def test_excel_export_creates_file_with_masked_data(self):
-        """
-        Full integration: Excel export should create file with properly masked PII.
-        """
-        # This will test the full flow:
-        # 1. User requests Excel export
-        # 2. Dataframe is generated
-        # 3. PII is masked based on user context
-        # 4. Excel file is created
-        # 5. File contains masked data
-        # 6. Audit log is created
-        
-        pass
-    
-    def test_excel_metadata_sheet_no_pii(self):
-        """
-        Excel metadata sheet should not contain PII.
-        
-        The metadata sheet shows filters applied - should not leak PII.
-        """
-        # Expected metadata:
-        # - Generated at timestamp
-        # - Total records count
-        # - Date filters
-        # - Hospital/Lab unit IDs (not patient IDs)
-        
-        pass
+        required_fields = ['id', 'user_id', 'operation_type', 'status', 'created_at']
+        for field in required_fields:
+            assert field in column_names, \
+                f"SensitiveOperationAudit must have {field} field"

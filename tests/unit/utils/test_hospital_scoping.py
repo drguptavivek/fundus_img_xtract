@@ -152,24 +152,41 @@ class TestApplyScopingHospitalBound:
     """Test apply_scoping() for hospital-bound operations."""
     
     def test_apply_scoping_filters_by_hospital_for_upload(
-        self, db_session, ophthalmologist_hospital_a
+        self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Upload operation should filter by hospital."""
         # Create test images in both hospitals
-        from models import DirectImageUpload
+        from models import DirectImageUpload, User
         import uuid
+        
+        # Get uploader from Hospital A
+        uploader = ophthalmologist_hospital_a
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_a.jpg',
+            filename='test_a.jpg',
+            folder_rel='files/test',
+            file_hash='abc123',
+            uploader_id=uploader.id,
             hospital_id=1,
             lab_unit_id=1,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         img_b = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_b.jpg',
+            filename='test_b.jpg',
+            folder_rel='files/test',
+            file_hash='def456',
+            uploader_id=uploader.id,
             hospital_id=2,
             lab_unit_id=4,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         db_session.add_all([img_a, img_b])
         db_session.flush()
@@ -186,7 +203,7 @@ class TestApplyScopingHospitalBound:
         assert 2 not in hospital_ids
     
     def test_master_admin_sees_all_hospitals_for_upload(
-        self, db_session, master_admin
+        self, db_session, master_admin, core_test_data
     ):
         """Master admin should see all hospitals even for hospital-bound operations."""
         from models import DirectImageUpload
@@ -194,15 +211,29 @@ class TestApplyScopingHospitalBound:
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_a.jpg',
+            filename='test_a.jpg',
+            folder_rel='files/test',
+            file_hash='abc123',
+            uploader_id=master_admin.id,
             hospital_id=1,
             lab_unit_id=1,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         img_b = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_b.jpg',
+            filename='test_b.jpg',
+            folder_rel='files/test',
+            file_hash='def456',
+            uploader_id=master_admin.id,
             hospital_id=2,
             lab_unit_id=4,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         db_session.add_all([img_a, img_b])
         db_session.flush()
@@ -223,7 +254,7 @@ class TestApplyScopingCrossHospital:
     """Test apply_scoping() for cross-hospital operations."""
     
     def test_grading_operation_does_not_filter_by_hospital(
-        self, db_session, ophthalmologist_hospital_a
+        self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Grading operations should NOT filter by hospital (cross-hospital)."""
         from models import DirectImageUpload
@@ -231,15 +262,29 @@ class TestApplyScopingCrossHospital:
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_a.jpg',
+            filename='test_a.jpg',
+            folder_rel='files/test',
+            file_hash='abc123',
+            uploader_id=ophthalmologist_hospital_a.id,
             hospital_id=1,
             lab_unit_id=1,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         img_b = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_b.jpg',
+            filename='test_b.jpg',
+            folder_rel='files/test',
+            file_hash='def456',
+            uploader_id=ophthalmologist_hospital_a.id,
             hospital_id=2,
             lab_unit_id=4,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         db_session.add_all([img_a, img_b])
         db_session.flush()
@@ -256,7 +301,7 @@ class TestApplyScopingCrossHospital:
         assert 2 in hospital_ids
     
     def test_dataset_creation_is_cross_hospital(
-        self, db_session, dataset_creator
+        self, db_session, dataset_creator, core_test_data
     ):
         """Dataset creation should be cross-hospital."""
         from models import DirectImageUpload
@@ -264,15 +309,29 @@ class TestApplyScopingCrossHospital:
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_a.jpg',
+            filename='test_a.jpg',
+            folder_rel='files/test',
+            file_hash='abc123',
+            uploader_id=dataset_creator.id,
             hospital_id=1,
             lab_unit_id=1,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         img_b = DirectImageUpload(
             uuid=str(uuid.uuid4()),
+            original_filename='test_b.jpg',
+            filename='test_b.jpg',
+            folder_rel='files/test',
+            file_hash='def456',
+            uploader_id=dataset_creator.id,
             hospital_id=2,
             lab_unit_id=4,
-            disease_id=1
+            camera_id=core_test_data['camera'].id,
+            disease_id=core_test_data['glaucoma'].id,
+            area_id=core_test_data['area'].id
         )
         db_session.add_all([img_a, img_b])
         db_session.flush()

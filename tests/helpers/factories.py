@@ -149,6 +149,8 @@ class CoreEntityFactory:
     @staticmethod
     def setup_core_entities(db_session):
         """Setup standard core entities for testing"""
+        from models import Camera, Area
+        
         # Check if they already exist
         hospital = db_session.query(Hospital).filter_by(id=1).first()
         if not hospital:
@@ -168,9 +170,25 @@ class CoreEntityFactory:
         if not dr:
             dr = CoreEntityFactory.create_disease(db_session, 'DR', 2)
         
+        # Add Camera
+        camera = db_session.query(Camera).filter_by(id=1).first()
+        if not camera:
+            camera = Camera(id=1, name='Remedio FOP')
+            db_session.add(camera)
+            db_session.flush()
+        
+        # Add Area
+        area = db_session.query(Area).filter_by(id=1).first()
+        if not area:
+            area = Area(id=1, name='Retina Disc Focus')
+            db_session.add(area)
+            db_session.flush()
+        
         return {
             'hospital': hospital,
             'lab_unit': lab_unit,
             'glaucoma': glaucoma,
-            'dr': dr
+            'dr': dr,
+            'camera': camera,
+            'area': area,
         }

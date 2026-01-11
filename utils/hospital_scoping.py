@@ -166,6 +166,12 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
     if user.is_master_admin:
         return query
     
+        return query
+    
+    # Dataset Creator: cross-hospital access for creation, research, training
+    if user.has_role('dataset_creator') and operation in {'dataset_creation', 'research', 'training'}:
+        return query
+
     # Cross-hospital operations (NO hospital filter)
     if is_cross_hospital_operation(operation):
         # Grading uses Slot-LabUnit scoping (via UserDiseaseUnitRole)

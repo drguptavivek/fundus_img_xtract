@@ -8,6 +8,7 @@ from flask import current_app, render_template, request, flash, redirect, url_fo
 from auth.roles import roles_required
 from utils.env_loader import get_env
 from utils.log_sanitize import sanitize_log_value
+from utils.sensitive_operations import requires_reauth, log_export_initiated, log_export_completed, log_export_failed
 from db_transaction_manager import get_db_session
 from sqlalchemy import text
 import pandas as pd
@@ -16,10 +17,14 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
+@requires_reauth("database_excel_export")
 @roles_required("admin")
 def database_excel_export():
     """Handle database Excel export functionality."""
     if request.method == "POST":
+        # Log export initiation
+        log_export_initiated("database_excel_export", {'tables': request.form.getlist("tables")})
+        
         try:
             # Get selected tables from form
             selected_tables = request.form.getlist("tables")
@@ -64,6 +69,18 @@ def database_excel_export():
             # Reset buffer position
             zip_buffer.seek(0)
             
+            # Calculate total row count from all tables
+            total_rows = len(selected_tables)  # Approximate - one per table
+            
+            # Save to temp file for hash calculation
+            import tempfile
+            temp_file = Path(tempfile.gettempdir()) / zip_filename
+            with open(temp_file, 'wb') as f:
+                f.write(zip_buffer.getvalue())
+            
+            # Log successful export
+            log_export_completed("database_excel_export", str(temp_file), total_rows)
+            
             # Log the export operation
             current_app.logger.info(
                 "Database Excel export created: %s with %s tables",
@@ -71,13 +88,24 @@ def database_excel_export():
                 sanitize_log_value(len(selected_tables)),
             )
             
+            # Reset buffer for sending
+            zip_buffer.seek(0)
+            
             # Send ZIP file to user
-            return send_file(
+            response = send_file(
                 zip_buffer,
                 as_attachment=True,
                 download_name=zip_filename,
                 mimetype='application/zip'
             )
+            
+            # Clean up temp file
+            try:
+                temp_file.unlink()
+            except Exception:
+                pass
+            
+            return response
             
         except Exception as e:
             current_app.logger.error(
@@ -85,6 +113,7 @@ def database_excel_export():
                 sanitize_log_value(e),
             )
             flash(f"Error creating database Excel export: {str(e)}", "danger")
+            log_export_failed("database_excel_export", str(e))
     
     # GET request - show the export page
     return render_template("admin/database_excel_export.html")

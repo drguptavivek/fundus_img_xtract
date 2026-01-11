@@ -10,13 +10,18 @@ from flask import current_app, render_template, request, flash, redirect, url_fo
 from auth.roles import roles_required
 from utils.env_loader import get_env
 from utils.log_sanitize import sanitize_log_value
+from utils.sensitive_operations import requires_reauth, log_export_initiated, log_export_completed, log_export_failed
 from db_transaction_manager import get_db_session
 
 
+@requires_reauth("database_dump")
 @roles_required("admin")
 def database_dump():
     """Handle database dump functionality."""
     if request.method == "POST":
+        # Log export initiation
+        audit_id = log_export_initiated("database_dump")
+        
         try:
             # Import DATABASE_URL from models to ensure it's properly loaded
             from models import DATABASE_URL
@@ -55,6 +60,12 @@ def database_dump():
                     with gzip.open(temp_file, 'wt', encoding='utf-8') as f:
                         f.write(dump_content)
                     
+                    # Calculate row count (approximate from dump content)
+                    row_count = dump_content.count('INSERT INTO') + dump_content.count('COPY ')
+                    
+                    # Log successful export
+                    log_export_completed("database_dump", str(temp_file), row_count)
+                    
                     # Log the dump operation
                     current_app.logger.info(
                         "Database dump created: %s",
@@ -87,13 +98,20 @@ def database_dump():
                         # Check pg_dump version
                         version_result = subprocess.run(['pg_dump', '--version'], capture_output=True, text=True)
                         if "pg_dump (PostgreSQL)" in version_result.stdout:
-                            flash("Database dump failed due to pg_dump version mismatch. Please ensure pg_dump version matches PostgreSQL server version.", "danger")
+                            error_msg = "Database dump failed due to pg_dump version mismatch"
+                            flash(f"{error_msg}. Please ensure pg_dump version matches PostgreSQL server version.", "danger")
                         else:
-                            flash("Failed to create database dump. Please check pg_dump installation.", "danger")
-                    except Exception:
-                        flash("Failed to create database dump. Please check database configuration.", "danger")
+                            error_msg = "Failed to create database dump. Please check pg_dump installation"
+                            flash(f"{error_msg}.", "danger")
+                        log_export_failed("database_dump", error_msg)
+                    except Exception as e:
+                        error_msg = "Failed to create database dump. Please check database configuration"
+                        flash(f"{error_msg}.", "danger")
+                        log_export_failed("database_dump", error_msg)
                 else:
-                    flash("Failed to create database dump.", "danger")
+                    error_msg = "Failed to create database dump"
+                    flash(f"{error_msg}.", "danger")
+                    log_export_failed("database_dump", error_msg)
                 
         except Exception as e:
             current_app.logger.error(
@@ -101,6 +119,7 @@ def database_dump():
                 sanitize_log_value(e),
             )
             flash(f"Error creating database dump: {str(e)}", "danger")
+            log_export_failed("database_dump", str(e))
     
     # GET request - show the dump page
     return render_template("admin/database_dump.html")

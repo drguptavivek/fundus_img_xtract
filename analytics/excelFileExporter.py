@@ -13,16 +13,22 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
-def export_encounter_summary_to_xlsx(encounter_data: Dict[str, Any]) -> bytes:
+def export_encounter_summary_to_xlsx(encounter_data: Dict[str, Any], mask_pii: bool = False) -> bytes:
     """
     Export encounter summary data to an XLSX file.
     
     Args:
         encounter_data: Dictionary containing encounter summary data
+        mask_pii: If True, mask patient PII (patient_id). Default False for backward compatibility.
         
     Returns:
         bytes: XLSX file content as bytes
+        
+    Note:
+        When mask_pii=True, patient_id is masked (P****XXX format).
+        Reference: docs/PII_Exposure_Control_Policy.md Section 5.3
     """
+    from utils.pii_masking import mask_patient_id
     wb = Workbook()
     ws = wb.active
     ws.title = f"Encounter {encounter_data.get('encounter_id', 'Unknown')}"
@@ -44,9 +50,15 @@ def export_encounter_summary_to_xlsx(encounter_data: Dict[str, Any]) -> bytes:
     ws.merge_cells('A1:F1')
     
     row = 3
+    
+    # Get patient_id and apply masking if needed
+    patient_id = encounter_data.get('encounter_patient_id')
+    if mask_pii and patient_id:
+        patient_id = mask_patient_id(patient_id)
+    
     encounter_info = [
         ('Encounter ID', encounter_data.get('encounter_id')),
-        ('Patient ID', encounter_data.get('encounter_patient_id')),
+        ('Patient ID', patient_id),
         ('Capture Date', encounter_data.get('encounter_capture_date')),
         ('Lab Unit', encounter_data.get('lab_unit_name')),
         ('Hospital', encounter_data.get('hospital_name')),
@@ -501,16 +513,22 @@ def export_image_tasks_to_xlsx(image_uuid: str, image_tasks_data: Dict[str, Any]
     return buffer.getvalue()
 
 
-def export_encounters_summary_list_to_xlsx(encounters_data: List[Dict[str, Any]]) -> bytes:
+def export_encounters_summary_list_to_xlsx(encounters_data: List[Dict[str, Any]], mask_pii: bool = False) -> bytes:
     """
     Export encounters summary list to an XLSX file.
     
     Args:
         encounters_data: List of dictionaries containing encounter summary data
+        mask_pii: If True, mask patient PII (patient_id). Default False for backward compatibility.
         
     Returns:
         bytes: XLSX file content as bytes
+        
+    Note:
+        When mask_pii=True, patient_id is masked (P****XXX format).
+        Reference: docs/PII_Exposure_Control_Policy.md Section 5.3
     """
+    from utils.pii_masking import mask_patient_id
     wb = Workbook()
     ws = wb.active
     ws.title = "Encounters Summary"
@@ -545,9 +563,14 @@ def export_encounters_summary_list_to_xlsx(encounters_data: List[Dict[str, Any]]
     
     # Add encounters data
     for encounter in encounters_data:
+        # Get patient_id and apply masking if needed
+        patient_id = encounter.get('patient_id')
+        if mask_pii and patient_id:
+            patient_id = mask_patient_id(patient_id)
+        
         ws.cell(row=row, column=1, value=encounter.get('id'))
         ws.cell(row=row, column=2, value=encounter.get('name'))
-        ws.cell(row=row, column=3, value=encounter.get('patient_id'))
+        ws.cell(row=row, column=3, value=patient_id)
         ws.cell(row=row, column=4, value=encounter.get('capture_date'))
         ws.cell(row=row, column=5, value=encounter.get('image_count', 0))
         ws.cell(row=row, column=6, value=encounter.get('task_count', 0))
@@ -583,16 +606,30 @@ def export_encounters_summary_list_to_xlsx(encounters_data: List[Dict[str, Any]]
     return buffer.getvalue()
 
 
-def export_encounter_files_to_xlsx(df) -> bytes:
+def export_encounter_files_to_xlsx(df, mask_pii: bool = False) -> bytes:
     """
     Export encounter files dataframe to an XLSX file.
     
     Args:
         df: pandas DataFrame containing encounter files data
+        mask_pii: If True, mask patient PII (patient_id column). Default False for backward compatibility.
         
     Returns:
         bytes: XLSX file content as bytes
+        
+    Note:
+        When mask_pii=True, patient_id column values are masked (P****XXX format).
+        Reference: docs/PII_Exposure_Control_Policy.md Section 5.3
     """
+    from utils.pii_masking import mask_patient_id
+    import pandas as pd
+    
+    # Create a copy to avoid modifying the original dataframe
+    df = df.copy()
+    
+    # Apply PII masking if needed
+    if mask_pii and 'patient_id' in df.columns:
+        df['patient_id'] = df['patient_id'].apply(lambda x: mask_patient_id(x) if x else x)
     wb = Workbook()
     ws = wb.active
     ws.title = "Encounter Files"

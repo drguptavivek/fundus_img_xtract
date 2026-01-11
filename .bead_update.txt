@@ -1,0 +1,32 @@
+## Implementation
+
+**Test User Fixtures Added (8 fixtures in tests/conftest.py):**
+
+1. core_test_data (session-scoped): Creates hospitals, lab units, diseases, roles once per session
+2. admin_user: Admin user fixture  
+3. ophthalmologist_user: Ophthalmologist with lab unit assignment
+4. resident_user: Resident with grading permissions (can_grade_resident=True)
+5. arbitrator_user: Ophthalmologist with arbitration permissions (can_arbitrate=True)
+6. test_users: Dict with all user types
+7. authenticated_client: HTTP client pre-authenticated as admin
+8. Session merging: db_session.merge() pattern for cross-session objects
+
+**Files:**
+- tests/conftest.py (+136 lines)
+- tests/unit/test_user_fixtures.py (NEW, 97 lines)
+
+## Verification
+
+**Tests:** 7/7 passed in 10.55s ✅
+
+1. core_test_data creates hospitals, labs, diseases
+2. admin_user has admin role  
+3. ophthalmologist_user has role + lab units
+4. resident_user has grading permissions
+5. arbitrator_user has arbitration permissions
+6. test_users dict contains all types
+7. authenticated_client has user_id in session
+
+**Session Merging Fix:** 2 errors → fix → all passing
+
+Baseline test data infrastructure established!

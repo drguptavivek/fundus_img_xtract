@@ -48,49 +48,45 @@ class TestDataframePIIMasking:
         """
         from api.kpis.encounter_files_kpis import get_filtered_encounter_dataframe
         
-        # Mock current user from Hospital 1
-        with patch('api.kpis.encounter_files_kpis.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 1
-            mock_user.hospital_id = 1
+        # Mock the dataframe generation to return our sample data
+        with patch('api.kpis.encounter_files_kpis.generate_encounter_upload_metrics_df', 
+                  return_value=sample_dataframe_with_pii):
             
-            # Mock role
-            role = Mock()
-            role.name = 'data_manager'
-            mock_user.roles = [role]
+            params = {}
+            user_lab_unit_ids = {1, 2}
             
-            # Mock the dataframe generation to return our sample data
-            with patch('api.kpis.encounter_files_kpis.generate_encounter_upload_metrics_df', 
-                      return_value=sample_dataframe_with_pii):
-                
-                params = {}
-                user_lab_unit_ids = {1, 2}
-                
-                df, _ = get_filtered_encounter_dataframe(mock_db_session, params, user_lab_unit_ids)
-                
-                # CRITICAL ASSERTIONS - these will FAIL until masking is implemented
-                
-                # Records from Hospital 1 (same as user): should have full patient_id
-                hospital_1_records = df[df['hospital_id'] == 1]
-                assert len(hospital_1_records) == 2
-                # For same hospital, patient_id should be visible (or check if it's NOT masked)
-                # We'll check it's not the masked format
-                for idx, row in hospital_1_records.iterrows():
-                    patient_id = row['patient_id']
-                    # Should NOT be masked format (P****XXX)
-                    assert not (isinstance(patient_id, str) and patient_id.startswith('P****')), \
-                        f"Same hospital data should not be masked, got: {patient_id}"
-                
-                # Records from Hospital 2 (different from user): should have masked patient_id
-                hospital_2_records = df[df['hospital_id'] == 2]
-                assert len(hospital_2_records) == 1
-                for idx, row in hospital_2_records.iterrows():
-                    patient_id = row['patient_id']
-                    # Should be masked format: P****XXX (last 3 chars)
-                    assert isinstance(patient_id, str) and patient_id.startswith('P****'), \
-                        f"Cross-hospital patient_id must be masked, got: {patient_id}"
-                    assert patient_id == 'P****344', \
-                        f"Expected 'P****344' for patient_id '11223344', got: {patient_id}"
+            # User from Hospital 1, data_manager role
+            df, _ = get_filtered_encounter_dataframe(
+                mock_db_session, 
+                params, 
+                user_lab_unit_ids,
+                current_user_hospital_id=1,
+                current_user_role='data_manager'
+            )
+            
+            # CRITICAL ASSERTIONS - these will FAIL until masking is implemented
+            
+            # Records from Hospital 1 (same as user): should have full patient_id
+            hospital_1_records = df[df['hospital_id'] == 1]
+            assert len(hospital_1_records) == 2
+            # For same hospital, patient_id should be visible (or check if it's NOT masked)
+            # We'll check it's not the masked format
+            for idx, row in hospital_1_records.iterrows():
+                patient_id = row['patient_id']
+                # Should NOT be masked format (P****XXX)
+                assert not (isinstance(patient_id, str) and patient_id.startswith('P****')), \
+                    f"Same hospital data should not be masked, got: {patient_id}"
+            
+            # Records from Hospital 2 (different from user): should have masked patient_id
+            hospital_2_records = df[df['hospital_id'] == 2]
+            assert len(hospital_2_records) == 1
+            for idx, row in hospital_2_records.iterrows():
+                patient_id = row['patient_id']
+                # Should be masked format: P****XXX (last 3 chars)
+                assert isinstance(patient_id, str) and patient_id.startswith('P****'), \
+                    f"Cross-hospital patient_id must be masked, got: {patient_id}"
+                assert patient_id == 'P****344', \
+                    f"Expected 'P****344' for patient_id '11223344', got: {patient_id}"
     
     def test_get_filtered_encounter_dataframe_resident_always_masked(
         self, mock_db_session, sample_dataframe_with_pii

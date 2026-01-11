@@ -38,7 +38,13 @@ from api.kpis.kpiutils import (
 
 
 
-def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[int]) -> Tuple[pd.DataFrame, Dict]:
+def get_filtered_encounter_dataframe(
+    db, 
+    params: Dict, 
+    user_lab_unit_ids: Set[int],
+    current_user_hospital_id: Optional[int] = None,
+    current_user_role: Optional[str] = None
+) -> Tuple[pd.DataFrame, Dict]:
     """
     Generate and filter encounter dataframe based on user permissions and filter parameters.
     
@@ -46,9 +52,15 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
         db: Database session
         params: Dictionary containing filter parameters
         user_lab_unit_ids: Set of lab unit IDs user has access to
+        current_user_hospital_id: Optional hospital ID of current user (for PII masking)
+        current_user_role: Optional role of current user (for PII masking)
         
     Returns:
-        Tuple of (filtered pandas DataFrame, filters_applied dictionary)
+        Tuple of (filtered pandas DataFrame with PII masked, filters_applied dictionary)
+        
+    Note:
+        PII (patient_id) is masked based on hospital context and user role.
+        Reference: docs/PII_Exposure_Control_Policy.md Section 5.1
     """
     try:
         # Generate the complete dataframe using utility function
@@ -96,6 +108,42 @@ def get_filtered_encounter_dataframe(db, params: Dict, user_lab_unit_ids: Set[in
             df = df[df['upload_date'] >= params['start_date']]
         if 'end_date' in params and 'upload_date' in df.columns:
             df = df[df['upload_date'] <= params['end_date']]
+        
+        # Apply PII masking based on user context
+        # Reference: docs/PII_Exposure_Control_Policy.md Section 5.1
+        if not df.empty and 'patient_id' in df.columns:
+            from utils.pii_masking import should_mask_pii, mask_patient_id
+            
+            # If user context not provided, try to get from current_user
+            if current_user_hospital_id is None and current_user_role is None:
+                try:
+                    from flask_login import current_user
+                    if current_user and hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+                        current_user_hospital_id = current_user.hospital_id
+                        if current_user.roles:
+                            current_user_role = current_user.roles[0].name
+                except (ImportError, RuntimeError):
+                    # No Flask context or current_user not available
+                    pass
+            
+            # Apply masking row by row based on hospital context
+            def mask_patient_id_if_needed(row):
+                data_hospital_id = row.get('hospital_id')
+                
+                # Determine if masking is needed
+                mask_pii = should_mask_pii(
+                    current_user_hospital_id=current_user_hospital_id,
+                    data_hospital_id=data_hospital_id,
+                    current_user_role=current_user_role
+                )
+                
+                if mask_pii and row.get('patient_id'):
+                    row['patient_id'] = mask_patient_id(row['patient_id'])
+                
+                return row
+            
+            # Apply masking to each row
+            df = df.apply(mask_patient_id_if_needed, axis=1)
         
         # Create filters_applied dictionary for response
         filters_applied = {

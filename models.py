@@ -1311,3 +1311,107 @@ class EmailSettings(Base):
 
         # Return masked version regardless of whether encrypted or not
         return "•" * min(len(self.smtp_password), 12)
+
+
+class SensitiveOperationAudit(Base):
+    """
+    Audit trail for sensitive data operations.
+    
+    This model tracks all sensitive operations such as database exports,
+    data downloads, and bulk data access to maintain a security audit trail.
+    
+    Reference: docs/PII_Exposure_Control_Policy.md Section 6A.3
+    Bead: 5N-1 (fundus_img_xtract-1yu)
+    """
+    __tablename__ = "sensitive_operations_audit"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    
+    # User who performed the operation
+    user_id: Mapped[int] = mapped_column(
+        Integer, 
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,  # Allow null if user is deleted
+        index=True
+    )
+    
+    # Type of operation performed
+    operation_type: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True
+    )
+    # Examples: 'database_dump', 'database_excel_export', 'discrepancy_export', 
+    #           'dataset_export', 'user_pii_access', 'bulk_data_download'
+    
+    # Status of the operation
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        index=True
+    )
+    # Values: 'initiated', 'reauth_success', 'reauth_failed', 'completed', 'failed', 'cancelled'
+    
+    # Client information
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)  # IPv6 max length
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Request details (filters, table names, parameters used)
+    request_details: Mapped[dict | None] = mapped_column(
+        Text,  # Store as JSON string
+        nullable=True
+    )
+    
+    # Result details (row_count, file_hash, file_size)
+    result_details: Mapped[dict | None] = mapped_column(
+        Text,  # Store as JSON string
+        nullable=True
+    )
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
+        index=True
+    )
+    
+    # Relationship to user
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    
+    def __repr__(self) -> str:
+        return (
+            f"<SensitiveOperationAudit(id={self.id}, user_id={self.user_id}, "
+            f"operation='{self.operation_type}', status='{self.status}')>"
+        )
+    
+    def set_request_details(self, details: dict) -> None:
+        """Serialize request details to JSON string."""
+        import json
+        self.request_details = json.dumps(details) if details else None
+    
+    def get_request_details(self) -> dict | None:
+        """Deserialize request details from JSON string."""
+        import json
+        if not self.request_details:
+            return None
+        try:
+            return json.loads(self.request_details)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    
+    def set_result_details(self, details: dict) -> None:
+        """Serialize result details to JSON string."""
+        import json
+        self.result_details = json.dumps(details) if details else None
+    
+    def get_result_details(self) -> dict | None:
+        """Deserialize result details from JSON string."""
+        import json
+        if not self.result_details:
+            return None
+        try:
+            return json.loads(self.result_details)
+        except (json.JSONDecodeError, TypeError):
+            return None
+

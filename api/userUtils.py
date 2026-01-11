@@ -10,12 +10,18 @@ from . import api_bp
 @login_required
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_eligible_lab_units():
-    """API endpoint to get eligible lab units for the current user."""
+    """API endpoint to get eligible lab units for the current user (hospital-aware)."""
+    from utils.hospital_scoping import get_user_lab_units_in_hospital
+    
     with get_db_session() as db:
         user_id = current_user.id
 
-        # Get the user's eligible lab unit IDs
-        lab_unit_ids = get_user_lab_unit_ids_no_admin_override(user_id)
+        # Use hospital-aware function - filters by user's hospital_id
+        lab_unit_ids = get_user_lab_units_in_hospital(
+            user_id=user_id,
+            hospital_id=current_user.hospital_id,  # Filter by user's hospital
+            db=db
+        )
         
         # Get the lab unit details from the database
         lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(lab_unit_ids))).all()
@@ -33,6 +39,8 @@ def get_eligible_lab_units():
         
         return jsonify({
             'user_id': user_id,
+            'hospital_id': current_user.hospital_id,  # Include hospital context
+            'is_master_admin': current_user.is_master_admin,
             'eligible_lab_units': eligible_lab_units
         })
     
@@ -41,26 +49,32 @@ def get_eligible_lab_units():
 @login_required
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_eligible_lab_units_currentUser():
-    """API endpoint to get eligible lab units for the current user only (regardless of admin status)."""
+    """API endpoint to get eligible lab units for the current user only (hospital-aware)."""
+    from utils.hospital_scoping import get_user_lab_units_in_hospital
+    
     with get_db_session() as db:
         # Always use the current user's ID, regardless of admin status
         user_id = current_user.id
         
-        # Get the user's eligible lab unit IDs without admin override
-        # This ensures admins only get lab units they're explicitly assigned to
-        lab_unit_ids = get_user_lab_unit_ids_no_admin_override(user_id)
+        # Use hospital-aware function - filters by user's hospital_id
+        lab_unit_ids = get_user_lab_units_in_hospital(
+            user_id=user_id,
+            hospital_id=current_user.hospital_id,  # Filter by user's hospital
+            db=db
+        )
         
         # Get the lab unit details from the database
         lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(lab_unit_ids))).all()
         
-        # Extract unique hospital IDs from lab units
-        hospital_ids = set()
-        for lab_unit in lab_units:
-            if lab_unit.hospital_id:
-                hospital_ids.add(lab_unit.hospital_id)
-        
-        # Get the hospital details from the database
-        hospitals = db.query(Hospital).filter(Hospital.id.in_(list(hospital_ids))).all()
+        # Get hospital details
+        # Master admin sees all hospitals, regular users see only their hospital
+        if current_user.is_master_admin:
+            hospitals = db.query(Hospital).order_by(Hospital.name).all()
+        else:
+            if current_user.hospital_id:
+                hospitals = db.query(Hospital).filter_by(id=current_user.hospital_id).all()
+            else:
+                hospitals = []
         
         # Format the results
         eligible_lab_units = [
@@ -84,6 +98,8 @@ def get_eligible_lab_units_currentUser():
         
         return jsonify({
             'user_id': user_id,
+            'hospital_id': current_user.hospital_id,
+            'is_master_admin': current_user.is_master_admin,
             'eligible_lab_units': eligible_lab_units,
             'eligible_hospitals': eligible_hospitals
         })

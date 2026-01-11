@@ -22,23 +22,21 @@ from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 @login_required
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_hospitals_list():
-    """Get all hospitals."""
+    """Get accessible hospitals for current user (hospital-aware)."""
     with get_db_session() as db:
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_unit_ids:
-            return jsonify([])
-
-        allowed_hospital_ids = set(
-            db.execute(
-                select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids))
-            ).scalars()
-        )
-
-        hospitals = db.execute(
-            select(Hospital)
-            .where(Hospital.id.in_(allowed_hospital_ids))
-            .order_by(Hospital.name.asc())
-        ).scalars().all()
+        # Master admin sees all hospitals
+        if current_user.is_master_admin:
+            hospitals = db.execute(
+                select(Hospital).order_by(Hospital.name.asc())
+            ).scalars().all()
+        else:
+            # Regular users see only their assigned hospital
+            if current_user.hospital_id:
+                hospitals = db.execute(
+                    select(Hospital).where(Hospital.id == current_user.hospital_id)
+                ).scalars().all()
+            else:
+                hospitals = []
 
         hospitals_data = [
             {
@@ -55,23 +53,17 @@ def get_hospitals_list():
 @login_required
 @roles_required("admin", "local_admin", "data_manager", "ophthalmologist", "resident", "optometrist", "fileUploader")
 def get_hospital_by_id(hospital_id):
-    """Get a specific hospital by ID."""
+    """Get a specific hospital by ID (hospital-aware)."""
     with get_db_session() as db:
         hospital = db.get(Hospital, hospital_id)
         if not hospital:
             return jsonify({"error": "Hospital not found"}), 404
 
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_unit_ids:
-            return jsonify({"error": "Forbidden"}), 403
-
-        allowed_hospital_ids = set(
-            db.execute(
-                select(LabUnit.hospital_id).where(LabUnit.id.in_(allowed_lab_unit_ids))
-            ).scalars()
-        )
-        if hospital_id not in allowed_hospital_ids:
-            return jsonify({"error": "Forbidden"}), 403
+        # Hospital access validation
+        if not current_user.is_master_admin:
+            # Non-admin users can only access their assigned hospital
+            if current_user.hospital_id != hospital_id:
+                return jsonify({"error": "Forbidden - access to this hospital not allowed"}), 403
 
         hospital_data = {
             "id": hospital.id,

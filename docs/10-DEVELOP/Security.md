@@ -341,3 +341,211 @@ The system distinguishes between different types of errors:
 - Image metadata is protected from unauthorized access
 - User personal information is encrypted at rest
 - Session data is stored securely server-side
+
+---
+
+## Hospital Isolation and Cross-Hospital Security
+
+### Overview
+
+The system implements a **3-tier security model** balancing hospital data isolation with cross-hospital medical expertise sharing:
+
+1. **Hospital-Level Isolation** - Strict separation for operational data
+2. **Cross-Hospital Grading** - Shared grader pool for medical workflow
+3. **PII Protection** - Zero PII in cross-hospital operations
+
+### Roles and Hospital Scoping
+
+#### Roles (11 total)
+
+**System Management:**
+- `admin` - Master admin (system-wide, `is_master_admin=True`)
+- `local_admin` - Site admin (single hospital only)
+
+**Clinical:**
+- `ophthalmologist` - Grading specialist (cross-hospital grading via ABAC)
+- `optometrist` - Verification & anonymization gatekeeper (hospital-bound)
+
+**Data Operations:**
+- `data_manager` - Uploads, verification (hospital-bound)
+- `fileUploader` - Uploads only (hospital-bound) 
+- `pregarded_uploader` - Excel import (hospital-bound)
+
+**Export & Analytics:**
+- `data_exporter` - Hospital-specific exports (hospital-bound)
+- `dataset_creator` - AI training datasets (cross-hospital)
+- `analytics_viewer` - Read-only analytics (hospital-bound)
+
+**Quality Control:**
+- `discrepancy_reviewer` - Discrepancy review (hospital-bound)
+
+### Cross-Hospital vs Hospital-Bound Operations
+
+#### Cross-Hospital Operations (5 categories)
+
+**Operations that work across ALL hospitals:**
+1. **Grading/Arbitration** - Shared grader pool (via `UserDiseaseUnitRole`)
+2. **Dataset Creation** - Multi-hospital AI training data
+3. **Research** - Multi-hospital studies (future)
+4. **Training/Education** - Cross-hospital learning (future)
+5. **Master Admin** - System-wide management
+
+**Security Requirement:** ZERO PII exposure in all cross-hospital operations
+
+#### Hospital-Bound Operations
+
+**Operations strictly limited to single hospital:**
+- Image uploads, verification, file management
+- Reports, dashboards, analytics (non-admin)
+- AI grade review, human grade review
+- QA/QC, discrepancy review
+- User management (site admin)
+- Regular data exports
+- Pre-graded Excel import
+
+### Anonymization Workflow (Critical Security Feature)
+
+#### Optometrist as Anonymization Gatekeeper
+
+**Why cross-hospital grading is secure:**
+
+```
+Step 1: Image Upload
+├─ User uploads image with PII
+└─ State: UPLOADED (contains patient_name, patient_id, phone, MRN)
+
+Step 2: Optometrist Verification ⭐ CRITICAL SECURITY GATE
+├─ Reviews image/report quality
+├─ Strips ALL PII:
+│  ├─ Removes patient_name
+│  ├─ Hashes patient_id → UUID
+│  ├─ Removes phone, MRN, address
+│  └─ Removes hospital-identifying information
+└─ State: VERIFIED & ANONYMIZED
+
+Step 3: Grading Task Creation
+├─ System creates task with ONLY:
+│  ├─ UUID (anonymized identifier)
+│  ├─ Disease type
+│  ├─ Image URL (UUID-based)
+│  └─ No patient data, no hospital identifier
+└─ State: PENDING_GRADING
+
+Step 4: Cross-Hospital Grading
+├─ Any ophthalmologist can grade (via UserDiseaseUnitRole)
+├─ Sees ZERO PII
+├─ Cannot determine source hospital
+└─ Grading is truly anonymized
+```
+
+**Result:** Cross-hospital grading works safely because optometrists remove all PII before tasks enter grading workflow.
+
+#### PII Fields (Forbidden in Cross-Hospital Operations)
+
+**NEVER allowed in grading interface:**
+- patient_name, patient_id, mrn
+- phone, email, address  
+- hospital_name, hospital_id, lab_unit_name
+- Any field that could identify patient or source hospital
+
+**ONLY allowed:**
+- UUID (anonymized identifier)
+- Disease type, camera type, area
+- Image URL (UUID-based)
+- Clinical metadata
+
+### Dual Grading with 2-Week Cooling-Off Period
+
+#### Workflow
+
+Due to small grader pool, same ophthalmologist can grade both R1 and R2 slots for same image, but **only after 2-week cooling-off period** to ensure independence:
+
+```python
+# Ophthalmologist grades as R1 at time T
+# Same ophthalmologist can grade as R2 only if:
+if (T_current - T_r1) >= 14 days:
+    # Allow: Memory decay provides independence
+    assign_r2_to_same_grader = True
+else:
+    # Reject: Too soon, assign to different grader
+    assign_r2_to_different_grader = True
+```
+
+**Grading Workflow:**
+1. Image → R1 grading (Ophthalmologist A, Day 0)
+2. If < 2 weeks: R2 → Ophthalmologist B (different grader)
+3. If ≥ 2 weeks: R2 → Ophthalmologist A allowed (same grader)
+4. If R1 ≠ R2 → Arbitrator (senior ophthalmologist)
+
+### Database Security
+
+#### User Hospital Assignment
+
+```sql
+-- All users (except master_admin) must have hospital assignment
+ALTER TABLE users ADD COLUMN hospital_id INTEGER REFERENCES hospitals(id);
+ALTER TABLE users ADD COLUMN is_master_admin BOOLEAN DEFAULT FALSE NOT NULL;
+
+-- Constraint
+ALTER TABLE users ADD CONSTRAINT ck_user_has_hospital
+    CHECK (is_master_admin = TRUE OR hospital_id IS NOT NULL);
+```
+
+#### Query Filtering
+
+**Hospital-bound operations:**
+```python
+# MUST filter by hospital
+if not user.is_master_admin:
+    query = query.filter(Model.hospital_id == user.hospital_id)
+    
+    # Then filter by lab units
+    user_lab_unit_ids = [lu.id for lu in user.lab_units 
+                         if lu.hospital_id == user.hospital_id]
+    query = query.filter(Model.lab_unit_id.in_(user_lab_unit_ids))
+```
+
+**Cross-hospital grading:**
+```python
+# NO hospital filter - intentional
+tasks = query.join(UserDiseaseUnitRole).filter(
+    UserDiseaseUnitRole.user_id == user.id,
+    UserDiseaseUnitRole.disease_id == task.disease_id,
+    UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
+    # No hospital_id filter - cross-hospital allowed!
+)
+```
+
+### Security Testing Requirements
+
+**Critical test scenarios:**
+1. ✅ Grader from Hospital A can grade Hospital B tasks
+2. ✅ Grading UI shows ZERO patient data/hospital identifiers
+3. ✅ Hospital A user cannot access Hospital B operational data
+4. ✅ Optometrist strips PII before task creation
+5. ✅ Same grader cannot do R2 grading within 2 weeks
+6. ✅ Site admin cannot manage users in other hospitals
+7. ✅ Dataset creator can access all hospitals (anonymized)
+8. ✅ Regular data exporter sees only own hospital data
+
+### Audit and Compliance
+
+**Logging requirements:**
+- All cross-hospital access logged
+- PII access by optometrists logged (temporary, pre-anonymization)
+- All data exports audited (hospital-specific vs cross-hospital)
+- User creation/modification logged
+- Hospital isolation violations flagged
+
+**Regular security audits:**
+- Verify hospital isolation working correctly
+- Check no PII leaking to grading interface
+- Validate anonymization workflow
+- Review cross-hospital access patterns
+- Check 2-week cooling-off enforcement
+
+---
+
+See also:
+- [Scoping](../03-Tasks/Scoping.md) - Detailed scoping mechanisms
+- [Master Data](../00-Core/master_data.md) - Hospital and role structure

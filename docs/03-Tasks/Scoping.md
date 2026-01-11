@@ -1,18 +1,69 @@
 # Scoping in Fundus Image Manager
 
-This document describes the two primary scoping mechanisms used in the Fundus Image Manager application to control data access and workflow permissions.
+This document describes the scoping mechanisms used in the Fundus Image Manager application to control data access and workflow permissions.
 
 ## Overview
 
-The application implements two distinct scoping mechanisms:
+The application implements a **3-tier scoping system**:
 
-1. **User-LabUnit Scoping** - For general operations like uploading, reporting, editing images, verification, and dashboard access
-2. **Slot-LabUnit Scoping** - For grading operations and task assignment
+1. **Hospital-Level Scoping** - Top-level organizational isolation
+2. **User-LabUnit Scoping** - For hospital-bound operations (uploads, verification, analytics)
+3. **Slot-LabUnit Scoping** - For cross-hospital grading workflow (shared medical expertise)
 
-## 1. User-LabUnit Scoping
+## Key Security Distinction
+
+### Cross-Hospital Operations
+**Small grader pool requires shared expertise:**
+- ✅ **Grading** (resident, resident2 slots) - via Slot-LabUnit
+- ✅ **Arbitration** (arbitrator slot) - via Slot-LabUnit
+- ✅ **Dataset Creation** (AI training) - multi-hospital datasets
+- ✅ **Research** (future) - multi-hospital studies
+- ✅ **Master Admin** - system-wide access
+
+**Why safe:** Optometrists anonymize all data BEFORE grading tasks are created
+
+### Hospital-Bound Operations
+**Organizational boundaries require strict isolation:**
+- ✅ Image uploads, verification, file management
+- ✅ Reports, dashboards, analytics (non-admin)
+- ✅ AI grade review, human grade review
+- ✅ QA/QC, discrepancy review
+- ✅ User management (site admin)
+- ✅ Regular data exports
+- ✅ Pre-graded Excel import
+
+---
+
+## 1. Hospital-Level Scoping
 
 ### Purpose
-User-LabUnit scoping controls access to images and operations based on the lab units assigned to a user. This mechanism is used for most user-facing operations.
+Top-level organizational isolation ensuring data from one hospital cannot be accessed by another hospital's users (except for cross-hospital grading).
+
+### Implementation
+Users belong to a specific hospital:
+```python
+user.hospital_id  # Foreign key to hospitals table
+user.is_master_admin  # True for system-wide access
+```
+
+### Access Control Pattern
+```python
+# Hospital-bound operations MUST filter by hospital
+if not user.is_master_admin:
+    query = query.filter(Model.hospital_id == user.hospital_id)
+```
+
+### Exceptions
+- **Master Admin** (`is_master_admin=True`) - Can access all hospitals
+- **Grading/Arbitration** - Cross-hospital via Slot-LabUnit scoping
+- **Dataset Creator** - Cross-hospital for AI training datasets
+
+---
+
+## 2. User-LabUnit Scoping (Hospital-Bound)
+
+### Purpose
+User-LabUnit scoping controls access to images and operations based on the lab units assigned to a user. This mechanism is used for **hospital-bound operations only**.
 
 ### Operations Using User-LabUnit Scoping
 - **Image Upload**: Users can only upload images to their assigned lab units
@@ -20,6 +71,7 @@ User-LabUnit scoping controls access to images and operations based on the lab u
 - **Image Editing**: Users can only edit images belonging to their assigned lab units
 - **Verification**: Verification tasks are scoped to user's assigned lab units
 - **Dashboard**: Dashboard displays data filtered by user's assigned lab units
+- **Analytics**: Analytics scoped to assigned lab units
 
 ### Implementation
 Users are associated with lab units through the `user_lab_units` association table:
@@ -34,27 +86,36 @@ user_lab_units = Table(
 
 ### Access Control Pattern
 ```python
-# Example: Filtering images by user's lab units
-user_lab_unit_ids = [lab_unit.id for lab_unit in current_user.lab_units]
-images = session.query(Image).filter(Image.lab_unit_id.in_(user_lab_unit_ids)).all()
+# Example: Filtering images by user's lab units (hospital-bound)
+if not user.is_master_admin:
+    # First filter by hospital
+    images = images.filter(Image.hospital_id == user.hospital_id)
+    
+    # Then filter by assigned lab units
+    user_lab_unit_ids = [lu.id for lu in user.lab_units 
+                         if lu.hospital_id == user.hospital_id]
+    images = images.filter(Image.lab_unit_id.in_(user_lab_unit_ids))
 ```
 
 ### Key Features
 - Users can be assigned to multiple lab units
+- Lab units must belong to user's assigned hospital
 - Access is determined by the lab units explicitly assigned to the user
-- Provides organizational boundaries for data access
-- Used throughout the application for consistent data filtering
+- Provides organizational boundaries within a hospital
+- Used throughout the application for hospital-bound operations
 
-## 2. Slot-LabUnit Scoping
+---
+
+## 3. Slot-LabUnit Scoping (Cross-Hospital Grading)
 
 ### Purpose
-Slot-LabUnit scoping is specifically designed for the grading workflow. It determines which grading tasks a user can access based on their role permissions for specific diseases within lab units.
+Slot-LabUnit scoping is specifically designed for the **cross-hospital grading workflow**. It determines which grading tasks a user can access based on their role permissions for specific diseases within lab units, **regardless of hospital**.
 
 ### Operations Using Slot-LabUnit Scoping
-- **Task Assignment**: Grading tasks are assigned based on slot permissions
-- **Grading Interface**: Users can only grade tasks for which they have slot permissions
-- **Arbitration**: Arbitrators can only access tasks within their permitted slots
-- **Quality Control**: Review processes are scoped by slot permissions
+- **Task Assignment**: Grading tasks can be assigned across hospitals
+- **Grading Interface**: Users grade tasks based on slot permissions (not hospital)
+- **Arbitration**: Arbitrators can access tasks from any hospital
+- **Quality Control**: Grading quality metrics (cross-hospital)
 
 ### Implementation
 Slot permissions are managed through the `UserDiseaseUnitRole` model:
@@ -72,38 +133,100 @@ class UserDiseaseUnitRole(Base):
 ```
 
 ### Permission Types
-- **can_grade_resident**: User can perform resident-level grading
-- **can_grade_resident2**: User can perform resident2-level grading
-- **can_arbitrate**: User can perform arbitration between conflicting grades
+- **can_grade_resident**: User can perform resident-level grading (slot 1)
+  - **Note:** Always equals `can_grade_resident2` (database constraint enforced)
+- **can_grade_resident2**: User can perform resident2-level grading (slot 2)
+  - **Note:** Always equals `can_grade_resident` (database constraint enforced)
+- **can_arbitrate**: User can perform arbitration between conflicting grades (slot 3)
+
+### 2-Week Cooling-Off Period
+Due to the small grader pool, the same ophthalmologist can grade both resident slots (R1 and R2) for the same image, but **only after a 2-week cooling-off period** to ensure independence:
+
+```python
+# Ophthalmologist grades as R1
+grade_r1_timestamp = datetime.now()
+
+# Same ophthalmologist can grade as R2 only if:
+if (datetime.now() - grade_r1_timestamp) >= timedelta(weeks=2):
+    can_assign_r2 = True  # Memory decay provides independence
+else:
+    assign_to_different_grader = True  # Assign to another ophthalmologist
+```
 
 ### Access Control Pattern
 ```python
-# Example: Querying available grading tasks for a user
+# Example: Querying available grading tasks (NO hospital filter)
 available_tasks = session.query(GradingTask).join(UserDiseaseUnitRole).filter(
     UserDiseaseUnitRole.user_id == current_user.id,
     UserDiseaseUnitRole.lab_unit_id == GradingTask.lab_unit_id,
-    UserDiseaseUnitRole.disease_id == GradingTask.disease_id,
+    UserDiseaseUnitRole.disease_id == GradingTask.disease_id,  
     UserDiseaseUnitRole.active == True,
     # Additional role-specific filters
+    # NOTE: NO hospital_id filter - intentionally cross-hospital!
 ).all()
 ```
 
 ### Key Features
+- **Cross-hospital grading** - Can grade tasks from any hospital (via permissions)
 - More granular control than User-LabUnit scoping
 - Disease-specific permissions within lab units
 - Role-based grading permissions (resident, resident2, arbitrator)
 - Supports the dual grading workflow
+- Lab units can be from different hospitals
+- **Anonymization enforced** - Graders see ZERO PII
+
+---
+
+## Anonymization Workflow (CRITICAL Security Feature)
+
+### Optometrist as Anonymization Gatekeeper
+
+**Why cross-hospital grading can work safely:**
+
+```
+Step 1: Image Upload
+├─ data_manager uploads image with PII
+└─ State: UPLOADED (contains patient data)
+
+Step 2: Optometrist Verification ⭐ CRITICAL STEP
+├─ Reviews image quality
+├─ Strips ALL PII:
+│  ├─ Removes patient_name
+│  ├─ Hashes patient_id → UUID
+│  ├─ Removes phone, MRN, address
+│  └─ Removes any hospital-identifying info
+└─ State: VERIFIED & ANONYMIZED
+
+Step 3: Grading Task Creation
+├─ Task created with ONLY:
+│  ├─ UUID (no patient data)
+│  ├─ Disease type
+│  └─ Image URL (UUID-based)
+└─ State: PENDING_GRADING
+
+Step 4: Cross-Hospital Grading
+├─ Any ophthalmologist can grade (via UserDiseaseUnitRole)
+├─ Sees ZERO PII
+├─ Cannot determine source hospital
+└─ Grading is truly anonymized
+```
+
+**Result:** Cross-hospital grading works safely because optometrists have already removed all PII before tasks enter the grading workflow.
+
+---
 
 ## Comparison of Scoping Mechanisms
 
-| Aspect | User-LabUnit Scoping | Slot-LabUnit Scoping |
-|--------|---------------------|---------------------|
-| **Purpose** | General data access | Grading workflow control |
-| **Granularity** | Lab unit level | Disease + Lab unit + Role level |
-| **Operations** | Upload, edit, verify, report, dashboard | Grading, arbitration, task assignment |
-| **Model** | user_lab_units association table | UserDiseaseUnitRole model |
-| **Flexibility** | Simple, broad access control | Complex, role-specific permissions |
-| **Use Case** | Organizational data boundaries | Specialized grading workflow |
+| Aspect | Hospital-Level | User-LabUnit | Slot-LabUnit |
+|--------|---------------|--------------|--------------|
+| **Purpose** | Org isolation | General data access | Cross-hospital grading |
+| **Granularity** | Hospital | Lab unit | Disease + Lab + Role |
+| **Cross-hospital?** | No (except admin) | No | Yes (grading only) |
+| **Operations** | All | Upload, verify, report | Grading, arbitration |
+| **Model** | users.hospital_id | user_lab_units | UserDiseaseUnitRole |
+| **Bypass** | is_master_admin | is_master_admin | N/A (no bypass) |
+
+---
 
 ## Utility Functions and APIs for Scoping
 

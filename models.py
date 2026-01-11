@@ -95,6 +95,17 @@ class User(Base):
     file_upload_quota: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     file_upload_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    
+    # Hospital isolation fields
+    hospital_id: Mapped[int | None] = mapped_column(
+        ForeignKey('hospitals.id', ondelete='RESTRICT'), 
+        nullable=True,
+        index=True
+    )
+    is_master_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    # Relationships
+    hospital: Mapped[Optional["Hospital"]] = relationship("Hospital", foreign_keys=[hospital_id])
     roles: Mapped[List["Role"]] = relationship("Role", secondary="user_roles", back_populates="users", lazy="selectin")
     lab_units: Mapped[List["LabUnit"]] = relationship("LabUnit", secondary=user_lab_units, back_populates="users")
     notifications: Mapped[List["Notification"]] = relationship(

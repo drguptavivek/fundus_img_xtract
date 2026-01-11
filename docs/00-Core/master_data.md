@@ -74,20 +74,59 @@ Each disease has associated grading levels (impressions) that are used for stand
 
 ### User Roles and Permissions
 
-The system implements role-based access control with the following core roles:
+The system implements role-based access control (RBAC) with attribute-based access control (ABAC) for grading. The security model balances hospital isolation with cross-hospital grading workflows.
 
-| Role | Description |
-|------|-------------|
-| Admin | System administrator with full system access |
-| Local Admin | Scoped admin for assigned lab units; can perform admin functions only within those units |
-| Data Manager | Manages data uploads and exports |
-| Resident Grader | Junior medical staff performing initial grading |
-| Resident 2 Grader | Senior medical staff performing secondary grading |
-| Arbitrator | Resident2 and Senior ophthalmologist resolving grading disputes |
-| Viewer | Read-only access to reports and analytics |
+#### Core Roles (11 total)
 
-#### User-Lab Unit Relationships
-Users can be associated with multiple lab units, allowing them to work across different organizational units while maintaining proper access boundaries based on their roles and permissions.
+| Role | Hospital Scoping | Description |
+|------|------------------|-------------|
+| **System Management** |
+| admin | None (all hospitals) | Master administrator with system-wide access. Can create hospitals and site admins. `is_master_admin=True` |
+| local_admin | Single hospital | Site administrator for one hospital. Manages users within assigned hospital only |
+| **Clinical Roles** |
+| ophthalmologist | Mixed | Grading specialist. Cross-hospital grading via ABAC. Hospital-bound for analytics/reviews |
+| optometrist | Single hospital | Verification & anonymization gatekeeper. Strips PII before grading task creation |
+| **Data Operations** |
+| data_manager | Single hospital | Manages data uploads, verification workflows within hospital |
+| fileUploader | Single hospital | Upload-only access for direct image uploads |
+| pregarded_uploader | Single hospital | Excel import for pre-graded data |
+| **Export & Analytics** |
+| data_exporter | Single hospital | Hospital-specific data exports for local analysis |
+| dataset_creator | None (cross-hospital) | Creates multi-hospital AI training datasets (fully anonymized) |
+| analytics_viewer | Single hospital | Read-only access to dashboards and reports |
+| **Quality Control** |
+| discrepancy_reviewer | Single hospital | Reviews grading discrepancies within hospital |
+
+#### Hospital Isolation Model
+
+**Hospital-Bound Operations** (strict isolation):
+- Image uploads, verification, file management
+- Reports, dashboards, analytics (non-admin)
+- AI grade review, human grade review, QA/QC
+- User management (site admin), data exports
+
+**Cross-Hospital Operations** (shared expertise):
+- Grading/Arbitration (via ABAC permissions)
+- Dataset creation for AI training
+- Master admin management
+
+**Security:** Optometrists act as anonymization gatekeepers. All PII is stripped before grading tasks are created, enabling safe cross-hospital grading.
+
+#### Attribute-Based Access Control (ABAC)
+
+Grading permissions are managed via `UserDiseaseUnitRole`:
+- `can_grade_resident` - Resident grading (slots 1 & 2, always equal)
+- `can_grade_resident2` - Resident2 grading (slots 1 & 2, always equal)  
+- `can_arbitrate` - Arbitration (slot 3, senior ophthalmologists)
+
+**2-Week Cooling-Off Period:** Due to small grader pool, same ophthalmologist can grade both R1 and R2 slots for the same image, but only after a 2-week cooling-off period to ensure grading independence.
+
+#### User-Hospital-Lab Unit Relationships
+
+- Users are assigned to a specific hospital (except master admin)
+- Users can be associated with multiple lab units within their hospital
+- Lab unit assignments must belong to user's hospital (enforced)
+- Cross-hospital grading enabled via ABAC permissions (no hospital filter)
 
 ## Master Data Setup Script
 

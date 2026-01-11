@@ -530,3 +530,20 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "skip_sqlite: Skip test if using SQLite"
     )
+# ===================================================================
+# Security Fixtures (Hospital Isolation)
+# ===================================================================
+
+# Import all security fixtures from fixtures/security.py
+from tests.fixtures.security import (
+    test_hospitals,
+    test_lab_units,
+    master_admin,
+    site_admin_hospital_a,
+    site_admin_hospital_b,
+    ophthalmologist_hospital_a,
+    ophthalmologist_cross_hospital,
+    optometrist_hospital_a,
+    dataset_creator,
+)
+

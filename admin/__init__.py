@@ -35,6 +35,7 @@ from .email_settings import (
     api_test_current_email_config, send_sample_email
 )
 from .grading_state_inconsistencies import grading_state_inconsistencies
+from .audit_routes import sensitive_operations_audit, sensitive_operation_details
 
 
 # Register routes with the blueprint
@@ -187,3 +188,7 @@ admin_bp.add_url_rule("/email-settings/<int:settings_id>/delete", view_func=dele
 admin_bp.add_url_rule("/email-settings/<int:settings_id>/activate", view_func=activate_email_settings, methods=["POST"])
 admin_bp.add_url_rule("/api/email-settings/test-current", view_func=api_test_current_email_config, methods=["GET"])
 admin_bp.add_url_rule("/api/email-settings/send-sample", view_func=send_sample_email, methods=["POST"])
+
+# Sensitive Operations Audit routes
+admin_bp.add_url_rule("/sensitive-operations", view_func=sensitive_operations_audit, methods=["GET"])
+admin_bp.add_url_rule("/sensitive-operations/<int:log_id>", view_func=sensitive_operation_details, methods=["GET"])

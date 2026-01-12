@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Sensitive Operations Audit{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1>
+            <i class="fas fa-shield-alt text-primary"></i> Sensitive Operations Audit
+        </h1>
+        <p class="text-muted">Audit log of all sensitive data operations and access events.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('admin.index') if 'admin.index' in url_for_list else url_for('homepage') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-light">
+        <h5 class="mb-0">Filter Logs</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="operation_type" class="form-label">Operation Type</label>
+                <select name="operation_type" id="operation_type" class="form-select">
+                    <option value="">All Operations</option>
+                    {% for op in operation_types %}
+                    <option value="{{ op }}" {% if current_filters.operation_type == op %}selected{% endif %}>
+                        {{ op }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="status" class="form-label">Status</label>
+                <select name="status" id="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="initiated" {% if current_filters.status == 'initiated' %}selected{% endif %}>Initiated</option>
+                    <option value="completed" {% if current_filters.status == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="failed" {% if current_filters.status == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="reauth_success" {% if current_filters.status == 'reauth_success' %}selected{% endif %}>Re-auth Success</option>
+                    <option value="reauth_failed" {% if current_filters.status == 'reauth_failed' %}selected{% endif %}>Re-auth Failed</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" value="{{ current_filters.username or '' }}" placeholder="Search user...">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+                <a href="{{ url_for('admin.sensitive_operations_audit') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Time</th>
+                    <th>User</th>
+                    <th>Operation</th>
+                    <th>Status</th>
+                    <th>IP Address</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in audit_logs %}
+                <tr>
+                    <td style="white-space: nowrap;">
+                        {{ log.created_at | user_datetime }}
+                    </td>
+                    <td>
+                        {% if log.user %}
+                            <a href="{{ url_for('admin.edit_user', user_id=log.user_id) }}" class="text-decoration-none">
+                                {{ log.user.username }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">System/Deleted</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border">
+                            {{ log.operation_type }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if log.status == 'completed' %}
+                            <span class="badge bg-success">Completed</span>
+                        {% elif log.status == 'failed' or log.status == 'reauth_failed' %}
+                            <span class="badge bg-danger">{{ log.status }}</span>
+                        {% elif log.status == 'initiated' %}
+                            <span class="badge bg-info text-dark">Initiated</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ log.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-monospace small">{{ log.ip_address }}</span>
+                    </td>
+                    <td>
+                        <button type="button" 
+                                class="btn btn-sm btn-outline-primary view-details-btn" 
+                                data-log-id="{{ log.id }}"
+                                data-bs-toggle="modal" 
+                                data-bs-target="#detailsModal">
+                            <i class="fas fa-eye"></i> Details
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">
+                        <i class="fas fa-info-circle me-2"></i> No audit logs found matching your criteria.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Simple Pagination -->
+    <div class="card-footer d-flex justify-content-between align-items-center">
+        <div>
+            Page {{ page }}
+        </div>
+        <div>
+            {% if page > 1 %}
+            <a href="{{ url_for('admin.sensitive_operations_audit', page=page-1, **current_filters) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-chevron-left"></i> Previous
+            </a>
+            {% endif %}
+            
+            {% if audit_logs|length == 50 %}
+            <a href="{{ url_for('admin.sensitive_operations_audit', page=page+1, **current_filters) }}" class="btn btn-sm btn-outline-secondary ms-2">
+                Next <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Operation Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Operation:</strong> <span id="modal-operation"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong> <span id="modal-status"></span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <h6>Request Details</h6>
+                    <pre class="bg-light p-3 border rounded" id="modal-request-details">Loading...</pre>
+                </div>
+                <div class="mb-3">
+                    <h6>Result Details</h6>
+                    <pre class="bg-light p-3 border rounded" id="modal-result-details">Loading...</pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const detailButtons = document.querySelectorAll('.view-details-btn');
+    const modal = document.getElementById('detailsModal');
+    
+    detailButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const logId = this.dataset.logId;
+            const requestPre = document.getElementById('modal-request-details');
+            const resultPre = document.getElementById('modal-result-details');
+            
+            requestPre.textContent = 'Loading...';
+            resultPre.textContent = 'Loading...';
+            
+            fetch(`/admin/sensitive-operations/${logId}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('modal-operation').textContent = data.operation_type;
+                    document.getElementById('modal-status').textContent = data.status;
+                    
+                    requestPre.textContent = data.request_details ? 
+                        JSON.stringify(data.request_details, null, 2) : 'None';
+                        
+                    resultPre.textContent = data.result_details ? 
+                        JSON.stringify(data.result_details, null, 2) : 'None';
+                })
+                .catch(error => {
+                    requestPre.textContent = 'Error loading details';
+                    resultPre.textContent = 'Error loading details';
+                    console.error('Error:', error);
+                });
+        });
+    });
+});
+</script>
+{% endblock %}

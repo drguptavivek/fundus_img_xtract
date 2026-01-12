@@ -6,8 +6,13 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
+import logging
+from time import perf_counter
 
 from models import Disease
+from utils.log_sanitize import sanitize_log_value
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -200,6 +205,7 @@ def search_mvw_images(
     offset: int,
 ) -> Tuple[List[MVImageRow], int]:
     """Execute the MV-backed image search with paging."""
+    start_time = perf_counter()
     where_sql, params = build_where_clause(db, filters)
 
     disease_key = _resolve_disease_key(db, filters.disease_id)
@@ -269,5 +275,12 @@ def search_mvw_images(
                 capture_date=row.capture_date,
             )
         )
+    
+    duration = perf_counter() - start_time
+    logger.info(
+        "MVW Search completed - Count: %s, Time: %.3fs",
+        sanitize_log_value(total_count),
+        duration
+    )
 
     return results, total_count

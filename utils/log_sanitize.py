@@ -44,3 +44,23 @@ def mask_pii(value: str | None) -> str:
     if len(s_value) <= 4:
         return "***"
     return f"{s_value[:2]}***{s_value[-2:]}"
+
+
+def mask_text_emails(text: str | None) -> str:
+    """Mask email addresses within a larger text block (no length limit)."""
+    if not text:
+        return ""
+    s_text = str(text)
+    
+
+    # Simple regex for email-like patterns
+    import re
+    email_pattern = r'\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b'
+    
+    def replace_email(match):
+        local, domain = match.groups()
+        if len(local) <= 2:
+            return f"***@{domain}"
+        return f"{local[:2]}***@{domain}"
+        
+    return re.sub(email_pattern, replace_email, s_text)

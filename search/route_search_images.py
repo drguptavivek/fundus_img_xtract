@@ -21,7 +21,7 @@ from utils.mvw_all_img_search import (
 )
 from utils.taskUtils import get_task_detail
 from utils.date_utils import parse_date_yyyy_mm_dd
-from review.task_review import AI_REVIEW_STATUS_LABELS
+from utils.log_sanitize import sanitize_log_value, mask_text_emails
 
 
 @bp.route("/images", methods=["GET"])
@@ -65,6 +65,16 @@ def search_images_route() -> str:
     upload_before = parse_date_yyyy_mm_dd(request.args.get("upload_before"))
     encounter_after = parse_date_yyyy_mm_dd(request.args.get("encounter_after"))
     encounter_before = parse_date_yyyy_mm_dd(request.args.get("encounter_before"))
+
+    # Log search request safely
+    current_app.logger.info(
+        "Search images request - User: %s, Page: %s, Disease: %s, LabUnit: %s, Search: %s",
+        sanitize_log_value(current_user.id),
+        sanitize_log_value(page),
+        sanitize_log_value(disease_id),
+        sanitize_log_value(lab_unit_id),
+        sanitize_log_value(image_uuid)
+    )
 
     with get_db_session() as db:
         # Get allowed lab units via scoping
@@ -360,12 +370,12 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
             continue
         grade_entry: Dict[str, Any] = {
             "impression": item.get("grade_name"),
-            "comment": item.get("comment"),
+            "comment": mask_text_emails(item.get("comment")),
             "ai_model_name": item.get("ai_model_name"),
             "ai_model_version": item.get("ai_model_version"),
         }
         if role == "ai":
-            comment = item.get("comment") or ""
+            comment = mask_text_emails(item.get("comment")) or ""
             provided_prob = (
                 item.get("ai_probability")
                 or item.get("ai_prob")

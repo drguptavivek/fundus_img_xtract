@@ -3,8 +3,8 @@
 import logging
 from flask import request, render_template, redirect, url_for, flash, current_app, session
 from flask_login import current_user
-from sqlalchemy import select, func
-from datetime import datetime, timezone
+from sqlalchemy import select, func, and_, or_
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from models import (
     User,
@@ -24,6 +24,7 @@ from auth.utils import utcnow
 from . import bp
 from db_transaction_manager import get_db_session
 from auth.roles import roles_required
+from utils.hospital_scoping import apply_scoping
 from utils.rate_limiter import rate_limit
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
@@ -115,18 +116,34 @@ def _log_image_attribute_changes(upload: DirectImageUpload, changes: list[dict[s
 @rate_limit("3000 per hour, 60 per minute", methods=["POST"])   # More restrictive for operations
 def dashboard():
     with get_db_session() as db_session:
-        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        allowed_lab_unit_ids_list = list(allowed_lab_unit_ids)
+        # Site admins and master admins can access dashboard if they have a hospital assignment
+        # Regular users need explicit lab unit assignments
         can_manage_others = current_user.has_role(
             "admin", "data_manager", "local_admin", "fileUploader", "optometrist"
         )
-
-        if not allowed_lab_unit_ids_list:
-            flash("You do not have access to any lab units.", "warning")
-            if request.method == "POST":
-                return redirect(url_for("direct_uploads.dashboard"), code=303)
-            return redirect(url_for("home.index"))
-
+        
+        # Check access: Master admin always allowed, Site admin needs hospital_id, others need lab units
+        if not current_user.is_master_admin:
+            if current_user.has_role("local_admin"):
+                # Site admin needs hospital assignment
+                if not current_user.hospital_id:
+                    flash("You do not have a hospital assignment.", "warning")
+                    if request.method == "POST":
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+                    return redirect(url_for("home.index"))
+            else:
+                # Regular users need lab unit assignments
+                allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+                if not allowed_lab_unit_ids:
+                    flash("You do not have access to any lab units.", "warning")
+                    if request.method == "POST":
+                        return redirect(url_for("direct_uploads.dashboard"), code=303)
+                    return redirect(url_for("home.index"))
+        
+        # Get lab units for filter dropdowns (still needed for UI)
+        allowed_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        allowed_lab_unit_ids_list = list(allowed_lab_unit_ids)
+        
         allowed_hospital_ids: set[int] = set()
         if allowed_lab_unit_ids_list:
             allowed_hospital_ids = {
@@ -657,10 +674,7 @@ def dashboard():
             page = 1
 
         q = select(DirectImageUpload)
-        if allowed_lab_unit_ids_list:
-            q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
-        else:
-            q = q.where(DirectImageUpload.id == -1)
+        q = apply_scoping(q, DirectImageUpload, current_user, 'upload')
 
         # Date filters
         if f_date_from:
@@ -760,15 +774,18 @@ def dashboard():
         areas     = {a.id: a for a in db_session.execute(select(Area).where(Area.id.in_(ids("area_id")))).scalars().all()} if uploads else {}
         users     = {u.id: u for u in db_session.execute(select(User).where(User.id.in_({u.uploader_id for u in uploads}))).scalars().all()} if uploads else {}
 
-        # Full lists for filters scoped to allowed lab units/hospitals
-        all_lab_units = db_session.execute(
-            select(LabUnit).where(LabUnit.id.in_(allowed_lab_unit_ids_list)).order_by(LabUnit.name)
-        ).scalars().all() if allowed_lab_unit_ids_list else []
-
-        allowed_hospital_ids_local = {lu.hospital_id for lu in all_lab_units if lu.hospital_id is not None}
+        # Full lists for filters - use scoped query to determine what user can see
+        # Build a scoped query to get all accessible lab units and hospitals
+        scoped_lab_units_q = select(LabUnit)
+        scoped_lab_units_q = apply_scoping(scoped_lab_units_q, LabUnit, current_user, 'upload')
+        all_lab_units = db_session.execute(scoped_lab_units_q.order_by(LabUnit.name)).scalars().all()
+        
+        # Get hospitals from accessible lab units
+        accessible_hospital_ids = {lu.hospital_id for lu in all_lab_units if lu.hospital_id is not None}
         all_hospitals = db_session.execute(
-            select(Hospital).where(Hospital.id.in_(allowed_hospital_ids_local)).order_by(Hospital.name)
-        ).scalars().all() if allowed_hospital_ids_local else []
+            select(Hospital).where(Hospital.id.in_(accessible_hospital_ids)).order_by(Hospital.name)
+        ).scalars().all() if accessible_hospital_ids else []
+        
         all_cameras   = db_session.execute(select(Camera).order_by(Camera.name)).scalars().all()
         all_diseases  = db_session.execute(select(Disease).order_by(Disease.name)).scalars().all()
         all_areas     = db_session.execute(select(Area).order_by(Area.name)).scalars().all()

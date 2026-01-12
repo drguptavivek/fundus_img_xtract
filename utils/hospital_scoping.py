@@ -187,19 +187,33 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
     if hasattr(model_class, 'hospital_id'):
         query = query.filter(model_class.hospital_id == user.hospital_id)
     
-    # Apply lab unit filter (if model has lab_unit_id and user has assignments)
-    if hasattr(model_class, 'lab_unit_id') and user.lab_units:
-        # Only include lab units from user's hospital
-        user_lab_unit_ids = [
-            lu.id for lu in user.lab_units
-            if lu.hospital_id == user.hospital_id
-        ]
+    # Apply lab unit filter (if model has lab_unit_id)
+    if hasattr(model_class, 'lab_unit_id'):
+        # If model doesn't have hospital_id but has lab_unit_id, we MUST filter by hospital via LabUnit join
+        if not hasattr(model_class, 'hospital_id'):
+             # We need to join with LabUnit to filter by hospital
+             # But first check if it's already joined? SQLAlchemy generally handles duplicate joins
+             query = query.join(LabUnit, model_class.lab_unit_id == LabUnit.id).filter(LabUnit.hospital_id == user.hospital_id)
         
-        if user_lab_unit_ids:
-            query = query.filter(model_class.lab_unit_id.in_(user_lab_unit_ids))
-        else:
-            # No lab units in user's hospital
-            return query.filter(model_class.id == None)
+        # Site admins see ALL lab units in their hospital (no further restriction)
+        # Regular users are restricted to their assigned lab units
+        if not user.is_master_admin and not user.has_role('local_admin'):
+            # Regular user - restrict to assigned lab units
+            if user.lab_units:
+                # Only include lab units from user's hospital
+                user_lab_unit_ids = [
+                    lu.id for lu in user.lab_units
+                    if lu.hospital_id == user.hospital_id
+                ]
+                
+                if user_lab_unit_ids:
+                    query = query.filter(model_class.lab_unit_id.in_(user_lab_unit_ids))
+                else:
+                    # No lab units in user's hospital - no access
+                    return query.filter(model_class.id == None)
+            else:
+                # Regular user with no lab units - no access
+                return query.filter(model_class.id == None)
     
     return query
 

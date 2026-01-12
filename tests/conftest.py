@@ -590,3 +590,14 @@ from tests.fixtures.hospital_roles import (
     all_hospital_a_users, all_hospital_b_users,
 )
 
+# Import database seeding fixture (autouse=True, runs at session start)
+from tests.fixtures.seed_database import seed_test_database
+
+# Import simplified fixtures that query seeded data
+from tests.fixtures.seeded_data import (
+    test_hospitals, test_lab_units, test_metadata,
+    site_admin_hospital_a, site_admin_hospital_b, master_admin,
+    ophthalmologist_hospital_a, ophthalmologist_hospital_b,
+    ophthalmologist_cross_hospital
+)
+

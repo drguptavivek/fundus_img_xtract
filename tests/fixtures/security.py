@@ -118,61 +118,84 @@ def master_admin(db_session):
     return user
 
 
-@pytest.fixture
-def site_admin_hospital_a(db_session, test_hospitals):
+@pytest.fixture(scope="session")
+def site_admin_hospital_a(test_engine, test_hospitals):
     """
-    Site admin for Hospital A only.
+    Site admin for Hospital A only (session-scoped).
     
     Attributes:
         hospital_id=1
         is_master_admin=False
     """
-    # Get or create local_admin role
-    role = db_session.query(Role).filter_by(name='local_admin').first()
-    if not role:
-        role = Role(name='local_admin')
-        db_session.add(role)
-        db_session.flush()
+    from sqlalchemy.orm import sessionmaker
     
-    user = User(
-        username='site_admin_a',
-        password_hash=hash_password('Test@2026'),
-        hospital_id=1,
-        is_master_admin=False,
-        roles=[role]
-    )
-    db_session.add(user)
-    db_session.flush()
+    Session = sessionmaker(bind=test_engine)
+    session = Session()
     
-    return user
+    try:
+        # Get or create local_admin role
+        role = session.query(Role).filter_by(name='local_admin').first()
+        if not role:
+            role = Role(name='local_admin')
+            session.add(role)
+            session.flush()
+        
+        # Check if user already exists
+        user = session.query(User).filter_by(username='site_admin_a').first()
+        if not user:
+            user = User(
+                username='site_admin_a',
+                password_hash=hash_password('Test@2026'),
+                hospital_id=1,
+                is_master_admin=False,
+                roles=[role]
+            )
+            session.add(user)
+        
+        session.commit()
+        return user
+    finally:
+        session.close()
 
 
-@pytest.fixture
-def site_admin_hospital_b(db_session, test_hospitals):
+@pytest.fixture(scope="session")
+def site_admin_hospital_b(test_engine, test_hospitals):
     """
-    Site admin for Hospital B only.
+    Site admin for Hospital B only (session-scoped).
     
     Attributes:
         hospital_id=2
         is_master_admin=False
     """
-    role = db_session.query(Role).filter_by(name='local_admin').first()
-    if not role:
-        role = Role(name='local_admin')
-        db_session.add(role)
-        db_session.flush()
+    from sqlalchemy.orm import sessionmaker
     
-    user = User(
-        username='site_admin_b',
-        password_hash=hash_password('Test@2026'),
-        hospital_id=2,
-        is_master_admin=False,
-        roles=[role]
-    )
-    db_session.add(user)
-    db_session.flush()
+    Session = sessionmaker(bind=test_engine)
+    session = Session()
     
-    return user
+    try:
+        # Get or create local_admin role
+        role = session.query(Role).filter_by(name='local_admin').first()
+        if not role:
+            role = Role(name='local_admin')
+            session.add(role)
+            session.flush()
+        
+        # Check if user already exists
+        user = session.query(User).filter_by(username='site_admin_b').first()
+        if not user:
+            user = User(
+                username='site_admin_b',
+                password_hash=hash_password('Test@2026'),
+                hospital_id=2,
+                is_master_admin=False,
+                roles=[role]
+            )
+            session.add(user)
+        
+        session.commit()
+        return user
+    finally:
+        session.close()
 
 
 @pytest.fixture

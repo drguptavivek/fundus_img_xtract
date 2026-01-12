@@ -17,8 +17,10 @@
           </div>
           <div class="col-12 col-md-4 d-flex justify-content-end">
             <div class="btn-group btn-group-sm" role="group" aria-label="Prev/Next">
-              <a id="prev-link" class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr; Prev</a>
-              <a id="next-link" class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next &rarr;</a>
+              <a id="prev-link" class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}"
+                href="{{ prev_url or '#' }}">&larr; Prev</a>
+              <a id="next-link" class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}"
+                href="{{ next_url or '#' }}">Next &rarr;</a>
             </div>
           </div>
         </div>
@@ -27,15 +29,17 @@
         <div class="row g-3 align-items-end">
           <div class="col-6 col-md-3">
             <label class="form-label" for="patient-id-input">Patient ID (PEC ID)</label>
-            <input id="patient-id-input" type="text" name="patient_id" class="form-control" maxlength="15" value="{{ encounter.patient_id or '' }}">
+            <input id="patient-id-input" type="text" name="patient_id" class="form-control" maxlength="15"
+              value="{{ encounter.patient_id | default('Hidden', true) }}">
           </div>
           <div class="col-6 col-md-3">
             <label class="form-label">Patient Name</label>
-            <input type="text" class="form-control" value="{{ encounter.name or '' }}" readonly>
+            <input type="text" class="form-control" value="{{ encounter.name | default('Anonymous', true) }}" readonly>
           </div>
           <div class="col-12 col-md-3">
             <label class="form-label" for="capture-date">Capture Date</label>
-            <input id="capture-date" type="date" name="capture_date_dt" class="form-control" value="{{ encounter.capture_date_dt or '' }}">
+            <input id="capture-date" type="date" name="capture_date_dt" class="form-control"
+              value="{{ encounter.capture_date_dt or '' }}">
           </div>
           <div class="col-12 col-md-3 d-flex justify-content-end">
             <button type="submit" class="btn btn-sm btn-outline-secondary">Save Changes</button>
@@ -44,18 +48,21 @@
         <div class="row g-3 mt-2 align-items-center">
           <div class="col-12 col-md-4">
             <div class="form-check form-switch">
-              <input class="form-check-input {% if encounter.encounter_verified_status != 'verified' %}state-not-verified{% endif %}" type="checkbox" role="switch" id="verify-toggle"
-                     data-verify-url="{{ url_for('verify_remedio_nodr.nodr_verify', encounter_id=encounter.id) }}"
-                     data-unverify-url="{{ url_for('verify_remedio_nodr.nodr_unverify', encounter_id=encounter.id) }}"
-                     {% if encounter.encounter_verified_status == 'verified' %}checked{% endif %}>
+              <input
+                class="form-check-input {% if encounter.encounter_verified_status != 'verified' %}state-not-verified{% endif %}"
+                type="checkbox" role="switch" id="verify-toggle"
+                data-verify-url="{{ url_for('verify_remedio_nodr.nodr_verify', encounter_id=encounter.id) }}"
+                data-unverify-url="{{ url_for('verify_remedio_nodr.nodr_unverify', encounter_id=encounter.id) }}" {% if
+                encounter.encounter_verified_status=='verified' %}checked{% endif %}>
               <label class="form-check-label" for="verify-toggle">Encounter Verified</label>
             </div>
           </div>
           <div class="col-12 col-md-8 text-md-end small" id="verify-status">
             {% if encounter.encounter_verified_status == 'verified' %}
-              <span class="text-success">Verified by {{ encounter.encounter_verified_by or '—' }} at {{ encounter.encounter_verified_at|user_datetime }}</span>
+            <span class="text-success">Verified by {{ encounter.encounter_verified_by or '—' }} at {{
+              encounter.encounter_verified_at|user_datetime }}</span>
             {% else %}
-              <span class="text-danger">Not verified</span>
+            <span class="text-danger">Not verified</span>
             {% endif %}
           </div>
         </div>
@@ -63,42 +70,54 @@
     </div>
   </form>
 
-    <div class="card shadow-sm">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <strong>Encounter Images</strong>
-        <span class="small text-muted">Laterality + Centering (Macula/Disk/Cannot tell)</span>
-      </div>
-      <div class="card-body">
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <strong>Encounter Images</strong>
+      <span class="small text-muted">Laterality + Centering (Macula/Disk/Cannot tell)</span>
+    </div>
+    <div class="card-body">
       {% if encounter.encounter_files %}
-        <div class="row g-3">
-          {% for ef in encounter.encounter_files if ef.file_type == 'image' %}
-          <div class="col-12 col-md-6 col-xl-4">
-            <div class="border rounded p-2 h-100 d-flex flex-column">
-              <div class="mb-2" style="width:100%; height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
-                <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
-              </div>
-              <form method="post" action="{{ url_for('verify_remedio_nodr.nodr_mark_eye', encounter_id=encounter.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
-                {{ csrf_field() }}
-                <input type="hidden" name="ef_id" value="{{ ef.id }}">
-                {% set sel = (ef.eye_side or '') %}
-                <button name="side" value="right" type="submit" class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
-                <button name="side" value="left" type="submit" class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
-                <button name="side" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
-              </form>
-              <form method="post" action="{{ url_for('verify_remedio_nodr.nodr_mark_eye', encounter_id=encounter.id) }}" class="mt-2 d-flex gap-2 flex-nowrap center-mark-form">
-                {{ csrf_field() }}
-                <input type="hidden" name="ef_id" value="{{ ef.id }}">
-                {% set csel = (ef.centering or '') %}
-                <button name="centering" value="macula" type="submit" class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
-                <button name="centering" value="disk" type="submit" class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
-                <button name="centering" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
-              </form>
+      <div class="row g-3">
+        {% for ef in encounter.encounter_files if ef.file_type == 'image' %}
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="border rounded p-2 h-100 d-flex flex-column">
+            <div class="mb-2"
+              style="width:100%; height:220px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+              <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" alt="Image"
+                style="max-width:100%; max-height:100%; object-fit:contain;" />
             </div>
+            <form method="post" action="{{ url_for('verify_remedio_nodr.nodr_mark_eye', encounter_id=encounter.id) }}"
+              class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
+              {{ csrf_field() }}
+              <input type="hidden" name="ef_id" value="{{ ef.id }}">
+              {% set sel = (ef.eye_side or '') %}
+              <button name="side" value="right" type="submit"
+                class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
+              <button name="side" value="left" type="submit"
+                class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
+              <button name="side" value="cannot_tell" type="submit"
+                class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+                tell</button>
+            </form>
+            <form method="post" action="{{ url_for('verify_remedio_nodr.nodr_mark_eye', encounter_id=encounter.id) }}"
+              class="mt-2 d-flex gap-2 flex-nowrap center-mark-form">
+              {{ csrf_field() }}
+              <input type="hidden" name="ef_id" value="{{ ef.id }}">
+              {% set csel = (ef.centering or '') %}
+              <button name="centering" value="macula" type="submit"
+                class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
+              <button name="centering" value="disk" type="submit"
+                class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
+              <button name="centering" value="cannot_tell" type="submit"
+                class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+                tell</button>
+            </form>
           </div>
-          {% endfor %}
         </div>
+        {% endfor %}
+      </div>
       {% else %}
-        <em class="text-muted">No images found for this encounter.</em>
+      <em class="text-muted">No images found for this encounter.</em>
       {% endif %}
     </div>
   </div>
@@ -106,5 +125,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-  <script src="{{ url_for('static', filename='js/dr_edit.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/dr_edit.js') }}?v={{ v }}"></script>
 {% endblock %}

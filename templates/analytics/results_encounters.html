@@ -7,7 +7,8 @@
   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center mb-4">
     <div>
       <h1 class="h3 mb-1">Encounter Grading Results</h1>
-      <p class="text-muted mb-0">Review grading outcomes per patient encounter, including Remedio reports and image-wise tasks.</p>
+      <p class="text-muted mb-0">Review grading outcomes per patient encounter, including Remedio reports and image-wise
+        tasks.</p>
     </div>
     <form class="row gy-2 gx-2 align-items-end" method="get">
       <div class="col-12 col-sm-6 col-lg-auto">
@@ -15,7 +16,8 @@
         <select class="form-select" id="filter-hospital" name="hospital_id">
           <option value="">All</option>
           {% for hospital in hospitals %}
-          <option value="{{ hospital.id }}" {% if filters.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+          <option value="{{ hospital.id }}" {% if filters.hospital_id==hospital.id %}selected{% endif %}>{{
+            hospital.name }}</option>
           {% endfor %}
         </select>
       </div>
@@ -24,13 +26,15 @@
         <select class="form-select" id="filter-lab" name="lab_unit_id">
           <option value="">All</option>
           {% for lab_unit in lab_units %}
-          <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id == lab_unit.id %}selected{% endif %}>{{ lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
+          <option value="{{ lab_unit.id }}" {% if filters.lab_unit_id==lab_unit.id %}selected{% endif %}>{{
+            lab_unit.name }}{% if lab_unit.hospital %} — {{ lab_unit.hospital.name }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <label class="form-label mb-1" for="filter-date">Capture Date</label>
-        <input class="form-control" type="date" id="filter-date" name="capture_date" value="{{ filters.capture_date or '' }}">
+        <input class="form-control" type="date" id="filter-date" name="capture_date"
+          value="{{ filters.capture_date or '' }}">
       </div>
       <div class="col-12 col-sm-6 col-lg-auto">
         <button class="btn btn-primary w-100" type="submit">Apply Filters</button>
@@ -39,157 +43,173 @@
   </div>
 
   {% if not encounters %}
-    <div class="alert alert-info">No encounters matched the selected filters.</div>
+  <div class="alert alert-info">No encounters matched the selected filters.</div>
   {% else %}
-    <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
-      <span>Showing {{ encounters|length }} encounters (page {{ page }} of {{ total_pages }})</span>
-    </div>
+  <div class="d-flex justify-content-between align-items-center mb-3 small text-muted">
+    <span>Showing {{ encounters|length }} encounters (page {{ page }} of {{ total_pages }})</span>
+  </div>
 
-    <div class="row g-3">
-      {% for item in encounters %}
-      {% set encounter = item.encounter %}
-      <div class="col-12">
-        <div class="card shadow-sm h-100">
-          <div class="card-header py-2 px-3">
-            <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
-              <div>
-                <h2 class="h6 mb-1">Encounter: {{ encounter.name or 'Unknown Patient' }}</h2>
-                <div class="small text-muted">Patient ID: {{ encounter.patient_id or '—' }}</div>
-              </div>
-              <div class="text-lg-end small">
-                <div>Capture Date: {{ encounter.capture_date_dt or encounter.capture_date or '—' }}</div>
-                <div>Lab Unit: {{ encounter.lab_unit.name if encounter.lab_unit else '—' }}</div>
-                <div>Hospital: {{ encounter.lab_unit.hospital.name if encounter.lab_unit and encounter.lab_unit.hospital else '—' }}</div>
-              </div>
+  <div class="row g-3">
+    {% for item in encounters %}
+    {% set encounter = item.encounter %}
+    <div class="col-12">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2 px-3">
+          <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
+            <div>
+              <h2 class="h6 mb-1">Encounter: {{ encounter.name | default('Anonymous', true) }}</h2>
+              <div class="small text-muted">Patient ID: {{ encounter.patient_id | default('Hidden', true) }}</div>
+            </div>
+            <div class="text-lg-end small">
+              <div>Capture Date: {{ encounter.capture_date_dt or encounter.capture_date or '—' }}</div>
+              <div>Lab Unit: {{ encounter.lab_unit.name if encounter.lab_unit else '—' }}</div>
+              <div>Hospital: {{ encounter.lab_unit.hospital.name if encounter.lab_unit and encounter.lab_unit.hospital
+                else '—' }}</div>
             </div>
           </div>
-          <div class="card-body py-3">
-            <div class="row g-3">
-              <div class="col-12 col-lg-4">
-                <div class="border rounded p-3 h-100">
-                  <h3 class="h6 mb-3">Remedio Reports</h3>
-                  <div class="mb-3 small">
-                    <div class="text-muted fw-semibold mb-1">Glaucoma (Cleaned)</div>
-                    {% if item.glaucoma %}
-                      <div>{{ item.glaucoma.result or '—' }}</div>
-                      <div class="text-muted">Qualitative: {{ item.glaucoma.qualitative_result or '—' }}</div>
-                      <div class="text-muted">VCDR R: {{ item.glaucoma.vcdr_right if item.glaucoma.vcdr_right is not none else '—' }}, L: {{ item.glaucoma.vcdr_left if item.glaucoma.vcdr_left is not none else '—' }}</div>
-                    {% else %}
-                      <div class="text-muted">No cleaned glaucoma results.</div>
-                    {% endif %}
-                  </div>
-                  <div class="small">
-                    <div class="text-muted fw-semibold mb-1">Diabetic Retinopathy</div>
-                    {% if item.dr %}
-                      <div>{{ item.dr.result or '—' }}</div>
-                      <div class="text-muted">{{ item.dr.qualitative_result or 'No qualitative result' }}</div>
-                    {% else %}
-                      <div class="text-muted">No DR report.</div>
-                    {% endif %}
-                  </div>
+        </div>
+        <div class="card-body py-3">
+          <div class="row g-3">
+            <div class="col-12 col-lg-4">
+              <div class="border rounded p-3 h-100">
+                <h3 class="h6 mb-3">Remedio Reports</h3>
+                <div class="mb-3 small">
+                  <div class="text-muted fw-semibold mb-1">Glaucoma (Cleaned)</div>
+                  {% if item.glaucoma %}
+                  <div>{{ item.glaucoma.result or '—' }}</div>
+                  <div class="text-muted">Qualitative: {{ item.glaucoma.qualitative_result or '—' }}</div>
+                  <div class="text-muted">VCDR R: {{ item.glaucoma.vcdr_right if item.glaucoma.vcdr_right is not none
+                    else '—' }}, L: {{ item.glaucoma.vcdr_left if item.glaucoma.vcdr_left is not none else '—' }}</div>
+                  {% else %}
+                  <div class="text-muted">No cleaned glaucoma results.</div>
+                  {% endif %}
+                </div>
+                <div class="small">
+                  <div class="text-muted fw-semibold mb-1">Diabetic Retinopathy</div>
+                  {% if item.dr %}
+                  <div>{{ item.dr.result or '—' }}</div>
+                  <div class="text-muted">{{ item.dr.qualitative_result or 'No qualitative result' }}</div>
+                  {% else %}
+                  <div class="text-muted">No DR report.</div>
+                  {% endif %}
                 </div>
               </div>
-              <div class="col-12 col-lg-8">
-                <div class="border rounded p-3 h-100">
-                  <h3 class="h6 mb-3">Encounter Images</h3>
-                  {% if not item.images %}
-                    <div class="text-muted small">No images associated with this encounter.</div>
-                  {% else %}
-                    <div class="d-flex flex-column gap-3">
-                      {% for image in item.images %}
-                      <div class="border rounded p-3">
-                        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
-                          <div>
-                            <div class="small text-muted">Image UUID</div>
-                            <code class="small">{{ image.uuid or '—' }}</code>
+            </div>
+            <div class="col-12 col-lg-8">
+              <div class="border rounded p-3 h-100">
+                <h3 class="h6 mb-3">Encounter Images</h3>
+                {% if not item.images %}
+                <div class="text-muted small">No images associated with this encounter.</div>
+                {% else %}
+                <div class="d-flex flex-column gap-3">
+                  {% for image in item.images %}
+                  <div class="border rounded p-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                      <div>
+                        <div class="small text-muted">Image UUID</div>
+                        <code class="small">{{ image.uuid or '—' }}</code>
+                      </div>
+                      <div class="small text-muted">Eye: {{ image.eye_side or '—' }}</div>
+                      {% if image.uuid %}
+                      {% set gallery_id = 'enc-gallery-' ~ encounter.id ~ '-' ~ loop.index0 %}
+                      <div id="{{ gallery_id }}" class="d-none pswp-gallery">
+                        <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}"
+                          data-pswp-type="image" title="Encounter Image"></a>
+                      </div>
+                      <div>
+                        <a class="btn btn-sm btn-outline-primary" href="#"
+                          onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+                      </div>
+                      {% endif %}
+                    </div>
+                    <div class="small">
+                      {% if image.tasks %}
+                      <div class="fw-semibold text-muted mb-1">Dual Grading Tasks</div>
+                      <div class="d-flex flex-column gap-2">
+                        {% for task in image.tasks %}
+                        {% set final_label = task.consensus.impression if task.consensus else
+                        (task.arbitrator_grade.impression if task.arbitrator_grade else (task.resident2_grade.impression
+                        if task.resident2_grade else (task.resident_grade.impression if task.resident_grade else
+                        'Pending'))) %}
+                        <div class="border rounded p-2">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <div class="fw-semibold">{{ task.disease_name or 'Disease Unknown' }}</div>
+                            <span class="badge bg-info text-dark text-uppercase">{{ task.graded_state }}</span>
                           </div>
-                          <div class="small text-muted">Eye: {{ image.eye_side or '—' }}</div>
-                          {% if image.uuid %}
-                          {% set gallery_id = 'enc-gallery-' ~ encounter.id ~ '-' ~ loop.index0 %}
-                          <div id="{{ gallery_id }}" class="d-none pswp-gallery">
-                            <a href="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}" data-pswp-type="image" title="Encounter Image"></a>
+                          <div class="mt-1">
+                            <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">Final Grade: {{
+                              final_label }}</span>
                           </div>
-                          <div>
-                            <a class="btn btn-sm btn-outline-primary" href="#" onclick="openPswpGallery('{{ gallery_id }}', 0); return false;">View Image</a>
+                          <div class="mt-2 d-flex flex-wrap gap-3 text-muted">
+                            <span>Resident: {% if task.resident_grade %}{{ task.resident_grade.impression or '—' }} ({{
+                              task.resident_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
+                            <span>Resident2: {% if task.resident2_grade %}{{ task.resident2_grade.impression or '—' }}
+                              ({{ task.resident2_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
+                            <span>Arbitrator: {% if task.arbitrator_grade %}{{ task.arbitrator_grade.impression or '—'
+                              }} ({{ task.arbitrator_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
+                          </div>
+                          {% if task.consensus %}
+                          <div class="small text-muted mt-2">
+                            {% set method_label = {
+                            'match': 'Match',
+                            'adjudication': 'Adjudication',
+                            'task_review': 'Review override'
+                            }.get(task.consensus.method, task.consensus.method) %}
+                            Consensus: {{ task.consensus.impression or '—' }} ({{ method_label }}{% if
+                            task.consensus.decided_by %} • {{ task.consensus.decided_by }}{% endif %})
                           </div>
                           {% endif %}
-                        </div>
-                        <div class="small">
-                          {% if image.tasks %}
-                            <div class="fw-semibold text-muted mb-1">Dual Grading Tasks</div>
-                            <div class="d-flex flex-column gap-2">
-                              {% for task in image.tasks %}
-                                {% set final_label = task.consensus.impression if task.consensus else (task.arbitrator_grade.impression if task.arbitrator_grade else (task.resident2_grade.impression if task.resident2_grade else (task.resident_grade.impression if task.resident_grade else 'Pending'))) %}
-                                <div class="border rounded p-2">
-                                  <div class="d-flex justify-content-between align-items-center">
-                                    <div class="fw-semibold">{{ task.disease_name or 'Disease Unknown' }}</div>
-                                    <span class="badge bg-info text-dark text-uppercase">{{ task.graded_state }}</span>
-                                  </div>
-                                  <div class="mt-1">
-                                    <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">Final Grade: {{ final_label }}</span>
-                                  </div>
-                                  <div class="mt-2 d-flex flex-wrap gap-3 text-muted">
-                                    <span>Resident: {% if task.resident_grade %}{{ task.resident_grade.impression or '—' }} ({{ task.resident_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
-                                    <span>Resident2: {% if task.resident2_grade %}{{ task.resident2_grade.impression or '—' }} ({{ task.resident2_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
-                                    <span>Arbitrator: {% if task.arbitrator_grade %}{{ task.arbitrator_grade.impression or '—' }} ({{ task.arbitrator_grade.grader or 'Unknown' }}){% else %}Pending{% endif %}</span>
-                                  </div>
-                                  {% if task.consensus %}
-                                  <div class="small text-muted mt-2">
-                                    {% set method_label = {
-                                      'match': 'Match',
-                                      'adjudication': 'Adjudication',
-                                      'task_review': 'Review override'
-                                    }.get(task.consensus.method, task.consensus.method) %}
-                                    Consensus: {{ task.consensus.impression or '—' }} ({{ method_label }}{% if task.consensus.decided_by %} • {{ task.consensus.decided_by }}{% endif %})
-                                  </div>
-                                  {% endif %}
-                                  {% if task.ai_grades %}
-                                  <div class="small text-muted mt-2">
-                                    AI Grades:
-                                    <ul class="mb-0">
-                                      {% for ai_grade in task.ai_grades %}
-                                      <li>{{ ai_grade.model_name }} {{ ai_grade.model_version }}{% if ai_grade.impression %} → {{ ai_grade.impression }}{% endif %}{% if ai_grade.confidence is not none %} ({{ '%.3f'|format(ai_grade.confidence) }}){% endif %}</li>
-                                      {% endfor %}
-                                    </ul>
-                                  </div>
-                                  {% endif %}
-                                </div>
-                              {% endfor %}
-                            </div>
-                          {% else %}
-                            <div class="text-muted">No dual grading tasks recorded for this image.</div>
-                          {% endif %}
-                          {% if image.legacy_gradings %}
-                          <div class="mt-3">
-                            <div class="fw-semibold text-muted mb-1">Single Grading History</div>
-                            <ul class="small text-muted mb-0">
-                              {% for legacy in image.legacy_gradings %}
-                              <li>{{ legacy.graded_for }}: {{ legacy.impression }} ({{ legacy.grader or 'Unknown' }})</li>
+                          {% if task.ai_grades %}
+                          <div class="small text-muted mt-2">
+                            AI Grades:
+                            <ul class="mb-0">
+                              {% for ai_grade in task.ai_grades %}
+                              <li>{{ ai_grade.model_name }} {{ ai_grade.model_version }}{% if ai_grade.impression %} →
+                                {{ ai_grade.impression }}{% endif %}{% if ai_grade.confidence is not none %} ({{
+                                '%.3f'|format(ai_grade.confidence) }}){% endif %}</li>
                               {% endfor %}
                             </ul>
                           </div>
                           {% endif %}
                         </div>
+                        {% endfor %}
                       </div>
-                      {% endfor %}
+                      {% else %}
+                      <div class="text-muted">No dual grading tasks recorded for this image.</div>
+                      {% endif %}
+                      {% if image.legacy_gradings %}
+                      <div class="mt-3">
+                        <div class="fw-semibold text-muted mb-1">Single Grading History</div>
+                        <ul class="small text-muted mb-0">
+                          {% for legacy in image.legacy_gradings %}
+                          <li>{{ legacy.graded_for }}: {{ legacy.impression }} ({{ legacy.grader or 'Unknown' }})</li>
+                          {% endfor %}
+                        </ul>
+                      </div>
+                      {% endif %}
                     </div>
-                  {% endif %}
+                  </div>
+                  {% endfor %}
                 </div>
+                {% endif %}
               </div>
             </div>
           </div>
         </div>
       </div>
-      {% endfor %}
     </div>
+    {% endfor %}
+  </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-3">
-      <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
-      <div class="btn-group" role="group" aria-label="Pagination">
-        <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url if prev_url else '#' }}">Previous</a>
-        <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url if next_url else '#' }}">Next</a>
-      </div>
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <div class="text-muted small">Page {{ page }} of {{ total_pages }}</div>
+    <div class="btn-group" role="group" aria-label="Pagination">
+      <a class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}"
+        href="{{ prev_url if prev_url else '#' }}">Previous</a>
+      <a class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}"
+        href="{{ next_url if next_url else '#' }}">Next</a>
     </div>
+  </div>
   {% endif %}
 
   <div class="pswp" tabindex="-1" role="dialog" aria-hidden="true"></div>
@@ -197,8 +217,8 @@
 {% endblock %}
 
 {% block page_scripts %}
-  {{ super() }}
-  <script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
-  <script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
+{{ super() }}
+<script src="{{ url_for('static', filename='js/photoswipe.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/photoswipe-lightbox.umd.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/pswp-init.js') }}?v={{ v }}"></script>
 {% endblock %}

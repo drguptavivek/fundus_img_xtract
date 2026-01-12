@@ -5,40 +5,39 @@
 {% block content %}
 <div class="py-3">
     {# small, inconspicuous nav bar #}
-<div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
-  <!-- Left: Back link -->
-  <div class="d-flex align-items-center gap-2">
-    <a class="btn btn-sm btn-outline-secondary btn-subtle"
-       href="{{ back_url }}" aria-label="Back" title="Back">
-      &larr; {{ back_label or 'All screenings' }}
-    </a>
-  </div>
+    <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
+        <!-- Left: Back link -->
+        <div class="d-flex align-items-center gap-2">
+            <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ back_url }}" aria-label="Back" title="Back">
+                &larr; {{ back_label or 'All screenings' }}
+            </a>
+        </div>
 
-  <!-- Right: Pager buttons -->
-  <div class="d-flex align-items-center gap-2">
-    {% if prev_url %}
-      <a class="btn btn-sm btn-outline-secondary btn-subtle"
-         href="{{ prev_url }}" aria-label="Previous screening" title="Previous screening">
-        &larr; Prev
-      </a>
-    {% else %}
-      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous screening">
-        &larr; Prev
-      </button>
-    {% endif %}
+        <!-- Right: Pager buttons -->
+        <div class="d-flex align-items-center gap-2">
+            {% if prev_url %}
+            <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ prev_url }}" aria-label="Previous screening"
+                title="Previous screening">
+                &larr; Prev
+            </a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous screening">
+                &larr; Prev
+            </button>
+            {% endif %}
 
-    {% if next_url %}
-      <a class="btn btn-sm btn-outline-secondary btn-subtle"
-         href="{{ next_url }}" aria-label="Next screening" title="Next screening">
-        Next &rarr;
-      </a>
-    {% else %}
-      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next screening">
-        Next &rarr;
-      </button>
-    {% endif %}
-  </div>
-</div>
+            {% if next_url %}
+            <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ next_url }}" aria-label="Next screening"
+                title="Next screening">
+                Next &rarr;
+            </a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next screening">
+                Next &rarr;
+            </button>
+            {% endif %}
+        </div>
+    </div>
 
 
 
@@ -52,22 +51,23 @@
                 <div class="card-body">
                     <dl class="row mb-0">
                         <dt class="col-5">Patient Name</dt>
-                        <dd class="col-7">{{ encounter.name or "-" }}</dd>
+                        <dd class="col-7">{{ encounter.name | default('Anonymous', true) }}</dd>
                         <dt class="col-5">Patient ID</dt>
-                        <dd class="col-7">{{ encounter.patient_id or "-" }}</dd>
+                        <dd class="col-7">{{ encounter.patient_id | default('Hidden', true) }}</dd>
                         <dt class="col-5">Capture Date</dt>
                         <dd class="col-7">
-                          {% if encounter.capture_date_dt %}
+                            {% if encounter.capture_date_dt %}
                             {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
-                          {% elif encounter.capture_date %}
+                            {% elif encounter.capture_date %}
                             {{ encounter.capture_date }}
-                          {% else %}
+                            {% else %}
                             -
-                          {% endif %}
+                            {% endif %}
                         </dd>
                         {% if encounter.lab_unit %}
                         <dt class="col-5">Hospital</dt>
-                        <dd class="col-7">{{ encounter.lab_unit.hospital.name if encounter.lab_unit.hospital else "-" }}</dd>
+                        <dd class="col-7">{{ encounter.lab_unit.hospital.name if encounter.lab_unit.hospital else "-" }}
+                        </dd>
                         <dt class="col-5">Lab Unit</dt>
                         <dd class="col-7">{{ encounter.lab_unit.name or "-" }}</dd>
                         {% endif %}
@@ -84,16 +84,18 @@
                 <div class="card-body">
                     {% set pdf_files = encounter.encounter_file_pdfs or [] %}
                     {% if pdf_files %}
-                        {% for pdf in pdf_files %}
-                            <div class="mb-2">
-                                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}" target="_blank" rel="noopener">
-                                    <i class="bi bi-file-pdf"></i> Open Original PDF
-                                </a>
-                                <small class="text-muted d-block mt-1">{{ pdf.filename }}</small>
-                            </div>
-                        {% endfor %}
+                    {% for pdf in pdf_files %}
+                    <div class="mb-2">
+                        <a class="btn btn-sm btn-outline-primary"
+                            href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}" target="_blank"
+                            rel="noopener">
+                            <i class="bi bi-file-pdf"></i> Open Original PDF
+                        </a>
+                        <small class="text-muted d-block mt-1">{{ pdf.filename }}</small>
+                    </div>
+                    {% endfor %}
                     {% else %}
-                        <em class="text-muted">No PDF files available for this encounter.</em>
+                    <em class="text-muted">No PDF files available for this encounter.</em>
                     {% endif %}
                 </div>
             </div>
@@ -104,24 +106,27 @@
                 <div class="card-header"><strong>PDF Processing Actions</strong></div>
                 <div class="card-body">
                     <div class="d-grid gap-2">
-                        <form method="post" action="{{ url_for('screenings.reprocess_pdf', encounter_id=encounter.id) }}"
-                              onsubmit="return confirm('This will reset the OCR processing flag for PDFs in this encounter and queue them for reprocessing. Continue?')">
+                        <form method="post"
+                            action="{{ url_for('screenings.reprocess_pdf', encounter_id=encounter.id) }}"
+                            onsubmit="return confirm('This will reset the OCR processing flag for PDFs in this encounter and queue them for reprocessing. Continue?')">
                             {{ forms.csrf_field() }}
                             <button type="submit" class="btn btn-warning btn-sm">
                                 <i class="bi bi-arrow-clockwise"></i> Reprocess PDFs
                             </button>
                         </form>
                         {% if dr_reports or gl_reports %}
-                        <form method="post" action="{{ url_for('screenings.delete_reports', encounter_id=encounter.id) }}"
-                              onsubmit="return confirm('This will permanently delete all DR and Glaucoma reports for this encounter. This action cannot be undone. Continue?')">
+                        <form method="post"
+                            action="{{ url_for('screenings.delete_reports', encounter_id=encounter.id) }}"
+                            onsubmit="return confirm('This will permanently delete all DR and Glaucoma reports for this encounter. This action cannot be undone. Continue?')">
                             {{ forms.csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">
                                 <i class="bi bi-trash"></i> Delete Existing Reports
                             </button>
                         </form>
                         {% endif %}
-                        <form method="post" action="{{ url_for('screenings.delete_encounter', encounter_id=encounter.id) }}"
-                              onsubmit="return confirm('WARNING: This will permanently delete this entire screening including all images, PDFs, and reports. This action cannot be undone. Are you absolutely sure?')">
+                        <form method="post"
+                            action="{{ url_for('screenings.delete_encounter', encounter_id=encounter.id) }}"
+                            onsubmit="return confirm('WARNING: This will permanently delete this entire screening including all images, PDFs, and reports. This action cannot be undone. Are you absolutely sure?')">
                             {{ forms.csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">
                                 <i class="bi bi-exclamation-triangle"></i> Delete Entire Screening
@@ -148,11 +153,11 @@
                             </div>{% endif %}
                             {# Link to DR split PDF by report UUID #}
                             {% if dr.report_file_name %}
-                              <div class="mt-2">
+                            <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                   href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}"
-                                   target="_blank" rel="noopener">Open PDF</a>
-                              </div>
+                                    href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" target="_blank"
+                                    rel="noopener">Open PDF</a>
+                            </div>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -176,11 +181,11 @@
                                 or "-" }}</div>
                             {# Link to Glaucoma split PDF by report UUID #}
                             {% if gl.report_file_name %}
-                              <div class="mt-2">
+                            <div class="mt-2">
                                 <a class="btn btn-sm btn-outline-dark"
-                                   href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gl.uuid) }}"
-                                   target="_blank" rel="noopener">Open PDF</a>
-                              </div>
+                                    href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gl.uuid) }}"
+                                    target="_blank" rel="noopener">Open PDF</a>
+                            </div>
                             {% endif %}
                         </li>
                         {% endfor %}
@@ -198,23 +203,29 @@
 
                     <!-- Filter buttons -->
                     <div class="sv-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-none-{{ encounter.id }}" value="none" checked>
-                    <label class="btn btn-outline-secondary" for="svf-none-{{ encounter.id }}">None</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-none-{{ encounter.id }}" value="none" checked>
+                        <label class="btn btn-outline-secondary" for="svf-none-{{ encounter.id }}">None</label>
 
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-r-{{ encounter.id }}" value="redfree">
-                    <label class="btn btn-outline-secondary" for="svf-r-{{ encounter.id }}">R</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-r-{{ encounter.id }}" value="redfree">
+                        <label class="btn btn-outline-secondary" for="svf-r-{{ encounter.id }}">R</label>
 
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-g-{{ encounter.id }}" value="greenboost">
-                    <label class="btn btn-outline-secondary" for="svf-g-{{ encounter.id }}">G</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-g-{{ encounter.id }}" value="greenboost">
+                        <label class="btn btn-outline-secondary" for="svf-g-{{ encounter.id }}">G</label>
 
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-b-{{ encounter.id }}" value="bluemono">
-                    <label class="btn btn-outline-secondary" for="svf-b-{{ encounter.id }}">B</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-b-{{ encounter.id }}" value="bluemono">
+                        <label class="btn btn-outline-secondary" for="svf-b-{{ encounter.id }}">B</label>
 
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-y-{{ encounter.id }}" value="gray">
-                    <label class="btn btn-outline-secondary" for="svf-y-{{ encounter.id }}">Y</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-y-{{ encounter.id }}" value="gray">
+                        <label class="btn btn-outline-secondary" for="svf-y-{{ encounter.id }}">Y</label>
 
-                    <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-h-{{ encounter.id }}" value="contrast">
-                    <label class="btn btn-outline-secondary" for="svf-h-{{ encounter.id }}">H</label>
+                        <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}"
+                            id="svf-h-{{ encounter.id }}" value="contrast">
+                        <label class="btn btn-outline-secondary" for="svf-h-{{ encounter.id }}">H</label>
                     </div>
                     <small class="text-muted">{{ images|length }} file(s)</small>
                 </div>
@@ -225,8 +236,8 @@
                         <!-- Large viewer -->
                         <div class="sv-main bg-black rounded position-relative mb-2">
                             <img class="sv-main-img"
-                                src="{{ url_for('media._encounterImageByUUID', uuid_str=images[0].uuid) }}"
-                                alt="Image" data-index="0" />
+                                src="{{ url_for('media._encounterImageByUUID', uuid_str=images[0].uuid) }}" alt="Image"
+                                data-index="0" />
                             <div class="sv-counter">1 / {{ images|length }}</div>
                             <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
                             <button class="sv-nav sv-next" type="button" aria-label="Next image">&rarr;</button>

@@ -4,42 +4,47 @@
 {% block content %}
 {% from "_forms.html" import csrf_field %}
 
-  <!-- Top: two rows with fields -->
-  <form id="main-form" method="post" action="">
-    {{ csrf_field() }}
-    <div class="card shadow-sm mb-3">
-      <div class="card-header">
-        <div class="row align-items-center g-2">
-          <!-- Left: Back to List -->
-          <div class="col-12 col-md-4 d-flex align-items-center">
-            <a class="btn btn-sm btn-outline-secondary" href="{{ back_url or url_for('verify_remedio_dr.verify_dr_list') }}">&larr; Back to List</a>
-          </div>
-          <!-- Center: Title -->
-          <div class="col-12 col-md-4 text-center">
-            <strong>Verify DR Results</strong>
-          </div>
-          <!-- Right: Prev/Next -->
-          <div class="col-12 col-md-4 d-flex justify-content-end">
-            <div class="btn-group btn-group-sm" role="group" aria-label="Prev/Next">
-              <a id="prev-link" class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr; Prev</a>
-              <a id="next-link" class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}" href="{{ next_url or '#' }}">Next &rarr;</a>
-            </div>
+<!-- Top: two rows with fields -->
+<form id="main-form" method="post" action="">
+  {{ csrf_field() }}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header">
+      <div class="row align-items-center g-2">
+        <!-- Left: Back to List -->
+        <div class="col-12 col-md-4 d-flex align-items-center">
+          <a class="btn btn-sm btn-outline-secondary"
+            href="{{ back_url or url_for('verify_remedio_dr.verify_dr_list') }}">&larr; Back to List</a>
+        </div>
+        <!-- Center: Title -->
+        <div class="col-12 col-md-4 text-center">
+          <strong>Verify DR Results</strong>
+        </div>
+        <!-- Right: Prev/Next -->
+        <div class="col-12 col-md-4 d-flex justify-content-end">
+          <div class="btn-group btn-group-sm" role="group" aria-label="Prev/Next">
+            <a id="prev-link" class="btn btn-outline-secondary {% if not prev_url %}disabled{% endif %}"
+              href="{{ prev_url or '#' }}">&larr; Prev</a>
+            <a id="next-link" class="btn btn-outline-secondary {% if not next_url %}disabled{% endif %}"
+              href="{{ next_url or '#' }}">Next &rarr;</a>
           </div>
         </div>
       </div>
-      <div class="card-body">
+    </div>
+    <div class="card-body">
       <!-- Row 1: ID, Name, Result, Qualitative Result, Verify -->
       <div class="row g-3 align-items-end">
         <div class="col-6 col-md-3">
           <label class="form-label" for="patient-id-input">Patient ID (PEC ID)</label>
           <input id="patient-id-input" type="text" name="patient_id"
-                 class="form-control {% if row.patient_encounter and (row.patient_encounter.patient_id|default('')|length != 8) %}is-invalid{% endif %}"
-                 maxlength="15"
-                 value="{{ row.patient_encounter.patient_id if row.patient_encounter else '' }}">
+            class="form-control {% if row.patient_encounter and (row.patient_encounter.patient_id|default('')|length != 8) %}is-invalid{% endif %}"
+            maxlength="15"
+            value="{{ (row.patient_encounter.patient_id if row.patient_encounter else None) | default('Hidden', true) }}">
         </div>
         <div class="col-6 col-md-3">
           <label class="form-label">Patient Name</label>
-          <input type="text" class="form-control" maxlength="30" value="{{ row.patient_encounter.name if row.patient_encounter else '' }}" readonly>
+          <input type="text" class="form-control" maxlength="30"
+            value="{{ (row.patient_encounter.name if row.patient_encounter else None) | default('Anonymous', true) }}"
+            readonly>
         </div>
         <div class="col-12 col-md-4">
           <label class="form-label">Result</label>
@@ -48,18 +53,20 @@
         <div class="col-12 col-md-2 d-flex flex-column align-items-end">
           {% if current_user_has('optometrist') or current_user_has('admin') %}
           <div class="form-check form-switch mb-2">
-            <input class="form-check-input {% if not (row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified') %}state-not-verified{% endif %}" type="checkbox" role="switch" id="verify-toggle"
-                   aria-label="Toggle verification"
-                   title="Toggle verification"
-                   data-verify-url="{{ url_for('verify_remedio_dr.verify_dr_verify', report_id=row.id) }}"
-                   data-unverify-url="{{ url_for('verify_remedio_dr.verify_dr_unverify', report_id=row.id) }}"
-                   {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}checked{% endif %}>
+            <input
+              class="form-check-input {% if not (row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified') %}state-not-verified{% endif %}"
+              type="checkbox" role="switch" id="verify-toggle" aria-label="Toggle verification"
+              title="Toggle verification"
+              data-verify-url="{{ url_for('verify_remedio_dr.verify_dr_verify', report_id=row.id) }}"
+              data-unverify-url="{{ url_for('verify_remedio_dr.verify_dr_unverify', report_id=row.id) }}" {% if
+              row.patient_encounter and row.patient_encounter.dr_verified_status=='verified' %}checked{% endif %}>
           </div>
-          <span id="verify-status" class="small mb-1 {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+          <span id="verify-status"
+            class="small mb-1 {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
             {% if row.patient_encounter and row.patient_encounter.dr_verified_status == 'verified' %}
-              Verified by {{ row.patient_encounter.dr_verified_by or '—' }}
+            Verified by {{ row.patient_encounter.dr_verified_by or '—' }}
             {% else %}
-              Not verified
+            Not verified
             {% endif %}
           </span>
           {% endif %}
@@ -70,78 +77,93 @@
       <div class="row g-3 mt-1 align-items-start">
         <div class="col-12 col-md-10">
           <label class="form-label">Qualitative Result</label>
-          <textarea name="qualitative_result" class="form-control" rows="2">{{ row.qualitative_result or '' }}</textarea>
+          <textarea name="qualitative_result" class="form-control"
+            rows="2">{{ row.qualitative_result or '' }}</textarea>
         </div>
         <div class="col-12 col-md-2 d-flex justify-content-end">
           <button type="submit" class="btn btn-sm btn-outline-secondary mt-md-4" form="main-form">Save Changes</button>
         </div>
       </div>
-      </div>
     </div>
-  </form>
+  </div>
+</form>
 
-  <!-- Below: two columns: Left images grid, Right PDF narrower -->
-  <div class="row g-3">
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <strong>Encounter Images</strong>
-          <span class="small text-muted">Laterality + Centering (Macula/Disk/Cannot tell)</span>
-        </div>
-        <div class="card-body">
-          {% if row.patient_encounter and row.patient_encounter.encounter_files %}
-            <div class="row g-3">
-            {% for ef in row.patient_encounter.encounter_files if ef.file_type == 'image' %}
-              <div class="col-12 col-md-6">
-                <div class="border rounded p-2 h-100 d-flex flex-column">
-                  <div class="mb-2" style="width:100%; height:240px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
-                    <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" alt="Image" style="max-width:100%; max-height:100%; object-fit:contain;" />
-                  </div>
-                  <form method="post" action="{{ url_for('verify_remedio_dr.verify_dr_mark_eye', report_id=row.id) }}" class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="ef_id" value="{{ ef.id }}">
-                    {% set sel = (ef.eye_side or '') %}
-                    <button name="side" value="right" type="submit" class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
-                    <button name="side" value="left" type="submit" class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
-                    <button name="side" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
-                  </form>
-                  <form method="post" action="{{ url_for('verify_remedio_dr.verify_dr_mark_eye', report_id=row.id) }}" class="mt-2 d-flex gap-2 flex-nowrap center-mark-form">
-                    {{ csrf_field() }}
-                    <input type="hidden" name="ef_id" value="{{ ef.id }}">
-                    {% set csel = (ef.centering or '') %}
-                    <button name="centering" value="macula" type="submit" class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
-                    <button name="centering" value="disk" type="submit" class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
-                    <button name="centering" value="cannot_tell" type="submit" class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot tell</button>
-                  </form>
-                </div>
-              </div>
-            {% endfor %}
-            </div>
-          {% else %}
-            <em class="text-muted">No images found for this encounter.</em>
-          {% endif %}
-        </div>
+<!-- Below: two columns: Left images grid, Right PDF narrower -->
+<div class="row g-3">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Encounter Images</strong>
+        <span class="small text-muted">Laterality + Centering (Macula/Disk/Cannot tell)</span>
       </div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="card shadow-sm">
-        <div class="card-header"><strong>PDF Report</strong></div>
-        <div class="card-body">
-          {% if row.uuid %}
-            <div style="height: 50vh;">
-              <iframe src="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=row.uuid) }}" title="DR PDF" frameborder="0" style="width:100%; height:100%;"></iframe>
+      <div class="card-body">
+        {% if row.patient_encounter and row.patient_encounter.encounter_files %}
+        <div class="row g-3">
+          {% for ef in row.patient_encounter.encounter_files if ef.file_type == 'image' %}
+          <div class="col-12 col-md-6">
+            <div class="border rounded p-2 h-100 d-flex flex-column">
+              <div class="mb-2"
+                style="width:100%; height:240px; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+                <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=ef.uuid) }}" alt="Image"
+                  style="max-width:100%; max-height:100%; object-fit:contain;" />
+              </div>
+              <form method="post" action="{{ url_for('verify_remedio_dr.verify_dr_mark_eye', report_id=row.id) }}"
+                class="mt-auto d-flex gap-2 flex-nowrap eye-mark-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="ef_id" value="{{ ef.id }}">
+                {% set sel = (ef.eye_side or '') %}
+                <button name="side" value="right" type="submit"
+                  class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
+                <button name="side" value="left" type="submit"
+                  class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
+                <button name="side" value="cannot_tell" type="submit"
+                  class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+                  tell</button>
+              </form>
+              <form method="post" action="{{ url_for('verify_remedio_dr.verify_dr_mark_eye', report_id=row.id) }}"
+                class="mt-2 d-flex gap-2 flex-nowrap center-mark-form">
+                {{ csrf_field() }}
+                <input type="hidden" name="ef_id" value="{{ ef.id }}">
+                {% set csel = (ef.centering or '') %}
+                <button name="centering" value="macula" type="submit"
+                  class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
+                <button name="centering" value="disk" type="submit"
+                  class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
+                <button name="centering" value="cannot_tell" type="submit"
+                  class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+                  tell</button>
+              </form>
             </div>
-          {% elif row.report_file_name %}
-            <div style="height: 50vh;">
-              <iframe src="{{ url_for('reports.serve_dr_pdf', filename=row.report_file_name) }}" title="DR PDF" frameborder="0" style="width:100%; height:100%;"></iframe>
-            </div>
-          {% else %}
-            <em class="text-muted">No PDF linked for this record.</em>
-          {% endif %}
+          </div>
+          {% endfor %}
         </div>
+        {% else %}
+        <em class="text-muted">No images found for this encounter.</em>
+        {% endif %}
       </div>
     </div>
   </div>
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header"><strong>PDF Report</strong></div>
+      <div class="card-body">
+        {% if row.uuid %}
+        <div style="height: 50vh;">
+          <iframe src="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=row.uuid) }}" title="DR PDF" frameborder="0"
+            style="width:100%; height:100%;"></iframe>
+        </div>
+        {% elif row.report_file_name %}
+        <div style="height: 50vh;">
+          <iframe src="{{ url_for('reports.serve_dr_pdf', filename=row.report_file_name) }}" title="DR PDF"
+            frameborder="0" style="width:100%; height:100%;"></iframe>
+        </div>
+        {% else %}
+        <em class="text-muted">No PDF linked for this record.</em>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 {% block page_scripts %}

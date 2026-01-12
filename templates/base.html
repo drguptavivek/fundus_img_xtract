@@ -7,7 +7,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   {% block meta_description %}
-  <meta name="description" content="{% block meta_content %}Eye Image Manager - An application that allows users to upload eye images, anonymize, grade, arbitrate and review grades them using attribute classification to generate golden datasets. Extensible with custom diseases, grades, features. Generate inter-rator and intra-rator statistics and AI model performance statistics by comparing AI grades with golden grades.{% endblock %}">
+  <meta name="description"
+    content="{% block meta_content %}Eye Image Manager - An application that allows users to upload eye images, anonymize, grade, arbitrate and review grades them using attribute classification to generate golden datasets. Extensible with custom diseases, grades, features. Generate inter-rator and intra-rator statistics and AI model performance statistics by comparing AI grades with golden grades.{% endblock %}">
   {% endblock %}
   {% set canonical_base = (config.get('BASE_URL') or '').rstrip('/') %}
   {% set page_title = (self.title() | striptags) %}
@@ -41,6 +42,7 @@
         top: 0;
         z-index: 1030;
       }
+
       .navbar.navbar-overlay-collapse .navbar-collapse {
         position: absolute;
         top: 100%;
@@ -51,36 +53,37 @@
         border-bottom: 1px solid var(--bs-border-color);
         padding: 0.5rem 1rem;
       }
+
       .navbar.navbar-overlay-collapse .navbar-collapse .navbar-nav {
         max-height: 60vh;
         overflow-y: auto;
       }
     }
   </style>
- 
+
   {% block extra_styles %}
 
   {% endblock %}
 
   <!-- Theme bootstrapper: set initial theme ASAP to avoid FOUC -->
   {% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-    (function () {
+  <script nonce="{{ csp_script_nonce() }}">
+    {% else %}
+    <script>
+      {% endif %}
+      (function () {
       try {
         var stored = localStorage.getItem('theme');
-        if (!stored) {
-          localStorage.setItem('theme', 'light');
-          stored = 'light';
+      if (!stored) {
+        localStorage.setItem('theme', 'light');
+      stored = 'light';
         }
-        var defaultTheme = document.documentElement.getAttribute('data-default-theme') || 'auto';
-        var theme = stored || defaultTheme;
-        if (defaultTheme === 'dark' && stored !== 'dark') {
-          theme = 'dark';
+      var defaultTheme = document.documentElement.getAttribute('data-default-theme') || 'auto';
+      var theme = stored || defaultTheme;
+      if (defaultTheme === 'dark' && stored !== 'dark') {
+        theme = 'dark';
         }
-        document.documentElement.setAttribute('data-bs-theme', theme);
+      document.documentElement.setAttribute('data-bs-theme', theme);
       } catch (e) {
         // no-op
       }
@@ -98,8 +101,8 @@
   <nav class="navbar navbar-expand-lg theme-auto bg-body border-bottom mb-4 navbar-overlay-collapse">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('homepage') }}">
-        <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Eye retina logo" width="36"
-          height="36" loading="eager">
+        <img src="{{ url_for('static', filename='retina_svg_logo.svg') }}" alt="Eye retina logo" width="36" height="36"
+          loading="eager">
         <span>Eye Image Manager</span>
       </a>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
@@ -113,16 +116,16 @@
             <a class="nav-link {% if request.endpoint == 'homepage' %}active{% endif %}"
               href="{{ url_for('homepage') }}">Home</a>
           </li>
-          
+
           <li class="nav-item">
             <a class="nav-link {% if request.blueprint == 'help' %}active{% endif %}"
               href="{{ url_for('help.index') }}">Help</a>
           </li>
 
           {% if current_user.is_authenticated %}
-          
+
           {% if current_user_has('admin') %}
-          
+
           {% endif %}
 
           {% if current_user_has('fileUploader') or current_user_has('data_manager') or current_user_has('admin') %}
@@ -132,7 +135,7 @@
               Upload
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="uploadMenu">
-                <li>
+              <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload_index' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload_index') }}">Dashboard</a>
               </li>
@@ -154,7 +157,7 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-         
+
               <li>
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.upload' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.upload') }}">Upload Images</a>
@@ -163,7 +166,7 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.dashboard' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.dashboard') }}">Uploaded Images</a>
               </li>
-                  {% if  current_user_has('pregarded_uploader') or current_user_has('admin') %}
+              {% if current_user_has('pregarded_uploader') or current_user_has('admin') %}
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -179,11 +182,11 @@
                 <a class="dropdown-item {% if request.endpoint == 'direct_uploads.recent_pregraded_grades' %}active{% endif %}"
                   href="{{ url_for('direct_uploads.recent_pregraded_grades') }}">Recent Grading Files</a>
               </li>
-   
+
               <li>
                 <hr class="dropdown-divider">
               </li>
-                       {% endif %}
+              {% endif %}
 
               <li>
                 <a class="dropdown-item {{ 'active' if (request.blueprint == 'jobs' or (request.endpoint|default('', true)).startswith('jobs.')) else '' }}"
@@ -193,15 +196,15 @@
           </li>
           {% endif %}
 
-          {% if  current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
+          {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] or (request.endpoint|default('', true)) == 'results.images_without_tasks') else '' }}" href="#"
-              id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] or (request.endpoint|default('', true)) == 'results.images_without_tasks') else '' }}"
+              href="#" id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Verify
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="verifyMenu">
 
-              <li  class="dropdown-item" style="font-weight: 800;">Verify Remedio</li>
+              <li class="dropdown-item" style="font-weight: 800;">Verify Remedio</li>
 
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_dr.verify_dr_list' else '' }}"
@@ -211,7 +214,7 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_nodr.nodr_list' else '' }}"
                   href="{{ url_for('verify_remedio_nodr.nodr_list') }}">DR Screenings Without PDF</a>
               </li>
-                            <li>
+              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_list' else '' }}"
                   href="{{ url_for('verify_remedio_glaucoma.glaucoma_list') }}">Glaucoma PDF Reports</a>
               </li>
@@ -220,12 +223,12 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_glaucoma.glaucoma_results' else '' }}"
                   href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Glaucoma PDF data Dashboard</a>
               </li>
-      
+
               <!-- DR Dashboard link removed as the route no longer exists -->
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li  class="dropdown-item" style="font-weight: 800;">Image Anonymization</li>
+              <li class="dropdown-item" style="font-weight: 800;">Image Anonymization</li>
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -233,10 +236,10 @@
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'preprocess.anonymization_dashboard' else '' }}"
                   href="{{ url_for('preprocess.anonymization_dashboard') }}">Anonymization Dashboard</a>
               </li>
-                     <li>
+              <li>
                 <hr class="dropdown-divider">
               </li>
-                      <li>
+              <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.images_without_tasks' else '' }}"
                   href="{{ url_for('analytics.images_without_tasks') }}">Images Without Tasks</a>
               </li>
@@ -245,47 +248,50 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('local_admin') or current_user_has('data_manager') %}
-                     <li class="nav-item dropdown">
-                       <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
-                         id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                         Grade
-                       </a>
-                       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
-                    {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
-                         <li>
-                         <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
-                           href="{{ url_for('grading.index') }}">Image Grading</a>
-                         </li>
-                         <li>
-                          <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.inter_rater_compare' else '' }}"
-                            href="{{ url_for('grading.inter_rater_compare') }}">My Inter-Rater</a>
-                         </li>
-                    {% if current_user_has('discrepancy_reviewer') %}
-                          <li>
-                            <a class="dropdown-item" href = "{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
-                         </li>
+          {% if current_user_has('ophthalmologist') or current_user_has('admin') or current_user_has('local_admin') or
+          current_user_has('data_manager') %}
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint in ['grading'] else '' }}" href="#"
+              id="gradingMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              Grade
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="gradingMenu">
+              {% if current_user_has('ophthalmologist') or current_user_has('admin') %}
+              <li>
+                <a class="dropdown-item {{ 'active' if request.blueprint == 'grading' else '' }}"
+                  href="{{ url_for('grading.index') }}">Image Grading</a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.inter_rater_compare' else '' }}"
+                  href="{{ url_for('grading.inter_rater_compare') }}">My Inter-Rater</a>
+              </li>
+              {% if current_user_has('discrepancy_reviewer') %}
+              <li>
+                <a class="dropdown-item" href="{{ url_for('review.discrepancy_review') }}"> Discrepancy Review</a>
+              </li>
 
-                         <li>
-                           <a class="dropdown-item {{ 'active' if request.endpoint == 'review.my_reviews' else '' }}" href="{{ url_for('review.my_reviews') }}">
-                             My Reviews
-                           </a>
-                         </li>
-   {% endif %}
-                          <li>
-                            <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}" href="{{ url_for('tasks.intra_rater_dashboard') }}">
-                              <span>My Intra-Rater Tasks</span>
-                            </a>
-                          </li>
-                    {% endif %}
-                          <li>
-                            <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.grader_statistics' else '' }}"
-                              href="{{ url_for('grading.grader_statistics') }}">Grader Statistics</a>
-                          </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if request.endpoint == 'review.my_reviews' else '' }}"
+                  href="{{ url_for('review.my_reviews') }}">
+                  My Reviews
+                </a>
+              </li>
+              {% endif %}
+              <li>
+                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_dashboard' else '' }}"
+                  href="{{ url_for('tasks.intra_rater_dashboard') }}">
+                  <span>My Intra-Rater Tasks</span>
+                </a>
+              </li>
+              {% endif %}
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'grading.grader_statistics' else '' }}"
+                  href="{{ url_for('grading.grader_statistics') }}">Grader Statistics</a>
+              </li>
 
-                       </ul>
-                     </li>
-                     {% endif %}
+            </ul>
+          </li>
+          {% endif %}
 
           {% if current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
@@ -294,31 +300,35 @@
               Tasks and Images
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="tasksMenu">
-  
+
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'tasks.all_tasks' else '' }}"
                   href="{{ url_for('tasks.all_tasks') }}">All Tasks</a>
               </li>
-               <li>
-               <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}" href="{{ url_for('search.search_images_route') }}">All Images</a>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'search.search_images_route' else '' }}"
+                  href="{{ url_for('search.search_images_route') }}">All Images</a>
               </li>
               <li>
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}" href="{{ url_for('ad_hoc_tasks.index') }}">Create Ad-hoc Tasks</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.index' else '' }}"
+                  href="{{ url_for('ad_hoc_tasks.index') }}">Create Ad-hoc Tasks</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}" href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'ad_hoc_tasks.list_batches' else '' }}"
+                  href="{{ url_for('ad_hoc_tasks.list_batches') }}">Ad-hoc Batches</a>
               </li>
 
               <li>
                 <hr class="dropdown-divider">
               </li>
 
- 
+
               <li>
-                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_admin' else '' }}" href="{{ url_for('tasks.intra_rater_admin') }}">
+                <a class="dropdown-item d-flex align-items-center gap-2 {{ 'active' if (request.endpoint|default('', true)) == 'tasks.intra_rater_admin' else '' }}"
+                  href="{{ url_for('tasks.intra_rater_admin') }}">
                   <span>Intra-Rater Batch Creator</span>
                   <span class="badge text-bg-secondary">Admin</span>
                 </a>
@@ -331,37 +341,49 @@
           </li>
           {% endif %}
 
-          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('data_exporter') or current_user_has('local_admin') %}
+          {% if current_user_has('data_manager') or current_user_has('admin') or current_user_has('data_exporter') or
+          current_user_has('local_admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}" href="#"
-              id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.endpoint|default('', true)) in ['analytics.image_results', 'analytics.encounter_results'] else '' }}"
+              href="#" id="analyticsMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Analytics
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="analyticsMenu">
 
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.image_results' else '' }}" href="{{ url_for('analytics.image_results') }}">Image Results</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.image_results' else '' }}"
+                  href="{{ url_for('analytics.image_results') }}">Image Results</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results' else '' }}" href="{{ url_for('analytics.encounter_results') }}">Encounter Results</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results' else '' }}"
+                  href="{{ url_for('analytics.encounter_results') }}">Encounter Results</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_files' else '' }}" href="{{ url_for('analytics.encounter_files') }}">Encounters</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_files' else '' }}"
+                  href="{{ url_for('analytics.encounter_files') }}">Encounters</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.direct_files' else '' }}" href="{{ url_for('analytics.direct_files') }}">Direct Files</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.direct_files' else '' }}"
+                  href="{{ url_for('analytics.direct_files') }}">Direct Files</a>
               </li>
-            
+
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}" href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.encounter_results_simple' else '' }}"
+                  href="{{ url_for('analytics.encounter_results_simple') }}">Encounters (Non-Pending)</a>
               </li>
-              <li><hr class="dropdown-divider"></li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.model_performance' else '' }}" href="{{ url_for('analytics.model_performance') }}">Model Performance</a>
+                <hr class="dropdown-divider">
               </li>
-              <li><hr class="dropdown-divider"></li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) in ['analytics.dataset_curation', 'analytics.dataset_detail'] else '' }}" href="{{ url_for('analytics.dataset_curation') }}">
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.model_performance' else '' }}"
+                  href="{{ url_for('analytics.model_performance') }}">Model Performance</a>
+              </li>
+              <li>
+                <hr class="dropdown-divider">
+              </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) in ['analytics.dataset_curation', 'analytics.dataset_detail'] else '' }}"
+                  href="{{ url_for('analytics.dataset_curation') }}">
                   Curated Datasets
                 </a>
               </li>
@@ -379,9 +401,9 @@
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminMenu">
               <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.admin_status') }}">
-                <i class="fas fa-tachometer-alt"></i> Admin Status Dashboard
-                <span class="badge bg-primary ms-auto">New</span>
-              </a></li>
+                  <i class="fas fa-tachometer-alt"></i> Admin Status Dashboard
+                  <span class="badge bg-primary ms-auto">New</span>
+                </a></li>
               <li>
                 <hr class="dropdown-divider">
               </li>
@@ -393,16 +415,25 @@
               <li><a class="dropdown-item" href="{{ url_for('admin.disk_usage') }}">Disk Usage</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.database_dump') }}">Database Backup</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.database_restore.index') }}">
-                <i class="fas fa-database-import"></i> Database Restore
-                <span class="badge bg-warning ms-auto">New</span>
-              </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.database_excel_export') }}">Database Tables export</a></li>
+                  <i class="fas fa-database-import"></i> Database Restore
+                  <span class="badge bg-warning ms-auto">New</span>
+                </a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.database_excel_export') }}">Database Tables
+                  export</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.email_settings_list') }}">
-                <i class="fas fa-envelope"></i> Email Settings
-              </a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views Status</a></li>
-              <li><a class="dropdown-item" href="{{ url_for('admin.grading_state_inconsistencies') }}">Grading State Inconsistencies</a></li>
+                  <i class="fas fa-envelope"></i> Email Settings
+                </a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a>
+              </li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views
+                  Status</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.materialized_view_status') }}">Analytics Views
+                  Status</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.grading_state_inconsistencies') }}">Grading State
+                  Inconsistencies</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.sensitive_operations_audit') }}">
+                  <i class="fas fa-shield-alt"></i> Sensitive Ops Audit
+                </a></li>
 
               <li>
                 <hr class="dropdown-divider">
@@ -420,7 +451,7 @@
                   Hospitals
                 </a>
               </li>
-               <li>
+              <li>
                 <a class="dropdown-item" href="{{ url_for('admin.list_and_create_ai_model') }}">
                   AI Models
                 </a>
@@ -458,7 +489,8 @@
               <li>
                 <hr class="dropdown-divider">
               </li>
-              <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Hospital Dashboard</a></li>
+              <li><a class="dropdown-item" href="{{ url_for('dashboard.hospital_dashboard') }}">Hospital Dashboard</a>
+              </li>
               <li><a class="dropdown-item" href="{{ url_for('dashboard.image_list') }}">Image List</a></li>
 
 
@@ -472,7 +504,7 @@
             </ul>
           </li>
           {% endif %}
-          
+
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ 'active' if request.blueprint == 'account' else '' }}" href="#"
               role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -485,7 +517,8 @@
                 <hr class="dropdown-divider">
               </li>
               <li>
-                <a class="dropdown-item d-flex justify-content-between align-items-center" href="{{ url_for('notifications.notifications') }}">
+                <a class="dropdown-item d-flex justify-content-between align-items-center"
+                  href="{{ url_for('notifications.notifications') }}">
                   <span>Notifications</span>
                   {% if unread_notification_count %}
                   <span class="badge bg-danger ms-2">{{ unread_notification_count }}</span>
@@ -651,8 +684,8 @@
   {% endif %}
 
   <!-- HTMX -->
-<!--  <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>-->
-  
+  <!--  <script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>-->
+
 
   <!-- {# Page-specific scripts go here #} -->
   {% block page_scripts %}
@@ -667,10 +700,10 @@
 
   <!-- Theme + palette logic -->
   {% if csp_script_nonce %}
-<script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
+  <script nonce="{{ csp_script_nonce() }}">
+  {% else %}
+  <script>
+    {% endif %}
     (function () {
       function updateToggle(theme) {
         var icon = document.querySelector('[data-theme-icon]');
@@ -679,25 +712,25 @@
         if (btn) btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
       }
       function setTheme(theme) {
-        document.documentElement.setAttribute('data-bs-theme', theme);
-        try { localStorage.setItem('theme', theme); } catch (e) { }
-        updateToggle(theme);
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    try {localStorage.setItem('theme', theme); } catch (e) { }
+    updateToggle(theme);
       }
-      // initialize toggle state based on current attribute
-      var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
-      updateToggle(current);
-      document.addEventListener('click', function (e) {
+    // initialize toggle state based on current attribute
+    var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+    updateToggle(current);
+    document.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-theme-toggle]');
-        if (!btn) return;
-        var cur = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
-        setTheme(cur === 'dark' ? 'light' : 'dark');
+    if (!btn) return;
+    var cur = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+    setTheme(cur === 'dark' ? 'light' : 'dark');
       });
 
       // Removed palette switching; single Healthcare theme remains
     })();
   </script>
 
-  
+
 
 
 </body>

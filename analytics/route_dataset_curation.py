@@ -33,7 +33,10 @@ from review.discrepancy_export import (
     _fetch_rows_by_task_ids,
 )
 from review.task_review import AI_REVIEW_STATUS_LABELS
+from review.task_review import AI_REVIEW_STATUS_LABELS
 from review.discrepancy_export import EXPORT_DIR
+from utils.filename_utils import sanitize_export_filename
+from werkzeug.utils import secure_filename
 
 
 def _build_filters_from_request(req) -> Dict[str, Any]:
@@ -499,6 +502,14 @@ def dataset_export_download(job_token: str, filename: str):
             abort(404)
         if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
             abort(404)
+
+        # Validate filename safety
+        if filename != secure_filename(filename):
+            abort(404)
+        
+        # Ensure filename looks like an export (basic check)
+        if ".." in filename or "/" in filename or "\\" in filename:
+             abort(404)
 
         export_path = (EXPORT_DIR / job_token / filename).resolve()
         if not export_path.exists() or EXPORT_DIR not in export_path.parents:

@@ -13,22 +13,13 @@ from . import bp
 @bp.route("/direct/view/<uuid_str>", methods=["GET"])
 @roles_required("admin", "local_admin", "data_manager")
 def view_upload(uuid_str: str):
-    # Use the utility function to get comprehensive summary
-    summary = get_direct_image_summary(uuid_str)
+    # Use the utility function to get comprehensive summary (now scoped)
+    summary = get_direct_image_summary(uuid_str, current_user)
     if not summary:
         from flask import abort
-        abort(404)
+        abort(404, description="Direct upload not found or access denied")
 
-    # Check if the user has access to the lab unit this direct upload belongs to
-    is_admin_like = current_user.has_role("admin", "data_manager")
-    user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    
-    direct_image = summary.get('direct_image', {})
-    lab_unit_id = direct_image.get('lab_unit_id')
-    
-    if not is_admin_like and lab_unit_id and lab_unit_id not in user_lab_unit_ids:
-        from flask import abort
-        abort(403, description="Access denied to this lab unit")
+    # Access control is handled by apply_scoping within get_direct_image_summary
     
     from flask import url_for
 

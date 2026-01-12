@@ -18,7 +18,7 @@ from models import (
     LabUnit,
     Session as DBSession,
 )
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 
 @bp.route("/", methods=["GET"])
 @roles_required(
@@ -31,7 +31,11 @@ from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
     "optometrist",
 )
 def search_route() -> str:
-    allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+    with DBSession() as db:
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_units = [lu.id for lu in lu_query.all()]
     if not allowed_lab_units:
         flash("No lab unit access.", "warning")
         return redirect(url_for("home.index"))

@@ -12,7 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from app_cache import cache
 from models import Consensus, Disease, DiseaseGrading, Grade, GradingTask, LabUnit
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 
 
 def register_routes(bp):
@@ -51,7 +51,11 @@ def inter_rater_compare():
             flash("No diseases configured.", "warning")
             return render_template("grading/inter_rater_compare.html", rows=[], diseases=[], grade_options=[])
 
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
+        
         if not allowed_lab_unit_ids:
             flash("No lab unit access.", "warning")
             return render_template("grading/inter_rater_compare.html", rows=[], diseases=diseases, grade_options=[])
@@ -296,7 +300,11 @@ def inter_rater_compare():
 def inter_rater_viewer(image_uuid: str):
     """Serve just the viewer card for HTMX swaps."""
     with get_db_session() as db:
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
+        
         if not allowed_lab_unit_ids:
             return ("", 403)
 

@@ -1,0 +1,64 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.9, pytest-8.4.1, pluggy-1.6.0 -- /app/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app
+configfile: pytest.ini
+plugins: Faker-39.0.0
+collecting ... collected 1 item
+
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual Setting up the environment...
+Directories are ready.
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+
+=== PRE-REQUEST DEBUG ===
+Total images in database: 2
+  - secret_hosp_b.jpg (hospital_id=2, lab_unit_id=3)
+  - my_hosp_a.jpg (hospital_id=1, lab_unit_id=1)
+User hospital_id: 1
+User has local_admin role: True
+=== END PRE-REQUEST DEBUG ===
+
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.commit() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.commit() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: load_user(2) loaded user site_admin_a with hospital_id 1
+DEBUG: Ignoring session.close() in test wrapper
+DEBUG: dashboard() reached. User: site_admin_a, IsAuthenticated: True, HospitalID: 1
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+DEBUG: allowed_lab_unit_ids: {1, 3}
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+DEBUG: Ignoring session.commit() in test wrapper
+DEBUG: Ignoring session.close() in test wrapper
+PASSED
+
+=============================== warnings summary ===============================
+tests/security/test_dashboard_isolation.py:7
+  /app/tests/security/test_dashboard_isolation.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.security - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.security
+
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+  /app/utils/notifications.py:77: SAWarning: Coercing Subquery object into a select() for use in IN(); please pass a select() construct explicitly
+    Notification.id.not_in(system_read_subq),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 1 passed, 7 warnings in 11.32s ========================
+<sys>:0: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

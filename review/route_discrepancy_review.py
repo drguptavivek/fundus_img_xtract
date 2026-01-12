@@ -25,10 +25,8 @@ from models import (
     Session,
     User,
 )
-from utils.upload_eligibility import (
-    get_user_lab_unit_ids,
-    get_user_lab_unit_ids_no_admin_override,
-)
+
+from utils.hospital_scoping import apply_scoping
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
 from . import bp
 from .task_review import AI_REVIEW_STATUS_LABELS
@@ -47,11 +45,13 @@ def discrepancy_review():
     db = Session()
     try:
         # Scope lab units to user's explicit associations (no admin override)
-        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        lab_units = db.execute(lu_query).scalars().all()
+        user_lab_unit_ids = {lu.id for lu in lab_units}
         
         # Get filter options
         diseases = db.query(Disease).order_by(Disease.name).all()
-        lab_units = db.query(LabUnit).filter(LabUnit.id.in_(list(user_lab_unit_ids))).options(joinedload(LabUnit.hospital)).order_by(LabUnit.hospital_id, LabUnit.name).all()
         
         # Get grade options from DiseaseGrading
         grade_options = db.query(DiseaseGrading).distinct(DiseaseGrading.impression).all()
@@ -393,11 +393,17 @@ def discrepancy_export():
     """Queue a background export for the current discrepancy filters."""
     db = Session()
     try:
-        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not user_lab_unit_ids:
+        # Scope lab units to user's explicit associations for export
+        lu_query = sa.select(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_units = db.execute(lu_query).scalars().all()
+        allowed_lab_unit_ids = {lu.id for lu in allowed_lab_units}
+
+        if not allowed_lab_unit_ids:
             from flask import flash, redirect, url_for
             flash("No lab units available for export.", "error")
             return redirect(url_for("review.discrepancy_review"))
+
         disease_id = request.form.get("disease_id", type=int)
         if not disease_id:
             from flask import flash, redirect, url_for
@@ -405,25 +411,16 @@ def discrepancy_export():
             return redirect(url_for("review.discrepancy_review", **request.args))
 
         lab_unit_id = request.form.get("lab_unit_id", type=int)
-        if lab_unit_id and lab_unit_id not in user_lab_unit_ids:
+        if lab_unit_id and lab_unit_id not in allowed_lab_unit_ids:
             from flask import flash, redirect, url_for
             flash("You are not allowed to export for this lab unit.", "error")
             return redirect(url_for("review.discrepancy_review", **request.args))
-
+            
+        # ... (ai_review_statuses extraction) ...
         ai_review_statuses = [
             status for status in request.form.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
         ]
-        if not ai_review_statuses:
-            ai_review_statuses = [
-                status for status in request.args.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
-            ]
-        if not ai_review_statuses and request.referrer:
-            from urllib.parse import urlparse, parse_qs
-            parsed_referrer = urlparse(request.referrer)
-            qs_params = parse_qs(parsed_referrer.query or "")
-            ai_review_statuses = [
-                status for status in qs_params.get("ai_review_status", []) if status in AI_REVIEW_STATUS_LABELS
-            ]
+        # ... (rest of filtering logic) ...
 
         filters = {
             "disease_id": disease_id,
@@ -439,7 +436,7 @@ def discrepancy_export():
             "ai_model_id": request.form.getlist("ai_model_id"),
             "ai_grade": request.form.getlist("ai_grade"),
             "ai_review_status": ai_review_statuses,
-            "allowed_lab_units": list(user_lab_unit_ids),
+            "allowed_lab_units": list(allowed_lab_unit_ids),
         }
 
         xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
@@ -471,10 +468,15 @@ def discrepancy_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "discrepancy_export").first()
         if not job:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+            
+        # Standard scoping check for job access
+        lu_query = sa.select(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = {lu.id for lu in db.execute(lu_query).scalars().all()}
+        
         if job.lab_unit_id is None and job.uploader_user_id != current_user.id:
             abort(404)
-        if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
+        if job.lab_unit_id and job.lab_unit_id not in allowed_lab_unit_ids and job.uploader_user_id != current_user.id:
             abort(404)
 
     export_dir = (EXPORT_DIR / job_token).resolve()

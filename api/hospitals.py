@@ -12,6 +12,7 @@ from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Hospital, LabUnit
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 
 
 # -------------------
@@ -24,19 +25,9 @@ from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 def get_hospitals_list():
     """Get accessible hospitals for current user (hospital-aware)."""
     with get_db_session() as db:
-        # Master admin sees all hospitals
-        if current_user.is_master_admin:
-            hospitals = db.execute(
-                select(Hospital).order_by(Hospital.name.asc())
-            ).scalars().all()
-        else:
-            # Regular users see only their assigned hospital
-            if current_user.hospital_id:
-                hospitals = db.execute(
-                    select(Hospital).where(Hospital.id == current_user.hospital_id)
-                ).scalars().all()
-            else:
-                hospitals = []
+        query = select(Hospital).order_by(Hospital.name.asc())
+        query = apply_scoping(query, Hospital, current_user, "view")
+        hospitals = db.execute(query).scalars().all()
 
         hospitals_data = [
             {
@@ -55,15 +46,12 @@ def get_hospitals_list():
 def get_hospital_by_id(hospital_id):
     """Get a specific hospital by ID (hospital-aware)."""
     with get_db_session() as db:
-        hospital = db.get(Hospital, hospital_id)
+        query = select(Hospital).where(Hospital.id == hospital_id)
+        query = apply_scoping(query, Hospital, current_user, "view")
+        hospital = db.execute(query).scalar_one_or_none()
+        
         if not hospital:
-            return jsonify({"error": "Hospital not found"}), 404
-
-        # Hospital access validation
-        if not current_user.is_master_admin:
-            # Non-admin users can only access their assigned hospital
-            if current_user.hospital_id != hospital_id:
-                return jsonify({"error": "Forbidden - access to this hospital not allowed"}), 403
+            return jsonify({"error": "Hospital not found or access denied"}), 404
 
         hospital_data = {
             "id": hospital.id,

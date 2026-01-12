@@ -11,7 +11,7 @@ from sqlalchemy import func
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import Disease, Grade, GradingTask, LabUnit, User
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 
 
 ROLE_LABELS = {
@@ -160,7 +160,11 @@ def _compute_totals(grouped: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Dict[
 def grader_statistics():
     """Show per-grader grade counts by disease and lab unit (monthly + cumulative)."""
     with get_db_session() as db:
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
+        
         if not allowed_lab_unit_ids:
             return render_template(
                 "grading/grader_statistics.html",

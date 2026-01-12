@@ -15,7 +15,6 @@ from flask import request
 CROSS_HOSPITAL_OPERATIONS = {
     'grading',
     'arbitration', 
-    'dataset_creation',
     'research',
     'training',
 }

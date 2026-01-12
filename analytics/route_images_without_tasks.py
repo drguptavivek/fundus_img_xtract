@@ -26,7 +26,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.hospital_scoping import apply_scoping
 
 
 @bp.route("/images/no-tasks", methods=["GET"])
@@ -63,21 +63,17 @@ def images_without_tasks() -> str:
                 .outerjoin(GradingTask, GradingTask.encounter_file_id == EncounterFile.id)
                 .filter(EncounterFile.file_type == 'image')
                 .filter(GradingTask.id.is_(None))
-                .options(
-                    selectinload(EncounterFile.lab_unit).selectinload(LabUnit.hospital),
-                    selectinload(EncounterFile.patient_encounter)
-                    .selectinload(PatientEncounters.lab_unit)
-                    .selectinload(LabUnit.hospital),
-                )
             )
             
-            # Apply lab unit access control for zip images
-            if not is_admin_like and user_lab_unit_ids:
-                # Filter by encounter's lab_unit or file's lab_unit if user doesn't have admin-like access
-                encounter_query = encounter_query.filter(
-                    (PatientEncounters.lab_unit_id.in_(list(user_lab_unit_ids))) |
-                    ((PatientEncounters.lab_unit_id.is_(None)) & (EncounterFile.lab_unit_id.in_(list(user_lab_unit_ids))))
-                )
+            # Apply hospital scoping for zip images
+            encounter_query = apply_scoping(encounter_query, EncounterFile, current_user, 'analytics')
+            
+            encounter_query = encounter_query.options(
+                selectinload(EncounterFile.lab_unit).selectinload(LabUnit.hospital),
+                selectinload(EncounterFile.patient_encounter)
+                .selectinload(PatientEncounters.lab_unit)
+                .selectinload(LabUnit.hospital),
+            )
             
             encounter_rows = encounter_query.all()
 
@@ -118,24 +114,21 @@ def images_without_tasks() -> str:
                 db.query(DirectImageUpload)
                 .outerjoin(GradingTask, GradingTask.direct_image_upload_id == DirectImageUpload.id)
                 .filter(GradingTask.id.is_(None))
-                .options(selectinload(DirectImageUpload.lab_unit).selectinload(LabUnit.hospital))
             )
             
-            # Apply lab unit access control for direct uploads
-            if not is_admin_like and user_lab_unit_ids:
-                direct_query = direct_query.filter(DirectImageUpload.lab_unit_id.in_(list(user_lab_unit_ids)))
-                
+            # Apply hospital scoping for direct uploads
+            direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, 'analytics')
+            
+            direct_query = direct_query.options(selectinload(DirectImageUpload.lab_unit).selectinload(LabUnit.hospital))
+            
             direct_rows = direct_query.all()
 
             for upload in direct_rows:
                 lab_unit = upload.lab_unit
                 
-                # Additional check for the specific lab_unit filter
-                if lab_unit_id:
-                    if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
-                        continue  # Skip if user doesn't have access to the filtered lab unit
-                    if not lab_unit or lab_unit.id != lab_unit_id:
-                        continue  # Skip if the lab unit doesn't match the filter
+                # Filter check for the specific lab_unit filter
+                if lab_unit_id and (not lab_unit or lab_unit.id != lab_unit_id):
+                    continue
 
                 records.append(
                     {
@@ -166,31 +159,22 @@ def images_without_tasks() -> str:
         page_records = records[start:end]
 
         # Filter hospitals and lab units to only those the user has access to
-        if is_admin_like:
-            hospitals = db.query(Hospital).order_by(Hospital.name).all()
-            lab_units = (
-                db.query(LabUnit)
-                .options(selectinload(LabUnit.hospital))
-                .order_by(LabUnit.name)
-                .all()
-            )
-        else:
-            lab_units = (
-                db.query(LabUnit)
-                .options(selectinload(LabUnit.hospital))
-                .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
-                .order_by(LabUnit.name)
-                .all()
-            )
-            # Get hospitals for the allowed lab units
-            hospital_ids = [lu.hospital_id for lu in lab_units]
-            hospitals = (
-                db.query(Hospital)
-                .filter(Hospital.id.in_(hospital_ids))
-                .options(selectinload(Hospital.lab_units))
-                .order_by(Hospital.name)
-                .all()
-            )
+        lab_units_query = db.query(LabUnit)
+        lab_units_query = apply_scoping(lab_units_query, LabUnit, current_user, 'analytics')
+        lab_units = (
+            lab_units_query
+            .options(selectinload(LabUnit.hospital))
+            .order_by(LabUnit.name)
+            .all()
+        )
+        
+        hospitals_query = db.query(Hospital)
+        hospitals_query = apply_scoping(hospitals_query, Hospital, current_user, 'analytics')
+        hospitals = (
+            hospitals_query
+            .order_by(Hospital.name)
+            .all()
+        )
             
         # Extract hospital and lab unit data before session closes
         hospitals_data = [

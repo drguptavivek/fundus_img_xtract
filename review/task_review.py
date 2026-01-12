@@ -11,7 +11,8 @@ import threading
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures, Consensus
-from utils.upload_eligibility import get_user_lab_unit_ids
+
+from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_detail
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
@@ -77,23 +78,20 @@ def _kick_off_mv_refresh(app) -> None:
 def review_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
-        # Get user's eligible lab units
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        
-        # First verify the task exists and is in a lab unit the user has access to
-        task = (
+        # Build query for the task
+        query = (
             db.query(GradingTask)
-            .join(LabUnit)
             .filter(GradingTask.id == task_id)
-            .filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
             .options(
                 joinedload(GradingTask.disease),
                 joinedload(GradingTask.lab_unit),
                 joinedload(GradingTask.encounter_file),
-                joinedload(GradingTask.direct_image)  # Add direct image information
+                joinedload(GradingTask.direct_image)
             )
-            .first()
         )
+        # Apply hospital scoping to ensure task is within user's access
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
         
         if not task:
             from flask import abort
@@ -111,6 +109,11 @@ def review_task_details(task_id: int):
             get_user_eligibility_for_task(db, current_user.id, task_id, 'resident2') or
             get_user_eligibility_for_task(db, current_user.id, task_id, 'arbitrator')
         )
+        
+        # Get allowed lab units for navigation
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        user_lab_unit_ids = [lu.id for lu in lu_query.all()]
         
         # Get latest existing review grade if any (any reviewer)
         existing_review_grade = None
@@ -590,22 +593,18 @@ def my_reviews():
 def my_reviews_viewer(image_uuid: str):
     """Serve the grading viewer card for a review image UUID."""
     with get_db_session() as db:
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids(current_user.id) or [])
-        if not allowed_lab_unit_ids:
-            return ("", 403)
-
-        task = (
+        query = (
             db.query(GradingTask)
             .filter(
-                GradingTask.lab_unit_id.in_(allowed_lab_unit_ids),
                 or_(
                     GradingTask.encounter_file.has(uuid=image_uuid),
                     GradingTask.direct_image.has(uuid=image_uuid),
                 ),
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
-            .first()
         )
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
         if not task:
             return ("Not found", 404)
 

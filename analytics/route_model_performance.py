@@ -12,7 +12,7 @@ from app_cache import cache
 
 from . import bp
 from models import AIModel, Camera, Disease, DiseaseGrading, LabUnit
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 from db_transaction_manager import get_db_session
 
 import json
@@ -675,16 +675,12 @@ def model_performance() -> str:
                 selected_model_name = selected_model.name
                 selected_model_version = selected_model.version
 
-        # Lab unit options respecting access (no admin override)
-        user_lab_unit_ids = list(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-        lab_units = (
-            db.query(LabUnit)
-            .filter(LabUnit.id.in_(user_lab_unit_ids))
-            .order_by(LabUnit.name)
-            .all()
-            if user_lab_unit_ids
-            else []
-        )
+        # Lab unit options respecting hospital access
+        lu_query = db.query(LabUnit).order_by(LabUnit.name)
+        # Apply hospital scoping for analytics context
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "analytics")
+        lab_units = lu_query.all()
+        user_lab_unit_ids = [lu.id for lu in lab_units]
         lab_units_payload = [{"id": lu.id, "name": lu.name} for lu in lab_units]
 
         if disease_id and ai_model_id:
@@ -780,24 +776,20 @@ def model_performance() -> str:
 
                 # Lab unit filter respecting access
                 if selected_lab_units:
-                    requested = set(selected_lab_units) & set(user_lab_unit_ids or [])
+                    # Only allow lab units that the user actually has access to
+                    requested = set(selected_lab_units) & set(user_lab_unit_ids)
                     if requested:
-                        placeholders = []
-                        for idx, val in enumerate(requested):
-                            key = f"lab_unit_id_{idx}"
-                            params[key] = val
-                            placeholders.append(f":{key}")
-                        sql_parts.append(f"AND lab_unit_id IN ({', '.join(placeholders)})")
+                        sql_parts.append("AND lab_unit_id = ANY(:selected_lab_unit_ids)")
+                        params["selected_lab_unit_ids"] = list(requested)
                     else:
                         sql_parts.append("AND 1=0")
                 elif user_lab_unit_ids:
-                    placeholders = []
-                    for idx, val in enumerate(user_lab_unit_ids):
-                        key = f"lab_unit_id_{idx}"
-                        params[key] = val
-                        placeholders.append(f":{key}")
-                    if placeholders:
-                        sql_parts.append(f"AND lab_unit_id IN ({', '.join(placeholders)})")
+                    # Default: restrict to ALL lab units the user has access to
+                    sql_parts.append("AND lab_unit_id = ANY(:allowed_lab_unit_ids)")
+                    params["allowed_lab_unit_ids"] = user_lab_unit_ids
+                elif not current_user.is_master_admin:
+                    # No lab units and not master admin = no access
+                    sql_parts.append("AND 1=0")
 
                 sql_parts.append("ORDER BY task_created_at DESC, grade_created_at DESC")
                 query = text("\n".join(sql_parts))

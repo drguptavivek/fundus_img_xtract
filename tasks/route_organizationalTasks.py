@@ -10,6 +10,7 @@ from flask_login import current_user
 from db_transaction_manager import get_db_session
 from utils.taskUtils import get_task_summary
 from utils.masterUtils import get_all_diseases
+from utils.hospital_scoping import apply_scoping
 from models import Hospital, LabUnit
 from . import bp
 
@@ -43,19 +44,21 @@ def all_tasks() -> str:
     with get_db_session() as db:
         # Get user's lab unit IDs for scoping
         user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-        if not user_lab_unit_ids:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-
-        user_lab_units = db.query(LabUnit).filter(LabUnit.id.in_(user_lab_unit_ids)).all()
-        allowed_hospital_ids = {lu.hospital_id for lu in user_lab_units if lu.hospital_id}
-
-        if hospital_filter and hospital_filter not in allowed_hospital_ids:
-            flash("Invalid hospital filter.", "danger")
-            return redirect(url_for("tasks.all_tasks"))
-        if lab_unit_filter and lab_unit_filter not in user_lab_unit_ids:
-            flash("Invalid lab unit filter.", "danger")
-            return redirect(url_for("tasks.all_tasks"))
+        
+        # Security check: Ensure requested filters are within user's scope
+        if hospital_filter:
+             h_query = select(Hospital).where(Hospital.id == hospital_filter)
+             h_query = apply_scoping(h_query, Hospital, current_user, "view")
+             if not db.execute(h_query).scalar_one_or_none():
+                 flash("Invalid hospital filter.", "danger")
+                 return redirect(url_for("tasks.all_tasks"))
+        
+        if lab_unit_filter:
+             lu_query = select(LabUnit).where(LabUnit.id == lab_unit_filter)
+             lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+             if not db.execute(lu_query).scalar_one_or_none():
+                 flash("Invalid lab unit filter.", "danger")
+                 return redirect(url_for("tasks.all_tasks"))
         
         # Get paginated tasks using the utility function
         tasks, total_count = get_task_summary(
@@ -76,18 +79,14 @@ def all_tasks() -> str:
         # Get all diseases for the disease filter dropdown
         diseases = get_all_diseases()
         
-        hospitals = (
-            db.query(Hospital)
-            .filter(Hospital.id.in_(allowed_hospital_ids))
-            .order_by(Hospital.id)
-            .all()
-        )
-        lab_units = (
-            db.query(LabUnit)
-            .filter(LabUnit.id.in_(user_lab_unit_ids))
-            .order_by(LabUnit.id)
-            .all()
-        )
+        # Get hospitals and lab units for filters
+        h_query = select(Hospital).order_by(Hospital.name.asc())
+        h_query = apply_scoping(h_query, Hospital, current_user, "view")
+        hospitals = db.execute(h_query).scalars().all()
+        
+        lu_query = select(LabUnit).order_by(LabUnit.name.asc())
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        lab_units = db.execute(lu_query).scalars().all()
         
         # Prepare context for template
         context = {

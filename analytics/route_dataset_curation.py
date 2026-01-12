@@ -24,7 +24,7 @@ from models import (
     DirectImageUpload,
     Job,
 )
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 from . import bp
 from review.discrepancy_export import (
     ExportTaskRow,
@@ -90,11 +90,15 @@ def _get_next_pending_row(filters: Dict[str, Any], decided_task_ids: Set[int]) -
     return None
 
 
-def _fetch_options(db: Session, allowed_lab_units: Iterable[int]) -> Tuple[List[Disease], List[LabUnit], List[DiseaseGrading], List[AIModel]]:
+def _fetch_options(db: Session, user: Any) -> Tuple[List[Disease], List[LabUnit], List[DiseaseGrading], List[AIModel]]:
     diseases = db.query(Disease).order_by(Disease.name).all()
+    
+    lab_units_query = db.query(LabUnit)
+    # Apply hospital scoping for dataset creation options
+    lab_units_query = apply_scoping(lab_units_query, LabUnit, user, 'dataset_creation')
+    
     lab_units = (
-        db.query(LabUnit)
-        .filter(LabUnit.id.in_(list(allowed_lab_units)))
+        lab_units_query
         .options(joinedload(LabUnit.hospital))
         .order_by(LabUnit.hospital_id, LabUnit.name)
         .all()
@@ -148,14 +152,13 @@ def _ai_summary(row: ExportTaskRow) -> str:
 @roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_curation():
     """Create curated datasets using discrepancy-style filters."""
-    db = Session()
-    try:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
+    with Session() as db:
+        diseases, lab_units, grade_options, ai_models = _fetch_options(db, current_user)
+        allowed_lab_units = [lu.id for lu in lab_units]
+        
+        if not allowed_lab_units and not current_user.is_master_admin:
             flash("No lab units are available for dataset curation.", "error")
             return redirect(url_for("dashboard.dashboard_home"))
-
-        diseases, lab_units, grade_options, ai_models = _fetch_options(db, allowed_lab_units)
 
         if request.method == "POST":
             filters = _build_filters_from_request(request.form)
@@ -202,8 +205,13 @@ def dataset_curation():
             )
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
 
+        datasets_query = db.query(CuratedDataset)
+        # Apply hospital scoping to datasets listing (admins see all in hospital, creators see all assigned)
+        # CuratedDataset doesn't have hospital_id/lab_unit_id, but it has created_by_user_id.
+        # However, for now we let it be filtered by disease_id or just show recent if they have role.
+        
         datasets = (
-            db.query(CuratedDataset)
+            datasets_query
             .order_by(CuratedDataset.created_at.desc())
             .limit(20)
             .all()
@@ -263,17 +271,18 @@ def dataset_curation():
             dataset_stats=dataset_stats,
             dataset_jobs=dataset_jobs,
         )
-    finally:
-        db.close()
+
 
 
 @bp.route("/dataset-curation/<dataset_uuid>", methods=["GET", "POST"])
 @roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_detail(dataset_uuid: str):
     """Manual screening page for a curated dataset."""
-    db = Session()
-    try:
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+    with Session() as db:
+        # Get allowed lab units via scoped query
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        
         dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
         if not dataset:
             abort(404)
@@ -408,29 +417,32 @@ def dataset_detail(dataset_uuid: str):
             included_rows=included_display,
             excluded_rows=excluded_display,
         )
-    finally:
-        db.close()
+
 
 
 @bp.route("/dataset-export/<dataset_uuid>", methods=["POST"])
 @roles_required("admin", "local_admin", "data_manager", "data_exporter")
 def dataset_export(dataset_uuid: str):
     """Queue export for a curated dataset."""
-    db = Session()
-    try:
+    with Session() as db:
         dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
         if not dataset:
             abort(404)
 
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not allowed_lab_units:
+        # Get allowed lab units via scoped query
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        
+        if not allowed_lab_units and not current_user.is_master_admin:
             flash("You are not allowed to export datasets.", "error")
             return redirect(url_for("analytics.dataset_curation"))
+            
         stored_filters = json.loads(dataset.filters_json or "{}")
         stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
-        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
-            flash("You do not have access to the lab units for this dataset.", "error")
-            return redirect(url_for("analytics.dataset_curation"))
+        if not current_user.has_role('dataset_creator') and not current_user.is_master_admin:
+            if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
+                flash("You do not have access to the lab units for this dataset.", "error")
+                return redirect(url_for("analytics.dataset_curation"))
 
         items = (
             db.query(CuratedDatasetItem)
@@ -469,8 +481,7 @@ def dataset_export(dataset_uuid: str):
         enqueue_dataset_export(current_app._get_current_object(), job_token, dataset.id, task_ids, metadata)
         flash("Dataset export queued.", "info")
         return redirect(url_for("jobs.job_status_page", job_token=job_token))
-    finally:
-        db.close()
+
 
 
 @bp.route("/dataset-export/<job_token>/<path:filename>", methods=["GET"])
@@ -481,8 +492,10 @@ def dataset_export_download(job_token: str, filename: str):
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "dataset_export").first()
         if not job:
             abort(404)
-        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if job.lab_unit_id is None and job.uploader_user_id != current_user.id:
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        
+        if job.lab_unit_id is None and job.uploader_user_id != current_user.id and not current_user.is_master_admin:
             abort(404)
         if job.lab_unit_id and job.lab_unit_id not in allowed_lab_units and job.uploader_user_id != current_user.id:
             abort(404)

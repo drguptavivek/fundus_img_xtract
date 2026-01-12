@@ -9,9 +9,9 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
 from models import Consensus, Grade, GradingTask, LabUnit, PatientEncounters
-from utils.upload_eligibility import get_user_lab_unit_ids
 from .encounterUtils import get_encounter_summary
 from db_transaction_manager import get_db_session
+from utils.hospital_scoping import apply_scoping
 
 from . import bp
 
@@ -22,9 +22,15 @@ def view_encounter(encounter_id: int):
     image_exts = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
     with get_db_session() as db:
+        # Build base query for encounter
+        query = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id)
+        
+        # Apply hospital scoping
+        query = apply_scoping(query, PatientEncounters, current_user, 'analytics')
+        
         # Get the encounter with all necessary relationships loaded for the template
         encounter = (
-            db.query(PatientEncounters)
+            query
             .options(
                 joinedload(PatientEncounters.zip_file),
                 selectinload(PatientEncounters.encounter_files),
@@ -33,18 +39,12 @@ def view_encounter(encounter_id: int):
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
                 joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
-            .filter(PatientEncounters.id == encounter_id)
             .first()
         )
         if not encounter:
-            abort(404, description="Encounter not found")
+            abort(404, description="Encounter not found or access denied")
 
-        is_admin_like = current_user.has_role("admin", "data_manager")
-        allowed_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if (not is_admin_like) and encounter.lab_unit_id and allowed_unit_ids and encounter.lab_unit_id not in allowed_unit_ids:
-            abort(403)
-
-        prev_enc = (
+        prev_query = (
             db.query(PatientEncounters)
             .filter(
                 or_(
@@ -55,10 +55,10 @@ def view_encounter(encounter_id: int):
                     ),
                 )
             )
-            .order_by(PatientEncounters.capture_date.asc(), PatientEncounters.id.asc())
-            .first()
         )
-        next_enc = (
+        prev_query = apply_scoping(prev_query, PatientEncounters, current_user, 'analytics')
+        prev_enc = prev_query.order_by(PatientEncounters.capture_date.asc(), PatientEncounters.id.asc()).first()
+        next_query = (
             db.query(PatientEncounters)
             .filter(
                 or_(
@@ -69,9 +69,9 @@ def view_encounter(encounter_id: int):
                     ),
                 )
             )
-            .order_by(PatientEncounters.capture_date.desc(), PatientEncounters.id.desc())
-            .first()
         )
+        next_query = apply_scoping(next_query, PatientEncounters, current_user, 'analytics')
+        next_enc = next_query.order_by(PatientEncounters.capture_date.desc(), PatientEncounters.id.desc()).first()
 
         images = []
         for ef in encounter.encounter_files or []:
@@ -85,7 +85,7 @@ def view_encounter(encounter_id: int):
         gl_cleaned = encounter.glaucoma_results_cleaned or []
 
         # Use utility function to get comprehensive task data
-        summary = get_encounter_summary(encounter_id)
+        summary = get_encounter_summary(encounter_id, current_user)
         if not summary:
             abort(404, description="Encounter not found")
 

@@ -27,9 +27,9 @@ class TestCrossHospitalOperationCheck:
         """Arbitration operations should be cross-hospital."""
         assert is_cross_hospital_operation('arbitration') is True
     
-    def test_dataset_creation_is_cross_hospital(self):
-        """Dataset creation should be cross-hospital."""
-        assert is_cross_hospital_operation('dataset_creation') is True
+    def test_dataset_creation_is_hospital_bound(self):
+        """Dataset creation should be hospital-bound (unless role override)."""
+        assert is_cross_hospital_operation('dataset_creation') is False
     
     def test_upload_is_hospital_bound(self):
         """Upload operations should be hospital-bound."""
@@ -43,7 +43,7 @@ class TestCrossHospitalOperationCheck:
         """CROSS_HOSPITAL_OPERATIONS constant should contain expected values."""
         assert 'grading' in CROSS_HOSPITAL_OPERATIONS
         assert 'arbitration' in CROSS_HOSPITAL_OPERATIONS
-        assert 'dataset_creation' in CROSS_HOSPITAL_OPERATIONS
+        assert 'dataset_creation' not in CROSS_HOSPITAL_OPERATIONS
         assert 'upload' not in CROSS_HOSPITAL_OPERATIONS
 
 
@@ -55,8 +55,9 @@ class TestGetUserLabUnitsInHospital:
         self, db_session, master_admin, test_lab_units
     ):
         """Master admin should get all lab units in specified hospital."""
+        user = db_session.merge(master_admin)
         # Get Hospital A lab units
-        lab_ids = get_user_lab_units_in_hospital(master_admin.id, hospital_id=1, db=db_session)
+        lab_ids = get_user_lab_units_in_hospital(user.id, hospital_id=1, db=db_session)
         
         assert 1 in lab_ids  # lab_a1
         assert 2 in lab_ids  # lab_a2
@@ -67,7 +68,8 @@ class TestGetUserLabUnitsInHospital:
         self, db_session, master_admin, test_lab_units
     ):
         """Master admin without hospital filter should get ALL lab units."""
-        lab_ids = get_user_lab_units_in_hospital(master_admin.id, db=db_session)
+        user = db_session.merge(master_admin)
+        lab_ids = get_user_lab_units_in_hospital(user.id, db=db_session)
         
         # Should include both hospitals
         assert len(lab_ids) >= 6
@@ -78,7 +80,8 @@ class TestGetUserLabUnitsInHospital:
         self, db_session, ophthalmologist_hospital_a, test_lab_units
     ):
         """Regular user should only get lab units from their hospital."""
-        lab_ids = get_user_lab_units_in_hospital(ophthalmologist_hospital_a.id, db=db_session)
+        user = db_session.merge(ophthalmologist_hospital_a)
+        lab_ids = get_user_lab_units_in_hospital(user.id, db=db_session)
         
         # Should only have Hospital A lab units (user's hospital)
         assert 1 in lab_ids  # lab_a1 (assigned)
@@ -118,9 +121,10 @@ class TestValidateLabUnitHospitalMatch:
         self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Lab unit from same hospital should be valid."""
+        user = db_session.merge(ophthalmologist_hospital_a)
         # ophth_a is in Hospital A (id=1), lab_a2 is also in Hospital A
         is_valid = validate_lab_unit_hospital_match(
-            ophthalmologist_hospital_a.id,
+            user.id,
             core_test_data['lab_a2'].id,  # Hospital A lab
             db=db_session
         )
@@ -131,9 +135,10 @@ class TestValidateLabUnitHospitalMatch:
         self, db_session, ophthalmologist_hospital_a, core_test_data
     ):
         """Lab unit from different hospital should be invalid."""
+        user = db_session.merge(ophthalmologist_hospital_a)
         # ophth_a is in Hospital A (id=1), lab_b1 is in Hospital B (id=2)
         is_valid = validate_lab_unit_hospital_match(
-            ophthalmologist_hospital_a.id,
+            user.id,
             core_test_data['lab_b1'].id,  # Hospital B lab
             db=db_session
         )
@@ -144,9 +149,10 @@ class TestValidateLabUnitHospitalMatch:
         self, db_session, master_admin, core_test_data
     ):
         """Master admin should be able to access any lab unit."""
+        user = db_session.merge(master_admin)
         # Master admin can access Hospital B lab unit
         is_valid = validate_lab_unit_hospital_match(
-            master_admin.id,
+            user.id,
             core_test_data['lab_b1'].id,  # Hospital B lab
             db=db_session
         )
@@ -170,7 +176,7 @@ class TestApplyScopingHospitalBound:
         import uuid
         
         # Get uploader from Hospital A
-        uploader = ophthalmologist_hospital_a
+        uploader = db_session.merge(ophthalmologist_hospital_a)
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -203,7 +209,7 @@ class TestApplyScopingHospitalBound:
         
         # Apply scoping for upload (hospital-bound)
         query = db_session.query(DirectImageUpload)
-        query = apply_scoping(query, DirectImageUpload, ophthalmologist_hospital_a, 'upload')
+        query = apply_scoping(query, DirectImageUpload, uploader, 'upload')
         
         images = query.all()
         hospital_ids = {img.hospital_id for img in images}
@@ -219,13 +225,15 @@ class TestApplyScopingHospitalBound:
         from models import DirectImageUpload
         import uuid
         
+        user = db_session.merge(master_admin)
+        
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
             original_filename='test_a.jpg',
             filename='test_a.jpg',
             folder_rel='files/test',
             file_hash='abc123',
-            uploader_id=master_admin.id,
+            uploader_id=user.id,
             hospital_id=1,
             lab_unit_id=1,
             camera_id=core_test_data['camera'].id,
@@ -238,7 +246,7 @@ class TestApplyScopingHospitalBound:
             filename='test_b.jpg',
             folder_rel='files/test',
             file_hash='def456',
-            uploader_id=master_admin.id,
+            uploader_id=user.id,
             hospital_id=2,
             lab_unit_id=4,
             camera_id=core_test_data['camera'].id,
@@ -249,7 +257,8 @@ class TestApplyScopingHospitalBound:
         db_session.flush()
         
         query = db_session.query(DirectImageUpload)
-        query = apply_scoping(query, DirectImageUpload, master_admin, 'upload')
+        user = db_session.merge(master_admin)
+        query = apply_scoping(query, DirectImageUpload, user, 'upload')
         
         images = query.all()
         hospital_ids = {img.hospital_id for img in images}
@@ -270,13 +279,15 @@ class TestApplyScopingCrossHospital:
         from models import DirectImageUpload
         import uuid
         
+        uploader = db_session.merge(ophthalmologist_hospital_a)
+        
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
             original_filename='test_a.jpg',
             filename='test_a.jpg',
             folder_rel='files/test',
             file_hash='abc123',
-            uploader_id=ophthalmologist_hospital_a.id,
+            uploader_id=uploader.id,
             hospital_id=1,
             lab_unit_id=1,
             camera_id=core_test_data['camera'].id,
@@ -289,7 +300,7 @@ class TestApplyScopingCrossHospital:
             filename='test_b.jpg',
             folder_rel='files/test',
             file_hash='def456',
-            uploader_id=ophthalmologist_hospital_a.id,
+            uploader_id=uploader.id,
             hospital_id=2,
             lab_unit_id=4,
             camera_id=core_test_data['camera'].id,
@@ -301,7 +312,7 @@ class TestApplyScopingCrossHospital:
         
         # Apply scoping for grading (cross-hospital)
         query = db_session.query(DirectImageUpload)
-        query = apply_scoping(query, DirectImageUpload, ophthalmologist_hospital_a, 'grading')
+        query = apply_scoping(query, DirectImageUpload, uploader, 'grading')
         
         images = query.all()
         hospital_ids = {img.hospital_id for img in images}
@@ -316,6 +327,8 @@ class TestApplyScopingCrossHospital:
         """Dataset creation should be cross-hospital."""
         from models import DirectImageUpload
         import uuid
+
+        user = db_session.merge(dataset_creator)
         
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -323,7 +336,8 @@ class TestApplyScopingCrossHospital:
             filename='test_a.jpg',
             folder_rel='files/test',
             file_hash='abc123',
-            uploader_id=dataset_creator.id,
+
+            uploader_id=user.id,
             hospital_id=1,
             lab_unit_id=1,
             camera_id=core_test_data['camera'].id,
@@ -336,7 +350,8 @@ class TestApplyScopingCrossHospital:
             filename='test_b.jpg',
             folder_rel='files/test',
             file_hash='def456',
-            uploader_id=dataset_creator.id,
+
+            uploader_id=user.id,
             hospital_id=2,
             lab_unit_id=4,
             camera_id=core_test_data['camera'].id,
@@ -348,7 +363,7 @@ class TestApplyScopingCrossHospital:
         
         # Apply scoping for dataset creation (cross-hospital)
         query = db_session.query(DirectImageUpload)
-        query = apply_scoping(query, DirectImageUpload, dataset_creator, 'dataset_creation')
+        query = apply_scoping(query, DirectImageUpload, user, 'dataset_creation')
         
         images = query.all()
         hospital_ids = {img.hospital_id for img in images}

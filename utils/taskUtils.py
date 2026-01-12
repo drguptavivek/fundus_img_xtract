@@ -28,7 +28,7 @@ from models import (
     DirectImageUpload,
     UserDiseaseUnitRole
 )
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.hospital_scoping import apply_scoping
 
 
 def get_task_summary(
@@ -71,11 +71,7 @@ def get_task_summary(
     query = query.outerjoin(Image, Task.encounter_file_id == Image.id).outerjoin(DirectImageUpload, Task.direct_image_upload_id == DirectImageUpload.id)
     
     # Apply scoping based on user's lab units or admin override
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if lab_unit_ids:
-            query = query.filter(Task.lab_unit_id.in_(lab_unit_ids))
+    query = apply_scoping(query, Task, current_user, "analytics")
     
     # Apply optional filters
     if status_filter:
@@ -154,19 +150,12 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     """
     from sqlalchemy.orm import joinedload
     from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
-    task = db_session.query(Task).filter(Task.id == task_id).options(
+    # Apply scoping to ensure task belongs to user's hospital/lab units
+    query = apply_scoping(db_session.query(Task), Task, current_user, "analytics")
+    task = query.filter(Task.id == task_id).options(
         joinedload(Task.consensus),  # Load consensus information
         joinedload(Task.grades)
     ).first()
-    
-    if not task:
-        return None
-        
-    # Apply scoping - only return task if user has access to its lab unit
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if task.lab_unit_id not in user_lab_unit_ids:
-            return None
     
     # Determine if PII should be masked based on hospital context
     current_user_hospital_id = current_user.hospital_id if current_user.is_authenticated else None
@@ -301,11 +290,7 @@ def get_tasks_by_status(
     query = db_session.query(Task).join(LabUnit).join(Disease).outerjoin(Image, Task.encounter_file_id == Image.id).outerjoin(DirectImageUpload, Task.direct_image_upload_id == DirectImageUpload.id)
     
     # Apply scoping based on user's lab units or admin override
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if lab_unit_ids:
-            query = query.filter(Task.lab_unit_id.in_(lab_unit_ids))
+    query = apply_scoping(query, Task, current_user, "analytics")
     
     # Apply status filter (state in the case of GradingTask)
     query = query.filter(Task.state == status)
@@ -357,11 +342,7 @@ def get_task_stats(db_session, lab_unit_ids: Optional[List[int]] = None) -> Dict
     query = db_session.query(Task)
     
     # Apply scoping based on user's lab units or admin override
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        if lab_unit_ids is None:
-            lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if lab_unit_ids:
-            query = query.filter(Task.lab_unit_id.in_(lab_unit_ids))
+    query = apply_scoping(query, Task, current_user, "analytics")
     
     # Count all tasks
     total_tasks = query.count()
@@ -439,10 +420,7 @@ def get_tasks_for_user(
     )
     
     # Apply scoping based on current user's lab units or admin override
-    if not (current_user.has_role('admin') if current_user.is_authenticated else False):
-        current_user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        if current_user_lab_unit_ids:
-            query = query.filter(Task.lab_unit_id.in_(current_user_lab_unit_ids))
+    query = apply_scoping(query, Task, current_user, "analytics")
     
     # Apply optional status filter
     if status_filter:

@@ -6,7 +6,9 @@ from flask import jsonify, request, render_template
 from flask_login import login_required
 
 from auth.roles import roles_required
+from flask_login import current_user
 from db_transaction_manager import transaction_scope
+from utils.hospital_scoping import apply_scoping
 from models import User, LoginAttempt, IpLock
 from . import api_bp
 
@@ -143,6 +145,10 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
         )
         if user_id is not None:
             created_q = created_q.where(User.id == user_id)
+        
+        # Apply hospital scoping to User
+        created_q = apply_scoping(created_q, User, current_user, "view")
+        
         if start_dt:
             created_q = created_q.where(User.created_at >= start_dt)
         if end_dt:
@@ -163,6 +169,10 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
             ).select_from(LoginAttempt).outerjoin(user_alias, join_condition).where(LoginAttempt.success.is_(True))
             if user_id is not None:
                 success_q = success_q.where(user_alias.id == user_id)
+            
+            # Apply hospital scoping to (aliased) User
+            success_q = apply_scoping(success_q, user_alias, current_user, "view")
+            
             if start_dt:
                 success_q = success_q.where(LoginAttempt.created_at >= start_dt)
             if end_dt:
@@ -179,6 +189,10 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
             ).select_from(LoginAttempt).outerjoin(user_alias, join_condition).where(LoginAttempt.success.is_(False))
             if user_id is not None:
                 failure_q = failure_q.where(user_alias.id == user_id)
+            
+            # Apply hospital scoping to (aliased) User
+            failure_q = apply_scoping(failure_q, user_alias, current_user, "view")
+            
             if start_dt:
                 failure_q = failure_q.where(LoginAttempt.created_at >= start_dt)
             if end_dt:
@@ -186,18 +200,21 @@ def _build_user_activity_query(types: set[str], user_id: int | None, start_dt: d
             selects.append(failure_q)
 
     if "ip_locked" in types and user_id is None:
-        ip_lock_q = sa.select(
-            sa.literal("ip_locked").label("event_type"),
-            sa.literal(None).label("username"),
-            IpLock.ip_address.label("ip_address"),
-            IpLock.locked_until.label("event_time"),
-            sa.literal(None).label("user_id"),
-        )
-        if start_dt:
-            ip_lock_q = ip_lock_q.where(IpLock.locked_until >= start_dt)
-        if end_dt:
-            ip_lock_q = ip_lock_q.where(IpLock.locked_until <= end_dt)
-        selects.append(ip_lock_q)
+        # IpLock is not tied to a hospital, but for Site Admins we only show it if they are master admins
+        # or we might want to skip it. For now, we restrict to master admins for consistency.
+        if getattr(current_user, 'is_master_admin', False):
+            ip_lock_q = sa.select(
+                sa.literal("ip_locked").label("event_type"),
+                sa.literal(None).label("username"),
+                IpLock.ip_address.label("ip_address"),
+                IpLock.locked_until.label("event_time"),
+                sa.literal(None).label("user_id"),
+            )
+            if start_dt:
+                ip_lock_q = ip_lock_q.where(IpLock.locked_until >= start_dt)
+            if end_dt:
+                ip_lock_q = ip_lock_q.where(IpLock.locked_until <= end_dt)
+            selects.append(ip_lock_q)
 
     if not selects:
         return sa.select(

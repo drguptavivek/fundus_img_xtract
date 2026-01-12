@@ -28,7 +28,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 
 TASK_STATE_OPTIONS: tuple[str, ...] = (
     "pending",
@@ -73,22 +73,13 @@ def image_results() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 50
 
     with get_db_session() as db:
-        # Check user permissions for lab unit access (no admin override)
-        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-        if not user_lab_unit_ids:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-        allowed_hospital_ids = {
-            hid for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(user_lab_unit_ids))
-            if hid is not None
-        }
+        query = db.query(GradingTask)
+        query = apply_scoping(query, GradingTask, current_user, 'analytics')
         
-        query = (
-            db.query(GradingTask)
-            .join(LabUnit, GradingTask.lab_unit)
-            .join(Hospital, LabUnit.hospital)
-            .filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
-        )
+        # Check if user has any access at all
+        if not current_user.is_master_admin and not current_user.hospital_id:
+            flash("No hospital access.", "warning")
+            return redirect(url_for("home.index"))
 
         if disease_id:
             query = query.filter(GradingTask.disease_id == disease_id)
@@ -100,16 +91,11 @@ def image_results() -> str:
                 query = query.filter(GradingTask.direct_image_upload_id.isnot(None))
 
         if hospital_id:
-            if hospital_id not in allowed_hospital_ids:
-                from flask import abort
-                abort(403, description="Access denied to this hospital")
-            query = query.filter(LabUnit.hospital_id == hospital_id)
+            # Note: apply_scoping already filters by user's hospital if applicable.
+            # Filtering by a specific hospital_id is still allowed for admins.
+            query = query.join(LabUnit, GradingTask.lab_unit).filter(LabUnit.hospital_id == hospital_id)
 
-        # Only allow filtering by lab_unit_id if the user has access to that lab unit
         if lab_unit_id:
-            if lab_unit_id not in user_lab_unit_ids:
-                from flask import abort
-                abort(403, description="Access denied to this lab unit")
             query = query.filter(GradingTask.lab_unit_id == lab_unit_id)
 
         if task_state and task_state in TASK_STATE_OPTIONS:
@@ -153,36 +139,38 @@ def image_results() -> str:
         )
 
         # Filter lab units to only those the user has access to
-        lab_units_query = (
-            db.query(LabUnit)
-            .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+        lab_units_query = db.query(LabUnit)
+        lab_units_query = apply_scoping(lab_units_query, LabUnit, current_user, 'analytics')
+        lab_units_list = (
+            lab_units_query
             .options(selectinload(LabUnit.hospital))
             .order_by(LabUnit.name)
             .all()
         )
 
         # Convert to simple data structures to avoid session issues in templates
+        diseases_query = db.query(Disease).join(GradingTask, GradingTask.disease_id == Disease.id)
+        diseases_query = apply_scoping(diseases_query, GradingTask, current_user, 'analytics')
         diseases = [
             {"id": d.id, "name": d.name}
-            for d in db.query(Disease)
-            .join(GradingTask, GradingTask.disease_id == Disease.id)
-            .filter(GradingTask.lab_unit_id.in_(user_lab_unit_ids))
+            for d in diseases_query
             .distinct()
             .order_by(Disease.name)
             .all()
         ]
+        
+        hospitals_query = db.query(Hospital)
+        hospitals_query = apply_scoping(hospitals_query, Hospital, current_user, 'analytics')
         hospitals = [
             {"id": h.id, "name": h.name}
-            for h in db.query(Hospital)
-            .join(LabUnit, LabUnit.hospital_id == Hospital.id)
-            .filter(LabUnit.id.in_(user_lab_unit_ids))
-            .distinct()
+            for h in hospitals_query
             .order_by(Hospital.name)
             .all()
         ]
+        
         lab_units = [
             {"id": lu.id, "name": lu.name, "hospital_id": lu.hospital_id, "hospital_name": lu.hospital.name if lu.hospital else None}
-            for lu in lab_units_query
+            for lu in lab_units_list
         ]
         rows = fetch_image_task_details(db, tasks)
 

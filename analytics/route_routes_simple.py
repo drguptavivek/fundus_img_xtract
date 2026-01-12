@@ -13,12 +13,8 @@ from . import bp
 def encounter_results_simple():
     """Render a simplified encounter list showing only encounters with non-pending tasks."""
     
-    # Get user's lab unit access
-    user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    is_admin_like = current_user.has_role("admin", "data_manager")
-    
-    # Get encounters with non-pending tasks using the utility function, passing user permissions
-    encounter_data = get_encounters_with_non_pending_tasks(user_lab_unit_ids, is_admin_like)
+    # Get encounters with non-pending tasks using the utility function (now scoped)
+    encounter_data = get_encounters_with_non_pending_tasks(current_user)
     
     return render_template(
         "analytics/results_encounters_simple.html",

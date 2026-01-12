@@ -25,11 +25,13 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from utils.log_sanitize import sanitize_log_value
+from utils.hospital_scoping import apply_scoping
 
 
 @get_db_session()
 def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None,
-                                     end_date: Optional[datetime] = None) -> pd.DataFrame:
+                                     end_date: Optional[datetime] = None,
+                                     user: Optional[User] = None) -> pd.DataFrame:
     """
     Approach 1: Multiple joinedload approach.
     Simple to understand but may have performance issues with large datasets.
@@ -47,7 +49,13 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
     
     try:
         # Query for tasks with all required relationships using multiple joinedload
-        tasks_query = db.query(GradingTask).options(
+        tasks_query = db.query(GradingTask)
+        
+        # Apply hospital scoping if user provided
+        if user:
+            tasks_query = apply_scoping(tasks_query, GradingTask, user, 'analytics')
+            
+        tasks_query = tasks_query.options(
             # Core relationships
             joinedload(GradingTask.disease),
             joinedload(GradingTask.lab_unit).joinedload(LabUnit.hospital),
@@ -193,7 +201,8 @@ def generate_tasks_dataframe_approach1(db, start_date: Optional[datetime] = None
 
 @get_db_session()
 def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None,
-                                     end_date: Optional[datetime] = None) -> pd.DataFrame:
+                                     end_date: Optional[datetime] = None,
+                                     user: Optional[User] = None) -> pd.DataFrame:
     """
     Approach 2: Batch query optimization.
     Reduces JOIN complexity by loading related data in separate queries.
@@ -211,7 +220,13 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
     
     try:
         # Step 1: Get base tasks with minimal relationships
-        tasks_query = db.query(GradingTask).options(
+        tasks_query = db.query(GradingTask)
+        
+        # Apply hospital scoping if user provided
+        if user:
+            tasks_query = apply_scoping(tasks_query, GradingTask, user, 'analytics')
+            
+        tasks_query = tasks_query.options(
             joinedload(GradingTask.disease),
             joinedload(GradingTask.lab_unit).joinedload(LabUnit.hospital)
         )
@@ -389,7 +404,8 @@ def generate_tasks_dataframe_approach2(db, start_date: Optional[datetime] = None
 
 @get_db_session()
 def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None,
-                                     end_date: Optional[datetime] = None) -> pd.DataFrame:
+                                     end_date: Optional[datetime] = None,
+                                     user: Optional[User] = None) -> pd.DataFrame:
     """
     Approach 3: Raw SQL query for maximum performance.
     Uses optimized SQL with precise JOINs and minimal memory usage.
@@ -463,9 +479,28 @@ def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None
         LEFT JOIN consensus c ON gt.id = c.task_id
         """
         
-        # Add date filters to WHERE clause
+        # Add filters to WHERE clause
         where_conditions = []
         params = {}
+        
+        # Manual scoping for Approach 3 (Raw SQL)
+        if user and not user.is_master_admin:
+            if not user.hospital_id:
+                # No hospital = no access
+                where_conditions.append("1=0")
+            else:
+                if user.has_role('local_admin'):
+                    # Site admin: filter by hospital_id via LabUnit join
+                    where_conditions.append("lu.hospital_id = :user_hospital_id")
+                    params['user_hospital_id'] = user.hospital_id
+                else:
+                    # Regular user: restrict to assigned lab units in their hospital
+                    user_lab_unit_ids = [lu.id for lu in user.lab_units if lu.hospital_id == user.hospital_id]
+                    if user_lab_unit_ids:
+                        where_conditions.append("gt.lab_unit_id IN :user_lab_unit_ids")
+                        params['user_lab_unit_ids'] = tuple(user_lab_unit_ids)
+                    else:
+                        where_conditions.append("1=0")
         
         if start_date:
             where_conditions.append("gt.created_at >= :start_date")
@@ -604,14 +639,14 @@ def generate_tasks_dataframe_approach3(db, start_date: Optional[datetime] = None
         raise
 
 
-def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set, approach: int = 2) -> tuple[pd.DataFrame, Dict]:
+def get_filtered_tasks_dataframe(db, params: Dict, user: Any, approach: int = 2) -> tuple[pd.DataFrame, Dict]:
     """
     Generate and filter tasks dataframe based on user permissions and filter parameters.
     
     Args:
         db: Database session
         params: Dictionary containing filter parameters
-        user_lab_unit_ids: Set of lab unit IDs user has access to
+        user: Current user object
         approach: Which approach to use (1, 2, or 3)
         
     Returns:
@@ -623,19 +658,22 @@ def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set, appro
             df = generate_tasks_dataframe_approach1(
                 db,
                 start_date=params.get('start_date'),
-                end_date=params.get('end_date')
+                end_date=params.get('end_date'),
+                user=user
             )
         elif approach == 2:
             df = generate_tasks_dataframe_approach2(
                 db,
                 start_date=params.get('start_date'),
-                end_date=params.get('end_date')
+                end_date=params.get('end_date'),
+                user=user
             )
         elif approach == 3:
             df = generate_tasks_dataframe_approach3(
                 db,
                 start_date=params.get('start_date'),
-                end_date=params.get('end_date')
+                end_date=params.get('end_date'),
+                user=user
             )
         else:
             raise ValueError("Invalid approach. Must be 1, 2, or 3.")
@@ -649,17 +687,8 @@ def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set, appro
             if 'lab_unit_id' in df.columns:
                 df = df[df['lab_unit_id'].isin(params['lab_unit_ids'])]
         
-        # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
-        # But only if no explicit lab_unit_ids filter was provided in params
-        if user_lab_unit_ids and len(user_lab_unit_ids) > 0:
-            # Only apply user permissions if no explicit lab_unit_ids filter in params
-            if 'lab_unit_ids' not in params or not params['lab_unit_ids']:
-                if 'lab_unit_id' in df.columns:
-                    df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
-        else:
-            # If user has no lab unit permissions and no explicit filter, return empty dataframe
-            if 'lab_unit_ids' not in params or not params['lab_unit_ids']:
-                df = df.iloc[0:0]  # Empty dataframe with same columns
+        # The database queries are already scoped by apply_scoping/manual logic.
+        # We can still apply further local filters from params if provided.
         
         # Apply disease filter if provided
         if 'disease_ids' in params and params['disease_ids']:
@@ -685,7 +714,6 @@ def get_filtered_tasks_dataframe(db, params: Dict, user_lab_unit_ids: set, appro
             "disease_ids": params.get('disease_ids'),
             "states": params.get('states'),
             "image_source_types": params.get('image_source_types'),
-            "user_lab_unit_ids": list(user_lab_unit_ids),
             "approach": approach
         }
         

@@ -11,15 +11,16 @@ from models import (
     DiabeticRetinopathyReport,
     GlaucomaReport,
     GlaucomaResultsCleaned,
-    GradingTask,
-    Grade,
     Consensus,
     Disease,
+    User,
     Session
 )
+from utils.hospital_scoping import apply_scoping
 
 
-def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False):
+
+def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: bool = False):
     """
     Fetches a comprehensive summary for a given encounter, including:
     - Image UUIDs
@@ -40,9 +41,14 @@ def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False
     """
     db = Session()
     try:
-        # Fetch the encounter with necessary related data
+        # Build query for the encounter
+        query = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id)
+        
+        # Apply hospital scoping
+        query = apply_scoping(query, PatientEncounters, user, 'analytics')
+        
         encounter = (
-            db.query(PatientEncounters)
+            query
             .options(
                 selectinload(PatientEncounters.encounter_files),
                 selectinload(PatientEncounters.encounter_file_pdfs),
@@ -51,7 +57,6 @@ def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False
                 selectinload(PatientEncounters.glaucoma_results_cleaned),
                 joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
             )
-            .filter(PatientEncounters.id == encounter_id)
             .first()
         )
         
@@ -77,9 +82,14 @@ def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False
         tasks = []
         
         if all_image_ids:
+            # Build query for tasks
+            task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(all_image_ids))
+            
+            # Apply hospital scoping to tasks as well
+            task_query = apply_scoping(task_query, GradingTask, user, 'analytics')
+            
             tasks = (
-                db.query(GradingTask)
-                .filter(GradingTask.encounter_file_id.in_(all_image_ids))
+                task_query
                 .options(
                     joinedload(GradingTask.disease),
                     joinedload(GradingTask.encounter_file),
@@ -197,7 +207,7 @@ def get_encounter_summary(encounter_id: int, with_encounter_object: bool = False
         db.close()
 
 
-def get_encounters_summary_list(filters=None):
+def get_encounters_summary_list(user: User, filters=None):
     """
     Fetches a summary list of encounters with basic information.
     This can be used for the simplified analytics/encounters view.
@@ -211,6 +221,8 @@ def get_encounters_summary_list(filters=None):
     db = Session()
     try:
         query = db.query(PatientEncounters)
+        # Apply hospital scoping
+        query = apply_scoping(query, PatientEncounters, user, 'analytics')
         
         # Apply filters if provided
         if filters:
@@ -258,7 +270,7 @@ def get_encounters_summary_list(filters=None):
         db.close()
 
 
-def get_encounters_with_non_pending_tasks(user_lab_unit_ids=None, is_admin_like=False):
+def get_encounters_with_non_pending_tasks(user: User):
     """
     Fetches encounters that have images with associated non-pending tasks.
     
@@ -283,9 +295,8 @@ def get_encounters_with_non_pending_tasks(user_lab_unit_ids=None, is_admin_like=
             )
         )
         
-        # Apply lab unit access control if not admin-like user
-        if not is_admin_like and user_lab_unit_ids:
-            query = query.filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
+        # Apply hospital scoping
+        query = apply_scoping(query, GradingTask, user, 'analytics')
         
         non_pending_tasks = query.all()
         
@@ -319,7 +330,7 @@ def get_encounters_with_non_pending_tasks(user_lab_unit_ids=None, is_admin_like=
         db.close()
 
 
-def get_direct_image_summary(uuid_str: str):
+def get_direct_image_summary(uuid_str: str, user: User):
     """
     Fetches a comprehensive summary for a direct image upload, including:
     - All tasks associated with the image
@@ -337,19 +348,24 @@ def get_direct_image_summary(uuid_str: str):
     try:
         # First get the direct image upload
         from models import DirectImageUpload
-        direct_image = (
-            db.query(DirectImageUpload)
-            .filter(DirectImageUpload.uuid == uuid_str)
-            .first()
-        )
+        query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid_str)
+        
+        # Apply hospital scoping
+        query = apply_scoping(query, DirectImageUpload, user, 'analytics')
+        
+        direct_image = query.first()
         
         if not direct_image:
             return None
         
         # Fetch all tasks associated with this direct image
+        task_query = db.query(GradingTask).filter(GradingTask.direct_image_upload_id == direct_image.id)
+        
+        # Apply hospital scoping to tasks
+        task_query = apply_scoping(task_query, GradingTask, user, 'analytics')
+        
         tasks = (
-            db.query(GradingTask)
-            .filter(GradingTask.direct_image_upload_id == direct_image.id)
+            task_query
             .options(
                 joinedload(GradingTask.disease),
                 selectinload(GradingTask.grades).selectinload(Grade.label),

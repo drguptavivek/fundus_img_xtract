@@ -4,7 +4,7 @@ from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
 from models import GradingTask, LabUnit
-from utils.upload_eligibility import get_user_lab_unit_ids
+from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_summary
 from . import bp
 from db_transaction_manager import get_db_session
@@ -15,30 +15,27 @@ from db_transaction_manager import get_db_session
 def view_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
-        # Get user's eligible lab units
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        
-        # First verify the task exists and is in a lab unit the user has access to
-        task = (
+        # Build query for the task
+        query = (
             db.query(GradingTask)
-            .join(LabUnit)
             .filter(GradingTask.id == task_id)
-            .filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
             .options(
                 joinedload(GradingTask.disease),
                 joinedload(GradingTask.lab_unit),
                 joinedload(GradingTask.encounter_file),
-                joinedload(GradingTask.direct_image)  # Add direct image information
+                joinedload(GradingTask.direct_image)
             )
-            .first()
         )
+        # Apply scoping to ensure task belongs to user's hospital/lab units
+        query = apply_scoping(query, GradingTask, current_user, "analytics")
+        task = query.first()
         
         if not task:
             from flask import abort
             abort(404, description="Task not found or access denied")
         
         # Use the utility function to get comprehensive task details
-        task_details = get_task_summary(task_id)
+        task_details = get_task_summary(db, task_id)
         
         if not task_details:
             from flask import abort

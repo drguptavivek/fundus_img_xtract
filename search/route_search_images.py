@@ -13,7 +13,7 @@ from auth.roles import roles_required
 from . import bp
 from models import Disease, LabUnit, DiseaseGrading, AIModel, Grade, GradingTask
 from sqlalchemy.orm import joinedload
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 from db_transaction_manager import get_db_session
 from utils.mvw_all_img_search import (
     MVImageFilters,
@@ -67,7 +67,10 @@ def search_images_route() -> str:
     encounter_before = parse_date_yyyy_mm_dd(request.args.get("encounter_before"))
 
     with get_db_session() as db:
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
         if not allowed_lab_unit_ids:
             flash("No lab unit access.", "warning")
             return redirect(url_for("home.index"))
@@ -300,7 +303,10 @@ def search_images_route() -> str:
 def search_image_detail(task_id: int) -> str:
     """Read-only task detail view for search results with inline image viewer."""
     with get_db_session() as db:
-        allowed_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
+        # Get allowed lab units via scoping
+        lu_query = db.query(LabUnit)
+        lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
+        allowed_lab_unit_ids = [lu.id for lu in lu_query.all()]
         if not allowed_lab_unit_ids:
             flash("No lab unit access.", "warning")
             return redirect(url_for("home.index"))

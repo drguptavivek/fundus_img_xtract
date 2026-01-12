@@ -6,7 +6,8 @@ from sqlalchemy.orm import joinedload
 from auth.roles import roles_required
 from db_transaction_manager import get_db_session
 from models import GradingTask, LabUnit
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+
+from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_detail
 from . import bp
 
@@ -24,26 +25,20 @@ from . import bp
 def view_task_details(task_id: int):
     """View details for a specific task, scoped to user's eligible lab units."""
     with get_db_session() as db:
-        # Get user's eligible lab units (no admin override)
-        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not user_lab_unit_ids:
-            from flask import abort
-            abort(403, description="No lab unit access")
-        
-        # First verify the task exists and is in a lab unit the user has access to
-        task = (
+        # Build query for the task
+        query = (
             db.query(GradingTask)
-            .join(LabUnit)
             .filter(GradingTask.id == task_id)
-            .filter(GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)))
             .options(
                 joinedload(GradingTask.disease),
                 joinedload(GradingTask.lab_unit),
                 joinedload(GradingTask.encounter_file),
-                joinedload(GradingTask.direct_image)  # Add direct image information
+                joinedload(GradingTask.direct_image)
             )
-            .first()
         )
+        # Apply scoping to ensure task belongs to user's hospital/lab units
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
         
         if not task:
             from flask import abort
@@ -81,23 +76,18 @@ def view_task_details(task_id: int):
 def all_tasks_viewer(image_uuid: str):
     """Serve the grading viewer card for the all-tasks list."""
     with get_db_session() as db:
-        user_lab_unit_ids = get_user_lab_unit_ids_no_admin_override(current_user.id)
-        if not user_lab_unit_ids:
-            from flask import abort
-            abort(403, description="No lab unit access")
-
-        task = (
+        query = (
             db.query(GradingTask)
             .filter(
-                GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)),
                 or_(
                     GradingTask.encounter_file.has(uuid=image_uuid),
                     GradingTask.direct_image.has(uuid=image_uuid),
                 ),
             )
             .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
-            .first()
         )
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
         if not task:
             from flask import abort
             abort(404, description="Task not found or access denied")

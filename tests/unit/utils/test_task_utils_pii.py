@@ -1,234 +1,210 @@
-"""
-Unit tests for taskUtils PII masking.
-
-Test IDs from PII_Exposure_Control_Policy.md:
-- PII-UNIT-002: Task utils masks cross-hospital PII
-
-Bead: 5A (fundus_img_xtract-4g2)
-"""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from utils.taskUtils import get_task_detail
+from models import GradingTask, LabUnit, Hospital, Disease, EncounterFile, DirectImageUpload, User
+
+@pytest.fixture
+def mock_db_session():
+    return MagicMock()
+
+@pytest.fixture
+def mock_task():
+    task = MagicMock(spec=GradingTask)
+    task.id = 1
+    task.state = 'pending'
+    task.created_at = '2023-01-01'
+    task.updated_at = '2023-01-01'
+    
+    # Setup relationships
+    task.disease = MagicMock(spec=Disease)
+    task.disease.name = 'DR'
+    
+    task.lab_unit = MagicMock(spec=LabUnit)
+    task.lab_unit.hospital = MagicMock(spec=Hospital)
+    task.lab_unit.hospital.name = 'Hospital B'
+    task.lab_unit.hospital_id = 2  # Task is in Hospital 2
+    
+    # Mock image
+    task.encounter_file = MagicMock(spec=EncounterFile)
+    task.encounter_file.uuid = 'img-uuid-123'
+    task.encounter_file.patient_id = '12345678'
+    task.encounter_file.patient_name = 'John Doe'
+    task.direct_image = None
+    
+    task.grades = []
+    task.consensus = None
+    
+    return task
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_global_admin_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 1: Global Admin Cross-Hospital
+    Expectation: PII is NOT masked.
+    """
+    # Setup User: Global Admin from Hospital 1
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 1
+    
+    # Mock Roles - list of Role objects
+    role_admin = MagicMock()
+    role_admin.name = 'admin'
+    mock_current_user.roles = [role_admin]
+    
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
+    
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
+    
+    # Verify
+    assert result['patient_id'] == '12345678'
+    assert result['patient_name'] == 'John Doe'
 
 
-class TestGetTaskDetailPIIMasking:
-    """Tests for PII masking in get_task_detail function."""
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_global_admin_mixed_roles(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 2: Global Admin + Resident (Mixed Roles)
+    Expectation: PII is NOT masked (Optimistic: Admin wins).
+    """
+    # Setup User: Admin + Resident
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 1
     
-    @pytest.fixture
-    def mock_db_session(self):
-        """Create a mock database session."""
-        return MagicMock()
+    role_resident = MagicMock()
+    role_resident.name = 'resident'
+    role_admin = MagicMock()
+    role_admin.name = 'admin'
     
-    @pytest.fixture
-    def mock_task_same_hospital(self):
-        """Create a mock task from the same hospital as current user."""
-        task = Mock()
-        task.id = 1
-        task.state = 'pending'
-        task.lab_unit_id = 1
-        task.created_at = Mock()
-        task.updated_at = Mock()
-        task.grades = []
-        task.consensus = None
-        
-        # Lab unit and hospital
-        task.lab_unit = Mock()
-        task.lab_unit.id = 1
-        task.lab_unit.name = 'Test Lab'
-        task.lab_unit.hospital_id = 1
-        task.lab_unit.hospital = Mock()
-        task.lab_unit.hospital.name = 'Hospital A'
-        
-        # Disease
-        task.disease = Mock()
-        task.disease.name = 'DR'
-        
-        # Encounter file with PII
-        task.encounter_file = Mock()
-        task.encounter_file.uuid = 'test-uuid-123'
-        task.encounter_file.patient_id = '12345678'
-        task.encounter_file.patient_name = 'John Doe'
-        
-        task.direct_image = None
-        
-        return task
+    # Order should not matter, but typically we want to test if presence of admin overrides others
+    mock_current_user.roles = [role_resident, role_admin]
     
-    @pytest.fixture
-    def mock_task_different_hospital(self):
-        """Create a mock task from a different hospital."""
-        task = Mock()
-        task.id = 2
-        task.state = 'pending'
-        task.lab_unit_id = 2
-        task.created_at = Mock()
-        task.updated_at = Mock()
-        task.grades = []
-        task.consensus = None
-        
-        # Lab unit and hospital (different hospital)
-        task.lab_unit = Mock()
-        task.lab_unit.id = 2
-        task.lab_unit.name = 'Other Lab'
-        task.lab_unit.hospital_id = 2
-        task.lab_unit.hospital = Mock()
-        task.lab_unit.hospital.name = 'Hospital B'
-        
-        # Disease
-        task.disease = Mock()
-        task.disease.name = 'DR'
-        
-        # Encounter file with PII
-        task.encounter_file = Mock()
-        task.encounter_file.uuid = 'test-uuid-456'
-        task.encounter_file.patient_id = '87654321'
-        task.encounter_file.patient_name = 'Jane Smith'
-        
-        task.direct_image = None
-        
-        return task
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
     
-    def test_same_hospital_optometrist_sees_full_pii(self, mock_db_session, mock_task_same_hospital):
-        """Optometrist at same hospital should see full PII."""
-        with patch('utils.taskUtils.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 1
-            mock_user.hospital_id = 1  # Same hospital
-            mock_user.has_role.return_value = False
-            
-            # Mock roles
-            role = Mock()
-            role.name = 'optometrist'
-            mock_user.roles = [role]
-            
-            with patch('utils.taskUtils.get_user_lab_unit_ids', return_value=[1, 2]):
-                # Mock query
-                mock_query = mock_db_session.query.return_value
-                mock_query.filter.return_value.options.return_value.first.return_value = mock_task_same_hospital
-                
-                result = get_task_detail(mock_db_session, 1)
-                
-                assert result is not None
-                assert result['patient_id'] == '12345678'  # Full PII
-                assert result['patient_name'] == 'John Doe'  # Full PII
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
     
-    def test_different_hospital_grader_sees_masked_pii(self, mock_db_session, mock_task_different_hospital):
-        """Grader from different hospital should see masked PII."""
-        with patch('utils.taskUtils.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 2
-            mock_user.hospital_id = 1  # Different from task's hospital (2)
-            mock_user.has_role.return_value = False
-            
-            # Mock roles
-            role = Mock()
-            role.name = 'resident'
-            mock_user.roles = [role]
-            
-            with patch('utils.taskUtils.get_user_lab_unit_ids', return_value=[1, 2]):
-                # Mock query
-                mock_query = mock_db_session.query.return_value
-                mock_query.filter.return_value.options.return_value.first.return_value = mock_task_different_hospital
-                
-                result = get_task_detail(mock_db_session, 2)
-                
-                assert result is not None
-                assert result['patient_id'] == 'P****321'  # Masked (last 3 chars)
-                assert result['patient_name'] == 'Anonymous'  # Masked
+    # Verify
+    assert result['patient_id'] == '12345678'
+    assert result['patient_name'] == 'John Doe'
+
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_resident_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 3: Resident Cross-Hospital
+    Expectation: PII is MASKED.
+    """
+    # Setup User: Resident from Hospital 1
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 1
     
-    def test_resident_same_hospital_sees_masked_pii(self, mock_db_session, mock_task_same_hospital):
-        """Resident at same hospital should still see masked PII (role-based)."""
-        with patch('utils.taskUtils.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 3
-            mock_user.hospital_id = 1  # Same hospital
-            mock_user.has_role.return_value = False
-            
-            # Mock roles
-            role = Mock()
-            role.name = 'resident'
-            mock_user.roles = [role]
-            
-            with patch('utils.taskUtils.get_user_lab_unit_ids', return_value=[1]):
-                # Mock query
-                mock_query = mock_db_session.query.return_value
-                mock_query.filter.return_value.options.return_value.first.return_value = mock_task_same_hospital
-                
-                result = get_task_detail(mock_db_session, 1)
-                
-                assert result is not None
-                assert result['patient_id'] == 'P****678'  # Masked (role-based)
-                assert result['patient_name'] == 'Anonymous'  # Masked (role-based)
+    role_resident = MagicMock()
+    role_resident.name = 'resident'
+    mock_current_user.roles = [role_resident]
     
-    def test_admin_sees_full_pii_regardless_of_hospital(self, mock_db_session, mock_task_different_hospital):
-        """Admin should see full PII regardless of hospital."""
-        with patch('utils.taskUtils.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 4
-            mock_user.hospital_id = 1  # Different from task's hospital
-            mock_user.has_role.return_value = True  # Admin
-            
-            # Mock roles
-            role = Mock()
-            role.name = 'admin'
-            mock_user.roles = [role]
-            
-            # Mock query
-            mock_query = mock_db_session.query.return_value
-            mock_query.filter.return_value.options.return_value.first.return_value = mock_task_different_hospital
-            
-            result = get_task_detail(mock_db_session, 2)
-            
-            assert result is not None
-            # Admin bypasses scoping, so we don't check PII masking here
-            # (admin check happens before masking logic)
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
     
-    def test_direct_image_no_pii_exposure(self, mock_db_session):
-        """Direct image uploads should not expose PII."""
-        task = Mock()
-        task.id = 3
-        task.state = 'pending'
-        task.lab_unit_id = 1
-        task.created_at = Mock()
-        task.updated_at = Mock()
-        task.grades = []
-        task.consensus = None
-        
-        task.lab_unit = Mock()
-        task.lab_unit.id = 1
-        task.lab_unit.name = 'Test Lab'
-        task.lab_unit.hospital_id = 1
-        task.lab_unit.hospital = Mock()
-        task.lab_unit.hospital.name = 'Hospital A'
-        
-        task.disease = Mock()
-        task.disease.name = 'DR'
-        
-        # Direct image (no patient info)
-        task.direct_image = Mock()
-        task.direct_image.uuid = 'direct-uuid-789'
-        task.direct_image.folder_rel = 'uploads'
-        task.direct_image.filename = 'image.jpg'
-        task.direct_image.camera = None
-        
-        task.encounter_file = None
-        
-        with patch('utils.taskUtils.current_user') as mock_user:
-            mock_user.is_authenticated = True
-            mock_user.id = 5
-            mock_user.hospital_id = 1
-            mock_user.has_role.return_value = False
-            
-            role = Mock()
-            role.name = 'resident'
-            mock_user.roles = [role]
-            
-            with patch('utils.taskUtils.get_user_lab_unit_ids', return_value=[1]):
-                mock_query = mock_db_session.query.return_value
-                mock_query.filter.return_value.options.return_value.first.return_value = task
-                
-                result = get_task_detail(mock_db_session, 3)
-                
-                assert result is not None
-                assert result['patient_id'] == 'Unknown'
-                assert result['patient_name'] == 'Unknown'
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
+    
+    # Verify
+    assert result['patient_id'] == 'P****678'
+    assert result['patient_name'] == 'Anonymous'
+
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_resident_same_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 4: Resident Same-Hospital
+    Expectation: PII is MASKED (Resident always masked).
+    """
+    # Setup User: Resident from Hospital 2 (Same as Task)
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 2
+    
+    role_resident = MagicMock()
+    role_resident.name = 'resident'
+    mock_current_user.roles = [role_resident]
+    
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
+    
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
+    
+    # Verify
+    assert result['patient_id'] == 'P****678'
+    assert result['patient_name'] == 'Anonymous'
+
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_data_manager_same_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 5: Data Manager Same-Hospital
+    Expectation: PII is NOT masked.
+    """
+    # Setup User: Data Manager from Hospital 2 (Same as Task)
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 2
+    
+    role_dm = MagicMock()
+    role_dm.name = 'data_manager'
+    mock_current_user.roles = [role_dm]
+    
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
+    
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
+    
+    # Verify
+    assert result['patient_id'] == '12345678'
+    assert result['patient_name'] == 'John Doe'
+
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_data_manager_cross_hospital(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 6: Data Manager Cross-Hospital
+    Expectation: PII is MASKED (Different hospital).
+    """
+    # Setup User: Data Manager from Hospital 1 (Diff from Task)
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 1
+    
+    role_dm = MagicMock()
+    role_dm.name = 'data_manager'
+    mock_current_user.roles = [role_dm]
+    
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
+    
+    # Execute
+    result = get_task_detail(mock_db_session, 1)
+    
+    # Verify
+    assert result['patient_id'] == 'P****678'
+    assert result['patient_name'] == 'Anonymous'

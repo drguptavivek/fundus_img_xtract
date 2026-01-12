@@ -160,17 +160,38 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
     # Determine if PII should be masked based on hospital context
     current_user_hospital_id = current_user.hospital_id if current_user.is_authenticated else None
     task_hospital_id = task.lab_unit.hospital_id if task.lab_unit else None
-    current_user_role = None
-    if current_user.is_authenticated:
-        # Get primary role (first role in list)
-        user_roles = [r.name for r in current_user.roles]
-        current_user_role = user_roles[0] if user_roles else None
     
-    mask_pii = should_mask_pii(
-        current_user_hospital_id=current_user_hospital_id,
-        data_hospital_id=task_hospital_id,
-        current_user_role=current_user_role
-    )
+    mask_pii = True  # Default to masking for safety
+    
+    if current_user.is_authenticated:
+        user_roles = [r.name for r in current_user.roles]
+        
+        # 1. Global Admin always sees PII
+        if 'admin' in user_roles:
+            mask_pii = False
+        # 2. Users with roles: Check using optimistic permission (if ANY role allows access, allow it)
+        elif user_roles:
+            # We check if there is ANY role that results in should_mask_pii returning False
+            # If so, we do NOT mask (mask_pii = False)
+            # Effectively, mask_pii is True only if ALL roles require masking
+            mask_pii = all(
+                should_mask_pii(
+                    current_user_hospital_id=current_user_hospital_id,
+                    data_hospital_id=task_hospital_id,
+                    current_user_role=role
+                )
+                for role in user_roles
+            )
+        # 3. Users without roles (if any)
+        else:
+            mask_pii = should_mask_pii(
+                current_user_hospital_id=current_user_hospital_id,
+                data_hospital_id=task_hospital_id,
+                current_user_role=None
+            )
+    else:
+        # Unauthenticated users always masked (though should be caught by auth middleware)
+        mask_pii = True
     
     # Collect grading information from the task
     grades = []

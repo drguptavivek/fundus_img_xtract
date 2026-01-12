@@ -12,6 +12,7 @@ from datetime import datetime
 import time
 
 from utils.env_loader import load_environment
+from utils.pii_masking import mask_patient_name, mask_patient_id
 
 load_environment()
 
@@ -39,10 +40,28 @@ def clean_ocr_text(text: str | None) -> str | None:
 
 # Log files
 
+def _sanitize_filename(filename: str) -> str:
+    """Mask PII in filenames for logging."""
+    if not filename:
+        return ""
+    # Expected format: {patient_id}_{patient_name}_{date}_{type}_Page{n}.pdf
+    # Simple heuristic: mask everything between first underscore and date/type
+    parts = filename.split('_')
+    if len(parts) >= 3:
+        # Assume parts[0] is ID, parts[1] is Name
+        # We can rely on mask_patient_id for the first part if it looks like an ID
+        masked_id = mask_patient_id(parts[0])
+        masked_name = mask_patient_name(parts[1]) # Returns "Anonymous"
+        
+        # Reconstruct: MaskedID_Anonymous_Rest
+        rest = "_".join(parts[2:])
+        return f"{masked_id}_{masked_name}_{rest}"
+    return filename
 
 def log_success(filename: str, message: str = ""):
+    safe_filename = _sanitize_filename(filename)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] SUCCESS {filename}"
+    line = f"[{ts}] SUCCESS {safe_filename}"
     if message:
         line += f" | {message}"
     with open(SUCCESS_LOG, "a", encoding="utf-8") as f:
@@ -50,8 +69,9 @@ def log_success(filename: str, message: str = ""):
     print(f"LOG (success): {line}")
 
 def log_error(filename: str, message: str):
+    safe_filename = _sanitize_filename(filename)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] ERROR {filename} | {message}"
+    line = f"[{ts}] ERROR {safe_filename} | {message}"
     with open(ERROR_LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
     print(f"LOG (error): {line}")

@@ -546,6 +546,35 @@ tasks = query.join(UserDiseaseUnitRole).filter(
 
 ---
 
+### PII Protection Guidelines (Technical Implementation)
+
+#### 1. Logging Sanitization
+**Critical Rule**: Never log raw filenames containing patient data.
+- **Problem**: `process_pdfs.py` often handles files named `{patient_id}_{name}_{date}.pdf`.
+- **Solution**: Use `_sanitize_filename(filename)` (which typically uses `utils.pii_masking`) before logging.
+- **Example**:
+  ```python
+  # BAD
+  logger.info(f"Processing file: {filename}")
+
+  # GOOD
+  from utils.pii_masking import mask_patient_name
+  safe_name = _sanitize_filename(filename)
+  logger.info(f"Processing file: {safe_name}")
+  ```
+
+#### 2. Data Export Safety
+**Critical Rule**: Export payloads must rely on internal IDs (UUIDs), not original filenames.
+- **Mechanism**: `review.discrepancy_export.py` uses `export_task_row.image_uuid` to rename files in the ZIP (e.g., `uuid.jpg` instead of `JohnDoe.jpg`).
+- **Verification**: `TestExportPIILeakage` ensures that PII filenames are stripped from the final export payload.
+
+#### 3. Grading Interface Logic
+**Critical Rule**: Views and Templates must interact *only* with UUIDs.
+- **Templates**: `dual_grading_task.html` and `_viewer_card.html` must only receive `task.uuid` or `image.uuid`.
+- **Media Serving**: The `media._imgForGradingByUUID` endpoint ensures images are served by UUID, completely decoupling the viewing experience from the physical file path (which might contain PII).
+
+---
+
 See also:
 - [Scoping](../03-Tasks/Scoping.md) - Detailed scoping mechanisms
 - [Master Data](../00-Core/master_data.md) - Hospital and role structure

@@ -27,7 +27,7 @@ from models import (
 )
 from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details, build_pagination_params
-from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.hospital_scoping import apply_scoping
 from utils.date_utils import parse_date_yyyy_mm_dd
 
 
@@ -67,43 +67,33 @@ def encounter_results() -> str:
     per_page = per_page if isinstance(per_page, int) and per_page > 0 else 10
 
     with get_db_session() as db:
-        # Check user permissions for lab unit access (no admin override)
-        user_lab_unit_ids = set(get_user_lab_unit_ids_no_admin_override(current_user.id) or [])
-        if not user_lab_unit_ids:
-            flash("No lab unit access.", "warning")
-            return redirect(url_for("home.index"))
-        allowed_hospital_ids = {
-            hid for hid, in db.query(LabUnit.hospital_id).filter(LabUnit.id.in_(user_lab_unit_ids))
-            if hid is not None
-        }
+        # Determine scoping context
+        query = db.query(PatientEncounters)
+        query = apply_scoping(query, PatientEncounters, current_user, 'analytics')
         
-        query = (
-            db.query(PatientEncounters)
-            .outerjoin(LabUnit, PatientEncounters.lab_unit)
-            .outerjoin(Hospital, LabUnit.hospital)
-            .options(
-                selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
-                selectinload(PatientEncounters.encounter_files),
-                selectinload(PatientEncounters.glaucoma_results_cleaned),
-                selectinload(PatientEncounters.dr_reports),
-                selectinload(PatientEncounters.zip_file),
-            )
+        # Check if user has any access at all
+        if not current_user.is_master_admin and not current_user.hospital_id:
+            flash("No hospital access.", "warning")
+            return redirect(url_for("home.index"))
+        
+        # Apply options for relationships
+        query = query.outerjoin(LabUnit, PatientEncounters.lab_unit).outerjoin(Hospital, LabUnit.hospital).options(
+            selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
+            selectinload(PatientEncounters.encounter_files),
+            selectinload(PatientEncounters.glaucoma_results_cleaned),
+            selectinload(PatientEncounters.dr_reports),
+            selectinload(PatientEncounters.zip_file),
         )
 
-        # Apply lab unit access control
-        query = query.filter(PatientEncounters.lab_unit_id.in_(list(user_lab_unit_ids)))
-
         if hospital_id:
-            if hospital_id not in allowed_hospital_ids:
-                from flask import abort
-                abort(403, description="Access denied to this hospital")
+            # Re-apply scoping to hospital filter check? 
+            # Actually apply_scoping already filters by hospital if user is scoped.
+            # If they pass a specific hospital_id, we just filter by it.
+            # If it's NOT their hospital, the previous scoping will result in empty set.
             query = query.filter(LabUnit.hospital_id == hospital_id)
 
         # Only allow filtering by lab_unit_id if the user has access to that lab unit
         if lab_unit_id:
-            if lab_unit_id not in user_lab_unit_ids:
-                from flask import abort
-                abort(403, description="Access denied to this lab unit")
             query = query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
 
         if capture_date:
@@ -118,7 +108,6 @@ def encounter_results() -> str:
             .all()
         )
 
-        # Only fetch tasks for encounters in allowed lab units
         encounter_file_ids: list[int] = []
         for encounter in encounters:
             for encounter_file in encounter.encounter_files:
@@ -126,14 +115,9 @@ def encounter_results() -> str:
 
         task_details: list[dict[str, Any]] = []
         if encounter_file_ids:
-            # Apply lab unit access control to task query as well
-            task_query = (
-                db.query(GradingTask)
-                .filter(
-                    GradingTask.encounter_file_id.in_(encounter_file_ids),
-                    GradingTask.lab_unit_id.in_(list(user_lab_unit_ids)),
-                )
-            )
+            # Apply apply_scoping to task query
+            task_query = db.query(GradingTask).filter(GradingTask.encounter_file_id.in_(encounter_file_ids))
+            task_query = apply_scoping(task_query, GradingTask, current_user, 'analytics')
             
             tasks = (
                 task_query.options(
@@ -149,17 +133,19 @@ def encounter_results() -> str:
         encounter_rows = build_encounter_result_payload(encounters, task_details)
 
         # Filter hospitals and lab units to only those the user has access to
+        lab_units_query = db.query(LabUnit)
+        lab_units_query = apply_scoping(lab_units_query, LabUnit, current_user, 'analytics')
         lab_units = (
-            db.query(LabUnit)
-            .filter(LabUnit.id.in_(list(user_lab_unit_ids)))
+            lab_units_query
             .options(selectinload(LabUnit.hospital))
             .order_by(LabUnit.name)
             .all()
         )
-        hospital_ids = [lu.hospital_id for lu in lab_units if lu.hospital_id]
+        
+        hospitals_query = db.query(Hospital)
+        hospitals_query = apply_scoping(hospitals_query, Hospital, current_user, 'analytics')
         hospitals = (
-            db.query(Hospital)
-            .filter(Hospital.id.in_(hospital_ids))
+            hospitals_query
             .order_by(Hospital.name)
             .all()
         )

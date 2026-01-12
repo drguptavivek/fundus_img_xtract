@@ -23,19 +23,21 @@ from models import (
     EncounterFile,
     DirectImageUpload,
 )
+from utils.hospital_scoping import apply_scoping
 
-def fetch_task_with_related_data(db, task_id: int):
+def fetch_task_with_related_data(db, task_id: int, user: Optional[User] = None):
     """
     Fetch a grading task with all related data.
     
     Args:
         db: Database session (caller is responsible for closing)
         task_id: The ID of the task to fetch
+        user: Optional user for scoping
         
     Returns:
         GradingTask object with all related data loaded
     """
-    return db.query(GradingTask).options(
+    q = db.query(GradingTask).options(
         selectinload(GradingTask.disease),
         selectinload(GradingTask.encounter_file),
         selectinload(GradingTask.direct_image),
@@ -43,16 +45,21 @@ def fetch_task_with_related_data(db, task_id: int):
         selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
         selectinload(GradingTask.grades).selectinload(Grade.grader),
         selectinload(GradingTask.grades).selectinload(Grade.label)
-    ).filter(GradingTask.id == task_id).first()
+    ).filter(GradingTask.id == task_id)
+    
+    if user:
+        q = apply_scoping(q, GradingTask, user, 'grading')
+        
+    return q.first()
 
 
-def fetch_task_with_related_data_by_uuid(db, task_uuid: str):
+def fetch_task_with_related_data_by_uuid(db, task_uuid: str, user: Optional[User] = None):
     """
     Fetch a grading task with all related data using its UUID.
 
     This mirrors fetch_task_with_related_data but filters by the new UUID column.
     """
-    return db.query(GradingTask).options(
+    q = db.query(GradingTask).options(
         selectinload(GradingTask.disease),
         selectinload(GradingTask.encounter_file),
         selectinload(GradingTask.direct_image),
@@ -60,21 +67,27 @@ def fetch_task_with_related_data_by_uuid(db, task_uuid: str):
         selectinload(GradingTask.consensus).selectinload(Consensus.final_label),
         selectinload(GradingTask.grades).selectinload(Grade.grader),
         selectinload(GradingTask.grades).selectinload(Grade.label)
-    ).filter(GradingTask.uuid == task_uuid).first()
+    ).filter(GradingTask.uuid == task_uuid)
+    
+    if user:
+        q = apply_scoping(q, GradingTask, user, 'grading')
+        
+    return q.first()
 
 
-def fetch_grade_with_related_data(db, grade_id: int):
+def fetch_grade_with_related_data(db, grade_id: int, user: Optional[User] = None):
     """
     Fetch a grade with all related data.
     
     Args:
         db: Database session (caller is responsible for closing)
         grade_id: The ID of the grade to fetch
+        user: Optional user for scoping
         
     Returns:
         Grade object with all related data loaded
     """
-    return db.query(Grade).options(
+    q = db.query(Grade).options(
         selectinload(Grade.task).selectinload(GradingTask.disease),
         selectinload(Grade.task).selectinload(GradingTask.encounter_file),
         selectinload(Grade.task).selectinload(GradingTask.direct_image),
@@ -83,10 +96,15 @@ def fetch_grade_with_related_data(db, grade_id: int):
         selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.grader),
         selectinload(Grade.task).selectinload(GradingTask.grades).selectinload(Grade.label),
         selectinload(Grade.label)
-    ).filter(Grade.id == grade_id).first()
+    ).filter(Grade.id == grade_id)
+    
+    if user:
+        q = apply_scoping(q, Grade, user, 'grading')
+        
+    return q.first()
 
 
-def fetch_existing_grade_for_user(db, task_id: int, user_id: int, slot_type: str):
+def fetch_existing_grade_for_user(db, task_id: int, user_id: int, slot_type: str, user: Optional[User] = None):
     """
     Fetch existing grade for this user and slot (for review purposes).
     
@@ -95,15 +113,21 @@ def fetch_existing_grade_for_user(db, task_id: int, user_id: int, slot_type: str
         task_id: The ID of the task
         user_id: The ID of the user
         slot_type: The slot type (resident, resident2, arbitrator)
+        user: Optional user for scoping
         
     Returns:
         Grade object if found, None otherwise
     """
-    return db.query(Grade).filter(
+    q = db.query(Grade).filter(
         Grade.task_id == task_id,
         Grade.grader_user_id == user_id,
         Grade.role_slot == slot_type
-    ).first()
+    )
+    
+    if user:
+        q = apply_scoping(q, Grade, user, 'grading')
+        
+    return q.first()
 
 
 def get_user_gradings(
@@ -111,7 +135,8 @@ def get_user_gradings(
     user_id: int, 
     page: int = 1, 
     per_page: int = 20,
-    role_slot: Optional[str] = None
+    role_slot: Optional[str] = None,
+    user: Optional[User] = None
 ) -> Tuple[List[Grade], int]:
     """
     Retrieve a paginated list of gradings done by a user.
@@ -126,6 +151,7 @@ def get_user_gradings(
         page (int): Page number (1-indexed)
         per_page (int): Number of items per page
         role_slot (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
+        user (Optional[User]): Optional user for scoping
         
     Returns:
         Tuple[List[Grade], int]: A tuple containing:
@@ -134,6 +160,12 @@ def get_user_gradings(
     """
     # Base query
     query = db.query(Grade).filter(Grade.grader_user_id == user_id)
+    
+    if not user:
+        user = db.query(User).filter_by(id=user_id).first()
+        
+    if user:
+        query = apply_scoping(query, Grade, user, 'grading')
     
     # Filter by role slot if provided
     if role_slot:
@@ -160,6 +192,7 @@ def get_user_gradings_with_details(
     role_slot: Optional[str] = None,
     filter_date: Optional[Union[str, date]] = None,
     exclude_role_slots: Optional[Iterable[str]] = None,
+    user: Optional[User] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
     Retrieve a paginated list of gradings done by a user with related details.
@@ -172,6 +205,7 @@ def get_user_gradings_with_details(
         role_slot (Optional[str]): Filter by role slot (resident, resident2, arbitrator)
         filter_date (Optional[str]): Filter by date in YYYY-MM-DD format
         exclude_role_slots (Optional[Iterable[str]]): Role slots to exclude from the result set
+        user: Optional user for scoping
         
     Returns:
         Tuple[List[Dict[str, Any]], int]: A tuple containing:
@@ -198,6 +232,12 @@ def get_user_gradings_with_details(
         .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
         .filter(Grade.grader_user_id == user_id)
     )
+    
+    if not user:
+        user = db.query(User).filter_by(id=user_id).first()
+        
+    if user:
+        query = apply_scoping(query, Grade, user, 'grading')
     
     # Filter by role slot if provided
     if role_slot:

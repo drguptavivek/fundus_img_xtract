@@ -3,7 +3,10 @@ Utility functions for dual grading system, specifically for revision eligibility
 """
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models import User
 
 from models import Grade, GradingTask
 from utils.dualGradingFetchDetailUtils import fetch_existing_grade_for_user
@@ -40,7 +43,10 @@ def is_user_eligible_for_revision(db: Session, user_id: int, task_id: int, slot_
 
     # Get the grade if not provided
     if grade is None:
-        grade = fetch_existing_grade_for_user(db, task_id, user_id, slot_type)
+        # Fetching user for scoping
+        from models import User
+        user = db.query(User).filter_by(id=user_id).first()
+        grade = fetch_existing_grade_for_user(db, task_id, user_id, slot_type, user=user)
     
     # Check if grade exists
     if not grade:
@@ -98,7 +104,9 @@ def is_arbitrator_eligible_for_revision(db: Session, user_id: int, task_id: int,
     # Get the task if not provided
     if task is None:
         from utils.dualGradingFetchDetailUtils import fetch_task_with_related_data
-        task = fetch_task_with_related_data(db, task_id)
+        from models import User
+        user = db.query(User).filter_by(id=user_id).first()
+        task = fetch_task_with_related_data(db, task_id, user=user)
         if not task:
             return {
                 "eligible": False,
@@ -107,7 +115,9 @@ def is_arbitrator_eligible_for_revision(db: Session, user_id: int, task_id: int,
             }
     
     # Check if user has made an arbitrator grade for this task
-    arbitrator_grade = fetch_existing_grade_for_user(db, task_id, user_id, 'arbitrator')
+    from models import User
+    user = db.query(User).filter_by(id=user_id).first()
+    arbitrator_grade = fetch_existing_grade_for_user(db, task_id, user_id, 'arbitrator', user=user)
     
     if not arbitrator_grade:
         return {
@@ -191,7 +201,9 @@ def is_arbitrator_revision_allowed(db: Session, user_id: int, task_id: int, slot
         return result
 
     # We need to fetch the existing grade to verify if it was created within 6 hours
-    existing_grade_for_check = fetch_existing_grade_for_user(db, task_id, user_id, slot)
+    from models import User
+    user = db.query(User).filter_by(id=user_id).first()
+    existing_grade_for_check = fetch_existing_grade_for_user(db, task_id, user_id, slot, user=user)
     
     if existing_grade_for_check:
         # Use timezone-aware datetime consistently

@@ -14,6 +14,7 @@ from models import (
     LabUnit, Hospital, User, GradingTask, Grade, Consensus, Job, JobItem
 )
 from db_transaction_manager import get_db_session
+from utils.hospital_scoping import apply_scoping
 
 
 def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
@@ -29,7 +30,8 @@ def _to_aware_datetime(value: datetime | _date | None) -> datetime | None:
 
 @get_db_session()
 def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = None, 
-                                     end_date: Optional[datetime] = None) -> pd.DataFrame:
+                                     end_date: Optional[datetime] = None,
+                                     user: Optional[User] = None) -> pd.DataFrame:
     """
     Generate encounter-wise upload processing metrics dataframe.
     
@@ -42,7 +44,13 @@ def generate_encounter_upload_metrics_df(db, start_date: Optional[datetime] = No
         pandas.DataFrame with encounter-wise operational metrics
     """
     # Build base query with all necessary relationships
-    query = db.query(PatientEncounters).options(
+    query = db.query(PatientEncounters)
+    
+    # Apply hospital scoping if user provided
+    if user:
+        query = apply_scoping(query, PatientEncounters, user, 'analytics')
+        
+    query = query.options(
         joinedload(PatientEncounters.zip_file),
         joinedload(PatientEncounters.lab_unit).joinedload(LabUnit.hospital),
         selectinload(PatientEncounters.encounter_files),

@@ -9,6 +9,7 @@ This design allows for better transaction management and session reuse.
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading
+from utils.hospital_scoping import apply_scoping
 from typing import Dict, Optional, List, Tuple
 
 
@@ -88,7 +89,7 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         # Count resident pending tasks (user can do resident grading if they have resident role or resident2 role and resident eligibility)
         if (has_resident_role or has_resident2_role) and info['can_grade_resident']:
             # Exclude tasks that the user has already graded as a resident
-            counts['resident_pending'] = db.query(GradingTask).filter(
+            q = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
@@ -98,12 +99,14 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                         Grade.role_slot == 'resident'
                     )
                 )
-            ).count()
+            )
+            q = apply_scoping(q, GradingTask, user, 'grading')
+            counts['resident_pending'] = q.count()
         
         # Count resident2 pending tasks (only if user has resident2 eligibility)
         if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']):
             # Exclude tasks that the user has already graded in either resident slot
-            counts['resident2_pending'] = db.query(GradingTask).filter(
+            q = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id,
@@ -113,16 +116,20 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
                         Grade.role_slot.in_(('resident', 'resident2'))
                     )
                 )
-            ).count()
+            )
+            q = apply_scoping(q, GradingTask, user, 'grading')
+            counts['resident2_pending'] = q.count()
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
         if has_resident2_role and info['can_arbitrate']:
             # Get tasks in arbitration state
-            arbitration_tasks = db.query(GradingTask).filter(
+            q = db.query(GradingTask).filter(
                 GradingTask.state == 'arbitration',
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id
-            ).all()
+            )
+            q = apply_scoping(q, GradingTask, user, 'grading')
+            arbitration_tasks = q.all()
             
             # Apply same filtering as in task assignment to exclude tasks user recently graded
             from utils.dualGradingGetNextTasks import _has_user_graded_task_2weeks
@@ -199,27 +206,33 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         # Count resident completed tasks
         # Allow both residents and resident2 graders to count resident completed tasks
         if has_resident_role or has_resident2_role:
-            counts['resident_completed'] = db.query(Grade).filter(
+            q = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'resident',
                 Grade.task.has(GradingTask.disease_id == disease_id)
-            ).count()
+            )
+            q = apply_scoping(q, Grade, user, 'grading')
+            counts['resident_completed'] = q.count()
         
         # Count resident2 completed tasks
         if has_resident2_role:
-            counts['resident2_completed'] = db.query(Grade).filter(
+            q = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'resident2',
                 Grade.task.has(GradingTask.disease_id == disease_id)
-            ).count()
+            )
+            q = apply_scoping(q, Grade, user, 'grading')
+            counts['resident2_completed'] = q.count()
     
         # Count arbitration completed tasks
         if has_resident2_role:
-            counts['arbitration_completed'] = db.query(Grade).filter(
+            q = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'arbitrator',
                 Grade.task.has(GradingTask.disease_id == disease_id)
-            ).count()
+            )
+            q = apply_scoping(q, Grade, user, 'grading')
+            counts['arbitration_completed'] = q.count()
         
         kpi_data[disease_name] = counts
     

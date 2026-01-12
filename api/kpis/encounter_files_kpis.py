@@ -68,7 +68,8 @@ def get_filtered_encounter_dataframe(
         df = generate_encounter_upload_metrics_df(
             db,
             start_date=params.get('start_date'),
-            end_date=params.get('end_date')
+            end_date=params.get('end_date'),
+            user=current_user
         )
         
         # Check if dataframe is empty
@@ -91,10 +92,7 @@ def get_filtered_encounter_dataframe(
             error_logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # Apply user permissions - all users (including admins) are scoped by their lab unit eligibility
-        if not user_lab_unit_ids:
-            raise ValueError("User has no lab unit permissions. Please contact administrator.")
-        df = df[df['lab_unit_id'].isin(user_lab_unit_ids)]
+        # PII masking and location filters follow
         
         # Apply location filters
         if 'hospital_ids' in params and 'hospital_id' in df.columns:

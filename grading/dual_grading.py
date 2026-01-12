@@ -251,7 +251,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
     with transaction_scope() as db:
         try:
             # Fetch the task with related data using utility function
-            task = fetch_task_with_related_data_by_uuid(db, task_uuid)
+            task = fetch_task_with_related_data_by_uuid(db, task_uuid, user=current_user)
             
             if not task:
                 flash("Error: Task not found. Please contact the system administrator.", "danger")
@@ -409,7 +409,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 return redirect(url_for("grading.index"))
 
             # Fetch existing grade for this user and slot (for review purposes) using utility function
-            existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
+            existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type, user=current_user)
             existing_selected_features = _parse_selected_features(
                 existing_grade.selected_features_json if existing_grade else None
             )
@@ -431,7 +431,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 is_arbitrator_revising_recent = arbitrator_eligibility.get("is_recent", False)
 
             # Check if this is a revision by checking if the user already has a grade for this task and slot
-            existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type)
+            existing_grade_for_slot = fetch_existing_grade_for_user(db, task_id, current_user.id, slot_type, user=current_user)
             is_revision = existing_grade_for_slot is not None
             
             # Store the start time in the session for fallback
@@ -522,7 +522,7 @@ def dual_grading_submit():
     with transaction_scope() as db:
         try:
             # Use utility function to fetch the task with related data
-            task = fetch_task_with_related_data_by_uuid(db, task_uuid)
+            task = fetch_task_with_related_data_by_uuid(db, task_uuid, user=current_user)
             if not task:
                 flash("Error: Task not found. Please contact the system administrator.", "danger")
                 # Send notification to admin about the missing task
@@ -599,7 +599,7 @@ def dual_grading_submit():
             # However, if this is a revision of an existing arbitrator grade by the same user, skip this check
             if slot == "arbitrator":
                 # Check if this is a revision of an existing arbitrator grade by the same user
-                existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
+                existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
                 is_arbitrator_revision = (
                     existing_grade and 
                     existing_grade.role_slot == "arbitrator" and 
@@ -665,7 +665,7 @@ def dual_grading_submit():
                 return redirect(url_for("grading.index"))
             
             # Fetch existing grade using utility function
-            existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot)
+            existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
             had_existing_grade = existing_grade is not None
 
             # Capture previous values for logging (before updating)

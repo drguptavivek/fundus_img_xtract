@@ -6,7 +6,7 @@ supporting both hospital-bound operations and cross-hospital grading.
 """
 from typing import Any, Set
 from sqlalchemy.orm import Query
-from models import User, LabUnit
+from models import User, LabUnit, Hospital
 from db_transaction_manager import get_db_session
 from flask import request
 
@@ -178,22 +178,30 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
         # No additional filtering needed here
         return query
     
+    # Helper to support both legacy Query (.filter) and modern Select (.where)
+    def apply_filter(q, *args):
+        if hasattr(q, 'filter'):
+            return q.filter(*args)
+        return q.where(*args)
+
     # Hospital-bound operations (APPLY hospital filter)
     if not user.hospital_id:
         # No hospital assignment = no access
-        return query.filter(model_class.id == None)  # Empty result
+        return apply_filter(query, model_class.id == None)  # Empty result
     
     # Apply hospital filter (if model has hospital_id)
     if hasattr(model_class, 'hospital_id'):
-        query = query.filter(model_class.hospital_id == user.hospital_id)
+        query = apply_filter(query, model_class.hospital_id == user.hospital_id)
+    elif model_class == Hospital:
+        query = apply_filter(query, Hospital.id == user.hospital_id)
     
     # Apply lab unit filter (if model has lab_unit_id)
     if hasattr(model_class, 'lab_unit_id'):
         # If model doesn't have hospital_id but has lab_unit_id, we MUST filter by hospital via LabUnit join
         if not hasattr(model_class, 'hospital_id'):
              # We need to join with LabUnit to filter by hospital
-             # But first check if it's already joined? SQLAlchemy generally handles duplicate joins
-             query = query.join(LabUnit, model_class.lab_unit_id == LabUnit.id).filter(LabUnit.hospital_id == user.hospital_id)
+             query = query.join(LabUnit, model_class.lab_unit_id == LabUnit.id)
+             query = apply_filter(query, LabUnit.hospital_id == user.hospital_id)
         
         # Site admins see ALL lab units in their hospital (no further restriction)
         # Regular users are restricted to their assigned lab units
@@ -207,13 +215,13 @@ def apply_scoping(query: Query, model_class: Any, user: User, operation: str) ->
                 ]
                 
                 if user_lab_unit_ids:
-                    query = query.filter(model_class.lab_unit_id.in_(user_lab_unit_ids))
+                    query = apply_filter(query, model_class.lab_unit_id.in_(user_lab_unit_ids))
                 else:
                     # No lab units in user's hospital - no access
-                    return query.filter(model_class.id == None)
+                    return apply_filter(query, model_class.id == None)
             else:
                 # Regular user with no lab units - no access
-                return query.filter(model_class.id == None)
+                return apply_filter(query, model_class.id == None)
     
     return query
 

@@ -55,6 +55,7 @@ def _serialize_user_for_cache(user: User) -> dict:
         "is_locked_until": user.is_locked_until,
         "designation": user.designation,
         "phone": user.phone,
+        "hospital_id": user.hospital_id,
         "roles": [role.name for role in (user.roles or [])],
     }
 
@@ -70,6 +71,7 @@ def _build_user_from_cache(payload: dict) -> User:
     user.is_locked_until = payload.get("is_locked_until")
     user.designation = payload.get("designation")
     user.phone = payload.get("phone")
+    user.hospital_id = payload.get("hospital_id")
     roles = [Role(name=name) for name in payload.get("roles", [])]
     user.roles = roles
     return user
@@ -99,6 +101,7 @@ def load_user(user_id: str):
             )
             .where(User.id == int(user_id))
         ).scalar_one_or_none()
+        
         # Expunge the user from session to prevent detached instance issues
         # but keep it as a persistent object with identity
         if user:

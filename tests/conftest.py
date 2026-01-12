@@ -23,7 +23,59 @@ from sqlalchemy.pool import NullPool
 from flask_login import FlaskLoginClient
 
 from models import Base
-from app import create_app
+
+# Global test session holder for monkeypatching
+_test_db_session = None
+
+from contextlib import contextmanager
+@contextmanager
+def _mock_get_db_session():
+    global _test_db_session
+    if _test_db_session:
+        print(f"DEBUG: Entering GLOBAL MOCK get_db_session (session id: {id(_test_db_session)})")
+        yield _test_db_session
+    else:
+        # Fallback to original if not set (should not happen during request)
+        from models import Session as DbSession
+        db = DbSession()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+class _TestSessionWrapper:
+    """Wrapper that prevents accidental closure or commit of the test session."""
+    def __init__(self, session):
+        self._session = session
+    
+    def __getattr__(self, name):
+        return getattr(self._session, name)
+
+    def commit(self):
+        # Prevent commit during tests to maintain transaction isolation
+        print("DEBUG: Ignoring session.commit() in test wrapper")
+        self._session.flush()
+
+    def close(self):
+        # Prevent closure of the shared test session
+        print("DEBUG: Ignoring session.close() in test wrapper")
+        pass
+    
+    def rollback(self):
+        # Allow rollback but log it
+        print("DEBUG: session.rollback() called in test wrapper")
+        self._session.rollback()
+
+# Monkeypatch db_transaction_manager BEFORE any other imports that might use it
+import db_transaction_manager
+db_transaction_manager.get_db_session = _mock_get_db_session
+db_transaction_manager.transaction_scope = _mock_get_db_session
+
+# Deferred import for create_app to allow patching
 
 
 # ==============================================================================
@@ -74,11 +126,6 @@ def db_session(test_engine):
     """
     Create a database session for each test function.
     Uses transactions with automatic rollback for isolation.
-    
-    This ensures:
-    - Each test starts with a clean state
-    - Tests don't interfere with each other
-    - Fast cleanup (rollback instead of DELETE)
     """
     connection = test_engine.connect()
     transaction = connection.begin()
@@ -105,6 +152,24 @@ def app(db_session):
     Create a Flask app configured for testing.
     Uses the test database and in-memory rate limiting.
     """
+    global _test_db_session
+    # Wrap the db_session to prevent accidental closure
+    wrapped_session = _TestSessionWrapper(db_session)
+    old_session = _test_db_session
+    _test_db_session = wrapped_session
+
+    from unittest.mock import patch
+    
+    # Also patch models.Session for those who use it directly
+    patcher_models = patch('models.Session', return_value=wrapped_session)
+    patcher_models.start()
+    
+    # Patch DbSession in db_transaction_manager as well
+    import db_transaction_manager
+    patcher_dbsession = patch('db_transaction_manager.DbSession', return_value=wrapped_session)
+    patcher_dbsession.start()
+
+    from app import create_app
     app = create_app()
     app.config.update(
         TESTING=True,
@@ -128,8 +193,22 @@ def app(db_session):
     # Use FlaskLoginClient for testing
     app.test_client_class = FlaskLoginClient
     
-    with app.app_context():
-        yield app
+    # Catch and print exceptions in tests to see tracebacks
+    @app.errorhandler(500)
+    def handle_500(e):
+        import traceback
+        import sys
+        print("\n!!! EXCEPTION IN APP (500) !!!", file=sys.stderr)
+        traceback.print_exc()
+        return "Internal Server Error", 500
+
+    try:
+        with app.app_context():
+            yield app
+    finally:
+        patcher_models.stop()
+        patcher_dbsession.stop()
+        _test_db_session = old_session
 
 
 @pytest.fixture(scope="function")

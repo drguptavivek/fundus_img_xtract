@@ -181,35 +181,41 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                if allowed_lab_unit_ids_list:
-                    q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
+                q = apply_scoping(q, DirectImageUpload, current_user, 'upload')
 
                 if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
                     
                 rows = db_session.execute(q).scalars().all()
 
-                if allowed_lab_unit_ids_list and not rows:
+                if not rows:
                     flash("No uploads matched your selection and permissions.", "warning")
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-                if new_lab_unit_id and not can_manage_others:
+                if new_lab_unit_id:
                     try:
                         new_lab_unit_id_int = int(new_lab_unit_id)
                     except (TypeError, ValueError):
                         flash("Invalid lab unit selection.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
-                    if allowed_lab_unit_ids_list and new_lab_unit_id_int not in allowed_lab_unit_ids_list:
+                    
+                    # Validate new lab unit - check if it's within user's scope
+                    lu_check = db_session.execute(
+                        apply_scoping(select(LabUnit).where(LabUnit.id == new_lab_unit_id_int), LabUnit, current_user, 'upload')
+                    ).scalar_one_or_none()
+                    if not lu_check:
                         flash("You cannot assign uploads to that lab unit.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
 
-                if new_hospital_id and not can_manage_others:
+                if new_hospital_id:
                     try:
                         new_hospital_id_int = int(new_hospital_id)
                     except (TypeError, ValueError):
                         flash("Invalid hospital selection.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
-                    if allowed_hospital_ids and new_hospital_id_int not in allowed_hospital_ids:
+                    
+                    # Validate hospital - check if user has access to this hospital
+                    if not current_user.is_master_admin and new_hospital_id_int != current_user.hospital_id:
                         flash("You cannot assign uploads to that hospital.", "danger")
                         return redirect(url_for("direct_uploads.dashboard"), code=303)
 
@@ -427,8 +433,7 @@ def dashboard():
                     return redirect(url_for("direct_uploads.dashboard"), code=303)
 
                 q = select(DirectImageUpload).where(DirectImageUpload.id.in_(ids))
-                if allowed_lab_unit_ids_list:
-                    q = q.where(DirectImageUpload.lab_unit_id.in_(allowed_lab_unit_ids_list))
+                q = apply_scoping(q, DirectImageUpload, current_user, 'upload')
 
                 if not can_manage_others:
                     q = q.where(DirectImageUpload.uploader_id == current_user.id)
@@ -675,7 +680,7 @@ def dashboard():
 
         q = select(DirectImageUpload)
         q = apply_scoping(q, DirectImageUpload, current_user, 'upload')
-
+        
         # Date filters
         if f_date_from:
             try:

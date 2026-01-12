@@ -25,6 +25,12 @@ def test_direct_upload_dashboard_isolation_manual(app, db_session, seed_test_dat
     if admin_role not in user.roles:
         user.roles.append(admin_role)
     
+    # Assign lab units to user to avoid redirect in dashboard
+    if lab_a not in user.lab_units:
+        user.lab_units.append(lab_a)
+    if lab_b not in user.lab_units:
+        user.lab_units.append(lab_b)
+    
     # Create an image in Hospital B (External)
     img_b = DirectImageUpload(
         filename="secret_hosp_b.jpg",
@@ -56,6 +62,16 @@ def test_direct_upload_dashboard_isolation_manual(app, db_session, seed_test_dat
     
     # Refresh user to ensure it's attached to current session
     db_session.refresh(user)
+    
+    # DEBUG: Verify images were actually created in the database
+    print(f"\n=== PRE-REQUEST DEBUG ===")
+    all_images = db_session.query(DirectImageUpload).all()
+    print(f"Total images in database: {len(all_images)}")
+    for img in all_images:
+        print(f"  - {img.filename} (hospital_id={img.hospital_id}, lab_unit_id={img.lab_unit_id})")
+    print(f"User hospital_id: {user.hospital_id}")
+    print(f"User has local_admin role: {user.has_role('local_admin')}")
+    print(f"=== END PRE-REQUEST DEBUG ===\n")
     
     # Use Flask-Login test client with proper authentication
     from flask_login import FlaskLoginClient

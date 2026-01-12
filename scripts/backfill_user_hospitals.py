@@ -26,6 +26,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from models import Session, User  # noqa: E402
 from sqlalchemy import and_  # noqa: E402
+from utils.log_sanitize import sanitize_log_value # noqa: E402
 
 # Configure logging
 logging.basicConfig(
@@ -135,11 +136,21 @@ def backfill_user_hospitals(*, dry_run: bool = False) -> Dict[str, int]:
                 })
                 stats['assigned'] += 1
             else:
-                logger.warning(f"User {user.username} (ID: {user.id}): {reason}")
+                logger.warning(
+                    "User %s (ID: %s): %s",
+                    sanitize_log_value(user.username),
+                    sanitize_log_value(user.id),
+                    sanitize_log_value(reason),
+                )
                 stats['skipped'] += 1
                 
         except Exception as e:
-            logger.error(f"Error processing user {user.username} (ID: {user.id}): {e}")
+            logger.error(
+                "Error processing user %s (ID: %s): %s",
+                sanitize_log_value(user.username),
+                sanitize_log_value(user.id),
+                sanitize_log_value(e),
+            )
             stats['errors'] += 1
     
     # Apply assignments
@@ -150,28 +161,36 @@ def backfill_user_hospitals(*, dry_run: bool = False) -> Dict[str, int]:
                 if user:
                     user.hospital_id = assignment['hospital_id']
                     logger.info(
-                        f"Assigned hospital_id={assignment['hospital_id']} to "
-                        f"user {assignment['username']} (ID: {assignment['user_id']}) - "
-                        f"{assignment['reason']}"
+                        "Assigned hospital_id=%s to user %s (ID: %s) - %s",
+                        sanitize_log_value(assignment['hospital_id']),
+                        sanitize_log_value(assignment['username']),
+                        sanitize_log_value(assignment['user_id']),
+                        sanitize_log_value(assignment['reason']),
                     )
             
             db.commit()
-            logger.info(f"✅ Committed {len(assignments)} hospital assignments")
+            logger.info("✅ Committed %s hospital assignments", len(assignments))
     
     # Generate report
     if dry_run:
         logger.info("\n=== DRY RUN REPORT ===")
-        logger.info(f"Would assign hospital_id to {stats['assigned']} users")
-        logger.info(f"Would skip {stats['skipped']} users (no lab units)")
+        logger.info("Would assign hospital_id to %d users", stats['assigned'])
+        logger.info("Would skip %d users (no lab units)", stats['skipped'])
         if assignments:
             logger.info("\nAssignments that would be made:")
             for a in assignments:
-                logger.info(f"  - User {a['username']} (ID: {a['user_id']}) → Hospital {a['hospital_id']} ({a['reason']})")
+                logger.info(
+                    "  - User %s (ID: %s) → Hospital %s (%s)",
+                    sanitize_log_value(a['username']),
+                    sanitize_log_value(a['user_id']),
+                    sanitize_log_value(a['hospital_id']),
+                    sanitize_log_value(a['reason']),
+                )
     else:
         logger.info("\n=== BACKFILL COMPLETE ===")
-        logger.info(f"Assigned: {stats['assigned']} users")
-        logger.info(f"Skipped: {stats['skipped']} users")
-        logger.info(f"Errors: {stats['errors']} users")
+        logger.info("Assigned: %d users", stats['assigned'])
+        logger.info("Skipped: %d users", stats['skipped'])
+        logger.info("Errors: %d users", stats['errors'])
     
     return stats
 

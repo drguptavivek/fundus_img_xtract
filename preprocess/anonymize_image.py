@@ -16,6 +16,7 @@ from preprocess import bp
 from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.log_sanitize import sanitize_log_value
 
 
 editing_logger = logging.getLogger("editing")
@@ -644,19 +645,21 @@ def anonymize_image(uuid: UUID):
 
             except Exception as e:
                 editing_logger.exception(
-                    "Failed to update verification status for image UUID %s: %s", uuid_val, e
+                    "Failed to update verification status for image UUID %s: %s",
+                    sanitize_log_value(uuid_val),
+                    sanitize_log_value(e)
                 )
                 editing_logger.debug(
                     "Database error details - Filename: %s, Uploaded: %s, Uploader: %s, "
                     "Hospital: %s, Lab Unit: %s, Camera: %s, Disease: %s, Area: %s",
-                    upload.filename if upload else "Unknown",
-                    upload.created_at if upload else "Unknown",
-                    current_user.username if current_user else "Unknown",
-                    upload.hospital.name if upload and upload.hospital else "Unknown",
-                    upload.lab_unit.name if upload and upload.lab_unit else "Unknown",
-                    upload.camera.name if upload and upload.camera else "Unknown",
-                    upload.disease.name if upload and upload.disease else "Unknown",
-                    upload.area.name if upload and upload.area else "Unknown"
+                    sanitize_log_value(upload.filename if upload else "Unknown"),
+                    sanitize_log_value(upload.created_at if upload else "Unknown"),
+                    sanitize_log_value(current_user.username if current_user else "Unknown"),
+                    sanitize_log_value(upload.hospital.name if upload and upload.hospital else "Unknown"),
+                    sanitize_log_value(upload.lab_unit.name if upload and upload.lab_unit else "Unknown"),
+                    sanitize_log_value(upload.camera.name if upload and upload.camera else "Unknown"),
+                    sanitize_log_value(upload.disease.name if upload and upload.disease else "Unknown"),
+                    sanitize_log_value(upload.area.name if upload and upload.area else "Unknown")
                 )
                 editing_logger.debug("Rolling back database session")
                 db_session.rollback()

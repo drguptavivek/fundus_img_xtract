@@ -15,7 +15,7 @@ from .utils import utcnow, get_client_ip
 from flask import flash
 from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback, rate_limit
 from utils.security_middleware import protect_form_submission, validate_payload_size
-from utils.log_sanitize import sanitize_log_value
+from utils.log_sanitize import sanitize_log_value, mask_email
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
@@ -739,7 +739,7 @@ def reset_password():
         auth_logger.info(
             "Password reset successful - User: %s, Email: %s, IP: %s, SessionID: %s, UserID: %s",
             sanitize_log_value(username),
-            sanitize_log_value(email),
+            mask_email(email),
             sanitize_log_value(ip),
             sanitize_log_value(session_id),
             sanitize_log_value(user_id),

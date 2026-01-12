@@ -442,8 +442,11 @@ def _register_inactivity_timeout(app: Flask) -> None:
             ip = get_client_ip()
             auth_logger = logging.getLogger("auth")
             auth_logger.info(
-                f"Session timeout - User: {username}, IP: {ip}, Last active: {last}, "
-                f"Timeout duration: {timeout_s // 60} minutes"
+                "Session timeout - User: %s, IP: %s, Last active: %s, Timeout duration: %s minutes",
+                sanitize_log_value(username),
+                sanitize_log_value(ip),
+                sanitize_log_value(last),
+                sanitize_log_value(timeout_s // 60),
             )
 
             cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")

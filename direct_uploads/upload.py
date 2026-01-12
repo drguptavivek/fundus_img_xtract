@@ -301,7 +301,27 @@ def upload():
                                 else:
                                     # write original
                                     dest = uniquify(orig_dir, filename)
-                                    dest.write_bytes(content)
+                                     
+                                    # Strip EXIF metadata before saving
+                                    try:
+                                        from utils.image_processing import strip_exif_data
+                                        clean_content = strip_exif_data(content)
+                                        dest.write_bytes(clean_content)
+                                        # Update content length for logging if changed
+                                        if len(clean_content) != len(content):
+                                            current_app.logger.info(
+                                                "Stripped EXIF data from %s. Size reduced: %s -> %s bytes",
+                                                sanitize_log_value(filename),
+                                                sanitize_log_value(len(content)),
+                                                sanitize_log_value(len(clean_content))
+                                            )
+                                    except Exception as e:
+                                        current_app.logger.error(
+                                            "Failed to strip EXIF from %s: %s. Saving original.",
+                                            sanitize_log_value(filename),
+                                            sanitize_log_value(e)
+                                        )
+                                        dest.write_bytes(content)
 
                                     # Generate thumbnail for the uploaded image
                                     thumbnail_filename = None

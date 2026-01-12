@@ -474,9 +474,31 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                     continue
 
                 target_path = dest_dir / new_filename
-                # Ensure both source and target are closed promptly
-                with zf.open(member_info) as source, open(target_path, "wb") as target:
-                    shutil.copyfileobj(source, target)
+                
+                # Extract file (intercept images for EXIF stripping)
+                if file_ext in {'.jpg', '.jpeg'}:
+                    try:
+                        with zf.open(member_info) as source:
+                            content = source.read()
+                            
+                        # Strip EXIF
+                        from utils.image_processing import strip_exif_data
+                        clean_content = strip_exif_data(content)
+                        
+                        with open(target_path, "wb") as target:
+                            target.write(clean_content)
+                            
+                        if len(clean_content) != len(content):
+                            print(f"  - Stripped EXIF from {new_filename} ({len(content)}->{len(clean_content)} bytes)")
+                    except Exception as e:
+                        print(f"  - Failed to strip EXIF from {new_filename}: {e}. Saving original.")
+                        # Fallback to direct copy
+                        with zf.open(member_info) as source, open(target_path, "wb") as target:
+                            shutil.copyfileobj(source, target)
+                else:
+                    # Direct stream copy for PDFs
+                    with zf.open(member_info) as source, open(target_path, "wb") as target:
+                        shutil.copyfileobj(source, target)
 
                 # Create appropriate model instance
                 if file_type == 'pdf':

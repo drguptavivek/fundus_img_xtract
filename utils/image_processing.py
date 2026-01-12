@@ -404,3 +404,44 @@ def create_thumbnail_for_image(
     if generate_thumbnail(image_path, thumbnail_path):
         return thumbnail_path
     return None
+
+
+def strip_exif_data(image_data: bytes) -> bytes:
+    """
+    Strip EXIF and other metadata from an image byte stream.
+    
+    This function creates a new image from the source data, dropping all
+    metadata tags (EXIF, IPTC, XMP) which effectively anonymizes technical
+    metadata that might contain PII (e.g., GPS, Patient Name in user comment).
+    
+    Args:
+        image_data: Raw image data as bytes
+        
+    Returns:
+        Cleaned image data as bytes. Returns original data if processing fails.
+    """
+    try:
+        if not image_data:
+            return image_data
+
+        with BytesIO(image_data) as in_stream:
+            with Image.open(in_stream) as img:
+                data = list(img.getdata())
+                # Create a new image without metadata
+                clean_img = Image.new(img.mode, img.size)
+                clean_img.putdata(data)
+                
+                # Copy format
+                fmt = img.format or 'JPEG'
+                
+                with BytesIO() as out_stream:
+                    # Save without extra metadata
+                    clean_img.save(out_stream, format=fmt)
+                    return out_stream.getvalue()
+                    
+    except Exception as e:
+        logger.error(
+            "Failed to strip EXIF data: %s",
+            sanitize_log_value(e)
+        )
+        return image_data

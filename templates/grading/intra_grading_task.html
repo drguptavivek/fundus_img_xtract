@@ -39,13 +39,13 @@
 <div class="row g-3">
   <div class="col-12 col-lg-9" id="image-card">
     {% if image_uuid %}
-      {% include 'grading/_viewer_card.html' %}
+    {% include 'grading/_viewer_card.html' %}
     {% else %}
-      <div class="card shadow-sm">
-        <div class="card-body text-center">
-          <p class="text-muted mb-0">Image not available</p>
-        </div>
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <p class="text-muted mb-0">Image not available</p>
       </div>
+    </div>
     {% endif %}
   </div>
 
@@ -60,49 +60,73 @@
           {% if start_time_iso %}
           <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
           {% endif %}
-
+          {% if existing_grade.comment %}
+          <div class="text-muted fst-italic">"{{ existing_grade.comment|mask_text_emails }}"</div>
+          {% endif %}
+          {% if existing_selected_features %}
           <div class="mb-2">
-            <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name }}</strong></label>
-            <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
-              {% for opt in disease_gradings %}
-                {% set oid = 'imp-' ~ opt.id %}
-                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required>
-                <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
-                  <span>{{ opt.impression }}</span>
-                  <span class="sel-icon d-none">✓</span>
-                </label>
+            <label class="form-label">Previously Selected Features</label>
+            <div class="d-flex flex-wrap gap-1">
+              {% for feature in existing_selected_features %}
+              <span class="badge bg-secondary">{{ feature.name }}</span>
               {% endfor %}
             </div>
           </div>
-                  <!-- Features Section -->
-        <div class="mb-2" id="features-section" style="display: none;">
-          <label class="form-label">Relevant Features</label>
-          <div id="features-container" class="d-flex flex-column gap-2">
-            <!-- Features will be dynamically populated here -->
+          {% endif %}
+
+          <div class="mb-2">
+            <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name
+                }}</strong></label>
+            <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
+              {% for opt in disease_gradings %}
+              {% set oid = 'imp-' ~ opt.id %}
+              <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}"
+                autocomplete="off" required>
+              <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center"
+                for="{{ oid }}">
+                <span>{{ opt.impression }}</span>
+                <span class="sel-icon d-none">✓</span>
+              </label>
+              {% endfor %}
+            </div>
           </div>
-        </div>
-        
+          <!-- Features Section -->
+          <div class="mb-2" id="features-section" style="display: none;">
+            <label class="form-label">Relevant Features</label>
+            <div id="features-container" class="d-flex flex-column gap-2">
+              <!-- Features will be dynamically populated here -->
+            </div>
+          </div>
+
           <div class="mb-3">
             <label for="comment-textarea" class="form-label">Comments (optional)</label>
-            <textarea class="form-control" id="comment-textarea" name="comment" rows="3" maxlength="1000" placeholder="Add any relevant notes..."></textarea>
+            <textarea class="form-control" id="comment-textarea" name="comment" rows="3" maxlength="1000"
+              placeholder="Add any relevant notes..."></textarea>
           </div>
-          
+
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" onclick="saveSelectionOnSubmit()">Save & Close</button>
-              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" onclick="saveSelectionOnSubmit()">Save & Next</button>
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close"
+                onclick="saveSelectionOnSubmit()">Save & Close</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next"
+                onclick="saveSelectionOnSubmit()">Save & Next</button>
             </div>
           </div>
 
           <div id="not-gradable-reasons" class="mt-3" style="display: none;">
             <label class="form-label">Reason for Not Gradable</label>
             <div class="d-flex flex-wrap gap-1">
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Disc not focussed">Disc not focussed</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Retina not focussed">Retina not focussed</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Disc not complete">Disc not complete</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Artefacts">Artefacts</button>
-              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason" data-reason="Other">Other</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
+                data-reason="Disc not focussed">Disc not focussed</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
+                data-reason="Retina not focussed">Retina not focussed</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
+                data-reason="Disc not complete">Disc not complete</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
+                data-reason="Artefacts">Artefacts</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm not-gradable-reason"
+                data-reason="Other">Other</button>
             </div>
           </div>
 
@@ -123,19 +147,19 @@
 {% block page_scripts %}
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-  window.gradingGuidelines = {{ grading_guidelines | tojson }};
-  window.taskId = "{{ task.uuid }}";
-  window.imageUuid = "{{ image_uuid }}";
-  window.currentUserId = {{ current_user_id or 'null' }};
-  window.currentSlot = "intra";
-  window.featuresReadOnly = false;
-  // Pass disease gradings with features to JavaScript
-  window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
-  // Pass existing selected features if available
-  window.existingSelectedFeatures = null;
+  {% else %}
+  <script>
+    {% endif %}
+    window.gradingGuidelines = {{ grading_guidelines | tojson}};
+    window.taskId = "{{ task.uuid }}";
+    window.imageUuid = "{{ image_uuid }}";
+    window.currentUserId = {{ current_user_id or 'null' }};
+    window.currentSlot = "intra";
+    window.featuresReadOnly = false;
+    // Pass disease gradings with features to JavaScript
+    window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
+    // Pass existing selected features if available
+    window.existingSelectedFeatures = null;
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

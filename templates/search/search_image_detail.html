@@ -10,9 +10,9 @@
     </div>
     <div class="d-flex gap-2">
       {% if return_to %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ return_to }}">Back</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ return_to }}">Back</a>
       {% else %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('search.search_images_route') }}">Back to search</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('search.search_images_route') }}">Back to search</a>
       {% endif %}
     </div>
   </div>
@@ -32,7 +32,8 @@
             <dt class="col-5 text-muted">Lab / Hospital</dt>
             <dd class="col-7">
               {{ original_task.lab_unit.name if original_task.lab_unit else '—' }}
-              {% if original_task.lab_unit and original_task.lab_unit.hospital %}<span class="text-muted">,</span> {{ original_task.lab_unit.hospital.name }}{% endif %}
+              {% if original_task.lab_unit and original_task.lab_unit.hospital %}<span class="text-muted">,</span> {{
+              original_task.lab_unit.hospital.name }}{% endif %}
             </dd>
 
             <dt class="col-5 text-muted">Encounter UUID</dt>
@@ -50,12 +51,12 @@
             <dt class="col-5 text-muted">Consensus</dt>
             <dd class="col-7">
               {% if task.consensus_info and task.consensus_info.has_consensus %}
-                <span class="badge bg-success">Yes</span>
-                {% if task.consensus_info.consensus_grading %}
-                  <span class="text-muted ms-1">({{ task.consensus_info.consensus_grading.grading_value }})</span>
-                {% endif %}
+              <span class="badge bg-success">Yes</span>
+              {% if task.consensus_info.consensus_grading %}
+              <span class="text-muted ms-1">({{ task.consensus_info.consensus_grading.grading_value }})</span>
+              {% endif %}
               {% else %}
-                <span class="text-muted">No</span>
+              <span class="text-muted">No</span>
               {% endif %}
             </dd>
           </dl>
@@ -64,38 +65,40 @@
             <div class="fw-semibold mb-2">Human Grading</div>
             {% set hg_roles = ['resident', 'resident2', 'arbitrator'] %}
             {% set badge_map = {
-              'resident': 'bg-secondary',
-              'resident2': 'bg-info text-dark',
-              'arbitrator': 'bg-warning text-dark',
-              'ai': 'bg-dark'
+            'resident': 'bg-secondary',
+            'resident2': 'bg-info text-dark',
+            'arbitrator': 'bg-warning text-dark',
+            'ai': 'bg-dark'
             } %}
             <div class="d-flex flex-column gap-2">
               {% for role in hg_roles %}
-                {% set grade = grade_by_role.get(role) %}
-                <div class="d-flex justify-content-between align-items-start gap-2">
-                  <span class="text-muted text-capitalize">{{ role }}</span>
-                  {% if grade %}
-                    <div class="text-end">
-                      <span class="badge {{ badge_map.get(role, 'bg-light text-dark') }}">{{ grade.grade_name or '—' }}</span>
-                      {% if grade.comment %}
-                        <div class="small text-muted mt-1">{{ grade.comment }}</div>
-                      {% endif %}
-                    </div>
-                  {% else %}
-                    <span class="text-muted">—</span>
+              {% set grade = grade_by_role.get(role) %}
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <span class="text-muted text-capitalize">{{ role }}</span>
+                {% if grade %}
+                <div class="text-end">
+                  <span class="badge {{ badge_map.get(role, 'bg-light text-dark') }}">{{ grade.grade_name or '—'
+                    }}</span>
+                  {% if grade.comment %}
+                  <div class="small text-muted mt-1">{{ grade.comment|mask_text_emails }}</div>
                   {% endif %}
                 </div>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </div>
               {% endfor %}
-              {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
-                <div class="d-flex justify-content-between align-items-start gap-2">
-                  <span class="fw-semibold">Consensus</span>
-                  <div class="text-end">
-                    <span class="badge bg-success">{{ task.consensus_info.consensus_grading.grading_value or '—' }}</span>
-                    {% if task.consensus_info.consensus_grading.grading_severity %}
-                      <div class="small text-muted mt-1">{{ task.consensus_info.consensus_grading.grading_severity }}</div>
-                    {% endif %}
-                  </div>
+              {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading
+              %}
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <span class="fw-semibold">Consensus</span>
+                <div class="text-end">
+                  <span class="badge bg-success">{{ task.consensus_info.consensus_grading.grading_value or '—' }}</span>
+                  {% if task.consensus_info.consensus_grading.grading_severity %}
+                  <div class="small text-muted mt-1">{{ task.consensus_info.consensus_grading.grading_severity }}</div>
+                  {% endif %}
                 </div>
+              </div>
               {% endif %}
             </div>
           </div>
@@ -106,14 +109,14 @@
             <div class="d-flex justify-content-between align-items-start gap-2">
               <span class="text-muted">Review Grade</span>
               {% if review_grade %}
-                <div class="text-end">
-                  <span class="badge bg-primary">{{ review_grade.grade_name or '—' }}</span>
-                  {% if review_grade.comment %}
-                    <div class="small text-muted mt-1">{{ review_grade.comment }}</div>
-                  {% endif %}
-                </div>
+              <div class="text-end">
+                <span class="badge bg-primary">{{ review_grade.grade_name or '—' }}</span>
+                {% if review_grade.comment %}
+                <div class="small text-muted mt-1">{{ review_grade.comment|mask_text_emails }}</div>
+                {% endif %}
+              </div>
               {% else %}
-                <span class="text-muted">—</span>
+              <span class="text-muted">—</span>
               {% endif %}
             </div>
           </div>
@@ -124,50 +127,51 @@
             <div class="d-flex justify-content-between align-items-start gap-2">
               <span class="text-muted">AI Grade</span>
               {% if ai_grade %}
-                <div class="text-end">
-                  <span class="badge bg-dark">{{ ai_grade.grade_name or '—' }}</span>
-                  {% if ai_grade.ai_model_name %}
-                    <div class="small text-muted mt-1">
-                      {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version %} v{{ ai_grade.ai_model_version }}{% endif %}
-                    </div>
-                  {% endif %}
-                  {% if ai_grade.ai_probability is not none %}
-                    <div class="small text-muted">Prob: {{ ai_grade.ai_probability }}</div>
-                  {% endif %}
-                  {% if ai_grade.comment %}
-                    <div class="small text-muted mt-1">{{ ai_grade.comment }}</div>
-                  {% endif %}
+              <div class="text-end">
+                <span class="badge bg-dark">{{ ai_grade.grade_name or '—' }}</span>
+                {% if ai_grade.ai_model_name %}
+                <div class="small text-muted mt-1">
+                  {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version %} v{{ ai_grade.ai_model_version }}{%
+                  endif %}
                 </div>
+                {% endif %}
+                {% if ai_grade.ai_probability is not none %}
+                <div class="small text-muted">Prob: {{ ai_grade.ai_probability }}</div>
+                {% endif %}
+                {% if ai_grade.comment %}
+                <div class="small text-muted mt-1">{{ ai_grade.comment|mask_text_emails }}</div>
+                {% endif %}
+              </div>
               {% else %}
-                <span class="text-muted">—</span>
+              <span class="text-muted">—</span>
               {% endif %}
             </div>
             <div class="d-flex justify-content-between align-items-start gap-2 mt-2">
               <span class="text-muted">AI Review</span>
               {% if ai_grade and (ai_grade.ai_review_status or ai_grade.ai_review_comment) %}
-                <div class="text-end">
-                  {% if ai_grade.ai_review_status %}
-                    <div class="small text-muted">Status: {{ ai_grade.ai_review_status }}</div>
-                  {% endif %}
-                  {% if ai_grade.ai_review_comment %}
-                    <div class="small text-muted">{{ ai_grade.ai_review_comment }}</div>
-                  {% endif %}
-                </div>
+              <div class="text-end">
+                {% if ai_grade.ai_review_status %}
+                <div class="small text-muted">Status: {{ ai_grade.ai_review_status }}</div>
+                {% endif %}
+                {% if ai_grade.ai_review_comment %}
+                <div class="small text-muted">{{ ai_grade.ai_review_comment|mask_text_emails }}</div>
+                {% endif %}
+              </div>
               {% else %}
-                <span class="text-muted">—</span>
+              <span class="text-muted">—</span>
               {% endif %}
             </div>
           </div>
 
           {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
-            <div class="mt-3">
-              <div class="d-flex justify-content-between align-items-center pt-1 border-top">
-                <span class="fw-semibold">Final</span>
-                <span class="badge bg-success">
-                  {{ task.consensus_info.consensus_grading.grading_value or '—' }}
-                </span>
-              </div>
+          <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center pt-1 border-top">
+              <span class="fw-semibold">Final</span>
+              <span class="badge bg-success">
+                {{ task.consensus_info.consensus_grading.grading_value or '—' }}
+              </span>
             </div>
+          </div>
           {% endif %}
         </div>
       </div>
@@ -175,10 +179,10 @@
 
     <div class="col-lg-7">
       {% if image_object %}
-        {% set image = image_object %}
-        {% include 'grading/_viewer_card.html' %}
+      {% set image = image_object %}
+      {% include 'grading/_viewer_card.html' %}
       {% else %}
-        <div class="alert alert-warning mb-0">No image found for this task.</div>
+      <div class="alert alert-warning mb-0">No image found for this task.</div>
       {% endif %}
     </div>
   </div>

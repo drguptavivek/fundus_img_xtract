@@ -28,10 +28,12 @@
               <p><strong>Lab Unit:</strong> {{ original_task.lab_unit.name if original_task.lab_unit else 'N/A' }}</p>
               <div class="row">
                 <div class="col-sm-6">
-                  <small><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else 'N/A' }}</small>
+                  <small><strong>Created:</strong> {{ task.created_at.strftime('%Y-%m-%d %H:%M') if task.created_at else
+                    'N/A' }}</small>
                 </div>
                 <div class="col-sm-6">
-                  <small><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else 'N/A' }}</small>
+                  <small><strong>Updated:</strong> {{ task.updated_at.strftime('%Y-%m-%d %H:%M') if task.updated_at else
+                    'N/A' }}</small>
                 </div>
               </div>
             </div>
@@ -46,11 +48,9 @@
         <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="card-title mb-0">Disease: {{ task.disease or 'N/A' }}</h5>
           <span class="badge 
-            {% if task.status == "resident_done" %}bg-warning text-dark
-            {% elif task.status == "resident2_done" %}bg-info
-            {% elif task.status == "arbitration" %}bg-danger
-            {% elif task.status == "final" %}bg-success
-            {% else %}bg-secondary{% endif %}">
+            {% if task.status == " resident_done" %}bg-warning text-dark {% elif task.status=="resident2_done"
+            %}bg-info {% elif task.status=="arbitration" %}bg-danger {% elif task.status=="final" %}bg-success {% else
+            %}bg-secondary{% endif %}">
             {{ task.status }}
           </span>
         </div>
@@ -61,49 +61,49 @@
             {% for grade in task.grades %}
             <div class="fw-semibold mb-1">
               <span class="badge 
-                {% if grade.role_slot == "resident" %}bg-secondary
-                {% elif grade.role_slot == "resident2" %}bg-info
-                {% elif grade.role_slot == "arbitrator" %}bg-warning text-dark
-                {% elif grade.role_slot == "ai" %}bg-primary
-                {% else %}bg-light text-dark{% endif %}">
+                {% if grade.role_slot == " resident" %}bg-secondary {% elif grade.role_slot=="resident2" %}bg-info {%
+                elif grade.role_slot=="arbitrator" %}bg-warning text-dark {% elif grade.role_slot=="ai" %}bg-primary {%
+                else %}bg-light text-dark{% endif %}">
                 {{ grade.role_slot|title }}
               </span>
               <span class="text-muted">- {{ grade.impression or "No impression" }}</span>
               {% if grade.role_slot == "ai" %}
-                {% set ai_meta = ai_grade_meta.get(grade.id) if ai_grade_meta else None %}
-                {% if ai_meta %}
-                <div class="small text-muted ms-2">
-                  {% if ai_meta.ai_model_name %}Model: {{ ai_meta.ai_model_name }}{% if ai_meta.ai_model_version %} v{{ ai_meta.ai_model_version }}{% endif %}{% endif %}
-                  {% if ai_meta.ai_probability %}<span class="ms-2">Prob: {{ "%.3f"|format(ai_meta.ai_probability|float) }}</span>{% endif %}
-                </div>
-                {% endif %}
+              {% set ai_meta = ai_grade_meta.get(grade.id) if ai_grade_meta else None %}
+              {% if ai_meta %}
+              <div class="small text-muted ms-2">
+                {% if ai_meta.ai_model_name %}Model: {{ ai_meta.ai_model_name }}{% if ai_meta.ai_model_version %} v{{
+                ai_meta.ai_model_version }}{% endif %}{% endif %}
+                {% if ai_meta.ai_probability %}<span class="ms-2">Prob: {{ "%.3f"|format(ai_meta.ai_probability|float)
+                  }}</span>{% endif %}
+              </div>
+              {% endif %}
               {% endif %}
               {% set feature_list = role_feature_map.get(grade.role_slot) if role_feature_map else [] %}
               {% if feature_list %}
-                <div class="small text-muted ms-2">
-                  <span class="text-uppercase">Features:</span>
-                  {% for feature in feature_list %}
-                    {% if feature is mapping %}
-                      <span class="badge bg-light text-dark border">{{ feature.label or ('#' ~ feature.id) }}</span>
-                    {% else %}
-                      <span class="badge bg-light text-dark border">{{ feature }}</span>
-                    {% endif %}
-                  {% endfor %}
-                </div>
+              <div class="small text-muted ms-2">
+                <span class="text-uppercase">Features:</span>
+                {% for feature in feature_list %}
+                {% if feature is mapping %}
+                <span class="badge bg-light text-dark border">{{ feature.label or ('#' ~ feature.id) }}</span>
+                {% else %}
+                <span class="badge bg-light text-dark border">{{ feature }}</span>
+                {% endif %}
+                {% endfor %}
+              </div>
               {% endif %}
             </div>
             {% endfor %}
           </div>
           {% endif %}
           <p>
-            <strong>Has Consensus:</strong> 
+            <strong>Has Consensus:</strong>
             {% if task.consensus_info and task.consensus_info.has_consensus %}
-              <i class="bi bi-check-circle"></i> Yes
+            <i class="bi bi-check-circle"></i> Yes
             {% else %}
-              <i class="bi bi-x-circle"></i> No
+            <i class="bi bi-x-circle"></i> No
             {% endif %}
             {% if task.consensus_info and task.consensus_info.has_consensus and task.consensus_info.consensus_grading %}
-            | <strong>Consensus Impression:</strong> 
+            | <strong>Consensus Impression:</strong>
             {{ task.consensus_info.consensus_grading and task.consensus_info.consensus_grading.impression or 'N/A' }}
             {% endif %}
           </p>
@@ -130,7 +130,7 @@
           <p class="mt-2 text-muted text-center">Image UUID: {{ image_object.uuid }}</p>
         </div>
 
-        
+
       </div>
       {% endif %}
     </div>
@@ -166,7 +166,7 @@
             {{ csrf_field() }}
             <input type="hidden" id="action-field" name="action" value="">
             <input type="hidden" name="next_task_id" value="{{ next_task_id or '' }}">
-            
+
             {% if ai_grades %}
             <div class="mb-3">
               <div class="d-flex align-items-center justify-content-between mb-2">
@@ -174,33 +174,43 @@
                 <span class="text-muted small">Use if you feel AI model result has error</span>
               </div>
               <div class="alert alert-info small mb-3">
-                <strong>When to use:</strong> If the  AI output seems off, record whether the AI was OK, a minor miss, or a major miss, and add a short rationale. This does <em>not</em> change the final grade.
+                <strong>When to use:</strong> If the AI output seems off, record whether the AI was OK, a minor miss, or
+                a major miss, and add a short rationale. This does <em>not</em> change the final grade.
               </div>
               {% for ai_grade in ai_grades %}
               <div class="border rounded p-3 mb-3">
                 <div class="d-flex justify-content-between align-items-start gap-2">
                   <div>
-                    <div class="fw-semibold">AI Model's Grading of image: <b> {{ ai_grade.impression or 'AI Grade' }}</b></div>
+                    <div class="fw-semibold">AI Model's Grading of image: <b> {{ ai_grade.impression or 'AI Grade'
+                        }}</b></div>
                     <div class="text-muted small">
-                      {% if ai_grade.ai_model_name %}Model: {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version %} v{{ ai_grade.ai_model_version }}{% endif %}{% endif %}
-                      {% if ai_grade.ai_probability %}<span class="ms-2">Prob: {{ "%.3f"|format(ai_grade.ai_probability|float) }}</span>{% endif %}
+                      {% if ai_grade.ai_model_name %}Model: {{ ai_grade.ai_model_name }}{% if ai_grade.ai_model_version
+                      %} v{{ ai_grade.ai_model_version }}{% endif %}{% endif %}
+                      {% if ai_grade.ai_probability %}<span class="ms-2">Prob: {{
+                        "%.3f"|format(ai_grade.ai_probability|float) }}</span>{% endif %}
                     </div>
                   </div>
                   <span class="badge bg-light text-dark">AI Grade ID: {{ ai_grade.id }}</span>
                 </div>
                 <div class="row mt-2 g-2">
                   <div class="col-md-4">
-                    <label class="form-label mb-1" for="ai-status-{{ ai_grade.id }}">Assessment of Quality of AI Model's Grade</label>
-                    <select class="form-select form-select-sm" name="ai_review_status_{{ ai_grade.id }}" id="ai-status-{{ ai_grade.id }}">
+                    <label class="form-label mb-1" for="ai-status-{{ ai_grade.id }}">Assessment of Quality of AI Model's
+                      Grade</label>
+                    <select class="form-select form-select-sm" name="ai_review_status_{{ ai_grade.id }}"
+                      id="ai-status-{{ ai_grade.id }}">
                       <option value="">No assessment</option>
                       {% for status_key, status_label in ai_review_status_labels.items() %}
-                      <option value="{{ status_key }}" {% if ai_grade.review_status == status_key %}selected{% endif %}>{{ status_label }}</option>
+                      <option value="{{ status_key }}" {% if ai_grade.review_status==status_key %}selected{% endif %}>{{
+                        status_label }}</option>
                       {% endfor %}
                     </select>
                   </div>
                   <div class="col-md-8">
-                    <label class="form-label mb-1" for="ai-comment-{{ ai_grade.id }}">Comments on AI Model's Grade</label>
-                    <textarea class="form-control" name="ai_review_comment_{{ ai_grade.id }}" id="ai-comment-{{ ai_grade.id }}" rows="2" placeholder="Notes on AI performance">{{ ai_grade.review_comment or '' }}</textarea>
+                    <label class="form-label mb-1" for="ai-comment-{{ ai_grade.id }}">Comments on AI Model's
+                      Grade</label>
+                    <textarea class="form-control" name="ai_review_comment_{{ ai_grade.id }}"
+                      id="ai-comment-{{ ai_grade.id }}" rows="2"
+                      placeholder="Notes on AI performance">{{ ai_grade.review_comment or '' }}</textarea>
                   </div>
                 </div>
               </div>
@@ -212,25 +222,32 @@
               <div class="col-md-8">
                 <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center">
-                    <label class="form-label mb-0">Review and Revise Human Grade for <strong>{{ task.disease }}</strong></label>
+                    <label class="form-label mb-0">Review and Revise Human Grade for <strong>{{ task.disease
+                        }}</strong></label>
                     <span class="small text-muted">Use this only when revising the human/consensus grade.</span>
                   </div>
-                            <div class="row">
+                  <div class="row">
 
-                      <p>Current Human Grader Impression:  <strong>{{ existing_consensus.final_grade_name or 'N/A' }}</strong></p>
-          </div>
+                    <p>Current Human Grader Impression: <strong>{{ existing_consensus.final_grade_name or 'N/A'
+                        }}</strong></p>
+                  </div>
 
                   <div class="alert alert-warning py-2 px-3 small mt-2 mb-2">
-                    <strong>When to use:</strong> Pick a new grade when the image was graded incorrectly . This updates the review grade and, if the task is final, overwrites the consensus.
+                    <strong>When to use:</strong> Pick a new grade when the image was graded incorrectly . This updates
+                    the review grade and, if the task is final, overwrites the consensus.
                   </div>
                   <div class="d-flex flex-column gap-2" role="group" aria-label="Review Grade">
                     {% for grade in available_grades %}
-                      {% set oid = 'review-grade-' ~ grade.id %}
-                      <input type="radio" class="btn-check" name="grading_id" id="{{ oid }}" value="{{ grade.id }}" autocomplete="off" {% if existing_review_grade and existing_review_grade.disease_grading_id == grade.id %}checked{% endif %}>
-                      <label class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
-                        <span>{{ grade.impression }}</span>
-                        <span class="sel-icon d-none">✓</span>
-                      </label>
+                    {% set oid = 'review-grade-' ~ grade.id %}
+                    <input type="radio" class="btn-check" name="grading_id" id="{{ oid }}" value="{{ grade.id }}"
+                      autocomplete="off" {% if existing_review_grade and
+                      existing_review_grade.disease_grading_id==grade.id %}checked{% endif %}>
+                    <label
+                      class="btn btn-outline-primary text-start w-100 d-flex justify-content-between align-items-center"
+                      for="{{ oid }}">
+                      <span>{{ grade.impression }}</span>
+                      <span class="sel-icon d-none">✓</span>
+                    </label>
                     {% endfor %}
                   </div>
                 </div>
@@ -240,13 +257,15 @@
                   <div id="review-features-container" class="d-flex flex-column gap-2"></div>
                 </div>
               </div>
-              
+
               <div class="col-md-4">
-                <div class="mb-3" id="review-comment-block" style="{% if existing_review_grade %}display: block;{% else %}display: none;{% endif %}">
+                <div class="mb-3" id="review-comment-block"
+                  style="{% if existing_review_grade %}display: block;{% else %}display: none;{% endif %}">
                   <label class="form-label">Comments on why Human Grade is being revised</label>
-                  <textarea id="review-comment" name="comment" class="form-control" rows="4" placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
+                  <textarea id="review-comment" name="comment" class="form-control" rows="4"
+                    placeholder="Add your review comments here...">{{ existing_review_grade.comment if existing_review_grade else '' }}</textarea>
                 </div>
-                
+
                 <div class="d-flex gap-2">
                   <button type="submit" name="action" value="save" class="btn btn-primary">
                     {% if existing_review_grade %}Update Review{% else %}Submit Review{% endif %}
@@ -268,10 +287,12 @@
           <div class="mt-3">
             <h6 class="border-bottom pb-1">Existing Review</h6>
             <div class="small mb-2 p-2 rounded">
-              <div><strong class="text-capitalize">{{ existing_review_grade.role_slot }}</strong> - Grader ID: {{ existing_review_grade.grader_user_id }}</div>
-              <div>{{ existing_review_grade.grade_name or (existing_review_grade.label.impression if existing_review_grade.label) or 'N/A' }}</div>
+              <div><strong class="text-capitalize">{{ existing_review_grade.role_slot }}</strong> - Grader ID: {{
+                existing_review_grade.grader_user_id }}</div>
+              <div>{{ existing_review_grade.grade_name or (existing_review_grade.label.impression if
+                existing_review_grade.label) or 'N/A' }}</div>
               {% if existing_review_grade.comment %}
-              <div class="text-muted fst-italic">"{{ existing_review_grade.comment }}"</div>
+              <div class="text-muted fst-italic">"{{ existing_review_grade.comment|mask_text_emails }}"</div>
               {% endif %}
               {% if existing_selected_features %}
               <div class="mt-1">
@@ -287,7 +308,8 @@
                 </ul>
               </div>
               {% endif %}
-              <div class="text-muted">Updated: {{ existing_review_grade.updated_at.strftime('%Y-%m-%d %H:%M') if existing_review_grade.updated_at else 'N/A' }}</div>
+              <div class="text-muted">Updated: {{ existing_review_grade.updated_at.strftime('%Y-%m-%d %H:%M') if
+                existing_review_grade.updated_at else 'N/A' }}</div>
             </div>
           </div>
           {% endif %}
@@ -308,20 +330,21 @@
         <div class="card-body">
           <div class="row">
             <div class="col-sm-6">
-                    {% set method_label = {
-                      'match': 'Match',
-                      'adjudication': 'Adjudication',
-                      'task_review': 'Review override'
-                    }.get(existing_consensus.method, existing_consensus.method) %}
-                    <p><strong>Method:</strong> {{ method_label }}</p>
+              {% set method_label = {
+              'match': 'Match',
+              'adjudication': 'Adjudication',
+              'task_review': 'Review override'
+              }.get(existing_consensus.method, existing_consensus.method) %}
+              <p><strong>Method:</strong> {{ method_label }}</p>
             </div>
             <div class="col-sm-6">
-                  <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if existing_consensus.decided_at else 'N/A' }}</p>
+              <p><strong>Decided At:</strong> {{ existing_consensus.decided_at.strftime('%Y-%m-%d %H:%M') if
+                existing_consensus.decided_at else 'N/A' }}</p>
             </div>
-                      <p><strong>Final Impression:</strong> {{ existing_consensus.final_grade_name or 'N/A' }}</p>
-          {% if existing_consensus.decided_by %}
+            <p><strong>Final Impression:</strong> {{ existing_consensus.final_grade_name or 'N/A' }}</p>
+            {% if existing_consensus.decided_by %}
             <p><strong>Decided By:</strong> {{ existing_consensus.decided_by.username }}</p>
-          {% endif %}
+            {% endif %}
           </div>
         </div>
       </div>
@@ -333,7 +356,8 @@
 </div>
 
 <!-- Confirmation modal for consensus override -->
-<div class="modal fade" id="reviewOverrideModal" tabindex="-1" aria-labelledby="reviewOverrideModalLabel" aria-hidden="true">
+<div class="modal fade" id="reviewOverrideModal" tabindex="-1" aria-labelledby="reviewOverrideModalLabel"
+  aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
@@ -361,28 +385,28 @@
 
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-const reviewGradingFeatures = {{ grading_features | tojson }};
-const existingReviewSelectedFeatures = {{ existing_selected_features | tojson }};
-const existingReviewGradeId = {{ existing_review_grade.disease_grading_id if existing_review_grade else 'null' }};
-const isFinalTask = {{ 'true' if task.status == 'final' else 'false' }};
-const consensusSnapshot = {% if existing_consensus %}
-{
-  method: {{ existing_consensus.method | tojson }},
-  final_grade_name: {{ existing_consensus.final_grade_name | tojson }},
-  final_grade_id: {{ existing_consensus.final_disease_grading_id | tojson }}
+  {% else %}
+  <script>
+    {% endif %}
+    const reviewGradingFeatures = {{ grading_features | tojson}};
+    const existingReviewSelectedFeatures = {{ existing_selected_features | tojson}};
+    const existingReviewGradeId = {{ existing_review_grade.disease_grading_id if existing_review_grade else 'null' }};
+    const isFinalTask = {{ 'true' if task.status == 'final' else 'false' }};
+    const consensusSnapshot = {% if existing_consensus %}
+    {
+      method: {{ existing_consensus.method | tojson }},
+    final_grade_name: {{ existing_consensus.final_grade_name | tojson }},
+    final_grade_id: {{ existing_consensus.final_disease_grading_id | tojson }}
 }
-{% else %}null{% endif %};
-const availableGradesMap = new Map(
-  ({{ grading_features | tojson }} || []).map(grade => [grade.id, grade])
-);
+    {% else %}null{% endif %};
+    const availableGradesMap = new Map(
+    ({{ grading_features | tojson}} || []).map(grade => [grade.id, grade])
+    );
 
-function normalizeExistingFeatures(rawSelection) {
-  const normalized = { ids: [], labels: [] };
+    function normalizeExistingFeatures(rawSelection) {
+  const normalized = {ids: [], labels: [] };
 
-  if (!Array.isArray(rawSelection)) {
+    if (!Array.isArray(rawSelection)) {
     return normalized;
   }
 
@@ -390,13 +414,13 @@ function normalizeExistingFeatures(rawSelection) {
     if (entry && typeof entry === 'object') {
       if (Object.prototype.hasOwnProperty.call(entry, 'id')) {
         const numericId = Number(entry.id);
-        if (!Number.isNaN(numericId)) {
-          normalized.ids.push(numericId);
+    if (!Number.isNaN(numericId)) {
+      normalized.ids.push(numericId);
         }
       }
 
-      if (typeof entry.label === 'string') {
-        normalized.labels.push(entry.label);
+    if (typeof entry.label === 'string') {
+      normalized.labels.push(entry.label);
       }
     } else if (typeof entry === 'number') {
       normalized.ids.push(entry);
@@ -405,67 +429,67 @@ function normalizeExistingFeatures(rawSelection) {
     }
   });
 
-  return normalized;
+    return normalized;
 }
 
-function isFeaturePreselected(feature, normalizedSelection) {
+    function isFeaturePreselected(feature, normalizedSelection) {
   const featureId = Number(feature.id);
-  const featureLabel = typeof feature.label === 'string' ? feature.label : null;
+    const featureLabel = typeof feature.label === 'string' ? feature.label : null;
 
-  if (!Number.isNaN(featureId) && normalizedSelection.ids.includes(featureId)) {
+    if (!Number.isNaN(featureId) && normalizedSelection.ids.includes(featureId)) {
     return true;
   }
 
-  if (featureLabel && normalizedSelection.labels.includes(featureLabel)) {
+    if (featureLabel && normalizedSelection.labels.includes(featureLabel)) {
     return true;
   }
 
-  return false;
+    return false;
 }
 
-function renderReviewFeatures(gradingId, shouldPreserveExisting) {
+    function renderReviewFeatures(gradingId, shouldPreserveExisting) {
   const featuresSection = document.getElementById('review-features-section');
-  const featuresContainer = document.getElementById('review-features-container');
+    const featuresContainer = document.getElementById('review-features-container');
 
-  if (!featuresSection || !featuresContainer) {
+    if (!featuresSection || !featuresContainer) {
     return;
   }
 
   const gradingData = reviewGradingFeatures.find(grade => grade.id === gradingId);
-  if (!gradingData || !Array.isArray(gradingData.features) || gradingData.features.length === 0) {
-    featuresSection.style.display = 'none';
+    if (!gradingData || !Array.isArray(gradingData.features) || gradingData.features.length === 0) {
+      featuresSection.style.display = 'none';
     featuresContainer.innerHTML = '';
     return;
   }
 
-  const normalizedExisting = shouldPreserveExisting
+    const normalizedExisting = shouldPreserveExisting
     ? normalizeExistingFeatures(existingReviewSelectedFeatures)
-    : { ids: [], labels: [] };
+    : {ids: [], labels: [] };
 
-  const sortedFeatures = gradingData.features
+    const sortedFeatures = gradingData.features
     .slice()
     .sort((a, b) => {
       const srA = Number(a.sr_no);
-      const srB = Number(b.sr_no);
-      const normalizedSrA = Number.isNaN(srA) ? 0 : srA;
-      const normalizedSrB = Number.isNaN(srB) ? 0 : srB;
+    const srB = Number(b.sr_no);
+    const normalizedSrA = Number.isNaN(srA) ? 0 : srA;
+    const normalizedSrB = Number.isNaN(srB) ? 0 : srB;
 
-      if (normalizedSrA !== normalizedSrB) {
+    if (normalizedSrA !== normalizedSrB) {
         return normalizedSrA - normalizedSrB;
       }
 
-      const idA = Number(a.id);
-      const idB = Number(b.id);
+    const idA = Number(a.id);
+    const idB = Number(b.id);
 
-      if (!Number.isNaN(idA) && !Number.isNaN(idB)) {
+    if (!Number.isNaN(idA) && !Number.isNaN(idB)) {
         return idA - idB;
       }
 
-      return String(a.id).localeCompare(String(b.id));
+    return String(a.id).localeCompare(String(b.id));
     });
 
-  featuresSection.style.display = 'block';
-  featuresContainer.innerHTML = '';
+    featuresSection.style.display = 'block';
+    featuresContainer.innerHTML = '';
 
   sortedFeatures.forEach(feature => {
     const numericId = Number(feature.id);
@@ -500,20 +524,20 @@ function renderReviewFeatures(gradingId, shouldPreserveExisting) {
   });
 }
 
-// Handle radio button selection visual feedback and feature hydration
-document.addEventListener('DOMContentLoaded', function() {
+    // Handle radio button selection visual feedback and feature hydration
+    document.addEventListener('DOMContentLoaded', function() {
   const radioInputs = document.querySelectorAll('input[type="radio"][name="grading_id"]');
-  const reviewForm = document.getElementById('review-form');
-  const overrideModalEl = document.getElementById('reviewOverrideModal');
-  const confirmOverrideBtn = document.getElementById('confirm-review-override');
-  const currentFinalSummary = document.getElementById('current-final-summary');
-  const newFinalSummary = document.getElementById('new-final-summary');
-  const reviewCommentBlock = document.getElementById('review-comment-block');
-  const reviewComment = document.getElementById('review-comment');
-  const actionField = document.getElementById('action-field');
-  let pendingSubmit = false;
+    const reviewForm = document.getElementById('review-form');
+    const overrideModalEl = document.getElementById('reviewOverrideModal');
+    const confirmOverrideBtn = document.getElementById('confirm-review-override');
+    const currentFinalSummary = document.getElementById('current-final-summary');
+    const newFinalSummary = document.getElementById('new-final-summary');
+    const reviewCommentBlock = document.getElementById('review-comment-block');
+    const reviewComment = document.getElementById('review-comment');
+    const actionField = document.getElementById('action-field');
+    let pendingSubmit = false;
 
-  function updateReviewCommentVisibility() {
+    function updateReviewCommentVisibility() {
     if (!reviewCommentBlock || !reviewComment) {
       return;
     }
@@ -524,94 +548,94 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   radioInputs.forEach(input => {
-    input.addEventListener('change', function() {
-      document.querySelectorAll('.sel-icon').forEach(icon => icon.classList.add('d-none'));
+      input.addEventListener('change', function () {
+        document.querySelectorAll('.sel-icon').forEach(icon => icon.classList.add('d-none'));
 
-      if (this.checked) {
-        const label = document.querySelector(`label[for="${this.id}"]`);
-        const icon = label ? label.querySelector('.sel-icon') : null;
-        if (icon) {
-          icon.classList.remove('d-none');
-        }
+        if (this.checked) {
+          const label = document.querySelector(`label[for="${this.id}"]`);
+          const icon = label ? label.querySelector('.sel-icon') : null;
+          if (icon) {
+            icon.classList.remove('d-none');
+          }
 
-        const gradingId = Number(this.value);
-        if (!Number.isNaN(gradingId)) {
-          renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
+          const gradingId = Number(this.value);
+          if (!Number.isNaN(gradingId)) {
+            renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
+          }
         }
-      }
-      updateReviewCommentVisibility();
-    });
+        updateReviewCommentVisibility();
+      });
 
     if (input.checked) {
       const label = document.querySelector(`label[for="${input.id}"]`);
-      const icon = label ? label.querySelector('.sel-icon') : null;
-      if (icon) {
-        icon.classList.remove('d-none');
+    const icon = label ? label.querySelector('.sel-icon') : null;
+    if (icon) {
+      icon.classList.remove('d-none');
       }
 
-      const gradingId = Number(input.value);
-      if (!Number.isNaN(gradingId)) {
-        renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
+    const gradingId = Number(input.value);
+    if (!Number.isNaN(gradingId)) {
+      renderReviewFeatures(gradingId, gradingId === existingReviewGradeId);
       }
     }
   });
 
-  if (!document.querySelector('input[name="grading_id"]:checked') && existingReviewGradeId !== null) {
+    if (!document.querySelector('input[name="grading_id"]:checked') && existingReviewGradeId !== null) {
     const matchingExisting = document.querySelector(`input[name="grading_id"][value="${existingReviewGradeId}"]`);
     if (matchingExisting) {
       matchingExisting.checked = true;
-      matchingExisting.dispatchEvent(new Event('change'));
+    matchingExisting.dispatchEvent(new Event('change'));
     }
   }
 
-  updateReviewCommentVisibility();
+    updateReviewCommentVisibility();
 
-  if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
+    if (reviewForm && isFinalTask && overrideModalEl && confirmOverrideBtn) {
     const overrideModal = new bootstrap.Modal(overrideModalEl);
     reviewForm.addEventListener('submit', function(event) {
       if (pendingSubmit) {
         return;
       }
-      const submitter = event.submitter;
-      const actionValue = submitter && submitter.getAttribute('value');
-      if (actionField) {
-        actionField.value = actionValue || 'save';
+    const submitter = event.submitter;
+    const actionValue = submitter && submitter.getAttribute('value');
+    if (actionField) {
+      actionField.value = actionValue || 'save';
       }
-      if (actionValue === 'cancel_next') {
+    if (actionValue === 'cancel_next') {
         return;
       }
-      const selectedRadio = document.querySelector('input[name="grading_id"]:checked');
-      if (!selectedRadio) {
+    const selectedRadio = document.querySelector('input[name="grading_id"]:checked');
+    if (!selectedRadio) {
         return;
       }
-      event.preventDefault();
-      const selectedId = Number(selectedRadio.value);
-      const selectedGrade = availableGradesMap.get(selectedId);
+    event.preventDefault();
+    const selectedId = Number(selectedRadio.value);
+    const selectedGrade = availableGradesMap.get(selectedId);
 
-      const currentSummary = consensusSnapshot
-        ? `${consensusSnapshot.final_grade_name || '—'} (${consensusSnapshot.method || '—'})`
-        : 'None';
-      const newSummary = selectedGrade
-        ? `${selectedGrade.impression || '—'} (task_review)`
-        : '—';
+    const currentSummary = consensusSnapshot
+    ? `${consensusSnapshot.final_grade_name || '—'} (${consensusSnapshot.method || '—'})`
+    : 'None';
+    const newSummary = selectedGrade
+    ? `${selectedGrade.impression || '—'} (task_review)`
+    : '—';
 
-      if (currentFinalSummary) {
-        currentFinalSummary.textContent = currentSummary;
+    if (currentFinalSummary) {
+      currentFinalSummary.textContent = currentSummary;
       }
-      if (newFinalSummary) {
-        newFinalSummary.textContent = newSummary;
+    if (newFinalSummary) {
+      newFinalSummary.textContent = newSummary;
       }
 
-      overrideModal.show();
+    overrideModal.show();
     });
 
     confirmOverrideBtn.addEventListener('click', function() {
       pendingSubmit = true;
-      overrideModal.hide();
-      if (actionField && !actionField.value) {
-        actionField.value = 'save';
+    overrideModal.hide();
+    if (actionField && !actionField.value) {
+      actionField.value = 'save';
       }
-      reviewForm.submit();
+    reviewForm.submit();
     });
   }
 });

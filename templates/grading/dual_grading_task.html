@@ -10,7 +10,7 @@
 </div>
 
 <!-- Task Information Row -->
-<div class="row g-3 mb-3" id ="task-info-row">
+<div class="row g-3 mb-3" id="task-info-row">
   <div class="col-12">
     <div class="card shadow-sm">
       <div class="card-body py-2">
@@ -47,110 +47,120 @@
 <div class="row g-3">
 
   <!-- Large image on left -->
-  <div class="col-12 col-lg-9" id = "image-card">
+  <div class="col-12 col-lg-9" id="image-card">
     {% if image_uuid %}
-      {% include 'grading/_viewer_card.html' %}
+    {% include 'grading/_viewer_card.html' %}
     {% else %}
-      <div class="card shadow-sm">
-        <div class="card-body text-center">
-          <p class="text-muted">Image not available</p>
-        </div>
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <p class="text-muted">Image not available</p>
       </div>
+    </div>
     {% endif %}
   </div>
 
-  
+
   <!-- Narrow right column with grading form -->
-  <div class="col-12 col-lg-3" id = "image-grading-controls">
+  <div class="col-12 col-lg-3" id="image-grading-controls">
     <div class="card shadow-sm">
       <div class="card-body">
         {% if task.state == "final" and not is_arbitrator_revising_recent %}
-        <div class="mb-3 small text-muted">Lock Status: 
+        <div class="mb-3 small text-muted">Lock Status:
           <strong class="text-danger">
             FINALIZED - This task has been completed
           </strong>
         </div>
         {% elif task.state == "final" and is_arbitrator_revising_recent %}
-        <div class="mb-3 small text-muted">Status: 
+        <div class="mb-3 small text-muted">Status:
           <strong class="text-warning">
             REVISING ARBITRATOR GRADE - You can update your decision (6-hour window)
           </strong>
         </div>
         {% endif %}
-        
+
         {% if task.consensus %}
-        <div class="mb-3 small text-muted">Consensus: 
+        <div class="mb-3 small text-muted">Consensus:
           <strong>{{ task.consensus.final_label.impression }}</strong>
           {% set method_label = {
-            'match': 'Match',
-            'adjudication': 'Adjudication',
-            'task_review': 'Review override'
+          'match': 'Match',
+          'adjudication': 'Adjudication',
+          'task_review': 'Review override'
           }.get(task.consensus.method, task.consensus.method) %}
           <div class="small">Method: {{ method_label }}</div>
           {% if task.consensus.decided_by %}
-          <div class="small">Decided by: {{ task.consensus.decided_by.full_name or task.consensus.decided_by.username }}</div>
+          <div class="small">Decided by: {{ task.consensus.decided_by.full_name or task.consensus.decided_by.username }}
+          </div>
           {% endif %}
         </div>
         {% endif %}
-        
+
         {% if existing_grade and not existing_grade_in_header %}
-        <div class="mb-3 small text-muted">Your Grade: 
+        <div class="mb-3 small text-muted">Your Grade:
           <strong>{{ existing_grade.label.impression }}</strong>
         </div>
         {% endif %}
-        
+
         {% if current_slot %}
         <form method="post" action="{{ url_for('grading.dual_grading_submit') }}" data-grading-form="true">
           {{ csrf_field() }}
           <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
-          
+
           <input type="hidden" name="slot" value="{{ current_slot }}">
-          
+
           <!-- Add the start_time as a hidden input field to prevent session expiration issues -->
           {% if start_time_iso %}
           <input type="hidden" name="start_time_iso" value="{{ start_time_iso }}">
           {% endif %}
-          
+
           <div class="mb-2">
-            <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name }}</strong></label>
+            <label class="form-label mt-5">Select a Grade for <strong class="mb-0">{{ task.disease.name
+                }}</strong></label>
             <div class="d-flex flex-column gap-2" role="group" aria-label="Impression" id="impression-group">
               {% for opt in disease_gradings %}
-                {% set oid = 'imp-' ~ opt.id %}
-                {% set btn_class = 'btn-outline-primary' %}
-                <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}" autocomplete="off" required {% if existing_grade and existing_grade.disease_grading_id == opt.id %}checked{% endif %} {% if task.state == "final" and not is_arbitrator_revising_recent %}disabled{% endif %}>
-                <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center" for="{{ oid }}">
-                  <span>{{ opt.impression }}</span>
-                  <span class="sel-icon d-none">✓</span>
-                </label>
+              {% set oid = 'imp-' ~ opt.id %}
+              {% set btn_class = 'btn-outline-primary' %}
+              <input type="radio" class="btn-check" name="label_id" id="{{ oid }}" value="{{ opt.id }}"
+                autocomplete="off" required {% if existing_grade and existing_grade.disease_grading_id==opt.id
+                %}checked{% endif %} {% if task.state=="final" and not is_arbitrator_revising_recent %}disabled{% endif
+                %}>
+              <label class="btn {{ btn_class }} text-start w-100 d-flex justify-content-between align-items-center"
+                for="{{ oid }}">
+                <span>{{ opt.impression }}</span>
+                <span class="sel-icon d-none">✓</span>
+              </label>
               {% endfor %}
             </div>
           </div>
-        
-        <!-- Features Section -->
-        <div class="mb-2" id="features-section" style="display: none;">
-          <label class="form-label">Relevant Features</label>
-          <div id="features-container" class="d-flex flex-column gap-2">
-            <!-- Features will be dynamically populated here --> 
+
+          <!-- Features Section -->
+          <div class="mb-2" id="features-section" style="display: none;">
+            <label class="form-label">Relevant Features</label>
+            <div id="features-container" class="d-flex flex-column gap-2">
+              <!-- Features will be dynamically populated here -->
+            </div>
           </div>
-        </div>
-        
-        <div class="mb-2">
+
+          <div class="mb-2">
             <label class="form-label">Remarks (optional)</label>
-            <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if task.state == "final" and not is_arbitrator_revising_recent %}disabled{% endif %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
+            <textarea name="comment" id="comment-textarea" class="form-control form-control-sm" rows="2" {% if
+              task.state=="final" and not is_arbitrator_revising_recent %}disabled{% endif
+              %}>{{ existing_grade.comment if existing_grade and existing_grade.comment else '' }}</textarea>
           </div>
-          
+
           {% if task.state != "final" or is_arbitrator_revising_recent %}
           <div class="d-flex justify-content-between gap-2">
             <button type="button" id="clear-impression" class="btn btn-outline-secondary btn-sm">Clear</button>
             <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close" onclick="saveSelectionOnSubmit()">Save & Close</button>
+              <button type="submit" class="btn btn-primary btn-sm" name="action" value="save_close"
+                onclick="saveSelectionOnSubmit()">Save & Close</button>
               {% if not existing_grade %}
-              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next" onclick="saveSelectionOnSubmit()">Save & Next</button>
+              <button type="submit" class="btn btn-success btn-sm" name="action" value="save_next"
+                onclick="saveSelectionOnSubmit()">Save & Next</button>
               {% endif %}
             </div>
           </div>
           {% endif %}
-          
+
           <!-- Grading Instructions Display -->
           <div id="grading-instructions" class="mt-3 p-3  border rounded" style="display: none;">
             <h6 class="border-bottom pb-1 mb-2">Grading Instructions</h6>
@@ -160,34 +170,36 @@
         {% else %}
         <div class="alert alert-info">
           {% if task.state == "final" %}
-            This task has been finalized.
+          This task has been finalized.
           {% elif task.state == "arbitration" %}
-            This task is in arbitration and requires an arbitrator.
+          This task is in arbitration and requires an arbitrator.
           {% else %}
-            You have already graded this task for all eligible roles.
+          You have already graded this task for all eligible roles.
           {% endif %}
         </div>
         {% endif %}
-        
+
         {% if current_slot == 'arbitrator' and (resident_grade or resident2_grade) %}
         <div class="mt-3">
           <h6 class="border-bottom pb-1">Previous Grades</h6>
           {% if resident_grade %}
           <div class="small mb-2 p-2  rounded">
-            <div><strong class="text-capitalize">{{ resident_grade.role_slot }}</strong> - Grader ID: {{ resident_grade.grader.id }}</div>
+            <div><strong class="text-capitalize">{{ resident_grade.role_slot }}</strong> - Grader ID: {{
+              resident_grade.grader.id }}</div>
             <div>{{ resident_grade.label.impression }}</div>
             {% if resident_grade.comment %}
-            <div class="text-muted fst-italic">"{{ resident_grade.comment }}"</div>
+            <div class="text-muted fst-italic">"{{ resident_grade.comment|mask_text_emails }}"</div>
             {% endif %}
             <div class="text-muted">{{ resident_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
           {% endif %}
           {% if resident2_grade %}
           <div class="small mb-2 p-2 rounded">
-            <div><strong class="text-capitalize">{{ resident2_grade.role_slot }}</strong> - Grader ID: {{ resident2_grade.grader.id }}</div>
+            <div><strong class="text-capitalize">{{ resident2_grade.role_slot }}</strong> - Grader ID: {{
+              resident2_grade.grader.id }}</div>
             <div>{{ resident2_grade.label.impression }}</div>
             {% if resident2_grade.comment %}
-            <div class="text-muted fst-italic">"{{ resident2_grade.comment }}"</div>
+            <div class="text-muted fst-italic">"{{ resident2_grade.comment|mask_text_emails }}"</div>
             {% endif %}
             <div class="text-muted">{{ resident2_grade.created_at|user_datetime('%Y-%m-%d %H:%M') }}</div>
           </div>
@@ -198,10 +210,11 @@
         <div class="mt-3">
           <h6 class="border-bottom pb-1">Your Previous Grade</h6>
           <div class="small mb-2 p-2 rounded">
-            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - Grader ID: {{ existing_grade.grader.id }}</div>
+            <div><strong class="text-capitalize">{{ existing_grade.role_slot }}</strong> - Grader ID: {{
+              existing_grade.grader.id }}</div>
             <div>{{ existing_grade.label.impression }}</div>
             {% if existing_grade.comment %}
-            <div class="text-muted fst-italic">"{{ existing_grade.comment }}"</div>
+            <div class="text-muted fst-italic">"{{ existing_grade.comment|mask_text_emails }}"</div>
             {% endif %}
             {% if existing_selected_features %}
             <div class="mt-1">
@@ -230,24 +243,24 @@
 {% block page_scripts %}
 {% if csp_script_nonce %}
 <script nonce="{{ csp_script_nonce() }}">
-{% else %}
-<script>
-{% endif %}
-  // Pass grading guidelines and task info to JavaScript
-  window.gradingGuidelines = {{ grading_guidelines | tojson }};
-  window.taskId = "{{ task.uuid }}";
-  window.imageUuid = "{{ image_uuid }}";
-  window.currentUserId = {{ current_user_id or 'null' }};
-  window.currentSlot = "{{ current_slot or '' }}";
-  window.featuresReadOnly = {{ (task.state == "final" and not is_arbitrator_revising_recent)|tojson }};
-  // Pass disease gradings with features to JavaScript
-  window.diseaseGradingsWithFeatures = {{ grading_features | tojson }};
-  // Pass existing selected features if available
-  {% if existing_selected_features %}
-  window.existingSelectedFeatures = {{ existing_selected_features | tojson }};
   {% else %}
-  window.existingSelectedFeatures = null;
-  {% endif %}
+  <script>
+    {% endif %}
+  // Pass grading guidelines and task info to JavaScript
+    window.gradingGuidelines = {{ grading_guidelines | tojson}};
+    window.taskId = "{{ task.uuid }}";
+    window.imageUuid = "{{ image_uuid }}";
+    window.currentUserId = {{ current_user_id or 'null' }};
+    window.currentSlot = "{{ current_slot or '' }}";
+    window.featuresReadOnly = {{ (task.state == "final" and not is_arbitrator_revising_recent) | tojson}};
+    // Pass disease gradings with features to JavaScript
+    window.diseaseGradingsWithFeatures = {{ grading_features | tojson}};
+    // Pass existing selected features if available
+    {% if existing_selected_features %}
+    window.existingSelectedFeatures = {{ existing_selected_features | tojson}};
+    {% else %}
+    window.existingSelectedFeatures = null;
+    {% endif %}
 </script>
 <script src="{{ url_for('static', filename='js/dual-grading-task.js') }}"></script>
 {% endblock %}

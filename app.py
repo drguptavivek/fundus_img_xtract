@@ -131,6 +131,9 @@ def _register_template_filters(app: Flask) -> None:
 
     app.jinja_env.filters["from_json"] = from_json
 
+    from utils.log_sanitize import mask_text_emails
+    app.jinja_env.filters["mask_text_emails"] = mask_text_emails
+
 
 def _register_default_theme_context(app: Flask) -> None:
     @app.context_processor

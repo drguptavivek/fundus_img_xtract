@@ -16,6 +16,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
+from utils.filename_utils import sanitize_export_filename
+
 
 @requires_reauth("database_excel_export")
 @roles_required("admin")
@@ -47,7 +49,7 @@ def database_excel_export():
                         excel_data = _export_table_to_excel(table_name)
                         if excel_data:
                             # Add Excel file to ZIP
-                            excel_filename = f"{table_name}_{timestamp}.xlsx"
+                            excel_filename = sanitize_export_filename(table_name, "xlsx")
                             zip_file.writestr(excel_filename, excel_data)
                             current_app.logger.info(
                                 "Added %s to export",

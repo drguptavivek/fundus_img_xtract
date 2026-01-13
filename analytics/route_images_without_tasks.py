@@ -51,11 +51,8 @@ def images_without_tasks() -> str:
         diseases_all: list[Disease] = []
         areas: list[Area] = []
         
-        # Check user permissions for lab unit access
-        user_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager", "optometrist")
-        
         records: list[dict[str, Any]] = []
+
 
         if image_type in {"all", "zip"}:
             encounter_query = (
@@ -80,12 +77,10 @@ def images_without_tasks() -> str:
             for ef in encounter_rows:
                 lab_unit = ef.lab_unit or (ef.patient_encounter.lab_unit if ef.patient_encounter else None)
                 
-                # Additional check for the specific lab_unit filter
-                if lab_unit_id:
-                    if not is_admin_like and lab_unit_id not in user_lab_unit_ids:
-                        continue  # Skip if user doesn't have access to the filtered lab unit
-                    if not lab_unit or lab_unit.id != lab_unit_id:
-                        continue  # Skip if the lab unit doesn't match the filter
+                # Filter by specific lab_unit if requested
+                if lab_unit_id and (not lab_unit or lab_unit.id != lab_unit_id):
+                    continue
+
 
                 capture_dt: datetime | None = None
                 if ef.patient_encounter and ef.patient_encounter.capture_date_dt:

@@ -22,9 +22,81 @@ from auth.security import verify_password
 from auth.utils import utcnow
 from db_transaction_manager import get_db_session
 from models import User, SensitiveOperationAudit
-from utils.log_sanitize import sanitize_log_value
+from utils.log_sanitize import sanitize_log_value, mask_email
 
 logger = logging.getLogger('sensitive_operations')
+
+# Fields that should be preserved (not masked) in audit logs
+PRESERVED_FIELDS = {'row_count', 'file_hash', 'file_size', 'status', 'operation_type'}
+
+
+def _sanitize_dict_recursive(data: dict | list | str | int | float | None, depth: int = 0) -> dict | list | str | int | float | None:
+    """
+    Recursively sanitize PII from nested dictionaries and lists.
+    
+    Preserves specific fields like row_count, file_hash, file_size while masking
+    potentially sensitive values like filenames, patient names, emails, etc.
+    
+    Args:
+        data: Data structure to sanitize
+        depth: Current recursion depth (safety limit)
+    
+    Returns:
+        Sanitized copy of the data structure
+    """
+    # Safety limit to prevent infinite recursion
+    if depth > 10:
+        return "[DEPTH_LIMIT]"
+    
+    if data is None:
+        return None
+    
+    if isinstance(data, dict):
+        sanitized = {}
+        for key, value in data.items():
+            # Preserve specific fields without masking
+            if key in PRESERVED_FIELDS:
+                sanitized[key] = value
+            else:
+                sanitized[key] = _sanitize_dict_recursive(value, depth + 1)
+        return sanitized
+    
+    if isinstance(data, list):
+        return [_sanitize_dict_recursive(item, depth + 1) for item in data]
+    
+    if isinstance(data, str):
+        # Mask emails in strings
+        from utils.log_sanitize import mask_text_emails
+        masked = mask_text_emails(data)
+        
+        # If string looks like a filename with potential PII, sanitize it
+        # But preserve file extensions and UUIDs
+        if any(ext in data.lower() for ext in ['.zip', '.csv', '.xlsx', '.sql', '.json']):
+            # Check if it's a UUID-based filename (safe)
+            import re
+            uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+            if re.search(uuid_pattern, data.lower()):
+                return data  # UUID filenames are safe
+            
+            # Otherwise, mask the filename but keep extension
+            parts = data.rsplit('.', 1)
+            if len(parts) == 2:
+                return f"[MASKED_FILE].{parts[1]}"
+            return "[MASKED_FILE]"
+        
+        # If the string contains "=" (likely a filter or parameter), mask the value part
+        if '=' in masked:
+            parts = masked.split('=', 1)
+            if len(parts) == 2:
+                key, value = parts
+                # Preserve the key, mask the value
+                return f"{key}=[MASKED]"
+        
+        # Use sanitize_log_value for general strings
+        return sanitize_log_value(masked, max_len=200)
+    
+    # Numbers, booleans, etc. are safe
+    return data
 
 # Re-authentication validity window (5 minutes)
 REAUTH_VALIDITY_MINUTES = 5
@@ -161,11 +233,14 @@ def _log_sensitive_operation(
                 user_agent=request.headers.get('User-Agent', '')[:500] if request else None,
             )
             
+            # Sanitize details before storage to prevent PII leakage
             if details:
-                audit.set_request_details(details)
+                sanitized_details = _sanitize_dict_recursive(details)
+                audit.set_request_details(sanitized_details)
             
             if result:
-                audit.set_result_details(result)
+                sanitized_result = _sanitize_dict_recursive(result)
+                audit.set_result_details(sanitized_result)
             
             db.add(audit)
             db.commit()

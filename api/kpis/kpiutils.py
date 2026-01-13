@@ -367,7 +367,7 @@ def handle_common_exceptions(func):
                 sanitize_log_value(func.__name__),
                 sanitize_log_value(e),
             )
-            return create_error_response("Internal server error", str(e), 500)
+            return create_error_response("Internal server error", "An internal error occurred", 500)
     
     return wrapper
 

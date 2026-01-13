@@ -4,7 +4,7 @@ Restricted to admin and datamanager roles.
 """
 from __future__ import annotations
 
-from flask import Blueprint, render_template, request, jsonify, abort
+from flask import Blueprint, render_template, request, jsonify, abort, current_app
 from typing import Any
 from datetime import timezone
 import json
@@ -18,6 +18,7 @@ from utils.imageSearchUtil import search_images_strict, ImageSearchError
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.suitability import check_suitability
+from utils.log_sanitize import sanitize_log_value
 
 # TODO: import role guard, CSRF, and DB context manager per project conventions
 # from utils.auth import roles_required
@@ -277,7 +278,8 @@ def search():
                 image_type=image_type,
             )
         except ImageSearchError as e:
-            return jsonify({'error': str(e), 'items': [], 'total': 0, 'page': page, 'per_page': per_page}), 400
+            current_app.logger.warning("Search failed: %s", sanitize_log_value(e))
+            return jsonify({'error': 'Invalid search parameters', 'items': [], 'total': 0, 'page': page, 'per_page': per_page}), 400
 
     # images already enriched by search util with IDs; add canonical id key for UI convenience
     enriched: list[dict[str, Any]] = []
@@ -349,7 +351,8 @@ def preview():
                 image_type=None if source == 'all' else source,
             )
         except ImageSearchError as e:
-            return jsonify({'error': str(e), 'hint': 'Invalid search filters'}), 400
+            current_app.logger.warning("Preview search failed: %s", sanitize_log_value(e))
+            return jsonify({'error': 'Invalid search filters', 'hint': 'Invalid search filters'}), 400
 
     # Determine eligibility: exclude images that already have a task for selected diseases
     def _build_meta(img: dict[str, Any]) -> dict[str, Any]:

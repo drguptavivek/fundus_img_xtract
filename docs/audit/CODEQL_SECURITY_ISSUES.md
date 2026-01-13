@@ -47,26 +47,26 @@ GitHub's CodeQL scanner has identified **63 security vulnerabilities** across th
 
 #### By File
 
-**Admin Blueprint** (35+ instances) - ✅ **FIXED**:
+**Admin Blueprint** (35+ instances) - 🟡 **PARTIALLY FIXED**:
 - `email_settings.py`: ✅ Fixed
 - `database_restore.py`: ✅ Fixed
 - `thumbnail_management.py`: ✅ Fixed
-- `database_excel_export.py`: Pending
+- `database_excel_export.py`: ✅ Fixed
 - `status.py`: Pending
 - `materialized_view_status.py`: Pending
 - `rate_limit_admin.py`: Pending
 - `database_dump.py`: Pending
 
-**API Blueprint** (6 instances) - 🔴 **OPEN**:
-- `viewer_settings.py`: Lines 205, 177, 129, 94, 47, 101, 100, 99, 98, 97
-- `kpis/kpiutils.py`: Line 58, 70
+**API Blueprint** (6 instances) - ✅ **FIXED**:
+- `viewer_settings.py`: ✅ Fixed
+- `kpis/kpiutils.py`: ✅ Fixed
 
-**Other Blueprints** - 🔴 **OPEN**:
-- `utils/thumbnail_integration.py`: Line 291, 83
-- `tasks/route_intra_rater.py`: Line 41, 79
-- `tasks/ad_hoc.py`: Lines 352, 280, 54, 53
-- `public/analytics.py`: Lines 406, 325, 56, 55
-- `app.py`: Line 791, 105
+**Other Blueprints** - ✅ **FIXED**:
+- `utils/thumbnail_integration.py`: ✅ Fixed
+- `tasks/route_intra_rater.py`: ✅ Verified Safe (ValueError)
+- `tasks/ad_hoc.py`: ✅ Fixed
+- `public/analytics.py`: ✅ Fixed
+- `app.py`: ✅ Fixed
 
 **Fix Pattern**:
 ```python

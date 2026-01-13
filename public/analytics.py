@@ -38,7 +38,7 @@ def public_analytics():
             "Error rendering public analytics page: %s",
             sanitize_log_value(e),
         )
-        return render_template("public/analytics_error.html", error=str(e)), 500
+        return render_template("public/analytics_error.html", error="An internal error occurred"), 500
 
 
 @cache.cached(timeout=_CACHE_TIMEOUT, key_prefix=_KPI_CACHE_KEY)
@@ -324,7 +324,7 @@ def api_analytics_kpi():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500
 
 
@@ -405,5 +405,5 @@ def api_analytics_chart_data():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal server error'
         }), 500

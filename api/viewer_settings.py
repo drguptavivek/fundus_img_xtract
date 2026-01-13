@@ -1,7 +1,8 @@
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 from flask_login import current_user, login_required
 from models import ViewerSettings, ViewerPresets
-from auth.roles import roles_required, login_required
+from auth.roles import roles_required
+from utils.log_sanitize import sanitize_log_value
 from . import api_bp
 
 @api_bp.route("/viewer/settings", methods=["GET"])
@@ -44,7 +45,8 @@ def get_viewer_settings_impl(db):
             'filter': settings.filter
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error("Failed to get viewer settings: %s", sanitize_log_value(e))
+        return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route("/viewer/settings", methods=["POST"])
 @login_required
@@ -91,7 +93,8 @@ def save_viewer_settings_impl(db):
 
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error("Failed to save viewer settings: %s", sanitize_log_value(e))
+        return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route("/viewer/presets", methods=["GET"])
 @login_required
@@ -126,7 +129,8 @@ def get_viewer_presets_impl(db):
         
         return jsonify(presets_dict)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error("Failed to get viewer presets: %s", sanitize_log_value(e))
+        return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route("/viewer/presets/<int:slot_number>", methods=["POST"])
 @login_required
@@ -174,7 +178,8 @@ def save_viewer_preset_impl(db, slot_number):
 
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error("Failed to save viewer preset: %s", sanitize_log_value(e))
+        return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route("/viewer/presets/<int:slot_number>", methods=["DELETE"])
 @login_required
@@ -202,4 +207,5 @@ def delete_viewer_preset_impl(db, slot_number):
         else:
             return jsonify({'error': 'Preset not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error("Failed to delete viewer preset: %s", sanitize_log_value(e))
+        return jsonify({'error': 'Internal server error'}), 500

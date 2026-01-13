@@ -66,7 +66,7 @@ def database_excel_export():
                             sanitize_log_value(table_name),
                             sanitize_log_value(e),
                         )
-                        flash(f"Error exporting table {table_name}: {str(e)}", "warning")
+                        flash(f"Error exporting table {table_name}. Please check logs.", "warning")
             
             # Reset buffer position
             zip_buffer.seek(0)
@@ -114,7 +114,7 @@ def database_excel_export():
                 "Error creating database Excel export: %s",
                 sanitize_log_value(e),
             )
-            flash(f"Error creating database Excel export: {str(e)}", "danger")
+            flash("Error creating database Excel export. Please check logs.", "danger")
             log_export_failed("database_excel_export", str(e))
     
     # GET request - show the export page
@@ -272,4 +272,4 @@ def get_database_tables():
             "Error getting database tables: %s",
             sanitize_log_value(e),
         )
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500

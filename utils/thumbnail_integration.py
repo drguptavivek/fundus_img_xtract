@@ -288,10 +288,17 @@ def setup_thumbnail_routes(bp):
     def cleanup_thumbnails():
         """Clean up orphaned thumbnails."""
         stats = cleanup_orphaned_thumbnails()
+        # Sanitize errors for response
+        error_count = len(stats.get('errors', []))
+        if error_count > 0:
+            current_app.logger.warning("Thumbnail cleanup encountered %d errors: %s", 
+                                     error_count, 
+                                     sanitize_log_value(stats['errors']))
+            
         return jsonify({
             'orphaned_count': stats['orphaned_count'],
             'cleaned_count': stats['cleaned_count'],
-            'errors': stats['errors']
+            'error_count': error_count
         })
 
     @bp.route('/api/thumbnails/batch', methods=['POST'])

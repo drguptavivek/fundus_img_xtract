@@ -792,7 +792,8 @@ def _register_utility_routes(app: Flask) -> None:
                 }
             )
         except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
+            current_app.logger.error("Health check failed: %s", sanitize_log_value(e))
+            return jsonify({"status": "error", "message": "Database connection failed"}), 500
         finally:
             db.close()
 

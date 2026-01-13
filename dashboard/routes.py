@@ -6,6 +6,7 @@ from models import Hospital, LabUnit, User, EncounterFile, DirectImageUpload, Zi
 from auth.roles import roles_required
 import pandas as pd
 import io
+from pathlib import Path
 
 
 def hospital_dashboard():
@@ -155,6 +156,10 @@ def image_list():
             
             # Add direct images
             for img in direct_images:
+                # Use UUID for filename in export to avoid PII
+                ext = Path(img.filename).suffix.lower() if img.filename else '.jpg'
+                renamed_filename = f"{img.uuid}{ext}"
+                
                 data.append({
                     'UUID': img.uuid or '',
                     'Image Type': 'Direct',
@@ -163,13 +168,13 @@ def image_list():
                     'Disease': img.disease.name if img.disease else '',
                     'Area': img.area.name if img.area else '',
                     'Encounter Date': img.created_at.strftime('%Y-%m-%d') if img.created_at else '',
-                    'Filename': img.filename or '',
+                    'Filename': renamed_filename,
                     'Eye Side': 'N/A (Direct)',
                     'VCDR Right': 'N/A (Direct)',
                     'VCDR Left': 'N/A (Direct)',
                     'Original VCDR Right': 'N/A (Direct)',
                     'Original VCDR Left': 'N/A (Direct)',
-                    'Is Arbitration': 'Yes' if img.is_arbitration else 'No'
+                    'Is Arbitration': 'Unknown'
                 })
             
             # Add encounter files
@@ -195,6 +200,10 @@ def image_list():
                     original_vcdr_right = report.vcdr_right
                     original_vcdr_left = report.vcdr_left
                 
+                # Use UUID for filename in export to avoid PII
+                ext = Path(img.filename).suffix.lower() if img.filename else '.jpg'
+                renamed_filename = f"{img.uuid}{ext}"
+
                 data.append({
                     'UUID': img.uuid or '',
                     'Image Type': 'ZIP',
@@ -203,13 +212,13 @@ def image_list():
                     'Disease': 'N/A (ZIP)',
                     'Area': 'N/A (ZIP)',
                     'Encounter Date': img.patient_encounter.capture_date_dt.strftime('%Y-%m-%d') if img.patient_encounter and img.patient_encounter.capture_date_dt else (img.patient_encounter.capture_date if img.patient_encounter else ''),
-                    'Filename': img.filename or '',
+                    'Filename': renamed_filename,
                     'Eye Side': img.eye_side or 'N/A',
                     'VCDR Right': vcdr_right or 'N/A',
                     'VCDR Left': vcdr_left or 'N/A',
                     'Original VCDR Right': original_vcdr_right or 'N/A',
                     'Original VCDR Left': original_vcdr_left or 'N/A',
-                    'Is Arbitration': 'Yes' if img.is_arbitration else 'No'
+                    'Is Arbitration': 'Unknown'
                 })
             
             # Sort by UUID

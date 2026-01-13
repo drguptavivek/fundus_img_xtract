@@ -20,12 +20,12 @@ from models import (
     Grade,
     LabUnit,
     GradingTask,
-    Session,
-    ZipFile as ZipUpload,
     EncounterFile,
     PatientEncounters,
     DirectImageUpload,
+    DIRECT_UPLOAD_DIR,
 )
+from db_transaction_manager import get_db_session
 from utils.fileUtils import abs_from_parts
 
 EXPORT_DIR = BASE_DIR / "files" / "exports"
@@ -601,7 +601,7 @@ def _load_encounter_paths(encounter_ids: Sequence[int]) -> Dict[int, tuple[Path,
     mapping: Dict[int, tuple[Path, str]] = {}
     if not encounter_ids:
         return mapping
-    with Session() as db:
+    with get_db_session() as db:
         rows = (
             db.query(EncounterFile.id, EncounterFile.filename, ZipUpload.upload_date)
             .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
@@ -622,16 +622,22 @@ def _load_direct_paths(direct_ids: Sequence[int]) -> Dict[int, tuple[Path, str]]
     mapping: Dict[int, tuple[Path, str]] = {}
     if not direct_ids:
         return mapping
-    with Session() as db:
+    with get_db_session() as db:
         rows = (
-            db.query(DirectImageUpload.id, DirectImageUpload.folder_rel, DirectImageUpload.filename)
+            db.query(DirectImageUpload.id, DirectImageUpload.folder_rel, DirectImageUpload.filename, DirectImageUpload.edited_filename)
             .filter(DirectImageUpload.id.in_(direct_ids))
             .all()
         )
-        for img_id, folder_rel, filename in rows:
+        for img_id, folder_rel, filename, edited_filename in rows:
             try:
-                path = abs_from_parts(folder_rel, filename, "orig").resolve()
-                mapping[img_id] = (path, Path(filename).suffix.lower() or ".jpg")
+                # Prioritize edited version if it exists
+                if edited_filename:
+                    path = (DIRECT_UPLOAD_DIR / folder_rel / "edited" / edited_filename).resolve()
+                    ext = Path(edited_filename).suffix.lower() or ".jpg"
+                else:
+                    path = (DIRECT_UPLOAD_DIR / folder_rel / filename).resolve()
+                    ext = Path(filename).suffix.lower() or ".jpg"
+                mapping[img_id] = (path, ext)
             except Exception:
                 continue
     return mapping

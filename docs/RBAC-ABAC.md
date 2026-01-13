@@ -23,7 +23,7 @@ For detailed technical implementation of isolation, see [Scoping.md](03-Tasks/Sc
 | `fileUploader` | Standard image ingestion | Lab (Hospital-Bound) | Full |
 | `data_exporter` | Exporting datasets | Hospital-Bound | Partial (Masked) |
 | `analytics_viewer` | KPI monitoring | Hospital-Bound | **None (Anonymized)** |
-| `discrepancy_reviewer` | Quality assurance review | Hospital-Bound | Full |
+| `discrepancy_reviewer` | Quality assurance review | Hospital-Bound | **None (Masked)** |
 
 ---
 
@@ -87,23 +87,45 @@ For detailed technical implementation of isolation, see [Scoping.md](03-Tasks/Sc
 #### `discrepancy_reviewer`
 - **Permissions**: Involved in the QA process where human grades disagree, before finalization. Settles medical conflicts.
 - **Scoping**: Hospital-bound.
-- **PII Rationale**: Requires clinical context (history, demographics) to reach a "ground truth" when experts disagree.
+- **PII Protection**: Operates on anonymized encounter IDs and masked metadata. Patient names/MRNs are hidden to prevent bias.
+
+---
+
+## Role-Blueprint PII Matrix
+
+The following matrix defines where PII (Patient Name, MRN, Phone) is visible (`✅`) versus masked/hidden (`❌`) across the system's core blueprints.
+
+| Role | `direct_uploads` | `screenings` | `review` | `analytics` | `grading` |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| `admin` (Master) | ✅ | ✅ | ✅ | ✅ | ❌ |
+| `local_admin` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `data_manager` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `optometrist` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `discrepancy_reviewer`| ❌ | ❌ | ❌ | ❌ | ❌ |
+| `ophthalmologist` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `analytics_viewer` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `dataset_creator` | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+> [!NOTE]
+> **PII Inconsistency**: `local_admin` and `data_manager` only see PII in ingestion-related blueprints (`direct_uploads`, `screenings`). Once data moves to `review` or `analytics`, it is masked for everyone except Master Admins to ensure medical objectivity and data safety.
 
 ---
 
 ## PII Access Rationale
 
-The system follows a "PII Firewall" model where most clinical staff work anonymized, but certain operational roles require PII access for specific reasons:
+The system follows a "PII Firewall" model where most clinical staff work anonymized, but certain operational roles require PII access for specific ingestion and compliance tasks:
 
 | Role | Why they need PII? | Silo Boundary |
 | :--- | :--- | :--- |
 | **Data Manager** | Must resolve ingestion errors and EMR mismatches during the raw upload phase. | Own Hospital Only |
 | **Local Admin** | Responsible for hospital-level legal compliance and patient follow-up requests. | Own Hospital Only |
 | **Optometrist** | Required to verify patient identity *before* performing the anonymization step. | Own Hospital Only |
-| **Discrepancy Reviewer** | Needs full clinical context to resolve complex medical tie-breaks. | Own Hospital Only |
+
+> [!IMPORTANT]
+> **Discrepancy Reviewer**: Unlike early ingestion roles, the Discrepancy Reviewer does **not** need PII. They use anonymous UUIDs and masked clinical metadata to reach a "ground truth" without the risk of bias or data leakage.
 
 > [!WARNING]
-> While these roles have *functional* access to PII, the system still applies **scoping isolation**. A Data Manager at Hospital A can never see PII from Hospital B.
+> While these roles have *functional* access to PII in specific modules, the system still applies **scoping isolation**. A Data Manager at Hospital A can never see PII from Hospital B.
 
 ---
 

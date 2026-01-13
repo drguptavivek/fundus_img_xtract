@@ -363,8 +363,8 @@
                   href="{{ url_for('analytics.encounter_files') }}">Encounters</a>
               </li>
               <li>
-                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.direct_files' else '' }}"
-                  href="{{ url_for('analytics.direct_files') }}">Direct Files</a>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'analytics.direct_uploads_kpi' else '' }}"
+                  href="{{ url_for('analytics.direct_uploads_kpi') }}">Direct Files</a>
               </li>
 
               <li>
@@ -701,29 +701,29 @@
   <!-- Theme + palette logic -->
   {% if csp_script_nonce %}
   <script nonce="{{ csp_script_nonce() }}">
-  {% else %}
-  <script>
-    {% endif %}
-    (function () {
-      function updateToggle(theme) {
-        var icon = document.querySelector('[data-theme-icon]');
-        if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-        var btn = document.querySelector('[data-theme-toggle]');
-        if (btn) btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
-      }
+      {% else %}
+      <script>
+        {% endif %}
+        (function () {
+          function updateToggle(theme) {
+            var icon = document.querySelector('[data-theme-icon]');
+            if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+            var btn = document.querySelector('[data-theme-toggle]');
+            if (btn) btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+          }
       function setTheme(theme) {
-      document.documentElement.setAttribute('data-bs-theme', theme);
-    try {localStorage.setItem('theme', theme); } catch (e) { }
-    updateToggle(theme);
+          document.documentElement.setAttribute('data-bs-theme', theme);
+        try {localStorage.setItem('theme', theme); } catch (e) { }
+        updateToggle(theme);
       }
-    // initialize toggle state based on current attribute
-    var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
-    updateToggle(current);
-    document.addEventListener('click', function (e) {
+        // initialize toggle state based on current attribute
+        var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        updateToggle(current);
+        document.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-theme-toggle]');
-    if (!btn) return;
-    var cur = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
-    setTheme(cur === 'dark' ? 'light' : 'dark');
+        if (!btn) return;
+        var cur = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        setTheme(cur === 'dark' ? 'light' : 'dark');
       });
 
       // Removed palette switching; single Healthcare theme remains

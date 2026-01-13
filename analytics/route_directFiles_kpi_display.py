@@ -84,12 +84,12 @@ def direct_uploads_kpi() -> str:
     }
 
     prev_url = (
-        url_for("analytics.direct_files", **build_pagination_params(filter_params, page - 1))
+        url_for("analytics.direct_uploads_kpi", **build_pagination_params(filter_params, page - 1))
         if page > 1
         else None
     )
     next_url = (
-        url_for("analytics.direct_files", **build_pagination_params(filter_params, page + 1))
+        url_for("analytics.direct_uploads_kpi", **build_pagination_params(filter_params, page + 1))
         if page < total_pages
         else None
     )

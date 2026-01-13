@@ -13,7 +13,7 @@ class TestEncounterResultsIsolation:
     """Test /analytics/encounters route isolation."""
 
     def test_user_sees_only_own_hospital_encounters(
-        self, client, test_hospitals, hosp_a_data_manager, hosp_b_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session
     ):
         """Data manager should only see encounters from their hospital."""
         from models import PatientEncounters, EncounterFile
@@ -22,12 +22,12 @@ class TestEncounterResultsIsolation:
         # Create encounters for both hospitals
         encounter_a = PatientEncounters(
             patient_id="PATIENT_A",
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             capture_date_dt=utcnow().date(),
         )
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add_all([encounter_a, encounter_b])
@@ -50,7 +50,7 @@ class TestEncounterResultsIsolation:
         assert "PATIENT_B" not in html
 
     def test_global_admin_sees_all_encounters(
-        self, client, master_admin, test_hospitals, db_session
+        self, client, master_admin, hospital_data, db_session
     ):
         """Global admin should see all encounters."""
         from models import PatientEncounters
@@ -59,12 +59,12 @@ class TestEncounterResultsIsolation:
         # Create encounters for both hospitals
         encounter_a = PatientEncounters(
             patient_id="PATIENT_A",
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             capture_date_dt=utcnow().date(),
         )
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add_all([encounter_a, encounter_b])
@@ -89,7 +89,7 @@ class TestImageResultsIsolation:
     """Test /analytics/images route isolation."""
 
     def test_user_sees_only_own_hospital_images(
-        self, client, test_hospitals, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """Data manager should only see images from their hospital."""
         from models import PatientEncounters, EncounterFile, GradingTask
@@ -98,12 +98,12 @@ class TestImageResultsIsolation:
         # Create encounters and tasks for both hospitals
         encounter_a = PatientEncounters(
             patient_id="PATIENT_A",
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add_all([encounter_a, encounter_b])
@@ -111,13 +111,13 @@ class TestImageResultsIsolation:
 
         file_a = EncounterFile(
             patient_encounter_id=encounter_a.id,
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             filename="image_a.jpg",
             file_type="image",
         )
         file_b = EncounterFile(
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             filename="image_b.jpg",
             file_type="image",
         )
@@ -127,13 +127,13 @@ class TestImageResultsIsolation:
         # Create tasks
         task_a = GradingTask(
             encounter_file_id=file_a.id,
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             disease_id=test_metadata["diseases"]["dr"].id,
             state="pending",
         )
         task_b = GradingTask(
             encounter_file_id=file_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             disease_id=test_metadata["diseases"]["dr"].id,
             state="pending",
         )
@@ -160,7 +160,7 @@ class TestEncounterViewIsolation:
     """Test /analytics/encounter/view/<id> route isolation."""
 
     def test_cross_hospital_encounter_view_forbidden(
-        self, client, test_hospitals, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should not be able to view encounters from other hospitals."""
         from models import PatientEncounters
@@ -169,7 +169,7 @@ class TestEncounterViewIsolation:
         # Create encounter for hospital B
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add(encounter_b)
@@ -188,7 +188,7 @@ class TestEncounterViewIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_encounter_view_allowed(
-        self, client, test_hospitals, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should be able to view encounters from their hospital."""
         from models import PatientEncounters
@@ -197,7 +197,7 @@ class TestEncounterViewIsolation:
         # Create encounter for hospital A
         encounter_a = PatientEncounters(
             patient_id="PATIENT_A",
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add(encounter_a)
@@ -220,14 +220,14 @@ class TestDirectViewIsolation:
     """Test /analytics/direct/view/<uuid> route isolation."""
 
     def test_cross_hospital_direct_view_forbidden(
-        self, client, test_hospitals, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should not be able to view direct uploads from other hospitals."""
         from models import DirectImageUpload
 
         # Create direct upload for hospital B
         direct_b = DirectImageUpload(
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             filename="direct_b.jpg",
             verification_status="verified",
         )
@@ -247,14 +247,14 @@ class TestDirectViewIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_direct_view_allowed(
-        self, client, test_hospitals, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should be able to view direct uploads from their hospital."""
         from models import DirectImageUpload
 
         # Create direct upload for hospital A
         direct_a = DirectImageUpload(
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             filename="direct_a.jpg",
             verification_status="verified",
         )
@@ -278,7 +278,7 @@ class TestTaskDetailsIsolation:
     """Test /analytics/viewTaskDetails/<id> route isolation."""
 
     def test_cross_hospital_task_view_forbidden(
-        self, client, test_hospitals, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """User should not be able to view tasks from other hospitals."""
         from models import PatientEncounters, EncounterFile, GradingTask
@@ -287,7 +287,7 @@ class TestTaskDetailsIsolation:
         # Create task for hospital B
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add(encounter_b)
@@ -295,7 +295,7 @@ class TestTaskDetailsIsolation:
 
         file_b = EncounterFile(
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             filename="image_b.jpg",
             file_type="image",
         )
@@ -304,7 +304,7 @@ class TestTaskDetailsIsolation:
 
         task_b = GradingTask(
             encounter_file_id=file_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             disease_id=test_metadata["diseases"]["dr"].id,
             state="pending",
         )
@@ -324,7 +324,7 @@ class TestTaskDetailsIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_task_view_allowed(
-        self, client, test_hospitals, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """User should be able to view tasks from their hospital."""
         from models import PatientEncounters, EncounterFile, GradingTask
@@ -333,7 +333,7 @@ class TestTaskDetailsIsolation:
         # Create task for hospital A
         encounter_a = PatientEncounters(
             patient_id="PATIENT_A",
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add(encounter_a)
@@ -341,7 +341,7 @@ class TestTaskDetailsIsolation:
 
         file_a = EncounterFile(
             patient_encounter_id=encounter_a.id,
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             filename="image_a.jpg",
             file_type="image",
         )
@@ -350,7 +350,7 @@ class TestTaskDetailsIsolation:
 
         task_a = GradingTask(
             encounter_file_id=file_a.id,
-            lab_unit_id=test_hospitals["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
             disease_id=test_metadata["diseases"]["dr"].id,
             state="pending",
         )
@@ -374,7 +374,7 @@ class TestGlobalAdminBypass:
     """Test that global admins can access all data."""
 
     def test_global_admin_can_view_all_hospitals(
-        self, client, master_admin, test_hospitals, db_session, test_metadata
+        self, client, master_admin, hospital_data, db_session, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
         from models import PatientEncounters, EncounterFile, DirectImageUpload, GradingTask
@@ -383,7 +383,7 @@ class TestGlobalAdminBypass:
         # Create data for hospital B
         encounter_b = PatientEncounters(
             patient_id="PATIENT_B",
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             capture_date_dt=utcnow().date(),
         )
         db_session.add(encounter_b)
@@ -391,7 +391,7 @@ class TestGlobalAdminBypass:
 
         file_b = EncounterFile(
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             filename="image_b.jpg",
             file_type="image",
         )
@@ -399,7 +399,7 @@ class TestGlobalAdminBypass:
         db_session.flush()
 
         direct_b = DirectImageUpload(
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             filename="direct_b.jpg",
             verification_status="verified",
         )
@@ -408,7 +408,7 @@ class TestGlobalAdminBypass:
 
         task_b = GradingTask(
             encounter_file_id=file_b.id,
-            lab_unit_id=test_hospitals["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
             disease_id=test_metadata["diseases"]["dr"].id,
             state="pending",
         )

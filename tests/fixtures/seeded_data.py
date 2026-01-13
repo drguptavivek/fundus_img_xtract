@@ -14,6 +14,31 @@ def test_hospitals(seed_test_database):
     return seed_test_database['hospitals']
 
 
+@pytest.fixture(scope="function")
+def hospital_data(db_session):
+    """Get hospitals with their lab units in a convenient structure (function-scoped)."""
+    # Query hospitals and lab units from the database
+    hosp_a = db_session.query(Hospital).filter_by(name='Hospital A').first()
+    hosp_b = db_session.query(Hospital).filter_by(name='Hospital B').first()
+    
+    lab_a1 = db_session.query(LabUnit).filter_by(name='Lab A1').first()
+    lab_a2 = db_session.query(LabUnit).filter_by(name='Lab A2').first()
+    lab_b1 = db_session.query(LabUnit).filter_by(name='Lab B1').first()
+    lab_b2 = db_session.query(LabUnit).filter_by(name='Lab B2').first()
+    
+    return {
+        'hospital_a': {
+            'hospital': hosp_a,
+            'lab_units': [lab_a1, lab_a2]
+        },
+        'hospital_b': {
+            'hospital': hosp_b,
+            'lab_units': [lab_b1, lab_b2]
+        }
+    }
+
+
+
 @pytest.fixture(scope="session")
 def test_lab_units(seed_test_database):
     """Get seeded lab units."""
@@ -29,10 +54,20 @@ def test_lab_units(seed_test_database):
 def test_metadata(seed_test_database):
     """Get seeded metadata (Camera, Disease, Area)."""
     return {
-        'camera': seed_test_database['cameras']['Test Camera'],
-        'disease': seed_test_database['diseases']['Test Disease'],
-        'area': seed_test_database['areas']['Test Area'],
+        'cameras': {
+            'test_camera': seed_test_database['cameras']['Test Camera'],
+        },
+        'diseases': {
+            'dr': seed_test_database['diseases']['DR'],
+            'glaucoma': seed_test_database['diseases']['Glaucoma'],
+            'amd': seed_test_database['diseases']['AMD'],
+            'test_disease': seed_test_database['diseases']['Test Disease'],
+        },
+        'areas': {
+            'test_area': seed_test_database['areas']['Test Area'],
+        },
     }
+
 
 
 @pytest.fixture(scope="session")

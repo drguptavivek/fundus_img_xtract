@@ -674,9 +674,10 @@ from tests.fixtures.seed_database import seed_test_database
 
 # Import simplified fixtures that query seeded data
 from tests.fixtures.seeded_data import (
-    test_hospitals, test_lab_units, test_metadata,
+    test_hospitals, test_lab_units, test_metadata, hospital_data,
     site_admin_hospital_a, site_admin_hospital_b, master_admin,
     ophthalmologist_hospital_a, ophthalmologist_hospital_b,
     ophthalmologist_cross_hospital
 )
+
 

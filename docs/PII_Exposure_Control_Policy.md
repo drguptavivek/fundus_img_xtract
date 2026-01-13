@@ -1,6 +1,6 @@
 # PII Exposure Control Policy
 
-**Document Version:** 1.1  
+**Document Version:** 1.2  
 **Last Updated:** 2026-01-13  
 **Owner:** Security Team  
 **Classification:** Internal
@@ -155,6 +155,23 @@ def mask_email(email: str) -> str:
 | `database_excel_export.py` | Audit log required | `PII-EXP-002` |
 | `database_dump.py` | Admin + audit log | `PII-EXP-003` |
 | `dashboard/routes.py` CSV/Excel | Masked filenames | `PII-EXP-004` |
+| `job_store.py` (upload jobs) | **Exception**: PII preserved for troubleshooting | `PII-EXP-005` |
+
+**Exception Policy for Upload Jobs:**
+
+Upload job error details (filenames, error messages) are **intentionally preserved** to facilitate troubleshooting of failed uploads. This exception applies only to:
+- ZIP upload jobs (`upload_type="zip upload"`)
+- Direct image upload jobs (`upload_type="direct image"`)
+- Excel import jobs (`upload_type="excel import"`)
+
+**Rationale**: Users need to see the actual filename and error details to fix upload issues (e.g., "file_123.jpg: Invalid EXIF data").
+
+**Scope Limitation**: This exception does NOT apply to:
+- Export jobs (discrepancy export, dataset export) - PII is always masked
+- Grading interfaces - PII is always masked
+- Analytics dashboards - PII is always masked
+
+**Implementation**: `job_store.py::db_get_job_payload()` conditionally masks based on `upload_type`.
 
 ---
 
@@ -597,3 +614,4 @@ If a feature requires PII access beyond this policy:
 |------|---------|--------|---------|
 | 2026-01-11 | 1.0 | System | Initial policy creation |
 | 2026-01-13 | 1.1 | System | Updated implementation status - All Phase 5A-5O beads completed |
+| 2026-01-13 | 1.2 | System | Added exception policy for upload job error details (PII preserved for troubleshooting) |

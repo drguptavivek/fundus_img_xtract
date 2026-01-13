@@ -680,4 +680,7 @@ from tests.fixtures.seeded_data import (
     ophthalmologist_cross_hospital
 )
 
+# Import authentication fixtures
+from tests.fixtures.auth_client import auth_client, multi_auth_clients
+
 

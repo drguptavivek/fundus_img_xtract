@@ -136,7 +136,7 @@ class TestEncounterViewIsolation:
     """Test /analytics/encounter/view/<id> route isolation."""
 
     def test_cross_hospital_encounter_view_forbidden(
-        self, client, hospital_data, hosp_a_data_manager, db_session, login_user
+        self, auth_client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should not be able to view encounters from other hospitals."""
         # Create encounter for hospital B
@@ -146,8 +146,8 @@ class TestEncounterViewIsolation:
             patient_id="PATIENT_B",
         )
 
-        # Login as hospital A data manager
-        login_user(hosp_a_data_manager.username, 'Test@2026')
+        # Get authenticated client for hospital A data manager
+        client = auth_client(hosp_a_data_manager)
 
         # Try to access hospital B's encounter
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")

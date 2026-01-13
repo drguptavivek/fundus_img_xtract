@@ -251,10 +251,51 @@ class TestMyFeature:
 
 ### Testing with Authentication
 
+#### Option 1: Using `auth_client` Fixture (Recommended)
+
+The `auth_client` fixture performs real login via POST request and maintains session cookies:
+
 ```python
-def test_authenticated_route(self, client, hosp_a_data_manager):
+def test_authenticated_route(auth_client, hosp_a_data_manager):
     """Test route requires authentication."""
-    # Login using session manipulation
+    # Get authenticated client for this user
+    client = auth_client(hosp_a_data_manager)
+    
+    # Make authenticated requests
+    response = client.get('/protected/route')
+    assert response.status_code == 200
+```
+
+**Benefits**:
+- Tests actual login flow
+- Maintains session cookies automatically
+- More realistic than session manipulation
+
+#### Option 2: Using `multi_auth_clients` for Multiple Users
+
+When testing with multiple users simultaneously:
+
+```python
+def test_multi_user_isolation(multi_auth_clients, hosp_a_data_manager, hosp_b_data_manager):
+    """Test isolation between different users."""
+    # Create authenticated clients for both users
+    clients = multi_auth_clients([hosp_a_data_manager, hosp_b_data_manager])
+    
+    # Each client maintains its own session
+    response_a = clients[hosp_a_data_manager.username].get('/data')
+    response_b = clients[hosp_b_data_manager.username].get('/data')
+    
+    # Verify isolation
+    assert response_a.data != response_b.data
+```
+
+#### Option 3: Session Manipulation (For Unit Tests)
+
+For pure unit tests where you don't need full login flow:
+
+```python
+def test_with_session(client, hosp_a_data_manager):
+    """Test using session manipulation."""
     with client.session_transaction() as sess:
         sess['user_id'] = hosp_a_data_manager.id
         sess['_fresh'] = True
@@ -262,6 +303,8 @@ def test_authenticated_route(self, client, hosp_a_data_manager):
     response = client.get('/protected/route')
     assert response.status_code == 200
 ```
+
+**Note**: Session manipulation may not work for all routes due to Flask-Login configuration. Use `auth_client` for integration tests.
 
 ### Testing Hospital Isolation
 
@@ -284,6 +327,129 @@ def test_cross_hospital_access_denied(self, client, hospital_data, hosp_a_data_m
     
     # Should be denied
     assert response.status_code == 404
+```
+
+## Testing Conventions
+
+### Naming Conventions
+
+1. **Test Files**: `test_<feature>.py` (e.g., `test_analytics_isolation.py`)
+2. **Test Classes**: `Test<Feature><Aspect>` (e.g., `TestEncounterViewIsolation`)
+3. **Test Methods**: `test_<what>_<expected>` (e.g., `test_cross_hospital_encounter_view_forbidden`)
+
+### Test Organization
+
+- **Unit Tests**: `tests/unit/<blueprint>/` - Fast, isolated component tests
+- **Integration Tests**: `tests/integration/` - Multi-component interaction tests
+- **E2E Tests**: `tests/e2e/` - Full browser-based user flow tests
+- **Security Tests**: `tests/unit/security/` - Hospital isolation and access control tests
+
+### Fixture Usage Patterns
+
+#### Always Use These Fixtures
+
+- **`db_session`**: For database operations (function-scoped, auto-rollback)
+- **`hospital_data`**: For hospital and lab unit data (function-scoped)
+- **`test_metadata`**: For cameras, diseases, areas (function-scoped)
+- **`TestDataFactory`**: For creating test data with all required fields
+
+#### Authentication Fixtures
+
+- **`auth_client`**: For single-user authenticated tests
+- **`multi_auth_clients`**: For multi-user isolation tests
+- **Session manipulation**: Only for unit tests where login flow isn't needed
+
+### Data Creation Pattern
+
+**Always use TestDataFactory** instead of creating models directly:
+
+```python
+# ✅ GOOD - Uses factory
+encounter = TestDataFactory.create_patient_encounter(
+    db_session,
+    lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+)
+
+# ❌ BAD - Creates model directly (will fail due to missing required fields)
+encounter = PatientEncounters(
+    patient_id="TEST",
+    lab_unit_id=lab_unit.id,
+)
+```
+
+### Test Structure Pattern
+
+Follow the **Arrange-Act-Assert** pattern:
+
+```python
+def test_something(db_session, hospital_data, test_metadata):
+    """Test description explaining what and why."""
+    # ARRANGE: Set up test data
+    encounter = TestDataFactory.create_patient_encounter(
+        db_session,
+        lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+    )
+    
+    # ACT: Perform the action being tested
+    result = my_function(encounter.id)
+    
+    # ASSERT: Verify the outcome
+    assert result.status == "success"
+    assert result.data is not None
+```
+
+### Isolation Testing Pattern
+
+For hospital isolation tests, always test both **positive** (own hospital) and **negative** (cross-hospital) cases:
+
+```python
+class TestFeatureIsolation:
+    """Test feature enforces hospital isolation."""
+    
+    def test_own_hospital_access_allowed(self, auth_client, hospital_data, hosp_a_data_manager, db_session):
+        """Users can access their own hospital's data."""
+        # Create data for hospital A
+        data_a = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+        )
+        
+        # Login as hospital A user
+        client = auth_client(hosp_a_data_manager)
+        
+        # Should succeed
+        response = client.get(f'/data/{data_a.id}')
+        assert response.status_code == 200
+    
+    def test_cross_hospital_access_forbidden(self, auth_client, hospital_data, hosp_a_data_manager, db_session):
+        """Users cannot access other hospitals' data."""
+        # Create data for hospital B
+        data_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+        )
+        
+        # Login as hospital A user
+        client = auth_client(hosp_a_data_manager)
+        
+        # Should be denied
+        response = client.get(f'/data/{data_b.id}')
+        assert response.status_code == 404
+    
+    def test_global_admin_bypass(self, auth_client, hospital_data, master_admin, db_session):
+        """Global admins can access all hospitals' data."""
+        # Create data for hospital B
+        data_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+        )
+        
+        # Login as global admin
+        client = auth_client(master_admin)
+        
+        # Should succeed
+        response = client.get(f'/data/{data_b.id}')
+        assert response.status_code == 200
 ```
 
 ## Best Practices

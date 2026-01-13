@@ -50,21 +50,29 @@ def test_lab_units(seed_test_database):
     }
 
 
-@pytest.fixture(scope="session")
-def test_metadata(seed_test_database):
-    """Get seeded metadata (Camera, Disease, Area)."""
+@pytest.fixture(scope="function")
+def test_metadata(db_session):
+    """Get seeded metadata (Camera, Disease, Area) - function-scoped."""
+    # Query metadata from database
+    test_camera = db_session.query(Camera).filter_by(name='Test Camera').first()
+    dr = db_session.query(Disease).filter_by(name='DR').first()
+    glaucoma = db_session.query(Disease).filter_by(name='Glaucoma').first()
+    amd = db_session.query(Disease).filter_by(name='AMD').first()
+    test_disease = db_session.query(Disease).filter_by(name='Test Disease').first()
+    test_area = db_session.query(Area).filter_by(name='Test Area').first()
+    
     return {
         'cameras': {
-            'test_camera': seed_test_database['cameras']['Test Camera'],
+            'test_camera': test_camera,
         },
         'diseases': {
-            'dr': seed_test_database['diseases']['DR'],
-            'glaucoma': seed_test_database['diseases']['Glaucoma'],
-            'amd': seed_test_database['diseases']['AMD'],
-            'test_disease': seed_test_database['diseases']['Test Disease'],
+            'dr': dr,
+            'glaucoma': glaucoma,
+            'amd': amd,
+            'test_disease': test_disease,
         },
         'areas': {
-            'test_area': seed_test_database['areas']['Test Area'],
+            'test_area': test_area,
         },
     }
 

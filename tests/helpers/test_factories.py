@@ -163,17 +163,29 @@ class TestDataFactory:
         cls,
         db_session,
         lab_unit_id: int,
+        uploader_id: int,
+        hospital_id: int,
+        camera_id: int,
+        disease_id: int,
+        area_id: int,
         filename: Optional[str] = None,
-        verification_status: str = "verified",
+        folder_rel: Optional[str] = None,
+        file_hash: Optional[str] = None,
     ) -> DirectImageUpload:
         """
-        Create a DirectImageUpload instance.
+        Create a DirectImageUpload instance with all required fields.
         
         Args:
             db_session: Database session
-            lab_unit_id: Lab unit ID
+            lab_unit_id: Lab unit ID (required)
+            uploader_id: Uploader user ID (required)
+            hospital_id: Hospital ID (required)
+            camera_id: Camera ID (required)
+            disease_id: Disease ID (required)
+            area_id: Area ID (required)
             filename: Filename (auto-generated if not provided)
-            verification_status: Verification status (default: "verified")
+            folder_rel: Relative folder path (auto-generated if not provided)
+            file_hash: File hash (auto-generated if not provided)
             
         Returns:
             DirectImageUpload instance
@@ -183,10 +195,24 @@ class TestDataFactory:
         if not filename:
             filename = f"direct_upload_{unique_id}.jpg"
         
+        if not folder_rel:
+            # Create a valid POSIX-style relative path (no leading slash)
+            folder_rel = f"files/direct_uploads/test_{unique_id}"
+        
+        if not file_hash:
+            # Generate a unique MD5 hash
+            file_hash = hashlib.md5(f"direct_file_{unique_id}".encode()).hexdigest()
+        
         direct_upload = DirectImageUpload(
             lab_unit_id=lab_unit_id,
+            uploader_id=uploader_id,
+            hospital_id=hospital_id,
+            camera_id=camera_id,
+            disease_id=disease_id,
+            area_id=area_id,
             filename=filename,
-            verification_status=verification_status,
+            folder_rel=folder_rel,
+            file_hash=file_hash,
         )
         db_session.add(direct_upload)
         db_session.flush()

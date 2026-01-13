@@ -14,7 +14,7 @@ class TestEncounterResultsIsolation:
     """Test /analytics/encounters route isolation."""
 
     def test_user_sees_only_own_hospital_encounters(
-        self, client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session, login_user
     ):
         """Data manager should only see encounters from their hospital."""
         # Create encounters for both hospitals using factory
@@ -30,11 +30,9 @@ class TestEncounterResultsIsolation:
         )
 
         # Login as hospital A data manager
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         response = client.get("/analytics/encounters")
         assert response.status_code == 200
@@ -46,7 +44,7 @@ class TestEncounterResultsIsolation:
         assert "PATIENT_B" not in html
 
     def test_global_admin_sees_all_encounters(
-        self, client, master_admin, hospital_data, db_session
+        self, client, master_admin, hospital_data, db_session, login_user
     ):
         """Global admin should see all encounters."""
         # Create encounters for both hospitals using factory
@@ -61,11 +59,9 @@ class TestEncounterResultsIsolation:
             patient_id="PATIENT_B",
         )
 
-        client.post(
-            "/login",
-            data={"username": master_admin.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = master_admin.id
+            sess['_fresh'] = True
 
         response = client.get("/analytics/encounters")
         assert response.status_code == 200
@@ -80,7 +76,7 @@ class TestImageResultsIsolation:
     """Test /analytics/images route isolation."""
 
     def test_user_sees_only_own_hospital_images(
-        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
     ):
         """Data manager should only see images from their hospital."""
         # Create encounters and tasks for both hospitals
@@ -122,11 +118,9 @@ class TestImageResultsIsolation:
             encounter_file_id=file_b.id,
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         response = client.get("/analytics/images")
         assert response.status_code == 200
@@ -142,7 +136,7 @@ class TestEncounterViewIsolation:
     """Test /analytics/encounter/view/<id> route isolation."""
 
     def test_cross_hospital_encounter_view_forbidden(
-        self, client, hospital_data, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user
     ):
         """User should not be able to view encounters from other hospitals."""
         # Create encounter for hospital B
@@ -152,11 +146,8 @@ class TestEncounterViewIsolation:
             patient_id="PATIENT_B",
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        # Login as hospital A data manager
+        login_user(hosp_a_data_manager.username, 'Test@2026')
 
         # Try to access hospital B's encounter
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")
@@ -165,7 +156,7 @@ class TestEncounterViewIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_encounter_view_allowed(
-        self, client, hospital_data, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user
     ):
         """User should be able to view encounters from their hospital."""
         # Create encounter for hospital A
@@ -175,11 +166,9 @@ class TestEncounterViewIsolation:
             patient_id="PATIENT_A",
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         # Access hospital A's encounter
         response = client.get(f"/analytics/encounter/view/{encounter_a.id}")
@@ -192,21 +181,24 @@ class TestDirectViewIsolation:
     """Test /analytics/direct/view/<uuid> route isolation."""
 
     def test_cross_hospital_direct_view_forbidden(
-        self, client, hospital_data, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
     ):
         """User should not be able to view direct uploads from other hospitals."""
         # Create direct upload for hospital B
         direct_b = TestDataFactory.create_direct_image_upload(
             db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            uploader_id=hosp_a_data_manager.id,  # Any user ID works for testing
+            hospital_id=hospital_data['hospital_b']['hospital'].id,
+            camera_id=test_metadata['cameras']['test_camera'].id,
+            disease_id=test_metadata['diseases']['dr'].id,
+            area_id=test_metadata['areas']['test_area'].id,
             filename="direct_b.jpg",
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         # Try to access hospital B's direct upload
         response = client.get(f"/analytics/direct/view/{direct_b.uuid}")
@@ -215,21 +207,24 @@ class TestDirectViewIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_direct_view_allowed(
-        self, client, hospital_data, hosp_a_data_manager, db_session
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
     ):
         """User should be able to view direct uploads from their hospital."""
         # Create direct upload for hospital A
         direct_a = TestDataFactory.create_direct_image_upload(
             db_session,
             lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+            uploader_id=hosp_a_data_manager.id,
+            hospital_id=hospital_data['hospital_a']['hospital'].id,
+            camera_id=test_metadata['cameras']['test_camera'].id,
+            disease_id=test_metadata['diseases']['dr'].id,
+            area_id=test_metadata['areas']['test_area'].id,
             filename="direct_a.jpg",
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         # Access hospital A's direct upload
         response = client.get(f"/analytics/direct/view/{direct_a.uuid}")
@@ -242,7 +237,7 @@ class TestTaskDetailsIsolation:
     """Test /analytics/viewTaskDetails/<id> route isolation."""
 
     def test_cross_hospital_task_view_forbidden(
-        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
     ):
         """User should not be able to view tasks from other hospitals."""
         # Create task for hospital B
@@ -264,11 +259,9 @@ class TestTaskDetailsIsolation:
             encounter_file_id=file_b.id,
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         # Try to access hospital B's task
         response = client.get(f"/analytics/viewTaskDetails/{task_b.id}")
@@ -277,7 +270,7 @@ class TestTaskDetailsIsolation:
         assert response.status_code == 404
 
     def test_own_hospital_task_view_allowed(
-        self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
+        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
     ):
         """User should be able to view tasks from their hospital."""
         # Create task for hospital A
@@ -299,11 +292,9 @@ class TestTaskDetailsIsolation:
             encounter_file_id=file_a.id,
         )
 
-        client.post(
-            "/login",
-            data={"username": hosp_a_data_manager.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = hosp_a_data_manager.id
+            sess['_fresh'] = True
 
         # Access hospital A's task
         response = client.get(f"/analytics/viewTaskDetails/{task_a.id}")
@@ -316,7 +307,7 @@ class TestGlobalAdminBypass:
     """Test that global admins can access all data."""
 
     def test_global_admin_can_view_all_hospitals(
-        self, client, master_admin, hospital_data, db_session, test_metadata
+        self, client, master_admin, hospital_data, db_session, login_user, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
         # Create data for hospital B
@@ -334,6 +325,11 @@ class TestGlobalAdminBypass:
         direct_b = TestDataFactory.create_direct_image_upload(
             db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            uploader_id=master_admin.id,
+            hospital_id=hospital_data['hospital_b']['hospital'].id,
+            camera_id=test_metadata['cameras']['test_camera'].id,
+            disease_id=test_metadata['diseases']['dr'].id,
+            area_id=test_metadata['areas']['test_area'].id,
             filename="direct_b.jpg",
         )
         task_b = TestDataFactory.create_grading_task(
@@ -343,11 +339,9 @@ class TestGlobalAdminBypass:
             encounter_file_id=file_b.id,
         )
 
-        client.post(
-            "/login",
-            data={"username": master_admin.username, "password": "Test@2026"},
-            follow_redirects=True,
-        )
+        with client.session_transaction() as sess:
+            sess['user_id'] = master_admin.id
+            sess['_fresh'] = True
 
         # Should be able to view encounter from hospital B
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")

@@ -5,6 +5,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session as DBSession, selectinload
 from models import Job, JobItem, LabUnit
 from db_transaction_manager import transaction_scope
+from utils.log_sanitize import sanitize_log_value
 
 def db_create_job(
     filenames: List[str],
@@ -88,14 +89,16 @@ def db_get_job_payload(job_token: str) -> dict | None:
         job = db.query(Job).filter_by(token=job_token).first()
         if not job:
             return None
+        is_export = job.upload_type in ("discrepancy_export", "dataset_export")
+        
         return {
             "id": job.id,
             "token": job.token,
             "status": job.status,
             "error": job.error,
-            "rejected_summary": job.rejected_summary,
+            "rejected_summary": sanitize_log_value(job.rejected_summary) if is_export else job.rejected_summary,
             "uploader_user_id": job.uploader_user_id,
-            "uploader_username": job.uploader_username,
+            "uploader_username": sanitize_log_value(job.uploader_username),
             "uploader_ip": job.uploader_ip,
             "lab_unit_id": job.lab_unit_id,
             "lab_unit_name": job.lab_unit.name if getattr(job, "lab_unit", None) else None,
@@ -105,11 +108,11 @@ def db_get_job_payload(job_token: str) -> dict | None:
             "items": [
                 {
                     "id": it.id,
-                    "filename": it.filename,
+                    "filename": sanitize_log_value(it.filename) if is_export else it.filename,
                     "state": it.state,
-                    "detail": it.detail,
+                    "detail": sanitize_log_value(it.detail) if is_export else it.detail,
                     "uploader_user_id": it.uploader_user_id,
-                    "uploader_username": it.uploader_username,
+                    "uploader_username": sanitize_log_value(it.uploader_username),
                     "uploader_ip": it.uploader_ip,
                     "started_at": it.started_at.isoformat() + "Z" if it.started_at else None,
                     "finished_at": it.finished_at.isoformat() + "Z" if it.finished_at else None,

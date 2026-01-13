@@ -25,6 +25,8 @@ from models import (
     Session,
     User,
 )
+from db_transaction_manager import get_db_session
+from sqlalchemy import select
 
 from utils.hospital_scoping import apply_scoping
 from .discrepancy_export import enqueue_discrepancy_export, EXPORT_DIR
@@ -42,8 +44,8 @@ def discrepancy_review():
     data access is properly restricted. Admin users will see all
     lab units, while data_managers will only see their assigned units.
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
+        # Scope lab units to user's explicit associations (no admin override)
         # Scope lab units to user's explicit associations (no admin override)
         lu_query = select(LabUnit).order_by(LabUnit.hospital_id, LabUnit.name)
         lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
@@ -383,16 +385,12 @@ def discrepancy_review():
                 "ai_review_status": ai_review_statuses,
             },
         )
-    finally:
-        db.close()
 
 
 @bp.route("/discrepancy-export", methods=["POST"])
 @roles_required("admin", "data_manager",  "data_exporter")
 def discrepancy_export():
-    """Queue a background export for the current discrepancy filters."""
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Scope lab units to user's explicit associations for export
         lu_query = sa.select(LabUnit)
         lu_query = apply_scoping(lu_query, LabUnit, current_user, "view")
@@ -457,8 +455,6 @@ def discrepancy_export():
         enqueue_discrepancy_export(current_app._get_current_object(), job_token, filters, {"user_id": current_user.id})
         flash("Export queued. You can monitor progress in Jobs.", "info")
         return redirect(url_for("jobs.job_status_page", job_token=job_token))
-    finally:
-        db.close()
 
 @bp.route("/discrepancy-export/<job_token>/<path:filename>", methods=["GET"])
 @roles_required("admin",  "data_manager", "data_exporter")

@@ -9,6 +9,7 @@ from utils.emails import send_password_reset_email
 from auth.route_analyzer import analyze_all_routes, get_role_usage_statistics, get_routes_by_role
 from models import User, Role
 from db_transaction_manager import transaction_scope, get_db_session
+from utils.log_sanitize import sanitize_log_value
 
 
 def change_password():
@@ -66,8 +67,8 @@ def change_password():
                 getattr(current_user, "username", "unknown"),
                 username,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning("Audit logging failed: %s", sanitize_log_value(e))
 
         flash(f"Password updated for '{username}'.", "success")
         return redirect(url_for("admin.change_password", username=username))

@@ -14,6 +14,7 @@ from auth.security import (
     generate_strong_password,
 )
 from utils.emails import send_email_sync
+from utils.log_sanitize import sanitize_log_value
 from models import User, Role, Hospital, LabUnit
 from db_transaction_manager import transaction_scope, get_db_session
 from utils.timezone_choices import (
@@ -481,8 +482,8 @@ def users_update(user_id: int):
                 user.username,
                 user.is_active,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning("Failed to log user update: %s", sanitize_log_value(e))
 
     flash("User updated.", "success")
     return redirect(url_for("admin.users_list"))

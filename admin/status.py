@@ -295,8 +295,8 @@ def get_recent_activity(limit=10):
                 'timestamp': maintenance_status['last_run'].get('completed_at'),
                 'status': maintenance_status['last_run'].get('status', 'unknown')
             })
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning("Failed to fetch recent maintenance activity: %s", sanitize_log_value(e))
 
     # Recent thumbnail statistics changes
     try:
@@ -320,8 +320,8 @@ def get_recent_activity(limit=10):
                 'status': 'warning' if missing_percentage > 10 else 'info',
                 'percentage': f'{100 - missing_percentage:.1f}%'
             })
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning("Failed to fetch recent thumbnail activity: %s", sanitize_log_value(e))
 
     # Health status changes
     try:
@@ -335,8 +335,8 @@ def get_recent_activity(limit=10):
                 'status': health.get('status', 'unknown'),
                 'issues_count': len(health.get('issues', []))
             })
-    except Exception:
-        pass
+    except Exception as e:
+        current_app.logger.warning("Failed to fetch recent health activity: %s", sanitize_log_value(e))
 
     # Sort by timestamp and limit
     recent_activity.sort(key=lambda x: x.get('timestamp', datetime.min), reverse=True)

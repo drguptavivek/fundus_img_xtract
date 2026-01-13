@@ -305,8 +305,8 @@ def disk_usage():
                 for item in files_root.iterdir():
                     if item.is_dir() and item.name.startswith("dupmd5_"):
                         return True
-        except Exception:
-            pass
+        except Exception as e:
+            current_app.logger.warning("Failed to check for dupmd5 at root: %s", sanitize_log_value(e))
         return False
     
     has_dupmd5 = has_dupmd5_directory(all_directories) or has_dupmd5_at_root()

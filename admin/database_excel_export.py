@@ -104,8 +104,8 @@ def database_excel_export():
             # Clean up temp file
             try:
                 temp_file.unlink()
-            except Exception:
-                pass
+            except Exception as e:
+                current_app.logger.warning("Failed to cleanup temp export file: %s", sanitize_log_value(e))
             
             return response
             

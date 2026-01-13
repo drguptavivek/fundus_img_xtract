@@ -82,7 +82,8 @@ def load_user(user_id: str):
     cache_key = f"auth:user:{user_id}"
     try:
         cached = cache.get(cache_key)
-    except Exception:
+    except Exception as e:
+        auth_logger.warning("Cache get failed: %s", sanitize_log_value(e))
         cached = None
     if cached:
         return _build_user_from_cache(cached)
@@ -107,8 +108,8 @@ def load_user(user_id: str):
             db.expunge(user)
             try:
                 cache.set(cache_key, _serialize_user_for_cache(user), timeout=_USER_CACHE_TTL_SECONDS)
-            except Exception:
-                pass
+            except Exception as e:
+                auth_logger.warning("Cache set failed: %s", sanitize_log_value(e))
         return user
     finally:
         db.close()

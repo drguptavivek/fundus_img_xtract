@@ -59,6 +59,7 @@ This directory contains comprehensive audit documentation for all Flask blueprin
 ### Critical/Important
 
 - **[JavaScript](javascript.md)** - 🔴 2 Critial XSS (fixed), 1 Library issue
+- **[Dependencies](dependencies.md)** - ✅ Clean (pip updated)
 - **[Admin Blueprint](admin.md)** - 🔴 SQL injection issues, error handling
 - **[Auth Blueprint](auth.md)** - 🟡 Minor error handling issue
 

@@ -131,19 +131,7 @@ def encounter_results() -> str:
             )
             task_details = fetch_image_task_details(db, tasks)
 
-        # Determine PII masking
-        mask_pii = False
-        if encounters:
-            # Check the first encounter's hospital for masking decision
-            first_enc = encounters[0]
-            data_hospital_id = first_enc.lab_unit.hospital_id if first_enc.lab_unit else None
-            mask_pii = should_mask_pii(
-                current_user_hospital_id=current_user.hospital_id,
-                data_hospital_id=data_hospital_id,
-                current_user_role=current_user.roles[0].name if current_user.roles else None
-            )
-
-        encounter_rows = build_encounter_result_payload(encounters, task_details, mask_pii=mask_pii)
+        encounter_rows = build_encounter_result_payload(encounters, task_details)
 
         # Filter hospitals and lab units to only those the user has access to
         lab_units_query = db.query(LabUnit)

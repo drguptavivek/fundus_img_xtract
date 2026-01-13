@@ -4,8 +4,8 @@ from analytics.utils import build_encounter_result_payload
 from analytics.encounterUtils import get_encounter_summary
 from models import PatientEncounters, LabUnit, Hospital, User, Role, ZipFile
 
-def test_build_encounter_result_payload_masks_pii(app):
-    """Verify that build_encounter_result_payload correctly masks PII when requested."""
+def test_build_encounter_result_payload_always_masks_pii(app):
+    """Verify that build_encounter_result_payload always masks PII."""
     with app.app_context():
         # Mock encounter object
         class MockEncounter:
@@ -17,21 +17,17 @@ def test_build_encounter_result_payload_masks_pii(app):
                 self.dr_reports = []
                 self.encounter_files = []
                 self.lab_unit = None
-
+ 
         encounters = [MockEncounter()]
         task_details = []
         
-        # Test with mask_pii=False
-        payload = build_encounter_result_payload(encounters, task_details, mask_pii=False)
-        assert payload[0]["patient_name"] == "John Doe"
-        
-        # Test with mask_pii=True
-        payload = build_encounter_result_payload(encounters, task_details, mask_pii=True)
+        # Test (should mask regardless of any flags if they existed, but we removed them)
+        payload = build_encounter_result_payload(encounters, task_details)
         assert payload[0]["patient_name"] == "Anonymous"
         assert payload[0]["patient_id"].startswith("P****")
 
-def test_get_encounter_summary_masks_pii(db_session, app):
-    """Verify get_encounter_summary masks PII for cross-hospital access."""
+def test_get_encounter_summary_always_masks_pii(db_session, app):
+    """Verify get_encounter_summary masks PII for ALL users (same hospital and cross-hospital)."""
     with app.app_context():
         # Find existing hospitals and users
         hospitals = db_session.query(Hospital).limit(2).all()
@@ -63,8 +59,8 @@ def test_get_encounter_summary_masks_pii(db_session, app):
         db_session.flush()
 
         # Create one unique encounter using a VERY high ID to avoid collisions
-        UID = 1000000 + int(uuid.uuid4().int % 100000)
-        z = ZipFile(id=UID, zip_filename=f"pii_{uuid.uuid4().hex[:6]}.zip", md5_hash=uuid.uuid4().hex)
+        UID = 3000000 + int(uuid.uuid4().int % 100000)
+        z = ZipFile(id=UID, zip_filename=f"pii_mand_{uuid.uuid4().hex[:6]}.zip", md5_hash=uuid.uuid4().hex)
         db_session.add(z)
         db_session.flush()
         
@@ -79,51 +75,42 @@ def test_get_encounter_summary_masks_pii(db_session, app):
         db_session.add(enc)
         db_session.flush()
         
-        # Test same-hospital access
+        # Test same-hospital access (MUST BE MASKED NOW)
         summary = get_encounter_summary(enc.id, u_same)
         assert summary is not None
-        assert summary["encounter_name"] == "Secret Patient"
+        assert summary["encounter_name"] == "Anonymous"
+        assert summary["encounter_patient_id"].startswith("P****")
         
-        # Test cross-hospital access
+        # Test cross-hospital access (MUST BE MASKED)
         summary = get_encounter_summary(enc.id, u_cross)
         assert summary is not None
         assert summary["encounter_name"] == "Anonymous"
         assert summary["encounter_patient_id"].startswith("P****")
 
-def test_analytics_viewer_always_sees_masked_pii(db_session, app):
-    """Verify analytics_viewer role always sees masked PII even in same hospital."""
+def test_admin_always_sees_masked_pii_in_analytics(db_session, app):
+    """Verify master admin also sees masked PII in analytics."""
     with app.app_context():
         # Find any hospital and lab unit
         lu1 = db_session.query(LabUnit).first()
         if not lu1:
              pytest.skip("No LabUnits found in seed")
-        h1 = lu1.hospital
         
-        user = db_session.query(User).first()
-        user.hospital_id = h1.id
-        user.is_master_admin = False
-        
-        role_av = db_session.query(Role).filter_by(name="analytics_viewer").first()
-        if not role_av:
-            role_id = 900000 + int(uuid.uuid4().int % 100000)
-            role_av = Role(id=role_id, name="analytics_viewer")
-            db_session.add(role_av)
+        admin = db_session.query(User).filter_by(is_master_admin=True).first()
+        if not admin:
+            # Create a master admin if not found (unlikely in seed)
+            admin = User(username=f"temp_admin_{uuid.uuid4().hex[:4]}", is_master_admin=True)
+            db_session.add(admin)
             db_session.flush()
-            
-        user.roles = [role_av]
-        # Assign lab unit so apply_scoping doesn't block access
-        user.lab_units = [lu1]
-        db_session.flush()
 
-        UID = 2000000 + int(uuid.uuid4().int % 100000)
-        z = ZipFile(id=UID, zip_filename=f"pii_av_{uuid.uuid4().hex[:6]}.zip", md5_hash=uuid.uuid4().hex)
+        UID = 4000000 + int(uuid.uuid4().int % 100000)
+        z = ZipFile(id=UID, zip_filename=f"pii_admin_{uuid.uuid4().hex[:6]}.zip", md5_hash=uuid.uuid4().hex)
         db_session.add(z)
         db_session.flush()
         
         enc = PatientEncounters(
             id=UID,
-            name="Visible Patient",
-            patient_id="VISIBLE123",
+            name="Admin Secret",
+            patient_id="ADMIN123",
             capture_date="2023-01-01",
             lab_unit_id=lu1.id,
             zip_file_id=z.id
@@ -131,8 +118,8 @@ def test_analytics_viewer_always_sees_masked_pii(db_session, app):
         db_session.add(enc)
         db_session.flush()
         
-        # Test analytics_viewer same-hospital access (should be masked)
-        summary = get_encounter_summary(enc.id, user)
+        # Admin same-hospital access (should be masked in analytics)
+        summary = get_encounter_summary(enc.id, admin)
         assert summary is not None
         assert summary["encounter_name"] == "Anonymous"
         assert summary["encounter_patient_id"].startswith("P****")

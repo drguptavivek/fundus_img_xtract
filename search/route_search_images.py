@@ -336,7 +336,7 @@ def search_image_detail(task_id: int) -> str:
         if not task:
             abort(404, description="Task not found or access denied")
 
-        task_details = get_task_detail(db, task_id)
+        task_details = get_task_detail(db, task_id, mask_pii_override=True)
         if not task_details:
             abort(404, description="Task not found or access denied")
 

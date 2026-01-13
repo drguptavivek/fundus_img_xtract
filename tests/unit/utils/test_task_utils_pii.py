@@ -208,3 +208,31 @@ def test_get_task_detail_data_manager_cross_hospital(mock_scoping, mock_current_
     # Verify
     assert result['patient_id'] == 'P****678'
     assert result['patient_name'] == 'Anonymous'
+
+
+@patch('utils.taskUtils.current_user')
+@patch('utils.taskUtils.apply_scoping')
+def test_get_task_detail_with_override_masks_for_admin(mock_scoping, mock_current_user, mock_db_session, mock_task):
+    """
+    Test Case 7: Global Admin with mask_pii_override=True
+    Expectation: PII is MASKED despite admin role.
+    """
+    # Setup User: Global Admin
+    mock_current_user.is_authenticated = True
+    mock_current_user.hospital_id = 1
+    
+    role_admin = MagicMock()
+    role_admin.name = 'admin'
+    mock_current_user.roles = [role_admin]
+    
+    # Setup DB Query Mock
+    mock_query = MagicMock()
+    mock_scoping.return_value = mock_query
+    mock_query.filter.return_value.options.return_value.first.return_value = mock_task
+    
+    # Execute with override
+    result = get_task_detail(mock_db_session, 1, mask_pii_override=True)
+    
+    # Verify
+    assert result['patient_id'] == 'P****678'
+    assert result['patient_name'] == 'Anonymous'

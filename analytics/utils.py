@@ -352,7 +352,6 @@ def group_task_details_by_image(task_details: Sequence[Dict[str, Any]]) -> Dict[
 def build_encounter_result_payload(
     encounters: Sequence[PatientEncounters],
     task_details: Sequence[Dict[str, Any]],
-    mask_pii: bool = False,
 ) -> List[Dict[str, Any]]:
     tasks_by_image = group_task_details_by_image(task_details)
     payload: List[Dict[str, Any]] = []
@@ -361,11 +360,8 @@ def build_encounter_result_payload(
         glaucoma_info = _latest_glaucoma_cleaned(encounter.glaucoma_results_cleaned)
         dr_info = _latest_dr_report(encounter.dr_reports)
 
-        patient_id = encounter.patient_id
-        patient_name = encounter.name
-        if mask_pii:
-            patient_id = mask_patient_id(patient_id)
-            patient_name = mask_patient_name(patient_name)
+        patient_id = mask_patient_id(encounter.patient_id)
+        patient_name = mask_patient_name(encounter.name)
 
         images: List[Dict[str, Any]] = []
         for image in sorted(encounter.encounter_files, key=lambda ef: ((ef.eye_side or ""), ef.id)):

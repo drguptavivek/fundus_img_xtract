@@ -119,20 +119,10 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
                 })
         
         # Prepare PII masking
-        from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
+        from utils.pii_masking import mask_patient_id, mask_patient_name
         
-        # We need to know the data's hospital ID, but for an encounter summary, 
-        # it's usually the same across the whole object.
-        data_hospital_id = encounter.lab_unit.hospital_id if encounter.lab_unit else None
-        
-        mask_pii = should_mask_pii(
-            current_user_hospital_id=user.hospital_id,
-            data_hospital_id=data_hospital_id,
-            current_user_role=user.roles[0].name if user.roles else None
-        )
-
-        display_patient_id = mask_patient_id(encounter.patient_id) if mask_pii else encounter.patient_id
-        display_name = mask_patient_name(encounter.name) if mask_pii else encounter.name
+        display_patient_id = mask_patient_id(encounter.patient_id)
+        display_name = mask_patient_name(encounter.name)
 
         # Format the response
         encounter_summary = {
@@ -262,19 +252,12 @@ def get_encounters_summary_list(user: User, filters=None):
                         GradingTask.state.in_(['final'])
                     ).count()
             
-            from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
+            from utils.pii_masking import mask_patient_id, mask_patient_name
             
-            data_hospital_id = encounter.lab_unit.hospital_id if encounter.lab_unit else None
-            mask_pii = should_mask_pii(
-                current_user_hospital_id=user.hospital_id,
-                data_hospital_id=data_hospital_id,
-                current_user_role=user.roles[0].name if user.roles else None
-            )
-
             summary_list.append({
                 'id': encounter.id,
-                'name': mask_patient_name(encounter.name) if mask_pii else encounter.name,
-                'patient_id': mask_patient_id(encounter.patient_id) if mask_pii else encounter.patient_id,
+                'name': mask_patient_name(encounter.name),
+                'patient_id': mask_patient_id(encounter.patient_id),
                 'capture_date': encounter.capture_date,
                 'image_count': image_count,
                 'task_count': task_count,

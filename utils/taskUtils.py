@@ -134,12 +134,13 @@ def get_task_summary(
     return task_list, total_count
 
 
-def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
+def get_task_detail(db_session, task_id: int, mask_pii_override: bool = False) -> Optional[Dict[str, Any]]:
     """Get detailed information about a specific task including grades and consensus.
     
     Args:
         db_session: Database session to use for queries
         task_id: ID of the task to retrieve details for
+        mask_pii_override: If True, always mask PII regardless of user role/hospital
     
     Returns:
         Dictionary with task details or None if task not found
@@ -157,13 +158,18 @@ def get_task_detail(db_session, task_id: int) -> Optional[Dict[str, Any]]:
         joinedload(Task.grades)
     ).first()
     
+    if not task:
+        return None
+
     # Determine if PII should be masked based on hospital context
     current_user_hospital_id = current_user.hospital_id if current_user.is_authenticated else None
     task_hospital_id = task.lab_unit.hospital_id if task.lab_unit else None
     
     mask_pii = True  # Default to masking for safety
     
-    if current_user.is_authenticated:
+    if mask_pii_override:
+        mask_pii = True
+    elif current_user.is_authenticated:
         user_roles = [r.name for r in current_user.roles]
         
         # 1. Global Admin always sees PII

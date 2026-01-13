@@ -22,7 +22,8 @@ from utils.datetime_filters import format_user_datetime
 from utils.timezone_choices import DEFAULT_TIMEZONE
 from server_side_session import DatabaseSessionInterface, mark_session_ended
 from utils.rate_limiter import init_rate_limiting, rate_limit
-from utils.security_middleware import PayloadSizeValidator
+from utils.rate_limiter import init_rate_limiting, rate_limit
+from utils.security_middleware import PayloadSizeValidator, is_safe_url
 from utils.env_loader import load_environment
 from utils.env_loader import get_env
 from utils.redis_connection import build_redis_url
@@ -663,7 +664,10 @@ def _register_error_handlers(app: Flask) -> None:
         )
 
         flash(e.description or "Security check failed. Please try again.", "danger")
-        return redirect(request.referrer or url_for("homepage")), 400
+        target = request.referrer or url_for("homepage")
+        if not is_safe_url(target):
+            target = url_for("homepage")
+        return redirect(target), 400
 
     @app.errorhandler(404)
     def handle_404(e):

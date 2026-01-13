@@ -14,6 +14,7 @@ from models import GradingTask, LabUnit, Grade, DiseaseGrading, GradingsFeatures
 
 from utils.hospital_scoping import apply_scoping
 from utils.taskUtils import get_task_detail
+from utils.security_middleware import is_safe_url
 from utils.dualGradingEligibility import get_user_eligibility_for_task
 from utils.masterUtils import fetch_active_disease_gradings
 from utils.dualGradingFetchDetailUtils import get_user_gradings_with_details
@@ -274,7 +275,7 @@ def review_task_details(task_id: int):
                 )
 
             if action == "cancel_next":
-                if return_to and return_to.startswith("/") and not return_to.startswith("//") and effective_next_task_id:
+                if return_to and is_safe_url(return_to) and effective_next_task_id:
                     return redirect(
                         url_for(
                             'review.review_task_details',
@@ -290,7 +291,7 @@ def review_task_details(task_id: int):
                             **next_redirect_params,
                         )
                     )
-                if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+                if return_to and is_safe_url(return_to):
                     return redirect(return_to)
                 return redirect(url_for('review.discrepancy_review'))
 
@@ -468,7 +469,7 @@ def review_task_details(task_id: int):
                 _kick_off_mv_refresh(current_app._get_current_object())
             except Exception:
                 grades_logger.warning("Post-review MV refresh trigger failed", exc_info=True)
-            if return_to and return_to.startswith("/") and not return_to.startswith("//"):
+            if return_to and is_safe_url(return_to):
                 if action in {"save_next", "cancel_next"} and effective_next_task_id:
                     return redirect(
                         url_for(

@@ -190,14 +190,14 @@ def upload_file():
             )
             # Clean up temp files
             shutil.rmtree(temp_dir, ignore_errors=True)
-            return jsonify({'error': f'Failed to process file: {str(e)}'}), 400
+            return jsonify({'error': 'Failed to process file. Please check the logs.'}), 400
 
     except Exception as e:
         logger.error(
             "File upload failed: %s",
             sanitize_log_value(e),
         )
-        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+        return jsonify({'error': 'Upload failed. Please check the logs.'}), 500
 
 
 @bp.route('/restore', methods=['POST'])
@@ -259,12 +259,14 @@ def restore_database():
             )
 
             # Extract more helpful error message for common issues
-            error_msg = str(e)
-            if "UndefinedColumn" in error_msg:
+            error_raw = str(e)
+            error_msg = "An internal error occurred during restore. Please check the logs."
+            
+            if "UndefinedColumn" in error_raw:
                 error_msg = "Database schema mismatch: The backup file contains columns that don't exist in the current database. Please check the backup file schema."
-            elif "relation" in error_msg and "does not exist" in error_msg:
+            elif "relation" in error_raw and "does not exist" in error_raw:
                 error_msg = "Table missing: The backup file references tables that don't exist in the current database."
-            elif "duplicate key" in error_msg.lower():
+            elif "duplicate key" in error_raw.lower():
                 error_msg = "Duplicate data: The backup file contains data that already exists in the database."
 
             return jsonify({'error': f'Restore failed: {error_msg}'}), 500
@@ -283,7 +285,7 @@ def restore_database():
             "Restore process failed: %s",
             sanitize_log_value(e),
         )
-        return jsonify({'error': f'Restore process failed: {str(e)}'}), 500
+        return jsonify({'error': 'Restore process failed. Please check the logs.'}), 500
 
 
 def remove_user_statements(sql_content, preserve_users=True):
@@ -592,4 +594,4 @@ def cancel_restore():
             "Failed to cancel restore: %s",
             sanitize_log_value(e),
         )
-        return jsonify({'error': f'Failed to cancel: {str(e)}'}), 500
+        return jsonify({'error': 'Failed to cancel operation. Please check the logs.'}), 500

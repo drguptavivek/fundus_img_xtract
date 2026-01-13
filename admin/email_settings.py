@@ -138,12 +138,23 @@ def create_email_settings():
             flash("Email settings created successfully!", "success")
             return redirect(url_for("admin.email_settings_list"))
 
+        except EmailConfigError as e:
+            logger.warning(
+                "Email configuration error (create): %s",
+                sanitize_log_value(e),
+            )
+            flash(str(e), "danger")
+            return render_template(
+                "admin/email_settings_create.html",
+                form_data=request.form
+            )
+
         except Exception as e:
             logger.error(
                 "Failed to create email settings: %s",
                 sanitize_log_value(e),
             )
-            flash(f"Failed to create email settings: {str(e)}", "danger")
+            flash("Failed to create email settings. Please check the logs.", "danger")
             return render_template(
                 "admin/email_settings_create.html",
                 form_data=request.form
@@ -260,12 +271,24 @@ def edit_email_settings(settings_id: int):
                 flash("Email settings updated successfully!", "success")
                 return redirect(url_for("admin.email_settings_list"))
 
+            except EmailConfigError as e:
+                logger.warning(
+                    "Email configuration error (update): %s",
+                    sanitize_log_value(e),
+                )
+                flash(str(e), "danger")
+                return render_template(
+                    "admin/email_settings_edit.html",
+                    email_settings=email_settings,
+                    form_data=request.form
+                )
+
             except Exception as e:
                 logger.error(
                     "Failed to update email settings: %s",
                     sanitize_log_value(e),
                 )
-                flash(f"Failed to update email settings: {str(e)}", "danger")
+                flash("Failed to update email settings. Please check the logs.", "danger")
                 return render_template(
                     "admin/email_settings_edit.html",
                     email_settings=email_settings,
@@ -306,6 +329,13 @@ def test_email_settings(settings_id: int):
                 "message": message
             })
 
+        except EmailConfigError as e:
+            logger.warning("Email test config error: %s", sanitize_log_value(e))
+            return jsonify({
+                "success": False,
+                "message": f"Configuration error: {str(e)}"
+            }), 400
+
         except Exception as e:
             logger.error(
                 "Email settings test failed: %s",
@@ -313,7 +343,7 @@ def test_email_settings(settings_id: int):
             )
             return jsonify({
                 "success": False,
-                "message": f"Test failed: {str(e)}"
+                "message": "Test failed due to an internal error. Please check the logs."
             }), 500
 
 
@@ -350,7 +380,7 @@ def delete_email_settings(settings_id: int):
                 "Failed to delete email settings: %s",
                 sanitize_log_value(e),
             )
-            flash(f"Failed to delete email settings: {str(e)}", "danger")
+            flash("Failed to delete email settings. Please check the logs.", "danger")
 
         return redirect(url_for("admin.email_settings_list"))
 
@@ -393,7 +423,7 @@ def activate_email_settings(settings_id: int):
                 "Failed to activate email settings: %s",
                 sanitize_log_value(e),
             )
-            flash(f"Failed to activate email settings: {str(e)}", "danger")
+            flash("Failed to activate email settings. Please check the logs.", "danger")
 
         return redirect(url_for("admin.email_settings_list"))
 
@@ -418,7 +448,7 @@ def api_test_current_email_config():
         )
         return jsonify({
             "success": False,
-            "message": f"Test failed: {str(e)}"
+            "message": "Test failed. Please check the logs."
         }), 500
 
 
@@ -531,7 +561,7 @@ Fundus Image Manager Team
             )
             return jsonify({
                 "success": False,
-                "message": f"Failed to send email: {str(email_error)}"
+                "message": "Failed to send email. Please check the logs."
             }), 500
 
     except Exception as e:
@@ -541,5 +571,5 @@ Fundus Image Manager Team
         )
         return jsonify({
             "success": False,
-            "message": f"An error occurred: {str(e)}"
+            "message": "An error occurred while sending the email. Please check the logs."
         }), 500

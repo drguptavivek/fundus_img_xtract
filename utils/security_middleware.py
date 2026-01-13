@@ -10,7 +10,9 @@ from flask import request, jsonify, current_app, g, abort, Response
 from functools import wraps
 import json
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.exceptions import RequestEntityTooLarge
 from utils.log_sanitize import sanitize_log_value
+from urllib.parse import urlparse, urljoin
 
 # Configure logger
 security_logger = logging.getLogger("security")
@@ -323,4 +325,25 @@ def protect_form_submission(max_fields: int = 100, max_field_length: int = 1024)
             return f(*args, **kwargs)
         
         return wrapped
+        return wrapped
     return decorator
+
+
+def is_safe_url(target: str) -> bool:
+    """
+    Ensure a URL is safe for redirection (same origin).
+    
+    Args:
+        target: The target URL to check
+        
+    Returns:
+        bool: True if URL is safe, False otherwise
+    """
+    if not target:
+        return False
+        
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    
+    return test_url.scheme in ('http', 'https') and \
+           ref_url.netloc == test_url.netloc

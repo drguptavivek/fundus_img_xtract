@@ -184,7 +184,7 @@ def api_thumbnail_stats():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -205,7 +205,7 @@ def api_maintenance_status():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -230,7 +230,7 @@ def api_manual_maintenance():
         )
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': 'Internal system error. Please check the logs.',
             'task_type': task_type
         }), 500
 
@@ -252,7 +252,7 @@ def api_cleanup_orphaned():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -276,7 +276,7 @@ def api_regenerate_missing():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -300,7 +300,7 @@ def api_validate_integrity():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -321,7 +321,7 @@ def api_full_maintenance():
         )
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Internal system error. Please check the logs.'
         }), 500
 
 
@@ -341,7 +341,7 @@ def get_system_health():
                 db.execute(text("SELECT 1")).fetchone()
             except Exception as e:
                 health_status['status'] = 'error'
-                health_status['issues'].append(f"Database connectivity error: {str(e)}")
+                health_status['issues'].append("Database connectivity error. Please check logs.")
 
         # Check scheduler status
         scheduler_enabled = current_app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False)
@@ -384,7 +384,7 @@ def get_system_health():
         )
         return {
             'status': 'error',
-            'issues': [f"Health check failed: {str(e)}"],
+            'issues': ["Health check failed due to internal error. Please check logs."],
             'recommendations': ['Check application logs', 'Verify system configuration'],
             'performance_metrics': {}
         }
@@ -407,7 +407,7 @@ def api_thumbnail_health_check():
                 db.execute(text("SELECT 1")).fetchone()
             except Exception as e:
                 health_status['overall_health'] = 'unhealthy'
-                health_status['issues'].append(f"Database connectivity error: {str(e)}")
+                health_status['issues'].append("Database connectivity error. Please check logs.")
 
         # Check scheduler status
         scheduler_enabled = current_app.config.get("THUMBNAIL_MAINTENANCE_ENABLED", False)
@@ -454,7 +454,7 @@ def api_thumbnail_health_check():
         )
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': 'Internal health check error. Please check logs.',
             'overall_health': 'error'
         }), 500
 

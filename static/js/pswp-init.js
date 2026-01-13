@@ -143,56 +143,56 @@
             if (currSlide?.data?.element) {
               caption = currSlide.data.element.getAttribute('title') || '';
             }
-            el.innerHTML = caption;
+            el.textContent = caption;
           });
         }
       });
 
 
       // 🔍 Zoom slider
-     pswp.ui.registerElement({
-  name: 'zoom-slider',
-  order: 40,
-  isButton: false,
-  appendTo: 'bar',
-  html: '<input type="range" min="0.1" max="4" step="0.1" value="1" class="pswp__zoom-slider" aria-label="Zoom">',
-  onInit: (el, pswp) => {
-    const slider = el.querySelector('input');
+      pswp.ui.registerElement({
+        name: 'zoom-slider',
+        order: 40,
+        isButton: false,
+        appendTo: 'bar',
+        html: '<input type="range" min="0.1" max="4" step="0.1" value="1" class="pswp__zoom-slider" aria-label="Zoom">',
+        onInit: (el, pswp) => {
+          const slider = el.querySelector('input');
 
-    // ✅ Allow the slider's native drag; just stop the event from reaching PSWP.
-    const stopOnly = (e) => {
-      e.stopPropagation();                // do NOT call preventDefault here
-    };
-    ['pointerdown','pointermove','pointerup',
-     'touchstart','touchmove','touchend',
-     'mousedown','mousemove','mouseup','click']
-      .forEach(evt => slider.addEventListener(evt, stopOnly, { capture: true }));
+          // ✅ Allow the slider's native drag; just stop the event from reaching PSWP.
+          const stopOnly = (e) => {
+            e.stopPropagation();                // do NOT call preventDefault here
+          };
+          ['pointerdown', 'pointermove', 'pointerup',
+            'touchstart', 'touchmove', 'touchend',
+            'mousedown', 'mousemove', 'mouseup', 'click']
+            .forEach(evt => slider.addEventListener(evt, stopOnly, { capture: true }));
 
-    // Only the wheel should be fully swallowed to avoid wheel-zoom under the slider
-    slider.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-    }, { capture: true, passive: false });
+          // Only the wheel should be fully swallowed to avoid wheel-zoom under the slider
+          slider.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }, { capture: true, passive: false });
 
-    // Change zoom when slider moves
-    slider.addEventListener('input', () => {
-      const z = parseFloat(slider.value);
-      if (pswp.currSlide) {
-        pswp.currSlide.zoomTo(z, {
-          x: pswp.viewportSize.x / 2,
-          y: pswp.viewportSize.y / 2
-        }, true);
-      }
-    });
+          // Change zoom when slider moves
+          slider.addEventListener('input', () => {
+            const z = parseFloat(slider.value);
+            if (pswp.currSlide) {
+              pswp.currSlide.zoomTo(z, {
+                x: pswp.viewportSize.x / 2,
+                y: pswp.viewportSize.y / 2
+              }, true);
+            }
+          });
 
-    // Sync slider when zoom changes via pinch/wheel/dblclick
-    pswp.on('zoomPanUpdate', () => {
-      if (pswp.currSlide) {
-        slider.value = pswp.currSlide.currZoomLevel.toFixed(2);
-      }
-    });
-  }
-});
+          // Sync slider when zoom changes via pinch/wheel/dblclick
+          pswp.on('zoomPanUpdate', () => {
+            if (pswp.currSlide) {
+              slider.value = pswp.currSlide.currZoomLevel.toFixed(2);
+            }
+          });
+        }
+      });
 
     });
 

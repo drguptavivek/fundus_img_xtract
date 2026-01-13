@@ -24,25 +24,17 @@ GitHub's CodeQL scanner has identified **63 security vulnerabilities** across th
 
 ### 1. DOM XSS in JavaScript (3 instances)
 
-| Issue | File | Line | Type |
-|-------|------|------|------|
-| #3 | `static/js/quill.js` | 2 | Incomplete string escaping |
-| #2 | `static/js/flash-toasts.js` | 110 | DOM text reinterpreted as HTML |
-| #1 | `static/js/flash-toasts.js` | 104 | DOM text reinterpreted as HTML |
+| Issue | File | Line | Type | Status |
+|-------|------|------|------|--------|
+| #3 | `static/js/quill.js` | 2 | Incomplete string escaping | ℹ️ Library (Quill v2) |
+| #2 | `static/js/flash-toasts.js` | 110 | DOM text reinterpreted as HTML | ✅ **FIXED** |
+| #1 | `static/js/flash-toasts.js` | 104 | DOM text reinterpreted as HTML | ✅ **FIXED** |
+| - | `static/js/pswp-init.js` | 146 | innerHTML usage with title | ✅ **FIXED** |
 
 **Risk**: HIGH - Cross-Site Scripting (XSS) attacks possible  
 **Impact**: Attackers could inject malicious JavaScript
 
-**Fix**:
-```javascript
-// VULNERABLE:
-element.innerHTML = userInput;
-
-// SAFE:
-element.textContent = userInput;
-// OR for rich content:
-element.innerHTML = DOMPurify.sanitize(userInput);
-```
+**Fix Applied**: Replaced `innerHTML` / `insertAdjacentHTML` with safe `document.createElement()` and `textContent` APIs.
 
 ---
 

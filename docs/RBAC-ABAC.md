@@ -93,21 +93,30 @@ For detailed technical implementation of isolation, see [Scoping.md](03-Tasks/Sc
 
 ## Role-Blueprint PII Matrix
 
-The following matrix defines where PII (Patient Name, MRN, Phone) is visible (`✅`) versus masked/hidden (`❌`) across the system's core blueprints.
+The following matrix defines where PII (Patient Name, MRN, Phone) is visible (`✅`), masked (`M`), or hidden (`❌`) across the system's core blueprints.
 
-| Role | `direct_uploads` | `screenings` | `review` | `analytics` | `grading` |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `admin` (Master) | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `local_admin` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `data_manager` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `optometrist` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `discrepancy_reviewer`| ❌ | ❌ | ❌ | ❌ | ❌ |
-| `ophthalmologist` | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `analytics_viewer` | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `dataset_creator` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Role | `direct_uploads` | `screenings` | `verification` | `review` | `analytics` | `grading` | `jobs` |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `admin` (Master) | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| `local_admin` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | M |
+| `data_manager` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | M |
+| `optometrist` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | M |
+| `discrepancy_reviewer`| ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | M |
+| `ophthalmologist` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `analytics_viewer` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `dataset_creator` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `data_exporter` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `fileUploader` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | M |
 
 > [!NOTE]
-> **PII Inconsistency**: `local_admin` and `data_manager` only see PII in ingestion-related blueprints (`direct_uploads`, `screenings`). Once data moves to `review` or `analytics`, it is masked for everyone except Master Admins to ensure medical objectivity and data safety.
+> **Blueprint Definitions**:
+> - `verification`: Includes Remedio ZIP verification and post-upload quality checks.
+> - `review`: Includes Discrepancy Review and Dataset Exports.
+> - `analytics`: Includes Performance Dashboards and Dataset Curation.
+> - `jobs`: Monitoring payloads for background operations (sanitized by default).
+
+> [!NOTE]
+> **PII Inconsistency**: `local_admin` and `data_manager` only see PII in ingestion and verification stages. Once data moves to `review` or `analytics`, it is masked for everyone except Master Admins.
 
 ---
 
@@ -120,6 +129,7 @@ The system follows a "PII Firewall" model where most clinical staff work anonymi
 | **Data Manager** | Must resolve ingestion errors and EMR mismatches during the raw upload phase. | Own Hospital Only |
 | **Local Admin** | Responsible for hospital-level legal compliance and patient follow-up requests. | Own Hospital Only |
 | **Optometrist** | Required to verify patient identity *before* performing the anonymization step. | Own Hospital Only |
+| **fileUploader** | Handles initial ingestion where PII is naturally present in source files/EMR. | Own Hospital Only |
 
 > [!IMPORTANT]
 > **Discrepancy Reviewer**: Unlike early ingestion roles, the Discrepancy Reviewer does **not** need PII. They use anonymous UUIDs and masked clinical metadata to reach a "ground truth" without the risk of bias or data leakage.

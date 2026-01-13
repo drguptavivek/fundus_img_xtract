@@ -290,3 +290,167 @@ def get_password_for_use(encrypted_password: str) -> str:
         # If decryption fails, assume it's plaintext (for backward compatibility)
         logger.warning("Failed to decrypt password, assuming plaintext for backward compatibility")
         return encrypted_password
+
+
+# ============================================================================
+# Export File Encryption (AES-256-GCM)
+# ============================================================================
+
+def generate_export_key(password: str, salt: bytes = None) -> bytes:
+    """
+    Generate AES-256 encryption key from password using PBKDF2.
+    
+    Args:
+        password: User-provided password for encryption
+        salt: Optional salt (32 bytes). If None, generates new random salt.
+    
+    Returns:
+        tuple: (key, salt) - 32-byte AES-256 key and salt used
+    
+    Reference: docs/PII_Exposure_Control_Policy.md Section 6A.4
+    Bead: 5N-3 (fundus_img_xtract-o25)
+    """
+    if salt is None:
+        salt = secrets.token_bytes(32)
+    
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,  # 256 bits for AES-256
+        salt=salt,
+        iterations=100000,
+    )
+    key = kdf.derive(password.encode())
+    
+    return key, salt
+
+
+def encrypt_export_file(file_path: str, password: str, output_path: str = None) -> str:
+    """
+    Encrypt a file using AES-256-GCM with password-based key derivation.
+    
+    Args:
+        file_path: Path to file to encrypt
+        password: Password for encryption
+        output_path: Optional output path. If None, appends .enc to original filename.
+    
+    Returns:
+        str: Path to encrypted file
+    
+    Raises:
+        EncryptionError: If encryption fails
+    
+    File format:
+        [32 bytes salt][12 bytes nonce][16 bytes tag][encrypted data]
+    
+    Reference: docs/PII_Exposure_Control_Policy.md Section 6A.4
+    """
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        
+        # Read the file to encrypt
+        with open(file_path, 'rb') as f:
+            plaintext = f.read()
+        
+        # Generate key and salt
+        key, salt = generate_export_key(password)
+        
+        # Generate random nonce (12 bytes for GCM)
+        nonce = secrets.token_bytes(12)
+        
+        # Encrypt using AES-256-GCM
+        aesgcm = AESGCM(key)
+        ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+        
+        # Determine output path
+        if output_path is None:
+            output_path = file_path + '.enc'
+        
+        # Write encrypted file: salt + nonce + ciphertext (which includes auth tag)
+        with open(output_path, 'wb') as f:
+            f.write(salt)  # 32 bytes
+            f.write(nonce)  # 12 bytes
+            f.write(ciphertext)  # encrypted data + 16 byte tag
+        
+        logger.info(
+            "Successfully encrypted file: %s -> %s",
+            sanitize_log_value(file_path),
+            sanitize_log_value(output_path)
+        )
+        
+        return output_path
+        
+    except Exception as e:
+        logger.error(
+            "Failed to encrypt export file %s: %s",
+            sanitize_log_value(file_path),
+            sanitize_log_value(e)
+        )
+        raise EncryptionError(f"Failed to encrypt export file: {str(e)}")
+
+
+def decrypt_export_file(encrypted_path: str, password: str, output_path: str = None) -> str:
+    """
+    Decrypt a file encrypted with encrypt_export_file().
+    
+    Args:
+        encrypted_path: Path to encrypted file
+        password: Password used for encryption
+        output_path: Optional output path. If None, removes .enc extension.
+    
+    Returns:
+        str: Path to decrypted file
+    
+    Raises:
+        EncryptionError: If decryption fails (wrong password or corrupted file)
+    
+    Reference: docs/PII_Exposure_Control_Policy.md Section 6A.4
+    """
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        
+        # Read encrypted file
+        with open(encrypted_path, 'rb') as f:
+            data = f.read()
+        
+        # Extract components
+        if len(data) < 60:  # 32 + 12 + 16 minimum
+            raise EncryptionError("File too small to be valid encrypted export")
+        
+        salt = data[:32]
+        nonce = data[32:44]
+        ciphertext = data[44:]  # includes 16-byte auth tag
+        
+        # Derive key from password and salt
+        key, _ = generate_export_key(password, salt)
+        
+        # Decrypt using AES-256-GCM
+        aesgcm = AESGCM(key)
+        plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+        
+        # Determine output path
+        if output_path is None:
+            if encrypted_path.endswith('.enc'):
+                output_path = encrypted_path[:-4]
+            else:
+                output_path = encrypted_path + '.dec'
+        
+        # Write decrypted file
+        with open(output_path, 'wb') as f:
+            f.write(plaintext)
+        
+        logger.info(
+            "Successfully decrypted file: %s -> %s",
+            sanitize_log_value(encrypted_path),
+            sanitize_log_value(output_path)
+        )
+        
+        return output_path
+        
+    except Exception as e:
+        logger.error(
+            "Failed to decrypt export file %s: %s",
+            sanitize_log_value(encrypted_path),
+            sanitize_log_value(e)
+        )
+        raise EncryptionError(f"Failed to decrypt export file (wrong password or corrupted file): {str(e)}")
+

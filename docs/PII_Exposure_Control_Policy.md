@@ -1,7 +1,7 @@
 # PII Exposure Control Policy
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-01-11  
+**Document Version:** 1.1  
+**Last Updated:** 2026-01-13  
 **Owner:** Security Team  
 **Classification:** Internal
 
@@ -525,29 +525,34 @@ Provide an admin view to monitor sensitive operations:
 Based on gap analysis, the following implementation tasks are required:
 
 ### Phase 5A-5G (Core PII Protection)
-- [x] Bead 5A: Grading API Sanitization
-- [ ] Bead 5B: Optometrist Anonymization Workflow
-- [ ] Bead 5C: UI Template Defense
-- [ ] Bead 5D: Logging Audit
-- [ ] Bead 5E: Search & Utils Sanitization
-- [ ] Bead 5F: Analytics Anonymization
-- [ ] Bead 5G: Jobs & Review Audit
+- [x] Bead 5A (4g2): Grading API Sanitization - COMPLETED
+- [x] Bead 5B (jx8): Optometrist Anonymization Workflow - COMPLETED
+- [x] Bead 5C (e3j): UI Template Defense - COMPLETED
+- [x] Bead 5D (ej1): Logging Audit - COMPLETED
+- [x] Bead 5E (sy5): Search & Utils Sanitization - COMPLETED
+- [x] Bead 5F (51f): Analytics Anonymization - COMPLETED
+- [x] Bead 5G (55n): Jobs & Review Audit - COMPLETED
 
 ### Phase 5H-5M (Export & Admin Controls)
-- [ ] Bead 5H: KPI & Export Sanitization
-- [ ] Bead 5I: Screenings Hospital Verification
-- [ ] Bead 5J: Image Metadata Stripping
-- [ ] Bead 5K: Export Pipeline Sanitization
-- [ ] Bead 5L: Filename Anonymization
-- [ ] Bead 5M: Admin Export Audit & Controls
+- [x] Bead 5H (dcl): KPI & Export Sanitization - COMPLETED
+- [x] Bead 5I (det): Screenings Hospital Verification - COMPLETED
+- [x] Bead 5J (57m): Image Metadata Stripping - COMPLETED
+- [x] Bead 5K (f6n): Export Pipeline Sanitization - COMPLETED
+- [x] Bead 5L (las): Filename Anonymization - COMPLETED
+- [x] Bead 5M (tig): Admin Export Audit & Controls - COMPLETED
 
 ### Phase 5N (Enhanced Export Security)
-- [ ] Bead 5N-1: Create `SensitiveOperationAudit` model and migration
-- [ ] Bead 5N-2: Implement `@requires_reauth` decorator
-- [ ] Bead 5N-3: Create `utils/encrypted_export.py`
-- [ ] Bead 5N-4: Add `reauth_confirm.html` template
-- [ ] Bead 5N-5: Integrate with `database_dump.py`, `database_excel_export.py`
-- [ ] Bead 5N-6: Create `/admin/sensitive-operations-log` dashboard
+- [x] Bead 5N-1 (1yu): Create `SensitiveOperationAudit` model and migration - COMPLETED
+- [x] Bead 5N-2 (43u): Implement `@requires_reauth` decorator - COMPLETED
+- [x] Bead 5N-3 (o25): Create export encryption utilities (`utils/encryption.py`) - COMPLETED
+  - **Implementation Note**: Used AES-256-GCM instead of separate file. Functions: `generate_export_key()`, `encrypt_export_file()`, `decrypt_export_file()`
+- [x] Bead 5N-4 (cwi): Add `reauth_confirm.html` template - COMPLETED
+- [x] Bead 5N-5 (tvp): Integrate re-auth with admin exports - COMPLETED
+- [x] Bead 5N-6 (c2i): Create `/admin/sensitive-operations` dashboard - COMPLETED
+  - **Implementation Note**: Dashboard includes PII masking in audit log details via `_sanitize_dict_recursive()`
+
+### Phase 5O (Additional PII Controls)
+- [x] Bead 5O (r4o): PII Masking Utility - COMPLETED
 
 ---
 
@@ -591,3 +596,4 @@ If a feature requires PII access beyond this policy:
 | Date | Version | Author | Changes |
 |------|---------|--------|---------|
 | 2026-01-11 | 1.0 | System | Initial policy creation |
+| 2026-01-13 | 1.1 | System | Updated implementation status - All Phase 5A-5O beads completed |

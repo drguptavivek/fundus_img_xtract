@@ -29,6 +29,7 @@ from db_transaction_manager import get_db_session
 from analytics.utils import build_encounter_result_payload, fetch_image_task_details, build_pagination_params
 from utils.hospital_scoping import apply_scoping
 from utils.date_utils import parse_date_yyyy_mm_dd
+from utils.pii_masking import should_mask_pii
 
 
 def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
@@ -130,7 +131,19 @@ def encounter_results() -> str:
             )
             task_details = fetch_image_task_details(db, tasks)
 
-        encounter_rows = build_encounter_result_payload(encounters, task_details)
+        # Determine PII masking
+        mask_pii = False
+        if encounters:
+            # Check the first encounter's hospital for masking decision
+            first_enc = encounters[0]
+            data_hospital_id = first_enc.lab_unit.hospital_id if first_enc.lab_unit else None
+            mask_pii = should_mask_pii(
+                current_user_hospital_id=current_user.hospital_id,
+                data_hospital_id=data_hospital_id,
+                current_user_role=current_user.roles[0].name if current_user.roles else None
+            )
+
+        encounter_rows = build_encounter_result_payload(encounters, task_details, mask_pii=mask_pii)
 
         # Filter hospitals and lab units to only those the user has access to
         lab_units_query = db.query(LabUnit)

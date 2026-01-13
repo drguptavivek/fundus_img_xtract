@@ -5,33 +5,32 @@
 <div class="py-3">
   <div class="sv-topbar d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
     <div class="d-flex align-items-center gap-2">
-      <a class="btn btn-sm btn-outline-secondary btn-subtle"
-         href="{{ back_url }}" aria-label="Back" title="Back">
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ back_url }}" aria-label="Back" title="Back">
         &larr; {{ back_label or 'Encounters' }}
       </a>
     </div>
 
     <div class="d-flex align-items-center gap-2">
       {% if prev_url %}
-        <a class="btn btn-sm btn-outline-secondary btn-subtle"
-           href="{{ prev_url }}" aria-label="Previous encounter" title="Previous encounter">
-          &larr; Prev
-        </a>
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ prev_url }}" aria-label="Previous encounter"
+        title="Previous encounter">
+        &larr; Prev
+      </a>
       {% else %}
-        <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous encounter">
-          &larr; Prev
-        </button>
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous encounter">
+        &larr; Prev
+      </button>
       {% endif %}
 
       {% if next_url %}
-        <a class="btn btn-sm btn-outline-secondary btn-subtle"
-           href="{{ next_url }}" aria-label="Next encounter" title="Next encounter">
-          Next &rarr;
-        </a>
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ next_url }}" aria-label="Next encounter"
+        title="Next encounter">
+        Next &rarr;
+      </a>
       {% else %}
-        <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next encounter">
-          Next &rarr;
-        </button>
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next encounter">
+        Next &rarr;
+      </button>
       {% endif %}
     </div>
   </div>
@@ -42,12 +41,16 @@
         <div class="card-header"><strong>Patient & Encounter</strong></div>
         <div class="card-body">
           <dl class="row mb-0">
+            <dt class="col-5">Patient Name</dt>
+            <dd class="col-7">{{ summary.encounter_name or 'Anonymous' }}</dd>
+            <dt class="col-5">Patient ID</dt>
+            <dd class="col-7">{{ summary.encounter_patient_id or 'Hidden' }}</dd>
             <dt class="col-5">Capture Date</dt>
             <dd class="col-7">
               {% if encounter.capture_date_dt %}
-                {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
+              {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
               {% elif encounter.capture_date %}
-                {{ encounter.capture_date }}
+              {{ encounter.capture_date }}
               {% else %}-{% endif %}
             </dd>
             {% if encounter.lab_unit %}
@@ -68,7 +71,8 @@
             {% for dr in dr_reports %}
             <li class="list-group-item">
               <div><strong>Result:</strong> {{ dr.result or '-' }}</div>
-              {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}</div>{% endif %}
+              {% if dr.qualitative_result %}<div><strong>Qualitative:</strong> {{ dr.qualitative_result }}</div>{% endif
+              %}
             </li>
             {% endfor %}
           </ul>
@@ -84,9 +88,12 @@
             {% for gr in gl_cleaned %}
             <li class="list-group-item">
               <div class="mb-1"><strong>Result:</strong> {{ gr.result or '-' }}</div>
-              {% if gr.qualitative_result %}<div class="mb-1"><strong>Qualitative:</strong> {{ gr.qualitative_result }}</div>{% endif %}
-              <div class="mb-1"><strong>VCDR Right:</strong> {{ gr.vcdr_right_num if gr.vcdr_right_num is not none else '-' }}</div>
-              <div class="mb-1"><strong>VCDR Left:</strong> {{ gr.vcdr_left_num if gr.vcdr_left_num is not none else '-' }}</div>
+              {% if gr.qualitative_result %}<div class="mb-1"><strong>Qualitative:</strong> {{ gr.qualitative_result }}
+              </div>{% endif %}
+              <div class="mb-1"><strong>VCDR Right:</strong> {{ gr.vcdr_right_num if gr.vcdr_right_num is not none else
+                '-' }}</div>
+              <div class="mb-1"><strong>VCDR Left:</strong> {{ gr.vcdr_left_num if gr.vcdr_left_num is not none else '-'
+                }}</div>
             </li>
             {% endfor %}
           </ul>
@@ -109,8 +116,7 @@
               <div class="border rounded p-2 h-100">
                 <div class="mb-2 ratio ratio-4x3 bg-light">
                   <img src="{{ url_for('media._imgForGradingByUUID', uuid_str=image.uuid) }}"
-                       alt="Encounter Image {{ loop.index }}"
-                       class="img-fluid object-fit-contain rounded">
+                    alt="Encounter Image {{ loop.index }}" class="img-fluid object-fit-contain rounded">
                 </div>
                 <dl class="row small mb-0">
                   <dt class="col-5">UUID</dt>
@@ -123,37 +129,37 @@
                 {% set dr_task = None %}
                 {% set glaucoma_task = None %}
                 {% for task in image_tasks %}
-                  {% if task.disease and (task.disease.name|lower in ['diabetic retinopathy', 'dr']) %}
-                    {% set dr_task = task %}
-                  {% elif task.disease and task.disease.name|lower == 'glaucoma' %}
-                    {% set glaucoma_task = task %}
-                  {% endif %}
+                {% if task.disease and (task.disease.name|lower in ['diabetic retinopathy', 'dr']) %}
+                {% set dr_task = task %}
+                {% elif task.disease and task.disease.name|lower == 'glaucoma' %}
+                {% set glaucoma_task = task %}
+                {% endif %}
                 {% endfor %}
 
                 <!-- Display all tasks with their grades -->
                 <div class="mt-3">
                   <strong>Tasks & Grades:</strong>
                   {% for task in image_tasks %}
-                    <div class="border-start border-2 ps-2 my-2 small">
-                      <div class="fw-bold">ID:{{ task.id }} ({{ task.disease }} - {{ task.status }})</div>
-                      {% if task.grades %}
-                        {% for grade in task.grades %}
-                          <div>
-                            <span class="text-muted">{{ grade.role_slot|title }}:</span> 
-                            {{ grade.impression if grade.impression else '-' }}
-                            {% if grade.comment %}<small class="text-info"> - {{ grade.comment }}</small>{% endif %}
-                          </div>
-                        {% endfor %}
-                      {% else %}
-                        <div class="text-muted">No grades yet</div>
-                      {% endif %}
-                      
-                      {% if task.consensus %}
-                        <div class="fw-bold text-success">
-                          Consensus: {{ task.consensus.final_impression if task.consensus.final_impression else '-' }}
-                        </div>
-                      {% endif %}
+                  <div class="border-start border-2 ps-2 my-2 small">
+                    <div class="fw-bold">ID:{{ task.id }} ({{ task.disease }} - {{ task.status }})</div>
+                    {% if task.grades %}
+                    {% for grade in task.grades %}
+                    <div>
+                      <span class="text-muted">{{ grade.role_slot|title }}:</span>
+                      {{ grade.impression if grade.impression else '-' }}
+                      {% if grade.comment %}<small class="text-info"> - {{ grade.comment }}</small>{% endif %}
                     </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-muted">No grades yet</div>
+                    {% endif %}
+
+                    {% if task.consensus %}
+                    <div class="fw-bold text-success">
+                      Consensus: {{ task.consensus.final_impression if task.consensus.final_impression else '-' }}
+                    </div>
+                    {% endif %}
+                  </div>
                   {% endfor %}
                 </div>
 

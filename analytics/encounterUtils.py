@@ -14,8 +14,8 @@ from models import (
     Consensus,
     Disease,
     User,
-    Session
 )
+from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping
 
 
@@ -39,8 +39,7 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
     Returns:
         dict: A dictionary containing all the requested data for the encounter
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Build query for the encounter
         query = db.query(PatientEncounters).filter(PatientEncounters.id == encounter_id)
         
@@ -119,12 +118,28 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
                     'status': task.state
                 })
         
+        # Prepare PII masking
+        from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
+        
+        # We need to know the data's hospital ID, but for an encounter summary, 
+        # it's usually the same across the whole object.
+        data_hospital_id = encounter.lab_unit.hospital_id if encounter.lab_unit else None
+        
+        mask_pii = should_mask_pii(
+            current_user_hospital_id=user.hospital_id,
+            data_hospital_id=data_hospital_id,
+            current_user_role=user.roles[0].name if user.roles else None
+        )
+
+        display_patient_id = mask_patient_id(encounter.patient_id) if mask_pii else encounter.patient_id
+        display_name = mask_patient_name(encounter.name) if mask_pii else encounter.name
+
         # Format the response
         encounter_summary = {
             'encounter_id': encounter.id,
-            'encounter_patient_id': encounter.patient_id,
+            'encounter_patient_id': display_patient_id,
             'encounter_capture_date': encounter.capture_date,
-            'encounter_name': encounter.name,
+            'encounter_name': display_name,
             'encounter_verified_status': encounter.encounter_verified_status,
             'encounter_verified_by': encounter.encounter_verified_by,
             'encounter_verified_at': encounter.encounter_verified_at,
@@ -202,9 +217,6 @@ def get_encounter_summary(encounter_id: int, user: User, with_encounter_object: 
             encounter_summary['tasks'].append(task_data)
         
         return encounter_summary
-        
-    finally:
-        db.close()
 
 
 def get_encounters_summary_list(user: User, filters=None):
@@ -218,8 +230,7 @@ def get_encounters_summary_list(user: User, filters=None):
     Returns:
         list: A list of dictionaries with basic encounter information
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         query = db.query(PatientEncounters)
         # Apply hospital scoping
         query = apply_scoping(query, PatientEncounters, user, 'analytics')
@@ -251,10 +262,19 @@ def get_encounters_summary_list(user: User, filters=None):
                         GradingTask.state.in_(['final'])
                     ).count()
             
+            from utils.pii_masking import should_mask_pii, mask_patient_id, mask_patient_name
+            
+            data_hospital_id = encounter.lab_unit.hospital_id if encounter.lab_unit else None
+            mask_pii = should_mask_pii(
+                current_user_hospital_id=user.hospital_id,
+                data_hospital_id=data_hospital_id,
+                current_user_role=user.roles[0].name if user.roles else None
+            )
+
             summary_list.append({
                 'id': encounter.id,
-                'name': encounter.name,
-                'patient_id': encounter.patient_id,
+                'name': mask_patient_name(encounter.name) if mask_pii else encounter.name,
+                'patient_id': mask_patient_id(encounter.patient_id) if mask_pii else encounter.patient_id,
                 'capture_date': encounter.capture_date,
                 'image_count': image_count,
                 'task_count': task_count,
@@ -265,9 +285,6 @@ def get_encounters_summary_list(user: User, filters=None):
             })
         
         return summary_list
-    
-    finally:
-        db.close()
 
 
 def get_encounters_with_non_pending_tasks(user: User):
@@ -282,8 +299,7 @@ def get_encounters_with_non_pending_tasks(user: User):
         list: A list of dictionaries with encounter ID and associated task IDs,
               including disease and status for each task
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # Start with the query for all non-pending tasks with their associated encounter and image information
         query = (
             db.query(GradingTask)
@@ -325,9 +341,6 @@ def get_encounters_with_non_pending_tasks(user: User):
         result.sort(key=lambda x: x['encounter_id'])
         
         return result
-    
-    finally:
-        db.close()
 
 
 def get_direct_image_summary(uuid_str: str, user: User):
@@ -344,8 +357,7 @@ def get_direct_image_summary(uuid_str: str, user: User):
     Returns:
         dict: A dictionary containing all the requested data for the direct image
     """
-    db = Session()
-    try:
+    with get_db_session() as db:
         # First get the direct image upload
         from models import DirectImageUpload
         query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == uuid_str)
@@ -431,6 +443,3 @@ def get_direct_image_summary(uuid_str: str, user: User):
             image_summary['tasks'].append(task_data)
         
         return image_summary
-        
-    finally:
-        db.close()

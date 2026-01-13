@@ -112,5 +112,6 @@ def view_encounter(encounter_id: int):
         prev_url=url_for("analytics.view_encounter", encounter_id=prev_enc.id) if prev_enc else None,
         next_url=url_for("analytics.view_encounter", encounter_id=next_enc.id) if next_enc else None,
         gallery_id=gallery_id,
+        summary=summary,
         back_label="Encounters",
     )

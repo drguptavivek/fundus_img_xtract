@@ -57,8 +57,8 @@
         <div class="card-header py-2 px-3">
           <div class="d-flex flex-column flex-lg-row justify-content-between gap-2">
             <div>
-              <h2 class="h6 mb-1">Encounter: {{ encounter.name | default('Anonymous', true) }}</h2>
-              <div class="small text-muted">Patient ID: {{ encounter.patient_id | default('Hidden', true) }}</div>
+              <h2 class="h6 mb-1">Encounter: {{ item.patient_name | default('Anonymous', true) }}</h2>
+              <div class="small text-muted">Patient ID: {{ item.patient_id | default('Hidden', true) }}</div>
             </div>
             <div class="text-lg-end small">
               <div>Capture Date: {{ encounter.capture_date_dt or encounter.capture_date or '—' }}</div>

@@ -108,6 +108,19 @@ except Exception as e:
 
 **Fix Applied**: Implemented `is_safe_url` validation utility checking origin and relative paths.
 
+
+### SQL Injection (6 instances)
+**Status**: ✅ **FIXED**
+
+**File**: `admin/database_excel_export.py`, `admin/status.py`
+**Fix**: Implemented STRICT table name validation and switched to SQLAlchemy Expression Language.
+
+### Empty Exception Handlers (7 instances)
+**Status**: ✅ **FIXED**
+
+**File**: `admin/status.py`, `admin/security.py`, `admin/disk_usage.py`, `admin/users.py`, `auth/routes.py`, `admin/database_excel_export.py`  
+**Fix**: Replaced `try/except/pass` with proper error logging.
+
 ---
 
 ## Priority Breakdown

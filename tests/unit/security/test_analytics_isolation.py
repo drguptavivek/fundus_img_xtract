@@ -2,11 +2,12 @@
 Test analytics routes enforce hospital isolation.
 
 Verifies that users can only access analytics data from their assigned hospital/lab units.
-Uses existing security fixtures from conftest.
+Uses existing security fixtures from conftest and TestDataFactory for creating test data.
 """
 
 import pytest
 from flask import url_for
+from tests.helpers.test_factories import TestDataFactory
 
 
 class TestEncounterResultsIsolation:
@@ -16,22 +17,17 @@ class TestEncounterResultsIsolation:
         self, client, hospital_data, hosp_a_data_manager, hosp_b_data_manager, db_session
     ):
         """Data manager should only see encounters from their hospital."""
-        from models import PatientEncounters, EncounterFile
-        from auth.utils import utcnow
-
-        # Create encounters for both hospitals
-        encounter_a = PatientEncounters(
-            patient_id="PATIENT_A",
+        # Create encounters for both hospitals using factory
+        encounter_a = TestDataFactory.create_patient_encounter(
+            db_session,
             lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
-            capture_date_dt=utcnow().date(),
+            patient_id="PATIENT_A",
         )
-        encounter_b = PatientEncounters(
-            patient_id="PATIENT_B",
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
-            capture_date_dt=utcnow().date(),
+            patient_id="PATIENT_B",
         )
-        db_session.add_all([encounter_a, encounter_b])
-        db_session.flush()
 
         # Login as hospital A data manager
         client.post(
@@ -53,22 +49,17 @@ class TestEncounterResultsIsolation:
         self, client, master_admin, hospital_data, db_session
     ):
         """Global admin should see all encounters."""
-        from models import PatientEncounters
-        from auth.utils import utcnow
-
-        # Create encounters for both hospitals
-        encounter_a = PatientEncounters(
-            patient_id="PATIENT_A",
+        # Create encounters for both hospitals using factory
+        encounter_a = TestDataFactory.create_patient_encounter(
+            db_session,
             lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
-            capture_date_dt=utcnow().date(),
+            patient_id="PATIENT_A",
         )
-        encounter_b = PatientEncounters(
-            patient_id="PATIENT_B",
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
-            capture_date_dt=utcnow().date(),
+            patient_id="PATIENT_B",
         )
-        db_session.add_all([encounter_a, encounter_b])
-        db_session.flush()
 
         client.post(
             "/login",
@@ -92,53 +83,44 @@ class TestImageResultsIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """Data manager should only see images from their hospital."""
-        from models import PatientEncounters, EncounterFile, GradingTask
-        from auth.utils import utcnow
-
         # Create encounters and tasks for both hospitals
-        encounter_a = PatientEncounters(
+        encounter_a = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             patient_id="PATIENT_A",
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        encounter_b = PatientEncounters(
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             patient_id="PATIENT_B",
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add_all([encounter_a, encounter_b])
-        db_session.flush()
 
-        file_a = EncounterFile(
+        file_a = TestDataFactory.create_encounter_file(
+            db_session,
             patient_encounter_id=encounter_a.id,
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             filename="image_a.jpg",
-            file_type="image",
         )
-        file_b = EncounterFile(
+        file_b = TestDataFactory.create_encounter_file(
+            db_session,
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="image_b.jpg",
-            file_type="image",
         )
-        db_session.add_all([file_a, file_b])
-        db_session.flush()
 
         # Create tasks
-        task_a = GradingTask(
+        task_a = TestDataFactory.create_grading_task(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             encounter_file_id=file_a.id,
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
-            disease_id=test_metadata["diseases"]["dr"].id,
-            state="pending",
         )
-        task_b = GradingTask(
+        task_b = TestDataFactory.create_grading_task(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             encounter_file_id=file_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            disease_id=test_metadata["diseases"]["dr"].id,
-            state="pending",
         )
-        db_session.add_all([task_a, task_b])
-        db_session.flush()
 
         client.post(
             "/login",
@@ -163,17 +145,12 @@ class TestEncounterViewIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should not be able to view encounters from other hospitals."""
-        from models import PatientEncounters
-        from auth.utils import utcnow
-
         # Create encounter for hospital B
-        encounter_b = PatientEncounters(
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             patient_id="PATIENT_B",
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add(encounter_b)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -191,17 +168,12 @@ class TestEncounterViewIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should be able to view encounters from their hospital."""
-        from models import PatientEncounters
-        from auth.utils import utcnow
-
         # Create encounter for hospital A
-        encounter_a = PatientEncounters(
+        encounter_a = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             patient_id="PATIENT_A",
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add(encounter_a)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -223,16 +195,12 @@ class TestDirectViewIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should not be able to view direct uploads from other hospitals."""
-        from models import DirectImageUpload
-
         # Create direct upload for hospital B
-        direct_b = DirectImageUpload(
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
+        direct_b = TestDataFactory.create_direct_image_upload(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="direct_b.jpg",
-            verification_status="verified",
         )
-        db_session.add(direct_b)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -250,16 +218,12 @@ class TestDirectViewIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should be able to view direct uploads from their hospital."""
-        from models import DirectImageUpload
-
         # Create direct upload for hospital A
-        direct_a = DirectImageUpload(
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
+        direct_a = TestDataFactory.create_direct_image_upload(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             filename="direct_a.jpg",
-            verification_status="verified",
         )
-        db_session.add(direct_a)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -281,35 +245,24 @@ class TestTaskDetailsIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """User should not be able to view tasks from other hospitals."""
-        from models import PatientEncounters, EncounterFile, GradingTask
-        from auth.utils import utcnow
-
         # Create task for hospital B
-        encounter_b = PatientEncounters(
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             patient_id="PATIENT_B",
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add(encounter_b)
-        db_session.flush()
-
-        file_b = EncounterFile(
+        file_b = TestDataFactory.create_encounter_file(
+            db_session,
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="image_b.jpg",
-            file_type="image",
         )
-        db_session.add(file_b)
-        db_session.flush()
-
-        task_b = GradingTask(
+        task_b = TestDataFactory.create_grading_task(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             encounter_file_id=file_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            disease_id=test_metadata["diseases"]["dr"].id,
-            state="pending",
         )
-        db_session.add(task_b)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -327,35 +280,24 @@ class TestTaskDetailsIsolation:
         self, client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """User should be able to view tasks from their hospital."""
-        from models import PatientEncounters, EncounterFile, GradingTask
-        from auth.utils import utcnow
-
         # Create task for hospital A
-        encounter_a = PatientEncounters(
+        encounter_a = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             patient_id="PATIENT_A",
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add(encounter_a)
-        db_session.flush()
-
-        file_a = EncounterFile(
+        file_a = TestDataFactory.create_encounter_file(
+            db_session,
             patient_encounter_id=encounter_a.id,
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             filename="image_a.jpg",
-            file_type="image",
         )
-        db_session.add(file_a)
-        db_session.flush()
-
-        task_a = GradingTask(
+        task_a = TestDataFactory.create_grading_task(
+            db_session,
+            lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             encounter_file_id=file_a.id,
-            lab_unit_id=hospital_data["hospital_a"]["lab_units"][0].id,
-            disease_id=test_metadata["diseases"]["dr"].id,
-            state="pending",
         )
-        db_session.add(task_a)
-        db_session.flush()
 
         client.post(
             "/login",
@@ -377,43 +319,29 @@ class TestGlobalAdminBypass:
         self, client, master_admin, hospital_data, db_session, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
-        from models import PatientEncounters, EncounterFile, DirectImageUpload, GradingTask
-        from auth.utils import utcnow
-
         # Create data for hospital B
-        encounter_b = PatientEncounters(
+        encounter_b = TestDataFactory.create_patient_encounter(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             patient_id="PATIENT_B",
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            capture_date_dt=utcnow().date(),
         )
-        db_session.add(encounter_b)
-        db_session.flush()
-
-        file_b = EncounterFile(
+        file_b = TestDataFactory.create_encounter_file(
+            db_session,
             patient_encounter_id=encounter_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="image_b.jpg",
-            file_type="image",
         )
-        db_session.add(file_b)
-        db_session.flush()
-
-        direct_b = DirectImageUpload(
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
+        direct_b = TestDataFactory.create_direct_image_upload(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="direct_b.jpg",
-            verification_status="verified",
         )
-        db_session.add(direct_b)
-        db_session.flush()
-
-        task_b = GradingTask(
+        task_b = TestDataFactory.create_grading_task(
+            db_session,
+            lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             encounter_file_id=file_b.id,
-            lab_unit_id=hospital_data["hospital_b"]["lab_units"][0].id,
-            disease_id=test_metadata["diseases"]["dr"].id,
-            state="pending",
         )
-        db_session.add(task_b)
-        db_session.flush()
 
         client.post(
             "/login",

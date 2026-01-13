@@ -85,8 +85,25 @@ For detailed technical implementation of isolation, see [Scoping.md](03-Tasks/Sc
 - **Scoping**: Hospital-bound. Filenames are automatically anonymized in exports.
 
 #### `discrepancy_reviewer`
-- **Permissions**: Involved in the QA process where human grades disagree, before finalization.
+- **Permissions**: Involved in the QA process where human grades disagree, before finalization. Settles medical conflicts.
 - **Scoping**: Hospital-bound.
+- **PII Rationale**: Requires clinical context (history, demographics) to reach a "ground truth" when experts disagree.
+
+---
+
+## PII Access Rationale
+
+The system follows a "PII Firewall" model where most clinical staff work anonymized, but certain operational roles require PII access for specific reasons:
+
+| Role | Why they need PII? | Silo Boundary |
+| :--- | :--- | :--- |
+| **Data Manager** | Must resolve ingestion errors and EMR mismatches during the raw upload phase. | Own Hospital Only |
+| **Local Admin** | Responsible for hospital-level legal compliance and patient follow-up requests. | Own Hospital Only |
+| **Optometrist** | Required to verify patient identity *before* performing the anonymization step. | Own Hospital Only |
+| **Discrepancy Reviewer** | Needs full clinical context to resolve complex medical tie-breaks. | Own Hospital Only |
+
+> [!WARNING]
+> While these roles have *functional* access to PII, the system still applies **scoping isolation**. A Data Manager at Hospital A can never see PII from Hospital B.
 
 ---
 

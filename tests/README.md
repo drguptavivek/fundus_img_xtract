@@ -72,7 +72,15 @@ docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec w
 - **`authenticated_client`**: Client authenticated as admin
 - **`login_user`**: Helper function to perform login via POST
 - **`logged_in_client`**: Client with admin logged in via actual login flow
-- **`auth_client_factory`**: Factory to create authenticated clients for any user
+- **`auth_client`**: **Session-based authentication fixture** (recommended). Sets `_user_id` directly in Flask session to avoid transaction conflicts with test isolation. Does NOT hit `/login` endpoint.
+  ```python
+  # Usage:
+  def test_protected_route(auth_client, db_session, my_user):
+      client = auth_client(db_session.merge(my_user))  # Always merge before auth
+      response = client.get('/protected/route')
+      assert response.status_code == 200
+  ```
+- **`auth_client_factory`**: Factory to create authenticated clients for any user (uses actual login POST - may cause transaction issues)
 
 #### Utility Fixtures
 

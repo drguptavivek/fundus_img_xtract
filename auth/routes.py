@@ -19,7 +19,7 @@ from utils.log_sanitize import sanitize_log_value, mask_email
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
-from models import engine, User, Role, LoginAttempt, IpLock, PasswordResetAttempt  # type: ignore
+from models import engine, User, Role, LoginAttempt, IpLock, PasswordResetAttempt, Session  # type: ignore
 from app_cache import cache
 from server_side_session import mark_session_ended
 from db_transaction_manager import get_db_session, transaction_scope
@@ -89,8 +89,7 @@ def load_user(user_id: str):
 
     # Use a fresh session that won't be closed immediately
     # Flask-Login needs to user object to remain bound to a session
-    from models import Session as DbSession
-    db = DbSession()
+    db = Session()
     try:
         user = db.execute(
             select(User)

@@ -173,6 +173,14 @@ def app(db_session):
     import server_side_session
     patcher_session_interface = patch('server_side_session.DbSession', return_value=wrapped_session)
     patcher_session_interface.start()
+    
+    # Patch Session in auth.routes (CRITICAL for load_user to see test users)
+    patcher_auth_routes = patch('auth.routes.Session', return_value=wrapped_session)
+    patcher_auth_routes.start()
+    
+    # Patch Session in preprocess.anonymize_image (CRITICAL for anonymization workflow tests)
+    patcher_preprocess = patch('preprocess.anonymize_image.Session', return_value=wrapped_session)
+    patcher_preprocess.start()
 
     # Patch environ to force settings that can't be set via config alone
     # This must happen before create_app() reads env vars
@@ -230,6 +238,8 @@ def app(db_session):
         patcher_models.stop()
         patcher_dbsession.stop()
         patcher_session_interface.stop()
+        patcher_auth_routes.stop()
+        patcher_preprocess.stop()
         env_patcher.stop()
         patcher_captcha.stop()
         _test_db_session = old_session

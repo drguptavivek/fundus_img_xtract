@@ -239,6 +239,20 @@ def reprocess_pdf(encounter_id: int):
         if not encounter:
             flash("Encounter not found", "danger")
             return redirect(url_for("screenings.list_screenings"))
+            
+        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        is_admin_like = current_user.has_role("admin", "data_manager")
+
+        # Admin override or strict lab unit check (data_manager role is not exempt from hospital scoping unless global admin logic implemented elsewhere, but here rely on allowed_lab_unit_ids)
+        # Note: 'data_manager' is often treated as local admin. If they have lab_units, restrict them.
+        if (not is_admin_like) or (allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids):
+             # Actually, if is_admin_like is true, we might still want to restrict if they are not GLOBAL admin.
+             # The existing pattern check:
+             # if (not is_admin_like) and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+             # However, roles_required("admin", "data_manager") means only these roles access.
+             # If a data_manager is scoped to a hospital, allowed_lab_unit_ids will be populated.
+             if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+                 abort(403)
         
         # Find PDF files for this encounter
         pdf_files = db.query(EncounterFilePDF).filter(
@@ -540,6 +554,11 @@ def delete_reports(encounter_id: int):
         if not encounter:
             flash("Encounter not found", "danger")
             return redirect(url_for("screenings.list_screenings"))
+
+        allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
+        # Check permissions - similar to other routes
+        if encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
+             abort(403)
         
         # Delete existing reports
         dr_reports = db.query(DiabeticRetinopathyReport).filter_by(

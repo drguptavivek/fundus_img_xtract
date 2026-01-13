@@ -458,16 +458,22 @@ def get_sequence_report():
             if not seq_name:
                 continue
 
-            table_fq = f'"{row.table_schema}"."{row.table_name}"'
-            col_name = f'"{row.column_name}"'
+            # Use SQLAlchemy expression language to prevent SQL injection
+            t = sa.table(row.table_name, schema=row.table_schema)
+            c = sa.column(row.column_name)
+            stmt = sa.select(sa.func.coalesce(sa.func.max(c), 0)).select_from(t)
+            max_id = db.execute(stmt).scalar_one()
 
-            max_id = db.execute(
-                sa.text(f"SELECT COALESCE(MAX({col_name}), 0) FROM {table_fq}")
-            ).scalar_one()
-
-            last_value, is_called = db.execute(
-                sa.text(f"SELECT last_value, is_called FROM {seq_name}")
-            ).one()
+            # Handle sequence name (might be 'schema.rel' or just 'rel')
+            # pg_get_serial_sequence usually returns 'schema.sequence' or 'sequence'
+            seq_parts = seq_name.split('.')
+            if len(seq_parts) == 2:
+                seq_t = sa.table(seq_parts[1], schema=seq_parts[0])
+            else:
+                seq_t = sa.table(seq_name)
+            
+            stmt_seq = sa.select(sa.column("last_value"), sa.column("is_called")).select_from(seq_t)
+            last_value, is_called = db.execute(stmt_seq).one()
 
             next_value = last_value + 1 if is_called else last_value
             mismatch = max_id >= next_value

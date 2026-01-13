@@ -126,6 +126,20 @@ def _export_table_to_excel(table_name):
     try:
         with get_db_session() as db:
             # Get table data, excluding sensitive columns
+            # Validate table_name to prevent SQL injection
+            if get_env("DATABASE_URL", "").startswith("postgresql://"):
+                check_query = text("SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = :t")
+            else:
+                check_query = text("SELECT 1 FROM sqlite_master WHERE type='table' AND name = :t")
+            
+            if not db.execute(check_query, {"t": table_name}).fetchone():
+                current_app.logger.warning(
+                    "Attempted export of invalid table: %s",
+                    sanitize_log_value(table_name),
+                )
+                return None
+
+            # Get table data, excluding sensitive columns
             if table_name == 'users':
                 # Exclude password_hash from users table
                 query = text("""
@@ -135,7 +149,9 @@ def _export_table_to_excel(table_name):
                     FROM users
                 """)
             else:
+                # Safe because table_name is validated against allowlist above
                 query = text(f"SELECT * FROM {table_name}")
+            
             result = db.execute(query)
             rows = result.fetchall()
             

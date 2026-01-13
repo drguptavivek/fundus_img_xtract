@@ -74,7 +74,7 @@ def get_unread_notifications_count(user_id: int) -> int:
             .select_from(Notification)
             .where(
                 Notification.recipient_user_id.is_(None),
-                Notification.id.not_in(system_read_subq),
+                Notification.id.not_in(select(NotificationRead.notification_id).where(NotificationRead.user_id == user_id)),
             )
         ).scalar() or 0
 

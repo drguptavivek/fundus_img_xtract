@@ -1,6 +1,6 @@
 # Scoping in Fundus Image Manager
 
-This document describes the scoping mechanisms used in the Fundus Image Manager application to control data access and workflow permissions.
+This document describes the scoping mechanisms used in the Fundus Image Manager application to control data access and workflow permissions. For a higher-level view of roles and permissions, see [RBAC-ABAC.md](../RBAC-ABAC.md).
 
 ## Overview
 
@@ -16,8 +16,8 @@ The application implements a **3-tier scoping system**:
 **Small grader pool requires shared expertise:**
 - ✅ **Grading** (resident, resident2 slots) - via Slot-LabUnit
 - ✅ **Arbitration** (arbitrator slot) - via Slot-LabUnit
-- ✅ **Dataset Creation** (AI training) - multi-hospital datasets
-- ✅ **Research** (future) - multi-hospital studies
+- ✅ **Dataset Creation** (`dataset_creator` role) - cross-hospital for curation
+- ✅ **Research & Training** (`dataset_creator` role) - multi-hospital datasets
 - ✅ **Master Admin** - system-wide access
 
 **Why safe:** Optometrists anonymize all data BEFORE grading tasks are created
@@ -25,7 +25,7 @@ The application implements a **3-tier scoping system**:
 ### Hospital-Bound Operations
 **Organizational boundaries require strict isolation:**
 - ✅ Image uploads, verification, file management
-- ✅ Reports, dashboards, analytics (non-admin)
+- ✅ Reports, dashboards, analytics (`analytics_viewer` role)
 - ✅ AI grade review, human grade review
 - ✅ QA/QC, discrepancy review
 - ✅ User management (site admin)
@@ -56,7 +56,8 @@ if not user.is_master_admin:
 ### Exceptions
 - **Master Admin** (`is_master_admin=True`) - Can access all hospitals
 - **Grading/Arbitration** - Cross-hospital via Slot-LabUnit scoping
-- **Dataset Creator** - Cross-hospital for AI training datasets
+- **Dataset Creator** (`dataset_creator` role) - Cross-hospital for `dataset_creation`, `research`, and `training` operations
+- **Analytics Viewer** (`analytics_viewer` role) - **NOT an exception**; strictly hospital-bound
 
 ---
 
@@ -221,10 +222,10 @@ Step 4: Cross-Hospital Grading
 |--------|---------------|--------------|--------------|
 | **Purpose** | Org isolation | General data access | Cross-hospital grading |
 | **Granularity** | Hospital | Lab unit | Disease + Lab + Role |
-| **Cross-hospital?** | No (except admin) | No | Yes (grading only) |
-| **Operations** | All | Upload, verify, report | Grading, arbitration |
-| **Model** | users.hospital_id | user_lab_units | UserDiseaseUnitRole |
-| **Bypass** | is_master_admin | is_master_admin | N/A (no bypass) |
+| **Cross-hospital?** | No (except admin/dataset_creator) | No | Yes (grading only) |
+| **Operations** | All | Upload, verify, analytics | Grading, arbitration |
+| **Model** | `users.hospital_id` | `user_lab_units` | `UserDiseaseUnitRole` |
+| **Bypass** | `is_master_admin` | `is_master_admin`, `local_admin` | N/A (no bypass) |
 
 ---
 

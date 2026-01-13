@@ -38,9 +38,9 @@ DISPLAY_COLUMNS: Tuple[str, ...] = (
 )
 
 
-@bp.route("/direct-files", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
-def direct_files() -> str:
+@bp.route("/direct-uploads/kpi", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+def direct_uploads_kpi() -> str:
     """Render direct files dataframe with filtering and pagination."""
     
     page = request.args.get("page", default=1, type=int) or 1

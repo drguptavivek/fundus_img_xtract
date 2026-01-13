@@ -46,6 +46,7 @@ TASK_STATE_OPTIONS: tuple[str, ...] = (
     "fileUploader",
     "ophthalmologist",
     "data_manager",
+    "analytics_viewer",
     "resident",
     "optometrist",
 )

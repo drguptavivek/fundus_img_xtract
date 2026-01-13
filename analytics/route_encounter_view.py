@@ -17,7 +17,7 @@ from . import bp
 
 
 @bp.route("/encounter/view/<int:encounter_id>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def view_encounter(encounter_id: int):
     image_exts = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 

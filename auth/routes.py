@@ -56,7 +56,9 @@ def _serialize_user_for_cache(user: User) -> dict:
         "designation": user.designation,
         "phone": user.phone,
         "hospital_id": user.hospital_id,
+        "is_master_admin": getattr(user, "is_master_admin", False),
         "roles": [role.name for role in (user.roles or [])],
+        "lab_units": [{"id": lu.id, "name": lu.name, "hospital_id": lu.hospital_id} for lu in (user.lab_units or [])],
     }
 
 
@@ -72,8 +74,17 @@ def _build_user_from_cache(payload: dict) -> User:
     user.designation = payload.get("designation")
     user.phone = payload.get("phone")
     user.hospital_id = payload.get("hospital_id")
+    user.is_master_admin = payload.get("is_master_admin", False)
     roles = [Role(name=name) for name in payload.get("roles", [])]
     user.roles = roles
+    
+    # Reconstruct lab units
+    lab_units = []
+    for lu_data in payload.get("lab_units", []):
+        lu = LabUnit(id=lu_data["id"], name=lu_data["name"], hospital_id=lu_data["hospital_id"])
+        lab_units.append(lu)
+    user.lab_units = lab_units
+    
     return user
 
 
@@ -88,31 +99,26 @@ def load_user(user_id: str):
     if cached:
         return _build_user_from_cache(cached)
 
-    # Use a fresh session that won't be closed immediately
-    # Flask-Login needs to user object to remain bound to a session
-    db = Session()
-    try:
+    # Use shared session from the transaction manager
+    from db_transaction_manager import get_db_session
+    with get_db_session() as db:
+        from sqlalchemy.orm import joinedload
         user = db.execute(
             select(User)
             .options(
-                selectinload(User.roles),
-                noload(User.notifications),
-                noload(User.sent_notifications),
+                joinedload(User.roles),
+                joinedload(User.lab_units),
+                joinedload(User.hospital),
             )
             .where(User.id == int(user_id))
-        ).scalar_one_or_none()
+        ).unique().scalar_one_or_none()
         
-        # Expunge the user from session to prevent detached instance issues
-        # but keep it as a persistent object with identity
         if user:
-            db.expunge(user)
             try:
                 cache.set(cache_key, _serialize_user_for_cache(user), timeout=_USER_CACHE_TTL_SECONDS)
             except Exception as e:
                 auth_logger.warning("Cache set failed: %s", sanitize_log_value(e))
         return user
-    finally:
-        db.close()
 
 # ----- Helpers -----
 def _is_ip_locked(db, ip: str):

@@ -172,6 +172,17 @@ def analytics_viewer_global(db_session):
     )
 
 
+@pytest.fixture
+def dataset_creator_global(db_session):
+    """Dataset creator with cross-hospital access."""
+    return UserFactory.create_with_hospital(
+        db_session,
+        role_name='dataset_creator',
+        hospital_id=1,
+        username='dataset_creator_global'
+    )
+
+
 # ============================================================================
 # Convenience Fixtures - Complete Hospital User Sets
 # ============================================================================

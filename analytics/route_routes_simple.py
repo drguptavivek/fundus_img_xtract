@@ -9,7 +9,7 @@ from . import bp
 
 
 @bp.route("/encounters-simple", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def encounter_results_simple():
     """Render a simplified encounter list showing only encounters with non-pending tasks."""
     

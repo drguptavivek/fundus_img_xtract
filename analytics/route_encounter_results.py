@@ -49,6 +49,7 @@ def _normalize_datetime(value: datetime | _date | None) -> datetime | None:
     "fileUploader",
     "ophthalmologist",
     "data_manager",
+    "analytics_viewer",
     "resident",
     "optometrist",
 )

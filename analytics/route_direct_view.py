@@ -10,9 +10,9 @@ from utils.upload_eligibility import get_user_lab_unit_ids
 from . import bp
 
 
-@bp.route("/direct/view/<uuid_str>", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
-def view_upload(uuid_str: str):
+@bp.route("/direct/view/<string:uuid_str>", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
+def view_direct_image(uuid_str: str):
     # Use the utility function to get comprehensive summary (now scoped)
     summary = get_direct_image_summary(uuid_str, current_user)
     if not summary:

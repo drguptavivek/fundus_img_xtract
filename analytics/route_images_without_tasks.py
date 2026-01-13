@@ -29,8 +29,8 @@ from analytics.utils import build_encounter_result_payload, fetch_image_task_det
 from utils.hospital_scoping import apply_scoping
 
 
-@bp.route("/images/no-tasks", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@bp.route("/images-without-tasks", methods=["GET", "POST"])
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def images_without_tasks() -> str:
     """Display images that have no associated grading tasks."""
 

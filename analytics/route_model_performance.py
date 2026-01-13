@@ -600,7 +600,7 @@ def _build_binary_with_ci(
 
 
 @bp.route("/model-performance", methods=["GET"])
-@roles_required("admin", "local_admin", "data_manager")
+@roles_required("admin", "local_admin", "data_manager", "analytics_viewer")
 def model_performance() -> str:
     """Show AI model performance against human reference grades using mvw_grading_data_all."""
     if not _ensure_sklearn():

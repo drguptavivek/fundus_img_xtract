@@ -4,61 +4,3731 @@ cachedir: .pytest_cache
 rootdir: /app
 configfile: pytest.ini
 plugins: Faker-39.0.0
-collecting ... collected 1 item
+collecting ... collected 4 items
 
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual Setting up the environment...
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access FAILED [ 25%]
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_dataset_creator_access ERROR [ 50%]
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_dataset_creator_denied_other_analytics ERROR [ 75%]
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_optometrist_denied_analytics ERROR [100%]
+
+==================================== ERRORS ====================================
+_______ ERROR at setup of TestNewRolesAccess.test_dataset_creator_access _______
+file /app/tests/integration/analytics/test_new_roles_access.py, line 31
+      def test_dataset_creator_access(self, app, db_session, dataset_creator_global):
+E       fixture 'dataset_creator_global' not found
+>       available fixtures: _session_faker, admin_user, all_hospital_a_users, all_hospital_b_users, analytics_viewer_global, app, arbitrator_user, auth_client, auth_client_factory, authenticated_client, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, client, core_test_data, cross_grader_a_to_b, cross_grader_b_to_a, csrf_token, dataset_creator, db_session, db_utils, doctest_namespace, faker, hosp_a_analyst, hosp_a_arb_1, hosp_a_arb_2, hosp_a_data_exporter, hosp_a_data_manager, hosp_a_file_uploader, hosp_a_optometrist, hosp_a_res_1, hosp_a_res_2, hosp_a_res_3, hosp_a_res_4, hosp_a_site_admin, hosp_b_analyst, hosp_b_arb_1, hosp_b_arb_2, hosp_b_data_exporter, hosp_b_data_manager, hosp_b_file_uploader, hosp_b_optometrist, hosp_b_res_1, hosp_b_res_2, hosp_b_res_3, hosp_b_res_4, hosp_b_site_admin, hospital_a_grading_pool, hospital_b_grading_pool, hospital_data, logged_in_client, login_user, make_request_with_auth, master_admin, monkeypatch, multi_auth_clients, ophthalmologist_cross_hospital, ophthalmologist_hospital_a, ophthalmologist_hospital_b, ophthalmologist_user, optometrist_hospital_a, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_sequences, resident_user, run_runner_test, seed_test_database, site_admin_hospital_a, site_admin_hospital_b, sqlite_session, test_db, test_engine, test_hospitals, test_lab_units, test_metadata, test_users, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/app/tests/integration/analytics/test_new_roles_access.py:31
+---------------------------- Captured stdout setup -----------------------------
+Setting up the environment...
 Directories are ready.
-DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
-DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824660896656)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824660896656)
+---------------------------- Captured stderr setup -----------------------------
+--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/logging/handlers.py", line 81, in emit
+    logging.FileHandler.emit(self, record)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1263, in emit
+    self.stream = self._open()
+                  ~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1248, in _open
+    return open_func(self.baseFilename, self.mode,
+                     encoding=self.encoding, errors=self.errors)
+PermissionError: [Errno 13] Permission denied: '/app/logs/db_query.log'
+Call stack:
+  File "/app/.venv/bin/pytest", line 10, in <module>
+    sys.exit(console_main())
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 336, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 289, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 343, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 367, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 117, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 130, in runtestprotocol
+    rep = call_and_report(item, "setup", log)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 245, in call_and_report
+    call = CallInfo.from_call(
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 344, in from_call
+    result: TResult | None = func()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 246, in <lambda>
+    lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 164, in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 514, in setup
+    col.setup()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/python.py", line 1674, in setup
+    self._request._fillfixtures()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 719, in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 548, in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 639, in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1127, in execute
+    result = ihook.pytest_fixture_setup(fixturedef=self, request=request)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1195, in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 922, in call_fixture_func
+    fixture_result = next(generator)
+  File "/app/tests/conftest.py", line 202, in app
+    app = create_app()
+  File "/app/app.py", line 878, in create_app
+    loggers = _configure_logging_services(app)
+  File "/app/app.py", line 287, in _configure_logging_services
+    loggers = configure_logging(app)
+  File "/app/app_init/logging_config.py", line 228, in configure_logging
+    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
+Message: 'DB query logger initialized at %s'
+Arguments: ('logs/db_query.log',)
+------------------------------ Captured log setup ------------------------------
+WARNING  utils.email_config:email_config.py:233 Could not update Flask email config: No valid email configuration found in database or environment variables
+_ ERROR at setup of TestNewRolesAccess.test_dataset_creator_denied_other_analytics _
+file /app/tests/integration/analytics/test_new_roles_access.py, line 44
+      def test_dataset_creator_denied_other_analytics(self, app, db_session, dataset_creator_global):
+E       fixture 'dataset_creator_global' not found
+>       available fixtures: _session_faker, admin_user, all_hospital_a_users, all_hospital_b_users, analytics_viewer_global, app, arbitrator_user, auth_client, auth_client_factory, authenticated_client, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, client, core_test_data, cross_grader_a_to_b, cross_grader_b_to_a, csrf_token, dataset_creator, db_session, db_utils, doctest_namespace, faker, hosp_a_analyst, hosp_a_arb_1, hosp_a_arb_2, hosp_a_data_exporter, hosp_a_data_manager, hosp_a_file_uploader, hosp_a_optometrist, hosp_a_res_1, hosp_a_res_2, hosp_a_res_3, hosp_a_res_4, hosp_a_site_admin, hosp_b_analyst, hosp_b_arb_1, hosp_b_arb_2, hosp_b_data_exporter, hosp_b_data_manager, hosp_b_file_uploader, hosp_b_optometrist, hosp_b_res_1, hosp_b_res_2, hosp_b_res_3, hosp_b_res_4, hosp_b_site_admin, hospital_a_grading_pool, hospital_b_grading_pool, hospital_data, logged_in_client, login_user, make_request_with_auth, master_admin, monkeypatch, multi_auth_clients, ophthalmologist_cross_hospital, ophthalmologist_hospital_a, ophthalmologist_hospital_b, ophthalmologist_user, optometrist_hospital_a, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, reset_sequences, resident_user, run_runner_test, seed_test_database, site_admin_hospital_a, site_admin_hospital_b, sqlite_session, test_db, test_engine, test_hospitals, test_lab_units, test_metadata, test_users, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
 
-=== PRE-REQUEST DEBUG ===
-Total images in database: 2
-  - secret_hosp_b.jpg (hospital_id=2, lab_unit_id=3)
-  - my_hosp_a.jpg (hospital_id=1, lab_unit_id=1)
-User hospital_id: 1
-User has local_admin role: True
-=== END PRE-REQUEST DEBUG ===
+/app/tests/integration/analytics/test_new_roles_access.py:44
+---------------------------- Captured stdout setup -----------------------------
+Setting up the environment...
+Directories are ready.
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824505615824)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824505615824)
+---------------------------- Captured stderr setup -----------------------------
+--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/logging/handlers.py", line 81, in emit
+    logging.FileHandler.emit(self, record)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1263, in emit
+    self.stream = self._open()
+                  ~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1248, in _open
+    return open_func(self.baseFilename, self.mode,
+                     encoding=self.encoding, errors=self.errors)
+PermissionError: [Errno 13] Permission denied: '/app/logs/db_query.log'
+Call stack:
+  File "/app/.venv/bin/pytest", line 10, in <module>
+    sys.exit(console_main())
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 336, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 289, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 343, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 367, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 117, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 130, in runtestprotocol
+    rep = call_and_report(item, "setup", log)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 245, in call_and_report
+    call = CallInfo.from_call(
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 344, in from_call
+    result: TResult | None = func()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 246, in <lambda>
+    lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 164, in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 514, in setup
+    col.setup()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/python.py", line 1674, in setup
+    self._request._fillfixtures()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 719, in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 548, in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 639, in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1127, in execute
+    result = ihook.pytest_fixture_setup(fixturedef=self, request=request)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1195, in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 922, in call_fixture_func
+    fixture_result = next(generator)
+  File "/app/tests/conftest.py", line 202, in app
+    app = create_app()
+  File "/app/app.py", line 878, in create_app
+    loggers = _configure_logging_services(app)
+  File "/app/app.py", line 287, in _configure_logging_services
+    loggers = configure_logging(app)
+  File "/app/app_init/logging_config.py", line 228, in configure_logging
+    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
+Message: 'DB query logger initialized at %s'
+Arguments: ('logs/db_query.log',)
+------------------------------ Captured log setup ------------------------------
+WARNING  utils.email_config:email_config.py:233 Could not update Flask email config: No valid email configuration found in database or environment variables
+____ ERROR at setup of TestNewRolesAccess.test_optometrist_denied_analytics ____
 
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.commit() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.commit() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: load_user(2) loaded user site_admin_a with hospital_id 1
-DEBUG: Ignoring session.close() in test wrapper
-DEBUG: dashboard() reached. User: site_admin_a, IsAuthenticated: True, HospitalID: 1
-DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
-DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
-DEBUG: allowed_lab_unit_ids: {1, 3}
-DEBUG: Entering GLOBAL MOCK get_db_session (session id: 135477985569696)
-DEBUG: Ignoring session.commit() in test wrapper
-DEBUG: Ignoring session.close() in test wrapper
-PASSED
+db_session = <sqlalchemy.orm.session.Session object at 0x7358aa501d30>
+test_lab_units = {'lab_a1': <models.LabUnit object at 0x7358abd80c20>, 'lab_a2': <models.LabUnit object at 0x7358ab1b2850>, 'lab_b1': <models.LabUnit object at 0x7358ab1b2990>, 'lab_b2': <models.LabUnit object at 0x7358aad00050>}
 
+    @pytest.fixture
+    def hosp_a_optometrist(db_session, test_lab_units):
+        """Optometrist for Hospital A - PII gatekeeper."""
+        return UserFactory.create_with_hospital(
+            db_session,
+            role_name='optometrist',
+            hospital_id=1,
+>           lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],  # All Hospital A labs
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            username='hosp_a_optometrist'
+        )
+
+tests/fixtures/hospital_roles.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.attributes.InstrumentedAttribute object at 0x7358acd387c0>
+instance = <models.LabUnit object at 0x7358abd80c20>
+owner = <class 'models.LabUnit'>
+
+    def __get__(
+        self, instance: Optional[object], owner: Any
+    ) -> Union[InstrumentedAttribute[_T_co], _T_co]:
+        if instance is None:
+            return self
+    
+        dict_ = instance_dict(instance)
+        if self.impl.supports_population and self.key in dict_:
+            return dict_[self.key]  # type: ignore[no-any-return]
+        else:
+            try:
+                state = instance_state(instance)
+            except AttributeError as err:
+                raise orm_exc.UnmappedInstanceError(instance) from err
+>           return self.impl.get(state, dict_)  # type: ignore[no-any-return]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/attributes.py:569: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.attributes.ScalarAttributeImpl object at 0x7358abd5b600>
+state = <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>
+dict_ = {'_sa_instance_state': <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>}
+passive = symbol('PASSIVE_OFF')
+
+    def get(
+        self,
+        state: InstanceState[Any],
+        dict_: _InstanceDict,
+        passive: PassiveFlag = PASSIVE_OFF,
+    ) -> Any:
+        """Retrieve a value from the given object.
+        If a callable is assembled on this object's attribute, and
+        passive is False, the callable will be executed and the
+        resulting value will be set as the new value for this attribute.
+        """
+        if self.key in dict_:
+            return dict_[self.key]
+        else:
+            # if history present, don't load
+            key = self.key
+            if (
+                key not in state.committed_state
+                or state.committed_state[key] is NO_VALUE
+            ):
+                if not passive & CALLABLES_OK:
+                    return PASSIVE_NO_RESULT
+    
+>               value = self._fire_loader_callables(state, key, passive)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/attributes.py:1096: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.attributes.ScalarAttributeImpl object at 0x7358abd5b600>
+state = <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>
+key = 'id', passive = symbol('PASSIVE_OFF')
+
+    def _fire_loader_callables(
+        self, state: InstanceState[Any], key: str, passive: PassiveFlag
+    ) -> Any:
+        if (
+            self.accepts_scalar_loader
+            and self.load_on_unexpire
+            and key in state.expired_attributes
+        ):
+>           return state._load_expired(state, passive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/attributes.py:1126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>
+state = <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>
+passive = symbol('PASSIVE_OFF')
+
+    def _load_expired(
+        self, state: InstanceState[_O], passive: PassiveFlag
+    ) -> LoaderCallableStatus:
+        """__call__ allows the InstanceState to act as a deferred
+        callable for loading expired attributes, which is also
+        serializable (picklable).
+    
+        """
+    
+        if not passive & SQL_OK:
+            return PASSIVE_NO_RESULT
+    
+        toload = self.expired_attributes.intersection(self.unmodified)
+        toload = toload.difference(
+            attr
+            for attr in toload
+            if not self.manager[attr].impl.load_on_unexpire
+        )
+    
+>       self.manager.expired_attribute_loader(self, toload, passive)
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/state.py:803: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mapper = <Mapper at 0x7358acd451d0; LabUnit>
+state = <sqlalchemy.orm.state.InstanceState object at 0x7358ab147ef0>
+attribute_names = {'hospital', 'hospital_id', 'id', 'name', 'users'}
+passive = symbol('PASSIVE_OFF')
+
+    def load_scalar_attributes(mapper, state, attribute_names, passive):
+        """initiate a column-based attribute refresh operation."""
+    
+        # assert mapper is _state_mapper(state)
+        session = state.session
+        if not session:
+>           raise orm_exc.DetachedInstanceError(
+                "Instance %s is not bound to a Session; "
+                "attribute refresh operation cannot proceed" % (state_str(state))
+            )
+E           sqlalchemy.orm.exc.DetachedInstanceError: Instance <LabUnit at 0x7358abd80c20> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/loading.py:1607: DetachedInstanceError
+---------------------------- Captured stdout setup -----------------------------
+Setting up the environment...
+Directories are ready.
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126823853634096)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126823853634096)
+---------------------------- Captured stderr setup -----------------------------
+--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/logging/handlers.py", line 81, in emit
+    logging.FileHandler.emit(self, record)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1263, in emit
+    self.stream = self._open()
+                  ~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1248, in _open
+    return open_func(self.baseFilename, self.mode,
+                     encoding=self.encoding, errors=self.errors)
+PermissionError: [Errno 13] Permission denied: '/app/logs/db_query.log'
+Call stack:
+  File "/app/.venv/bin/pytest", line 10, in <module>
+    sys.exit(console_main())
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 336, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 289, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 343, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 367, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 117, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 130, in runtestprotocol
+    rep = call_and_report(item, "setup", log)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 245, in call_and_report
+    call = CallInfo.from_call(
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 344, in from_call
+    result: TResult | None = func()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 246, in <lambda>
+    lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 164, in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 514, in setup
+    col.setup()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/python.py", line 1674, in setup
+    self._request._fillfixtures()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 719, in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 548, in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 639, in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1127, in execute
+    result = ihook.pytest_fixture_setup(fixturedef=self, request=request)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1195, in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 922, in call_fixture_func
+    fixture_result = next(generator)
+  File "/app/tests/conftest.py", line 202, in app
+    app = create_app()
+  File "/app/app.py", line 878, in create_app
+    loggers = _configure_logging_services(app)
+  File "/app/app.py", line 287, in _configure_logging_services
+    loggers = configure_logging(app)
+  File "/app/app_init/logging_config.py", line 228, in configure_logging
+    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
+Message: 'DB query logger initialized at %s'
+Arguments: ('logs/db_query.log',)
+------------------------------ Captured log setup ------------------------------
+WARNING  utils.email_config:email_config.py:233 Could not update Flask email config: No valid email configuration found in database or environment variables
+=================================== FAILURES ===================================
+_______________ TestNewRolesAccess.test_analytics_viewer_access ________________
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884cc8cd0>
+parameters = [{'hospital_id_1': 1}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+cursor = <cursor object at 0x735884ce5e40; closed: -1>
+statement = 'SELECT count(*) AS count_1 \nFROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file...= lab_units.hospital_id \nWHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1'
+parameters = {'hospital_id_1': 1}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       psycopg2.errors.DuplicateAlias: table name "lab_units" specified more than once
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py:951: DuplicateAlias
+
+The above exception was the direct cause of the following exception:
+
+self = <Flask 'app'>
+
+    def full_dispatch_request(self) -> Response:
+        """Dispatches the request and on top of that performs request
+        pre and postprocessing as well as HTTP exception catching and
+        error handling.
+    
+        .. versionadded:: 0.7
+        """
+        self._got_first_request = True
+    
+        try:
+            request_started.send(self, _async_wrapper=self.ensure_sync)
+            rv = self.preprocess_request()
+            if rv is None:
+>               rv = self.dispatch_request()
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:917: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+
+    def dispatch_request(self) -> ft.ResponseReturnValue:
+        """Does the request dispatching.  Matches the URL and returns the
+        return value of the view or error handler.  This does not have to
+        be a response object.  In order to convert the return value to a
+        proper response object, call :func:`make_response`.
+    
+        .. versionchanged:: 0.7
+           This no longer does the exception handling, this code was
+           moved to the new :meth:`full_dispatch_request`.
+        """
+        req = request_ctx.request
+        if req.routing_exception is not None:
+            self.raise_routing_exception(req)
+        rule: Rule = req.url_rule  # type: ignore[assignment]
+        # if we provide automatic options for this URL and the
+        # request came with the OPTIONS method, reply automatically
+        if (
+            getattr(rule, "provide_automatic_options", False)
+            and req.method == "OPTIONS"
+        ):
+            return self.make_default_options_response()
+        # otherwise dispatch to the handler for that endpoint
+        view_args: dict[str, t.Any] = req.view_args  # type: ignore[assignment]
+>       return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:902: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (), kwargs = {}
+
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if request.method in EXEMPT_METHODS or current_app.config.get("LOGIN_DISABLED"):
+            pass
+        elif not current_user.is_authenticated:
+            return current_app.login_manager.unauthorized()
+    
+        # flask 1.x compatibility
+        # current_app.ensure_sync is only available in Flask >= 2.0
+        if callable(getattr(current_app, "ensure_sync", None)):
+>           return current_app.ensure_sync(func)(*args, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask_login/utils.py:290: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (), kwargs = {}, ok = True
+
+    @wraps(fn)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("auth.login"))
+        ok = (current_user.has_all_roles(*required) if require_all
+              else current_user.has_role(*required))
+        if not ok:
+            return abort(403)
+>       return fn(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^
+
+auth/roles.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @bp.route("/encounters", methods=["GET"])
+    @roles_required(
+        "admin",
+        "local_admin",
+        "fileUploader",
+        "ophthalmologist",
+        "data_manager",
+        "analytics_viewer",
+        "resident",
+        "optometrist",
+    )
+    def encounter_results() -> str:
+        """Render encounter-level grading summaries."""
+    
+        page = request.args.get("page", default=1, type=int) or 1
+        hospital_id = request.args.get("hospital_id", type=int)
+        lab_unit_id = request.args.get("lab_unit_id", type=int)
+        capture_date_str = (request.args.get("capture_date") or "").strip() or None
+        capture_date = None
+        if capture_date_str:
+            capture_date = parse_date_yyyy_mm_dd(capture_date_str)
+    
+        page = max(1, page)
+        per_page = current_app.config.get("REPORT_ENCOUNTER_RESULTS_PAGE_SIZE", 10)
+        per_page = per_page if isinstance(per_page, int) and per_page > 0 else 10
+    
+        with get_db_session() as db:
+            # Determine scoping context
+            query = db.query(PatientEncounters)
+            query = apply_scoping(query, PatientEncounters, current_user, 'analytics')
+    
+            # Check if user has any access at all
+            if not current_user.is_master_admin and not current_user.hospital_id:
+                flash("No hospital access.", "warning")
+                return redirect(url_for("home.index"))
+    
+            # Apply options for relationships
+            query = query.outerjoin(LabUnit, PatientEncounters.lab_unit).outerjoin(Hospital, LabUnit.hospital).options(
+                selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
+                selectinload(PatientEncounters.encounter_files),
+                selectinload(PatientEncounters.glaucoma_results_cleaned),
+                selectinload(PatientEncounters.dr_reports),
+                selectinload(PatientEncounters.zip_file),
+            )
+    
+            if hospital_id:
+                # Re-apply scoping to hospital filter check?
+                # Actually apply_scoping already filters by hospital if user is scoped.
+                # If they pass a specific hospital_id, we just filter by it.
+                # If it's NOT their hospital, the previous scoping will result in empty set.
+                query = query.filter(LabUnit.hospital_id == hospital_id)
+    
+            # Only allow filtering by lab_unit_id if the user has access to that lab unit
+            if lab_unit_id:
+                query = query.filter(PatientEncounters.lab_unit_id == lab_unit_id)
+    
+            if capture_date:
+                query = query.filter(PatientEncounters.capture_date_dt == capture_date)
+    
+>           total = query.count()
+                    ^^^^^^^^^^^^^
+
+analytics/route_encounter_results.py:104: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.query.Query object at 0x735884c820d0>
+
+    def count(self) -> int:
+        r"""Return a count of rows this the SQL formed by this :class:`Query`
+        would return.
+    
+        This generates the SQL for this Query as follows:
+    
+        .. sourcecode:: sql
+    
+            SELECT count(1) AS count_1 FROM (
+                SELECT <rest of query follows...>
+            ) AS anon_1
+    
+        The above SQL returns a single row, which is the aggregate value
+        of the count function; the :meth:`_query.Query.count`
+        method then returns
+        that single integer value.
+    
+        .. warning::
+    
+            It is important to note that the value returned by
+            count() is **not the same as the number of ORM objects that this
+            Query would return from a method such as the .all() method**.
+            The :class:`_query.Query` object,
+            when asked to return full entities,
+            will **deduplicate entries based on primary key**, meaning if the
+            same primary key value would appear in the results more than once,
+            only one object of that primary key would be present.  This does
+            not apply to a query that is against individual columns.
+    
+            .. seealso::
+    
+                :ref:`faq_query_deduplicating`
+    
+        For fine grained control over specific columns to count, to skip the
+        usage of a subquery or otherwise control of the FROM clause, or to use
+        other aggregate functions, use :attr:`~sqlalchemy.sql.expression.func`
+        expressions in conjunction with :meth:`~.Session.query`, i.e.::
+    
+            from sqlalchemy import func
+    
+            # count User records, without
+            # using a subquery.
+            session.query(func.count(User.id))
+    
+            # return count of user "id" grouped
+            # by "name"
+            session.query(func.count(User.id)).group_by(User.name)
+    
+            from sqlalchemy import distinct
+    
+            # count distinct "name" values
+            session.query(func.count(distinct(User.name)))
+    
+        .. seealso::
+    
+            :ref:`migration_20_query_usage`
+    
+        """
+        col = sql.func.count(sql.literal_column("*"))
+        return (  # type: ignore
+>           self._legacy_from_self(col).enable_eagerloads(False).scalar()
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py:3146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.query.Query object at 0x735884c82350>
+
+    def scalar(self) -> Any:
+        """Return the first element of the first result or None
+        if no rows present.  If multiple rows are returned,
+        raises :class:`_exc.MultipleResultsFound`.
+    
+          >>> session.query(Item).scalar()
+          <Item>
+          >>> session.query(Item.id).scalar()
+          1
+          >>> session.query(Item.id).filter(Item.id < 0).scalar()
+          None
+          >>> session.query(Item.id, Item.name).scalar()
+          1
+          >>> session.query(func.count(Parent.id)).scalar()
+          20
+    
+        This results in an execution of the underlying query.
+    
+        .. seealso::
+    
+            :meth:`_engine.Result.scalar` - v2 comparable method.
+    
+        """
+        # TODO: not sure why we can't use result.scalar() here
+        try:
+>           ret = self.one()
+                  ^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py:2835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.query.Query object at 0x735884c82350>
+
+    def one(self) -> _T:
+        """Return exactly one result or raise an exception.
+    
+        Raises :class:`_exc.NoResultFound` if the query selects no rows.
+        Raises :class:`_exc.MultipleResultsFound` if multiple object identities
+        are returned, or if multiple rows are returned for a query that returns
+        only scalar values as opposed to full identity-mapped entities.
+    
+        Calling :meth:`.one` results in an execution of the underlying query.
+    
+        .. seealso::
+    
+            :meth:`_query.Query.first`
+    
+            :meth:`_query.Query.one_or_none`
+    
+            :meth:`_engine.Result.one` - v2 comparable method.
+    
+            :meth:`_engine.Result.scalar_one` - v2 comparable method.
+    
+        """
+>       return self._iter().one()  # type: ignore
+               ^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py:2808: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.query.Query object at 0x735884c82350>
+
+    def _iter(self) -> Union[ScalarResult[_T], Result[_T]]:
+        # new style execution.
+        params = self._params
+    
+        statement = self._statement_20()
+>       result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+            statement,
+            params,
+            execution_options={"_sa_orm_load_options": self.load_options},
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py:2857: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+params = immutabledict({})
+
+    def execute(
+        self,
+        statement: Executable,
+        params: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
+        bind_arguments: Optional[_BindArguments] = None,
+        _parent_execute_state: Optional[Any] = None,
+        _add_event: Optional[Any] = None,
+    ) -> Result[Any]:
+        r"""Execute a SQL expression construct.
+    
+        Returns a :class:`_engine.Result` object representing
+        results of the statement execution.
+    
+        E.g.::
+    
+            from sqlalchemy import select
+    
+            result = session.execute(select(User).where(User.id == 5))
+    
+        The API contract of :meth:`_orm.Session.execute` is similar to that
+        of :meth:`_engine.Connection.execute`, the :term:`2.0 style` version
+        of :class:`_engine.Connection`.
+    
+        .. versionchanged:: 1.4 the :meth:`_orm.Session.execute` method is
+           now the primary point of ORM statement execution when using
+           :term:`2.0 style` ORM usage.
+    
+        :param statement:
+            An executable statement (i.e. an :class:`.Executable` expression
+            such as :func:`_expression.select`).
+    
+        :param params:
+            Optional dictionary, or list of dictionaries, containing
+            bound parameter values.   If a single dictionary, single-row
+            execution occurs; if a list of dictionaries, an
+            "executemany" will be invoked.  The keys in each dictionary
+            must correspond to parameter names present in the statement.
+    
+        :param execution_options: optional dictionary of execution options,
+         which will be associated with the statement execution.  This
+         dictionary can provide a subset of the options that are accepted
+         by :meth:`_engine.Connection.execution_options`, and may also
+         provide additional options understood only in an ORM context.
+    
+         .. seealso::
+    
+            :ref:`orm_queryguide_execution_options` - ORM-specific execution
+            options
+    
+        :param bind_arguments: dictionary of additional arguments to determine
+         the bind.  May include "mapper", "bind", or other custom arguments.
+         Contents of this dictionary are passed to the
+         :meth:`.Session.get_bind` method.
+    
+        :return: a :class:`_engine.Result` object.
+    
+    
+        """
+>       return self._execute_internal(
+            statement,
+            params,
+            execution_options=execution_options,
+            bind_arguments=bind_arguments,
+            _parent_execute_state=_parent_execute_state,
+            _add_event=_add_event,
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py:2365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+params = immutabledict({})
+
+    def _execute_internal(
+        self,
+        statement: Executable,
+        params: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
+        bind_arguments: Optional[_BindArguments] = None,
+        _parent_execute_state: Optional[Any] = None,
+        _add_event: Optional[Any] = None,
+        _scalar_result: bool = False,
+    ) -> Any:
+        statement = coercions.expect(roles.StatementRole, statement)
+    
+        if not bind_arguments:
+            bind_arguments = {}
+        else:
+            bind_arguments = dict(bind_arguments)
+    
+        if (
+            statement._propagate_attrs.get("compile_state_plugin", None)
+            == "orm"
+        ):
+            compile_state_cls = CompileState._get_plugin_class_for_plugin(
+                statement, "orm"
+            )
+            if TYPE_CHECKING:
+                assert isinstance(
+                    compile_state_cls, context.AbstractORMCompileState
+                )
+        else:
+            compile_state_cls = None
+            bind_arguments.setdefault("clause", statement)
+    
+        execution_options = util.coerce_to_immutabledict(execution_options)
+    
+        if _parent_execute_state:
+            events_todo = _parent_execute_state._remaining_events()
+        else:
+            events_todo = self.dispatch.do_orm_execute
+            if _add_event:
+                events_todo = list(events_todo) + [_add_event]
+    
+        if events_todo:
+            if compile_state_cls is not None:
+                # for event handlers, do the orm_pre_session_exec
+                # pass ahead of the event handlers, so that things like
+                # .load_options, .update_delete_options etc. are populated.
+                # is_pre_event=True allows the hook to hold off on things
+                # it doesn't want to do twice, including autoflush as well
+                # as "pre fetch" for DML, etc.
+                (
+                    statement,
+                    execution_options,
+                ) = compile_state_cls.orm_pre_session_exec(
+                    self,
+                    statement,
+                    params,
+                    execution_options,
+                    bind_arguments,
+                    True,
+                )
+    
+            orm_exec_state = ORMExecuteState(
+                self,
+                statement,
+                params,
+                execution_options,
+                bind_arguments,
+                compile_state_cls,
+                events_todo,
+            )
+            for idx, fn in enumerate(events_todo):
+                orm_exec_state._starting_event_idx = idx
+                fn_result: Optional[Result[Any]] = fn(orm_exec_state)
+                if fn_result:
+                    if _scalar_result:
+                        return fn_result.scalar()
+                    else:
+                        return fn_result
+    
+            statement = orm_exec_state.statement
+            execution_options = orm_exec_state.local_execution_options
+    
+        if compile_state_cls is not None:
+            # now run orm_pre_session_exec() "for real".   if there were
+            # event hooks, this will re-run the steps that interpret
+            # new execution_options into load_options / update_delete_options,
+            # which we assume the event hook might have updated.
+            # autoflush will also be invoked in this step if enabled.
+            (
+                statement,
+                execution_options,
+            ) = compile_state_cls.orm_pre_session_exec(
+                self,
+                statement,
+                params,
+                execution_options,
+                bind_arguments,
+                False,
+            )
+    
+        bind = self.get_bind(**bind_arguments)
+    
+        conn = self._connection_for_bind(bind)
+    
+        if _scalar_result and not compile_state_cls:
+            if TYPE_CHECKING:
+                params = cast(_CoreSingleExecuteParams, params)
+            return conn.scalar(
+                statement, params or {}, execution_options=execution_options
+            )
+    
+        if compile_state_cls:
+>           result: Result[Any] = compile_state_cls.orm_execute_statement(
+                self,
+                statement,
+                params or {},
+                execution_options,
+                bind_arguments,
+                conn,
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py:2251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'sqlalchemy.orm.context.ORMSelectCompileState'>
+session = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+params = {}
+execution_options = immutabledict({'_sa_orm_load_options': default_load_options(_legacy_uniquing=True), '_result_disable_adapt_to_context': True})
+bind_arguments = {'clause': <sqlalchemy.sql.selectable.Select object at 0x735884c66250>, 'mapper': <Mapper at 0x7358acd25090; PatientEncounters>}
+conn = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+
+    @classmethod
+    def orm_execute_statement(
+        cls,
+        session,
+        statement,
+        params,
+        execution_options,
+        bind_arguments,
+        conn,
+    ) -> Result:
+>       result = conn.execute(
+            statement, params or {}, execution_options=execution_options
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/context.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+parameters = {}
+
+    def execute(
+        self,
+        statement: Executable,
+        parameters: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: Optional[CoreExecuteOptionsParameter] = None,
+    ) -> CursorResult[Any]:
+        r"""Executes a SQL statement construct and returns a
+        :class:`_engine.CursorResult`.
+    
+        :param statement: The statement to be executed.  This is always
+         an object that is in both the :class:`_expression.ClauseElement` and
+         :class:`_expression.Executable` hierarchies, including:
+    
+         * :class:`_expression.Select`
+         * :class:`_expression.Insert`, :class:`_expression.Update`,
+           :class:`_expression.Delete`
+         * :class:`_expression.TextClause` and
+           :class:`_expression.TextualSelect`
+         * :class:`_schema.DDL` and objects which inherit from
+           :class:`_schema.ExecutableDDLElement`
+    
+        :param parameters: parameters which will be bound into the statement.
+         This may be either a dictionary of parameter names to values,
+         or a mutable sequence (e.g. a list) of dictionaries.  When a
+         list of dictionaries is passed, the underlying statement execution
+         will make use of the DBAPI ``cursor.executemany()`` method.
+         When a single dictionary is passed, the DBAPI ``cursor.execute()``
+         method will be used.
+    
+        :param execution_options: optional dictionary of execution options,
+         which will be associated with the statement execution.  This
+         dictionary can provide a subset of the options that are accepted
+         by :meth:`_engine.Connection.execution_options`.
+    
+        :return: a :class:`_engine.Result` object.
+    
+        """
+        distilled_parameters = _distill_params_20(parameters)
+        try:
+            meth = statement._execute_on_connection
+        except AttributeError as err:
+            raise exc.ObjectNotExecutableError(statement) from err
+        else:
+>           return meth(
+                self,
+                distilled_parameters,
+                execution_options or NO_OPTIONS,
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1419: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+connection = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+distilled_params = [{}]
+execution_options = immutabledict({'_sa_orm_load_options': default_load_options(_legacy_uniquing=True), '_result_disable_adapt_to_context': True})
+
+    def _execute_on_connection(
+        self,
+        connection: Connection,
+        distilled_params: _CoreMultiExecuteParams,
+        execution_options: CoreExecuteOptionsParameter,
+    ) -> Result[Any]:
+        if self.supports_execution:
+            if TYPE_CHECKING:
+                assert isinstance(self, Executable)
+>           return connection._execute_clauseelement(
+                self, distilled_params, execution_options
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/sql/elements.py:526: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+elem = <sqlalchemy.sql.selectable.Select object at 0x735884c66250>
+distilled_parameters = [{}]
+execution_options = immutabledict({'_sa_orm_load_options': default_load_options(_legacy_uniquing=True), '_result_disable_adapt_to_context': True})
+
+    def _execute_clauseelement(
+        self,
+        elem: Executable,
+        distilled_parameters: _CoreMultiExecuteParams,
+        execution_options: CoreExecuteOptionsParameter,
+    ) -> CursorResult[Any]:
+        """Execute a sql.ClauseElement object."""
+    
+        execution_options = elem._execution_options.merge_with(
+            self._execution_options, execution_options
+        )
+    
+        has_events = self._has_events or self.engine._has_events
+        if has_events:
+            (
+                elem,
+                distilled_parameters,
+                event_multiparams,
+                event_params,
+            ) = self._invoke_before_exec_event(
+                elem, distilled_parameters, execution_options
+            )
+    
+        if distilled_parameters:
+            # ensure we don't retain a link to the view object for keys()
+            # which links to the values, which we don't want to cache
+            keys = sorted(distilled_parameters[0])
+            for_executemany = len(distilled_parameters) > 1
+        else:
+            keys = []
+            for_executemany = False
+    
+        dialect = self.dialect
+    
+        schema_translate_map = execution_options.get(
+            "schema_translate_map", None
+        )
+    
+        compiled_cache: Optional[CompiledCacheType] = execution_options.get(
+            "compiled_cache", self.engine._compiled_cache
+        )
+    
+        compiled_sql, extracted_params, cache_hit = elem._compile_w_cache(
+            dialect=dialect,
+            compiled_cache=compiled_cache,
+            column_keys=keys,
+            for_executemany=for_executemany,
+            schema_translate_map=schema_translate_map,
+            linting=self.dialect.compiler_linting | compiler.WARN_LINTING,
+        )
+>       ret = self._execute_context(
+            dialect,
+            dialect.execution_ctx_cls._init_compiled,
+            compiled_sql,
+            distilled_parameters,
+            execution_options,
+            compiled_sql,
+            distilled_parameters,
+            elem,
+            extracted_params,
+            cache_hit=cache_hit,
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1641: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+constructor = <bound method DefaultExecutionContext._init_compiled of <class 'sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2'>>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884cc8cd0>
+parameters = [{}]
+execution_options = immutabledict({'_sa_orm_load_options': default_load_options(_legacy_uniquing=True), '_result_disable_adapt_to_context': True})
+args = (<sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884cc8cd0>, [{}], <sqlalchemy.sql.selectable.Select object at 0x735884c66250>, [BindParameter('%(126824022186192 hospital_id)s', 1, type_=Integer())])
+kw = {'cache_hit': <CacheStats.CACHE_MISS: 1>}, yp = None
+conn = <sqlalchemy.pool.base._ConnectionFairy object at 0x7358ace87f50>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+
+    def _execute_context(
+        self,
+        dialect: Dialect,
+        constructor: Callable[..., ExecutionContext],
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+        execution_options: _ExecuteOptions,
+        *args: Any,
+        **kw: Any,
+    ) -> CursorResult[Any]:
+        """Create an :class:`.ExecutionContext` and execute, returning
+        a :class:`_engine.CursorResult`."""
+    
+        if execution_options:
+            yp = execution_options.get("yield_per", None)
+            if yp:
+                execution_options = execution_options.union(
+                    {"stream_results": True, "max_row_buffer": yp}
+                )
+        try:
+            conn = self._dbapi_connection
+            if conn is None:
+                conn = self._revalidate_connection()
+    
+            context = constructor(
+                dialect, self, conn, execution_options, *args, **kw
+            )
+        except (exc.PendingRollbackError, exc.ResourceClosedError):
+            raise
+        except BaseException as e:
+            self._handle_dbapi_exception(
+                e, str(statement), parameters, None, None
+            )
+    
+        if (
+            self._transaction
+            and not self._transaction.is_active
+            or (
+                self._nested_transaction
+                and not self._nested_transaction.is_active
+            )
+        ):
+            self._invalid_transaction()
+    
+        elif self._trans_context_manager:
+            TransactionalContext._trans_ctx_check(self)
+    
+        if self._transaction is None:
+            self._autobegin()
+    
+        context.pre_exec()
+    
+        if context.execute_style is ExecuteStyle.INSERTMANYVALUES:
+            return self._exec_insertmany_context(dialect, context)
+        else:
+>           return self._exec_single_context(
+                dialect, context, statement, parameters
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1846: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884cc8cd0>
+parameters = [{'hospital_id_1': 1}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+    
+            if self._has_events or self.engine._has_events:
+                self.dispatch.after_cursor_execute(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+            context.post_exec()
+    
+            result = context._setup_result_proxy()
+    
+        except BaseException as e:
+>           self._handle_dbapi_exception(
+                e, str_statement, effective_parameters, cursor, context
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1986: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+e = DuplicateAlias('table name "lab_units" specified more than once\n')
+statement = 'SELECT count(*) AS count_1 \nFROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file...= lab_units.hospital_id \nWHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1'
+parameters = {'hospital_id_1': 1}
+cursor = <cursor object at 0x735884ce5e40; closed: -1>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+is_sub_exec = False
+
+    def _handle_dbapi_exception(
+        self,
+        e: BaseException,
+        statement: Optional[str],
+        parameters: Optional[_AnyExecuteParams],
+        cursor: Optional[DBAPICursor],
+        context: Optional[ExecutionContext],
+        is_sub_exec: bool = False,
+    ) -> NoReturn:
+        exc_info = sys.exc_info()
+    
+        is_exit_exception = util.is_exit_exception(e)
+    
+        if not self._is_disconnect:
+            self._is_disconnect = (
+                isinstance(e, self.dialect.loaded_dbapi.Error)
+                and not self.closed
+                and self.dialect.is_disconnect(
+                    e,
+                    self._dbapi_connection if not self.invalidated else None,
+                    cursor,
+                )
+            ) or (is_exit_exception and not self.closed)
+    
+        invalidate_pool_on_disconnect = not is_exit_exception
+    
+        ismulti: bool = (
+            not is_sub_exec and context.executemany
+            if context is not None
+            else False
+        )
+        if self._reentrant_error:
+            raise exc.DBAPIError.instance(
+                statement,
+                parameters,
+                e,
+                self.dialect.loaded_dbapi.Error,
+                hide_parameters=self.engine.hide_parameters,
+                dialect=self.dialect,
+                ismulti=ismulti,
+            ).with_traceback(exc_info[2]) from e
+        self._reentrant_error = True
+        try:
+            # non-DBAPI error - if we already got a context,
+            # or there's no string statement, don't wrap it
+            should_wrap = isinstance(e, self.dialect.loaded_dbapi.Error) or (
+                statement is not None
+                and context is None
+                and not is_exit_exception
+            )
+    
+            if should_wrap:
+                sqlalchemy_exception = exc.DBAPIError.instance(
+                    statement,
+                    parameters,
+                    cast(Exception, e),
+                    self.dialect.loaded_dbapi.Error,
+                    hide_parameters=self.engine.hide_parameters,
+                    connection_invalidated=self._is_disconnect,
+                    dialect=self.dialect,
+                    ismulti=ismulti,
+                )
+            else:
+                sqlalchemy_exception = None
+    
+            newraise = None
+    
+            if (self.dialect._has_events) and not self._execution_options.get(
+                "skip_user_error_events", False
+            ):
+                ctx = ExceptionContextImpl(
+                    e,
+                    sqlalchemy_exception,
+                    self.engine,
+                    self.dialect,
+                    self,
+                    cursor,
+                    statement,
+                    parameters,
+                    context,
+                    self._is_disconnect,
+                    invalidate_pool_on_disconnect,
+                    False,
+                )
+    
+                for fn in self.dialect.dispatch.handle_error:
+                    try:
+                        # handler returns an exception;
+                        # call next handler in a chain
+                        per_fn = fn(ctx)
+                        if per_fn is not None:
+                            ctx.chained_exception = newraise = per_fn
+                    except Exception as _raised:
+                        # handler raises an exception - stop processing
+                        newraise = _raised
+                        break
+    
+                if self._is_disconnect != ctx.is_disconnect:
+                    self._is_disconnect = ctx.is_disconnect
+                    if sqlalchemy_exception:
+                        sqlalchemy_exception.connection_invalidated = (
+                            ctx.is_disconnect
+                        )
+    
+                # set up potentially user-defined value for
+                # invalidate pool.
+                invalidate_pool_on_disconnect = (
+                    ctx.invalidate_pool_on_disconnect
+                )
+    
+            if should_wrap and context:
+                context.handle_dbapi_exception(e)
+    
+            if not self._is_disconnect:
+                if cursor:
+                    self._safe_close_cursor(cursor)
+                # "autorollback" was mostly relevant in 1.x series.
+                # It's very unlikely to reach here, as the connection
+                # does autobegin so when we are here, we are usually
+                # in an explicit / semi-explicit transaction.
+                # however we have a test which manufactures this
+                # scenario in any case using an event handler.
+                # test/engine/test_execute.py-> test_actual_autorollback
+                if not self.in_transaction():
+                    self._rollback_impl()
+    
+            if newraise:
+                raise newraise.with_traceback(exc_info[2]) from e
+            elif should_wrap:
+                assert sqlalchemy_exception is not None
+>               raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:2355: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884cc8cd0>
+parameters = [{'hospital_id_1': 1}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+cursor = <cursor object at 0x735884ce5e40; closed: -1>
+statement = 'SELECT count(*) AS count_1 \nFROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file...= lab_units.hospital_id \nWHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1'
+parameters = {'hospital_id_1': 1}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4850>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.ProgrammingError: (psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once
+E       
+E       [SQL: SELECT count(*) AS count_1 
+E       FROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file_id AS patient_encounters_zip_file_id, patient_encounters.name AS patient_encounters_name, patient_encounters.patient_id AS patient_encounters_patient_id, patient_encounters.capture_date AS patient_encounters_capture_date, patient_encounters.glaucoma_verified_status AS patient_encounters_glaucoma_verified_status, patient_encounters.glaucoma_verified_by AS patient_encounters_glaucoma_verified_by, patient_encounters.glaucoma_verified_at AS patient_encounters_glaucoma_verified_at, patient_encounters.dr_verified_status AS patient_encounters_dr_verified_status, patient_encounters.dr_verified_by AS patient_encounters_dr_verified_by, patient_encounters.dr_verified_at AS patient_encounters_dr_verified_at, patient_encounters.capture_date_dt AS patient_encounters_capture_date_dt, patient_encounters.lab_unit_id AS patient_encounters_lab_unit_id, patient_encounters.encounter_verified_status AS patient_encounters_encounter_verified_status, patient_encounters.encounter_verified_by AS patient_encounters_encounter_verified_by, patient_encounters.encounter_verified_at AS patient_encounters_encounter_verified_at 
+E       FROM patient_encounters JOIN lab_units ON patient_encounters.lab_unit_id = lab_units.id LEFT OUTER JOIN lab_units ON lab_units.id = patient_encounters.lab_unit_id LEFT OUTER JOIN hospitals ON hospitals.id = lab_units.hospital_id 
+E       WHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1]
+E       [parameters: {'hospital_id_1': 1}]
+E       (Background on this error at: https://sqlalche.me/e/20/f405)
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py:951: ProgrammingError
+
+During handling of the above exception, another exception occurred:
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884ccbd90>
+parameters = [{'recipient_user_id_1': 7}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+cursor = <cursor object at 0x735884ce65c0; closed: -1>
+statement = 'SELECT count(*) AS count_1 \nFROM notifications \nWHERE notifications.recipient_user_id = %(recipient_user_id_1)s AND notifications.is_read IS false'
+parameters = {'recipient_user_id_1': 7}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       psycopg2.errors.InFailedSqlTransaction: current transaction is aborted, commands ignored until end of transaction block
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py:951: InFailedSqlTransaction
+
+The above exception was the direct cause of the following exception:
+
+self = <test_new_roles_access.TestNewRolesAccess object at 0x7358ac6c91d0>
+app = <Flask 'app'>
+db_session = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+analytics_viewer_global = <models.User object at 0x735884c417b0>
+
+    def test_analytics_viewer_access(self, app, db_session, analytics_viewer_global):
+        """Verify analytics_viewer can access dashboard routes."""
+        # Re-fetch user to ensure it's in the current session
+        user = db_session.query(User).filter_by(id=analytics_viewer_global.id).first()
+    
+        # Use FlaskLoginClient's support for user= parameter
+        with app.test_client(user=user) as client:
+            # Test routes (direct paths)
+            paths = [
+                '/analytics/encounters',
+                '/analytics/encounters-simple',
+                '/analytics/image-results',
+                '/analytics/images-without-tasks',
+                '/analytics/encounter-files/kpi',
+                '/analytics/direct-uploads/kpi',
+                '/analytics/model-performance'
+            ]
+    
+            for path in paths:
+>               response = client.get(path)
+                           ^^^^^^^^^^^^^^^^
+
+tests/integration/analytics/test_new_roles_access.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FlaskLoginClient <Flask 'app'>>, args = ('/analytics/encounters',)
+kw = {'method': 'GET'}
+
+    def get(self, *args: t.Any, **kw: t.Any) -> TestResponse:
+        """Call :meth:`open` with ``method`` set to ``GET``."""
+        kw["method"] = "GET"
+>       return self.open(*args, **kw)
+               ^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/werkzeug/test.py:1162: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FlaskLoginClient <Flask 'app'>>, buffered = False
+follow_redirects = False, args = ('/analytics/encounters',)
+kwargs = {'environ_base': {'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'REMOTE_ADDR': '127.0.0.1', 'werkzeug.debug.preserve_context': <built-in method append of list object at 0x73588f3a8a40>}, 'method': 'GET'}
+request = <Request 'http://localhost/analytics/encounters' [GET]>
+
+    def open(
+        self,
+        *args: t.Any,
+        buffered: bool = False,
+        follow_redirects: bool = False,
+        **kwargs: t.Any,
+    ) -> TestResponse:
+        if args and isinstance(
+            args[0], (werkzeug.test.EnvironBuilder, dict, BaseRequest)
+        ):
+            if isinstance(args[0], werkzeug.test.EnvironBuilder):
+                builder = copy(args[0])
+                builder.environ_base = self._copy_environ(builder.environ_base or {})  # type: ignore[arg-type]
+                request = builder.get_request()
+            elif isinstance(args[0], dict):
+                request = EnvironBuilder.from_environ(
+                    args[0], app=self.application, environ_base=self._copy_environ({})
+                ).get_request()
+            else:
+                # isinstance(args[0], BaseRequest)
+                request = copy(args[0])
+                request.environ = self._copy_environ(request.environ)
+        else:
+            # request is None
+            request = self._request_from_builder_args(args, kwargs)
+    
+        # Pop any previously preserved contexts. This prevents contexts
+        # from being preserved across redirects or multiple requests
+        # within a single block.
+        self._context_stack.close()
+    
+>       response = super().open(
+            request,
+            buffered=buffered,
+            follow_redirects=follow_redirects,
+        )
+
+.venv/lib/python3.13/site-packages/flask/testing.py:235: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FlaskLoginClient <Flask 'app'>>, buffered = False
+follow_redirects = False
+args = (<Request 'http://localhost/analytics/encounters' [GET]>,), kwargs = {}
+request = <Request 'http://localhost/analytics/encounters' [GET]>
+arg = <Request 'http://localhost/analytics/encounters' [GET]>
+
+    def open(
+        self,
+        *args: t.Any,
+        buffered: bool = False,
+        follow_redirects: bool = False,
+        **kwargs: t.Any,
+    ) -> TestResponse:
+        """Generate an environ dict from the given arguments, make a
+        request to the application using it, and return the response.
+    
+        :param args: Passed to :class:`EnvironBuilder` to create the
+            environ for the request. If a single arg is passed, it can
+            be an existing :class:`EnvironBuilder` or an environ dict.
+        :param buffered: Convert the iterator returned by the app into
+            a list. If the iterator has a ``close()`` method, it is
+            called automatically.
+        :param follow_redirects: Make additional requests to follow HTTP
+            redirects until a non-redirect status is returned.
+            :attr:`TestResponse.history` lists the intermediate
+            responses.
+    
+        .. versionchanged:: 2.1
+            Removed the ``as_tuple`` parameter.
+    
+        .. versionchanged:: 2.0
+            The request input stream is closed when calling
+            ``response.close()``. Input streams for redirects are
+            automatically closed.
+    
+        .. versionchanged:: 0.5
+            If a dict is provided as file in the dict for the ``data``
+            parameter the content type has to be called ``content_type``
+            instead of ``mimetype``. This change was made for
+            consistency with :class:`werkzeug.FileWrapper`.
+    
+        .. versionchanged:: 0.5
+            Added the ``follow_redirects`` parameter.
+        """
+        request: Request | None = None
+    
+        if not kwargs and len(args) == 1:
+            arg = args[0]
+    
+            if isinstance(arg, EnvironBuilder):
+                request = arg.get_request()
+            elif isinstance(arg, dict):
+                request = EnvironBuilder.from_environ(arg).get_request()
+            elif isinstance(arg, Request):
+                request = arg
+    
+        if request is None:
+            builder = EnvironBuilder(*args, **kwargs)
+    
+            try:
+                request = builder.get_request()
+            finally:
+                builder.close()
+    
+>       response_parts = self.run_wsgi_app(request.environ, buffered=buffered)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/werkzeug/test.py:1116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <FlaskLoginClient <Flask 'app'>>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+buffered = False
+
+    def run_wsgi_app(
+        self, environ: WSGIEnvironment, buffered: bool = False
+    ) -> tuple[t.Iterable[bytes], str, Headers]:
+        """Runs the wrapped WSGI app with the given environment.
+    
+        :meta private:
+        """
+        self._add_cookies_to_wsgi(environ)
+>       rv = run_wsgi_app(self.application, environ, buffered=buffered)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/werkzeug/test.py:988: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+app = <Flask 'app'>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+buffered = False
+
+    def run_wsgi_app(
+        app: WSGIApplication, environ: WSGIEnvironment, buffered: bool = False
+    ) -> tuple[t.Iterable[bytes], str, Headers]:
+        """Return a tuple in the form (app_iter, status, headers) of the
+        application output.  This works best if you pass it an application that
+        returns an iterator all the time.
+    
+        Sometimes applications may use the `write()` callable returned
+        by the `start_response` function.  This tries to resolve such edge
+        cases automatically.  But if you don't get the expected output you
+        should set `buffered` to `True` which enforces buffering.
+    
+        If passed an invalid WSGI application the behavior of this function is
+        undefined.  Never pass non-conforming WSGI applications to this function.
+    
+        :param app: the application to execute.
+        :param buffered: set to `True` to enforce buffering.
+        :return: tuple in the form ``(app_iter, status, headers)``
+        """
+        # Copy environ to ensure any mutations by the app (ProxyFix, for
+        # example) don't affect subsequent requests (such as redirects).
+        environ = _get_environ(environ).copy()
+        status: str
+        response: tuple[str, list[tuple[str, str]]] | None = None
+        buffer: list[bytes] = []
+    
+        def start_response(status, headers, exc_info=None):  # type: ignore
+            nonlocal response
+    
+            if exc_info:
+                try:
+                    raise exc_info[1].with_traceback(exc_info[2])
+                finally:
+                    exc_info = None
+    
+            response = (status, headers)
+            return buffer.append
+    
+>       app_rv = app(environ, start_response)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/werkzeug/test.py:1264: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+start_response = <function run_wsgi_app.<locals>.start_response at 0x7358aceb5800>
+
+    def __call__(
+        self, environ: WSGIEnvironment, start_response: StartResponse
+    ) -> cabc.Iterable[bytes]:
+        """The WSGI server calls the Flask application object as the
+        WSGI application. This calls :meth:`wsgi_app`, which can be
+        wrapped to apply middleware.
+        """
+>       return self.wsgi_app(environ, start_response)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:1536: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <werkzeug.middleware.proxy_fix.ProxyFix object at 0x7358a6f85940>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+start_response = <function run_wsgi_app.<locals>.start_response at 0x7358aceb5800>
+
+    def __call__(
+        self, environ: WSGIEnvironment, start_response: StartResponse
+    ) -> t.Iterable[bytes]:
+        """Modify the WSGI environ based on the various ``Forwarded``
+        headers before calling the wrapped application. Store the
+        original environ values in ``werkzeug.proxy_fix.orig_{key}``.
+        """
+        environ_get = environ.get
+        orig_remote_addr = environ_get("REMOTE_ADDR")
+        orig_wsgi_url_scheme = environ_get("wsgi.url_scheme")
+        orig_http_host = environ_get("HTTP_HOST")
+        environ.update(
+            {
+                "werkzeug.proxy_fix.orig": {
+                    "REMOTE_ADDR": orig_remote_addr,
+                    "wsgi.url_scheme": orig_wsgi_url_scheme,
+                    "HTTP_HOST": orig_http_host,
+                    "SERVER_NAME": environ_get("SERVER_NAME"),
+                    "SERVER_PORT": environ_get("SERVER_PORT"),
+                    "SCRIPT_NAME": environ_get("SCRIPT_NAME"),
+                }
+            }
+        )
+    
+        x_for = self._get_real_value(self.x_for, environ_get("HTTP_X_FORWARDED_FOR"))
+        if x_for:
+            environ["REMOTE_ADDR"] = x_for
+    
+        x_proto = self._get_real_value(
+            self.x_proto, environ_get("HTTP_X_FORWARDED_PROTO")
+        )
+        if x_proto:
+            environ["wsgi.url_scheme"] = x_proto
+    
+        x_host = self._get_real_value(self.x_host, environ_get("HTTP_X_FORWARDED_HOST"))
+        if x_host:
+            environ["HTTP_HOST"] = environ["SERVER_NAME"] = x_host
+            # "]" to check for IPv6 address without port
+            if ":" in x_host and not x_host.endswith("]"):
+                environ["SERVER_NAME"], environ["SERVER_PORT"] = x_host.rsplit(":", 1)
+    
+        x_port = self._get_real_value(self.x_port, environ_get("HTTP_X_FORWARDED_PORT"))
+        if x_port:
+            host = environ.get("HTTP_HOST")
+            if host:
+                # "]" to check for IPv6 address without port
+                if ":" in host and not host.endswith("]"):
+                    host = host.rsplit(":", 1)[0]
+                environ["HTTP_HOST"] = f"{host}:{x_port}"
+            environ["SERVER_PORT"] = x_port
+    
+        x_prefix = self._get_real_value(
+            self.x_prefix, environ_get("HTTP_X_FORWARDED_PREFIX")
+        )
+        if x_prefix:
+            environ["SCRIPT_NAME"] = x_prefix
+    
+>       return self.app(environ, start_response)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/werkzeug/middleware/proxy_fix.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+start_response = <function run_wsgi_app.<locals>.start_response at 0x7358aceb5800>
+
+    def wsgi_app(
+        self, environ: WSGIEnvironment, start_response: StartResponse
+    ) -> cabc.Iterable[bytes]:
+        """The actual WSGI application. This is not implemented in
+        :meth:`__call__` so that middlewares can be applied without
+        losing a reference to the app object. Instead of doing this::
+    
+            app = MyMiddleware(app)
+    
+        It's a better idea to do this instead::
+    
+            app.wsgi_app = MyMiddleware(app.wsgi_app)
+    
+        Then you still have the original application object around and
+        can continue to call methods on it.
+    
+        .. versionchanged:: 0.7
+            Teardown events for the request and app contexts are called
+            even if an unhandled error occurs. Other events may not be
+            called depending on when an error occurs during dispatch.
+            See :ref:`callbacks-and-errors`.
+    
+        :param environ: A WSGI environment.
+        :param start_response: A callable accepting a status code,
+            a list of headers, and an optional exception context to
+            start the response.
+        """
+        ctx = self.request_context(environ)
+        error: BaseException | None = None
+        try:
+            try:
+                ctx.push()
+                response = self.full_dispatch_request()
+            except Exception as e:
+                error = e
+>               response = self.handle_exception(e)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:1514: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (InternalError('(psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block\n'),)
+kwargs = {}
+
+    def wrapped_function(*args, **kwargs):
+>       return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                    ^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask_cors/extension.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+environ = {'HTTP_COOKIE': 'session=1991bae29a059003a8c217fd7e0886cfcbc9df60b471159068655d8d6830a694', 'HTTP_HOST': 'localhost', 'HTTP_USER_AGENT': 'Werkzeug/3.1.4', 'PATH_INFO': '/analytics/encounters', ...}
+start_response = <function run_wsgi_app.<locals>.start_response at 0x7358aceb5800>
+
+    def wsgi_app(
+        self, environ: WSGIEnvironment, start_response: StartResponse
+    ) -> cabc.Iterable[bytes]:
+        """The actual WSGI application. This is not implemented in
+        :meth:`__call__` so that middlewares can be applied without
+        losing a reference to the app object. Instead of doing this::
+    
+            app = MyMiddleware(app)
+    
+        It's a better idea to do this instead::
+    
+            app.wsgi_app = MyMiddleware(app.wsgi_app)
+    
+        Then you still have the original application object around and
+        can continue to call methods on it.
+    
+        .. versionchanged:: 0.7
+            Teardown events for the request and app contexts are called
+            even if an unhandled error occurs. Other events may not be
+            called depending on when an error occurs during dispatch.
+            See :ref:`callbacks-and-errors`.
+    
+        :param environ: A WSGI environment.
+        :param start_response: A callable accepting a status code,
+            a list of headers, and an optional exception context to
+            start the response.
+        """
+        ctx = self.request_context(environ)
+        error: BaseException | None = None
+        try:
+            try:
+                ctx.push()
+>               response = self.full_dispatch_request()
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:1511: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+
+    def full_dispatch_request(self) -> Response:
+        """Dispatches the request and on top of that performs request
+        pre and postprocessing as well as HTTP exception catching and
+        error handling.
+    
+        .. versionadded:: 0.7
+        """
+        self._got_first_request = True
+    
+        try:
+            request_started.send(self, _async_wrapper=self.ensure_sync)
+            rv = self.preprocess_request()
+            if rv is None:
+                rv = self.dispatch_request()
+        except Exception as e:
+>           rv = self.handle_user_exception(e)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:919: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (ProgrammingError('(psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once\n'),)
+kwargs = {}
+
+    def wrapped_function(*args, **kwargs):
+>       return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                    ^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask_cors/extension.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+e = ProgrammingError('(psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once\n')
+
+    def handle_user_exception(
+        self, e: Exception
+    ) -> HTTPException | ft.ResponseReturnValue:
+        """This method is called whenever an exception occurs that
+        should be handled. A special case is :class:`~werkzeug
+        .exceptions.HTTPException` which is forwarded to the
+        :meth:`handle_http_exception` method. This function will either
+        return a response value or reraise the exception with the same
+        traceback.
+    
+        .. versionchanged:: 1.0
+            Key errors raised from request data like ``form`` show the
+            bad key in debug mode rather than a generic bad request
+            message.
+    
+        .. versionadded:: 0.7
+        """
+        if isinstance(e, BadRequestKeyError) and (
+            self.debug or self.config["TRAP_BAD_REQUEST_ERRORS"]
+        ):
+            e.show_exception = True
+    
+        if isinstance(e, HTTPException) and not self.trap_http_exception(e):
+            return self.handle_http_exception(e)
+    
+        handler = self._find_error_handler(e, request.blueprints)
+    
+        if handler is None:
+            raise
+    
+>       return self.ensure_sync(handler)(e)  # type: ignore[no-any-return]
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:809: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+e = ProgrammingError('(psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once\n')
+
+    @app.errorhandler(Exception)
+    def handle_generic_exception(e):
+        from utils.stack_trace_handler import log_stack_trace
+        log_stack_trace(
+            message=f"Unhandled exception: {type(e).__name__}",
+            exception=e,
+        )
+        current_app.logger.exception("Unhandled exception: %s", e)
+>       return render_template("errors/500.html"), 500
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+app.py:702: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+template_name_or_list = 'errors/500.html'
+context = {'csrf_token': <function generate_csrf at 0x7358a6f08c20>, 'default_theme': 'auto', 'g': <flask.g of 'app'>, 'request': <Request 'http://localhost/analytics/encounters' [GET]>, ...}
+app = <Flask 'app'>, template = <Template 'errors/500.html'>
+
+    def render_template(
+        template_name_or_list: str | Template | list[str | Template],
+        **context: t.Any,
+    ) -> str:
+        """Render a template by name with the given context.
+    
+        :param template_name_or_list: The name of the template to render. If
+            a list is given, the first name to exist will be rendered.
+        :param context: The variables to make available in the template.
+        """
+        app = current_app._get_current_object()  # type: ignore[attr-defined]
+        template = app.jinja_env.get_or_select_template(template_name_or_list)
+>       return _render(app, template, context)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/templating.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+app = <Flask 'app'>, template = <Template 'errors/500.html'>
+context = {'csrf_token': <function generate_csrf at 0x7358a6f08c20>, 'default_theme': 'auto', 'g': <flask.g of 'app'>, 'request': <Request 'http://localhost/analytics/encounters' [GET]>, ...}
+
+    def _render(app: Flask, template: Template, context: dict[str, t.Any]) -> str:
+>       app.update_template_context(context)
+
+.venv/lib/python3.13/site-packages/flask/templating.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Flask 'app'>
+context = {'csrf_token': <function generate_csrf at 0x7358a6f08c20>, 'default_theme': 'auto', 'g': <flask.g of 'app'>, 'request': <Request 'http://localhost/analytics/encounters' [GET]>, ...}
+
+    def update_template_context(self, context: dict[str, t.Any]) -> None:
+        """Update the template context with some commonly used variables.
+        This injects request, session, config and g into the template
+        context as well as everything template context processors want
+        to inject.  Note that the as of Flask 0.6, the original values
+        in the context will not be overridden if a context processor
+        decides to return a value with the same key.
+    
+        :param context: the context as a dictionary that is updated in place
+                        to add extra variables.
+        """
+        names: t.Iterable[str | None] = (None,)
+    
+        # A template may be rendered outside a request context.
+        if request:
+            names = chain(names, reversed(request.blueprints))
+    
+        # The values passed to render_template take precedence. Keep a
+        # copy to re-apply after all context functions.
+        orig_ctx = context.copy()
+    
+        for name in names:
+            if name in self.template_context_processors:
+                for func in self.template_context_processors[name]:
+>                   context.update(self.ensure_sync(func)())
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/flask/app.py:530: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @app.context_processor
+    def inject_acl():
+        from flask_login import current_user as cu
+        from utils.notifications import get_unread_notifications_count_cached
+        def current_user_has(*roles):
+            try:
+                return cu.is_authenticated and cu.has_role(*roles)
+            except Exception:
+                return False
+        unread_count = 0
+        if cu.is_authenticated:
+>           unread_count = get_unread_notifications_count_cached(cu.id)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+app.py:322: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+user_id = 7
+
+    def get_unread_notifications_count_cached(user_id: int) -> int:
+        key = _unread_cache_key(user_id)
+        try:
+            cached = cache.get(key)
+        except Exception:
+            cached = None
+        if cached is not None:
+            return int(cached)
+>       count = get_unread_notifications_count(user_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+utils/notifications.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+user_id = 7
+
+    def get_unread_notifications_count(user_id: int) -> int:
+        with transaction_scope() as db:
+>           user_unread = db.execute(
+                select(func.count())
+                .select_from(Notification)
+                .where(
+                    Notification.recipient_user_id == user_id,
+                    Notification.is_read.is_(False),
+                )
+            ).scalar() or 0
+
+utils/notifications.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+params = None
+
+    def execute(
+        self,
+        statement: Executable,
+        params: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
+        bind_arguments: Optional[_BindArguments] = None,
+        _parent_execute_state: Optional[Any] = None,
+        _add_event: Optional[Any] = None,
+    ) -> Result[Any]:
+        r"""Execute a SQL expression construct.
+    
+        Returns a :class:`_engine.Result` object representing
+        results of the statement execution.
+    
+        E.g.::
+    
+            from sqlalchemy import select
+    
+            result = session.execute(select(User).where(User.id == 5))
+    
+        The API contract of :meth:`_orm.Session.execute` is similar to that
+        of :meth:`_engine.Connection.execute`, the :term:`2.0 style` version
+        of :class:`_engine.Connection`.
+    
+        .. versionchanged:: 1.4 the :meth:`_orm.Session.execute` method is
+           now the primary point of ORM statement execution when using
+           :term:`2.0 style` ORM usage.
+    
+        :param statement:
+            An executable statement (i.e. an :class:`.Executable` expression
+            such as :func:`_expression.select`).
+    
+        :param params:
+            Optional dictionary, or list of dictionaries, containing
+            bound parameter values.   If a single dictionary, single-row
+            execution occurs; if a list of dictionaries, an
+            "executemany" will be invoked.  The keys in each dictionary
+            must correspond to parameter names present in the statement.
+    
+        :param execution_options: optional dictionary of execution options,
+         which will be associated with the statement execution.  This
+         dictionary can provide a subset of the options that are accepted
+         by :meth:`_engine.Connection.execution_options`, and may also
+         provide additional options understood only in an ORM context.
+    
+         .. seealso::
+    
+            :ref:`orm_queryguide_execution_options` - ORM-specific execution
+            options
+    
+        :param bind_arguments: dictionary of additional arguments to determine
+         the bind.  May include "mapper", "bind", or other custom arguments.
+         Contents of this dictionary are passed to the
+         :meth:`.Session.get_bind` method.
+    
+        :return: a :class:`_engine.Result` object.
+    
+    
+        """
+>       return self._execute_internal(
+            statement,
+            params,
+            execution_options=execution_options,
+            bind_arguments=bind_arguments,
+            _parent_execute_state=_parent_execute_state,
+            _add_event=_add_event,
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py:2365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+params = None
+
+    def _execute_internal(
+        self,
+        statement: Executable,
+        params: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: OrmExecuteOptionsParameter = util.EMPTY_DICT,
+        bind_arguments: Optional[_BindArguments] = None,
+        _parent_execute_state: Optional[Any] = None,
+        _add_event: Optional[Any] = None,
+        _scalar_result: bool = False,
+    ) -> Any:
+        statement = coercions.expect(roles.StatementRole, statement)
+    
+        if not bind_arguments:
+            bind_arguments = {}
+        else:
+            bind_arguments = dict(bind_arguments)
+    
+        if (
+            statement._propagate_attrs.get("compile_state_plugin", None)
+            == "orm"
+        ):
+            compile_state_cls = CompileState._get_plugin_class_for_plugin(
+                statement, "orm"
+            )
+            if TYPE_CHECKING:
+                assert isinstance(
+                    compile_state_cls, context.AbstractORMCompileState
+                )
+        else:
+            compile_state_cls = None
+            bind_arguments.setdefault("clause", statement)
+    
+        execution_options = util.coerce_to_immutabledict(execution_options)
+    
+        if _parent_execute_state:
+            events_todo = _parent_execute_state._remaining_events()
+        else:
+            events_todo = self.dispatch.do_orm_execute
+            if _add_event:
+                events_todo = list(events_todo) + [_add_event]
+    
+        if events_todo:
+            if compile_state_cls is not None:
+                # for event handlers, do the orm_pre_session_exec
+                # pass ahead of the event handlers, so that things like
+                # .load_options, .update_delete_options etc. are populated.
+                # is_pre_event=True allows the hook to hold off on things
+                # it doesn't want to do twice, including autoflush as well
+                # as "pre fetch" for DML, etc.
+                (
+                    statement,
+                    execution_options,
+                ) = compile_state_cls.orm_pre_session_exec(
+                    self,
+                    statement,
+                    params,
+                    execution_options,
+                    bind_arguments,
+                    True,
+                )
+    
+            orm_exec_state = ORMExecuteState(
+                self,
+                statement,
+                params,
+                execution_options,
+                bind_arguments,
+                compile_state_cls,
+                events_todo,
+            )
+            for idx, fn in enumerate(events_todo):
+                orm_exec_state._starting_event_idx = idx
+                fn_result: Optional[Result[Any]] = fn(orm_exec_state)
+                if fn_result:
+                    if _scalar_result:
+                        return fn_result.scalar()
+                    else:
+                        return fn_result
+    
+            statement = orm_exec_state.statement
+            execution_options = orm_exec_state.local_execution_options
+    
+        if compile_state_cls is not None:
+            # now run orm_pre_session_exec() "for real".   if there were
+            # event hooks, this will re-run the steps that interpret
+            # new execution_options into load_options / update_delete_options,
+            # which we assume the event hook might have updated.
+            # autoflush will also be invoked in this step if enabled.
+            (
+                statement,
+                execution_options,
+            ) = compile_state_cls.orm_pre_session_exec(
+                self,
+                statement,
+                params,
+                execution_options,
+                bind_arguments,
+                False,
+            )
+    
+        bind = self.get_bind(**bind_arguments)
+    
+        conn = self._connection_for_bind(bind)
+    
+        if _scalar_result and not compile_state_cls:
+            if TYPE_CHECKING:
+                params = cast(_CoreSingleExecuteParams, params)
+            return conn.scalar(
+                statement, params or {}, execution_options=execution_options
+            )
+    
+        if compile_state_cls:
+>           result: Result[Any] = compile_state_cls.orm_execute_statement(
+                self,
+                statement,
+                params or {},
+                execution_options,
+                bind_arguments,
+                conn,
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py:2251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'sqlalchemy.orm.context.ORMSelectCompileState'>
+session = <sqlalchemy.orm.session.Session object at 0x7358abd6a510>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+params = {}
+execution_options = immutabledict({'_result_disable_adapt_to_context': True})
+bind_arguments = {'clause': <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>, 'mapper': <Mapper at 0x7358acc642d0; Notification>}
+conn = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+
+    @classmethod
+    def orm_execute_statement(
+        cls,
+        session,
+        statement,
+        params,
+        execution_options,
+        bind_arguments,
+        conn,
+    ) -> Result:
+>       result = conn.execute(
+            statement, params or {}, execution_options=execution_options
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/orm/context.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+statement = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+parameters = {}
+
+    def execute(
+        self,
+        statement: Executable,
+        parameters: Optional[_CoreAnyExecuteParams] = None,
+        *,
+        execution_options: Optional[CoreExecuteOptionsParameter] = None,
+    ) -> CursorResult[Any]:
+        r"""Executes a SQL statement construct and returns a
+        :class:`_engine.CursorResult`.
+    
+        :param statement: The statement to be executed.  This is always
+         an object that is in both the :class:`_expression.ClauseElement` and
+         :class:`_expression.Executable` hierarchies, including:
+    
+         * :class:`_expression.Select`
+         * :class:`_expression.Insert`, :class:`_expression.Update`,
+           :class:`_expression.Delete`
+         * :class:`_expression.TextClause` and
+           :class:`_expression.TextualSelect`
+         * :class:`_schema.DDL` and objects which inherit from
+           :class:`_schema.ExecutableDDLElement`
+    
+        :param parameters: parameters which will be bound into the statement.
+         This may be either a dictionary of parameter names to values,
+         or a mutable sequence (e.g. a list) of dictionaries.  When a
+         list of dictionaries is passed, the underlying statement execution
+         will make use of the DBAPI ``cursor.executemany()`` method.
+         When a single dictionary is passed, the DBAPI ``cursor.execute()``
+         method will be used.
+    
+        :param execution_options: optional dictionary of execution options,
+         which will be associated with the statement execution.  This
+         dictionary can provide a subset of the options that are accepted
+         by :meth:`_engine.Connection.execution_options`.
+    
+        :return: a :class:`_engine.Result` object.
+    
+        """
+        distilled_parameters = _distill_params_20(parameters)
+        try:
+            meth = statement._execute_on_connection
+        except AttributeError as err:
+            raise exc.ObjectNotExecutableError(statement) from err
+        else:
+>           return meth(
+                self,
+                distilled_parameters,
+                execution_options or NO_OPTIONS,
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1419: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+connection = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+distilled_params = [{}]
+execution_options = immutabledict({'_result_disable_adapt_to_context': True})
+
+    def _execute_on_connection(
+        self,
+        connection: Connection,
+        distilled_params: _CoreMultiExecuteParams,
+        execution_options: CoreExecuteOptionsParameter,
+    ) -> Result[Any]:
+        if self.supports_execution:
+            if TYPE_CHECKING:
+                assert isinstance(self, Executable)
+>           return connection._execute_clauseelement(
+                self, distilled_params, execution_options
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/sql/elements.py:526: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+elem = <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>
+distilled_parameters = [{}]
+execution_options = immutabledict({'_result_disable_adapt_to_context': True})
+
+    def _execute_clauseelement(
+        self,
+        elem: Executable,
+        distilled_parameters: _CoreMultiExecuteParams,
+        execution_options: CoreExecuteOptionsParameter,
+    ) -> CursorResult[Any]:
+        """Execute a sql.ClauseElement object."""
+    
+        execution_options = elem._execution_options.merge_with(
+            self._execution_options, execution_options
+        )
+    
+        has_events = self._has_events or self.engine._has_events
+        if has_events:
+            (
+                elem,
+                distilled_parameters,
+                event_multiparams,
+                event_params,
+            ) = self._invoke_before_exec_event(
+                elem, distilled_parameters, execution_options
+            )
+    
+        if distilled_parameters:
+            # ensure we don't retain a link to the view object for keys()
+            # which links to the values, which we don't want to cache
+            keys = sorted(distilled_parameters[0])
+            for_executemany = len(distilled_parameters) > 1
+        else:
+            keys = []
+            for_executemany = False
+    
+        dialect = self.dialect
+    
+        schema_translate_map = execution_options.get(
+            "schema_translate_map", None
+        )
+    
+        compiled_cache: Optional[CompiledCacheType] = execution_options.get(
+            "compiled_cache", self.engine._compiled_cache
+        )
+    
+        compiled_sql, extracted_params, cache_hit = elem._compile_w_cache(
+            dialect=dialect,
+            compiled_cache=compiled_cache,
+            column_keys=keys,
+            for_executemany=for_executemany,
+            schema_translate_map=schema_translate_map,
+            linting=self.dialect.compiler_linting | compiler.WARN_LINTING,
+        )
+>       ret = self._execute_context(
+            dialect,
+            dialect.execution_ctx_cls._init_compiled,
+            compiled_sql,
+            distilled_parameters,
+            execution_options,
+            compiled_sql,
+            distilled_parameters,
+            elem,
+            extracted_params,
+            cache_hit=cache_hit,
+        )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1641: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+constructor = <bound method DefaultExecutionContext._init_compiled of <class 'sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2'>>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884ccbd90>
+parameters = [{}]
+execution_options = immutabledict({'_result_disable_adapt_to_context': True})
+args = (<sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884ccbd90>, [{}], <sqlalchemy.sql.selectable.Select object at 0x735884cd5250>, [BindParameter('%(126824022465840 recipient_user_id)s', 7, type_=Integer())])
+kw = {'cache_hit': <CacheStats.CACHE_MISS: 1>}, yp = None
+conn = <sqlalchemy.pool.base._ConnectionFairy object at 0x7358ace87f50>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+
+    def _execute_context(
+        self,
+        dialect: Dialect,
+        constructor: Callable[..., ExecutionContext],
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+        execution_options: _ExecuteOptions,
+        *args: Any,
+        **kw: Any,
+    ) -> CursorResult[Any]:
+        """Create an :class:`.ExecutionContext` and execute, returning
+        a :class:`_engine.CursorResult`."""
+    
+        if execution_options:
+            yp = execution_options.get("yield_per", None)
+            if yp:
+                execution_options = execution_options.union(
+                    {"stream_results": True, "max_row_buffer": yp}
+                )
+        try:
+            conn = self._dbapi_connection
+            if conn is None:
+                conn = self._revalidate_connection()
+    
+            context = constructor(
+                dialect, self, conn, execution_options, *args, **kw
+            )
+        except (exc.PendingRollbackError, exc.ResourceClosedError):
+            raise
+        except BaseException as e:
+            self._handle_dbapi_exception(
+                e, str(statement), parameters, None, None
+            )
+    
+        if (
+            self._transaction
+            and not self._transaction.is_active
+            or (
+                self._nested_transaction
+                and not self._nested_transaction.is_active
+            )
+        ):
+            self._invalid_transaction()
+    
+        elif self._trans_context_manager:
+            TransactionalContext._trans_ctx_check(self)
+    
+        if self._transaction is None:
+            self._autobegin()
+    
+        context.pre_exec()
+    
+        if context.execute_style is ExecuteStyle.INSERTMANYVALUES:
+            return self._exec_insertmany_context(dialect, context)
+        else:
+>           return self._exec_single_context(
+                dialect, context, statement, parameters
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1846: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884ccbd90>
+parameters = [{'recipient_user_id_1': 7}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+    
+            if self._has_events or self.engine._has_events:
+                self.dispatch.after_cursor_execute(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+            context.post_exec()
+    
+            result = context._setup_result_proxy()
+    
+        except BaseException as e:
+>           self._handle_dbapi_exception(
+                e, str_statement, effective_parameters, cursor, context
+            )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1986: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+e = InFailedSqlTransaction('current transaction is aborted, commands ignored until end of transaction block\n')
+statement = 'SELECT count(*) AS count_1 \nFROM notifications \nWHERE notifications.recipient_user_id = %(recipient_user_id_1)s AND notifications.is_read IS false'
+parameters = {'recipient_user_id_1': 7}
+cursor = <cursor object at 0x735884ce65c0; closed: -1>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+is_sub_exec = False
+
+    def _handle_dbapi_exception(
+        self,
+        e: BaseException,
+        statement: Optional[str],
+        parameters: Optional[_AnyExecuteParams],
+        cursor: Optional[DBAPICursor],
+        context: Optional[ExecutionContext],
+        is_sub_exec: bool = False,
+    ) -> NoReturn:
+        exc_info = sys.exc_info()
+    
+        is_exit_exception = util.is_exit_exception(e)
+    
+        if not self._is_disconnect:
+            self._is_disconnect = (
+                isinstance(e, self.dialect.loaded_dbapi.Error)
+                and not self.closed
+                and self.dialect.is_disconnect(
+                    e,
+                    self._dbapi_connection if not self.invalidated else None,
+                    cursor,
+                )
+            ) or (is_exit_exception and not self.closed)
+    
+        invalidate_pool_on_disconnect = not is_exit_exception
+    
+        ismulti: bool = (
+            not is_sub_exec and context.executemany
+            if context is not None
+            else False
+        )
+        if self._reentrant_error:
+            raise exc.DBAPIError.instance(
+                statement,
+                parameters,
+                e,
+                self.dialect.loaded_dbapi.Error,
+                hide_parameters=self.engine.hide_parameters,
+                dialect=self.dialect,
+                ismulti=ismulti,
+            ).with_traceback(exc_info[2]) from e
+        self._reentrant_error = True
+        try:
+            # non-DBAPI error - if we already got a context,
+            # or there's no string statement, don't wrap it
+            should_wrap = isinstance(e, self.dialect.loaded_dbapi.Error) or (
+                statement is not None
+                and context is None
+                and not is_exit_exception
+            )
+    
+            if should_wrap:
+                sqlalchemy_exception = exc.DBAPIError.instance(
+                    statement,
+                    parameters,
+                    cast(Exception, e),
+                    self.dialect.loaded_dbapi.Error,
+                    hide_parameters=self.engine.hide_parameters,
+                    connection_invalidated=self._is_disconnect,
+                    dialect=self.dialect,
+                    ismulti=ismulti,
+                )
+            else:
+                sqlalchemy_exception = None
+    
+            newraise = None
+    
+            if (self.dialect._has_events) and not self._execution_options.get(
+                "skip_user_error_events", False
+            ):
+                ctx = ExceptionContextImpl(
+                    e,
+                    sqlalchemy_exception,
+                    self.engine,
+                    self.dialect,
+                    self,
+                    cursor,
+                    statement,
+                    parameters,
+                    context,
+                    self._is_disconnect,
+                    invalidate_pool_on_disconnect,
+                    False,
+                )
+    
+                for fn in self.dialect.dispatch.handle_error:
+                    try:
+                        # handler returns an exception;
+                        # call next handler in a chain
+                        per_fn = fn(ctx)
+                        if per_fn is not None:
+                            ctx.chained_exception = newraise = per_fn
+                    except Exception as _raised:
+                        # handler raises an exception - stop processing
+                        newraise = _raised
+                        break
+    
+                if self._is_disconnect != ctx.is_disconnect:
+                    self._is_disconnect = ctx.is_disconnect
+                    if sqlalchemy_exception:
+                        sqlalchemy_exception.connection_invalidated = (
+                            ctx.is_disconnect
+                        )
+    
+                # set up potentially user-defined value for
+                # invalidate pool.
+                invalidate_pool_on_disconnect = (
+                    ctx.invalidate_pool_on_disconnect
+                )
+    
+            if should_wrap and context:
+                context.handle_dbapi_exception(e)
+    
+            if not self._is_disconnect:
+                if cursor:
+                    self._safe_close_cursor(cursor)
+                # "autorollback" was mostly relevant in 1.x series.
+                # It's very unlikely to reach here, as the connection
+                # does autobegin so when we are here, we are usually
+                # in an explicit / semi-explicit transaction.
+                # however we have a test which manufactures this
+                # scenario in any case using an event handler.
+                # test/engine/test_execute.py-> test_actual_autorollback
+                if not self.in_transaction():
+                    self._rollback_impl()
+    
+            if newraise:
+                raise newraise.with_traceback(exc_info[2]) from e
+            elif should_wrap:
+                assert sqlalchemy_exception is not None
+>               raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:2355: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.engine.base.Connection object at 0x7358aad00770>
+dialect = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+statement = <sqlalchemy.dialects.postgresql.base.PGCompiler object at 0x735884ccbd90>
+parameters = [{'recipient_user_id_1': 7}]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py:1967: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <sqlalchemy.dialects.postgresql.psycopg2.PGDialect_psycopg2 object at 0x7358ac6c9950>
+cursor = <cursor object at 0x735884ce65c0; closed: -1>
+statement = 'SELECT count(*) AS count_1 \nFROM notifications \nWHERE notifications.recipient_user_id = %(recipient_user_id_1)s AND notifications.is_read IS false'
+parameters = {'recipient_user_id_1': 7}
+context = <sqlalchemy.dialects.postgresql.psycopg2.PGExecutionContext_psycopg2 object at 0x735884cd4c50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.InternalError: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+E       
+E       [SQL: SELECT count(*) AS count_1 
+E       FROM notifications 
+E       WHERE notifications.recipient_user_id = %(recipient_user_id_1)s AND notifications.is_read IS false]
+E       [parameters: {'recipient_user_id_1': 7}]
+E       (Background on this error at: https://sqlalche.me/e/20/2j85)
+
+.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py:951: InternalError
+---------------------------- Captured stdout setup -----------------------------
+Setting up the environment...
+Directories are ready.
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824677290544)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824677290544)
+---------------------------- Captured stderr setup -----------------------------
+--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/logging/handlers.py", line 81, in emit
+    logging.FileHandler.emit(self, record)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1263, in emit
+    self.stream = self._open()
+                  ~~~~~~~~~~^^
+  File "/usr/local/lib/python3.13/logging/__init__.py", line 1248, in _open
+    return open_func(self.baseFilename, self.mode,
+                     encoding=self.encoding, errors=self.errors)
+PermissionError: [Errno 13] Permission denied: '/app/logs/db_query.log'
+Call stack:
+  File "/app/.venv/bin/pytest", line 10, in <module>
+    sys.exit(console_main())
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 175, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 336, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 289, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 343, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/main.py", line 367, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 117, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 130, in runtestprotocol
+    rep = call_and_report(item, "setup", log)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 245, in call_and_report
+    call = CallInfo.from_call(
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 344, in from_call
+    result: TResult | None = func()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 246, in <lambda>
+    lambda: runtest_hook(item=item, **kwds), when=when, reraise=reraise
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 164, in pytest_runtest_setup
+    item.session._setupstate.setup(item)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 514, in setup
+    col.setup()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/python.py", line 1674, in setup
+    self._request._fillfixtures()
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 719, in _fillfixtures
+    item.funcargs[argname] = self.getfixturevalue(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 548, in getfixturevalue
+    fixturedef = self._get_active_fixturedef(argname)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 639, in _get_active_fixturedef
+    fixturedef.execute(request=subrequest)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1127, in execute
+    result = ihook.pytest_fixture_setup(fixturedef=self, request=request)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/app/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 1195, in pytest_fixture_setup
+    result = call_fixture_func(fixturefunc, request, kwargs)
+  File "/app/.venv/lib/python3.13/site-packages/_pytest/fixtures.py", line 922, in call_fixture_func
+    fixture_result = next(generator)
+  File "/app/tests/conftest.py", line 202, in app
+    app = create_app()
+  File "/app/app.py", line 878, in create_app
+    loggers = _configure_logging_services(app)
+  File "/app/app.py", line 287, in _configure_logging_services
+    loggers = configure_logging(app)
+  File "/app/app_init/logging_config.py", line 228, in configure_logging
+    db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
+Message: 'DB query logger initialized at %s'
+Arguments: ('logs/db_query.log',)
+------------------------------ Captured log setup ------------------------------
+ERROR    rate_limit:rate_limiter.py:1010 Limiter initialization failed. Storage is None
+WARNING  matplotlib:__init__.py:537 mkdir -p failed for path /.config/matplotlib: [Errno 13] Permission denied: '/.config'
+WARNING  matplotlib:__init__.py:554 Matplotlib created a temporary cache directory at /tmp/matplotlib-paustfm3 because there was an issue with the default path (/.config/matplotlib); it is highly recommended to set the MPLCONFIGDIR environment variable to a writable directory, in particular to speed up the import of Matplotlib and to better support multiprocessing.
+WARNING  utils.email_config:email_config.py:233 Could not update Flask email config: No valid email configuration found in database or environment variables
+----------------------------- Captured stdout call -----------------------------
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824677290544)
+DEBUG: Entering GLOBAL MOCK get_db_session (session id: 126824677290544)
+----------------------------- Captured stderr call -----------------------------
+Unhandled exception: (psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once
+
+[SQL: SELECT count(*) AS count_1 
+FROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file_id AS patient_encounters_zip_file_id, patient_encounters.name AS patient_encounters_name, patient_encounters.patient_id AS patient_encounters_patient_id, patient_encounters.capture_date AS patient_encounters_capture_date, patient_encounters.glaucoma_verified_status AS patient_encounters_glaucoma_verified_status, patient_encounters.glaucoma_verified_by AS patient_encounters_glaucoma_verified_by, patient_encounters.glaucoma_verified_at AS patient_encounters_glaucoma_verified_at, patient_encounters.dr_verified_status AS patient_encounters_dr_verified_status, patient_encounters.dr_verified_by AS patient_encounters_dr_verified_by, patient_encounters.dr_verified_at AS patient_encounters_dr_verified_at, patient_encounters.capture_date_dt AS patient_encounters_capture_date_dt, patient_encounters.lab_unit_id AS patient_encounters_lab_unit_id, patient_encounters.encounter_verified_status AS patient_encounters_encounter_verified_status, patient_encounters.encounter_verified_by AS patient_encounters_encounter_verified_by, patient_encounters.encounter_verified_at AS patient_encounters_encounter_verified_at 
+FROM patient_encounters JOIN lab_units ON patient_encounters.lab_unit_id = lab_units.id LEFT OUTER JOIN lab_units ON lab_units.id = patient_encounters.lab_unit_id LEFT OUTER JOIN hospitals ON hospitals.id = lab_units.hospital_id 
+WHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1]
+[parameters: {'hospital_id_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.DuplicateAlias: table name "lab_units" specified more than once
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask_login/utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/app/auth/roles.py", line 71, in wrapper
+    return fn(*args, **kwargs)
+  File "/app/analytics/route_encounter_results.py", line 104, in encounter_results
+    total = query.count()
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 3146, in count
+    self._legacy_from_self(col).enable_eagerloads(False).scalar()
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 2835, in scalar
+    ret = self.one()
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 2808, in one
+    return self._iter().one()  # type: ignore
+           ~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 2857, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2251, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self,
+        ^^^^^
+    ...<4 lines>...
+        conn,
+        ^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/orm/context.py", line 306, in orm_execute_statement
+    result = conn.execute(
+        statement, params or {}, execution_options=execution_options
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1419, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1641, in _execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 951, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.DuplicateAlias) table name "lab_units" specified more than once
+
+[SQL: SELECT count(*) AS count_1 
+FROM (SELECT patient_encounters.id AS patient_encounters_id, patient_encounters.zip_file_id AS patient_encounters_zip_file_id, patient_encounters.name AS patient_encounters_name, patient_encounters.patient_id AS patient_encounters_patient_id, patient_encounters.capture_date AS patient_encounters_capture_date, patient_encounters.glaucoma_verified_status AS patient_encounters_glaucoma_verified_status, patient_encounters.glaucoma_verified_by AS patient_encounters_glaucoma_verified_by, patient_encounters.glaucoma_verified_at AS patient_encounters_glaucoma_verified_at, patient_encounters.dr_verified_status AS patient_encounters_dr_verified_status, patient_encounters.dr_verified_by AS patient_encounters_dr_verified_by, patient_encounters.dr_verified_at AS patient_encounters_dr_verified_at, patient_encounters.capture_date_dt AS patient_encounters_capture_date_dt, patient_encounters.lab_unit_id AS patient_encounters_lab_unit_id, patient_encounters.encounter_verified_status AS patient_encounters_encounter_verified_status, patient_encounters.encounter_verified_by AS patient_encounters_encounter_verified_by, patient_encounters.encounter_verified_at AS patient_encounters_encounter_verified_at 
+FROM patient_encounters JOIN lab_units ON patient_encounters.lab_unit_id = lab_units.id LEFT OUTER JOIN lab_units ON lab_units.id = patient_encounters.lab_unit_id LEFT OUTER JOIN hospitals ON hospitals.id = lab_units.hospital_id 
+WHERE lab_units.hospital_id = %(hospital_id_1)s AND patient_encounters.id IS NULL) AS anon_1]
+[parameters: {'hospital_id_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
 =============================== warnings summary ===============================
-tests/security/test_dashboard_isolation.py:7
-  /app/tests/security/test_dashboard_isolation.py:7: PytestUnknownMarkWarning: Unknown pytest.mark.security - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
-    @pytest.mark.security
+tests/integration/analytics/test_new_roles_access.py:5
+  /app/tests/integration/analytics/test_new_roles_access.py:5: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.integration
 
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access
   <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
 
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access
   <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
 
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
+tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access
   <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 
-tests/security/test_dashboard_isolation.py::test_direct_upload_dashboard_isolation_manual
-  /app/utils/notifications.py:77: SAWarning: Coercing Subquery object into a select() for use in IN(); please pass a select() construct explicitly
-    Notification.id.not_in(system_read_subq),
-
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 1 passed, 7 warnings in 11.32s ========================
+=========================== short test summary info ============================
+FAILED tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_analytics_viewer_access - sqlalchemy.exc.InternalError: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block
+
+[SQL: SELECT count(*) AS count_1 
+FROM notifications 
+WHERE notifications.recipient_user_id = %(recipient_user_id_1)s AND notifications.is_read IS false]
+[parameters: {'recipient_user_id_1': 7}]
+(Background on this error at: https://sqlalche.me/e/20/2j85)
+ERROR tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_dataset_creator_access
+ERROR tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_dataset_creator_denied_other_analytics
+ERROR tests/integration/analytics/test_new_roles_access.py::TestNewRolesAccess::test_optometrist_denied_analytics - sqlalchemy.orm.exc.DetachedInstanceError: Instance <LabUnit at 0x7358abd80c20> is not bound to a Session; attribute refresh operation cannot proceed (Background on this error at: https://sqlalche.me/e/20/bhk3)
+=================== 1 failed, 6 warnings, 3 errors in 14.89s ===================
 <sys>:0: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

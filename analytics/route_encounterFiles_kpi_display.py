@@ -24,6 +24,7 @@ from utils.date_utils import parse_date_yyyy_mm_dd
     "fileUploader",
     "ophthalmologist",
     "data_manager",
+    "analytics_viewer",
     "resident",
     "optometrist",
 )

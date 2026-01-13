@@ -5,7 +5,7 @@ across the application.
 from contextlib import contextmanager
 from typing import Generator, Optional
 from sqlalchemy.orm import Session
-from models import Session as DbSession
+from server_side_session import DbSession
 
 
 @contextmanager

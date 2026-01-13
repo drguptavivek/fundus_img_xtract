@@ -85,7 +85,7 @@ class DatabaseSessionInterface(SessionInterface):
             if not stored:
                 new_sid = self._generate_sid()
                 return self.session_class(session_id=new_sid, new=True)
-
+            
             updated = False
             stored.expiry = self._ensure_utc(stored.expiry)
             if stored.started_at is None:

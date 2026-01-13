@@ -57,17 +57,17 @@ class _TestSessionWrapper:
 
     def commit(self):
         # Prevent commit during tests to maintain transaction isolation
-        print("DEBUG: Ignoring session.commit() in test wrapper")
+        # print("DEBUG: Ignoring session.commit() in test wrapper")
         self._session.flush()
 
     def close(self):
         # Prevent closure of the shared test session
-        print("DEBUG: Ignoring session.close() in test wrapper")
+        # print("DEBUG: Ignoring session.close() in test wrapper")
         pass
     
     def rollback(self):
         # Allow rollback but log it
-        print("DEBUG: session.rollback() called in test wrapper")
+        # print("DEBUG: session.rollback() called in test wrapper")
         self._session.rollback()
 
 # Monkeypatch db_transaction_manager BEFORE any other imports that might use it
@@ -168,6 +168,27 @@ def app(db_session):
     import db_transaction_manager
     patcher_dbsession = patch('db_transaction_manager.DbSession', return_value=wrapped_session)
     patcher_dbsession.start()
+    
+    # Patch DbSession in server_side_session (CRITICAL for session persistence)
+    import server_side_session
+    patcher_session_interface = patch('server_side_session.DbSession', return_value=wrapped_session)
+    patcher_session_interface.start()
+
+    # Patch environ to force settings that can't be set via config alone
+    # This must happen before create_app() reads env vars
+    env_patcher = patch.dict(os.environ, {
+        "FORCE_HTTPS": "false", 
+        "SESSION_COOKIE_SECURE": "false",
+        "SESSION_COOKIE_SAMESITE": "Lax",
+        "THUMBNAIL_MAINTENANCE_ENABLED": "false",
+        "MATERIALIZED_VIEW_SCHEDULE_ENABLED": "false",
+        "RATELIMIT_ENABLED": "false"  # Disable rate limiting for tests significantly speeds them up
+    })
+    env_patcher.start()
+
+    # Patch CaptchaManager to always pass validation in tests
+    patcher_captcha = patch('utils.captcha.CaptchaManager.validate_captcha', return_value=(True, "Success"))
+    patcher_captcha.start()
 
     from app import create_app
     app = create_app()
@@ -208,6 +229,9 @@ def app(db_session):
     finally:
         patcher_models.stop()
         patcher_dbsession.stop()
+        patcher_session_interface.stop()
+        env_patcher.stop()
+        patcher_captcha.stop()
         _test_db_session = old_session
 
 

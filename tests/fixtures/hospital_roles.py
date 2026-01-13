@@ -18,7 +18,7 @@ def hosp_a_file_uploader(db_session, test_lab_units):
         db_session,
         role_name='fileUploader',
         hospital_id=1,
-        lab_unit_ids=[1, 2, 3],  # All Hospital A labs
+        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],  # All Hospital A labs
         username='hosp_a_file_uploader'
     )
 
@@ -30,7 +30,7 @@ def hosp_a_optometrist(db_session, test_lab_units):
         db_session,
         role_name='optometrist',
         hospital_id=1,
-        lab_unit_ids=[1, 2, 3],  # All Hospital A labs
+        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],  # All Hospital A labs
         username='hosp_a_optometrist'
     )
 
@@ -42,7 +42,7 @@ def hosp_a_data_manager(db_session, test_lab_units):
         db_session,
         role_name='data_manager',
         hospital_id=1,
-        lab_unit_ids=[1, 2, 3],
+        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
         username='hosp_a_data_manager'
     )
 
@@ -54,7 +54,7 @@ def hosp_a_data_exporter(db_session, test_lab_units):
         db_session,
         role_name='data_exporter',
         hospital_id=1,
-        lab_unit_ids=[1, 2, 3],
+        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
         username='hosp_a_data_exporter'
     )
 
@@ -66,7 +66,7 @@ def hosp_a_analyst(db_session, test_lab_units):
         db_session,
         role_name='analyst',
         hospital_id=1,
-        lab_unit_ids=[1, 2, 3],
+        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
         username='hosp_a_analyst'
     )
 
@@ -93,7 +93,7 @@ def hosp_b_file_uploader(db_session, test_lab_units):
         db_session,
         role_name='fileUploader',
         hospital_id=2,
-        lab_unit_ids=[4, 5, 6],  # All Hospital B labs
+        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],  # All Hospital B labs
         username='hosp_b_file_uploader'
     )
 
@@ -105,7 +105,7 @@ def hosp_b_optometrist(db_session, test_lab_units):
         db_session,
         role_name='optometrist',
         hospital_id=2,
-        lab_unit_ids=[4, 5, 6],  # All Hospital B labs
+        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],  # All Hospital B labs
         username='hosp_b_optometrist'
     )
 
@@ -117,7 +117,7 @@ def hosp_b_data_manager(db_session, test_lab_units):
         db_session,
         role_name='data_manager',
         hospital_id=2,
-        lab_unit_ids=[4, 5, 6],
+        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
         username='hosp_b_data_manager'
     )
 
@@ -129,7 +129,7 @@ def hosp_b_data_exporter(db_session, test_lab_units):
         db_session,
         role_name='data_exporter',
         hospital_id=2,
-        lab_unit_ids=[4, 5, 6],
+        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
         username='hosp_b_data_exporter'
     )
 
@@ -141,7 +141,7 @@ def hosp_b_analyst(db_session, test_lab_units):
         db_session,
         role_name='analyst',
         hospital_id=2,
-        lab_unit_ids=[4, 5, 6],
+        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
         username='hosp_b_analyst'
     )
 

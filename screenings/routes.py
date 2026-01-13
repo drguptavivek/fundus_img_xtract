@@ -30,7 +30,7 @@ def list_screenings():
     per_page = max(1, per_page)
 
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    is_admin_like = current_user.has_role("admin", "data_manager")
+    is_admin_like = current_user.has_role("admin")
 
     db = Session()
     try:
@@ -143,7 +143,7 @@ def screening_detail(encounter_id: int):
     IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp"}
 
     allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-    is_admin_like = current_user.has_role("admin", "data_manager")
+    is_admin_like = current_user.has_role("admin")
 
     db = Session()
     try:
@@ -241,7 +241,7 @@ def reprocess_pdf(encounter_id: int):
             return redirect(url_for("screenings.list_screenings"))
             
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager")
+        is_admin_like = current_user.has_role("admin")
 
         # Admin override or strict lab unit check (data_manager role is not exempt from hospital scoping unless global admin logic implemented elsewhere, but here rely on allowed_lab_unit_ids)
         # Note: 'data_manager' is often treated as local admin. If they have lab_units, restrict them.
@@ -338,7 +338,7 @@ def delete_encounter(encounter_id: int):
         
         # Check permissions
         allowed_lab_unit_ids = get_user_lab_unit_ids(current_user.id)
-        is_admin_like = current_user.has_role("admin", "data_manager")
+        is_admin_like = current_user.has_role("admin")
         
         if not is_admin_like and encounter.lab_unit_id and allowed_lab_unit_ids and encounter.lab_unit_id not in allowed_lab_unit_ids:
             abort(403)

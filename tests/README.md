@@ -60,7 +60,7 @@ docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec w
 
 - **`test_engine`** (session-scoped): PostgreSQL engine, creates/drops all tables
 - **`db_session`** (function-scoped): Transactional session with automatic rollback
-- **`app`** (function-scoped): Flask app configured for testing
+- **`app`** (function-scoped): Flask app configured for testing with critical environment variable overrides (FORCE_HTTPS=false, etc.)
 - **`client`** (function-scoped): Flask test client
 
 #### Authentication Fixtures
@@ -304,7 +304,7 @@ def test_with_session(client, hosp_a_data_manager):
     assert response.status_code == 200
 ```
 
-**Note**: Session manipulation may not work for all routes due to Flask-Login configuration. Use `auth_client` for integration tests.
+**Note**: `auth_client` is the preferred method as it tests the full authentication stack including `Flask-Login` session management, which has been patched to work correctly in the test environment.
 
 ### Testing Hospital Isolation
 
@@ -468,7 +468,14 @@ class TestFeatureIsolation:
 
 **Problem**: `DetachedInstanceError: Instance <Model> is not bound to a Session`
 
-**Solution**: Use function-scoped fixtures instead of session-scoped ones. The `hospital_data` and `test_metadata` fixtures are already function-scoped.
+**Solution**: 
+1. Use function-scoped fixtures instead of session-scoped ones. The `hospital_data` and `test_metadata` fixtures are already function-scoped.
+2. When using `auth_client` in tests that mix seeded/fixture data with session transactions (like `test_screenings_isolation.py`), use `db_session.merge(user)` to attach the user object to the current session before passing it to `auth_client`:
+   ```python
+   user = db_session.merge(hosp_a_data_manager)
+   client = auth_client(user)
+   ```
+3. Use `db_session.expunge_all()` at the start of complex tests to ensure a clean session state.
 
 ### NOT NULL Constraint Violations
 
@@ -478,13 +485,21 @@ class TestFeatureIsolation:
 
 ### Session Authentication Issues
 
-**Problem**: Tests getting 301 redirects instead of accessing protected routes
+**Problem**: Tests getting 301 redirects instead of accessing protected routes or `InternalError` during login.
 
-**Solution**: Use session manipulation with `client.session_transaction()`:
+**Solution**: 
+1. **Use `auth_client` fixture**: This handles CSRF and cookie management automatically.
+2. **Environment Patching**: The `conftest.py` automatically patches `FORCE_HTTPS`, `SESSION_COOKIE_SECURE`, and `CaptchaManager` to ensure the test environment behaves correctly.
+3. **Explicit Commits**: When using `TestDataFactory` before logging in with `auth_client`, ensure you call `db_session.commit()` to persist state for the separate request transaction.
+
 ```python
-with client.session_transaction() as sess:
-    sess['user_id'] = user.id
-    sess['_fresh'] = True
+# Create data
+data = TestDataFactory.create_patient_encounter(db_session, ...)
+db_session.commit()  # CRITICAL: Commit before auth_client login
+
+# Login and access
+client = auth_client(user)
+response = client.get('/protected/route')
 ```
 
 ### Unique Constraint Violations
@@ -502,8 +517,7 @@ encounter = TestDataFactory.create_patient_encounter(
 
 ## Future Improvements
 
-1. **Fix Session Authentication**: Resolve 301 redirect issues in analytics isolation tests
-2. **Update E2E Tests**: Refresh Playwright tests to match current application state
+1. **Update E2E Tests**: Refresh Playwright tests to match current application state
 3. **Add Performance Tests**: Create tests for query performance and N+1 detection
 4. **Expand Coverage**: Add tests for remaining blueprints and edge cases
 5. **API Tests**: Create comprehensive API endpoint tests

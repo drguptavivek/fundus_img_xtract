@@ -337,6 +337,9 @@ class TestGlobalAdminBypass:
         self, auth_client, master_admin, hospital_data, db_session, login_user, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
+        # Merge master_admin into current session to avoid DetachedInstanceError
+        admin = db_session.merge(master_admin)
+
         # Create data for hospital B
         encounter_b = TestDataFactory.create_patient_encounter(
             db_session,
@@ -352,7 +355,7 @@ class TestGlobalAdminBypass:
         direct_b = TestDataFactory.create_direct_image_upload(
             db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
-            uploader_id=master_admin.id,
+            uploader_id=admin.id,
             hospital_id=hospital_data['hospital_b']['hospital'].id,
             camera_id=test_metadata['cameras']['test_camera'].id,
             disease_id=test_metadata['diseases']['dr'].id,
@@ -368,7 +371,7 @@ class TestGlobalAdminBypass:
         task_b.encounter_file_id = file_b.id
         db_session.commit()
 
-        client = auth_client(master_admin)
+        client = auth_client(admin)
 
         # Should be able to view encounter from hospital B
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")

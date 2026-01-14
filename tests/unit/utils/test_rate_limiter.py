@@ -542,77 +542,83 @@ class TestRateLimitLogging(unittest.TestCase):
 
 class TestUserRateLimits(unittest.TestCase):
     """Test user-based rate limit functions."""
-    
-    @patch('utils.rate_limiter.Session')
-    @patch('models.User')
-    def test_get_user_rate_limits_admin(self, mock_user_class, mock_session):
+
+    @patch('utils.rate_limiter.get_db_session')
+    def test_get_user_rate_limits_admin(self, mock_get_db_session):
         """Test getting rate limits for admin user."""
-        mock_user = Mock()
+        from models import User
+        mock_db = MagicMock()
+        mock_user = Mock(spec=User)
         mock_user.has_role.return_value = True
-        mock_session.return_value.get.return_value = mock_user
-        
+        mock_db.get.return_value = mock_user
+        mock_get_db_session.return_value.__enter__.return_value = mock_db
+
         limits = get_user_rate_limits(123)
-        
+
         self.assertEqual(limits["default"], "5000 per hour")
-        self.assertEqual(limits["upload"], "100 per minute")
+        self.assertEqual(limits["upload"], "200 per minute")
         self.assertEqual(limits["api"], "1000 per minute")
-    
-    @patch('utils.rate_limiter.Session')
-    @patch('models.User')
-    def test_get_user_rate_limits_data_manager(self, mock_user_class, mock_session):
+
+    @patch('utils.rate_limiter.get_db_session')
+    def test_get_user_rate_limits_data_manager(self, mock_get_db_session):
         """Test getting rate limits for data manager user."""
-        mock_user = Mock()
+        from models import User
+        mock_db = MagicMock()
+        mock_user = Mock(spec=User)
         mock_user.has_role.side_effect = lambda role, *args: role in ['data_manager', 'ophthalmologist']
-        mock_session.return_value.get.return_value = mock_user
-        
+        mock_db.get.return_value = mock_user
+        mock_get_db_session.return_value.__enter__.return_value = mock_db
+
         limits = get_user_rate_limits(456)
-        
-        # The actual implementation returns data_manager limits if user has data_manager role
-        # Based on the actual implementation, it seems to return admin limits first
-        self.assertEqual(limits["default"], "5000 per hour")
-        self.assertEqual(limits["upload"], "100 per minute")
-        self.assertEqual(limits["api"], "1000 per minute")
-    
-    @patch('utils.rate_limiter.Session')
-    @patch('models.User')
-    def test_get_user_rate_limits_file_uploader(self, mock_user_class, mock_session):
+
+        self.assertEqual(limits["default"], "2000 per hour")
+        self.assertEqual(limits["upload"], "200 per minute")
+        self.assertEqual(limits["api"], "500 per minute")
+
+    @patch('utils.rate_limiter.get_db_session')
+    def test_get_user_rate_limits_file_uploader(self, mock_get_db_session):
         """Test getting rate limits for file uploader user."""
-        mock_user = Mock()
+        from models import User
+        mock_db = MagicMock()
+        mock_user = Mock(spec=User)
         mock_user.has_role.side_effect = lambda role, *args: role in ['fileUploader', 'optometrist']
-        mock_session.return_value.get.return_value = mock_user
-        
+        mock_db.get.return_value = mock_user
+        mock_get_db_session.return_value.__enter__.return_value = mock_db
+
         limits = get_user_rate_limits(789)
-        
-        # Based on the actual implementation, it seems to return admin limits first
-        self.assertEqual(limits["default"], "5000 per hour")
-        self.assertEqual(limits["upload"], "100 per minute")
-        self.assertEqual(limits["api"], "1000 per minute")
-    
-    @patch('utils.rate_limiter.Session')
-    @patch('models.User')
-    def test_get_user_rate_limits_default(self, mock_user_class, mock_session):
+
+        self.assertEqual(limits["default"], "1000 per hour")
+        self.assertEqual(limits["upload"], "200 per minute")
+        self.assertEqual(limits["api"], "200 per minute")
+
+    @patch('utils.rate_limiter.get_db_session')
+    def test_get_user_rate_limits_default(self, mock_get_db_session):
         """Test getting default rate limits for regular user."""
-        mock_user = Mock()
+        from models import User
+        mock_db = MagicMock()
+        mock_user = Mock(spec=User)
         mock_user.has_role.return_value = False
-        mock_session.return_value.get.return_value = mock_user
-        
+        mock_db.get.return_value = mock_user
+        mock_get_db_session.return_value.__enter__.return_value = mock_db
+
         limits = get_user_rate_limits(999)
-        
-        # Based on the actual implementation, it seems to return admin limits first
-        self.assertEqual(limits["default"], "5000 per hour")
-        self.assertEqual(limits["upload"], "100 per minute")
-        self.assertEqual(limits["api"], "1000 per minute")
-    
-    @patch('utils.rate_limiter.Session')
-    def test_get_user_rate_limits_user_not_found(self, mock_session):
+
+        self.assertEqual(limits["default"], "500 per hour")
+        self.assertEqual(limits["upload"], "10 per minute")
+        self.assertEqual(limits["api"], "100 per minute")
+
+    @patch('utils.rate_limiter.get_db_session')
+    def test_get_user_rate_limits_user_not_found(self, mock_get_db_session):
         """Test getting rate limits for non-existent user."""
-        mock_session.return_value.get.return_value = None
-        
+        mock_db = MagicMock()
+        mock_db.get.return_value = None
+        mock_get_db_session.return_value.__enter__.return_value = mock_db
+
         limits = get_user_rate_limits(111)
-        
+
         # When user is not found, should return default limits
         self.assertIn("default", limits)
-        self.assertEqual(limits["default"], "5000 per hour")
+        self.assertEqual(limits["default"], "500 per hour")
 
 
 class TestDynamicRateLimits(unittest.TestCase):

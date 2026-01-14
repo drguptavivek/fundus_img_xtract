@@ -14,6 +14,7 @@ class TestFilenameAnonymization:
         user.id = 1
         user.username = 'admin'
         user.is_authenticated = True
+        user.is_master_admin = False  # Must explicitly set for @roles_required decorator
         user.has_role.return_value = True
         return user
 
@@ -36,7 +37,7 @@ class TestFilenameAnonymization:
                         mock_send_file.return_value = "file_response"
                         
                         response = client.post('/admin/database-excel-export', data={
-                            'table_name': 'users',
+                            'tables': 'users',  # Route expects 'tables' field
                             'csrf_token': 'mock_token' # CSRF might be mocked elsewhere
                         })
                         

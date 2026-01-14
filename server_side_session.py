@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from flask.sessions import SessionInterface, SessionMixin
 from werkzeug.datastructures import CallbackDict
+from sqlalchemy import select, and_
 
 from models import Session as DbSession, FlaskSession
+
+# Logger for session operations
+session_logger = logging.getLogger('session')
 
 
 class DatabaseSession(CallbackDict, SessionMixin):
@@ -196,6 +201,29 @@ class DatabaseSessionInterface(SessionInterface):
                 if stored.started_at is None:
                     stored.started_at = self._now()
             db.commit()
+
+            # SECURITY: Enforce concurrent session limit on user login
+            # This prevents session abuse by limiting active sessions per user
+            if user_id_value is not None:
+                enforce_concurrent_session_limit(session.session_id, user_id_value)
+
+                # SECURITY: Session rotation on fresh login
+                # Invalidate all other sessions when user logs in from new device
+                # This prevents session fixation attacks (CWE-384)
+                is_fresh_login = payload_dict.get("_fresh_login", False)
+                if is_fresh_login:
+                    invalidated = invalidate_all_other_sessions(session.session_id, user_id_value)
+                    if invalidated > 0:
+                        session_logger.info(
+                            "Session rotation on login - UserID: %s, CurrentSession: %s, Invalidated: %d",
+                            user_id_value,
+                            session.session_id,
+                            invalidated,
+                        )
+                    # Clear the flag so we don't invalidate on every save
+                    payload_dict.pop("_fresh_login", None)
+                    stored.data = self.serializer.dumps(payload_dict)
+                    db.commit()
         finally:
             db.close()
 
@@ -251,5 +279,207 @@ def mark_session_ended(session_id: str, user_id: int | None = None) -> None:
             stored.user_id = authoritative_user_id
         stored.data = "{}"
         db.commit()
+    finally:
+        db.close()
+
+
+# Maximum number of concurrent active sessions per user
+MAX_CONCURRENT_SESSIONS = 3
+
+
+def invalidate_all_other_sessions(current_session_id: str, user_id: int) -> int:
+    """
+    Invalidate all sessions for a user except the current one.
+
+    This is used for "log out all other sessions" functionality and
+    as part of session rotation on login to prevent session fixation.
+
+    Args:
+        current_session_id: The session ID to keep active
+        user_id: The user ID whose other sessions should be invalidated
+
+    Returns:
+        The number of sessions that were invalidated
+
+    Security:
+        - Prevents session fixation by invalidating old sessions
+        - Allows users to log out from all other devices
+        - Logs all invalidations with reason
+    """
+    if not current_session_id or not user_id:
+        return 0
+
+    db = DbSession()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Find all active sessions for this user except the current one
+        other_sessions = db.execute(
+            select(FlaskSession).where(
+                and_(
+                    FlaskSession.user_id == user_id,
+                    FlaskSession.session_id != current_session_id,
+                    FlaskSession.ended_at.is_(None),
+                    FlaskSession.expiry > now
+                )
+            )
+        ).scalars().all()
+
+        invalidated_count = 0
+        for sess in other_sessions:
+            sess.ended_at = now
+            sess.expiry = now
+            sess.data = "{}"
+            invalidated_count += 1
+
+            # Log session invalidation
+            session_logger.info(
+                "Session invalidated for user - SessionID: %s, UserID: %s, Reason: other_sessions_invalidation",
+                sess.session_id,
+                user_id,
+            )
+
+        if invalidated_count > 0:
+            db.commit()
+            session_logger.info(
+                "Invalidated %d other sessions for user - UserID: %s, CurrentSession: %s",
+                invalidated_count,
+                user_id,
+                current_session_id,
+            )
+
+        return invalidated_count
+    finally:
+        db.close()
+
+
+def enforce_concurrent_session_limit(session_id: str, user_id: int) -> int:
+    """
+    Enforce the maximum concurrent session limit per user.
+
+    If a user has more than MAX_CONCURRENT_SESSIONS active sessions,
+    invalidate the oldest sessions (by started_at) to maintain the limit.
+
+    Args:
+        session_id: The current/new session ID
+        user_id: The user ID whose sessions should be limited
+
+    Returns:
+        The number of sessions that were invalidated
+
+    Security:
+        - Prevents session abuse by limiting concurrent sessions
+        - Oldest sessions are invalidated first
+        - Logs all enforcement actions
+    """
+    if not session_id or not user_id:
+        return 0
+
+    db = DbSession()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Count active sessions for this user
+        active_sessions = db.execute(
+            select(FlaskSession).where(
+                and_(
+                    FlaskSession.user_id == user_id,
+                    FlaskSession.ended_at.is_(None),
+                    FlaskSession.expiry > now
+                )
+            ).order_by(FlaskSession.started_at.asc())
+        ).scalars().all()
+
+        active_count = len(active_sessions)
+
+        # If within limit, nothing to do
+        if active_count <= MAX_CONCURRENT_SESSIONS:
+            return 0
+
+        # Need to invalidate oldest sessions (first N sessions where N = active_count - MAX)
+        to_invalidate = active_count - MAX_CONCURRENT_SESSIONS
+        invalidated_count = 0
+
+        for sess in active_sessions[:to_invalidate]:
+            sess.ended_at = now
+            sess.expiry = now
+            sess.data = "{}"
+            invalidated_count += 1
+
+            # Log session invalidation
+            session_logger.info(
+                "Session invalidated due to concurrent limit - SessionID: %s, UserID: %s, StartedAt: %s",
+                sess.session_id,
+                user_id,
+                sess.started_at,
+            )
+
+        if invalidated_count > 0:
+            db.commit()
+            session_logger.info(
+                "Enforced concurrent session limit for user - UserID: %s, Invalidated: %d, Limit: %d",
+                user_id,
+                invalidated_count,
+                MAX_CONCURRENT_SESSIONS,
+            )
+
+        return invalidated_count
+    finally:
+        db.close()
+
+
+def invalidate_all_user_sessions(user_id: int) -> int:
+    """
+    Invalidate ALL sessions for a user (including current).
+
+    This is used for forced logout (e.g., password change, role change,
+    account lock, admin action).
+
+    Args:
+        user_id: The user ID whose sessions should be invalidated
+
+    Returns:
+        The number of sessions that were invalidated
+    """
+    if not user_id:
+        return 0
+
+    db = DbSession()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Find all active sessions for this user
+        active_sessions = db.execute(
+            select(FlaskSession).where(
+                and_(
+                    FlaskSession.user_id == user_id,
+                    FlaskSession.ended_at.is_(None),
+                )
+            )
+        ).scalars().all()
+
+        invalidated_count = 0
+        for sess in active_sessions:
+            sess.ended_at = now
+            sess.expiry = now
+            sess.data = "{}"
+            invalidated_count += 1
+
+            # Log session invalidation
+            session_logger.info(
+                "Session invalidated for user - SessionID: %s, UserID: %s, Reason: all_sessions_invalidated",
+                sess.session_id,
+                user_id,
+            )
+
+        if invalidated_count > 0:
+            db.commit()
+            session_logger.info(
+                "Invalidated all %d sessions for user - UserID: %s",
+                invalidated_count,
+                user_id,
+            )
+
+        return invalidated_count
     finally:
         db.close()

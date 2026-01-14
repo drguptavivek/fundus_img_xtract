@@ -383,6 +383,10 @@ def login():
                 # Start sliding inactivity window
                 session.permanent = True  # enable cookie expiration control
                 session["last_active"] = int(time.time())
+
+                # SECURITY: Flag this as a new login for session rotation
+                # This will trigger invalidation of other sessions in save_session()
+                session["_fresh_login"] = True
                 session.modified = True
 
                 # Log successful login with session ID

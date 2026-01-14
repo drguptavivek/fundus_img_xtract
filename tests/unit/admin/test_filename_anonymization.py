@@ -1,6 +1,6 @@
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, PropertyMock
 from flask import url_for
 from werkzeug.datastructures import Headers
 

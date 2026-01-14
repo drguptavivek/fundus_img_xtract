@@ -14,11 +14,14 @@ from tests.helpers.factories import UserFactory
 @pytest.fixture
 def hosp_a_file_uploader(db_session, test_lab_units):
     """File uploader for Hospital A."""
+    # Merge LabUnits into current session to avoid DetachedInstanceError
+    lab_a1 = db_session.merge(test_lab_units['lab_a1'])
+    lab_a2 = db_session.merge(test_lab_units['lab_a2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='fileUploader',
         hospital_id=1,
-        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],  # All Hospital A labs
+        lab_unit_ids=[lab_a1.id, lab_a2.id],  # All Hospital A labs
         username='hosp_a_file_uploader'
     )
 
@@ -26,11 +29,13 @@ def hosp_a_file_uploader(db_session, test_lab_units):
 @pytest.fixture
 def hosp_a_optometrist(db_session, test_lab_units):
     """Optometrist for Hospital A - PII gatekeeper."""
+    lab_a1 = db_session.merge(test_lab_units['lab_a1'])
+    lab_a2 = db_session.merge(test_lab_units['lab_a2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='optometrist',
         hospital_id=1,
-        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],  # All Hospital A labs
+        lab_unit_ids=[lab_a1.id, lab_a2.id],  # All Hospital A labs
         username='hosp_a_optometrist'
     )
 
@@ -38,11 +43,13 @@ def hosp_a_optometrist(db_session, test_lab_units):
 @pytest.fixture
 def hosp_a_data_manager(db_session, test_lab_units):
     """Data manager for Hospital A."""
+    lab_a1 = db_session.merge(test_lab_units['lab_a1'])
+    lab_a2 = db_session.merge(test_lab_units['lab_a2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_manager',
         hospital_id=1,
-        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
+        lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_data_manager'
     )
 
@@ -50,11 +57,13 @@ def hosp_a_data_manager(db_session, test_lab_units):
 @pytest.fixture
 def hosp_a_data_exporter(db_session, test_lab_units):
     """Data exporter for Hospital A."""
+    lab_a1 = db_session.merge(test_lab_units['lab_a1'])
+    lab_a2 = db_session.merge(test_lab_units['lab_a2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_exporter',
         hospital_id=1,
-        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
+        lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_data_exporter'
     )
 
@@ -62,11 +71,13 @@ def hosp_a_data_exporter(db_session, test_lab_units):
 @pytest.fixture
 def hosp_a_analyst(db_session, test_lab_units):
     """Analyst for Hospital A - read-only stats."""
+    lab_a1 = db_session.merge(test_lab_units['lab_a1'])
+    lab_a2 = db_session.merge(test_lab_units['lab_a2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='analyst',
         hospital_id=1,
-        lab_unit_ids=[test_lab_units['lab_a1'].id, test_lab_units['lab_a2'].id],
+        lab_unit_ids=[lab_a1.id, lab_a2.id],
         username='hosp_a_analyst'
     )
 
@@ -89,11 +100,13 @@ def hosp_a_site_admin(db_session, test_hospitals):
 @pytest.fixture
 def hosp_b_file_uploader(db_session, test_lab_units):
     """File uploader for Hospital B."""
+    lab_b1 = db_session.merge(test_lab_units['lab_b1'])
+    lab_b2 = db_session.merge(test_lab_units['lab_b2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='fileUploader',
         hospital_id=2,
-        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],  # All Hospital B labs
+        lab_unit_ids=[lab_b1.id, lab_b2.id],  # All Hospital B labs
         username='hosp_b_file_uploader'
     )
 
@@ -101,11 +114,13 @@ def hosp_b_file_uploader(db_session, test_lab_units):
 @pytest.fixture
 def hosp_b_optometrist(db_session, test_lab_units):
     """Optometrist for Hospital B - PII gatekeeper."""
+    lab_b1 = db_session.merge(test_lab_units['lab_b1'])
+    lab_b2 = db_session.merge(test_lab_units['lab_b2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='optometrist',
         hospital_id=2,
-        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],  # All Hospital B labs
+        lab_unit_ids=[lab_b1.id, lab_b2.id],  # All Hospital B labs
         username='hosp_b_optometrist'
     )
 
@@ -113,11 +128,13 @@ def hosp_b_optometrist(db_session, test_lab_units):
 @pytest.fixture
 def hosp_b_data_manager(db_session, test_lab_units):
     """Data manager for Hospital B."""
+    lab_b1 = db_session.merge(test_lab_units['lab_b1'])
+    lab_b2 = db_session.merge(test_lab_units['lab_b2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_manager',
         hospital_id=2,
-        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
+        lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_data_manager'
     )
 
@@ -125,11 +142,13 @@ def hosp_b_data_manager(db_session, test_lab_units):
 @pytest.fixture
 def hosp_b_data_exporter(db_session, test_lab_units):
     """Data exporter for Hospital B."""
+    lab_b1 = db_session.merge(test_lab_units['lab_b1'])
+    lab_b2 = db_session.merge(test_lab_units['lab_b2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='data_exporter',
         hospital_id=2,
-        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
+        lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_data_exporter'
     )
 
@@ -137,11 +156,13 @@ def hosp_b_data_exporter(db_session, test_lab_units):
 @pytest.fixture
 def hosp_b_analyst(db_session, test_lab_units):
     """Analyst for Hospital B - read-only stats."""
+    lab_b1 = db_session.merge(test_lab_units['lab_b1'])
+    lab_b2 = db_session.merge(test_lab_units['lab_b2'])
     return UserFactory.create_with_hospital(
         db_session,
         role_name='analyst',
         hospital_id=2,
-        lab_unit_ids=[test_lab_units['lab_b1'].id, test_lab_units['lab_b2'].id],
+        lab_unit_ids=[lab_b1.id, lab_b2.id],
         username='hosp_b_analyst'
     )
 

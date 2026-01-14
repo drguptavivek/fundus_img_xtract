@@ -18,7 +18,7 @@ class TestUserFixtures:
         assert 'glaucoma' in core_test_data
         assert 'dr' in core_test_data
         
-        assert core_test_data['hospital'].name == 'RPC AIIMS'
+        assert core_test_data['hospital'].name == 'Hospital A'
         assert core_test_data['glaucoma'].name == 'Glaucoma'
     
     def test_admin_user_fixture(self, admin_user):

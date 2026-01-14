@@ -94,7 +94,7 @@ class TestFactoriesWithDatabase:
         assert 'glaucoma' in entities
         assert 'dr' in entities
         
-        assert entities['hospital'].name == 'RPC AIIMS'
+        assert entities['hospital'].name == 'Hospital A'
         assert entities['glaucoma'].name == 'Glaucoma'
 
 

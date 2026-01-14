@@ -99,8 +99,10 @@ def _sanitize_dict_recursive(data: dict | list | str | int | float | None, depth
     # Numbers, booleans, etc. are safe
     return data
 
-# Re-authentication validity window (5 minutes)
-REAUTH_VALIDITY_MINUTES = 5
+# Re-authentication validity window (default 5 minutes)
+from utils.env_loader import load_environment
+load_environment()
+REAUTH_VALIDITY_MINUTES = int(os.getenv('REAUTH_VALIDITY_MINUTES', '5'))
 
 
 def requires_reauth(operation_name: str):

@@ -101,3 +101,6 @@ docker-compose.override.yml
 
 .osgrep
 
+# Security audit reports (generated artifacts)
+security-audit/reports/
+

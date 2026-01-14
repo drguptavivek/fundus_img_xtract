@@ -79,4 +79,21 @@ def register_csp(app: Flask) -> None:
         csp = "; ".join(csp_directives)
         response.headers["Content-Security-Policy"] = csp
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+
+        # Add HSTS header only in production (CWE-523)
+        # HSTS prevents downgrade attacks from HTTPS to HTTP
+        if not is_development:
+            # Get HSTS configuration from environment
+            max_age = os.getenv("HSTS_MAX_AGE", "31536000")  # 1 year default
+            include_subdomains = os.getenv("HSTS_INCLUDE_SUBDOMAINS", "true").lower() in ("1", "true", "yes")
+            preload = os.getenv("HSTS_PRELOAD", "false").lower() in ("1", "true", "yes")
+
+            hsts_parts = [f"max-age={max_age}"]
+            if include_subdomains:
+                hsts_parts.append("includeSubDomains")
+            if preload:
+                hsts_parts.append("preload")
+
+            response.headers["Strict-Transport-Security"] = "; ".join(hsts_parts)
+
         return response

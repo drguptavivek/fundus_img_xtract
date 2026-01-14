@@ -128,8 +128,9 @@ class TestAuthRoutesSessionManagement:
         with app.test_client() as client:
             # Set up valid OTP in session
             with client.session_transaction() as sess:
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('TEST1234')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
             
@@ -153,8 +154,9 @@ class TestAuthRoutesSessionManagement:
         with app.test_client() as client:
             # Set up valid OTP in session
             with client.session_transaction() as sess:
-                sess['password_reset_otp'] = 'VALID1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('VALID1234')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
             
@@ -287,28 +289,26 @@ class TestAuthRoutesDataPersistence:
     def test_password_reset_persistence(self, app, test_users):
         """Test that password reset is persisted correctly"""
         with app.test_client() as client:
-            # Set up valid OTP in session
+            # Set up valid OTP in session (using hashed OTP format)
             with client.session_transaction() as sess:
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('TEST1234')
+                # Note: password_reset_email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
-            
-            # Reset password
-            client.post("/reset-password", data={
-                "otp": "TEST1234",
-                "new_password": "NewPassword123!",
-                "confirm_password": "NewPassword123!"
-            })
-            
+
+            # Reset password - system generates new password automatically
+            response = client.post("/reset-password", data={"otp": "TEST1234"})
+
+            # Verify response is successful
+            assert response.status_code == 200
+
             # Verify persistence with new session
             with get_db_session() as db:
                 user = db.query(User).filter(User.id == test_users["admin"].id).first()
                 assert user is not None
-                # Password should be different
+                # Password should be different from original (system generated new one)
                 assert user.password_hash != test_users["admin"].password_hash
-                # Should be able to verify with new password
-                assert verify_password(user.password_hash, "NewPassword123!")
     
     def test_ip_lock_persistence(self, app):
         """Test that IP locks are persisted correctly"""
@@ -355,8 +355,9 @@ class TestAuthRoutesErrorHandling:
         with app.test_client() as client:
             # Try to reset password with invalid data to trigger error
             with client.session_transaction() as sess:
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('TEST1234')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
             

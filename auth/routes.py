@@ -654,7 +654,9 @@ def forgot_password():
                 # SECURITY: Store hashed OTP in session, not plaintext
                 # This prevents OTP extraction if session database is compromised
                 session['password_reset_otp_hashed'] = hash_password(otp)
-                session['password_reset_email'] = email
+                # SECURITY: Do NOT store email in session (CWE-922)
+                # Store only user_id - we can look up email from database
+                # This prevents email exposure through session backups/logs
                 session['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 session['password_reset_user_id'] = user.id
                 session['password_reset_otp_used'] = False  # One-time use flag
@@ -705,12 +707,13 @@ def reset_password():
 
         # Verify OTP from session (now using hashed OTP)
         session_otp_hashed = session.get('password_reset_otp_hashed')
-        session_email = session.get('password_reset_email')
         session_expiry = session.get('password_reset_expiry')
         session_user_id = session.get('password_reset_user_id')
         session_otp_used = session.get('password_reset_otp_used', False)
 
-        if not all([session_otp_hashed, session_email, session_expiry, session_user_id]):
+        # Note: We no longer check for session_email (CWE-922 fix)
+        # Email is looked up from database using user_id
+        if not all([session_otp_hashed, session_expiry, session_user_id]):
             flash("Invalid or expired OTP. Please request a new one.", "error")
             return redirect(url_for("auth.forgot_password"))
 
@@ -746,7 +749,9 @@ def reset_password():
 
         with transaction_scope() as db:
             user = db.get(User, session_user_id)
-            if user is None or (user.email or "").lower() != session_email.lower():
+            # SECURITY: No longer verify email from session (CWE-922 fix)
+            # User is fetched by ID from database, which contains the authoritative email
+            if user is None:
                 flash("Unable to reset password for this account. Please request a new OTP.", "error")
                 _clear_password_reset_session(session)
                 return redirect(url_for("auth.forgot_password"))

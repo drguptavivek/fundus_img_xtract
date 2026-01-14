@@ -256,9 +256,10 @@ class TestResetPasswordRoute:
         """Test password reset with valid OTP"""
         with app.test_client() as client:
             with client.session_transaction() as sess:
-                # Set up valid OTP in session
-                sess['password_reset_otp'] = 'TEST1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # Set up valid OTP in session (using hashed OTP format)
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('TEST1234')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
 
@@ -273,9 +274,10 @@ class TestResetPasswordRoute:
         """Test password reset with invalid OTP"""
         with app.test_client() as client:
             with client.session_transaction() as sess:
-                # Set up valid OTP in session
-                sess['password_reset_otp'] = 'VALID1234'
-                sess['password_reset_email'] = test_users["admin"].email
+                # Set up valid OTP in session (using hashed OTP format)
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('VALID1234')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
             
@@ -289,9 +291,10 @@ class TestResetPasswordRoute:
         """Test password reset with expired OTP"""
         with app.test_client() as client:
             with client.session_transaction() as sess:
-                # Set up expired OTP in session
-                sess['password_reset_otp'] = 'EXPIRED12'
-                sess['password_reset_email'] = test_users["admin"].email
+                # Set up expired OTP in session (using hashed OTP format)
+                # SECURITY: OTP must be hashed in session (not plaintext)
+                sess['password_reset_otp_hashed'] = hash_password('EXPIRED12')
+                # SECURITY: Email no longer stored in session (CWE-922 fix)
                 sess['password_reset_expiry'] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
                 sess['password_reset_user_id'] = test_users["admin"].id
             

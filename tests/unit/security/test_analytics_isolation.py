@@ -334,7 +334,8 @@ class TestGlobalAdminBypass:
         self, auth_client, master_admin, hospital_data, db_session, login_user, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
-        # master_admin fixture now returns the seeded master_admin (already in current session)
+        # Merge session-scoped master_admin into current function-scoped session
+        master_admin = db_session.merge(master_admin)
 
         # Create data for hospital B
         encounter_b = TestDataFactory.create_patient_encounter(

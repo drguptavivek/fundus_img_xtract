@@ -48,6 +48,9 @@ class TestEncounterResultsIsolation:
         self, auth_client, master_admin, hospital_data, db_session
     ):
         """Global admin should see all encounters."""
+        # Merge master_admin into current session to avoid DetachedInstanceError
+        admin = db_session.merge(master_admin)
+
         # Create encounters for both hospitals using factory
         encounter_a = TestDataFactory.create_patient_encounter(
             db_session,
@@ -61,7 +64,7 @@ class TestEncounterResultsIsolation:
         )
 
         # Login as global admin
-        client = auth_client(master_admin)
+        client = auth_client(admin)
 
         response = client.get("/analytics/encounters")
         assert response.status_code == 200

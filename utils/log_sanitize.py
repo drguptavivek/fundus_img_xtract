@@ -4,14 +4,35 @@ from __future__ import annotations
 
 
 def sanitize_log_value(value: object, max_len: int = 100) -> str:
-    """Return a safe, single-line string for logging."""
+    """
+    Return a safe, single-line string for logging.
+
+    Sanitizes the input by:
+    - Stripping null bytes (injection attack prevention)
+    - Replacing newlines/carriage returns with escape sequences
+    - Limiting length to max_len characters
+
+    Args:
+        value: The value to sanitize
+        max_len: Maximum length of returned string
+
+    Returns:
+        Sanitized string safe for logging
+    """
     if value is None:
         return ""
     if isinstance(value, (bytes, bytearray)):
         text = value.decode("utf-8", errors="ignore")
     else:
         text = str(value)
+
+    # SECURITY: Strip null bytes to prevent injection attacks
+    text = text.replace("\x00", "")
+
+    # Replace newlines/carriage returns with escape sequences
     text = text.replace("\r", "\\r").replace("\n", "\\n")
+
+    # Limit length
     if len(text) > max_len:
         return text[:max_len]
     return text

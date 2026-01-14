@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from utils.utils2 import uniquify
 from utils.env_loader import load_environment
+from utils.filename_validation import validate_upload_filename, sanitize_filename_for_logging
 
 from . import bp
 from db_transaction_manager import get_db_session
@@ -242,7 +243,29 @@ def upload():
             job_items = []
 
             for file in files:
-                filename = secure_filename(file.filename or "")
+                original_filename = file.filename or ""
+
+                # SECURITY: Validate filename before any processing
+                # This prevents path traversal, null byte injection, and log injection attacks
+                is_valid, validation_error = validate_upload_filename(original_filename)
+
+                if not is_valid:
+                    # Log the original filename (sanitized) and the validation error
+                    state, detail = "error", f"Invalid filename: {validation_error}"
+                    current_app.logger.warning(
+                        "File upload rejected - %s. Original filename: %s",
+                        validation_error,
+                        sanitize_filename_for_logging(original_filename),
+                    )
+                    job_items.append(JobItem(
+                        filename=sanitize_filename_for_logging(original_filename),
+                        state=state,
+                        detail=detail,
+                    ))
+                    continue
+
+                # Filename is valid, proceed with secure_filename processing
+                filename = secure_filename(original_filename)
                 state, detail = "queued", ""
 
                 if not filename:

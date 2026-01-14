@@ -101,6 +101,3 @@ docker-compose.override.yml
 
 .osgrep
 
-# bv (beads viewer) local config and caches
-.bv/
-.beads/

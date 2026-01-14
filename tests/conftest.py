@@ -8,6 +8,9 @@ This conftest.py provides fixtures for the restructured test suite with:
 - Test data factories and utilities
 """
 
+# Load security fixtures for hospital isolation testing
+pytest_plugins = ['fixtures.security', 'fixtures.metadata']
+
 import os
 import sys
 from pathlib import Path

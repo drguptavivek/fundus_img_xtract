@@ -22,6 +22,7 @@ from utils.mvw_all_img_search import (
 from utils.taskUtils import get_task_detail
 from utils.date_utils import parse_date_yyyy_mm_dd
 from utils.log_sanitize import sanitize_log_value, mask_text_emails
+from review.task_review import AI_REVIEW_STATUS_LABELS
 
 
 @bp.route("/images", methods=["GET"])

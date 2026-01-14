@@ -63,28 +63,42 @@ def seed_test_database(test_engine):
         session.flush()
         
         # ===== CAMERAS =====
-        cameras_data = ['Test Camera', 'Fundus Camera', 'Topcon TRC-50DX', 'Canon CR-2']
+        # Create with specific IDs for consistency with test expectations
+        # Test Camera is ID 1 for backward compatibility with tests that query by name
+        cameras_data = [
+            {'id': 1, 'name': 'Test Camera'},
+            {'id': 2, 'name': 'Fundus Camera'},
+            {'id': 3, 'name': 'Topcon TRC-50DX'},
+            {'id': 4, 'name': 'Canon CR-2'},
+        ]
         cameras = {}
-        for camera_name in cameras_data:
-            camera = session.query(Camera).filter_by(name=camera_name).first()
+        for camera_data in cameras_data:
+            camera = session.query(Camera).filter_by(id=camera_data['id']).first()
             if not camera:
-                camera = Camera(name=camera_name)
+                camera = Camera(id=camera_data['id'], name=camera_data['name'])
                 session.add(camera)
-            cameras[camera_name] = camera
+            cameras[camera_data['name']] = camera
         session.flush()
-        
+
         # ===== AREAS =====
-        areas_data = ['Test Area', 'Macula', 'Optic Disc', 'Peripheral Retina']
+        # Create with specific IDs for consistency with test expectations
+        areas_data = [
+            {'id': 1, 'name': 'Test Area'},
+            {'id': 2, 'name': 'Macula'},
+            {'id': 3, 'name': 'Optic Disc'},
+            {'id': 4, 'name': 'Peripheral Retina'},
+        ]
         areas = {}
-        for area_name in areas_data:
-            area = session.query(Area).filter_by(name=area_name).first()
+        for area_data in areas_data:
+            area = session.query(Area).filter_by(id=area_data['id']).first()
             if not area:
-                area = Area(name=area_name)
+                area = Area(id=area_data['id'], name=area_data['name'])
                 session.add(area)
-            areas[area_name] = area
+            areas[area_data['name']] = area
         session.flush()
         
         # ===== HOSPITALS =====
+        # Use names that tests expect (queried by name in test fixtures)
         hospitals_data = [
             {'id': 1, 'name': 'Hospital A'},
             {'id': 2, 'name': 'Hospital B'}
@@ -146,24 +160,27 @@ def seed_test_database(test_engine):
                 'password': 'Test@2026',
                 'hospital_id': 1,
                 'is_master_admin': False,
-                'roles': ['ophthalmologist']
+                'roles': ['ophthalmologist'],
+                'lab_units': ['Lab A1']  # Assign lab unit
             },
             {
                 'username': 'ophthalmologist_b',
                 'password': 'Test@2026',
                 'hospital_id': 2,
                 'is_master_admin': False,
-                'roles': ['ophthalmologist']
+                'roles': ['ophthalmologist'],
+                'lab_units': ['Lab B1']  # Assign lab unit
             },
             {
                 'username': 'ophthalmologist_cross',
                 'password': 'Test@2026',
                 'hospital_id': None,
                 'is_master_admin': False,
-                'roles': ['ophthalmologist']
+                'roles': ['ophthalmologist'],
+                'lab_units': ['Lab A1', 'Lab B1']  # Cross-hospital lab units
             }
         ]
-        
+
         users = {}
         for user_data in users_data:
             user = session.query(User).filter_by(username=user_data['username']).first()
@@ -177,8 +194,18 @@ def seed_test_database(test_engine):
                     roles=user_roles
                 )
                 session.add(user)
+                session.flush()
+
+                # Assign lab units if specified
+                if 'lab_units' in user_data:
+                    for lab_name in user_data['lab_units']:
+                        lab_unit = lab_units.get(lab_name)
+                        if lab_unit:
+                            user.lab_units.append(lab_unit)
+                    session.flush()
+
             users[user_data['username']] = user
-        
+
         session.commit()
         
         return {

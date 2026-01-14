@@ -15,32 +15,33 @@ from auth.security import hash_password
 @pytest.fixture(scope="session")
 def test_hospitals(test_engine):
     """
-    Create two test hospitals for isolation testing.
-    
+    Get two test hospitals for isolation testing.
+
+    NOTE: This fixture NO LONGER creates hospitals. It only queries what
+    seed_test_database fixture has already created. This ensures a single
+    source of truth for test data seeding.
+
     Returns:
         dict: {'hospital_a': Hospital, 'hospital_b': Hospital}
     """
     from sqlalchemy.orm import sessionmaker
-    
+
     Session = sessionmaker(bind=test_engine)
     session = Session()
-    
+
     try:
-        # Create hospitals
-        hospital_a = Hospital(id=1, name='Hospital A')
-        hospital_b = Hospital(id=2, name='Hospital B')
-        
-        session.add_all([hospital_a, hospital_b])
-        session.commit()
-        
+        # Query hospitals created by seed_database (autouse fixture)
+        hospital_a = session.query(Hospital).filter_by(id=1).first()
+        hospital_b = session.query(Hospital).filter_by(id=2).first()
+
         # Return as dict for easy access
         hospitals = {
             'hospital_a': hospital_a,
             'hospital_b': hospital_b
         }
-        
+
         yield hospitals
-        
+
     finally:
         session.close()
 
@@ -48,10 +49,11 @@ def test_hospitals(test_engine):
 @pytest.fixture(scope="session")
 def test_lab_units(test_engine, test_hospitals):
     """
-    Get or create lab units for both hospitals.
+    Get lab units for both hospitals.
 
-    This fixture checks if lab units were created by seed_database (autouse).
-    If they exist, it queries them. If not, it creates them.
+    NOTE: This fixture NO LONGER creates lab units. It only queries what
+    seed_test_database fixture has already created. This ensures a single
+    source of truth for test data seeding.
 
     Returns:
         dict: Lab units mapped by hospital
@@ -62,40 +64,16 @@ def test_lab_units(test_engine, test_hospitals):
     session = Session()
 
     try:
+        # Query lab units created by seed_database (autouse fixture)
         # Hospital A lab units (IDs 1-3)
-        # Check if already created by seed_database, use those names if exist
         lab_a1 = session.query(LabUnit).filter_by(id=1).first()
-        if not lab_a1:
-            lab_a1 = LabUnit(id=1, name='Lab A1', hospital_id=1)
-            session.add(lab_a1)
-
         lab_a2 = session.query(LabUnit).filter_by(id=2).first()
-        if not lab_a2:
-            lab_a2 = LabUnit(id=2, name='Lab A2', hospital_id=1)
-            session.add(lab_a2)
-
         lab_a3 = session.query(LabUnit).filter_by(id=3).first()
-        if not lab_a3:
-            lab_a3 = LabUnit(id=3, name='Lab A3', hospital_id=1)
-            session.add(lab_a3)
 
         # Hospital B lab units (IDs 4-6)
         lab_b1 = session.query(LabUnit).filter_by(id=4).first()
-        if not lab_b1:
-            lab_b1 = LabUnit(id=4, name='Lab B1', hospital_id=2)
-            session.add(lab_b1)
-
         lab_b2 = session.query(LabUnit).filter_by(id=5).first()
-        if not lab_b2:
-            lab_b2 = LabUnit(id=5, name='Lab B2', hospital_id=2)
-            session.add(lab_b2)
-
         lab_b3 = session.query(LabUnit).filter_by(id=6).first()
-        if not lab_b3:
-            lab_b3 = LabUnit(id=6, name='Lab B3', hospital_id=2)
-            session.add(lab_b3)
-
-        session.commit()
 
         lab_units = {
             'hospital_a': [lab_a1, lab_a2, lab_a3],

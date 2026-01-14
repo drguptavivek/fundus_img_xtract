@@ -322,95 +322,44 @@ class CoreEntityFactory:
     
     @staticmethod
     def setup_core_entities(db_session):
-        """Setup standard core entities for testing with multi-hospital support."""
+        """
+        Query standard core entities for testing.
+
+        NOTE: This method NO LONGER creates entities. It only queries what
+        seed_test_database fixture has already created. This ensures a single
+        source of truth for test data seeding.
+
+        All entities are created by seed_database.py (autouse fixture).
+        """
         from models import Camera, Area
-        
-        # Hospitals
+
+        # Query hospitals (created by seed_database)
         hospital_a = db_session.query(Hospital).filter_by(id=1).first()
-        if not hospital_a:
-            hospital_a = CoreEntityFactory.create_hospital(db_session, 'RPC AIIMS', 1)
-        
         hospital_b = db_session.query(Hospital).filter_by(id=2).first()
-        if not hospital_b:
-            hospital_b = CoreEntityFactory.create_hospital(db_session, 'Hospital B', 2)
-        
-        # Hospital A Lab Units
+
+        # Query lab units (created by seed_database)
+        # Names are whatever seed_database created (Lab A1, Lab A2, etc.)
         lab_a1 = db_session.query(LabUnit).filter_by(id=1).first()
-        if not lab_a1:
-            lab_a1 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Community Ophthalmology', 1, 1
-            )
-        
         lab_a2 = db_session.query(LabUnit).filter_by(id=2).first()
-        if not lab_a2:
-            lab_a2 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Retina Lab', 1, 2
-            )
-        
         lab_a3 = db_session.query(LabUnit).filter_by(id=3).first()
-        if not lab_a3:
-            lab_a3 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Glaucoma Lab', 1, 3
-            )
-        
-        # Hospital B Lab Units
         lab_b1 = db_session.query(LabUnit).filter_by(id=4).first()
-        if not lab_b1:
-            lab_b1 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Corena Lab', 2, 4
-            )
-        
         lab_b2 = db_session.query(LabUnit).filter_by(id=5).first()
-        if not lab_b2:
-            lab_b2 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Retina', 2, 5
-            )
-        
         lab_b3 = db_session.query(LabUnit).filter_by(id=6).first()
-        if not lab_b3:
-            lab_b3 = CoreEntityFactory.create_lab_unit(
-                db_session, 'Glaucoma', 2, 6
-            )
-        
-        # Diseases
-        glaucoma = db_session.query(Disease).filter_by(id=1).first()
-        if not glaucoma:
-            glaucoma = CoreEntityFactory.create_disease(db_session, 'Glaucoma', 1)
-        
-        dr = db_session.query(Disease).filter_by(id=2).first()
-        if not dr:
-            dr = CoreEntityFactory.create_disease(db_session, 'DR', 2)
-        
-        amd = db_session.query(Disease).filter_by(id=3).first()
-        if not amd:
-            amd = CoreEntityFactory.create_disease(db_session, 'AMD', 3)
-        
-        # Cameras
+
+        # Query diseases (created by seed_database)
+        # Use ILIKE for flexible matching since IDs may vary
+        glaucoma = db_session.query(Disease).filter(Disease.name.ilike('%glaucoma%')).first()
+        dr = db_session.query(Disease).filter(Disease.name.ilike('%dr%')).first()
+        amd = db_session.query(Disease).filter(Disease.name.ilike('%amd%')).first()
+
+        # Query cameras (created by seed_database)
         camera_remedio = db_session.query(Camera).filter_by(id=1).first()
-        if not camera_remedio:
-            camera_remedio = Camera(id=1, name='Remedio FOP')
-            db_session.add(camera_remedio)
-            db_session.flush()
-        
         camera_topcon = db_session.query(Camera).filter_by(id=2).first()
-        if not camera_topcon:
-            camera_topcon = Camera(id=2, name='Topcon')
-            db_session.add(camera_topcon)
-            db_session.flush()
-        
-        # Areas
+
+        # Query areas (created by seed_database)
         area_disc = db_session.query(Area).filter_by(id=1).first()
-        if not area_disc:
-            area_disc = Area(id=1, name='Retina Disc Focus')
-            db_session.add(area_disc)
-            db_session.flush()
-        
         area_macula = db_session.query(Area).filter_by(id=2).first()
-        if not area_macula:
-            area_macula = Area(id=2, name='Macula')
-            db_session.add(area_macula)
-            db_session.flush()
-        
+
         return {
             # Hospitals
             'hospital_a': hospital_a,

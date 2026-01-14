@@ -259,14 +259,16 @@ def client(app):
 # ==============================================================================
 
 @pytest.fixture(scope="session")
-def core_test_data(test_engine):
+def core_test_data(test_engine, seed_test_database):
     """
     Create core test data once per session (hospitals, lab units, diseases, roles).
     This persists for the entire test session for efficiency.
+
+    Depends on seed_test_database to ensure correct lab units are created first.
     """
     from tests.helpers.factories import CoreEntityFactory
     from sqlalchemy.orm import sessionmaker
-    
+
     Session = sessionmaker(bind=test_engine)
     session = Session()
     

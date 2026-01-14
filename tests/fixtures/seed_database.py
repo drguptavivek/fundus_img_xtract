@@ -8,8 +8,12 @@ This module provides a session-scoped fixture that seeds the test database with:
 - Areas (Macula, Optic Disc, etc.)
 - Grades (for DR, Glaucoma, AMD)
 - Hospitals (Hospital A, Hospital B)
-- Lab Units (Lab A1, Lab A2, Lab B1, Lab B2)
+- Lab Units (Lab A1, A2, A3 for Hospital A; Lab B1, B2, B3 for Hospital B)
 - Test Users (master_admin, site_admin_a, site_admin_b, ophthalmologists, etc.)
+
+Lab Unit ID Assignment:
+  ID 1-3: Hospital A lab units (Lab A1, A2, A3)
+  ID 4-6: Hospital B lab units (Lab B1, B2, B3)
 """
 import pytest
 from models import (
@@ -95,11 +99,15 @@ def seed_test_database(test_engine):
         session.flush()
         
         # ===== LAB UNITS =====
+        # Hospital A: IDs 1-3
+        # Hospital B: IDs 4-6
         lab_units_data = [
             {'id': 1, 'name': 'Lab A1', 'hospital_id': 1},
             {'id': 2, 'name': 'Lab A2', 'hospital_id': 1},
-            {'id': 3, 'name': 'Lab B1', 'hospital_id': 2},
-            {'id': 4, 'name': 'Lab B2', 'hospital_id': 2}
+            {'id': 3, 'name': 'Lab A3', 'hospital_id': 1},
+            {'id': 4, 'name': 'Lab B1', 'hospital_id': 2},
+            {'id': 5, 'name': 'Lab B2', 'hospital_id': 2},
+            {'id': 6, 'name': 'Lab B3', 'hospital_id': 2}
         ]
         lab_units = {}
         for lab_data in lab_units_data:

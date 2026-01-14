@@ -58,11 +58,16 @@ class TestGetUserLabUnitsInHospital:
         user = db_session.merge(master_admin)
         # Get Hospital A lab units
         lab_ids = get_user_lab_units_in_hospital(user.id, hospital_id=1, db=db_session)
-        
-        assert 1 in lab_ids  # lab_a1
-        assert 2 in lab_ids  # lab_a2
-        assert 3 in lab_ids  # lab_a3
-        assert 4 not in lab_ids  # lab_b1 (different hospital)
+
+        # Use actual lab unit IDs from fixture (resilient to ID changes)
+        hosp_a_labs = test_lab_units['hospital_a']
+        for lab in hosp_a_labs:
+            assert lab.id in lab_ids, f"Lab {lab.name} (id={lab.id}) should be in Hospital A"
+
+        # Hospital B labs should NOT be in Hospital A results
+        hosp_b_labs = test_lab_units['hospital_b']
+        for lab in hosp_b_labs:
+            assert lab.id not in lab_ids, f"Lab {lab.name} (id={lab.id}) should NOT be in Hospital A"
    
     def test_master_admin_gets_all_lab_units_without_hospital_filter(
         self, db_session, master_admin, test_lab_units
@@ -70,11 +75,17 @@ class TestGetUserLabUnitsInHospital:
         """Master admin without hospital filter should get ALL lab units."""
         user = db_session.merge(master_admin)
         lab_ids = get_user_lab_units_in_hospital(user.id, db=db_session)
-        
-        # Should include both hospitals
-        assert len(lab_ids) >= 6
-        assert 1 in lab_ids  # Hospital A
-        assert 4 in lab_ids  # Hospital B
+
+        # Should include all lab units from both hospitals
+        hosp_a_labs = test_lab_units['hospital_a']
+        hosp_b_labs = test_lab_units['hospital_b']
+        all_labs = hosp_a_labs + hosp_b_labs
+
+        assert len(lab_ids) >= len(all_labs), f"Expected at least {len(all_labs)} lab units, got {len(lab_ids)}"
+
+        # Check that all expected lab units are present
+        for lab in all_labs:
+            assert lab.id in lab_ids, f"Lab {lab.name} (id={lab.id}) should be included"
     
     def test_regular_user_gets_only_own_hospital_lab_units(
         self, db_session, ophthalmologist_hospital_a, test_lab_units
@@ -82,10 +93,22 @@ class TestGetUserLabUnitsInHospital:
         """Regular user should only get lab units from their hospital."""
         user = db_session.merge(ophthalmologist_hospital_a)
         lab_ids = get_user_lab_units_in_hospital(user.id, db=db_session)
-        
-        # Should only have Hospital A lab units (user's hospital)
-        assert 1 in lab_ids  # lab_a1 (assigned)
-        assert 4 not in lab_ids  # lab_b1 (different hospital)
+
+        # User is in Hospital A, should only see Hospital A labs
+        hosp_a_labs = test_lab_units['hospital_a']
+        hosp_b_labs = test_lab_units['hospital_b']
+
+        # Should have at least one Hospital A lab unit (the one assigned)
+        assert len(lab_ids) > 0, "User should have at least one lab unit"
+
+        # All returned labs should be from Hospital A
+        for lab_id in lab_ids:
+            lab = next((l for l in hosp_a_labs if l.id == lab_id), None)
+            assert lab is not None, f"Lab id={lab_id} should be from Hospital A"
+
+        # Should NOT have any Hospital B labs
+        for lab in hosp_b_labs:
+            assert lab.id not in lab_ids, f"Lab {lab.name} (id={lab.id}) from Hospital B should NOT be included"
     
     def test_user_with_no_hospital_gets_empty_set(self, db_session):
         """User with no hospital assignment should get empty set."""

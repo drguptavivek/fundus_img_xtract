@@ -16,24 +16,34 @@ def test_hospitals(seed_test_database):
 
 @pytest.fixture(scope="function")
 def hospital_data(db_session):
-    """Get hospitals with their lab units in a convenient structure (function-scoped)."""
-    # Query hospitals and lab units from the database
+    """
+    Get hospitals with their lab units in a convenient structure (function-scoped).
+
+    Queries by NAME for resilience to ID changes.
+    Returns all 6 lab units (3 per hospital).
+    """
+    # Query hospitals and lab units from the database by NAME
     hosp_a = db_session.query(Hospital).filter_by(name='Hospital A').first()
     hosp_b = db_session.query(Hospital).filter_by(name='Hospital B').first()
-    
+
+    # Hospital A lab units (IDs 1-3)
     lab_a1 = db_session.query(LabUnit).filter_by(name='Lab A1').first()
     lab_a2 = db_session.query(LabUnit).filter_by(name='Lab A2').first()
+    lab_a3 = db_session.query(LabUnit).filter_by(name='Lab A3').first()
+
+    # Hospital B lab units (IDs 4-6)
     lab_b1 = db_session.query(LabUnit).filter_by(name='Lab B1').first()
     lab_b2 = db_session.query(LabUnit).filter_by(name='Lab B2').first()
-    
+    lab_b3 = db_session.query(LabUnit).filter_by(name='Lab B3').first()
+
     return {
         'hospital_a': {
             'hospital': hosp_a,
-            'lab_units': [lab_a1, lab_a2]
+            'lab_units': [lab_a1, lab_a2, lab_a3]  # 3 labs
         },
         'hospital_b': {
             'hospital': hosp_b,
-            'lab_units': [lab_b1, lab_b2]
+            'lab_units': [lab_b1, lab_b2, lab_b3]  # 3 labs
         }
     }
 
@@ -41,12 +51,32 @@ def hospital_data(db_session):
 
 @pytest.fixture(scope="session")
 def test_lab_units(seed_test_database):
-    """Get seeded lab units."""
+    """
+    Get seeded lab units.
+
+    Returns all 6 lab units (3 per hospital) in a structure compatible
+    with security.py fixture format.
+    """
     return {
+        # Hospital A (IDs 1-3)
+        'hospital_a': [
+            seed_test_database['lab_units']['Lab A1'],
+            seed_test_database['lab_units']['Lab A2'],
+            seed_test_database['lab_units']['Lab A3'],
+        ],
+        # Hospital B (IDs 4-6)
+        'hospital_b': [
+            seed_test_database['lab_units']['Lab B1'],
+            seed_test_database['lab_units']['Lab B2'],
+            seed_test_database['lab_units']['Lab B3'],
+        ],
+        # Individual access (backward compatibility)
         'lab_a1': seed_test_database['lab_units']['Lab A1'],
         'lab_a2': seed_test_database['lab_units']['Lab A2'],
+        'lab_a3': seed_test_database['lab_units']['Lab A3'],
         'lab_b1': seed_test_database['lab_units']['Lab B1'],
         'lab_b2': seed_test_database['lab_units']['Lab B2'],
+        'lab_b3': seed_test_database['lab_units']['Lab B3'],
     }
 
 

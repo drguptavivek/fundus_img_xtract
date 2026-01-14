@@ -48,30 +48,55 @@ def test_hospitals(test_engine):
 @pytest.fixture(scope="session")
 def test_lab_units(test_engine, test_hospitals):
     """
-    Create lab units for both hospitals.
-    
+    Get or create lab units for both hospitals.
+
+    This fixture checks if lab units were created by seed_database (autouse).
+    If they exist, it queries them. If not, it creates them.
+
     Returns:
         dict: Lab units mapped by hospital
     """
     from sqlalchemy.orm import sessionmaker
-    
+
     Session = sessionmaker(bind=test_engine)
     session = Session()
-    
+
     try:
-        # Hospital A lab units
-        lab_a1 = LabUnit(id=1, name='Community Ophthalmology', hospital_id=1)
-        lab_a2 = LabUnit(id=2, name='Retina Lab', hospital_id=1)
-        lab_a3 = LabUnit(id=3, name='Glaucoma Lab', hospital_id=1)
-        
-        # Hospital B lab units
-        lab_b1 = LabUnit(id=4, name='Corena Lab', hospital_id=2)
-        lab_b2 = LabUnit(id=5, name='Retina', hospital_id=2)
-        lab_b3 = LabUnit(id=6, name='Glaucoma', hospital_id=2)
-        
-        session.add_all([lab_a1, lab_a2, lab_a3, lab_b1, lab_b2, lab_b3])
+        # Hospital A lab units (IDs 1-3)
+        # Check if already created by seed_database, use those names if exist
+        lab_a1 = session.query(LabUnit).filter_by(id=1).first()
+        if not lab_a1:
+            lab_a1 = LabUnit(id=1, name='Lab A1', hospital_id=1)
+            session.add(lab_a1)
+
+        lab_a2 = session.query(LabUnit).filter_by(id=2).first()
+        if not lab_a2:
+            lab_a2 = LabUnit(id=2, name='Lab A2', hospital_id=1)
+            session.add(lab_a2)
+
+        lab_a3 = session.query(LabUnit).filter_by(id=3).first()
+        if not lab_a3:
+            lab_a3 = LabUnit(id=3, name='Lab A3', hospital_id=1)
+            session.add(lab_a3)
+
+        # Hospital B lab units (IDs 4-6)
+        lab_b1 = session.query(LabUnit).filter_by(id=4).first()
+        if not lab_b1:
+            lab_b1 = LabUnit(id=4, name='Lab B1', hospital_id=2)
+            session.add(lab_b1)
+
+        lab_b2 = session.query(LabUnit).filter_by(id=5).first()
+        if not lab_b2:
+            lab_b2 = LabUnit(id=5, name='Lab B2', hospital_id=2)
+            session.add(lab_b2)
+
+        lab_b3 = session.query(LabUnit).filter_by(id=6).first()
+        if not lab_b3:
+            lab_b3 = LabUnit(id=6, name='Lab B3', hospital_id=2)
+            session.add(lab_b3)
+
         session.commit()
-        
+
         lab_units = {
             'hospital_a': [lab_a1, lab_a2, lab_a3],
             'hospital_b': [lab_b1, lab_b2, lab_b3],
@@ -82,9 +107,9 @@ def test_lab_units(test_engine, test_hospitals):
             'lab_b2': lab_b2,
             'lab_b3': lab_b3,
         }
-        
+
         yield lab_units
-        
+
     finally:
         session.close()
 

@@ -2,7 +2,6 @@
   "name": "fundus-img-xtract",
   "private": true,
   "devDependencies": {
-    "@playwright/test": "^1.56.0",
     "@types/node": "^24.7.2",
     "bootstrap": "^5.3.3",
     "sass": "^1.91.0"

@@ -8,10 +8,10 @@ Bead: 5N-2 (fundus_img_xtract-43u)
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock, patch, MagicMock
-from flask import session
 
+from auth.utils import utcnow
 from utils.sensitive_operations import (
     requires_reauth,
     _log_sensitive_operation,
@@ -24,16 +24,27 @@ from utils.sensitive_operations import (
 
 class TestRequiresReauth:
     """Tests for @requires_reauth decorator."""
-    
+
     @pytest.fixture
     def mock_app(self):
-        """Create a mock Flask app context."""
+        """Create a mock Flask app context with Flask-Login initialized."""
         from flask import Flask
+        from flask_login import LoginManager
         app = Flask(__name__)
         app.config['SECRET_KEY'] = 'test-secret-key'
         app.config['TESTING'] = True
+
+        # Initialize Flask-Login (required for current_user proxy to work)
+        login_manager = LoginManager()
+        login_manager.init_app(app)
+
+        # Add a user_loader callback (required by Flask-Login)
+        @login_manager.user_loader
+        def _load_user(user_id):
+            return None  # Not used in unit tests
+
         return app
-    
+
     @pytest.fixture
     def mock_user(self):
         """Create a mock user."""
@@ -43,60 +54,68 @@ class TestRequiresReauth:
         user.password_hash = '$2b$12$test_hash'
         user.is_authenticated = True
         return user
-    
+
     def test_unauthenticated_user_redirects_to_login(self, mock_app):
         """Unauthenticated users should be redirected to login."""
         with mock_app.test_request_context():
-            with patch('utils.sensitive_operations.current_user') as mock_current_user:
+            with patch('utils.sensitive_operations.current_user', new_callable=MagicMock) as mock_current_user:
                 mock_current_user.is_authenticated = False
-                
+
                 @requires_reauth("test_operation")
                 def test_func():
                     return "success"
-                
+
                 with patch('utils.sensitive_operations.redirect') as mock_redirect:
                     with patch('utils.sensitive_operations.url_for') as mock_url_for:
                         with patch('utils.sensitive_operations.flash') as mock_flash:
                             test_func()
-                            
+
                             mock_flash.assert_called_once()
                             mock_url_for.assert_called_with('auth.login')
                             mock_redirect.assert_called_once()
-    
+
     def test_recent_reauth_allows_operation(self, mock_app, mock_user):
         """Recently re-authenticated users should proceed without password."""
         with mock_app.test_request_context():
-            with mock_app.test_client() as client:
-                with client.session_transaction() as sess:
-                    # Set recent re-auth time (2 minutes ago)
-                    recent_time = datetime.utcnow() - timedelta(minutes=2)
-                    sess['last_reauth_time'] = recent_time.isoformat()
-                
-                with patch('utils.sensitive_operations.current_user', mock_user):
-                    @requires_reauth("test_operation")
-                    def test_func():
-                        return "success"
-                    
-                    result = test_func()
-                    assert result == "success"
+            # Mock utcnow() to have consistent time for comparison
+            from auth.utils import utcnow
+            now = utcnow()
+            recent_time = now - timedelta(minutes=2)
+
+            with patch('utils.sensitive_operations.current_user', new_callable=MagicMock) as mock_current_user:
+                mock_current_user.is_authenticated = True
+                mock_current_user.id = 1
+                mock_current_user.username = 'testuser'
+
+                # Use patch.object to mock Flask's session dict properly
+                from flask import session as flask_session
+                with patch.dict(flask_session, {'last_reauth_time': recent_time.isoformat()}):
+                    # Mock utcnow() to return the same 'now' time
+                    with patch('utils.sensitive_operations.utcnow', return_value=now):
+                        @requires_reauth("test_operation")
+                        def test_func():
+                            return "success"
+
+                        result = test_func()
+                        assert result == "success"
     
     def test_expired_reauth_requires_password(self, mock_app, mock_user):
         """Expired re-auth should require password confirmation."""
         with mock_app.test_request_context():
-            with mock_app.test_client() as client:
-                with client.session_transaction() as sess:
-                    # Set expired re-auth time (10 minutes ago)
-                    expired_time = datetime.utcnow() - timedelta(minutes=10)
-                    sess['last_reauth_time'] = expired_time.isoformat()
-                
-                with patch('utils.sensitive_operations.current_user', mock_user):
+            # Mock session.get() to return expired reauth time (10 minutes ago)
+            expired_time = utcnow() - timedelta(minutes=10)
+
+            with patch('utils.sensitive_operations.current_user', mock_user):
+                with patch('utils.sensitive_operations.session') as mock_session:
+                    mock_session.get.return_value = expired_time.isoformat()
+
                     with patch('utils.sensitive_operations.render_template') as mock_render:
                         @requires_reauth("test_operation")
                         def test_func():
                             return "success"
-                        
+
                         test_func()
-                        
+
                         mock_render.assert_called_once()
                         args, kwargs = mock_render.call_args
                         assert args[0] == 'admin/reauth_confirm.html'
@@ -106,42 +125,50 @@ class TestRequiresReauth:
         """Correct password should proceed with operation."""
         with mock_app.test_request_context(method='POST', data={'confirm_password': 'correct_password'}):
             with patch('utils.sensitive_operations.current_user', mock_user):
-                with patch('utils.sensitive_operations.verify_password', return_value=True):
-                    with patch('utils.sensitive_operations.get_db_session') as mock_db:
-                        mock_session = MagicMock()
-                        mock_session.get.return_value = mock_user
-                        mock_db.return_value.__enter__.return_value = mock_session
-                        
-                        with patch('utils.sensitive_operations._log_sensitive_operation'):
-                            @requires_reauth("test_operation")
-                            def test_func():
-                                return "success"
-                            
-                            result = test_func()
-                            assert result == "success"
+                with patch('utils.sensitive_operations.session') as mock_flask_session:
+                    # No previous reauth time - force password check
+                    mock_flask_session.get.return_value = None
+
+                    with patch('utils.sensitive_operations.verify_password', return_value=True):
+                        with patch('utils.sensitive_operations.get_db_session') as mock_db:
+                            mock_db_session = MagicMock()
+                            mock_db_session.get.return_value = mock_user
+                            mock_db.return_value.__enter__.return_value = mock_db_session
+
+                            with patch('utils.sensitive_operations._log_sensitive_operation'):
+                                @requires_reauth("test_operation")
+                                def test_func():
+                                    return "success"
+
+                                result = test_func()
+                                assert result == "success"
     
     def test_incorrect_password_shows_error(self, mock_app, mock_user):
         """Incorrect password should show error and re-auth form."""
         with mock_app.test_request_context(method='POST', data={'confirm_password': 'wrong_password'}):
             with patch('utils.sensitive_operations.current_user', mock_user):
-                with patch('utils.sensitive_operations.verify_password', return_value=False):
-                    with patch('utils.sensitive_operations.get_db_session') as mock_db:
-                        mock_session = MagicMock()
-                        mock_session.get.return_value = mock_user
-                        mock_db.return_value.__enter__.return_value = mock_session
-                        
-                        with patch('utils.sensitive_operations._log_sensitive_operation'):
-                            with patch('utils.sensitive_operations.flash') as mock_flash:
-                                with patch('utils.sensitive_operations.render_template') as mock_render:
-                                    @requires_reauth("test_operation")
-                                    def test_func():
-                                        return "success"
-                                    
-                                    test_func()
-                                    
-                                    mock_flash.assert_called_once()
-                                    assert "failed" in mock_flash.call_args[0][0].lower()
-                                    mock_render.assert_called_once()
+                with patch('utils.sensitive_operations.session') as mock_flask_session:
+                    # No previous reauth time - force password check
+                    mock_flask_session.get.return_value = None
+
+                    with patch('utils.sensitive_operations.verify_password', return_value=False):
+                        with patch('utils.sensitive_operations.get_db_session') as mock_db:
+                            mock_db_session = MagicMock()
+                            mock_db_session.get.return_value = mock_user
+                            mock_db.return_value.__enter__.return_value = mock_db_session
+
+                            with patch('utils.sensitive_operations._log_sensitive_operation'):
+                                with patch('utils.sensitive_operations.flash') as mock_flash:
+                                    with patch('utils.sensitive_operations.render_template') as mock_render:
+                                        @requires_reauth("test_operation")
+                                        def test_func():
+                                            return "success"
+
+                                        test_func()
+
+                                        mock_flash.assert_called_once()
+                                        assert "failed" in mock_flash.call_args[0][0].lower()
+                                        mock_render.assert_called_once()
 
 
 class TestAuditLogging:

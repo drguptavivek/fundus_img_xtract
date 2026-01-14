@@ -17,6 +17,7 @@ from typing import Optional
 
 from flask import request, session, flash, redirect, url_for, render_template, current_app
 from flask_login import current_user
+from argon2.exceptions import InvalidHashError
 
 from auth.security import verify_password
 from auth.utils import utcnow
@@ -156,7 +157,16 @@ def requires_reauth(operation_name: str):
                 with get_db_session() as db:
                     user = db.get(User, current_user.id)
                     
-                    if user and verify_password(password, user.password_hash):
+                    verified = False
+                    try:
+                        if user and user.password_hash and verify_password(password, user.password_hash.strip()):
+                            verified = True
+                    except (InvalidHashError, ValueError) as e:
+                        logger.error("Password verification error (invalid hash) for user %s: %s", 
+                                     sanitize_log_value(current_user.username), str(e))
+                        verified = False
+                    
+                    if verified:
                         # Password verified - update session
                         session['last_reauth_time'] = utcnow().isoformat()
                         

@@ -16,6 +16,7 @@ from flask import flash
 from utils.rate_limiter import auth_rate_limit, rate_limit_with_feedback, rate_limit
 from utils.security_middleware import protect_form_submission, validate_payload_size
 from utils.log_sanitize import sanitize_log_value, mask_email
+from utils.emails import generate_otp
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
@@ -186,6 +187,22 @@ def _recent_password_reset_attempts_by_email(db, email: str):
 def _record_password_reset_attempt(db, email: str, ip: str):
     """Record a password reset attempt."""
     db.add(PasswordResetAttempt(email=email, ip_address=ip))
+
+def _clear_password_reset_session(session):
+    """
+    Clear all password reset session data.
+
+    Helper function to securely clean up session data after
+    password reset completion or failure.
+
+    Args:
+        session: Flask session object
+    """
+    session.pop('password_reset_otp_hashed', None)
+    session.pop('password_reset_email', None)
+    session.pop('password_reset_expiry', None)
+    session.pop('password_reset_user_id', None)
+    session.pop('password_reset_otp_used', None)
 
 # Global storage for user-specific events (in production, use Redis or similar)
 # This is a simple in-memory storage for demo purposes
@@ -624,19 +641,20 @@ def forgot_password():
             
             # Record password reset attempt
             _record_password_reset_attempt(db, email, ip)
-            
+
             # If user exists, proceed with OTP generation and sending
             if user:
-                # Generate a random 8-character alphanumeric OTP
-                otp = ''.join(secrets.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
-                
-                # Store OTP and expiry time temporarily (in a real app, you'd use a cache like Redis)
-                # For now, I'll store it in session, but this is not ideal for production
-                session['password_reset_otp'] = otp
+                # Generate a secure 16-character OTP using centralized utility
+                otp = generate_otp(length=16)
+
+                # SECURITY: Store hashed OTP in session, not plaintext
+                # This prevents OTP extraction if session database is compromised
+                session['password_reset_otp_hashed'] = hash_password(otp)
                 session['password_reset_email'] = email
                 session['password_reset_expiry'] = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
-                session['password_reset_user_id'] = user.id  # Store user ID for verification
-                
+                session['password_reset_user_id'] = user.id
+                session['password_reset_otp_used'] = False  # One-time use flag
+
                 # Send email with OTP asynchronously
                 session_id = session.get('_id', 'unknown')
                 send_otp_email(
@@ -645,10 +663,10 @@ def forgot_password():
                     otp,
                     callback=lambda success: email_callback(success, session_id),
                 )
-                
+
                 # To prevent user enumeration, always show the same initial message regardless of email sending result
                 flash("If an account exists with that email address, an OTP has been sent to it. Please check your inbox.", "success")
-                
+
                 return redirect(url_for("auth.reset_password"))
             else:
                 # To prevent user enumeration, we still show the same message
@@ -675,54 +693,58 @@ def reset_password():
         # No need for manual validation here
         ip = get_client_ip()
         otp = request.form.get("otp", "").strip()
-        
+
         # Validate inputs
         if not otp:
             flash("Please enter the OTP.", "error")
             return render_template("auth/reset_password.html")
-        
-        # Verify OTP from session
-        session_otp = session.get('password_reset_otp')
+
+        # Verify OTP from session (now using hashed OTP)
+        session_otp_hashed = session.get('password_reset_otp_hashed')
         session_email = session.get('password_reset_email')
         session_expiry = session.get('password_reset_expiry')
         session_user_id = session.get('password_reset_user_id')
-        
-        if not all([session_otp, session_email, session_expiry, session_user_id]):
+        session_otp_used = session.get('password_reset_otp_used', False)
+
+        if not all([session_otp_hashed, session_email, session_expiry, session_user_id]):
             flash("Invalid or expired OTP. Please request a new one.", "error")
             return redirect(url_for("auth.forgot_password"))
-        
+
+        # Check if OTP has already been used (one-time use protection)
+        if session_otp_used:
+            flash("This OTP has already been used. Please request a new one.", "error")
+            _clear_password_reset_session(session)
+            return redirect(url_for("auth.forgot_password"))
+
         # Check if OTP has expired
         expiry_time = datetime.fromisoformat(session_expiry)
         current_time = datetime.now(timezone.utc)
-        
+
         # Ensure both datetimes are timezone-aware for comparison
         if expiry_time.tzinfo is None:
             expiry_time = expiry_time.replace(tzinfo=timezone.utc)
         if current_time.tzinfo is None:
             current_time = current_time.replace(tzinfo=timezone.utc)
-            
+
         if current_time > expiry_time:
             flash("OTP has expired. Please request a new one.", "error")
-            # Clear session values
-            session.pop('password_reset_otp', None)
-            session.pop('password_reset_email', None)
-            session.pop('password_reset_expiry', None)
-            session.pop('password_reset_user_id', None)
+            _clear_password_reset_session(session)
             return redirect(url_for("auth.forgot_password"))
-        
-        # Check if OTP matches
-        if otp != session_otp:
+
+        # SECURITY: Use constant-time comparison for OTP verification
+        # This prevents timing attacks that could reveal valid OTPs
+        if not verify_password(session_otp_hashed, otp):
             flash("Invalid OTP. Please try again.", "error")
             return render_template("auth/reset_password.html")
+
+        # Mark OTP as used (one-time use protection)
+        session['password_reset_otp_used'] = True
 
         with transaction_scope() as db:
             user = db.get(User, session_user_id)
             if user is None or (user.email or "").lower() != session_email.lower():
                 flash("Unable to reset password for this account. Please request a new OTP.", "error")
-                session.pop('password_reset_otp', None)
-                session.pop('password_reset_email', None)
-                session.pop('password_reset_expiry', None)
-                session.pop('password_reset_user_id', None)
+                _clear_password_reset_session(session)
                 return redirect(url_for("auth.forgot_password"))
 
             generated_password = generate_strong_password()
@@ -735,10 +757,7 @@ def reset_password():
             email = user.email
             user_id = user.id
 
-        session.pop('password_reset_otp', None)
-        session.pop('password_reset_email', None)
-        session.pop('password_reset_expiry', None)
-        session.pop('password_reset_user_id', None)
+        _clear_password_reset_session(session)
 
         # Log successful password reset
         session_id = session.get('_id', 'unknown')

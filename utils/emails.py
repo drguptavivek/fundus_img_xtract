@@ -2,6 +2,7 @@
 Email utilities for the fundus image management system.
 """
 
+import secrets
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -13,6 +14,38 @@ from typing import Callable, Optional
 
 from utils.email_config import EmailConfigService, EmailConfigError
 from utils.log_sanitize import sanitize_log_value
+
+
+def generate_otp(length: int = 16) -> str:
+    """
+    Generate a cryptographically secure random OTP.
+
+    Uses secrets.choice() for cryptographically secure random generation.
+    Default length is 16 characters for sufficient entropy against brute force.
+
+    Args:
+        length: Length of OTP to generate (default: 16, min: 8, max: 32)
+
+    Returns:
+        A random alphanumeric OTP string
+
+    Security:
+        - Uses secrets.choice() for CSPRNG (not random.choice())
+        - Alphanumeric only (A-Z, a-z, 0-9) for email compatibility
+        - Minimum 8 characters, maximum 32 characters
+    """
+    import os
+
+    # Clamp length to reasonable bounds
+    length = max(8, min(32, length))
+
+    # Generate OTP using cryptographically secure random generator
+    # Alphanumeric: A-Z, a-z, 0-9 (62 characters)
+    # 16 characters provides ~95 bits of entropy (log2(62^16))
+    characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    otp = ''.join(secrets.choice(characters) for _ in range(length))
+
+    return otp
 
 
 def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger | None]:

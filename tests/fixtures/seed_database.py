@@ -39,7 +39,7 @@ def seed_test_database(test_engine):
     try:
         # ===== ROLES =====
         roles_data = [
-            'master_admin', 'local_admin', 'ophthalmologist', 'resident',
+            'admin', 'master_admin', 'local_admin', 'ophthalmologist', 'resident',
             'arbitrator', 'optometrist', 'fileUploader', 'data_manager',
             'researcher', 'dataset_creator', 'analytics_viewer'
         ]
@@ -140,7 +140,7 @@ def seed_test_database(test_engine):
                 'password': 'Test@2026',
                 'hospital_id': None,
                 'is_master_admin': True,
-                'roles': ['master_admin']
+                'roles': ['master_admin', 'admin']  # Both roles for full access to analytics routes
             },
             {
                 'username': 'site_admin_a',

@@ -8,6 +8,8 @@ from typing import List, Tuple
 from flask import Flask, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+logger = logging.getLogger('startup_checks')
+
 
 def _mask_url_password(url: str) -> str:
     """Mask credentials in URLs before logging."""
@@ -120,4 +122,78 @@ def run_startup_env_checks(app: Flask, startup_env_logger: logging.Logger) -> No
         }
         startup_env_logger.info("First request forwarded header snapshot: %s", headers_of_interest)
         app.config["_forwarded_headers_logged"] = True
+
+
+def check_cookie_security() -> bool:
+    """
+    Check cookie security settings and warn about insecure configuration.
+
+    This function checks if cookies are configured securely for the
+    current environment and logs warnings for any issues.
+
+    Returns:
+        True if all checks pass, False if any security issues found
+
+    Checks:
+        1. SESSION_COOKIE_SECURE should be True in production
+        2. SESSION_COOKIE_SAMESITE should be 'Strict' or 'Lax' in production
+        3. SESSION_COOKIE_HTTPONLY should always be True
+        4. No warnings in development environment
+
+    Examples:
+        >>> os.environ['FLASK_ENV'] = 'production'
+        >>> os.environ['SESSION_COOKIE_SECURE'] = 'false'
+        >>> check_cookie_security()
+        False  # Logs warning about insecure cookies
+    """
+    checks_passed = True
+
+    # Determine if running in production
+    flask_env = os.getenv('FLASK_ENV', 'development')
+    is_production = flask_env == 'production'
+
+    if not is_production:
+        # Development environment - no checks needed
+        return True
+
+    # Check SESSION_COOKIE_SECURE
+    secure_cookie = os.getenv('SESSION_COOKIE_SECURE', 'false').lower() in ('1', 'true', 'yes')
+    if not secure_cookie:
+        logger.warning(
+            "SECURITY: SESSION_COOKIE_SECURE is False in production environment. "
+            "This exposes session cookies to interception over HTTP connections. "
+            "Set SESSION_COOKIE_SECURE=true in production."
+        )
+        checks_passed = False
+
+    # Check SESSION_COOKIE_SAMESITE
+    same_site = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax').capitalize()
+    if same_site == 'None':
+        logger.warning(
+            "SECURITY: SESSION_COOKIE_SAMESITE is None in production environment. "
+            "This may expose cookies to CSRF attacks. "
+            "Use 'Strict' or 'Lax' instead."
+        )
+        checks_passed = False
+    elif same_site == 'Lax':
+        logger.info(
+            "INFO: SESSION_COOKIE_SAMESITE is Lax in production environment. "
+            "Consider using 'Strict' for sensitive operations requiring stronger CSRF protection."
+        )
+        # This is just informational, not a failure
+
+    # Check SESSION_COOKIE_HTTPONLY (should always be True)
+    httponly = os.getenv('SESSION_COOKIE_HTTPONLY', 'true').lower() in ('1', 'true', 'yes')
+    if not httponly:
+        logger.error(
+            "SECURITY: SESSION_COOKIE_HTTPONLY is False. "
+            "This exposes cookies to XSS attacks. "
+            "Set SESSION_COOKIE_HTTPONLY=true."
+        )
+        checks_passed = False
+
+    if checks_passed:
+        logger.info("Cookie security checks passed for production environment.")
+
+    return checks_passed
 

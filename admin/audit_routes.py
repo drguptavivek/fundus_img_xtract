@@ -1,6 +1,6 @@
 """Admin routes for sensitive operations audit."""
 
-from flask import render_template, request, jsonify
+from flask import render_template, request, jsonify, session
 import logging
 from sqlalchemy import select, desc
 from sqlalchemy.orm import joinedload

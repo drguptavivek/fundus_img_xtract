@@ -36,21 +36,38 @@ class TestAuditDashboard:
                 # Mock DB session and query results
                 mock_session = MagicMock()
                 mock_db.return_value.__enter__.return_value = mock_session
-                
-                # Mock query execution
-                mock_session.execute.return_value.scalars.return_value.all.return_value = []
-                
-                response = client.get('/admin/sensitive-operations')
-                assert response.status_code == 200
-                assert b'Sensitive Operations Audit' in response.data
+
+                # Mock query execution - need to mock two separate execute calls
+                # First call: user query (returns None since we don't need attached_user)
+                mock_session.execute.return_value.unique.return_value.scalar_one_or_none.return_value = None
+
+                # Second call: audit logs query
+                mock_execute_result = MagicMock()
+                mock_execute_result.scalars.return_value.all.return_value = []
+
+                # Third call: operation types query
+                mock_execute_result2 = MagicMock()
+                mock_execute_result2.scalars.return_value.all.return_value = []
+
+                # Set up side_effect for multiple execute calls
+                mock_session.execute.side_effect = [
+                    MagicMock(unique=MagicMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))),
+                    mock_execute_result,
+                    mock_execute_result2
+                ]
+
+                # Mock the notification cache to avoid DB calls
+                with patch('utils.notifications.cache'):
+                    response = client.get('/admin/sensitive-operations')
+                    assert response.status_code == 200
+                    assert b'Sensitive Operations Audit' in response.data
 
     def test_non_admin_cannot_access_dashboard(self, client, mock_user_regular):
         """Non-admin user should be denied access."""
         with patch('flask_login.utils._get_user', return_value=mock_user_regular):
             response = client.get('/admin/sensitive-operations')
-            # Should redirect to homepage or login, or return 403 depending on implementation
-            # Since @roles_required usually redirects with flash message
-            assert response.status_code == 302 
+            # @roles_required decorator returns 403 Forbidden for authenticated users without required roles
+            assert response.status_code == 403 
 
     def test_audit_details_ajax(self, client, mock_user_admin):
         """Admin should be able to fetch audit details via AJAX."""

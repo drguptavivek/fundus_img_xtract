@@ -39,25 +39,27 @@ from api.kpis.kpiutils import (
 
 
 def get_filtered_encounter_dataframe(
-    db, 
-    params: Dict, 
+    db,
+    params: Dict,
     user_lab_unit_ids: Set[int],
     current_user_hospital_id: Optional[int] = None,
-    current_user_role: Optional[str] = None
+    current_user_role: Optional[str] = None,
+    user_for_scoping=None
 ) -> Tuple[pd.DataFrame, Dict]:
     """
     Generate and filter encounter dataframe based on user permissions and filter parameters.
-    
+
     Args:
         db: Database session
         params: Dictionary containing filter parameters
         user_lab_unit_ids: Set of lab unit IDs user has access to
         current_user_hospital_id: Optional hospital ID of current user (for PII masking)
         current_user_role: Optional role of current user (for PII masking)
-        
+        user_for_scoping: Optional User object for hospital scoping in query
+
     Returns:
         Tuple of (filtered pandas DataFrame with PII masked, filters_applied dictionary)
-        
+
     Note:
         PII (patient_id) is masked based on hospital context and user role.
         Reference: docs/PII_Exposure_Control_Policy.md Section 5.1
@@ -69,7 +71,7 @@ def get_filtered_encounter_dataframe(
             db,
             start_date=params.get('start_date'),
             end_date=params.get('end_date'),
-            user=current_user
+            user=user_for_scoping
         )
         
         # Check if dataframe is empty
@@ -198,7 +200,9 @@ def get_filtered_dataframe():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -257,7 +261,9 @@ def get_filtered_dataframe_excel():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -339,7 +345,9 @@ def year_month_wise_uploads():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Skip if dataframe is empty
             if df.empty:
@@ -492,7 +500,9 @@ def dr_reports_count():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -559,7 +569,9 @@ def glaucoma_reports_count():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -636,7 +648,9 @@ def images_count():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -699,7 +713,9 @@ def dr_results_distribution():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -805,7 +821,9 @@ def glaucoma_results_distribution():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)
@@ -870,7 +888,9 @@ def vcdr_distribution():
             user_lab_unit_ids = get_user_permissions(current_user.id)
             
             # Get filtered dataframe using common function
-            df, filters_applied = get_filtered_encounter_dataframe(db, params, user_lab_unit_ids)
+            df, filters_applied = get_filtered_encounter_dataframe(
+                db, params, user_lab_unit_ids, user_for_scoping=current_user
+            )
             
             # Handle NaT values to prevent JSON serialization errors
             df = handle_nat_values_for_json(df)

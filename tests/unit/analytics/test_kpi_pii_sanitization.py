@@ -57,11 +57,12 @@ class TestDataframePIIMasking:
             
             # User from Hospital 1, data_manager role
             df, _ = get_filtered_encounter_dataframe(
-                mock_db_session, 
-                params, 
+                mock_db_session,
+                params,
                 user_lab_unit_ids,
                 current_user_hospital_id=1,
-                current_user_role='data_manager'
+                current_user_role='data_manager',
+                user_for_scoping=None  # Not testing scoping in this test
             )
             
             # CRITICAL ASSERTIONS - these will FAIL until masking is implemented
@@ -114,8 +115,13 @@ class TestDataframePIIMasking:
                 
                 params = {}
                 user_lab_unit_ids = {1}
-                
-                df, _ = get_filtered_encounter_dataframe(mock_db_session, params, user_lab_unit_ids)
+
+                df, _ = get_filtered_encounter_dataframe(
+                    mock_db_session, params, user_lab_unit_ids,
+                    current_user_hospital_id=1,  # Mocked user's hospital
+                    current_user_role='resident',
+                    user_for_scoping=None  # Not testing scoping in this test
+                )
                 
                 # ALL records should have masked patient_id (role-based masking)
                 for idx, row in df.iterrows():
@@ -126,27 +132,16 @@ class TestDataframePIIMasking:
     def test_dataframe_has_patient_id_column(self, mock_db_session):
         """
         Verify that generate_encounter_upload_metrics_df DOES include patient_id.
-        
+
         This confirms we need to mask it.
         """
         from utils.dataframeEncounterFiles import generate_encounter_upload_metrics_df
-        
-        # This will actually call the real function with mocked DB
-        # We expect it to have patient_id column
-        with patch('utils.dataframeEncounterFiles.db') as mock_db:
-            mock_db.query.return_value.options.return_value.filter.return_value.all.return_value = []
-            
-            df = generate_encounter_upload_metrics_df(mock_db_session)
-            
-            # If dataframe is empty, we can't check columns
-            # But the function should return a dataframe structure
-            # This test documents that patient_id is in the schema
-            
-            # We'll verify this by checking the function code includes patient_id
-            import inspect
-            source = inspect.getsource(generate_encounter_upload_metrics_df)
-            assert "'patient_id': encounter.patient_id" in source, \
-                "generate_encounter_upload_metrics_df must include patient_id in dataframe"
+
+        # We'll verify this by checking the function code includes patient_id
+        import inspect
+        source = inspect.getsource(generate_encounter_upload_metrics_df)
+        assert "'patient_id': encounter.patient_id" in source, \
+            "generate_encounter_upload_metrics_df must include patient_id in dataframe"
 
 
 class TestKPIEndpointsNoPII:

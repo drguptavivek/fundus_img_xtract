@@ -227,21 +227,45 @@ class TestDataFactory:
         encounter_file_id: Optional[int] = None,
         direct_image_upload_id: Optional[int] = None,
         state: str = "pending",
+        image_name: Optional[str] = None,
     ) -> GradingTask:
         """
-        Create a GradingTask instance.
-        
+        Create a GradingTask instance satisfying the check constraint.
+
+        The GradingTask model has a check constraint that requires exactly one of
+        encounter_file_id OR direct_image_upload_id to be set. If neither is provided,
+        this method will auto-create an EncounterFile.
+
         Args:
             db_session: Database session
             lab_unit_id: Lab unit ID
             disease_id: Disease ID
-            encounter_file_id: Encounter file ID (one of encounter_file_id or direct_image_upload_id required)
-            direct_image_upload_id: Direct image upload ID
+            encounter_file_id: Encounter file ID (optional, auto-created if neither provided)
+            direct_image_upload_id: Direct image upload ID (optional)
             state: Task state (default: "pending")
-            
+            image_name: Optional image name for auto-created encounter file
+
         Returns:
             GradingTask instance
         """
+        # Enforce check constraint: exactly one of encounter_file_id or direct_image_upload_id must be set
+        if encounter_file_id is None and direct_image_upload_id is None:
+            # Auto-create an EncounterFile if neither is provided
+            encounter = cls.create_patient_encounter(db_session, lab_unit_id=lab_unit_id)
+            encounter_file = cls.create_encounter_file(
+                db_session,
+                patient_encounter_id=encounter.id,
+                lab_unit_id=lab_unit_id,
+                filename=image_name or "auto_test_image.jpg",
+            )
+            encounter_file_id = encounter_file.id
+        elif encounter_file_id is not None and direct_image_upload_id is not None:
+            raise ValueError(
+                "GradingTask requires exactly one of encounter_file_id or direct_image_upload_id, "
+                "not both. This is enforced by database check constraint "
+                "'ck_grading_task_either_encounter_or_direct'."
+            )
+
         task = GradingTask(
             lab_unit_id=lab_unit_id,
             disease_id=disease_id,

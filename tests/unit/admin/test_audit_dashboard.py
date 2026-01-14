@@ -13,6 +13,7 @@ class TestAuditDashboard:
         user.id = 1
         user.username = 'admin'
         user.is_authenticated = True
+        user.is_master_admin = False  # Not a master admin, just has admin role
         user.has_role.return_value = True
         # Mock role check for decorator
         user.roles = [Mock(name='admin')]
@@ -25,6 +26,7 @@ class TestAuditDashboard:
         user.id = 2
         user.username = 'user'
         user.is_authenticated = True
+        user.is_master_admin = False  # Explicitly set to False
         user.has_role.return_value = False
         user.roles = []
         return user

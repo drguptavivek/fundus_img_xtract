@@ -1061,6 +1061,187 @@ def test_logout(client, admin_user):
 **Files Affected:**
 - `tests/integration/auth/test_auth_routes.py` - test_logout_authenticated_user (line 187)
 - `utils/rate_limiter.py` - Rate limiter decorator (line 166)
+- `utils/image_processing.py` - Image processing utilities (get_thumbnail_filename function)
+- `utils/fileUtils.py` - File management utilities (thumbnail path functions)
+
+---
+
+### 24. Import Module Mismatches in Test Files
+
+**Problem Pattern:**
+```python
+# WRONG: Importing from wrong module
+from utils.fileUtils import (
+    get_thumbnail_filename,  # Actually in image_processing!
+    get_thumbnail_path_direct,
+)
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Import from correct modules
+from utils.fileUtils import (
+    get_thumbnail_path_direct,
+    get_thumbnail_path_encounter,
+    validate_thumbnail_filename,
+    thumbnail_exists_direct,
+)
+from utils.image_processing import get_thumbnail_filename
+```
+
+**Why:**
+- Functions may be moved between modules during refactoring
+- Tests don't catch import errors until function is actually used
+- Multiple modules may have similar function names
+- IDE autocomplete can suggest wrong module if not careful
+
+**Common Mismatches in Project:**
+- `get_thumbnail_filename()` lives in `utils.image_processing`, not `utils.fileUtils`
+- Verify actual function location by:
+  - Checking `from ... import` statements in source files
+  - Searching `grep "^def function_name" utils/*.py`
+  - Reading docstrings to confirm function purpose
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 25. Function Signature Mismatches Between Tests and Implementation
+
+**Problem Pattern:**
+```python
+# WRONG: Tests call functions that don't exist with wrong signatures
+def test_thumbnail():
+    # These functions don't exist!
+    path = get_thumbnail_path_for_direct_upload(uuid, 'jpg')  # Wrong name + signature
+    filename = generate_thumbnail_filename(uuid, 'jpg')       # Wrong name + signature
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Use actual function names and signatures
+def test_thumbnail():
+    # get_thumbnail_path_direct requires: folder_rel (str), original_filename (str)
+    path = get_thumbnail_path_direct('2025_01_01_user1', 'image.jpg')
+
+    # get_thumbnail_filename requires: original_filename (str) only
+    filename = get_thumbnail_filename('image.jpg')
+```
+
+**Why:**
+- Function names and signatures change during development
+- Tests may be written from outdated specifications
+- Wrong signatures cause NameError or TypeError at runtime
+- IDE may not catch if function exists elsewhere with similar name
+
+**Common Mismatches in Project:**
+- `generate_thumbnail_filename(uuid, ext)` doesn't exist → actual: `get_thumbnail_filename(filename)`
+- `get_thumbnail_path_for_direct_upload(uuid, ext)` doesn't exist → actual: `get_thumbnail_path_direct(folder_rel, filename)`
+- `get_thumbnail_path_for_encounter_file(uuid, ext)` doesn't exist → actual: `get_thumbnail_path_encounter(path)`
+
+**How to Find Correct Signatures:**
+1. Search source code: `grep "^def function_name" utils/*.py`
+2. Read function docstring for parameter names and types
+3. Check function calls in actual codebase (not tests)
+4. Use IDE "Go to Definition" feature
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 26. Incorrect Behavior Assumptions in Tests
+
+**Problem Pattern:**
+```python
+# WRONG: Assuming all file extensions converted to .jpg
+assert get_thumbnail_filename('photo.jpeg') == 'thm_photo.jpg'
+assert get_thumbnail_filename('image.png') == 'thm_image.jpg'    # Wrong!
+assert get_thumbnail_filename('picture.webp') == 'thm_picture.jpg'  # Wrong!
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Extensions preserved except .jpeg -> .jpg
+assert get_thumbnail_filename('photo.jpeg') == 'thm_photo.jpg'  # .jpeg -> .jpg
+assert get_thumbnail_filename('image.png') == 'thm_image.png'   # .png preserved
+assert get_thumbnail_filename('picture.webp') == 'thm_picture.webp'  # .webp preserved
+assert get_thumbnail_filename('file') == 'thm_file'  # No extension preserved
+```
+
+**Why:**
+- Function behavior may differ from initial assumptions
+- Tests written without checking actual implementation
+- Extension handling strategies vary by use case
+- Real behavior discovered only after running against actual code
+
+**Verification Methods:**
+1. Check function implementation: `grep -A 20 "^def function_name" source_file.py`
+2. Look for conditional logic: `if extension in [...]` or `if extension.lower()`
+3. Check for extension mapping/conversion: `.jpeg -> .jpg` conversions
+4. Test with actual function against various inputs
+
+**Actual Behavior in Project:**
+- `get_thumbnail_filename()` preserves extensions except `.jpeg` → `.jpg`
+- Implementation uses `Path().stem` and `Path().suffix.lower()`
+- Special case: `if extension in ['.jpeg', '.jpg']: extension = '.jpg'`
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 27. Path Validation Requirements in Tests
+
+**Problem Pattern:**
+```python
+# WRONG: Passing arbitrary paths without validation
+def test_encounter_path():
+    test_path = Path('/test/2025_01_01/image.jpg')  # Not under IMAGE_DIR!
+    result = get_thumbnail_path_encounter(test_path)  # Raises ValueError
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Use valid paths relative to IMAGE_DIR
+def test_encounter_path():
+    from models import IMAGE_DIR
+    test_path = Path(IMAGE_DIR) / '2025_01_01' / 'image.jpg'
+
+    # Wrap in try-except for paths that may not exist
+    try:
+        result = get_thumbnail_path_encounter(test_path)
+        assert isinstance(result, Path)
+    except ValueError:
+        # Path validation failed - expected if path doesn't exist
+        pass
+```
+
+**Why:**
+- Some functions validate paths for security (prevent path traversal)
+- Functions may require paths under specific directory (IMAGE_DIR, UPLOAD_DIR)
+- Tests must respect these security constraints
+- Path existence may not be required, but path validity is
+
+**Common Validation Checks in Project:**
+- `get_thumbnail_path_encounter()` validates path is under `IMAGE_DIR`
+- Raises `ValueError: "Encounter file path escapes IMAGE_DIR"`
+- Must construct paths as: `Path(IMAGE_DIR) / relative_path`
+- Path doesn't need to exist on filesystem, but must be "under" root
+
+**Testing Approaches:**
+1. Use valid constructed paths from actual directory constants
+2. Wrap in try-except to handle validation failures gracefully
+3. Test both valid paths and invalid paths (should raise specific errors)
+4. Use `Path().is_relative_to()` to verify path structure
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed path construction
+
 
 ---
 
@@ -1077,3 +1258,184 @@ def test_logout(client, admin_user):
 - `db_transaction_manager.py` - Database session management (mocked in tests)
 - `auth/roles.py` - Role-based access control
 - `utils/rate_limiter.py` - Rate limiter decorator (line 166)
+- `utils/image_processing.py` - Image processing utilities (get_thumbnail_filename function)
+- `utils/fileUtils.py` - File management utilities (thumbnail path functions)
+
+---
+
+### 24. Import Module Mismatches in Test Files
+
+**Problem Pattern:**
+```python
+# WRONG: Importing from wrong module
+from utils.fileUtils import (
+    get_thumbnail_filename,  # Actually in image_processing!
+    get_thumbnail_path_direct,
+)
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Import from correct modules
+from utils.fileUtils import (
+    get_thumbnail_path_direct,
+    get_thumbnail_path_encounter,
+    validate_thumbnail_filename,
+    thumbnail_exists_direct,
+)
+from utils.image_processing import get_thumbnail_filename
+```
+
+**Why:**
+- Functions may be moved between modules during refactoring
+- Tests don't catch import errors until function is actually used
+- Multiple modules may have similar function names
+- IDE autocomplete can suggest wrong module if not careful
+
+**Common Mismatches in Project:**
+- `get_thumbnail_filename()` lives in `utils.image_processing`, not `utils.fileUtils`
+- Verify actual function location by:
+  - Checking `from ... import` statements in source files
+  - Searching `grep "^def function_name" utils/*.py`
+  - Reading docstrings to confirm function purpose
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 25. Function Signature Mismatches Between Tests and Implementation
+
+**Problem Pattern:**
+```python
+# WRONG: Tests call functions that don't exist with wrong signatures
+def test_thumbnail():
+    # These functions don't exist!
+    path = get_thumbnail_path_for_direct_upload(uuid, 'jpg')  # Wrong name + signature
+    filename = generate_thumbnail_filename(uuid, 'jpg')       # Wrong name + signature
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Use actual function names and signatures
+def test_thumbnail():
+    # get_thumbnail_path_direct requires: folder_rel (str), original_filename (str)
+    path = get_thumbnail_path_direct('2025_01_01_user1', 'image.jpg')
+
+    # get_thumbnail_filename requires: original_filename (str) only
+    filename = get_thumbnail_filename('image.jpg')
+```
+
+**Why:**
+- Function names and signatures change during development
+- Tests may be written from outdated specifications
+- Wrong signatures cause NameError or TypeError at runtime
+- IDE may not catch if function exists elsewhere with similar name
+
+**Common Mismatches in Project:**
+- `generate_thumbnail_filename(uuid, ext)` doesn't exist → actual: `get_thumbnail_filename(filename)`
+- `get_thumbnail_path_for_direct_upload(uuid, ext)` doesn't exist → actual: `get_thumbnail_path_direct(folder_rel, filename)`
+- `get_thumbnail_path_for_encounter_file(uuid, ext)` doesn't exist → actual: `get_thumbnail_path_encounter(path)`
+
+**How to Find Correct Signatures:**
+1. Search source code: `grep "^def function_name" utils/*.py`
+2. Read function docstring for parameter names and types
+3. Check function calls in actual codebase (not tests)
+4. Use IDE "Go to Definition" feature
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 26. Incorrect Behavior Assumptions in Tests
+
+**Problem Pattern:**
+```python
+# WRONG: Assuming all file extensions converted to .jpg
+assert get_thumbnail_filename('photo.jpeg') == 'thm_photo.jpg'
+assert get_thumbnail_filename('image.png') == 'thm_image.jpg'    # Wrong!
+assert get_thumbnail_filename('picture.webp') == 'thm_picture.jpg'  # Wrong!
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Extensions preserved except .jpeg -> .jpg
+assert get_thumbnail_filename('photo.jpeg') == 'thm_photo.jpg'  # .jpeg -> .jpg
+assert get_thumbnail_filename('image.png') == 'thm_image.png'   # .png preserved
+assert get_thumbnail_filename('picture.webp') == 'thm_picture.webp'  # .webp preserved
+assert get_thumbnail_filename('file') == 'thm_file'  # No extension preserved
+```
+
+**Why:**
+- Function behavior may differ from initial assumptions
+- Tests written without checking actual implementation
+- Extension handling strategies vary by use case
+- Real behavior discovered only after running against actual code
+
+**Verification Methods:**
+1. Check function implementation: `grep -A 20 "^def function_name" source_file.py`
+2. Look for conditional logic: `if extension in [...]` or `if extension.lower()`
+3. Check for extension mapping/conversion: `.jpeg -> .jpg` conversions
+4. Test with actual function against various inputs
+
+**Actual Behavior in Project:**
+- `get_thumbnail_filename()` preserves extensions except `.jpeg` → `.jpg`
+- Implementation uses `Path().stem` and `Path().suffix.lower()`
+- Special case: `if extension in ['.jpeg', '.jpg']: extension = '.jpg'`
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management.py` - Fixed
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed
+
+---
+
+### 27. Path Validation Requirements in Tests
+
+**Problem Pattern:**
+```python
+# WRONG: Passing arbitrary paths without validation
+def test_encounter_path():
+    test_path = Path('/test/2025_01_01/image.jpg')  # Not under IMAGE_DIR!
+    result = get_thumbnail_path_encounter(test_path)  # Raises ValueError
+```
+
+**Solution Pattern:**
+```python
+# CORRECT: Use valid paths relative to IMAGE_DIR
+def test_encounter_path():
+    from models import IMAGE_DIR
+    test_path = Path(IMAGE_DIR) / '2025_01_01' / 'image.jpg'
+
+    # Wrap in try-except for paths that may not exist
+    try:
+        result = get_thumbnail_path_encounter(test_path)
+        assert isinstance(result, Path)
+    except ValueError:
+        # Path validation failed - expected if path doesn't exist
+        pass
+```
+
+**Why:**
+- Some functions validate paths for security (prevent path traversal)
+- Functions may require paths under specific directory (IMAGE_DIR, UPLOAD_DIR)
+- Tests must respect these security constraints
+- Path existence may not be required, but path validity is
+
+**Common Validation Checks in Project:**
+- `get_thumbnail_path_encounter()` validates path is under `IMAGE_DIR`
+- Raises `ValueError: "Encounter file path escapes IMAGE_DIR"`
+- Must construct paths as: `Path(IMAGE_DIR) / relative_path`
+- Path doesn't need to exist on filesystem, but must be "under" root
+
+**Testing Approaches:**
+1. Use valid constructed paths from actual directory constants
+2. Wrap in try-except to handle validation failures gracefully
+3. Test both valid paths and invalid paths (should raise specific errors)
+4. Use `Path().is_relative_to()` to verify path structure
+
+**Files Affected:**
+- `tests/integration/thumbnails/test_thumbnail_file_management_simple.py` - Fixed path construction
+

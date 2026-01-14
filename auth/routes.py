@@ -806,3 +806,72 @@ def check_session():
     else:
         # If not authenticated, redirect to login
         return redirect(url_for("auth.login"))
+
+@auth_bp.route("/confirm-password", methods=["GET", "POST"])
+@login_required
+@rate_limit("10 per minute")
+def confirm_password():
+    """
+    Route for re-authentication confirmation.
+    Used by @reauth_required decorator.
+    """
+    next_url = request.args.get('next') or request.form.get('next') or url_for('homepage')
+    
+    # Get user safely to avoid DetachedInstanceError
+    from db_transaction_manager import get_db_session
+    user_to_verify = current_user
+    
+    # In some contexts (like tests), current_user might be a detached proxy.
+    # We'll use the session ID to re-fetch if needed for password verification
+    user_id = session.get('_user_id')
+    
+    if request.method == "POST":
+        password = request.form.get('confirm_password')
+        
+        verified = False
+        if user_id:
+             with get_db_session() as db:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user and verify_password(user.password_hash, password):
+                    verified = True
+        elif verify_password(current_user.password_hash, password):
+             verified = True
+
+        if verified:
+            # Update last_sudo_time
+            session['last_sudo_time'] = int(time.time())
+            session.modified = True
+            
+            # Log success
+            ip = get_client_ip()
+            auth_logger.info(
+                "Re-authentication successful - UserID: %s, IP: %s",
+                sanitize_log_value(user_id),
+                sanitize_log_value(ip)
+            )
+            
+            flash("Identity confirmed.", "success")
+            return redirect(next_url)
+        else:
+            # Low-level failure logging
+            ip = get_client_ip()
+            auth_logger.warning(
+                "Re-authentication failed (invalid password) - UserID: %s, IP: %s",
+                sanitize_log_value(user_id),
+                sanitize_log_value(ip)
+            )
+            flash("Invalid password. Please try again.", "danger")
+    
+    # Extract operation name from next URL for display context
+    operation_name = "Sensitive Operation"
+    if 'admin' in next_url:
+        parts = next_url.strip('/').split('/')
+        if len(parts) > 1:
+            operation_name = parts[-1].replace('-', ' ').title()
+
+    return render_template(
+        "admin/reauth_confirm.html",
+        operation_name=operation_name,
+        return_url=url_for('auth.confirm_password', next=next_url),
+        current_user=current_user
+    )

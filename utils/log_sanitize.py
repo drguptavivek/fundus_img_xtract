@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from utils.error_sanitization import sanitize_header_value
+
 
 def sanitize_log_value(value: object, max_len: int = 100) -> str:
     """
@@ -72,16 +74,39 @@ def mask_text_emails(text: str | None) -> str:
     if not text:
         return ""
     s_text = str(text)
-    
+
 
     # Simple regex for email-like patterns
     import re
     email_pattern = r'\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b'
-    
+
     def replace_email(match):
         local, domain = match.groups()
         if len(local) <= 2:
             return f"***@{domain}"
         return f"{local[:2]}***@{domain}"
-        
+
     return re.sub(email_pattern, replace_email, s_text)
+
+
+def sanitize_log_headers(headers: dict | None) -> str:
+    """
+    Sanitize HTTP headers for logging.
+
+    Masks sensitive headers like Authorization, Cookie, etc.
+
+    Args:
+        headers: Dictionary of HTTP headers
+
+    Returns:
+        Sanitized string representation of headers
+    """
+    if not headers:
+        return ""
+
+    sanitized = {}
+    for key, value in headers.items():
+        sanitized[key] = sanitize_header_value(key, value)
+
+    # Return as a sanitized string
+    return str(sanitized)

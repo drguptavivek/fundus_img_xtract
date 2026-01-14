@@ -27,7 +27,7 @@ from utils.security_middleware import PayloadSizeValidator, is_safe_url
 from utils.env_loader import load_environment
 from utils.env_loader import get_env
 from utils.redis_connection import build_redis_url
-from utils.log_sanitize import sanitize_log_value
+from utils.log_sanitize import sanitize_log_value, sanitize_log_headers
 from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
@@ -660,7 +660,7 @@ def _register_error_handlers(app: Flask) -> None:
         )
         auth_logger.error(
             "CSRF Error - Headers: %s",
-            sanitize_log_value(dict(request.headers)),
+            sanitize_log_headers(dict(request.headers)),
         )
 
         flash(e.description or "Security check failed. Please try again.", "danger")

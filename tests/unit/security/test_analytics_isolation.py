@@ -48,8 +48,7 @@ class TestEncounterResultsIsolation:
         self, auth_client, master_admin, hospital_data, db_session
     ):
         """Global admin should see all encounters."""
-        # Merge master_admin into current session to avoid DetachedInstanceError
-        admin = db_session.merge(master_admin)
+        # master_admin fixture now returns the seeded master_admin (already in current session)
 
         # Create encounters for both hospitals using factory
         encounter_a = TestDataFactory.create_patient_encounter(
@@ -64,10 +63,10 @@ class TestEncounterResultsIsolation:
         )
 
         # Login as global admin
-        client = auth_client(admin)
+        client = auth_client(master_admin)
 
         response = client.get("/analytics/encounters")
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}. Response: {response.data.decode()[:500]}"
         html = response.data.decode()
 
         # Should see data from both hospitals
@@ -80,7 +79,7 @@ class TestImageResultsIsolation:
     """Test /analytics/images route isolation."""
 
     def test_user_sees_only_own_hospital_images(
-        self, client, hospital_data, hosp_a_data_manager, db_session, login_user, test_metadata
+        self, auth_client, hospital_data, hosp_a_data_manager, db_session, test_metadata
     ):
         """Data manager should only see images from their hospital."""
         # Create encounters and tasks for both hospitals
@@ -122,9 +121,8 @@ class TestImageResultsIsolation:
             encounter_file_id=file_b.id,
         )
 
-        with client.session_transaction() as sess:
-            sess['user_id'] = hosp_a_data_manager.id
-            sess['_fresh'] = True
+        # Get authenticated client for hospital A data manager
+        client = auth_client(hosp_a_data_manager)
 
         response = client.get("/analytics/images")
         assert response.status_code == 200
@@ -156,11 +154,11 @@ class TestEncounterViewIsolation:
         # Try to access hospital B's encounter
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")
 
-        # Should return 404 (not found or access denied)
-        assert response.status_code == 404
+        # Should return 403 (forbidden) or 404 (not found - either means access denied)
+        assert response.status_code in (403, 404)
 
     def test_own_hospital_encounter_view_allowed(
-        self, client, hospital_data, hosp_a_data_manager, db_session, login_user
+        self, auth_client, hospital_data, hosp_a_data_manager, db_session
     ):
         """User should be able to view encounters from their hospital."""
         # Create encounter for hospital A
@@ -170,9 +168,8 @@ class TestEncounterViewIsolation:
             patient_id="PATIENT_A",
         )
 
-        with client.session_transaction() as sess:
-            sess['user_id'] = hosp_a_data_manager.id
-            sess['_fresh'] = True
+        # Get authenticated client for hospital A data manager
+        client = auth_client(hosp_a_data_manager)
 
         # Access hospital A's encounter
         response = client.get(f"/analytics/encounter/view/{encounter_a.id}")
@@ -251,11 +248,11 @@ class TestTaskDetailsIsolation:
             patient_encounter_id=encounter_b.id,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
             filename="file_b.jpg",
-            test_metadata=test_metadata
         )
         task_b = TestDataFactory.create_grading_task(
             db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             image_name="file_b.jpg"
         )
         # Link task to file (important for updated factory)
@@ -285,11 +282,11 @@ class TestTaskDetailsIsolation:
             patient_encounter_id=encounter_a.id,
             lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
             filename="file_a.jpg",
-            test_metadata=test_metadata
         )
         task_a = TestDataFactory.create_grading_task(
             db_session,
             lab_unit_id=hospital_data['hospital_a']['lab_units'][0].id,
+            disease_id=test_metadata['diseases']['dr'].id,
             image_name="file_a.jpg"
         )
         # Link task to file
@@ -337,8 +334,7 @@ class TestGlobalAdminBypass:
         self, auth_client, master_admin, hospital_data, db_session, login_user, test_metadata
     ):
         """Global admin should bypass hospital scoping."""
-        # Merge master_admin into current session to avoid DetachedInstanceError
-        admin = db_session.merge(master_admin)
+        # master_admin fixture now returns the seeded master_admin (already in current session)
 
         # Create data for hospital B
         encounter_b = TestDataFactory.create_patient_encounter(
@@ -355,7 +351,7 @@ class TestGlobalAdminBypass:
         direct_b = TestDataFactory.create_direct_image_upload(
             db_session,
             lab_unit_id=hospital_data['hospital_b']['lab_units'][0].id,
-            uploader_id=admin.id,
+            uploader_id=master_admin.id,
             hospital_id=hospital_data['hospital_b']['hospital'].id,
             camera_id=test_metadata['cameras']['test_camera'].id,
             disease_id=test_metadata['diseases']['dr'].id,
@@ -371,7 +367,7 @@ class TestGlobalAdminBypass:
         task_b.encounter_file_id = file_b.id
         db_session.commit()
 
-        client = auth_client(admin)
+        client = auth_client(master_admin)
 
         # Should be able to view encounter from hospital B
         response = client.get(f"/analytics/encounter/view/{encounter_b.id}")

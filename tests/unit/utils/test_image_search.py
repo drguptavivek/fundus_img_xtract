@@ -205,29 +205,46 @@ class TestGetTasksForMultipleImages:
         mock_task1 = Mock()
         mock_task1.direct_image_upload_id = 1
         mock_task1.state = "active"
+        mock_task1.id = 1
         mock_task2 = Mock()
         mock_task2.direct_image_upload_id = 2
         mock_task2.state = "completed"
+        mock_task2.id = 2
         mock_disease1 = Mock()
         mock_disease1.name = "DR"
+        mock_disease1.id = 1
         mock_disease2 = Mock()
         mock_disease2.name = "Glaucoma"
-        
-        mock_query = Mock()
-        mock_query.join.return_value.filter.return_value.filter.return_value.all.return_value = [
+        mock_disease2.id = 2
+
+        # Mock the Task query
+        mock_task_query = Mock()
+        mock_task_query.join.return_value.filter.return_value.all.return_value = [
             (mock_task1, mock_disease1),
             (mock_task2, mock_disease2)
         ]
-        mock_db.query.return_value = mock_query
-        
+
+        # Mock the Task ID query for AI grades
+        mock_task_id_query = Mock()
+        mock_task_id_query.filter.return_value.all.return_value = [mock_task1, mock_task2]
+
         # Mock the Grade query for AI grades
         mock_grade_query = Mock()
         mock_grade_query.outerjoin.return_value.filter.return_value.all.return_value = []
-        mock_db.query.side_effect = [mock_query, mock_grade_query]
-        
+
+        # Mock Disease query for disease_id_to_name
+        mock_disease_query = Mock()
+        mock_disease_query.all.return_value = [mock_disease1, mock_disease2]
+
+        mock_db.query.side_effect = [mock_task_query, mock_task_id_query, mock_grade_query, mock_disease_query]
+
         result = get_tasks_for_multiple_images(mock_db, [1, 2], 'direct')
-        
-        assert result == {1: [{"disease": "DR", "status": "active"}], 2: [{"disease": "Glaucoma", "status": "completed"}]}
+
+        expected = {
+            1: {'tasks': [{"disease": "DR", "status": "active", "disease_id": 1}], 'ai_disease_ids': [], 'ai_diseases': []},
+            2: {'tasks': [{"disease": "Glaucoma", "status": "completed", "disease_id": 2}], 'ai_disease_ids': [], 'ai_diseases': []}
+        }
+        assert result == expected
     
     def test_zip_image_tasks_retrieved(self):
         """Test that ZIP image tasks are retrieved correctly."""
@@ -235,33 +252,46 @@ class TestGetTasksForMultipleImages:
         mock_task1 = Mock()
         mock_task1.encounter_file_id = 1
         mock_task1.state = "active"
+        mock_task1.id = 1
         mock_task2 = Mock()
         mock_task2.encounter_file_id = 2
         mock_task2.state = "pending"
+        mock_task2.id = 2
         mock_disease1 = Mock()
         mock_disease1.name = "AMD"
+        mock_disease1.id = 1
         mock_disease2 = Mock()
         mock_disease2.name = "DR"
-        
-        mock_query = Mock()
-        mock_query.join.return_value.filter.return_value.filter.return_value.all.return_value = [
+        mock_disease2.id = 2
+
+        # Mock the Task query
+        mock_task_query = Mock()
+        mock_task_query.join.return_value.filter.return_value.all.return_value = [
             (mock_task1, mock_disease1),
             (mock_task2, mock_disease2)
         ]
-        
+
+        # Mock the Task ID query for AI grades
+        mock_task_id_query = Mock()
+        mock_task_id_query.filter.return_value.all.return_value = [mock_task1, mock_task2]
+
         # Mock the Grade query for AI grades
         mock_grade_query = Mock()
         mock_grade_query.outerjoin.return_value.filter.return_value.all.return_value = []
-        
-        # Mock the task query for AI grades
-        mock_task_query = Mock()
-        mock_task_query.filter.return_value.all.return_value = []
-        
-        mock_db.query.side_effect = [mock_query, mock_task_query, mock_grade_query]
-        
+
+        # Mock Disease query for disease_id_to_name
+        mock_disease_query = Mock()
+        mock_disease_query.all.return_value = [mock_disease1, mock_disease2]
+
+        mock_db.query.side_effect = [mock_task_query, mock_task_id_query, mock_grade_query, mock_disease_query]
+
         result = get_tasks_for_multiple_images(mock_db, [1, 2], 'zip')
-        
-        assert result == {1: [{"disease": "AMD", "status": "active"}], 2: [{"disease": "DR", "status": "pending"}]}
+
+        expected = {
+            1: {'tasks': [{"disease": "AMD", "status": "active", "disease_id": 1}], 'ai_disease_ids': [], 'ai_diseases': []},
+            2: {'tasks': [{"disease": "DR", "status": "pending", "disease_id": 2}], 'ai_disease_ids': [], 'ai_diseases': []}
+        }
+        assert result == expected
 
 
 class TestFormatDirectImageWithTasks:
@@ -271,72 +301,110 @@ class TestFormatDirectImageWithTasks:
         """Test direct image formatting."""
         mock_image = Mock()
         mock_image.uuid = "test-uuid-123"
+        mock_image.id = 123
         mock_image.created_at = datetime(2024, 1, 15, 10, 30, 0)
         mock_image.hospital.name = "Test Hospital"
+        mock_image.hospital_id = 1
         mock_image.lab_unit.name = "Test Lab"
+        mock_image.lab_unit_id = 2
         mock_image.camera.name = "Test Camera"
+        mock_image.camera_id = 3
         mock_image.disease.name = "DR"
+        mock_image.disease_id = 4
         mock_image.area.name = "Macula"
+        mock_image.area_id = 5
         mock_image.is_mydriatic = True
         mock_image.uploader = None
         mock_image.file_hash = None
-        
-        task_diseases = [{"disease": "DR", "status": "active"}, {"disease": "Glaucoma", "status": "pending"}]
-        
-        result = format_direct_image_with_tasks(mock_image, task_diseases)
-        
+
+        task_payload = {
+            'tasks': [{"disease": "DR", "status": "active", "disease_id": 4}, {"disease": "Glaucoma", "status": "pending", "disease_id": 2}],
+            'ai_disease_ids': [1],
+            'ai_diseases': ['Glaucoma']
+        }
+
+        result = format_direct_image_with_tasks(mock_image, task_payload)
+
         expected = {
             "uuid": "test-uuid-123",
             "type": "direct",
             "upload_date": datetime(2024, 1, 15, 10, 30, 0),
             "capture_date": datetime(2024, 1, 15, 10, 30, 0),
             "hospital": "Test Hospital",
+            "hospital_id": 1,
             "lab_unit": "Test Lab",
+            "lab_unit_id": 2,
             "camera": "Test Camera",
+            "camera_id": 3,
             "disease": "DR",
+            "direct_image_disease_id": 4,
             "area": "Macula",
+            "area_id": 5,
             "is_mydriatic": True,
-            "tasks_for_diseases": [{"disease": "DR", "status": "active"}, {"disease": "Glaucoma", "status": "pending"}],
+            "tasks_for_diseases": [{"disease": "DR", "status": "active", "disease_id": 4}, {"disease": "Glaucoma", "status": "pending", "disease_id": 2}],
+            "tasks_for_diseases_ids": [4, 2],
+            "ai_disease_ids": [1],
+            "ai_diseases": ['Glaucoma'],
             "uploader": None,
-            "file_hash": None
+            "file_hash": None,
+            "direct_image_upload_id": 123,
         }
-        
+
         assert result == expected
     
     def test_format_direct_image_with_none_values(self):
         """Test direct image formatting with None values."""
         mock_image = Mock()
         mock_image.uuid = "test-uuid-123"
+        mock_image.id = 123
         mock_image.created_at = None
         mock_image.hospital = None
+        mock_image.hospital_id = None
         mock_image.lab_unit = None
+        mock_image.lab_unit_id = None
         mock_image.camera = None
+        mock_image.camera_id = None
         mock_image.disease = None
+        mock_image.disease_id = None
         mock_image.area = None
+        mock_image.area_id = None
         mock_image.is_mydriatic = False
         mock_image.uploader = None
         mock_image.file_hash = None
-        
-        task_diseases = []
-        
-        result = format_direct_image_with_tasks(mock_image, task_diseases)
-        
+
+        task_payload = {
+            'tasks': [],
+            'ai_disease_ids': [],
+            'ai_diseases': []
+        }
+
+        result = format_direct_image_with_tasks(mock_image, task_payload)
+
         expected = {
             "uuid": "test-uuid-123",
             "type": "direct",
             "upload_date": None,
             "capture_date": None,
             "hospital": None,
+            "hospital_id": None,
             "lab_unit": None,
+            "lab_unit_id": None,
             "camera": None,
+            "camera_id": None,
             "disease": None,
+            "direct_image_disease_id": None,
             "area": None,
+            "area_id": None,
             "is_mydriatic": False,
             "tasks_for_diseases": [],
+            "tasks_for_diseases_ids": [],
+            "ai_disease_ids": [],
+            "ai_diseases": [],
             "uploader": None,
-            "file_hash": None
+            "file_hash": None,
+            "direct_image_upload_id": 123,
         }
-        
+
         assert result == expected
 
 
@@ -413,34 +481,62 @@ class TestSearchImagesStrict:
         # Setup mocks
         mock_validate_filters.return_value = "both"
         mock_get_scope.return_value = ({1, 2}, False)
-        
+
         # Mock database session
         mock_db = Mock()
-        
+
         # Mock direct query
         mock_direct_query = Mock()
         mock_direct_query.count.return_value = 1
         mock_direct_img = Mock()
         mock_direct_img.id = 1
         mock_direct_img.created_at = datetime(2024, 1, 15, 10, 30, 0)
-        mock_direct_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_direct_img]
-        
+        mock_direct_query.order_by.return_value.limit.return_value.all.return_value = [mock_direct_img]
+
         # Mock ZIP query
         mock_zip_query = Mock()
         mock_zip_query.count.return_value = 1
         mock_zip_img = Mock()
         mock_zip_img.id = 2
-        mock_zip_query.order_by.return_value.offset.return_value.limit.return_value.all.return_value = [mock_zip_img]
-        
+        mock_zip_img.patient_encounter_id = 100
+        mock_zip_query.order_by.return_value.limit.return_value.all.return_value = [mock_zip_img]
+
+        # Mock report queries
+        mock_dr_report_query = Mock()
+        mock_dr_report_query.filter.return_value.all.return_value = []
+        mock_glaucoma_report_query = Mock()
+        mock_glaucoma_report_query.filter.return_value.all.return_value = []
+
+        # Mock Disease query
+        mock_disease_query = Mock()
+        mock_disease_query.all.return_value = []
+
+        # Setup db.query side_effect to handle all the queries
+        call_count = [0]
+        def mock_query_side_effect(*args):
+            call_count[0] += 1
+            # These queries are made in order:
+            # 1. DiabeticRetinopathyReport query
+            # 2. GlaucomaResultsCleaned query
+            # 3. Disease query
+            if call_count[0] == 1:
+                return mock_dr_report_query
+            elif call_count[0] == 2:
+                return mock_glaucoma_report_query
+            else:
+                return mock_disease_query
+
+        mock_db.query.side_effect = mock_query_side_effect
+
         # Mock query builder functions
         with patch('utils.imageSearchUtil.build_direct_query', return_value=mock_direct_query), \
              patch('utils.imageSearchUtil.build_zip_query', return_value=mock_zip_query), \
              patch('utils.imageSearchUtil.get_tasks_for_multiple_images', return_value={}), \
              patch('utils.imageSearchUtil.format_direct_image_with_tasks', return_value={"uuid": "direct-uuid", "upload_date": datetime.now()}), \
              patch('utils.imageSearchUtil.format_zip_image_with_tasks', return_value={"uuid": "zip-uuid", "upload_date": datetime.now()}):
-            
+
             results, total = search_images_strict(mock_db, page=1, per_page=50, user_id=123)
-        
+
         # Assertions
         assert len(results) == 2
         assert total == 2
@@ -460,22 +556,25 @@ class TestSearchImagesStrict:
         # Setup mocks
         mock_validate_filters.return_value = "direct_only"
         mock_get_scope.return_value = ({1, 2}, False)
-        
+
         # Mock database session
         mock_db = Mock()
-        
+
         # Mock direct query
         mock_direct_query = Mock()
         mock_direct_query.count.return_value = 1
         mock_direct_img = Mock()
         mock_direct_img.id = 1
-        mock_direct_query.order_by.return_value.all.return_value = [mock_direct_img]
-        
+        mock_direct_query.order_by.return_value.limit.return_value.all.return_value = [mock_direct_img]
+
         # Mock query builder functions
         with patch('utils.imageSearchUtil.build_direct_query', return_value=mock_direct_query), \
              patch('utils.imageSearchUtil.get_tasks_for_multiple_images', return_value={}), \
-             patch('utils.imageSearchUtil.format_direct_image_with_tasks', return_value={"uuid": "direct-uuid", "upload_date": datetime.now()}):
-            
+             patch('utils.imageSearchUtil.format_direct_image_with_tasks', return_value={"uuid": "direct-uuid", "upload_date": datetime.now()}), \
+             patch('utils.imageSearchUtil.Disease') as mock_disease:
+            # Mock Disease query
+            mock_disease.return_value.all.return_value = []
+
             results, total = search_images_strict(
                 mock_db,
                 page=1,
@@ -483,7 +582,7 @@ class TestSearchImagesStrict:
                 camera_ids=[1],
                 user_id=123
             )
-        
+
         # Assertions
         assert len(results) == 1
         assert total == 1
@@ -502,22 +601,50 @@ class TestSearchImagesStrict:
         # Setup mocks
         mock_validate_filters.return_value = "zip_only"
         mock_get_scope.return_value = ({1, 2}, False)
-        
+
         # Mock database session
         mock_db = Mock()
-        
+
         # Mock ZIP query
         mock_zip_query = Mock()
         mock_zip_query.count.return_value = 1
         mock_zip_img = Mock()
         mock_zip_img.id = 2
-        mock_zip_query.order_by.return_value.all.return_value = [mock_zip_img]
-        
+        mock_zip_img.patient_encounter_id = 100
+        mock_zip_query.order_by.return_value.limit.return_value.all.return_value = [mock_zip_img]
+
+        # Mock report queries
+        mock_dr_report_query = Mock()
+        mock_dr_report_query.filter.return_value.all.return_value = []
+        mock_glaucoma_report_query = Mock()
+        mock_glaucoma_report_query.filter.return_value.all.return_value = []
+
+        # Mock Disease query
+        mock_disease_query = Mock()
+        mock_disease_query.all.return_value = []
+
+        # Setup db.query side_effect to handle all the queries
+        call_count = [0]
+        def mock_query_side_effect(*args):
+            call_count[0] += 1
+            # These queries are made in order:
+            # 1. DiabeticRetinopathyReport query
+            # 2. GlaucomaResultsCleaned query
+            # 3. Disease query
+            if call_count[0] == 1:
+                return mock_dr_report_query
+            elif call_count[0] == 2:
+                return mock_glaucoma_report_query
+            else:
+                return mock_disease_query
+
+        mock_db.query.side_effect = mock_query_side_effect
+
         # Mock query builder functions
         with patch('utils.imageSearchUtil.build_zip_query', return_value=mock_zip_query), \
              patch('utils.imageSearchUtil.get_tasks_for_multiple_images', return_value={}), \
              patch('utils.imageSearchUtil.format_zip_image_with_tasks', return_value={"uuid": "zip-uuid", "upload_date": datetime.now()}):
-            
+
             results, total = search_images_strict(
                 mock_db,
                 page=1,
@@ -525,7 +652,7 @@ class TestSearchImagesStrict:
                 has_dr_report=True,
                 user_id=123
             )
-        
+
         # Assertions
         assert len(results) == 1
         assert total == 1

@@ -16,6 +16,7 @@ Lab Unit ID Assignment:
   ID 4-6: Hospital B lab units (Lab B1, B2, B3)
 """
 import pytest
+from sqlalchemy import text
 from models import (
     Role, Disease, Camera, Area, Grade, Hospital, LabUnit, User
 )
@@ -205,6 +206,16 @@ def seed_test_database(test_engine):
                     session.flush()
 
             users[user_data['username']] = user
+
+        # ===== SYNC SEQUENCES =====
+        # When entities are created with explicit IDs, PostgreSQL sequences
+        # don't automatically advance. This causes duplicate key errors when
+        # tests create new entities without specifying IDs.
+        # Sync all sequences to the max ID currently in the table.
+        session.execute(text("SELECT setval('cameras_id_seq', (SELECT COALESCE(MAX(id), 1) FROM cameras))"))
+        session.execute(text("SELECT setval('areas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM areas))"))
+        session.execute(text("SELECT setval('hospitals_id_seq', (SELECT COALESCE(MAX(id), 1) FROM hospitals))"))
+        session.execute(text("SELECT setval('lab_units_id_seq', (SELECT COALESCE(MAX(id), 1) FROM lab_units))"))
 
         session.commit()
         

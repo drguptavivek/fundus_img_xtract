@@ -96,18 +96,33 @@ def test_lab_units(test_engine, test_hospitals):
 def master_admin(db_session):
     """
     Master admin - can access all hospitals.
-    
+
+    This fixture first checks if a seeded master_admin exists (from seed_test_database).
+    If found, it returns that user (merged into current session).
+    Otherwise, it creates a new one for backwards compatibility.
+
     Attributes:
         is_master_admin=True
         hospital_id=None
     """
+    # First check if a seeded master_admin already exists
+    existing_admin = db_session.query(User).filter(
+        User.username == 'master_admin',
+        User.is_master_admin == True
+    ).first()
+
+    if existing_admin:
+        # Return the existing master_admin, merged into current session
+        return db_session.merge(existing_admin)
+
+    # Fallback: create new master_admin if none exists (backwards compatibility)
     # Get or create admin role
     admin_role = db_session.query(Role).filter_by(name='admin').first()
     if not admin_role:
         admin_role = Role(name='admin')
         db_session.add(admin_role)
         db_session.flush()
-    
+
     user = User(
         username='master_admin',
         password_hash=hash_password('Test@2026'),
@@ -117,7 +132,7 @@ def master_admin(db_session):
     )
     db_session.add(user)
     db_session.flush()
-    
+
     return user
 
 

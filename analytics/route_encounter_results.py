@@ -72,14 +72,19 @@ def encounter_results() -> str:
         # Determine scoping context
         query = db.query(PatientEncounters)
         query = apply_scoping(query, PatientEncounters, current_user, 'analytics')
-        
+
         # Check if user has any access at all
         if not current_user.is_master_admin and not current_user.hospital_id:
             flash("No hospital access.", "warning")
             return redirect(url_for("home.index"))
-        
+
         # Apply options for relationships
-        query = query.outerjoin(LabUnit, PatientEncounters.lab_unit).outerjoin(Hospital, LabUnit.hospital).options(
+        # NOTE: apply_scoping already joins LabUnit for non-master-admin users
+        # For master_admin, we need to explicitly join LabUnit before joining Hospital
+        if current_user.is_master_admin:
+            query = query.outerjoin(LabUnit, PatientEncounters.lab_unit_id == LabUnit.id)
+
+        query = query.outerjoin(Hospital, LabUnit.hospital).options(
             selectinload(PatientEncounters.lab_unit).selectinload(LabUnit.hospital),
             selectinload(PatientEncounters.encounter_files),
             selectinload(PatientEncounters.glaucoma_results_cleaned),
@@ -88,7 +93,7 @@ def encounter_results() -> str:
         )
 
         if hospital_id:
-            # Re-apply scoping to hospital filter check? 
+            # Re-apply scoping to hospital filter check?
             # Actually apply_scoping already filters by hospital if user is scoped.
             # If they pass a specific hospital_id, we just filter by it.
             # If it's NOT their hospital, the previous scoping will result in empty set.

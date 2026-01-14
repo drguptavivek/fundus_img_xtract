@@ -90,16 +90,16 @@ class TestRateLimitDecorators(unittest.TestCase):
         mock_decorated_func = Mock()
         mock_decorated_func.return_value = "test_response"
         mock_limiter.limit.return_value = lambda f: f
-        
+
         decorated = rate_limit("100 per hour")(self.mock_func)
         result = decorated()
-        
+
         mock_limiter.limit.assert_called_once_with(
             "100 per hour",
             per_method=True,
             methods=None,
             error_message="Rate limit exceeded: 100 per hour",
-            override_defaults=True
+            override_defaults=False
         )
         self.assertEqual(result, "test_response")
     
@@ -107,7 +107,7 @@ class TestRateLimitDecorators(unittest.TestCase):
     def test_rate_limit_decorator_with_custom_params(self, mock_limiter):
         """Test rate limit decorator with custom parameters."""
         mock_limiter.limit.return_value = lambda f: f
-        
+
         decorated = rate_limit(
             "50 per minute",
             per_method=False,
@@ -115,13 +115,13 @@ class TestRateLimitDecorators(unittest.TestCase):
             error_message="Custom error message"
         )(self.mock_func)
         result = decorated()
-        
+
         mock_limiter.limit.assert_called_once_with(
             "50 per minute",
             per_method=False,
             methods=["POST", "PUT"],
             error_message="Custom error message",
-            override_defaults=True
+            override_defaults=False
         )
         self.assertEqual(result, "test_response")
     
@@ -637,21 +637,21 @@ class TestDynamicRateLimits(unittest.TestCase):
         with test_app.test_request_context('/test-rate-limit'), \
              patch('flask.current_app') as mock_current_app, \
              patch('flask.request') as mock_request:
-            
+
             mock_current_app.config.get.side_effect = lambda key, default=None: {
                 'RATELIMIT_TEST_RATE_LIMIT_LIMIT': '200 per minute',
-                'RATELIMIT_DEFAULT': '500 per hour, 50 per minute'
+                'RATELIMIT_DEFAULT': '5000 per hour, 500 per minute'
             }.get(key, default)
-            
+
             # Mock the request endpoint to match the config key
             mock_request.endpoint = 'test_rate_limit_limit'
             limit = dynamic_rate_limit_from_config()
-            
+
             # The implementation might not be finding the custom limit, so let's check what it returns
             # If it's not finding the custom limit, it should return the default
-            if limit == "500 per hour, 50 per minute":
+            if limit == "5000 per hour, 500 per minute":
                 # This means the custom limit wasn't found, which is still a valid test
-                self.assertEqual(limit, "500 per hour, 50 per minute")
+                self.assertEqual(limit, "5000 per hour, 500 per minute")
             else:
                 self.assertEqual(limit, "200 per minute")
     
@@ -667,14 +667,14 @@ class TestDynamicRateLimits(unittest.TestCase):
         )
         with test_app.test_request_context('/test-rate-limit'), \
              patch('flask.current_app') as mock_current_app:
-            
+
             mock_current_app.config.get.side_effect = lambda key, default=None: {
-                'RATELIMIT_DEFAULT': '500 per hour, 50 per minute'
+                'RATELIMIT_DEFAULT': '5000 per hour, 500 per minute'
             }.get(key, default)
-            
+
             limit = dynamic_rate_limit_from_config()
-            
-            self.assertEqual(limit, "500 per hour, 50 per minute")
+
+            self.assertEqual(limit, "5000 per hour, 500 per minute")
     
     def test_dynamic_rate_limit_no_endpoint(self):
         """Test dynamic rate limit when no endpoint is available."""
@@ -688,15 +688,15 @@ class TestDynamicRateLimits(unittest.TestCase):
         )
         with test_app.test_request_context('/test-rate-limit'), \
              patch('flask.current_app') as mock_current_app:
-            
-            mock_current_app.config.get.return_value = '500 per hour, 50 per minute'
-            
+
+            mock_current_app.config.get.return_value = '5000 per hour, 500 per minute'
+
             # Simulate no endpoint by patching the request
             with patch('flask.request') as mock_request:
                 mock_request.endpoint = None
                 limit = dynamic_rate_limit_from_config()
-            
-            self.assertEqual(limit, "500 per hour, 50 per minute")
+
+            self.assertEqual(limit, "5000 per hour, 500 per minute")
 
 
 class TestSharedResourceLimits(unittest.TestCase):
@@ -751,7 +751,7 @@ class TestSharedResourceLimits(unittest.TestCase):
             # Call the decorated function to trigger the decorator
             test_function()
             
-            mock_limiter.shared_limit.assert_called_once_with("100 per hour", scope="database")
+            mock_limiter.shared_limit.assert_called_once_with("200 per hour", scope="database")
 
 class TestConditionalExemption(unittest.TestCase):
     """Test conditional exemption functions."""

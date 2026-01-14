@@ -201,6 +201,11 @@ def app(db_session):
     patcher_captcha = patch('utils.captcha.CaptchaManager.validate_captcha', return_value=(True, "Success"))
     patcher_captcha.start()
 
+    # Patch EmailConfigService to avoid database queries during app initialization
+    # This prevents transaction aborts when email_settings table doesn't exist
+    patcher_email_config = patch('utils.email_config.EmailConfigService.get_email_config', return_value=None)
+    patcher_email_config.start()
+
     from app import create_app
     app = create_app()
     app.config.update(
@@ -673,10 +678,12 @@ def pytest_configure(config):
 # ===================================================================
 
 # Import all security fixtures from fixtures/security.py
+# Note: master_admin is also available from fixtures/seeded_data.py (session-scoped)
+# The function-scoped one here takes precedence in tests that import it directly
 from tests.fixtures.security import (
     test_hospitals,
     test_lab_units,
-    master_admin,
+    master_admin,  # Function-scoped from security.py
     site_admin_hospital_a,
     site_admin_hospital_b,
     ophthalmologist_hospital_a,

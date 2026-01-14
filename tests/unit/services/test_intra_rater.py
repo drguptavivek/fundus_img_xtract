@@ -248,8 +248,8 @@ def test_list_tasks_includes_completed(db_session, intra_rater_fixture):
     db.commit()
 
     pending = service.list_grader_tasks(ctx["grader"].id, include_completed=False)
-    assert pending == []
+    assert pending['tasks'] == []
 
     completed = service.list_grader_tasks(ctx["grader"].id, include_completed=True)
-    assert len(completed) == 1
-    assert completed[0].state == "completed"
+    assert len(completed['tasks']) == 1
+    assert completed['tasks'][0].state == "completed"

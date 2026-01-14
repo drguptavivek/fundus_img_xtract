@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from models import (
     DirectImageUpload,
+    Grade,
     LabUnit,
     PatientEncounters,
     EncounterFile,
@@ -14,6 +15,7 @@ from models import (
     Consensus,
     Disease,
     User,
+    GradingTask,
 )
 from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping

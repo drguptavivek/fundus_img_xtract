@@ -1,6 +1,8 @@
 # direct_uploads/uploads.py
 
 import os, uuid, hashlib, magic
+
+from utils.file_hashing import hash_file_content, get_hash_algorithm, is_duplicate_file
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import request, render_template, redirect, url_for, flash, current_app
@@ -297,10 +299,12 @@ def upload():
                                 sanitize_log_value(filename),
                             )
                         else:
-                            md5_hash = hashlib.md5(content).hexdigest()
-                            existing = db_session.execute(
-                                select(DirectImageUpload).filter_by(file_hash=md5_hash).limit(1)
-                            ).scalar_one_or_none()
+                            # SECURITY: Use SHA-256 instead of MD5 for file hashing (CWE-327)
+                            # Truncate to 32 chars due to database column constraint (String(32))
+                            # 32 chars of SHA-256 is still cryptographically stronger than MD5
+                            full_hash = hash_file_content(content, algorithm=get_hash_algorithm())
+                            file_hash = full_hash[:32]  # Truncate to fit existing schema
+                            existing = is_duplicate_file(file_hash, len(content), db_session)
 
                             if existing:
                                 # save a copy to dup folder (no DB row)
@@ -376,10 +380,10 @@ def upload():
                                     db_session.add(DirectImageUpload(
                                         original_filename=filename,
                                         filename=dest.name,                 # basename stored
-                                        folder_rel=folder_rel,    
+                                        folder_rel=folder_rel,
                                         edited_filename=None,               # not yet
-                                        file_hash=md5_hash,
-                                        content_hash=md5_hash,
+                                        file_hash=file_hash,               # SHA-256 (truncated to 32 chars)
+                                        content_hash=file_hash,            # SHA-256 (truncated to 32 chars)
                                         uploader_id=current_user.id,
                                         hospital_id=hospital.id,
                                         lab_unit_id=lab_unit.id,

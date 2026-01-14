@@ -101,9 +101,10 @@ services:
       POSTGRES_DB: fundus_test
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_password_change_in_production
-      POSTGRES_PORT: 5433
-    ports:
-      - "127.0.0.1:5433:5432"
+      POSTGRES_PORT: 5438
+    # No port mapping needed - internal docker network only
+    # ports:
+    #   - "127.0.0.1:5438:5432"
     tmpfs:
       - /var/lib/postgresql/data # In-memory for speed
     healthcheck:

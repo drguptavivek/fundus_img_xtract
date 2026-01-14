@@ -19,7 +19,7 @@ from utils.log_sanitize import sanitize_log_value, mask_email
 # Note: We're using Flask-WTF's built-in CSRF protection instead of custom implementation
 
 # Pull your shared SQLAlchemy engine & Base session factory from models
-from models import engine, User, Role, LoginAttempt, IpLock, PasswordResetAttempt, Session  # type: ignore
+from models import engine, User, Role, LabUnit, LoginAttempt, IpLock, PasswordResetAttempt, Session  # type: ignore
 from app_cache import cache
 from server_side_session import mark_session_ended
 from db_transaction_manager import get_db_session, transaction_scope

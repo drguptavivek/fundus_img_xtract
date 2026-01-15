@@ -291,11 +291,21 @@ def run_runner_test(db_session, clean_db):
     pass
 
 
-def create_authenticated_client(app, user):
+def create_authenticated_client(app, user, db_session=None):
     """
     Helper to create a test client authenticated as a specific user.
     Uses Flask-Login's session management to simulate login.
+
+    Args:
+        app: Flask application
+        user: User object (may be session-scoped/detached)
+        db_session: Optional session to merge detached users (Pattern 2)
     """
+    # Pattern 2: Always merge if db_session is provided to ensure fresh attachment
+    # This prevents DetachedInstanceError when user is from session-scoped fixture
+    if db_session:
+        user = db_session.merge(user)
+
     with app.test_client() as client:
         with client.session_transaction() as sess:
             # Set the user_id in session directly, simulating login

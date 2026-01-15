@@ -2,16 +2,33 @@
 Tests for dataset exclusivity feature.
 
 TDD Approach: Tests written first, then implementation.
+
+NOTE: Integration tests require materialized views (mvw_image_listing_all).
+Tests that call routes will be skipped if views don't exist in test database.
 """
 
 import pytest
 import json
 from flask import url_for
+from sqlalchemy import text
 from models import (
     User, CuratedDataset, CuratedDatasetItem,
     GradingTask, Disease, LabUnit
 )
 from review.discrepancy_export import _fetch_filtered_rows
+
+
+def _check_materialized_view(db_session):
+    """Skip test if materialized view doesn't exist."""
+    try:
+        result = db_session.execute(text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_name = 'mvw_image_listing_all'"
+        ))
+        if result.scalar() is None:
+            pytest.skip("Materialized view mvw_image_listing_all not available in test database")
+    except Exception:
+        pytest.skip("Materialized view mvw_image_listing_all not available in test database")
 
 
 @pytest.mark.usefixtures("db_session", "client", "seed_test_database")
@@ -23,6 +40,8 @@ class TestDatasetExclusivity:
         Test creating a dataset that excludes tasks from existing datasets.
         Verify that excluded tasks don't appear in filtered results.
         """
+        _check_materialized_view(db_session)
+
         user = db_session.query(User).filter_by(username='master_admin').first()
         client = auth_client_factory(user)
 
@@ -75,6 +94,8 @@ class TestDatasetExclusivity:
         """
         Test excluding tasks from multiple datasets simultaneously.
         """
+        _check_materialized_view(db_session)
+
         user = db_session.query(User).filter_by(username='master_admin').first()
         client = auth_client_factory(user)
 
@@ -120,6 +141,8 @@ class TestDatasetExclusivity:
         Test that exclusion only applies to tasks with include_in_export=true.
         Tasks that were skipped (include_in_export=false) should still be available.
         """
+        _check_materialized_view(db_session)
+
         user = db_session.query(User).filter_by(username='master_admin').first()
         client = auth_client_factory(user)
 
@@ -173,6 +196,8 @@ class TestDatasetExclusivity:
         """
         Test that empty excluded_dataset_ids list doesn't break query.
         """
+        _check_materialized_view(db_session)
+
         user = db_session.query(User).filter_by(username='master_admin').first()
         client = auth_client_factory(user)
 
@@ -201,6 +226,8 @@ class TestDatasetExclusivity:
         """
         Test that deleting a dataset makes its tasks available again.
         """
+        _check_materialized_view(db_session)
+
         user = db_session.query(User).filter_by(username='master_admin').first()
         client = auth_client_factory(user)
 
@@ -269,6 +296,8 @@ class TestFetchFilteredRowsExclusion:
         """
         Test that _fetch_filtered_rows accepts excluded_dataset_ids parameter.
         """
+        _check_materialized_view(db_session)
+
         disease = db_session.query(Disease).first()
         lab_units = [lu.id for lu in db_session.query(LabUnit).limit(2).all()]
 
@@ -318,10 +347,27 @@ class TestFetchFilteredRowsExclusion:
         Test that exclusion only considers tasks with include_in_export=true.
         This is enforced at SQL level.
         """
-        from models import CuratedDataset, CuratedDatasetItem
+        _check_materialized_view(db_session)
+
+        from models import CuratedDataset, CuratedDatasetItem, GradingTask
 
         disease = db_session.query(Disease).first()
         lab_unit = db_session.query(LabUnit).first()
+
+        # Get actual task IDs from the database
+        existing_tasks = (
+            db_session.query(GradingTask.id)
+            .filter(
+                GradingTask.disease_id == disease.id if disease else True,
+                GradingTask.lab_unit_id == lab_unit.id if lab_unit else True,
+            )
+            .limit(10)
+            .all()
+        )
+        task_ids = [t.id for t in existing_tasks]
+
+        if len(task_ids) < 10:
+            pytest.skip("Not enough tasks in test database to test include_in_export filtering")
 
         # Create a dataset
         dataset = CuratedDataset(
@@ -337,8 +383,8 @@ class TestFetchFilteredRowsExclusion:
         db_session.add(dataset)
         db_session.flush()
 
-        # Add some items as included
-        for task_id in range(100, 105):
+        # Add some items as included (first 5)
+        for task_id in task_ids[:5]:
             item = CuratedDatasetItem(
                 dataset_id=dataset.id,
                 task_id=task_id,
@@ -347,8 +393,8 @@ class TestFetchFilteredRowsExclusion:
             )
             db_session.add(item)
 
-        # Add some items as excluded (include_in_export=false)
-        for task_id in range(105, 110):
+        # Add some items as excluded (include_in_export=false) (next 5)
+        for task_id in task_ids[5:10]:
             item = CuratedDatasetItem(
                 dataset_id=dataset.id,
                 task_id=task_id,
@@ -366,7 +412,7 @@ class TestFetchFilteredRowsExclusion:
             "excluded_dataset_ids": [dataset.id],
         }
 
-        # The SQL should only exclude tasks with include_in_export=true (100-104)
-        # Tasks 105-109 should theoretically be available if they match other filters
+        # The SQL should only exclude tasks with include_in_export=true (first 5)
+        # Tasks with include_in_export=false (next 5) should theoretically be available
         rows = _fetch_filtered_rows(filters)
         assert isinstance(rows, list)

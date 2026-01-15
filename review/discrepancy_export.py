@@ -163,8 +163,7 @@ def _run_dataset_export_job(
 
 
 def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
-    db = Session()
-    try:
+    with get_db_session() as db:
         disease_id = filters.get("disease_id")
         lab_unit_id = filters.get("lab_unit_id")
         resident_grades = filters.get("resident_grade", [])
@@ -409,8 +408,6 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
             )
 
         return results
-    finally:
-        db.close()
 
 
 def _resolve_disease_key(db: Session, disease_id: int) -> str:
@@ -515,8 +512,7 @@ def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
 
 def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] = None) -> List[ExportTaskRow]:
     """Fetch tasks by explicit ids for dataset export."""
-    db = Session()
-    try:
+    with get_db_session() as db:
         if not task_ids:
             return []
 
@@ -622,8 +618,6 @@ def _fetch_rows_by_task_ids(task_ids: Sequence[int], disease_id: Optional[int] =
                 )
             )
         return results
-    finally:
-        db.close()
 
 
 def _load_encounter_paths(encounter_ids: Sequence[int]) -> Dict[int, tuple[Path, str]]:

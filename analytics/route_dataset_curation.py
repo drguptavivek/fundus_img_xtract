@@ -24,6 +24,7 @@ from models import (
     DirectImageUpload,
     Job,
 )
+from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping
 from . import bp
 from review.discrepancy_export import (
@@ -185,7 +186,7 @@ def _ai_summary(row: ExportTaskRow) -> str:
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
 def dataset_curation():
     """Create curated datasets using discrepancy-style filters."""
-    with Session() as db:
+    with get_db_session() as db:
         diseases, lab_units, grade_options, ai_models = _fetch_options(db, current_user)
         allowed_lab_units = [lu.id for lu in lab_units]
         
@@ -311,7 +312,7 @@ def dataset_curation():
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
 def dataset_detail(dataset_uuid: str):
     """Manual screening page for a curated dataset."""
-    with Session() as db:
+    with get_db_session() as db:
         # Get allowed lab units via scoped query
         lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
@@ -457,7 +458,7 @@ def dataset_detail(dataset_uuid: str):
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator")
 def dataset_export(dataset_uuid: str):
     """Queue export for a curated dataset."""
-    with Session() as db:
+    with get_db_session() as db:
         dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
         if not dataset:
             abort(404)
@@ -521,7 +522,7 @@ def dataset_export(dataset_uuid: str):
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator")
 def dataset_export_download(job_token: str, filename: str):
     """Serve dataset export artifacts."""
-    with Session() as db:
+    with get_db_session() as db:
         job = db.query(Job).filter(Job.token == job_token, Job.upload_type == "dataset_export").first()
         if not job:
             abort(404)
@@ -555,7 +556,7 @@ def dataset_delete(dataset_uuid: str):
     from utils.log_sanitize import sanitize_log_value
     logger = logging.getLogger("analytics")
 
-    with Session() as db:
+    with get_db_session() as db:
         dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
 
         if not dataset:

@@ -56,10 +56,27 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
         status for status in req.getlist("ai_review_status") if status in AI_REVIEW_STATUS_LABELS
     ]
 
+    # Random selection parameters
+    randomize_selection = req.get("randomize_selection", type=str)
+    random_seed = req.get("random_seed", type=str)
+
     if has_ai_grade != "yes":
         ai_model_ids = []
         ai_grades = []
         ai_review_status = []
+
+    # Process randomize flag: "yes" or "on" = True, others = False
+    randomize_bool = randomize_selection in ("yes", "on", "true", "1")
+
+    # Process seed: convert to int if provided
+    seed_value = None
+    if random_seed:
+        try:
+            seed_value = int(random_seed)
+        except ValueError:
+            # If seed is not a valid integer, hash the string to get an int
+            import hashlib
+            seed_value = int(hashlib.sha256(random_seed.encode()).hexdigest(), 16) % (2 ** 31)
 
     return {
         "disease_id": disease_id,
@@ -74,6 +91,8 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
         "ai_model_id": ai_model_ids,
         "ai_grade": ai_grades,
         "ai_review_status": ai_review_status,
+        "randomize_selection": randomize_bool,
+        "random_seed": seed_value,
     }
 
 

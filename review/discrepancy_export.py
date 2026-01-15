@@ -287,6 +287,22 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 where_clauses.append("dg.impression = ANY(:final_grades)")
                 params["final_grades"] = valid_final_grades
 
+        # Handle random ordering
+        randomize_selection = filters.get("randomize_selection", False)
+        random_seed = filters.get("random_seed")
+
+        if randomize_selection:
+            if random_seed is not None:
+                # Deterministic random: use setseed() for reproducibility
+                order_clause = "ORDER BY setseed(:seed), RANDOM()"
+                params["seed"] = random_seed / 2147483647.0  # Normalize to [-1, 1] range
+            else:
+                # True random without seed
+                order_clause = "ORDER BY RANDOM()"
+        else:
+            # Default: sequential by task_id descending
+            order_clause = "ORDER BY gt.id DESC"
+
         where_sql = " AND ".join(where_clauses)
 
         base_query = f"""
@@ -328,7 +344,7 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 diu.filename AS direct_filename,
                 diu.folder_rel AS direct_folder_rel
             {base_query}
-            ORDER BY gt.id DESC
+            {order_clause}
         """
 
         rows = db.execute(text(data_sql), params).fetchall()

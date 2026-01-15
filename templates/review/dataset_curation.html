@@ -21,6 +21,7 @@
 .dropdown-menu .form-check-label { display: inline; margin-bottom: 0; width: calc(100% - 2rem); cursor: pointer; }
 .dropdown-menu .form-check-input { border-color: var(--bs-gray-600) !important; background-color: var(--bs-white) !important; }
 .dropdown-menu .form-check-input:checked { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; }
+.max-height-300 { max-height: 300px; }
 </style>
 {% endblock %}
 
@@ -235,6 +236,43 @@
           </div>
         </div>
 
+        <div class="row g-3 mt-2" id="exclusionRow">
+          <div class="col-md-12">
+            <label class="form-label">Exclude Datasets (optional)</label>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
+                      type="button"
+                      id="excludeDatasetsDropdown"
+                      data-bs-toggle="dropdown"
+                      aria-expanded="false">
+                <span id="excludeDatasetsText">None selected</span>
+              </button>
+              <ul class="dropdown-menu w-100 max-height-300 overflow-auto" id="excludeDatasetsList">
+                <li><h6 class="dropdown-header">Select datasets to exclude</h6></li>
+                {% for ds in datasets %}
+                <li data-disease-id="{{ ds.disease_id }}" style="display: none;">
+                  <div class="form-check ms-4 px-3 py-1">
+                    <input class="form-check-input exclude-dataset-checkbox"
+                           type="checkbox"
+                           value="{{ ds.id }}"
+                           id="exclude_ds_{{ ds.id }}"
+                           name="excluded_dataset_ids"
+                           data-dataset-name="{{ ds.name }}">
+                    <label class="form-check-label" for="exclude_ds_{{ ds.id }}">
+                      {{ ds.name }} <small class="text-muted">({{ ds.purpose }})</small>
+                    </label>
+                  </div>
+                </li>
+                {% endfor %}
+                {% if not datasets %}
+                <li><span class="dropdown-item text-muted">No existing datasets</span></li>
+                {% endif %}
+              </ul>
+            </div>
+            <div class="form-text">Tasks in these datasets will be hidden from filters.</div>
+          </div>
+        </div>
+
         <div class="row g-3 mt-2" id="randomSelectionRow" style="display: none;">
           <div class="col-md-4">
             <div class="form-check mt-4">
@@ -333,6 +371,9 @@ function clearFilters() {
   document.getElementById('randomizeSelection').checked = false;
   document.getElementById('randomSeed').value = '';
   document.getElementById('randomSelectionRow').style.display = 'none';
+  // Clear exclusion dataset selection
+  document.querySelectorAll('.exclude-dataset-checkbox').forEach(cb => cb.checked = false);
+  updateExcludeDatasetsText();
 }
 
 let diseasesData = null;
@@ -458,6 +499,45 @@ function toggleAiControls() {
 }
 document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
 toggleAiControls();
+
+// Update excluded datasets dropdown text and filter by disease
+function updateExcludeDatasetsText() {
+  const checkedCount = document.querySelectorAll('.exclude-dataset-checkbox:checked').length;
+  const excludeText = document.getElementById('excludeDatasetsText');
+  if (checkedCount === 0) {
+    excludeText.textContent = 'None selected';
+  } else if (checkedCount === 1) {
+    const checkedBox = document.querySelector('.exclude-dataset-checkbox:checked');
+    const name = checkedBox.getAttribute('data-dataset-name');
+    excludeText.textContent = name;
+  } else {
+    excludeText.textContent = `${checkedCount} datasets excluded`;
+  }
+}
+
+// Event listener for disease selection to filter available datasets
+document.getElementById('diseaseSelect').addEventListener('change', function() {
+  const selectedDiseaseId = parseInt(this.value);
+  const excludeItems = document.querySelectorAll('#excludeDatasetsList li[data-disease-id]');
+
+  excludeItems.forEach(li => {
+    const datasetDiseaseId = parseInt(li.getAttribute('data-disease-id'));
+    li.style.display = (datasetDiseaseId === selectedDiseaseId) ? '' : 'none';
+  });
+
+  // Clear selections when disease changes
+  document.querySelectorAll('.exclude-dataset-checkbox:checked').forEach(cb => {
+    cb.checked = false;
+  });
+  updateExcludeDatasetsText();
+});
+
+// Attach to checkbox changes
+document.getElementById('excludeDatasetsList').addEventListener('change', function(e) {
+  if (e.target.classList.contains('exclude-dataset-checkbox')) {
+    updateExcludeDatasetsText();
+  }
+});
 
 // Show random selection options when auto-select count is entered
 const autoSelectCount = document.getElementById('autoSelectCount');

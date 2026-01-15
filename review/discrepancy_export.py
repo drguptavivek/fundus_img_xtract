@@ -287,6 +287,19 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
                 where_clauses.append("dg.impression = ANY(:final_grades)")
                 params["final_grades"] = valid_final_grades
 
+        # Dataset exclusivity: exclude tasks from selected existing datasets
+        excluded_dataset_ids = filters.get("excluded_dataset_ids", [])
+        if excluded_dataset_ids:
+            where_clauses.append(
+                "NOT EXISTS ("
+                "SELECT 1 FROM curated_dataset_items cdi "
+                "WHERE cdi.task_id = gt.id "
+                "AND cdi.dataset_id = ANY(:excluded_dataset_ids) "
+                "AND cdi.include_in_export = true"
+                ")"
+            )
+            params["excluded_dataset_ids"] = excluded_dataset_ids
+
         # Handle random ordering
         randomize_selection = filters.get("randomize_selection", False)
         random_seed = filters.get("random_seed")

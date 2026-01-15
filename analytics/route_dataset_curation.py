@@ -60,6 +60,16 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
     randomize_selection = req.get("randomize_selection", type=str)
     random_seed = req.get("random_seed", type=str)
 
+    # Dataset exclusivity: exclude tasks from selected existing datasets
+    excluded_dataset_ids_raw = req.getlist("excluded_dataset_ids")
+    excluded_dataset_ids = []
+    for ds_id in excluded_dataset_ids_raw:
+        try:
+            excluded_dataset_ids.append(int(ds_id))
+        except (ValueError, TypeError):
+            # Skip invalid dataset IDs
+            pass
+
     if has_ai_grade != "yes":
         ai_model_ids = []
         ai_grades = []
@@ -93,6 +103,7 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
         "ai_review_status": ai_review_status,
         "randomize_selection": randomize_bool,
         "random_seed": seed_value,
+        "excluded_dataset_ids": excluded_dataset_ids,
     }
 
 
@@ -534,3 +545,56 @@ def dataset_export_download(job_token: str, filename: str):
         if not export_path.exists() or EXPORT_DIR not in export_path.parents:
             abort(404)
         return send_file(export_path, as_attachment=True)
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/delete", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager", "dataset_creator")
+def dataset_delete(dataset_uuid: str):
+    """Delete a curated dataset and release its tasks."""
+    import logging
+    from utils.log_sanitize import sanitize_log_value
+    logger = logging.getLogger("analytics")
+
+    with Session() as db:
+        dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
+
+        if not dataset:
+            abort(404)
+
+        # Access control: user must have access to the dataset's lab units
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+
+        if not current_user.is_master_admin:
+            if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)):
+                flash("You do not have permission to delete this dataset.", "error")
+                return redirect(url_for("analytics.dataset_curation"))
+
+        # Count included items for user feedback
+        include_count = db.query(CuratedDatasetItem).filter_by(
+            dataset_id=dataset.id,
+            include_in_export=True
+        ).count()
+
+        # Log deletion for audit
+        logger.info(
+            "Dataset deleted: %s (id=%s, uuid=%s, include_count=%s) by user %s",
+            sanitize_log_value(dataset.name),
+            dataset.id,
+            dataset.uuid,
+            include_count,
+            sanitize_log_value(current_user.username),
+        )
+
+        # Cascade delete handles CuratedDatasetItem cleanup automatically
+        db.delete(dataset)
+        db.commit()
+
+        flash(
+            f"Dataset '{dataset.name}' deleted. {include_count} tasks are now available for selection.",
+            "success"
+        )
+        return redirect(url_for("analytics.dataset_curation"))

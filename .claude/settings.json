@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "documentation-generation@claude-code-workflows": true
+  }
+}

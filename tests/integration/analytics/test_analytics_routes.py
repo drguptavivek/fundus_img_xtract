@@ -73,9 +73,11 @@ class TestAnalyticsRoutes:
     def test_analytics_kpi_isolation(self, auth_client_factory, db_session):
         """Verify isolation for KPI endpoints."""
         from models import User
-        user_a = db_session.query(User).filter_by(username='site_admin_a').first()
+        # Use ophthalmologist_a instead of site_admin_a because site_admin_a
+        # has no lab units assigned in seeded data, which causes redirect
+        user_a = db_session.query(User).filter_by(username='ophthalmologist_a').first()
         client_a = auth_client_factory(user_a)
-        
+
         # Correct URL for encounter files KPI
         response = client_a.get("/analytics/encounter-files")
         assert response.status_code == 200

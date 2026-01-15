@@ -68,8 +68,10 @@ disease_id: int              # Disease to filter by
 dataset_name: str            # Dataset name
 dataset_purpose: str         # Purpose description
 
-# Optional
+# Optional - Auto-selection
 auto_select_count: int       # Number of tasks to auto-select (default: 0)
+randomize_selection: str     # "yes"/"on"/"true"/"1" to enable random selection
+random_seed: str            # Optional seed for reproducible random selection
 
 # Filters (discrepancy-style)
 lab_unit_id: int
@@ -191,8 +193,15 @@ Extracts discrepancy-style filters from Flask request.
     "ai_model_id": List[int],
     "ai_grade": List[str],
     "ai_review_status": List[str],
+    # Random selection (NEW)
+    "randomize_selection": bool,    # True for random, False for sequential
+    "random_seed": int|None,         # Optional seed for reproducibility
 }
 ```
+
+**Random Selection Processing:**
+- `randomize_selection`: Parsed from form values "yes", "on", "true", "1" → `True`
+- `random_seed`: Converted to integer; strings are hashed using SHA-256 for consistent seed values
 
 ### `_filters_with_allowed(filters, allowed_lab_units)`
 Merges user's allowed lab units into filter dictionary.
@@ -239,6 +248,22 @@ from review.discrepancy_export import (
 - `_fetch_filtered_rows(filters)` → Returns matching `ExportTaskRow` objects
 - `_fetch_rows_by_task_ids(task_ids, disease_id)` → Returns rows by task IDs
 - `enqueue_dataset_export(app, job_token, dataset_id, task_ids, metadata)` → Queues export job
+
+**Random Selection Implementation:**
+The `_fetch_filtered_rows()` function now supports random ordering via:
+- `filters["randomize_selection"] = True` → Uses `ORDER BY RANDOM()` in SQL
+- `filters["random_seed"] = <int>` → Uses `setseed()` before `RANDOM()` for reproducible results
+
+```sql
+-- Sequential (default)
+ORDER BY gt.id DESC
+
+-- Random without seed
+ORDER BY RANDOM()
+
+-- Random with seed (deterministic)
+ORDER BY setseed(:seed), RANDOM()
+```
 
 ### Hospital Scoping (`utils/hospital_scoping.py`)
 ```python

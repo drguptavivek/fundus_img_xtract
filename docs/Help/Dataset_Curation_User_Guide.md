@@ -44,6 +44,8 @@ You must have one of the following roles:
 | **Purpose** | Explain why you're creating this dataset | Yes |
 | **Disease** | Select the disease to filter (Glaucoma, DR, AMD) | Yes |
 | **Auto-Select Count** | Number of tasks to automatically include (0 for manual) | No |
+| **Randomize Selection** | Check to randomly sample instead of taking first N | No |
+| **Random Seed** | Optional seed for reproducible random selection | No |
 
 **Example:**
 ```
@@ -88,6 +90,37 @@ Use the filter options to narrow down which grading tasks to include in your dat
 **Has Consensus:**
 - **has_consensus** - Both graders agreed
 - **no_consensus** - Graders disagreed (went to arbitration)
+
+### Random Selection
+
+When you enter an **Auto-Select Count**, additional options appear:
+
+**Randomize Selection:**
+- **Unchecked (default)** - Selects the first N tasks by task ID (sequential)
+- **Checked** - Selects N tasks randomly from matching results
+
+**Random Seed (Optional):**
+- Leave blank for true random (different each time)
+- Enter a number (e.g., 42) for reproducible selection
+- Same seed + same filters = same dataset (useful for research)
+
+**When to Use Random Selection:**
+- **AI Training** - Avoid bias from temporal ordering
+- **Statistical Sampling** - Get representative samples
+- **Cross-Validation** - Create reproducible train/test splits
+- **Quality Assurance** - Random audit of cases
+
+**Example: Creating a Balanced Random Dataset**
+```
+Disease: Diabetic Retinopathy
+Has Consensus: has_consensus
+Final Grade: No DR, Mild NPDR, Moderate NPDR, Severe NPDR, PDR
+Auto-Select Count: 1000
+Randomize Selection: ✓ Checked
+Random Seed: 42
+```
+
+This creates a reproducible random sample of 1000 consensus DR cases.
 
 ### Step 4: Create and Review
 

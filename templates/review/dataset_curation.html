@@ -230,9 +230,27 @@
           </div>
           <div class="col-md-4">
             <label class="form-label">Auto-select count (optional)</label>
-            <input type="number" min="1" class="form-control" name="auto_select_count" placeholder="e.g., 200">
+            <input type="number" min="1" class="form-control" name="auto_select_count" id="autoSelectCount" placeholder="e.g., 200">
             <div class="form-text">If provided, picks the first N tasks that match filters.</div>
           </div>
+        </div>
+
+        <div class="row g-3 mt-2" id="randomSelectionRow" style="display: none;">
+          <div class="col-md-4">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="randomizeSelection" name="randomize_selection" value="yes">
+              <label class="form-check-label" for="randomizeSelection">
+                Randomize selection
+              </label>
+              <div class="form-text">When checked, selects tasks randomly instead of sequentially by ID.</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="randomSeed">Random seed (optional)</label>
+            <input type="text" class="form-control" name="random_seed" id="randomSeed" placeholder="e.g., 42">
+            <div class="form-text">Fixed seed for reproducible selection. Leave empty for true random.</div>
+          </div>
+          <div class="col-md-4"></div>
         </div>
 
         <div class="d-flex gap-2 mt-4">
@@ -310,6 +328,11 @@ function clearFilters() {
   document.getElementById('aiModelText').textContent = 'All Models';
   document.getElementById('aiGradeText').textContent = 'All AI Grades';
   document.getElementById('aiReviewStatusText').textContent = 'All AI Review Statuses';
+  // Clear random selection fields
+  document.getElementById('autoSelectCount').value = '';
+  document.getElementById('randomizeSelection').checked = false;
+  document.getElementById('randomSeed').value = '';
+  document.getElementById('randomSelectionRow').style.display = 'none';
 }
 
 let diseasesData = null;
@@ -435,5 +458,22 @@ function toggleAiControls() {
 }
 document.getElementById('hasAiGradeSelect').addEventListener('change', toggleAiControls);
 toggleAiControls();
+
+// Show random selection options when auto-select count is entered
+const autoSelectCount = document.getElementById('autoSelectCount');
+const randomSelectionRow = document.getElementById('randomSelectionRow');
+
+function toggleRandomSelectionOptions() {
+  if (autoSelectCount.value && parseInt(autoSelectCount.value) > 0) {
+    randomSelectionRow.style.display = 'flex';
+  } else {
+    randomSelectionRow.style.display = 'none';
+    document.getElementById('randomizeSelection').checked = false;
+    document.getElementById('randomSeed').value = '';
+  }
+}
+
+autoSelectCount.addEventListener('input', toggleRandomSelectionOptions);
+autoSelectCount.addEventListener('change', toggleRandomSelectionOptions);
 </script>
 {% endblock %}

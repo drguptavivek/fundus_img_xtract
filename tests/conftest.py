@@ -369,18 +369,29 @@ def test_users(db_session, core_test_data):
     """
     Create a complete set of test users for comprehensive testing.
     Returns a dict with all user types.
+
+    Note: This fixture first checks if users exist in the seeded data
+    (from seed_test_database) before creating new ones to avoid
+    UniqueViolation errors.
     """
     from tests.helpers.factories import UserFactory
-    from models import LabUnit, Disease
-    
+    from models import LabUnit, Disease, User
+
     # Merge entities into current session
     lab_unit = db_session.merge(core_test_data['lab_unit'])
     glaucoma = db_session.merge(core_test_data['glaucoma'])
-    
+
+    # Check for existing seeded users first (Pattern 8 from patterns.md)
+    existing_admin = db_session.query(User).filter_by(username='test_admin').first()
+    if existing_admin:
+        admin_user = db_session.merge(existing_admin)
+    else:
+        admin_user = UserFactory.create_admin(db_session, username='test_admin')
+
     users = {
-        'admin': UserFactory.create_admin(db_session, username='test_admin'),
+        'admin': admin_user,
         'ophthalmologist': UserFactory.create_ophthalmologist(
-            db_session, 
+            db_session,
             username='test_ophthalmologist',
             lab_units=[lab_unit]
         ),
@@ -401,7 +412,7 @@ def test_users(db_session, core_test_data):
             can_arbitrate=True
         ),
     }
-    
+
     db_session.flush()
     return users
 

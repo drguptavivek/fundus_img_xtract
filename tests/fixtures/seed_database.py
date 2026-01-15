@@ -143,6 +143,21 @@ def seed_test_database(test_engine):
                 'roles': ['master_admin', 'admin']  # Both roles for full access to analytics routes
             },
             {
+                'username': 'test_admin',
+                'password': 'Test@2026',
+                'hospital_id': None,
+                'is_master_admin': True,
+                'roles': ['admin']  # Admin role for integration tests
+            },
+            {
+                'username': 'test_manager',
+                'password': 'Test@2026',
+                'hospital_id': 1,
+                'is_master_admin': False,
+                'roles': ['data_manager'],  # Manager role for integration tests
+                'lab_units': ['Lab A1']
+            },
+            {
                 'username': 'site_admin_a',
                 'password': 'Test@2026',
                 'hospital_id': 1,

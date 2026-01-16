@@ -1,0 +1,3 @@
+{"type": "create", "issue_id": "fundus_img_xtract-5e08", "timestamp": "2026-01-14T15:59:35.279834Z", "user": "vivek", "details": {"title": "CRIT-001: Password Reset OTP Stored in Session (Timing Attack Vulnerability)"}}
+{"type":"create","issue_id":"fundus_img_xtract-crit001","timestamp":"2026-01-14T12:00:00Z","user":"vivek","details":{"title":"CRIT-001: Password Reset OTP Stored in Session (Timing Attack Vulnerability)"}}
+{"type": "create", "issue_id": "fundus_img_xtract-crit001", "timestamp": "2026-01-14T16:00:43.349201Z", "user": "vivek", "details": {"title": "CRIT-001: Password Reset OTP Stored in Session (Timing Attack Vulnerability)"}}

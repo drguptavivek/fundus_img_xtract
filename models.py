@@ -670,6 +670,7 @@ class CuratedDataset(Base):
     filters_json: Mapped[str] = mapped_column(Text, nullable=False)
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
@@ -1414,4 +1415,3 @@ class SensitiveOperationAudit(Base):
             return json.loads(self.result_details)
         except (json.JSONDecodeError, TypeError):
             return None
-

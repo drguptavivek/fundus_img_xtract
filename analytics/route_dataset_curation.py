@@ -96,6 +96,7 @@ def _build_filters_from_request(req) -> Dict[str, Any]:
         "resident2_grade": resident2_grades,
         "arbitrator_grade": arbitrator_grades,
         "final_grade": final_grades,
+        "require_final_grade": True,
         "has_ai_grade": has_ai_grade,
         "has_review": has_review,
         "has_consensus": has_consensus,
@@ -239,7 +240,7 @@ def dataset_curation():
             )
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
 
-        datasets_query = db.query(CuratedDataset)
+        datasets_query = db.query(CuratedDataset).filter(CuratedDataset.is_active.is_(True))
         # Apply hospital scoping to datasets listing (admins see all in hospital, creators see all assigned)
         # CuratedDataset doesn't have hospital_id/lab_unit_id, but it has created_by_user_id.
         # However, for now we let it be filtered by disease_id or just show recent if they have role.
@@ -317,7 +318,11 @@ def dataset_detail(dataset_uuid: str):
         lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
         allowed_lab_units = [lu.id for lu in lab_units_query.all()]
         
-        dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
         if not dataset:
             abort(404)
 
@@ -459,7 +464,11 @@ def dataset_detail(dataset_uuid: str):
 def dataset_export(dataset_uuid: str):
     """Queue export for a curated dataset."""
     with get_db_session() as db:
-        dataset = db.query(CuratedDataset).filter(CuratedDataset.uuid == dataset_uuid).first()
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
         if not dataset:
             abort(404)
 

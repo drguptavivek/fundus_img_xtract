@@ -30,7 +30,8 @@
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
     <div>
       <h3 class="mb-0">Dataset Curation</h3>
-      <p class="text-muted mb-0 small">Use discrepancy filters, add purpose, optionally auto-select a batch, then screen images manually.</p>
+      <p class="text-muted mb-0 small">Use filters, add purpose, optionally auto-select a batch, then screen images manually.</p>
+      <p class="text-muted mb-0 small">Only tasks with a final grade are eligible for dataset curation.</p>
     </div>
 
   </div>
@@ -135,7 +136,14 @@
             </div>
           </div>
           <div class="col-md-3">
-            <label class="form-label">Final Grade</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Final Grade
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip"
+                title="Final grade comes from consensus (match, adjudication, or review override)."
+                aria-label="Final grade comes from consensus">
+                i
+              </button>
+            </label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start" type="button" id="finalGradeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <span id="finalGradeText">All Grades</span>
@@ -230,15 +238,29 @@
             <input type="text" class="form-control" name="dataset_purpose" required>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Auto-select count (optional)</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Auto-select count (optional)
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip"
+                title="Automatically pre-select this many tasks from the filtered results before manual review."
+                aria-label="Auto-select count help">
+                i
+              </button>
+            </label>
             <input type="number" min="1" class="form-control" name="auto_select_count" id="autoSelectCount" placeholder="e.g., 200">
-            <div class="form-text">If provided, picks the first N tasks that match filters.</div>
+            <div class="form-text">If provided, pre-selects the first N matching tasks (by newest ID) unless randomize is enabled below.</div>
           </div>
         </div>
 
         <div class="row g-3 mt-2" id="exclusionRow">
           <div class="col-md-12">
-            <label class="form-label">Exclude Datasets (optional)</label>
+            <label class="form-label d-flex align-items-center gap-2">
+              Exclude Datasets (optional)
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="tooltip"
+                title="Hide tasks that already belong to selected datasets."
+                aria-label="Exclude datasets help">
+                i
+              </button>
+            </label>
             <div class="dropdown">
               <button class="btn btn-outline-secondary dropdown-toggle w-100 text-start"
                       type="button"
@@ -536,6 +558,15 @@ document.getElementById('diseaseSelect').addEventListener('change', function() {
 document.getElementById('excludeDatasetsList').addEventListener('change', function(e) {
   if (e.target.classList.contains('exclude-dataset-checkbox')) {
     updateExcludeDatasetsText();
+  }
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (window.bootstrap) {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+      new bootstrap.Tooltip(tooltipTriggerEl);
+    });
   }
 });
 

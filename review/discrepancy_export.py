@@ -196,8 +196,12 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
             where_clauses.append("gt.lab_unit_id = :lab_unit_id")
             params["lab_unit_id"] = lab_unit_id
 
+        require_final_grade = bool(filters.get("require_final_grade"))
         if has_consensus == "has_consensus":
             where_clauses.append("c.id IS NOT NULL")
+            if require_final_grade:
+                # Ensure a final grade is present (not just a consensus shell).
+                where_clauses.append("c.final_disease_grading_id IS NOT NULL")
         elif has_consensus == "no":
             where_clauses.append("c.id IS NULL")
 

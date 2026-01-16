@@ -2,17 +2,20 @@
 
 ## Table of Contents
 
-1. [Getting Started](getting-started.md)
-2. [Direct Image Uploads](direct-uploads.md)
-3. [ZIP Archive Uploads](zip-uploads.md)
-4. [Pre-Graded Uploads](pre-graded-uploads.md)
-5. [Grading Images](grading-images.md)
-6. [Viewing Analytics](viewing-analytics.md)
-7. [Notifications System](notifications.md)
-8. [Discrepancy Review](discrepancy-review.md)
-9. [Verification of DR/Glaucoma ZIPs](verification-dr-glaucoma-zips.md)
-10. [Verification of No-DR ZIPs](verification-nodr-zips.md)
-11. [Troubleshooting](troubleshooting.md)
+1. [Getting Started](/help/getting-started)
+2. [Direct Image Uploads](/help/direct-uploads)
+3. [ZIP Archive Uploads](/help/zip-uploads)
+4. [Pre-Graded Uploads](/help/pre-graded-uploads)
+5. [Grading Images](/help/grading-images)
+6. [Viewing Analytics](/help/viewing-analytics)
+7. [Notifications System](/help/notifications)
+8. [Discrepancy Review](/help/discrepancy-review)
+9. [Verification of DR/Glaucoma ZIPs](/help/verification-dr-glaucoma-zips)
+10. [Verification of No-DR ZIPs](/help/verification-nodr-zips)
+11. [Troubleshooting](/help/troubleshooting)
+12. [Dataset Creation](/help/dataset-creation)
+13. [Dataset Sharing](/help/dataset-sharing)
+14. [Dataset Download](/help/dataset-download)
 
 ## About This System
 

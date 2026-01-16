@@ -28,6 +28,12 @@ You must have one of the following roles:
 
 ---
 
+## Related User Guides
+
+- [Dataset Creation](../user-guide/dataset-creation.md)
+- [Dataset Sharing](../user-guide/dataset-sharing.md)
+- [Dataset Download](../user-guide/dataset-download.md)
+
 ## Creating a Dataset
 
 ### Step 1: Access Dataset Creation

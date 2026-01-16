@@ -37,6 +37,9 @@ HELP_PAGES = [
     {"slug": "discrepancy-review", "title": "Discrepancy Review", "filename": "discrepancy-review.md"},
     {"slug": "notifications", "title": "Notifications", "filename": "notifications.md"},
     {"slug": "troubleshooting", "title": "Troubleshooting", "filename": "troubleshooting.md"},
+    {"slug": "dataset-creation", "title": "Dataset Creation", "filename": "dataset-creation.md"},
+    {"slug": "dataset-sharing", "title": "Dataset Sharing", "filename": "dataset-sharing.md"},
+    {"slug": "dataset-download", "title": "Dataset Download", "filename": "dataset-download.md"},
 ]
 
 

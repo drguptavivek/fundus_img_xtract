@@ -5,7 +5,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
@@ -17,6 +17,7 @@ from models import (
     BASE_DIR,
     IMAGE_DIR,
     Disease,
+    DiseaseGrading,
     Grade,
     LabUnit,
     GradingTask,
@@ -181,6 +182,25 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
         if not allowed_lab_units:
             return []
 
+        valid_grade_impressions: Set[str] = set()
+        if disease_id:
+            valid_grade_impressions = {
+                row.impression
+                for row in db.query(DiseaseGrading.impression)
+                .filter(
+                    DiseaseGrading.disease_id == disease_id,
+                    DiseaseGrading.is_active.is_(True),
+                )
+                .all()
+            }
+        if valid_grade_impressions:
+            resident_grades = [g for g in resident_grades if g in valid_grade_impressions]
+            resident2_grades = [g for g in resident2_grades if g in valid_grade_impressions]
+            arbitrator_grades = [g for g in arbitrator_grades if g in valid_grade_impressions]
+            final_grades = [g for g in final_grades if g in valid_grade_impressions]
+            review_grades = [g for g in review_grades if g in valid_grade_impressions]
+            ai_grades = [g for g in ai_grades if g in valid_grade_impressions]
+
         disease_key = _resolve_disease_key(db, disease_id)
         mv_detail_col = f"{disease_key}_grading_details_json"
         mv_ai_count_col = f"{disease_key}_ai_grading_count"
@@ -309,9 +329,10 @@ def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:
 
         if randomize_selection:
             if random_seed is not None:
-                # Deterministic random: use setseed() for reproducibility
-                order_clause = "ORDER BY setseed(:seed), RANDOM()"
-                params["seed"] = random_seed / 2147483647.0  # Normalize to [-1, 1] range
+                # Deterministic random: set seed once, then order by RANDOM().
+                seed_value = random_seed / 2147483647.0
+                db.execute(text("SELECT setseed(:seed)"), {"seed": seed_value})
+                order_clause = "ORDER BY RANDOM()"
             else:
                 # True random without seed
                 order_clause = "ORDER BY RANDOM()"

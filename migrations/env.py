@@ -21,9 +21,9 @@ DATABASE_URL = _build_database_url(BASE_DIR)
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from environment variables ONLY if not already set.
-# This allows tests to configure a different database URL via alembic commands.
-if not config.get_main_option("sqlalchemy.url"):
+# Prefer environment variables over alembic.ini defaults.
+# Tests can still override by setting sqlalchemy.url explicitly.
+if DATABASE_URL:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Interpret the config file for Python logging.

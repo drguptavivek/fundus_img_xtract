@@ -103,6 +103,8 @@ def load_user(user_id: str):
     # Use shared session from the transaction manager
     from db_transaction_manager import get_db_session
     with get_db_session() as db:
+        # Keep loaded user attributes available after the session closes.
+        db.expire_on_commit = False
         from sqlalchemy.orm import joinedload
         user = db.execute(
             select(User)
@@ -119,6 +121,9 @@ def load_user(user_id: str):
                 cache.set(cache_key, _serialize_user_for_cache(user), timeout=_USER_CACHE_TTL_SECONDS)
             except Exception as e:
                 auth_logger.warning("Cache set failed: %s", sanitize_log_value(e))
+        if user:
+            # Ensure the instance can be used safely outside this session.
+            db.expunge(user)
         return user
 
 # ----- Helpers -----

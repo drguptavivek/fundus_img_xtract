@@ -319,7 +319,15 @@ def _register_acl_context(app: Flask) -> None:
                 return False
         unread_count = 0
         if cu.is_authenticated:
-            unread_count = get_unread_notifications_count_cached(cu.id)
+            try:
+                user_id = cu.id
+            except Exception:
+                try:
+                    user_id = int(cu.get_id()) if cu.get_id() else None
+                except Exception:
+                    user_id = None
+            if user_id is not None:
+                unread_count = get_unread_notifications_count_cached(user_id)
         return dict(current_user_has=current_user_has, unread_notification_count=unread_count)
 
 

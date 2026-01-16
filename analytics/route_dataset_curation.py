@@ -192,7 +192,7 @@ def dataset_curation():
         
         if not allowed_lab_units and not current_user.is_master_admin:
             flash("No lab units are available for dataset curation.", "error")
-            return redirect(url_for("dashboard.dashboard_home"))
+            return redirect(url_for("dashboard.hospital_dashboard"))
 
         if request.method == "POST":
             filters = _build_filters_from_request(request.form)

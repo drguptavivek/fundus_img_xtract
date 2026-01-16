@@ -52,12 +52,14 @@ class TestGetUserLabUnitsInHospital:
     """Test get_user_lab_units_in_hospital() function."""
     
     def test_master_admin_gets_all_lab_units_in_hospital(
-        self, db_session, master_admin, test_lab_units
+        self, db_session, master_admin, test_lab_units, core_test_data
     ):
         """Master admin should get all lab units in specified hospital."""
         user = db_session.merge(master_admin)
+        # Query Hospital A by name for dynamic ID
+        hospital_a = db_session.merge(core_test_data['hospital_a'])
         # Get Hospital A lab units
-        lab_ids = get_user_lab_units_in_hospital(user.id, hospital_id=1, db=db_session)
+        lab_ids = get_user_lab_units_in_hospital(user.id, hospital_id=hospital_a.id, db=db_session)
 
         # Merge lab units into current session to avoid DetachedInstanceError
         hosp_a_labs = [db_session.merge(lab) for lab in test_lab_units['hospital_a']]
@@ -209,6 +211,11 @@ class TestApplyScopingHospitalBound:
         camera = db_session.merge(core_test_data['camera'])
         glaucoma = db_session.merge(core_test_data['glaucoma'])
         area = db_session.merge(core_test_data['area'])
+        # Get hospitals and lab units by name for dynamic IDs
+        hospital_a = db_session.merge(core_test_data['hospital_a'])
+        hospital_b = db_session.merge(core_test_data['hospital_b'])
+        lab_a1 = db_session.merge(core_test_data['lab_a1'])
+        lab_b1 = db_session.merge(core_test_data['lab_b1'])
 
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -217,8 +224,8 @@ class TestApplyScopingHospitalBound:
             folder_rel='files/test',
             file_hash='abc123',
             uploader_id=uploader.id,
-            hospital_id=1,
-            lab_unit_id=1,
+            hospital_id=hospital_a.id,
+            lab_unit_id=lab_a1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -230,8 +237,8 @@ class TestApplyScopingHospitalBound:
             folder_rel='files/test',
             file_hash='def456',
             uploader_id=uploader.id,
-            hospital_id=2,
-            lab_unit_id=4,
+            hospital_id=hospital_b.id,
+            lab_unit_id=lab_b1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -247,8 +254,8 @@ class TestApplyScopingHospitalBound:
         hospital_ids = {img.hospital_id for img in images}
 
         # Should only see Hospital A images
-        assert 1 in hospital_ids
-        assert 2 not in hospital_ids
+        assert hospital_a.id in hospital_ids
+        assert hospital_b.id not in hospital_ids
 
     def test_master_admin_sees_all_hospitals_for_upload(
         self, db_session, master_admin, core_test_data
@@ -263,6 +270,11 @@ class TestApplyScopingHospitalBound:
         camera = db_session.merge(core_test_data['camera'])
         glaucoma = db_session.merge(core_test_data['glaucoma'])
         area = db_session.merge(core_test_data['area'])
+        # Get hospitals and lab units by name for dynamic IDs
+        hospital_a = db_session.merge(core_test_data['hospital_a'])
+        hospital_b = db_session.merge(core_test_data['hospital_b'])
+        lab_a1 = db_session.merge(core_test_data['lab_a1'])
+        lab_b1 = db_session.merge(core_test_data['lab_b1'])
 
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -271,8 +283,8 @@ class TestApplyScopingHospitalBound:
             folder_rel='files/test',
             file_hash='abc123',
             uploader_id=user.id,
-            hospital_id=1,
-            lab_unit_id=1,
+            hospital_id=hospital_a.id,
+            lab_unit_id=lab_a1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -284,8 +296,8 @@ class TestApplyScopingHospitalBound:
             folder_rel='files/test',
             file_hash='def456',
             uploader_id=user.id,
-            hospital_id=2,
-            lab_unit_id=4,
+            hospital_id=hospital_b.id,
+            lab_unit_id=lab_b1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -301,8 +313,8 @@ class TestApplyScopingHospitalBound:
         hospital_ids = {img.hospital_id for img in images}
 
         # Master admin sees both hospitals
-        assert 1 in hospital_ids
-        assert 2 in hospital_ids
+        assert hospital_a.id in hospital_ids
+        assert hospital_b.id in hospital_ids
 
 
 @pytest.mark.unit
@@ -322,6 +334,11 @@ class TestApplyScopingCrossHospital:
         camera = db_session.merge(core_test_data['camera'])
         glaucoma = db_session.merge(core_test_data['glaucoma'])
         area = db_session.merge(core_test_data['area'])
+        # Get hospitals and lab units by name for dynamic IDs
+        hospital_a = db_session.merge(core_test_data['hospital_a'])
+        hospital_b = db_session.merge(core_test_data['hospital_b'])
+        lab_a1 = db_session.merge(core_test_data['lab_a1'])
+        lab_b1 = db_session.merge(core_test_data['lab_b1'])
 
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -330,8 +347,8 @@ class TestApplyScopingCrossHospital:
             folder_rel='files/test',
             file_hash='abc123',
             uploader_id=uploader.id,
-            hospital_id=1,
-            lab_unit_id=1,
+            hospital_id=hospital_a.id,
+            lab_unit_id=lab_a1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -343,8 +360,8 @@ class TestApplyScopingCrossHospital:
             folder_rel='files/test',
             file_hash='def456',
             uploader_id=uploader.id,
-            hospital_id=2,
-            lab_unit_id=4,
+            hospital_id=hospital_b.id,
+            lab_unit_id=lab_b1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -360,8 +377,8 @@ class TestApplyScopingCrossHospital:
         hospital_ids = {img.hospital_id for img in images}
 
         # Should see BOTH hospitals for grading (no hospital filter)
-        assert 1 in hospital_ids
-        assert 2 in hospital_ids
+        assert hospital_a.id in hospital_ids
+        assert hospital_b.id in hospital_ids
 
     def test_dataset_creation_is_cross_hospital(
         self, db_session, dataset_creator, core_test_data
@@ -376,6 +393,11 @@ class TestApplyScopingCrossHospital:
         camera = db_session.merge(core_test_data['camera'])
         glaucoma = db_session.merge(core_test_data['glaucoma'])
         area = db_session.merge(core_test_data['area'])
+        # Get hospitals and lab units by name for dynamic IDs
+        hospital_a = db_session.merge(core_test_data['hospital_a'])
+        hospital_b = db_session.merge(core_test_data['hospital_b'])
+        lab_a1 = db_session.merge(core_test_data['lab_a1'])
+        lab_b1 = db_session.merge(core_test_data['lab_b1'])
 
         img_a = DirectImageUpload(
             uuid=str(uuid.uuid4()),
@@ -383,10 +405,9 @@ class TestApplyScopingCrossHospital:
             filename='test_a.jpg',
             folder_rel='files/test',
             file_hash='abc123',
-
             uploader_id=user.id,
-            hospital_id=1,
-            lab_unit_id=1,
+            hospital_id=hospital_a.id,
+            lab_unit_id=lab_a1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -397,10 +418,9 @@ class TestApplyScopingCrossHospital:
             filename='test_b.jpg',
             folder_rel='files/test',
             file_hash='def456',
-
             uploader_id=user.id,
-            hospital_id=2,
-            lab_unit_id=4,
+            hospital_id=hospital_b.id,
+            lab_unit_id=lab_b1.id,
             camera_id=camera.id,
             disease_id=glaucoma.id,
             area_id=area.id
@@ -416,5 +436,5 @@ class TestApplyScopingCrossHospital:
         hospital_ids = {img.hospital_id for img in images}
 
         # Dataset creator can access both hospitals
-        assert 1 in hospital_ids
-        assert 2 in hospital_ids
+        assert hospital_a.id in hospital_ids
+        assert hospital_b.id in hospital_ids

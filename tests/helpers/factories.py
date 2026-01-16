@@ -325,68 +325,59 @@ class CoreEntityFactory:
         """
         Query standard core entities for testing.
 
-        NOTE: This method NO LONGER creates entities. It only queries what
-        seed_test_database fixture has already created. This ensures a single
-        source of truth for test data seeding.
+        NOTE: This method queries entities created by migrations and seed_database.
+        Uses NAME-based lookups instead of ID to be resilient to ID changes.
 
-        All entities are created by seed_database.py (autouse fixture).
+        Entities come from two sources:
+        1. Migration 691d42ba3fff: Production hospitals, lab units, diseases, cameras, areas
+        2. seed_database.py: Test-specific hospitals, lab units, users, roles
+
+        Test-specific entities take precedence when there are name collisions.
         """
         from models import Camera, Area
 
-        # Query hospitals (created by seed_database)
-        hospital_a = db_session.query(Hospital).filter_by(id=1).first()
-        hospital_b = db_session.query(Hospital).filter_by(id=2).first()
+        # Query test hospitals (created by seed_database)
+        hospital = db_session.query(Hospital).filter_by(name='Hospital A').first()
+        hospital_b = db_session.query(Hospital).filter_by(name='Hospital B').first()
 
-        # Query lab units (created by seed_database)
-        # Names are whatever seed_database created (Lab A1, Lab A2, etc.)
-        lab_a1 = db_session.query(LabUnit).filter_by(id=1).first()
-        lab_a2 = db_session.query(LabUnit).filter_by(id=2).first()
-        lab_a3 = db_session.query(LabUnit).filter_by(id=3).first()
-        lab_b1 = db_session.query(LabUnit).filter_by(id=4).first()
-        lab_b2 = db_session.query(LabUnit).filter_by(id=5).first()
-        lab_b3 = db_session.query(LabUnit).filter_by(id=6).first()
+        # Query test lab units (created by seed_database)
+        lab_unit = db_session.query(LabUnit).filter_by(name='Lab A1').first()
+        lab_a1 = lab_unit  # Alias for backward compatibility
+        lab_a2 = db_session.query(LabUnit).filter_by(name='Lab A2').first()
+        lab_a3 = db_session.query(LabUnit).filter_by(name='Lab A3').first()
+        lab_b1 = db_session.query(LabUnit).filter_by(name='Lab B1').first()
+        lab_b2 = db_session.query(LabUnit).filter_by(name='Lab B2').first()
+        lab_b3 = db_session.query(LabUnit).filter_by(name='Lab B3').first()
 
-        # Query diseases (created by seed_database)
-        # Use ILIKE for flexible matching since IDs may vary
-        glaucoma = db_session.query(Disease).filter(Disease.name.ilike('%glaucoma%')).first()
-        dr = db_session.query(Disease).filter(Disease.name.ilike('%dr%')).first()
-        amd = db_session.query(Disease).filter(Disease.name.ilike('%amd%')).first()
+        # Query diseases (created by migration)
+        glaucoma = db_session.query(Disease).filter_by(name='Glaucoma').first()
+        dr = db_session.query(Disease).filter_by(name='DR').first()
+        amd = db_session.query(Disease).filter_by(name='AMD').first()
 
-        # Query cameras (created by seed_database)
-        camera_remedio = db_session.query(Camera).filter_by(id=1).first()
-        camera_topcon = db_session.query(Camera).filter_by(id=2).first()
+        # Query cameras (created by migration)
+        camera = db_session.query(Camera).first()
 
-        # Query areas (created by seed_database)
-        area_disc = db_session.query(Area).filter_by(id=1).first()
-        area_macula = db_session.query(Area).filter_by(id=2).first()
+        # Query areas (created by migration)
+        area = db_session.query(Area).first()
 
         return {
-            # Hospitals
-            'hospital_a': hospital_a,
-            'hospital_b': hospital_b,
-            # Hospital A Labs
-            'lab_a1': lab_a1,
-            'lab_a2': lab_a2,
-            'lab_a3': lab_a3,
-            # Hospital B Labs
-            'lab_b1': lab_b1,
-            'lab_b2': lab_b2,
-            'lab_b3': lab_b3,
-            # Diseases
+            # Primary entities (backward compatibility)
+            'hospital': hospital,
+            'lab_unit': lab_unit,
             'glaucoma': glaucoma,
             'dr': dr,
             'amd': amd,
-            # Cameras
-            'camera_remedio': camera_remedio,
-            'camera_topcon': camera_topcon,
-            # Areas
-            'area_disc': area_disc,
-            'area_macula': area_macula,
-            # Legacy keys (for backward compatibility)
-            'hospital': hospital_a,
-            'lab_unit': lab_a1,
-            'camera': camera_remedio,
-            'area': area_disc,
+            'camera': camera,
+            'area': area,
+            # Extended entities for comprehensive testing
+            'hospital_a': hospital,
+            'hospital_b': hospital_b,
+            'lab_a1': lab_a1,
+            'lab_a2': lab_a2,
+            'lab_a3': lab_a3,
+            'lab_b1': lab_b1,
+            'lab_b2': lab_b2,
+            'lab_b3': lab_b3,
         }
 
 

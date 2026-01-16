@@ -21,8 +21,10 @@ DATABASE_URL = _build_database_url(BASE_DIR)
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from environment variables
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# Set the database URL from environment variables ONLY if not already set.
+# This allows tests to configure a different database URL via alembic commands.
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

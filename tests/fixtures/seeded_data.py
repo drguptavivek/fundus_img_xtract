@@ -10,8 +10,8 @@ from models import Hospital, LabUnit, Camera, Disease, Area, User
 
 @pytest.fixture(scope="session")
 def test_hospitals(seed_test_database):
-    """Get seeded hospitals."""
-    return seed_test_database['hospitals']
+    """Get seeded test hospitals (Hospital A, Hospital B)."""
+    return seed_test_database['test_hospitals']  # Key from seed_database.py
 
 
 @pytest.fixture(scope="function")
@@ -57,26 +57,27 @@ def test_lab_units(seed_test_database):
     Returns all 6 lab units (3 per hospital) in a structure compatible
     with security.py fixture format.
     """
+    lab_units = seed_test_database['test_lab_units']  # Key from seed_database.py
     return {
-        # Hospital A (IDs 1-3)
+        # Hospital A (IDs 100-102)
         'hospital_a': [
-            seed_test_database['lab_units']['Lab A1'],
-            seed_test_database['lab_units']['Lab A2'],
-            seed_test_database['lab_units']['Lab A3'],
+            lab_units['Lab A1'],
+            lab_units['Lab A2'],
+            lab_units['Lab A3'],
         ],
-        # Hospital B (IDs 4-6)
+        # Hospital B (IDs 103-105)
         'hospital_b': [
-            seed_test_database['lab_units']['Lab B1'],
-            seed_test_database['lab_units']['Lab B2'],
-            seed_test_database['lab_units']['Lab B3'],
+            lab_units['Lab B1'],
+            lab_units['Lab B2'],
+            lab_units['Lab B3'],
         ],
         # Individual access (backward compatibility)
-        'lab_a1': seed_test_database['lab_units']['Lab A1'],
-        'lab_a2': seed_test_database['lab_units']['Lab A2'],
-        'lab_a3': seed_test_database['lab_units']['Lab A3'],
-        'lab_b1': seed_test_database['lab_units']['Lab B1'],
-        'lab_b2': seed_test_database['lab_units']['Lab B2'],
-        'lab_b3': seed_test_database['lab_units']['Lab B3'],
+        'lab_a1': lab_units['Lab A1'],
+        'lab_a2': lab_units['Lab A2'],
+        'lab_a3': lab_units['Lab A3'],
+        'lab_b1': lab_units['Lab B1'],
+        'lab_b2': lab_units['Lab B2'],
+        'lab_b3': lab_units['Lab B3'],
     }
 
 

@@ -9,7 +9,7 @@ This conftest.py provides fixtures for the restructured test suite with:
 """
 
 # Load security fixtures for hospital isolation testing
-pytest_plugins = ['fixtures.security', 'fixtures.metadata']
+pytest_plugins = ['fixtures.security', 'fixtures.metadata', 'fixtures.workflow']
 
 import os
 import sys
@@ -102,21 +102,54 @@ TEST_DATABASE_URL = os.getenv(
 def test_engine():
     """
     Create a test database engine (session-scoped).
-    Creates all tables at the start of test session and drops them at the end.
+    Runs Alembic migrations to create tables and seed core entities.
+
+    Uses migrations to ensure:
+    1. All tables are created with correct schema
+    2. Core entities are seeded with production IDs (hospitals, diseases, etc.)
+    3. PostgreSQL sequences are properly synchronized
     """
+    from alembic.config import Config
+
     engine = create_engine(
         TEST_DATABASE_URL,
         poolclass=NullPool,  # No connection pooling for tests
         echo=False,  # Set to True for SQL debugging
     )
-    
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    
+
+    # Drop and recreate schema for a clean slate at session start.
+    # Using raw SQL with CASCADE to handle materialized views and dependencies.
+    # This ensures idempotent test runs even if previous session crashed.
+    with engine.connect() as conn:
+        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+        conn.commit()
+
+    # Run Alembic migrations to create schema and seed core data
+    alembic_cfg = Config()
+    alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    alembic_cfg.set_main_option("script_location", str(project_root / "migrations"))
+
+    from alembic import command
+    try:
+        # Run all migrations from scratch (schema was just recreated)
+        command.upgrade(alembic_cfg, "head")
+
+        print("✅ Test database migrations applied successfully")
+    except Exception as e:
+        print(f"❌ Error running migrations: {e}")
+        # Fallback to metadata.create_all if migrations fail
+        # NOTE: This creates empty tables without seed data - tests may fail
+        Base.metadata.create_all(bind=engine)
+        print("⚠️  Fell back to metadata.create_all() - seed data NOT available!")
+
     yield engine
-    
-    # Cleanup: Drop all tables after test session
-    Base.metadata.drop_all(bind=engine)
+
+    # Cleanup: Drop schema with CASCADE to handle materialized views
+    with engine.connect() as conn:
+        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+        conn.commit()
     engine.dispose()
 
 

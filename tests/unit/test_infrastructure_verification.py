@@ -79,22 +79,26 @@ class TestFactoriesWithDatabase:
     def test_user_factory_with_db(self, db_session):
         """Verify UserFactory can create users in database"""
         # This will use the db_session fixture from conftest
-        user = UserFactory.create_admin(db_session)
-        
+        # Use a unique username to avoid collision with seeded data
+        user = UserFactory.create_admin(db_session, username='factory_test_admin')
+
         assert user is not None
-        assert user.username == 'test_admin'
+        assert user.username == 'factory_test_admin'
         assert user.is_active is True
     
     def test_core_entity_factory(self, db_session):
-        """Verify CoreEntityFactory can create entities"""
+        """Verify CoreEntityFactory can query entities"""
         entities = CoreEntityFactory.setup_core_entities(db_session)
-        
+
         assert 'hospital' in entities
         assert 'lab_unit' in entities
         assert 'glaucoma' in entities
         assert 'dr' in entities
-        
+
+        # Verify entities were found (created by migrations/seed_database)
+        assert entities['hospital'] is not None
         assert entities['hospital'].name == 'Hospital A'
+        assert entities['glaucoma'] is not None
         assert entities['glaucoma'].name == 'Glaucoma'
 
 

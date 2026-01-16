@@ -1,24 +1,30 @@
 """
-Test database seeding - populates core entities at test session start.
+Test database seeding - adds test-specific entities on top of migrated data.
 
-This module provides a session-scoped fixture that seeds the test database with:
-- Roles (master_admin, local_admin, ophthalmologist, resident, arbitrator, etc.)
-- Diseases (DR, Glaucoma, AMD)
-- Cameras (Test Camera, Fundus Camera, etc.)
-- Areas (Macula, Optic Disc, etc.)
-- Grades (for DR, Glaucoma, AMD)
-- Hospitals (Hospital A, Hospital B)
-- Lab Units (Lab A1, A2, A3 for Hospital A; Lab B1, B2, B3 for Hospital B)
-- Test Users (master_admin, site_admin_a, site_admin_b, ophthalmologists, etc.)
+This module provides a session-scoped fixture that runs AFTER Alembic migrations
+to add test-specific entities:
 
-Lab Unit ID Assignment:
-  ID 1-3: Hospital A lab units (Lab A1, A2, A3)
-  ID 4-6: Hospital B lab units (Lab B1, B2, B3)
+Core entities (seeded by migrations):
+- Production hospitals (RPC AIIMS, UCMS GTB Hosp)
+- Production lab units (Community Ophthalmology, Retina Lab, etc.)
+- Diseases (Glaucoma, DR, AMD) with gradings and features
+- Areas, Cameras, etc.
+
+Test-specific entities (added by this fixture):
+- Test hospitals (Hospital A, Hospital B) - IDs 100-101
+- Test lab units (Lab A1-A3, Lab B1-B3) - IDs 100-105
+- AI Models (GlaucomaNet, DRNet)
+- Test users (master_admin, site_admin_a/b, ophthalmologists, etc.)
+- Roles
+
+Note: Tests should query by NAME instead of ID to be resilient to ID changes.
+Example: db_session.query(LabUnit).filter_by(name='Lab A1').first()
 """
 import pytest
 from sqlalchemy import text
 from models import (
-    Role, Disease, Camera, Area, Grade, Hospital, LabUnit, User
+    Role, Disease, Camera, Area, Hospital, LabUnit, User,
+    DiseaseGrading, GradingsFeatures, AIModel
 )
 from auth.security import hash_password
 
@@ -26,16 +32,19 @@ from auth.security import hash_password
 @pytest.fixture(scope="session", autouse=True)
 def seed_test_database(test_engine):
     """
-    Seed the test database with core entities.
-    
-    This fixture runs automatically at the start of the test session
-    and populates all foundational data that should persist across all tests.
+    Seed the test database with test-specific entities.
+
+    This fixture runs automatically AFTER Alembic migrations to add
+    test-specific data on top of the core seeded entities.
+
+    Core entities (hospitals, diseases, gradings, cameras, areas) are
+    already seeded by migration 691d42ba3fff_seed_core_entities_data.py.
     """
     from sqlalchemy.orm import sessionmaker
-    
+
     Session = sessionmaker(bind=test_engine)
     session = Session()
-    
+
     try:
         # ===== ROLES =====
         roles_data = [
@@ -49,90 +58,103 @@ def seed_test_database(test_engine):
             if not role:
                 role = Role(name=role_name)
                 session.add(role)
+                session.flush()
             roles[role_name] = role
-        session.flush()
-        
-        # ===== DISEASES =====
-        diseases_data = ['DR', 'Glaucoma', 'AMD', 'Test Disease']
-        diseases = {}
-        for disease_name in diseases_data:
-            disease = session.query(Disease).filter_by(name=disease_name).first()
-            if not disease:
-                disease = Disease(name=disease_name)
-                session.add(disease)
-            diseases[disease_name] = disease
-        session.flush()
-        
-        # ===== CAMERAS =====
-        # Create with specific IDs for consistency with test expectations
-        # Test Camera is ID 1 for backward compatibility with tests that query by name
-        cameras_data = [
-            {'id': 1, 'name': 'Test Camera'},
-            {'id': 2, 'name': 'Fundus Camera'},
-            {'id': 3, 'name': 'Topcon TRC-50DX'},
-            {'id': 4, 'name': 'Canon CR-2'},
-        ]
-        cameras = {}
-        for camera_data in cameras_data:
-            camera = session.query(Camera).filter_by(id=camera_data['id']).first()
-            if not camera:
-                camera = Camera(id=camera_data['id'], name=camera_data['name'])
-                session.add(camera)
-            cameras[camera_data['name']] = camera
-        session.flush()
 
-        # ===== AREAS =====
-        # Create with specific IDs for consistency with test expectations
-        areas_data = [
-            {'id': 1, 'name': 'Test Area'},
-            {'id': 2, 'name': 'Macula'},
-            {'id': 3, 'name': 'Optic Disc'},
-            {'id': 4, 'name': 'Peripheral Retina'},
+        # ===== TEST HOSPITALS (high IDs to avoid conflict with production) =====
+        # Production uses IDs 1-2, so tests use 100-101
+        # If there are name collisions with seeded data, delete the seeded entity first
+        test_hospitals_data = [
+            {'id': 100, 'name': 'Hospital A'},
+            {'id': 101, 'name': 'Hospital B'}
         ]
-        areas = {}
-        for area_data in areas_data:
-            area = session.query(Area).filter_by(id=area_data['id']).first()
-            if not area:
-                area = Area(id=area_data['id'], name=area_data['name'])
-                session.add(area)
-            areas[area_data['name']] = area
-        session.flush()
-        
-        # ===== HOSPITALS =====
-        # Use names that tests expect (queried by name in test fixtures)
-        hospitals_data = [
-            {'id': 1, 'name': 'Hospital A'},
-            {'id': 2, 'name': 'Hospital B'}
-        ]
-        hospitals = {}
-        for hosp_data in hospitals_data:
+        test_hospitals = {}
+        for hosp_data in test_hospitals_data:
+            # Check for name collision with seeded entities
+            existing = session.query(Hospital).filter_by(name=hosp_data['name']).first()
+            if existing:
+                # Delete the seeded entity so test-specific one wins
+                session.delete(existing)
+                session.flush()
+
             hospital = session.query(Hospital).filter_by(id=hosp_data['id']).first()
             if not hospital:
                 hospital = Hospital(**hosp_data)
                 session.add(hospital)
-            hospitals[hosp_data['name']] = hospital
+                session.flush()
+            test_hospitals[hosp_data['name']] = hospital
         session.flush()
-        
-        # ===== LAB UNITS =====
-        # Hospital A: IDs 1-3
-        # Hospital B: IDs 4-6
-        lab_units_data = [
-            {'id': 1, 'name': 'Lab A1', 'hospital_id': 1},
-            {'id': 2, 'name': 'Lab A2', 'hospital_id': 1},
-            {'id': 3, 'name': 'Lab A3', 'hospital_id': 1},
-            {'id': 4, 'name': 'Lab B1', 'hospital_id': 2},
-            {'id': 5, 'name': 'Lab B2', 'hospital_id': 2},
-            {'id': 6, 'name': 'Lab B3', 'hospital_id': 2}
+
+        # ===== TEST LAB UNITS (high IDs to avoid conflict with production) =====
+        # Production uses IDs 1-4, so tests use 100-105
+        # If there are name collisions with seeded data, delete the seeded entity first
+        test_lab_units_data = [
+            {'id': 100, 'name': 'Lab A1', 'hospital_id': 100},
+            {'id': 101, 'name': 'Lab A2', 'hospital_id': 100},
+            {'id': 102, 'name': 'Lab A3', 'hospital_id': 100},
+            {'id': 103, 'name': 'Lab B1', 'hospital_id': 101},
+            {'id': 104, 'name': 'Lab B2', 'hospital_id': 101},
+            {'id': 105, 'name': 'Lab B3', 'hospital_id': 101}
         ]
-        lab_units = {}
-        for lab_data in lab_units_data:
+        test_lab_units = {}
+        for lab_data in test_lab_units_data:
+            # Check for name collision with seeded entities
+            existing = session.query(LabUnit).filter_by(name=lab_data['name']).first()
+            if existing:
+                # Delete the seeded entity so test-specific one wins
+                session.delete(existing)
+                session.flush()
+
             lab_unit = session.query(LabUnit).filter_by(id=lab_data['id']).first()
             if not lab_unit:
                 lab_unit = LabUnit(**lab_data)
                 session.add(lab_unit)
-            lab_units[lab_data['name']] = lab_unit
+                session.flush()
+            test_lab_units[lab_data['name']] = lab_unit
         session.flush()
-        
+
+        # ===== AI MODELS =====
+        # If there are name collisions with seeded data, delete the seeded entity first
+        ai_models_data = [
+            {'id': 1, 'name': 'GlaucomaNet', 'version': '1.0',
+             'description': 'Deep learning model for glaucoma detection'},
+            {'id': 2, 'name': 'DRNet', 'version': '2.0',
+             'description': 'Deep learning model for diabetic retinopathy grading'},
+        ]
+        ai_models = {}
+        for model_data in ai_models_data:
+            # Check for name collision with seeded entities
+            existing = session.query(AIModel).filter_by(name=model_data['name']).first()
+            if existing:
+                # Delete the seeded entity so test-specific one wins
+                session.delete(existing)
+                session.flush()
+
+            ai_model = session.query(AIModel).filter_by(id=model_data['id']).first()
+            if not ai_model:
+                ai_model = AIModel(
+                    id=model_data['id'],
+                    name=model_data['name'],
+                    version=model_data['version'],
+                    description=model_data['description']
+                )
+                session.add(ai_model)
+                session.flush()
+            ai_models[model_data['name']] = ai_model
+        session.flush()
+
+        # ===== AI SYSTEM USER =====
+        ai_system_user = session.query(User).filter_by(username='ai_system').first()
+        if not ai_system_user:
+            ai_system_user = User(
+                username='ai_system',
+                password_hash=hash_password('AI@2026'),
+                is_active=True,
+                full_name='AI Grading System'
+            )
+            session.add(ai_system_user)
+            session.flush()
+
         # ===== TEST USERS =====
         users_data = [
             {
@@ -140,52 +162,52 @@ def seed_test_database(test_engine):
                 'password': 'Test@2026',
                 'hospital_id': None,
                 'is_master_admin': True,
-                'roles': ['master_admin', 'admin']  # Both roles for full access to analytics routes
+                'roles': ['master_admin', 'admin']
             },
             {
                 'username': 'test_admin',
                 'password': 'Test@2026',
                 'hospital_id': None,
                 'is_master_admin': True,
-                'roles': ['admin']  # Admin role for integration tests
+                'roles': ['admin']
             },
             {
                 'username': 'test_manager',
                 'password': 'Test@2026',
-                'hospital_id': 1,
+                'hospital_id': 100,
                 'is_master_admin': False,
-                'roles': ['data_manager'],  # Manager role for integration tests
+                'roles': ['data_manager'],
                 'lab_units': ['Lab A1']
             },
             {
                 'username': 'site_admin_a',
                 'password': 'Test@2026',
-                'hospital_id': 1,
+                'hospital_id': 100,
                 'is_master_admin': False,
                 'roles': ['local_admin']
             },
             {
                 'username': 'site_admin_b',
                 'password': 'Test@2026',
-                'hospital_id': 2,
+                'hospital_id': 101,
                 'is_master_admin': False,
                 'roles': ['local_admin']
             },
             {
                 'username': 'ophthalmologist_a',
                 'password': 'Test@2026',
-                'hospital_id': 1,
+                'hospital_id': 100,
                 'is_master_admin': False,
                 'roles': ['ophthalmologist'],
-                'lab_units': ['Lab A1']  # Assign lab unit
+                'lab_units': ['Lab A1']
             },
             {
                 'username': 'ophthalmologist_b',
                 'password': 'Test@2026',
-                'hospital_id': 2,
+                'hospital_id': 101,
                 'is_master_admin': False,
                 'roles': ['ophthalmologist'],
-                'lab_units': ['Lab B1']  # Assign lab unit
+                'lab_units': ['Lab B1']
             },
             {
                 'username': 'ophthalmologist_cross',
@@ -193,7 +215,7 @@ def seed_test_database(test_engine):
                 'hospital_id': None,
                 'is_master_admin': False,
                 'roles': ['ophthalmologist'],
-                'lab_units': ['Lab A1', 'Lab B1']  # Cross-hospital lab units
+                'lab_units': ['Lab A1', 'Lab B1']
             }
         ]
 
@@ -212,36 +234,30 @@ def seed_test_database(test_engine):
                 session.add(user)
                 session.flush()
 
-                # Assign lab units if specified
                 if 'lab_units' in user_data:
                     for lab_name in user_data['lab_units']:
-                        lab_unit = lab_units.get(lab_name)
+                        lab_unit = test_lab_units.get(lab_name)
                         if lab_unit:
                             user.lab_units.append(lab_unit)
                     session.flush()
 
             users[user_data['username']] = user
 
-        # ===== SYNC SEQUENCES =====
-        # When entities are created with explicit IDs, PostgreSQL sequences
-        # don't automatically advance. This causes duplicate key errors when
-        # tests create new entities without specifying IDs.
-        # Sync all sequences to the max ID currently in the table.
-        session.execute(text("SELECT setval('cameras_id_seq', (SELECT COALESCE(MAX(id), 1) FROM cameras))"))
-        session.execute(text("SELECT setval('areas_id_seq', (SELECT COALESCE(MAX(id), 1) FROM areas))"))
-        session.execute(text("SELECT setval('hospitals_id_seq', (SELECT COALESCE(MAX(id), 1) FROM hospitals))"))
-        session.execute(text("SELECT setval('lab_units_id_seq', (SELECT COALESCE(MAX(id), 1) FROM lab_units))"))
+        # ===== SYNC SEQUENCES FOR TEST TABLES =====
+        session.execute(text("SELECT setval('ai_models_id_seq', (SELECT COALESCE(MAX(id), 1) FROM ai_models))"))
 
         session.commit()
-        
+
         return {
             'roles': roles,
-            'diseases': diseases,
-            'cameras': cameras,
-            'areas': areas,
-            'hospitals': hospitals,
-            'lab_units': lab_units,
-            'users': users
+            'test_hospitals': test_hospitals,
+            'test_lab_units': test_lab_units,
+            'users': users,
+            'ai_models': ai_models,
         }
+
+    except Exception as e:
+        session.rollback()
+        raise
     finally:
         session.close()

@@ -108,6 +108,101 @@ def admin_function():
     tasks = db.query(GradingTask).filter(GradingTask.lab_unit_id.in_(eligible_labs))
 ```
 
+### 6. Database Transaction Manager
+For complex multi-step operations requiring transactional control, use the transaction manager:
+```python
+from utils.db_transaction import transactional
+
+@transactional()
+def complex_update(user_id, changes):
+    # All operations in this function are atomic
+    # Auto-commit on success, auto-rollback on exception
+    user = db.query(User).get(user_id)
+    user.update(changes)
+    create_audit_log(user_id, changes)
+    send_notification(user_id)  # Only runs if DB operations succeed
+```
+
+### 7. Flask Caching
+Use Flask-Caching for expensive operations (query results, computations):
+```python
+from flask_caching import cache
+
+@cache.memoize(timeout=300)  # Cache for 5 minutes
+def expensive_query(lab_id):
+    return db.query(GradingTask).filter_by(lab_unit_id=lab_id).all()
+
+# Clear cache when data changes
+def update_grading_task(task_id, changes):
+    task = db.query(GradingTask).get(task_id)
+    task.update(changes)
+    cache.delete_memoized(expensive_query, task.lab_unit_id)
+```
+
+### 8. Alembic Migrations (CRITICAL)
+
+**🚨 NEVER use `pass` in migrations** - always write proper upgrade/downgrade.
+
+**🚨 Make migrations IDEMPOTENT** - they should be safe to run multiple times:
+
+```bash
+# Generate migration (use -u flag to avoid root-owned files)
+$DC exec -u $(id -u):$(id -g) web uv run alembic revision --autogenerate -m "description"
+
+# Review the generated migration file
+$DC exec web uv run alembic heads  # Check current head
+$DC exec web uv run alembic history  # Review sequence
+```
+
+**Always review and edit the migration file:**
+
+```python
+# BAD - Never do this:
+def upgrade():
+    pass
+
+# GOOD - Proper, idempotent migration:
+def upgrade():
+    # Check if exists before creating (idempotent)
+    op.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'new_table') THEN
+                CREATE TABLE new_table (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    user_id INTEGER REFERENCES users(id)
+                );
+            END IF;
+        END $$;
+    """)
+
+    # Check if column exists before adding (idempotent)
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('users')]
+    if 'new_field' not in columns:
+        op.add_column('users', sa.Column('new_field', sa.String(50), server_default='default'))
+
+    # Check if index exists before creating (idempotent)
+    if not op.get_context().dialect.has_index(conn, 'users', 'ix_users_new_field'):
+        op.create_index('ix_users_new_field', 'users', ['new_field'])
+
+def downgrade():
+    op.drop_index('ix_users_new_field', table_name='users')
+    op.drop_column('users', 'new_field')
+    op.drop_table('new_table')
+```
+
+**Migration rules:**
+- Always write both `upgrade()` and `downgrade()`
+- Make migrations **idempotent** - safe to re-run if needed
+- Use `op.execute()` with PostgreSQL `IF NOT EXISTS` checks
+- Check for existing objects before creating them
+- Use `--autogenerate` as a starting point, then edit
+- Test migrations on staging first
+- Never skip migration work with `pass`
+
 ## Key Workflows
 
 **Dual Grading**: Resident → Resident2 → Arbitrator (if disagree). See `docs/04-Grade/comprehensive_dual_grading_system.md`. Key utils: `dualGradingFetchDetailUtils`, `dualGradingEligibility`, `dualGradingConsensusUtils`.
@@ -149,6 +244,143 @@ bd sync                      # Sync beads again
 git push                     # PUSH (work NOT done until this succeeds)
 ```
 
+## Development Workflow
+
+### For New Features, Refactoring, or Starting New Sessions
+
+**MANDATORY SEQUENCE**: Plan → Discuss → Optimize → BEAD → TDD → Close
+
+```
+┌─────────┐    ┌──────────┐    ┌───────────┐    ┌──────┐    ┌─────┐    ┌───────┐
+│  Plan   │ →  │ Discuss  │ →  │ Optimize  │ →  │ BEAD │ →  │ TDD │ →  │ Close │
+└─────────┘    └──────────┘    └───────────┘    └──────┘    └─────┘    └───────┘
+```
+
+---
+
+### 1. PLAN - Understand and Explore
+
+**Goal**: Understand requirements, explore codebase, identify files
+
+```bash
+# Use Explore agent for codebase investigation
+# Ask Claude to explore:
+# - Existing patterns and conventions
+# - Similar features already implemented
+# - Relevant files and modules
+# - Dependencies and integrations
+```
+
+**Deliverable**: Clear understanding of what needs to be built, where it fits
+
+---
+
+### 2. DISCUSS - Validate Approach
+
+**Goal**: Confirm understanding, clarify ambiguities, agree on approach
+
+- Use `AskUserQuestion` tool for key decisions
+- Confirm architectural choices (e.g., "Use Redis vs in-memory cache?")
+- Validate edge cases and error handling
+- Agree on test strategy
+
+**Deliverable**: Approved approach with no open questions
+
+---
+
+### 3. OPTIMIZE - Design Implementation
+
+**Goal**: Design efficient solution before coding
+
+- Identify reusables (don't duplicate code)
+- Plan efficient queries (avoid N+1)
+- Consider security implications (CSRF, input validation, RBAC)
+- Design for testability
+
+**Deliverable**: Implementation plan with file list and approach
+
+---
+
+### 4. BEAD - Create Tracker
+
+**Goal**: Establish source of truth for the work
+
+```bash
+# Create bead AFTER planning is complete
+bd create --title="Feature name" --type=feature --priority=2
+
+# Create corresponding GitHub issue
+gh issue create --title "Feature name" --label "p2,type-feature,bead-xyz"
+```
+
+**Deliverable**: Bead and GitHub issue tracking the work
+
+---
+
+### 5. TDD - Test-Driven Development
+
+**Goal**: Write tests first, then implementation
+
+```bash
+# 1. Write failing test
+$DC exec -u $(id -u):$(id -g) web uv run pytest tests/test_feature.py -v
+
+# 2. Write minimal code to pass test
+
+# 3. Refactor while keeping tests green
+$DC exec web uv run pytest tests/
+```
+
+**Deliverable**: Tested code with coverage
+
+---
+
+### 6. CLOSE - Complete the Cycle
+
+**Goal**: Update bead, close GitHub issue, push code
+
+```bash
+# 1. Update bead with implementation details
+bd update <id> --description="
+## Implementation
+- Created files: file1.py, file2.py
+- Updated X with Y features
+
+## Verification
+- Tests: X/Y passed
+- Commands run: pytest tests/
+"
+
+# 2. Commit and push code
+git add . && git commit -m "Feature: description" && git push
+
+# 3. Close bead (source of truth)
+bd close <id>
+
+# 4. Close GitHub issue
+gh issue close <number> --comment "Completed via beads-<id>"
+
+# 5. Sync beads
+bd sync
+```
+
+**Deliverable**: Closed bead, closed GitHub issue, pushed code
+
+---
+
+### Quick Reference: When to Use This Workflow
+
+| Scenario | Use Full Workflow? |
+|----------|-------------------|
+| New feature | ✅ Yes |
+| Refactoring | ✅ Yes |
+| New session | ✅ Yes |
+| Simple bug fix (1-2 lines) | ⚠️ Skip to BEAD |
+| Documentation only | ⚠️ Skip to BEAD |
+| Trivial typo fix | ⚠️ Skip BEAD & TDD |
+
+---
+
 ## Beads Workflow
 **Create**: `bd create --title="..." --type=task|bug|feature --priority=2` (0=critical, 2=medium, 4=backlog)
 **Start work**: `bd ready` → `bd show <id>` → `bd update <id> --status=in_progress`
@@ -181,7 +413,146 @@ git push                     # PUSH (work NOT done until this succeeds)
 
 ## Beads ↔ GitHub Sync
 
-**Manual Sync**: Beads need to manually synced with GitHub issues time BD status changes or decreition is changed
+### ⚠️ Beads is the PRIMARY Source of Truth
+
+**Golden Rule**: If a Bead exists, GitHub issue is derived from it. Always update from Bead → GitHub, never the reverse.
+
+---
+
+### Creation Workflow (Beads-First)
+
+**Standard workflow - always create Bead first:**
+
+```bash
+# 1. Create the bead (source of truth)
+bd create --title="Fix login bug" --type=bug --priority=1
+
+# 2. Get the bead ID (e.g., beads-abc)
+bd show beads-abc
+
+# 3. Create corresponding GitHub issue with bead label
+gh issue create \
+  --title "Fix login bug" \
+  --label "p1,type-bug,bead-abc" \
+  --body "Beads tracker: beads-abc"
+```
+
+**If GitHub issue exists first (rare edge case):**
+
+```bash
+# 1. Create corresponding bead to establish source of truth
+bd create --title="Fix login bug" --type=bug --priority=1
+
+# 2. Update GitHub with bead label to establish the link
+gh issue edit 123 --add-label "bead-abc"
+```
+
+---
+
+### Closure Workflow (Beads-First)
+
+**Always close Bead first, then GitHub:**
+
+```bash
+# 1. Complete the work, commit, push code
+git add . && git commit -m "Fix login bug" && git push
+
+# 2. Close the Bead (source of truth)
+bd close beads-abc
+
+# 3. Close the GitHub issue (derived from bead)
+gh issue close 123 --comment "Fixed via beads-abc. Commit: <sha>"
+```
+
+**Batch closing multiple beads:**
+
+```bash
+# 1. Close beads (source of truth)
+bd close beads-abc beads-def beads-xyz
+
+# 2. Close corresponding GitHub issues
+gh issue close 123 124 125 --comment "Completed via beads. Commit: <sha>"
+```
+
+---
+
+### Status Change Sync (Beads-First)
+
+| Beads Command (Source) | GitHub Action (Derived) |
+|---------------|---------------|
+| `bd update <id> --status=in_progress` | Add comment: "Started work on beads-<id>" |
+| `bd close <id>` | `gh issue close <number>` |
+| `bd reopen <id>` | `gh issue reopen <number>` |
+| `bd update <id> --description="..."` | Add comment with summary |
+
+---
+
+### Quick Reference: Label Mapping
+
+| Beads Type | GitHub Label |
+|------------|--------------|
+| `--type=bug` | `type-bug` |
+| `--type=feature` | `type-feature` |
+| `--type=task` | `type-task` |
+| `--priority=0` | `p0` |
+| `--priority=1` | `p1` |
+| `--priority=2` | `p2` |
+| `--priority=3` | `p3` |
+| `--priority=4` | `p4` |
+
+---
+
+### Verification Checklist
+
+After creating work:
+- [ ] Bead exists (`bd show <id>`)
+- [ ] GitHub issue exists with matching title
+- [ ] GitHub has `bead-*` label linking to bead
+- [ ] Priority/type labels match (p0-p4, type-bug/feature/task)
+
+After closing work:
+- [ ] Bead is closed (`bd show <id>` shows closed)
+- [ ] GitHub issue is closed
+- [ ] Commit pushed to remote
+- [ ] `bd sync` run successfully
+
+## GitHub Labels
+
+### Priority Labels (use one)
+| Label | Color | Description |
+|-------|-------|-------------|
+| `p0` | 🔴 b60205 | Priority P0 - Critical |
+| `p1` | 🟠 ff9f1c | Priority P1 - High |
+| `p2` | 🟡 ffcd56 | Priority P2 - Medium |
+| `p3` | 🔷 C5DEF5 | Priority P3 - Low |
+| `p4` | 🔷 1D76DB | Priority P4 - Backlog |
+
+### Type Labels (use one)
+| Label | Color | Description |
+|-------|-------|-------------|
+| `type-bug` | 🔴 d73a4a | Bug report |
+| `type-feature` | 🔷 a2eeef | Feature request |
+| `type-task` | 🟣 5319e7 | Task item |
+
+### Other Labels
+| Label | Color | Description |
+|-------|-------|-------------|
+| `bug` | 🔴 d73a4a | Something isn't working |
+| `documentation` | 🔷 0075ca | Improvements or additions to documentation |
+| `enhancement` | 🔷 a2eeef | New feature or request |
+| `good first issue` | 🟣 7057ff | Good for newcomers |
+| `help wanted` | 🟢 008672 | Extra attention is needed |
+| `question` | 🟣 d876e3 | Further information is requested |
+| `hospital-isolation` | 🔷 1a63c9 | Hospital isolation security feature |
+| `tests` | 🟢 2da44e | Test related |
+| `migration` | 🔴 e99695 | Data migration |
+| `bead-*` | 🔷 1a63c9 | Links GitHub issue to Beads tracker ID |
+
+### PR Labels
+| Label | Color | Description |
+|-------|-------|-------------|
+| `dependencies` | 🔷 0366d6 | Pull requests that update a dependency file |
+| `python` | 🔷 2b67c6 | Pull requests that update python code |
 
 ---
 

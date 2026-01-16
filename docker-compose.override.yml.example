@@ -12,9 +12,9 @@ services:
       - app.py
       - run
       - --host
-      - 0.0.0.0
+      - "${FLASK_HOST:-0.0.0.0}"
       - --port
-      - "5001"
+      - "${FLASK_PORT:-5001}"
       - --reload
     environment:
       FLASK_ENV: development

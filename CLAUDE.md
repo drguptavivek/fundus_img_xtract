@@ -382,6 +382,41 @@ bd sync
 ---
 
 ## Beads Workflow
+
+### Valid Issue Types
+
+**🚨 IMPORTANT**: The beads tool has **hardcoded valid issue types**. You cannot create custom types.
+
+| Valid Types | Usage |
+|-------------|-------|
+| `bug` | Bug reports, security vulnerabilities, defects |
+| `feature` | New features, enhancements |
+| `task` | Tasks, chores, refactoring |
+| `epic` | Large features spanning multiple issues |
+| `chore` | Maintenance tasks, dependencies |
+| `merge-request` | Git merge requests |
+| `molecule` | Multi-issue coordination (swarm, patrol) |
+| `gate` | Async coordination gates |
+| `agent` | Agent-related issues |
+| `role` | Agent role definitions |
+| `rig` | Beads rig configuration |
+| `convoy` | Multi-rig coordination |
+| `event` | Event tracking |
+
+**For security-related issues**: Use `type: "bug"` with `label: "security"` - do NOT attempt to use `type: "security"` as it will cause sync errors.
+
+```bash
+# CORRECT - Security bug with proper type and label
+bd create --title="Fix XSS vulnerability" --type=bug --priority=1 --labels=security
+
+# WRONG - Will cause sync errors (invalid type)
+bd create --title="Fix XSS vulnerability" --type=security --priority=1
+```
+
+---
+
+### Core Commands
+
 **Create**: `bd create --title="..." --type=task|bug|feature --priority=2` (0=critical, 2=medium, 4=backlog)
 **Start work**: `bd ready` → `bd show <id>` → `bd update <id> --status=in_progress`
 **Update**: **CRITICAL** - Always update beads with implementation and verification details using `bd update <id> --description="..."`:
@@ -395,17 +430,17 @@ bd sync
     - Created X files: file1.py, file2.py
     - Updated Y with Z features
     - Config changes: ...
-    
+
     ## Verification
     - Tests: X/Y passed
     - Manual verification: ...
     - Commands run: ...
-    - Docker web Container has not errors: 
+    - Docker web Container has not errors:
 
     ## GIT Commit Deatils
      - Date, Time:
-     - Commit ID: 
-     - Files Modified: 
+     - Commit ID:
+     - Files Modified:
     ```
 **Complete**: `bd close <id1> <id2> ...` → `bd sync`
 **Dependencies**: `bd dep add <issue> <depends-on>`

@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+from types import SimpleNamespace
 from typing import List, Optional
 
-from flask import abort, current_app, flash, render_template, request, session, url_for
+from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy.orm import joinedload
@@ -23,6 +24,7 @@ from models import (
     CuratedDatasetItem,
     DatasetExport,
     DatasetShare,
+    Disease,
     Job,
     LabUnit,
     User,
@@ -39,7 +41,7 @@ from utils.dataset_share import (
     validate_share_token,
     verify_share_otp,
 )
-from utils.emails import send_email
+from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
 from utils.hospital_scoping import apply_scoping
 from utils.dataset_share_security import clear_failures, is_locked_out, register_failure
 from utils.log_sanitize import sanitize_log_value
@@ -93,7 +95,7 @@ def list_datasets():
             .first()
         )
         user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
-        can_share = "dataset_creator" in user_roles
+        can_share = bool(user_roles.intersection({"dataset_creator", "admin"}))
 
         datasets = (
             db.query(CuratedDataset)
@@ -153,6 +155,10 @@ def share_dataset():
         flash("Select a dataset to manage shares.", "warning")
         return redirect(url_for("datasets.list_datasets"))
 
+    share_display_data = None
+    link_email_failed = False
+    otp_email_failed = False
+    template_context = None
     with get_db_session() as db:
         dataset = (
             db.query(CuratedDataset)
@@ -181,7 +187,7 @@ def share_dataset():
             .first()
         )
         user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
-        can_share = "dataset_creator" in user_roles
+        can_share = bool(user_roles.intersection({"dataset_creator", "admin"}))
 
         if request.method == "POST":
             if not can_share:
@@ -210,10 +216,6 @@ def share_dataset():
             otp_hash = hash_share_otp(otp)
             expires_at = datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
 
-            db.query(DatasetShare).filter(DatasetShare.dataset_id == dataset.id).update(
-                {DatasetShare.is_active: False},
-                synchronize_session=False,
-            )
             share = DatasetShare(
                 dataset_id=dataset.id,
                 token_hash=token_hash,
@@ -228,13 +230,12 @@ def share_dataset():
             db.add(share)
             db.flush()
 
-            session["dataset_share_display"] = {
+            share_display_data = {
                 "dataset_uuid": dataset.uuid,
                 "token": token,
                 "otp": otp,
                 "expires_at": expires_at.isoformat(),
             }
-            session.modified = True
             logger.info(
                 "Dataset share created dataset_id=%s dataset_uuid=%s user_id=%s expires_at=%s",
                 dataset.id,
@@ -265,7 +266,29 @@ def share_dataset():
                         "OTP will be shared separately by the dataset creator.",
                     ]
                 )
-                send_email(recipient_email, subject, body, sensitive=True, cc_emails=cc_list or None)
+                logo_cid, inline_images = build_inline_logo_image()
+                html_body = build_dataset_share_email_html(
+                    title="Dataset Download Link",
+                    dataset_name=dataset.name,
+                    purpose=dataset.purpose,
+                    created_for=created_for,
+                    expires_at=expires_at.isoformat(),
+                    logo_cid=logo_cid,
+                    link=link,
+                )
+                try:
+                    send_email(
+                        recipient_email,
+                        subject,
+                        body,
+                        sensitive=True,
+                        cc_emails=cc_list or None,
+                        html_body=html_body,
+                        inline_images=inline_images,
+                    )
+                except Exception as exc:
+                    logger.warning("Share link email failed: %s", exc)
+                    link_email_failed = True
             creator_email = (current_user.email or "").strip()
             if creator_email:
                 cc_list = []
@@ -284,9 +307,29 @@ def share_dataset():
                         "Share this OTP separately with the recipient.",
                     ]
                 )
-                send_email(creator_email, otp_subject, otp_body, sensitive=True, cc_emails=cc_list or None)
-            flash("Share link created. Save the OTP now; it will not be shown again.", "success")
-            return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset_uuid))
+                logo_cid, inline_images = build_inline_logo_image()
+                otp_html = build_dataset_share_email_html(
+                    title="Dataset Share OTP",
+                    dataset_name=dataset.name,
+                    purpose=dataset.purpose,
+                    created_for=created_for,
+                    expires_at=expires_at.isoformat(),
+                    logo_cid=logo_cid,
+                    otp=otp,
+                )
+                try:
+                    send_email(
+                        creator_email,
+                        otp_subject,
+                        otp_body,
+                        sensitive=True,
+                        cc_emails=cc_list or None,
+                        html_body=otp_html,
+                        inline_images=inline_images,
+                    )
+                except Exception as exc:
+                    logger.warning("Share OTP email failed: %s", exc)
+                    otp_email_failed = True
 
         shares = (
             db.query(DatasetShare)
@@ -303,19 +346,195 @@ def share_dataset():
                 status = "expired"
             elif share.is_active:
                 status = "active"
-            share_rows.append({"share": share, "status": status})
+            created_by_name = "—"
+            if share.created_by:
+                created_by_name = share.created_by.full_name or share.created_by.username or "—"
+            share_rows.append(
+                {
+                    "share_id": share.id,
+                    "status": status,
+                    "is_active": bool(share.is_active),
+                    "purpose": share.purpose,
+                    "created_for": share.created_for,
+                    "recipient_email": share.recipient_email,
+                    "created_by_name": created_by_name,
+                    "created_at": share.created_at,
+                    "expires_at": share.expires_at,
+                    "download_count": share.download_count or 0,
+                }
+            )
 
         share_display = session.pop("dataset_share_display", None)
         if share_display and share_display.get("dataset_uuid") != dataset.uuid:
             share_display = None
+        otp_display = session.pop("dataset_share_otp_display", None)
+        if otp_display and otp_display.get("dataset_uuid") != dataset.uuid:
+            otp_display = None
 
-        return render_template(
-            "datasets/share.html",
-            dataset=dataset,
-            share_rows=share_rows,
-            can_share=can_share,
-            share_display=share_display,
+        dataset_view = SimpleNamespace(
+            uuid=dataset.uuid,
+            name=dataset.name,
+            purpose=dataset.purpose,
+            is_finalized=dataset.is_finalized,
         )
+
+        template_context = {
+            "dataset": dataset_view,
+            "share_rows": share_rows,
+            "can_share": can_share,
+            "share_display": share_display,
+            "otp_display": otp_display,
+        }
+    if share_display_data:
+        session["dataset_share_display"] = share_display_data
+        session.modified = True
+        flash("Share link created. Save the OTP now; it will not be shown again.", "success")
+        if link_email_failed:
+            flash("Link email failed to send. Please share the link manually.", "warning")
+        if otp_email_failed:
+            flash("OTP email failed to send. Please share the OTP manually.", "warning")
+        return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset_uuid))
+    if template_context is None:
+        abort(500)
+    return render_template("datasets/share.html", **template_context)
+
+
+@bp.route("/share/<int:share_id>/toggle", methods=["POST"])
+@roles_required("dataset_creator", "admin")
+def toggle_share_status(share_id: int):
+    """Toggle dataset share active status."""
+    dataset_uuid = request.form.get("dataset_uuid")
+    with get_db_session() as db:
+        share = (
+            db.query(DatasetShare)
+            .options(joinedload(DatasetShare.dataset))
+            .filter(DatasetShare.id == share_id)
+            .first()
+        )
+        if not share or not share.dataset or not share.dataset.is_active:
+            abort(404)
+
+        dataset = share.dataset
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have permission to update this share.", "error")
+            return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
+
+        share.is_active = not bool(share.is_active)
+        db.add(share)
+        status_label = "activated" if share.is_active else "deactivated"
+        logging.getLogger("audit").info(
+            "Dataset share %s share_id=%s dataset_id=%s dataset_uuid=%s user_id=%s",
+            status_label,
+            share.id,
+            dataset.id,
+            dataset.uuid,
+            current_user.id,
+        )
+        flash(f"Share {status_label}.", "success")
+        target_uuid = dataset_uuid or dataset.uuid
+        return redirect(url_for("datasets.share_dataset", dataset_uuid=target_uuid))
+
+
+@bp.route("/share/<int:share_id>/regenerate-otp", methods=["POST"])
+@roles_required("dataset_creator", "admin")
+def regenerate_share_otp(share_id: int):
+    """Regenerate OTP for an existing dataset share."""
+    dataset_uuid = request.form.get("dataset_uuid")
+    with get_db_session() as db:
+        share = (
+            db.query(DatasetShare)
+            .options(joinedload(DatasetShare.dataset), joinedload(DatasetShare.created_by))
+            .filter(DatasetShare.id == share_id)
+            .first()
+        )
+        if not share or not share.dataset or not share.dataset.is_active:
+            abort(404)
+
+        dataset = share.dataset
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have permission to update this share.", "error")
+            return redirect(url_for("datasets.share_dataset", dataset_uuid=dataset.uuid))
+
+        otp = generate_share_otp()
+        share.otp_hash = hash_share_otp(otp)
+        db.add(share)
+        logging.getLogger("audit").info(
+            "Dataset share OTP regenerated share_id=%s dataset_id=%s dataset_uuid=%s user_id=%s",
+            share.id,
+            dataset.id,
+            dataset.uuid,
+            current_user.id,
+        )
+
+        creator_email = (share.created_by.email or "").strip() if share.created_by else ""
+        main_admin_email = None
+        main_admin = db.query(User).filter(User.username == "main_admin").first()
+        if main_admin and main_admin.email:
+            main_admin_email = main_admin.email.strip()
+
+        email_failed = False
+        if creator_email:
+            cc_list = []
+            if main_admin_email and main_admin_email.lower() != creator_email.lower():
+                cc_list.append(main_admin_email)
+            otp_subject = f"Dataset share OTP: {dataset.name}"
+            otp_body = "\n".join(
+                [
+                    f"Dataset: {dataset.name}",
+                    f"Purpose: {dataset.purpose}",
+                    f"Created for: {share.created_for}",
+                    f"Expires at: {share.expires_at.isoformat() if share.expires_at else '—'}",
+                    "",
+                    f"OTP: {otp}",
+                    "",
+                    "Share this OTP separately with the recipient.",
+                ]
+            )
+            logo_cid, inline_images = build_inline_logo_image()
+            otp_html = build_dataset_share_email_html(
+                title="Dataset Share OTP",
+                dataset_name=dataset.name,
+                purpose=dataset.purpose,
+                created_for=share.created_for or "—",
+                expires_at=share.expires_at.isoformat() if share.expires_at else "—",
+                logo_cid=logo_cid,
+                otp=otp,
+            )
+            try:
+                send_email(
+                    creator_email,
+                    otp_subject,
+                    otp_body,
+                    sensitive=True,
+                    cc_emails=cc_list or None,
+                    html_body=otp_html,
+                    inline_images=inline_images,
+                )
+            except Exception as exc:
+                logging.getLogger("security").warning("Share OTP email failed: %s", exc)
+                email_failed = True
+        else:
+            email_failed = True
+
+    session["dataset_share_otp_display"] = {
+        "dataset_uuid": dataset.uuid,
+        "share_id": share.id,
+        "otp": otp,
+    }
+    session.modified = True
+    flash("OTP regenerated. Save it now; it will not be shown again.", "success")
+    if email_failed:
+        flash("OTP email failed to send. Please share the OTP manually.", "warning")
+    target_uuid = dataset_uuid or dataset.uuid
+    return redirect(url_for("datasets.share_dataset", dataset_uuid=target_uuid))
 
 
 def _list_export_files(job_token: str) -> List[str]:
@@ -391,14 +610,30 @@ def _build_verified_context(db, share: DatasetShare, token: str) -> dict:
         export_files = _list_export_files(latest_job.token)
         if export_files:
             export_job = latest_job
+    dataset = share.dataset
+    disease_name = None
+    if dataset and dataset.disease_id:
+        disease_name = db.query(Disease.name).filter(Disease.id == dataset.disease_id).scalar()
+    image_count = (
+        db.query(sa.func.count(CuratedDatasetItem.id))
+        .filter(
+            CuratedDatasetItem.dataset_id == share.dataset_id,
+            CuratedDatasetItem.include_in_export.is_(True),
+        )
+        .scalar()
+        or 0
+    )
     expires_seconds = int((share.expires_at - datetime.now(timezone.utc)).total_seconds())
     expiry_hours, expiry_minutes = format_expiry_delta(expires_seconds)
     return {
         "token": token,
-        "dataset_name": share.dataset.name,
+        "dataset_name": dataset.name,
         "purpose": share.purpose,
         "created_for": share.created_for,
         "expires_at": share.expires_at,
+        "share_created_at": share.created_at,
+        "disease_name": disease_name,
+        "image_count": image_count,
         "expiry_hours": expiry_hours,
         "expiry_minutes": expiry_minutes,
         "export_job": export_job,

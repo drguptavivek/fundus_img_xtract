@@ -7,10 +7,12 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from flask import current_app
 import logging
 from threading import Thread
 from typing import Callable, Iterable, Optional
+from pathlib import Path
 
 from utils.email_config import EmailConfigService, EmailConfigError
 from utils.log_sanitize import sanitize_log_value
@@ -67,6 +69,93 @@ def _get_email_loggers() -> tuple[logging.Logger, logging.Logger, logging.Logger
     )
 
 
+def build_dataset_share_email_html(
+    *,
+    title: str,
+    dataset_name: str,
+    purpose: str,
+    created_for: str,
+    expires_at: str,
+    logo_url: str | None = None,
+    logo_cid: str | None = None,
+    link: str | None = None,
+    otp: str | None = None,
+) -> str:
+    logo_html = ""
+    if logo_cid:
+        logo_html = (
+            f'<img src="cid:{logo_cid}" alt="Eye Image Manager" '
+            'style="height:36px;width:36px;display:block;margin-bottom:16px;">'
+        )
+    elif logo_url:
+        logo_html = (
+            f'<img src="{logo_url}" alt="Eye Image Manager" '
+            'style="height:36px;width:36px;display:block;margin-bottom:16px;">'
+        )
+    button_html = ""
+    if link:
+        button_html = (
+            f'<a href="{link}" '
+            'style="background:#0d6efd;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;display:inline-block;">'
+            "Open Download Link</a>"
+        )
+    link_row = ""
+    if link:
+        link_row = (
+            "<tr>"
+            "<td style='padding:6px 0;color:#6b7280;'>Download link</td>"
+            f"<td style='padding:6px 0;font-weight:600;'><a href='{link}'>{link}</a></td>"
+            "</tr>"
+        )
+    otp_html = ""
+    if otp:
+        otp_html = (
+            '<div style="font-family:Consolas,Menlo,Monaco,\'Liberation Mono\',\'Courier New\',monospace;'
+            'font-size:18px;letter-spacing:2px;background:#f8f9fa;padding:10px 12px;border-radius:6px;'
+            'display:inline-block;">'
+            f"{otp}</div>"
+        )
+
+    return (
+        '<div style="font-family:Arial,sans-serif;background:#f5f7fb;padding:24px;">'
+        '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:10px;padding:24px;">'
+        f"{logo_html}"
+        f'<h2 style="margin:0 0 12px 0;color:#1f2a37;">{title}</h2>'
+        '<table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;margin-bottom:16px;">'
+        f"<tr><td style='padding:6px 0;color:#6b7280;'>Dataset</td><td style='padding:6px 0;font-weight:600;'>{dataset_name}</td></tr>"
+        f"{link_row}"
+        f"<tr><td style='padding:6px 0;color:#6b7280;'>Purpose</td><td style='padding:6px 0;font-weight:600;'>{purpose}</td></tr>"
+        f"<tr><td style='padding:6px 0;color:#6b7280;'>Created for</td><td style='padding:6px 0;font-weight:600;'>{created_for}</td></tr>"
+        f"<tr><td style='padding:6px 0;color:#6b7280;'>Expires at</td><td style='padding:6px 0;font-weight:600;'>{expires_at}</td></tr>"
+        "</table>"
+        f"{button_html}"
+        f"{otp_html}"
+        '<p style="margin-top:16px;color:#6b7280;font-size:12px;">'
+        "If you did not expect this email, please ignore it.</p>"
+        '<p style="margin-top:8px;color:#9ca3af;font-size:12px;">'
+        "Eye Image Manager, AIIMS, New Delhi</p>"
+        "</div></div>"
+    )
+
+
+def build_inline_logo_image() -> tuple[str | None, list[dict] | None]:
+    """Return a CID and inline image list for the retina logo."""
+    if not current_app:
+        return None, None
+    logo_path = Path(current_app.root_path) / "static" / "retina_logo_180.png"
+    if not logo_path.exists():
+        return None, None
+    cid = f"logo-{secrets.token_hex(8)}"
+    return cid, [
+        {
+            "content": logo_path.read_bytes(),
+            "cid": cid,
+            "mimetype": "image/png",
+            "filename": "retina_logo_180.png",
+        }
+    ]
+
+
 def _build_tls_context() -> ssl.SSLContext:
     context = ssl.create_default_context()
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -87,6 +176,8 @@ def send_email_sync(
     body: str,
     *,
     cc_emails: Optional[Iterable[str]] = None,
+    html_body: Optional[str] = None,
+    inline_images: Optional[Iterable[dict]] = None,
     sensitive: bool = False,
 ) -> bool:
     """
@@ -129,15 +220,42 @@ def send_email_sync(
                 use_ssl,
             )
 
-        msg = MIMEMultipart()
+        use_related = bool(html_body or inline_images)
+        msg = MIMEMultipart("related") if use_related else MIMEMultipart()
         msg['From'] = from_email
         msg['To'] = to_email
         if cc_list:
             msg['Cc'] = ", ".join(cc_list)
         msg['Subject'] = subject
 
-        # Add body to email
-        msg.attach(MIMEText(body, 'plain'))
+        # Add body to email (alternative for HTML)
+        if use_related:
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(body, "plain"))
+            if html_body:
+                alt.attach(MIMEText(html_body, "html"))
+            msg.attach(alt)
+        else:
+            msg.attach(MIMEText(body, "plain"))
+
+        # Attach inline images
+        if inline_images:
+            for image in inline_images:
+                content = image.get("content")
+                cid = image.get("cid")
+                mimetype = (image.get("mimetype") or "image/png").lower()
+                filename = image.get("filename") or "image"
+                if not (content and cid):
+                    continue
+                if mimetype.endswith("png"):
+                    mime_image = MIMEImage(content, _subtype="png")
+                elif mimetype.endswith("jpeg") or mimetype.endswith("jpg"):
+                    mime_image = MIMEImage(content, _subtype="jpeg")
+                else:
+                    mime_image = MIMEImage(content)
+                mime_image.add_header("Content-ID", f"<{cid}>")
+                mime_image.add_header("Content-Disposition", "inline", filename=filename)
+                msg.attach(mime_image)
 
         # Extract headers for logging
         headers = dict(msg.items())
@@ -151,8 +269,6 @@ def send_email_sync(
             smtp_class = smtplib.SMTP
             server_kwargs = {"timeout": connection_timeout}
             context = _build_tls_context()
-            if use_tls:
-                server_kwargs["context"] = context
 
         # Send the email
         with smtp_class(smtp_server, smtp_port, **server_kwargs) as server:
@@ -228,6 +344,8 @@ def send_email(
         callback: Optional[Callable[[bool], None]] = None,
         sensitive: bool = False,
         cc_emails: Optional[Iterable[str]] = None,
+        html_body: Optional[str] = None,
+        inline_images: Optional[Iterable[dict]] = None,
         ) -> Thread:
     """
     Asynchronously send an email to the specified recipient.
@@ -254,6 +372,8 @@ def send_email(
                 subject,
                 body,
                 cc_emails=cc_emails,
+                html_body=html_body,
+                inline_images=inline_images,
                 sensitive=sensitive,
             )
 

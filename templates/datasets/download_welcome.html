@@ -8,7 +8,10 @@
       <div class="card shadow-sm">
         <div class="card-body">
           {% if not verified %}
-            <h4 class="mb-3">Dataset Download</h4>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h4 class="mb-0">Dataset Download</h4>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('auth.login') }}">Close</a>
+            </div>
             <p class="text-muted small mb-4">
               Enter the dataset name and OTP to continue.
             </p>
@@ -25,17 +28,28 @@
               <button type="submit" class="btn btn-primary">Verify</button>
             </form>
           {% else %}
-            <h4 class="mb-2">Credentials verified</h4>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h4 class="mb-0">Credentials verified</h4>
+              <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('auth.login') }}">Close</a>
+            </div>
             <p class="text-muted small mb-3">
               Access expires in {{ expiry_hours }}h {{ expiry_minutes }}m.
             </p>
             <div class="mb-3">
               <div class="small text-muted">Dataset</div>
               <div class="fw-semibold">{{ dataset_name }}</div>
+              <div class="small text-muted mt-2">Download link</div>
+              <div class="fw-semibold">{{ url_for('datasets.download_welcome', token=token, _external=True) }}</div>
+              <div class="small text-muted mt-2">Disease</div>
+              <div class="fw-semibold">{{ disease_name or '—' }}</div>
+              <div class="small text-muted mt-2">Images</div>
+              <div class="fw-semibold">{{ image_count }}</div>
               <div class="small text-muted mt-2">Purpose</div>
               <div class="fw-semibold">{{ purpose }}</div>
               <div class="small text-muted mt-2">Created For</div>
               <div class="fw-semibold">{{ created_for }}</div>
+              <div class="small text-muted mt-2">Share created</div>
+              <div class="fw-semibold">{{ share_created_at | user_datetime }}</div>
             </div>
 
             {% if error_message %}
@@ -58,6 +72,10 @@
               {% if latest_job %}
                 <div class="alert alert-info">
                   Export status: {{ latest_job.status }}. Refresh this page after a few minutes.
+                </div>
+              {% else %}
+                <div class="alert alert-info">
+                  No export is ready yet. Click Generate Export to continue. Exports are available for 20 hours.
                 </div>
               {% endif %}
               <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">

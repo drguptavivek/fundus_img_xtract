@@ -32,7 +32,7 @@ from models import (
 from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping
 from utils.dataset_share import generate_share_otp, generate_share_token, hash_share_otp, hash_share_token
-from utils.emails import send_email
+from utils.emails import build_dataset_share_email_html, build_inline_logo_image, send_email
 from . import bp
 from review.discrepancy_export import (
     ExportTaskRow,
@@ -592,6 +592,9 @@ def dataset_export(dataset_uuid: str):
 def dataset_share_create(dataset_uuid: str):
     """Create or regenerate a dataset share token + OTP."""
     logger = logging.getLogger("audit")
+    share_display_data = None
+    link_email_failed = False
+    otp_email_failed = False
     with get_db_session() as db:
         dataset = (
             db.query(CuratedDataset)
@@ -631,10 +634,6 @@ def dataset_share_create(dataset_uuid: str):
         otp_hash = hash_share_otp(otp)
         expires_at = datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
 
-        db.query(DatasetShare).filter(DatasetShare.dataset_id == dataset.id).update(
-            {DatasetShare.is_active: False},
-            synchronize_session=False,
-        )
         share = DatasetShare(
             dataset_id=dataset.id,
             token_hash=token_hash,
@@ -649,13 +648,12 @@ def dataset_share_create(dataset_uuid: str):
         db.add(share)
         db.flush()
 
-        session["dataset_share_display"] = {
+        share_display_data = {
             "dataset_uuid": dataset.uuid,
             "token": token,
             "otp": otp,
             "expires_at": expires_at.isoformat(),
         }
-        session.modified = True
         logger.info(
             "Dataset share created dataset_id=%s dataset_uuid=%s user_id=%s expires_at=%s",
             dataset.id,
@@ -686,7 +684,29 @@ def dataset_share_create(dataset_uuid: str):
                     "OTP will be shared separately by the dataset creator.",
                 ]
             )
-            send_email(recipient_email, subject, body, sensitive=True, cc_emails=cc_list or None)
+            logo_cid, inline_images = build_inline_logo_image()
+            html_body = build_dataset_share_email_html(
+                title="Dataset Download Link",
+                dataset_name=dataset.name,
+                purpose=dataset.purpose,
+                created_for=created_for,
+                expires_at=expires_at.isoformat(),
+                logo_cid=logo_cid,
+                link=link,
+            )
+            try:
+                send_email(
+                    recipient_email,
+                    subject,
+                    body,
+                    sensitive=True,
+                    cc_emails=cc_list or None,
+                    html_body=html_body,
+                    inline_images=inline_images,
+                )
+            except Exception as exc:
+                logger.warning("Share link email failed: %s", exc)
+                link_email_failed = True
         creator_email = (current_user.email or "").strip()
         if creator_email:
             cc_list = []
@@ -705,9 +725,38 @@ def dataset_share_create(dataset_uuid: str):
                     "Share this OTP separately with the recipient.",
                 ]
             )
-            send_email(creator_email, otp_subject, otp_body, sensitive=True, cc_emails=cc_list or None)
+            logo_cid, inline_images = build_inline_logo_image()
+            otp_html = build_dataset_share_email_html(
+                title="Dataset Share OTP",
+                dataset_name=dataset.name,
+                purpose=dataset.purpose,
+                created_for=created_for,
+                expires_at=expires_at.isoformat(),
+                logo_cid=logo_cid,
+                otp=otp,
+            )
+            try:
+                send_email(
+                    creator_email,
+                    otp_subject,
+                    otp_body,
+                    sensitive=True,
+                    cc_emails=cc_list or None,
+                    html_body=otp_html,
+                    inline_images=inline_images,
+                )
+            except Exception as exc:
+                logger.warning("Share OTP email failed: %s", exc)
+                otp_email_failed = True
+    if share_display_data:
+        session["dataset_share_display"] = share_display_data
+        session.modified = True
         flash("Share link created. Save the OTP now; it will not be shown again.", "success")
-        return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+        if link_email_failed:
+            flash("Link email failed to send. Please share the link manually.", "warning")
+        if otp_email_failed:
+            flash("OTP email failed to send. Please share the OTP manually.", "warning")
+    return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
 
 @bp.route("/dataset-curation/<dataset_uuid>/finalize", methods=["POST"])

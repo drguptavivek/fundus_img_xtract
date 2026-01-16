@@ -387,6 +387,12 @@
                   Curated Datasets
                 </a>
               </li>
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'datasets.list_datasets' else '' }}"
+                  href="{{ url_for('datasets.list_datasets') }}">
+                  Curated Datasets (List)
+                </a>
+              </li>
             </ul>
           </li>
           {% endif %}

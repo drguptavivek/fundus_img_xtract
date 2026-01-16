@@ -23,6 +23,7 @@ from utils.timezone_choices import (
     TIMEZONE_LABELS,
     DEFAULT_TIMEZONE,
 )
+from app_cache import cache
 
 
 def users_list():
@@ -344,6 +345,8 @@ def edit_user(user_id: int):
                         user.roles.append(r)
 
                 db.add(user)
+                cache_key = f"auth:user:{user.id}"
+                cache.delete(cache_key)
                 flash("Roles updated.", "success")
                 return redirect(url_for("admin.edit_user", user_id=user_id))
 

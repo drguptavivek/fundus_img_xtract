@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Datasets{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="mb-0">Datasets</h3>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analytics.dataset_curation') }}">Back to Curation</a>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <h5 class="card-title mb-0">All Datasets</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Purpose</th>
+              <th>Status</th>
+              <th>Selected</th>
+              <th>Skipped</th>
+              <th>Filters</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summaries %}
+            {% set ds = row.dataset %}
+            <tr>
+              <td>{{ ds.name }}</td>
+              <td class="text-muted">{{ ds.purpose }}</td>
+              <td>
+                {% if ds.is_finalized %}
+                  <span class="badge text-bg-success">Finalized</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Draft</span>
+                {% endif %}
+              </td>
+              <td>{{ row.counts.include }}</td>
+              <td>{{ row.counts.exclude }}</td>
+              <td class="text-muted small">{{ row.filters_summary }}</td>
+              <td>{{ ds.created_at | user_datetime }}</td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=ds.uuid) }}">
+                  {{ "View" if ds.is_finalized else "Screen" }}
+                </a>
+                {% if can_share and ds.is_finalized %}
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('datasets.share_dataset', dataset_uuid=ds.uuid) }}">
+                  Share
+                </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-3">No datasets available.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

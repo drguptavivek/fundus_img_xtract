@@ -340,6 +340,7 @@
               <th>Skipped</th>
               <th>Created By</th>
               <th>Created At</th>
+              <th>Status</th>
               <th></th>
             </tr>
           </thead>
@@ -353,13 +354,22 @@
               <td>{{ stats.include }}</td>
               <td>{{ stats.exclude }}</td>
               <td>{{ ds.created_by.full_name or ds.created_by.username if ds.created_by else "—" }}</td>
-              <td>{{ ds.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>{{ ds.created_at | user_datetime }}</td>
+              <td>
+                {% if ds.is_finalized %}
+                  <span class="badge text-bg-success">Finalized</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">Draft</span>
+                {% endif %}
+              </td>
               <td class="text-end">
-                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=ds.uuid) }}">Screen</a>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=ds.uuid) }}">
+                  {{ "View" if ds.is_finalized else "Screen" }}
+                </a>
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="text-center py-3 text-muted">No datasets yet.</td></tr>
+            <tr><td colspan="9" class="text-center py-3 text-muted">No datasets yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>

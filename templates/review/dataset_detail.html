@@ -1,5 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Dataset {{ dataset.name }}{% endblock %}
+{% block extra_styles %}
+<style>
+  .otp-code {
+    font-family: "Consolas", "Menlo", "Monaco", "Liberation Mono", "Courier New", monospace;
+    font-variant-numeric: slashed-zero;
+    font-feature-settings: "zero" 1;
+    letter-spacing: 0.08em;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
@@ -10,13 +20,22 @@
     </div>
     <div class="d-flex gap-2">
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('analytics.dataset_curation') }}">Back</a>
+      {% if can_finalize %}
+      <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#finalizeDatasetModal">
+        Finalize
+      </button>
+      {% elif can_unfinalize %}
+      <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#unfinalizeDatasetModal">
+        Unfinalize
+      </button>
+      {% endif %}
       <button type="button"
               class="btn btn-outline-danger btn-sm"
               data-bs-toggle="modal"
               data-bs-target="#deleteDatasetModal">
         Delete Dataset
       </button>
-      {% if include_count > 0 %}
+      {% if include_count > 0 and dataset.is_finalized %}
       <form method="POST" action="{{ url_for('analytics.dataset_export', dataset_uuid=dataset.uuid) }}">
         {{ csrf_field() }}
         <button type="submit" class="btn btn-primary btn-sm">Export ({{ include_count }})</button>
@@ -58,7 +77,15 @@
       <div class="card shadow-sm h-100">
         <div class="card-body">
           <div class="small text-muted">Created</div>
-          <div class="fw-semibold">{{ dataset.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          <div class="fw-semibold">{{ dataset.created_at | user_datetime }}</div>
+          <div class="small text-muted mt-2">Status</div>
+          <div class="fw-semibold">
+            {% if dataset.is_finalized %}
+              Finalized{% if dataset.finalized_at %} ({{ dataset.finalized_at | user_datetime }}){% endif %}
+            {% else %}
+              Draft
+            {% endif %}
+          </div>
           <div class="small text-muted mt-2">Matches current filters</div>
           <div class="fw-semibold">{{ total_matching }}</div>
         </div>
@@ -126,6 +153,59 @@
     </div>
   </div>
 
+  {% if can_share %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Share Dataset Download</h5>
+    </div>
+    <div class="card-body">
+      {% if not dataset.is_finalized %}
+      <div class="alert alert-warning small mb-3">Finalize the dataset before sharing.</div>
+      {% endif %}
+      <p class="text-muted small mb-3">
+        Create a magic link + OTP for external access. The OTP is shown once; save it securely.
+      </p>
+      {% if share_display %}
+      <div class="alert alert-warning">
+        <div class="fw-semibold mb-1">Share link created</div>
+        <div class="small">Link: <span class="fw-semibold">{{ url_for('datasets.download_welcome', token=share_display.token, _external=True) }}</span></div>
+        <div class="small">OTP: <span class="fw-semibold otp-code">{{ share_display.otp }}</span></div>
+        <div class="small">Expires at: {{ share_display.expires_at }}</div>
+      </div>
+      {% endif %}
+      <form method="POST" action="{{ url_for('analytics.dataset_share_create', dataset_uuid=dataset.uuid) }}">
+        {{ csrf_field() }}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label small text-muted" for="share_purpose">Purpose</label>
+            <input class="form-control form-control-sm" id="share_purpose" name="share_purpose" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-muted" for="share_created_for">Created For</label>
+            <input class="form-control form-control-sm" id="share_created_for" name="share_created_for" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-muted" for="share_recipient_email">Recipient Email</label>
+            <input class="form-control form-control-sm" id="share_recipient_email" name="share_recipient_email" type="email">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small text-muted" for="share_expiry_hours">Expiry (hours)</label>
+            <input class="form-control form-control-sm" id="share_expiry_hours" name="share_expiry_hours" type="number" min="1" max="168" value="24" required>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-outline-primary btn-sm" {% if not dataset.is_finalized %}disabled{% endif %}>
+            Generate Link + OTP
+          </button>
+        </div>
+      </form>
+      <div class="mt-3 small text-muted">
+        Current share downloads: <span class="fw-semibold">{{ active_share.download_count if active_share else 0 }}</span>
+        &nbsp;|&nbsp; Total downloads (all shares): <span class="fw-semibold">{{ total_downloads }}</span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="card shadow-sm">
     <div class="card-header d-flex align-items-center justify-content-between">
@@ -133,7 +213,9 @@
       <small class="text-muted">Decide include / exclude then move to the next image.</small>
     </div>
     <div class="card-body">
-      {% if next_row %}
+      {% if dataset.is_finalized %}
+        <div class="alert alert-info mb-0">Dataset is finalized. Manual screening is locked.</div>
+      {% elif next_row %}
         <div class="row g-3">
           <div class="col-lg-7">
             {% set image = next_image %}
@@ -289,6 +371,52 @@
       </div>
     </div>
   </div>
+
+  {% if can_finalize %}
+  <div class="modal fade" id="finalizeDatasetModal" tabindex="-1" aria-labelledby="finalizeDatasetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="finalizeDatasetModalLabel">Finalize Dataset</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Finalizing locks selections. Exports and shares will use this fixed set.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <form method="POST" action="{{ url_for('analytics.dataset_finalize', dataset_uuid=dataset.uuid) }}">
+            {{ csrf_field() }}
+            <button type="submit" class="btn btn-primary btn-sm">Finalize</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if can_unfinalize %}
+  <div class="modal fade" id="unfinalizeDatasetModal" tabindex="-1" aria-labelledby="unfinalizeDatasetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="unfinalizeDatasetModalLabel">Unfinalize Dataset</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Unfinalizing re-opens manual screening and changes selections for future exports.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <form method="POST" action="{{ url_for('analytics.dataset_unfinalize', dataset_uuid=dataset.uuid) }}">
+            {{ csrf_field() }}
+            <button type="submit" class="btn btn-warning btn-sm">Unfinalize</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Delete Confirmation Modal -->
   <div class="modal fade" id="deleteDatasetModal" tabindex="-1" aria-labelledby="deleteDatasetModalLabel" aria-hidden="true">

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Dataset Download{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          {% if not verified %}
+            <h4 class="mb-3">Dataset Download</h4>
+            <p class="text-muted small mb-4">
+              Enter the dataset name and OTP to continue.
+            </p>
+            <form method="POST" action="{{ url_for('datasets.download_verify', token=token) }}">
+              {{ csrf_field() }}
+              <div class="mb-3">
+                <label class="form-label small text-muted" for="dataset_name">Dataset Name</label>
+                <input class="form-control" id="dataset_name" name="dataset_name" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label small text-muted" for="otp">OTP</label>
+                <input class="form-control" id="otp" name="otp" required>
+              </div>
+              <button type="submit" class="btn btn-primary">Verify</button>
+            </form>
+          {% else %}
+            <h4 class="mb-2">Credentials verified</h4>
+            <p class="text-muted small mb-3">
+              Access expires in {{ expiry_hours }}h {{ expiry_minutes }}m.
+            </p>
+            <div class="mb-3">
+              <div class="small text-muted">Dataset</div>
+              <div class="fw-semibold">{{ dataset_name }}</div>
+              <div class="small text-muted mt-2">Purpose</div>
+              <div class="fw-semibold">{{ purpose }}</div>
+              <div class="small text-muted mt-2">Created For</div>
+              <div class="fw-semibold">{{ created_for }}</div>
+            </div>
+
+            {% if error_message %}
+            <div class="alert alert-danger">{{ error_message }}</div>
+            {% endif %}
+
+            {% if export_files %}
+              <div class="alert alert-success">
+                Export is ready. Download below.
+              </div>
+              <ul class="list-group mb-3">
+                {% for file in export_files %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>{{ file }}</span>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('datasets.download_file', token=token, job_token=export_job.token, filename=file) }}">Download</a>
+                </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              {% if latest_job %}
+                <div class="alert alert-info">
+                  Export status: {{ latest_job.status }}. Refresh this page after a few minutes.
+                </div>
+              {% endif %}
+              <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">
+                {{ csrf_field() }}
+                <button type="submit" class="btn btn-outline-primary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
+                  Generate Export
+                </button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

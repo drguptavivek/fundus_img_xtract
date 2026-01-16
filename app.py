@@ -505,6 +505,7 @@ def _register_blueprints(app: Flask) -> None:
     from dashboard import dashboard_bp
     from api import api_bp
     from docs import docs_bp
+    from datasets import bp as datasets_bp
 
     app.register_blueprint(jobs_bp)
     app.register_blueprint(uploaded_zips_bp)
@@ -533,6 +534,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(docs_bp)
+    app.register_blueprint(datasets_bp)
 
 
 def _register_auth(app: Flask) -> None:
@@ -580,6 +582,7 @@ def _register_login_guard(app: Flask) -> None:
             or path == "/analytics"
             or path == "/sitemap.xml"
             or path.startswith("/api/analytics/")
+            or path.startswith("/datasets/download")
         ):
             return
         if not current_user.is_authenticated:

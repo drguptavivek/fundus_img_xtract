@@ -1,31 +1,38 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import sqlalchemy as sa
-from flask import abort, flash, redirect, render_template, request, url_for, send_file, current_app
+from flask import abort, flash, redirect, render_template, request, session, url_for, send_file, current_app
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
+from auth.security import validate_email
 from job_store import db_create_job
 from models import (
     AIModel,
     CuratedDataset,
     CuratedDatasetItem,
+    DatasetExport,
+    DatasetShare,
     Disease,
     DiseaseGrading,
     EncounterFile,
     LabUnit,
     Session,
     DirectImageUpload,
+    User,
     Job,
 )
 from db_transaction_manager import get_db_session
 from utils.hospital_scoping import apply_scoping
+from utils.dataset_share import generate_share_otp, generate_share_token, hash_share_otp, hash_share_token
+from utils.emails import send_email
 from . import bp
 from review.discrepancy_export import (
     ExportTaskRow,
@@ -339,6 +346,14 @@ def dataset_detail(dataset_uuid: str):
             flash("Dataset is missing a disease filter; cannot proceed.", "error")
             return redirect(url_for("analytics.dataset_curation"))
 
+        db_user = (
+            db.query(User)
+            .options(joinedload(User.roles))
+            .filter(User.id == current_user.id)
+            .first()
+        )
+        user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
+
         # Track decisions
         items = (
             db.query(CuratedDatasetItem)
@@ -374,6 +389,9 @@ def dataset_detail(dataset_uuid: str):
         ]
 
         if request.method == "POST":
+            if dataset.is_finalized:
+                flash("Dataset is finalized and cannot be edited.", "warning")
+                return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
             task_id = request.form.get("task_id", type=int)
             decision = request.form.get("decision")
             if task_id and decision in ("include", "exclude"):
@@ -405,7 +423,7 @@ def dataset_detail(dataset_uuid: str):
                 flash("Decision saved.", "success")
                 return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
-        next_row = _get_next_pending_row(filters, decided_task_ids)
+        next_row = None if dataset.is_finalized else _get_next_pending_row(filters, decided_task_ids)
         next_image = None
         next_grades: Dict[str, Any] = {}
         next_meta: Dict[str, Any] = {}
@@ -440,6 +458,30 @@ def dataset_detail(dataset_uuid: str):
 
         include_count = sum(1 for i in items if i.include_in_export)
         exclude_count = sum(1 for i in items if not i.include_in_export)
+        active_share = (
+            db.query(DatasetShare)
+            .filter(DatasetShare.dataset_id == dataset.id, DatasetShare.is_active.is_(True))
+            .order_by(DatasetShare.created_at.desc())
+            .first()
+        )
+        total_downloads = (
+            db.query(sa.func.coalesce(sa.func.sum(DatasetShare.download_count), 0))
+            .filter(DatasetShare.dataset_id == dataset.id)
+            .scalar()
+        )
+        total_downloads = int(total_downloads or 0)
+        now = datetime.now(timezone.utc)
+        can_finalize = ("dataset_creator" in user_roles or "admin" in user_roles or current_user.is_master_admin) and not dataset.is_finalized
+        can_unfinalize = False
+        if dataset.is_finalized and dataset.finalized_at:
+            within_window = (now - dataset.finalized_at) <= timedelta(minutes=30)
+            is_creator = dataset.finalized_by_user_id == current_user.id
+            is_admin = "admin" in user_roles or current_user.is_master_admin
+            can_unfinalize = (within_window and is_creator) or is_admin
+
+        share_display = session.pop("dataset_share_display", None)
+        if share_display and share_display.get("dataset_uuid") != dataset.uuid:
+            share_display = None
 
         return render_template(
             "review/dataset_detail.html",
@@ -455,6 +497,12 @@ def dataset_detail(dataset_uuid: str):
             filters_display=filters,
             included_rows=included_display,
             excluded_rows=excluded_display,
+            can_share="dataset_creator" in user_roles,
+            share_display=share_display,
+            active_share=active_share,
+            total_downloads=total_downloads,
+            can_finalize=can_finalize,
+            can_unfinalize=can_unfinalize,
         )
 
 
@@ -471,6 +519,9 @@ def dataset_export(dataset_uuid: str):
         )
         if not dataset:
             abort(404)
+        if not dataset.is_finalized:
+            flash("Finalize the dataset before exporting.", "warning")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
         # Get allowed lab units via scoped query
         lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, 'dataset_creation')
@@ -512,6 +563,16 @@ def dataset_export(dataset_uuid: str):
             uploader_ip=ip,
             upload_type="dataset_export",
         )
+        job = db.query(Job).filter(Job.token == job_token).first()
+        if job:
+            db.add(
+                DatasetExport(
+                    dataset_id=dataset.id,
+                    job_id=job.id,
+                    created_by_user_id=uploader_user_id,
+                )
+            )
+            db.flush()
 
         metadata = {
             "dataset_name": dataset.name,
@@ -524,6 +585,215 @@ def dataset_export(dataset_uuid: str):
         enqueue_dataset_export(current_app._get_current_object(), job_token, dataset.id, task_ids, metadata)
         flash("Dataset export queued.", "info")
         return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/share", methods=["POST"])
+@roles_required("dataset_creator")
+def dataset_share_create(dataset_uuid: str):
+    """Create or regenerate a dataset share token + OTP."""
+    logger = logging.getLogger("audit")
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+        if not dataset.is_finalized:
+            flash("Finalize the dataset before sharing.", "warning")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have permission to share this dataset.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        purpose = (request.form.get("share_purpose") or "").strip()
+        created_for = (request.form.get("share_created_for") or "").strip()
+        recipient_email = (request.form.get("share_recipient_email") or "").strip()
+        expiry_hours = request.form.get("share_expiry_hours", type=int) or 24
+        expiry_hours = max(1, min(168, expiry_hours))
+
+        if not purpose or not created_for:
+            flash("Purpose and created-for are required.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+        if recipient_email and not validate_email(recipient_email):
+            flash("Recipient email is invalid.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        token = generate_share_token()
+        otp = generate_share_otp()
+        token_hash = hash_share_token(token)
+        otp_hash = hash_share_otp(otp)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
+
+        db.query(DatasetShare).filter(DatasetShare.dataset_id == dataset.id).update(
+            {DatasetShare.is_active: False},
+            synchronize_session=False,
+        )
+        share = DatasetShare(
+            dataset_id=dataset.id,
+            token_hash=token_hash,
+            otp_hash=otp_hash,
+            purpose=purpose,
+            created_for=created_for,
+            recipient_email=recipient_email or None,
+            expires_at=expires_at,
+            created_by_user_id=current_user.id,
+            is_active=True,
+        )
+        db.add(share)
+        db.flush()
+
+        session["dataset_share_display"] = {
+            "dataset_uuid": dataset.uuid,
+            "token": token,
+            "otp": otp,
+            "expires_at": expires_at.isoformat(),
+        }
+        session.modified = True
+        logger.info(
+            "Dataset share created dataset_id=%s dataset_uuid=%s user_id=%s expires_at=%s",
+            dataset.id,
+            dataset.uuid,
+            current_user.id,
+            expires_at.isoformat(),
+        )
+        main_admin_email = None
+        main_admin = db.query(User).filter(User.username == "main_admin").first()
+        if main_admin and main_admin.email:
+            main_admin_email = main_admin.email.strip()
+        if recipient_email:
+            cc_list = []
+            if main_admin_email and main_admin_email.lower() != recipient_email.lower():
+                cc_list.append(main_admin_email)
+            link = url_for("datasets.download_welcome", token=token, _external=True)
+            subject = f"Dataset download link: {dataset.name}"
+            body = "\n".join(
+                [
+                    f"Dataset: {dataset.name}",
+                    f"Purpose: {dataset.purpose}",
+                    f"Created for: {created_for}",
+                    f"Expires at: {expires_at.isoformat()}",
+                    "",
+                    "Download link:",
+                    link,
+                    "",
+                    "OTP will be shared separately by the dataset creator.",
+                ]
+            )
+            send_email(recipient_email, subject, body, sensitive=True, cc_emails=cc_list or None)
+        creator_email = (current_user.email or "").strip()
+        if creator_email:
+            cc_list = []
+            if main_admin_email and main_admin_email.lower() != creator_email.lower():
+                cc_list.append(main_admin_email)
+            otp_subject = f"Dataset share OTP: {dataset.name}"
+            otp_body = "\n".join(
+                [
+                    f"Dataset: {dataset.name}",
+                    f"Purpose: {dataset.purpose}",
+                    f"Created for: {created_for}",
+                    f"Expires at: {expires_at.isoformat()}",
+                    "",
+                    f"OTP: {otp}",
+                    "",
+                    "Share this OTP separately with the recipient.",
+                ]
+            )
+            send_email(creator_email, otp_subject, otp_body, sensitive=True, cc_emails=cc_list or None)
+        flash("Share link created. Save the OTP now; it will not be shown again.", "success")
+        return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/finalize", methods=["POST"])
+@roles_required("dataset_creator", "admin")
+def dataset_finalize(dataset_uuid: str):
+    """Finalize a dataset to lock selections."""
+    logger = logging.getLogger("audit")
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+        if dataset.is_finalized:
+            flash("Dataset is already finalized.", "info")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have permission to finalize this dataset.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        dataset.is_finalized = True
+        dataset.finalized_at = datetime.now(timezone.utc)
+        dataset.finalized_by_user_id = current_user.id
+        db.add(dataset)
+        logger.info(
+            "Dataset finalized dataset_id=%s dataset_uuid=%s user_id=%s",
+            dataset.id,
+            dataset.uuid,
+            current_user.id,
+        )
+        flash("Dataset finalized.", "success")
+        return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/unfinalize", methods=["POST"])
+@roles_required("dataset_creator", "admin")
+def dataset_unfinalize(dataset_uuid: str):
+    """Unfinalize a dataset within a limited window or as admin."""
+    logger = logging.getLogger("audit")
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+        if not dataset.is_finalized:
+            flash("Dataset is not finalized.", "info")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have permission to unfinalize this dataset.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        now = datetime.now(timezone.utc)
+        within_window = bool(dataset.finalized_at and (now - dataset.finalized_at) <= timedelta(minutes=30))
+        is_creator = dataset.finalized_by_user_id == current_user.id
+        is_admin = current_user.has_role("admin") or current_user.is_master_admin
+        if not ((within_window and is_creator) or is_admin):
+            flash("Unfinalize window expired. Contact an admin.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        dataset.is_finalized = False
+        dataset.finalized_at = None
+        dataset.finalized_by_user_id = None
+        db.add(dataset)
+        logger.info(
+            "Dataset unfinalized dataset_id=%s dataset_uuid=%s user_id=%s",
+            dataset.id,
+            dataset.uuid,
+            current_user.id,
+        )
+        flash("Dataset unfinalized. You can edit selections again.", "warning")
+        return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
 
 

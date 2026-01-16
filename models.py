@@ -671,11 +671,15 @@ class CuratedDataset(Base):
     disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
     created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finalized_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[disease_id], lazy="selectin")
     created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id], lazy="selectin")
+    finalized_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[finalized_by_user_id], lazy="selectin")
     items: Mapped[List["CuratedDatasetItem"]] = relationship(
         "CuratedDatasetItem",
         back_populates="dataset",
@@ -706,6 +710,70 @@ class CuratedDatasetItem(Base):
     __table_args__ = (
         UniqueConstraint("dataset_id", "task_id", name="uq_curated_dataset_items_dataset_task"),
         CheckConstraint("selection_method IN ('auto','manual')", name="ck_curated_dataset_items_method"),
+    )
+
+
+class DatasetExport(Base):
+    """Link dataset exports to their job records."""
+
+    __tablename__ = "dataset_exports"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(
+        ForeignKey("curated_datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    dataset: Mapped["CuratedDataset"] = relationship("CuratedDataset", lazy="selectin")
+    job: Mapped["Job"] = relationship("Job", lazy="selectin")
+    created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id], lazy="selectin")
+
+
+class DatasetShare(Base):
+    """Share token metadata for curated datasets."""
+
+    __tablename__ = "dataset_shares"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dataset_id: Mapped[int] = mapped_column(
+        ForeignKey("curated_datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    otp_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    purpose: Mapped[str] = mapped_column(Text, nullable=False)
+    created_for: Mapped[str] = mapped_column(Text, nullable=False)
+    recipient_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_by_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    dataset: Mapped["CuratedDataset"] = relationship("CuratedDataset", lazy="selectin")
+    created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id], lazy="selectin")
+
+    __table_args__ = (
+        Index("ix_dataset_shares_dataset_active", "dataset_id", "is_active"),
     )
 
 

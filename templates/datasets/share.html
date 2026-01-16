@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Dataset Shares{% endblock %}
+{% block extra_styles %}
+<style>
+  .otp-code {
+    font-family: "Consolas", "Menlo", "Monaco", "Liberation Mono", "Courier New", monospace;
+    font-variant-numeric: slashed-zero;
+    font-feature-settings: "zero" 1;
+    letter-spacing: 0.08em;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h3 class="mb-0">Dataset Shares</h3>
+      <div class="text-muted small">{{ dataset.name }} • {{ dataset.purpose }}</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('datasets.list_datasets') }}">Back to list</a>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}">View dataset</a>
+      {% if can_share %}
+      <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#createShareModal" {% if not dataset.is_finalized %}disabled{% endif %}>
+        New Share
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not dataset.is_finalized %}
+  <div class="alert alert-warning small">Finalize the dataset before creating shares.</div>
+  {% endif %}
+
+  {% if share_display %}
+  <div class="alert alert-warning">
+    <div class="fw-semibold mb-1">Share link created</div>
+    <div class="small">Link: <span class="fw-semibold">{{ url_for('datasets.download_welcome', token=share_display.token, _external=True) }}</span></div>
+    <div class="small">OTP: <span class="fw-semibold otp-code">{{ share_display.otp }}</span></div>
+    <div class="small">Expires at: {{ share_display.expires_at }}</div>
+  </div>
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <h5 class="card-title mb-0">Shares</h5>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Status</th>
+              <th>Purpose</th>
+              <th>Created For</th>
+              <th>Recipient Email</th>
+              <th>Created By</th>
+              <th>Created</th>
+              <th>Expires</th>
+              <th>Downloads</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in share_rows %}
+            {% set share = row.share %}
+            <tr>
+              <td>
+                {% if row.status == 'active' %}
+                  <span class="badge text-bg-success">Active</span>
+                {% elif row.status == 'expired' %}
+                  <span class="badge text-bg-secondary">Expired</span>
+                {% else %}
+                  <span class="badge text-bg-light">Inactive</span>
+                {% endif %}
+              </td>
+              <td>{{ share.purpose }}</td>
+              <td>{{ share.created_for }}</td>
+              <td>{{ share.recipient_email or '—' }}</td>
+              <td>{{ share.created_by.full_name or share.created_by.username if share.created_by else '—' }}</td>
+              <td>{{ share.created_at | user_datetime }}</td>
+              <td>{{ share.expires_at | user_datetime }}</td>
+              <td>{{ share.download_count or 0 }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-3">No shares created yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if can_share %}
+<div class="modal fade" id="createShareModal" tabindex="-1" aria-labelledby="createShareModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="createShareModalLabel">Create Share</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('datasets.share_dataset', dataset_uuid=dataset.uuid) }}">
+        {{ csrf_field() }}
+        <div class="modal-body">
+          <input type="hidden" name="dataset_uuid" value="{{ dataset.uuid }}">
+          <div class="mb-3">
+            <label class="form-label small text-muted" for="share_purpose">Purpose</label>
+            <input class="form-control" id="share_purpose" name="share_purpose" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted" for="share_created_for">Created For</label>
+            <input class="form-control" id="share_created_for" name="share_created_for" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted" for="share_recipient_email">Recipient Email</label>
+            <input class="form-control" id="share_recipient_email" name="share_recipient_email" type="email">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted" for="share_expiry_hours">Expiry (hours)</label>
+            <input class="form-control" id="share_expiry_hours" name="share_expiry_hours" type="number" min="1" max="168" value="24" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" {% if not dataset.is_finalized %}disabled{% endif %}>Create Share</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

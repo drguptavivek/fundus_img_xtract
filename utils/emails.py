@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from flask import current_app
 import logging
 from threading import Thread
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from utils.email_config import EmailConfigService, EmailConfigError
 from utils.log_sanitize import sanitize_log_value
@@ -75,7 +75,20 @@ def _build_tls_context() -> ssl.SSLContext:
     return context
 
 
-def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = False) -> bool:
+def _normalize_emails(emails: Optional[Iterable[str]]) -> list[str]:
+    if not emails:
+        return []
+    return [email.strip() for email in emails if email and email.strip()]
+
+
+def send_email_sync(
+    to_email: str,
+    subject: str,
+    body: str,
+    *,
+    cc_emails: Optional[Iterable[str]] = None,
+    sensitive: bool = False,
+) -> bool:
     """
     Synchronous function to send an email to the specified recipient.
 
@@ -102,10 +115,12 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
         use_ssl = config['use_ssl']
         connection_timeout = config.get('connection_timeout', 30)
 
+        cc_list = _normalize_emails(cc_emails)
         if debug_logger:
             debug_logger.debug(
-                "Preparing email - To: %s Subject: %s From: %s Server: %s:%d (TLS=%s, SSL=%s)",
+                "Preparing email - To: %s CC: %s Subject: %s From: %s Server: %s:%d (TLS=%s, SSL=%s)",
                 to_email,
+                ", ".join(cc_list),
                 subject,
                 from_email,
                 smtp_server,
@@ -117,6 +132,8 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
         msg = MIMEMultipart()
         msg['From'] = from_email
         msg['To'] = to_email
+        if cc_list:
+            msg['Cc'] = ", ".join(cc_list)
         msg['Subject'] = subject
 
         # Add body to email
@@ -153,7 +170,8 @@ def send_email_sync(to_email: str, subject: str, body: str, sensitive: bool = Fa
             if debug_logger:
                 debug_logger.debug("SMTP authenticated as %s", smtp_username)
 
-            server.send_message(msg)
+            recipients = [to_email] + cc_list
+            server.send_message(msg, to_addrs=recipients)
             if debug_logger:
                 debug_logger.debug("SMTP message sent")
 
@@ -209,6 +227,7 @@ def send_email(
         body: str,
         callback: Optional[Callable[[bool], None]] = None,
         sensitive: bool = False,
+        cc_emails: Optional[Iterable[str]] = None,
         ) -> Thread:
     """
     Asynchronously send an email to the specified recipient.
@@ -230,7 +249,13 @@ def send_email(
 
     def send_email_task():
         def _execute() -> bool:
-            return send_email_sync(to_email, subject, body, sensitive=sensitive)
+            return send_email_sync(
+                to_email,
+                subject,
+                body,
+                cc_emails=cc_emails,
+                sensitive=sensitive,
+            )
 
         if app is not None:
             with app.app_context():

@@ -81,6 +81,9 @@
         </div>
 
         <div class="row g-3 mt-2" id="gradeFiltersRow" style="display: none;">
+          <div class="col-12">
+            <div class="text-muted small">Select a disease to enable grade filters.</div>
+          </div>
           <div class="col-md-3">
             <label class="form-label">Resident Grade</label>
             <div class="dropdown">
@@ -401,7 +404,12 @@ function clearFilters() {
 let diseasesData = null;
 fetch('/api/diseases-with-gradings')
   .then(resp => resp.json())
-  .then(data => { diseasesData = data.diseases; })
+  .then(data => {
+    diseasesData = data.diseases;
+    if (window.datasetCurationUpdateGradeOptions) {
+      window.datasetCurationUpdateGradeOptions();
+    }
+  })
   .catch(err => console.error('Failed to load diseases', err));
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -420,11 +428,38 @@ document.addEventListener('DOMContentLoaded', function() {
     ai: Array.from(aiGradeList.querySelectorAll('li')),
   };
 
+  function setGradeFiltersEnabled(enabled) {
+    const dropdownIds = [
+      'residentGradeDropdown',
+      'resident2GradeDropdown',
+      'arbitratorGradeDropdown',
+      'finalGradeDropdown',
+      'aiGradeDropdown',
+    ];
+    dropdownIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !enabled;
+    });
+    document.querySelectorAll('.grade-checkbox, .ai-grade-checkbox').forEach(cb => {
+      cb.disabled = !enabled;
+      if (!enabled) cb.checked = false;
+    });
+  }
+
+  function resetGradeTexts() {
+    document.getElementById('residentGradeText').textContent = 'All Grades';
+    document.getElementById('resident2GradeText').textContent = 'All Grades';
+    document.getElementById('arbitratorGradeText').textContent = 'All Grades';
+    document.getElementById('finalGradeText').textContent = 'All Grades';
+    document.getElementById('aiGradeText').textContent = 'All AI Grades';
+  }
+
   function updateGradeOptions() {
     const diseaseId = parseInt(diseaseSelect.value);
     const gradeFiltersRow = document.getElementById('gradeFiltersRow');
     if (diseaseId && diseasesData) {
       gradeFiltersRow.style.display = 'flex';
+      setGradeFiltersEnabled(true);
       const selectedDisease = diseasesData.find(d => d.id === diseaseId);
       if (selectedDisease) {
         updateGradeCheckboxes(residentGradeList, selectedDisease.gradings, allGradeOptions.resident);
@@ -435,10 +470,13 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     } else {
       gradeFiltersRow.style.display = 'none';
+      setGradeFiltersEnabled(false);
+      resetGradeTexts();
     }
   }
 
   diseaseSelect.addEventListener('change', updateGradeOptions);
+  window.datasetCurationUpdateGradeOptions = updateGradeOptions;
   if (diseaseSelect.value) {
     setTimeout(updateGradeOptions, 100);
   }

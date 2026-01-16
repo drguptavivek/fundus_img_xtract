@@ -21,7 +21,24 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Create email_settings table
-    op.create_table('email_settings',
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+
+    def _create_table(table_name: str, *args: object, **kwargs: object) -> None:
+        if table_name in existing_tables:
+            return
+        op.create_table(table_name, *args, **kwargs)
+        existing_tables.add(table_name)
+
+    def _create_index(index_name: str, table_name: str, columns: list[str], **kwargs: object) -> None:
+        if table_name not in existing_tables:
+            return
+        if op.get_context().dialect.has_index(conn, table_name, index_name):
+            return
+        op.create_index(index_name, table_name, columns, **kwargs)
+
+    _create_table('email_settings',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('smtp_server', sa.String(length=255), nullable=False, server_default='localhost'),
         sa.Column('smtp_port', sa.Integer(), nullable=False, server_default='587'),
@@ -47,8 +64,8 @@ def upgrade() -> None:
     )
 
     # Create indexes
-    op.create_index('ix_email_settings_active', 'email_settings', ['is_active'], unique=False)
-    op.create_index('ix_email_settings_updated', 'email_settings', ['updated_at'], unique=False)
+    _create_index('ix_email_settings_active', 'email_settings', ['is_active'], unique=False)
+    _create_index('ix_email_settings_updated', 'email_settings', ['updated_at'], unique=False)
 
 
 def downgrade() -> None:

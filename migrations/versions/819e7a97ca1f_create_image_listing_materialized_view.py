@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Create comprehensive materialized view for image listing analytics with real data
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS mvw_image_listing_all")
     op.execute("""
         CREATE MATERIALIZED VIEW mvw_image_listing_all AS
         WITH base_images AS (
@@ -269,58 +270,58 @@ def upgrade() -> None:
 
     # Create comprehensive performance indexes on the materialized view
     # Core identification indexes
-    op.execute("CREATE INDEX idx_image_listing_uuid ON mvw_image_listing_all(image_uuid);")
-    op.execute("CREATE INDEX idx_image_listing_upload_task_uuid ON mvw_image_listing_all(image_upload_task_uuid);")
-    op.execute("CREATE INDEX idx_image_listing_encounter_file_uuid ON mvw_image_listing_all(encounter_file_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_uuid ON mvw_image_listing_all(image_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_upload_task_uuid ON mvw_image_listing_all(image_upload_task_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_encounter_file_uuid ON mvw_image_listing_all(encounter_file_uuid);")
 
     # Location-based indexes
-    op.execute("CREATE INDEX idx_image_listing_hospital ON mvw_image_listing_all(hospital_name);")
-    op.execute("CREATE INDEX idx_image_listing_lab_unit ON mvw_image_listing_all(lab_unit_name);")
-    op.execute("CREATE INDEX idx_image_listing_camera ON mvw_image_listing_all(camera_name);")
-    op.execute("CREATE INDEX idx_image_listing_area ON mvw_image_listing_all(area_name);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_hospital ON mvw_image_listing_all(hospital_name);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_lab_unit ON mvw_image_listing_all(lab_unit_name);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_camera ON mvw_image_listing_all(camera_name);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_area ON mvw_image_listing_all(area_name);")
 
     # Date-based indexes
-    op.execute("CREATE INDEX idx_image_listing_capture_date ON mvw_image_listing_all(capture_date);")
-    op.execute("CREATE INDEX idx_image_listing_upload_date ON mvw_image_listing_all(upload_date_utc);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_capture_date ON mvw_image_listing_all(capture_date);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_upload_date ON mvw_image_listing_all(upload_date_utc);")
 
     # Classification indexes
-    op.execute("CREATE INDEX idx_image_listing_upload_type ON mvw_image_listing_all(upload_type);")
-    op.execute("CREATE INDEX idx_image_listing_original_disease ON mvw_image_listing_all(original_disease_uploaded);")
-    op.execute("CREATE INDEX idx_image_listing_verification_direct ON mvw_image_listing_all(verified_status_direct);")
-    op.execute("CREATE INDEX idx_image_listing_verification_zip ON mvw_image_listing_all(verified_status_zip);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_upload_type ON mvw_image_listing_all(upload_type);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_original_disease ON mvw_image_listing_all(original_disease_uploaded);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_verification_direct ON mvw_image_listing_all(verified_status_direct);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_verification_zip ON mvw_image_listing_all(verified_status_zip);")
 
     # Laterality index for ZIP uploads
-    op.execute("CREATE INDEX idx_image_listing_laterality ON mvw_image_listing_all(laterality);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_laterality ON mvw_image_listing_all(laterality);")
 
     # Task and grading count indexes for analytics
-    op.execute("CREATE INDEX idx_image_listing_has_dr_task ON mvw_image_listing_all(has_dr_task);")
-    op.execute("CREATE INDEX idx_image_listing_has_glaucoma_task ON mvw_image_listing_all(has_glaucoma_task);")
-    op.execute("CREATE INDEX idx_image_listing_has_amd_task ON mvw_image_listing_all(has_amd_task);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_has_dr_task ON mvw_image_listing_all(has_dr_task);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_has_glaucoma_task ON mvw_image_listing_all(has_glaucoma_task);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_has_amd_task ON mvw_image_listing_all(has_amd_task);")
 
     # Grading count indexes
-    op.execute("CREATE INDEX idx_image_listing_dr_grading_count ON mvw_image_listing_all(dr_grading_count);")
-    op.execute("CREATE INDEX idx_image_listing_glaucoma_grading_count ON mvw_image_listing_all(glaucoma_grading_count);")
-    op.execute("CREATE INDEX idx_image_listing_amd_grading_count ON mvw_image_listing_all(amd_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_dr_grading_count ON mvw_image_listing_all(dr_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_glaucoma_grading_count ON mvw_image_listing_all(glaucoma_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_amd_grading_count ON mvw_image_listing_all(amd_grading_count);")
 
     # AI grading count indexes
-    op.execute("CREATE INDEX idx_image_listing_dr_ai_grading_count ON mvw_image_listing_all(dr_ai_grading_count);")
-    op.execute("CREATE INDEX idx_image_listing_glaucoma_ai_grading_count ON mvw_image_listing_all(glaucoma_ai_grading_count);")
-    op.execute("CREATE INDEX idx_image_listing_amd_ai_grading_count ON mvw_image_listing_all(amd_ai_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_dr_ai_grading_count ON mvw_image_listing_all(dr_ai_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_glaucoma_ai_grading_count ON mvw_image_listing_all(glaucoma_ai_grading_count);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_amd_ai_grading_count ON mvw_image_listing_all(amd_ai_grading_count);")
 
     # Consensus status indexes
-    op.execute("CREATE INDEX idx_image_listing_dr_consensus ON mvw_image_listing_all(dr_consensus_status);")
-    op.execute("CREATE INDEX idx_image_listing_glaucoma_consensus ON mvw_image_listing_all(glaucoma_consensus_status);")
-    op.execute("CREATE INDEX idx_image_listing_amd_consensus ON mvw_image_listing_all(amd_consensus_status);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_dr_consensus ON mvw_image_listing_all(dr_consensus_status);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_glaucoma_consensus ON mvw_image_listing_all(glaucoma_consensus_status);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_amd_consensus ON mvw_image_listing_all(amd_consensus_status);")
 
     # GIN indexes for JSONB columns to support JSON queries
-    op.execute("CREATE INDEX idx_image_listing_dr_grading_details_json ON mvw_image_listing_all USING GIN((dr_grading_details_json::jsonb));")
-    op.execute("CREATE INDEX idx_image_listing_glaucoma_grading_details_json ON mvw_image_listing_all USING GIN((glaucoma_grading_details_json::jsonb));")
-    op.execute("CREATE INDEX idx_image_listing_amd_grading_details_json ON mvw_image_listing_all USING GIN((amd_grading_details_json::jsonb));")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_dr_grading_details_json ON mvw_image_listing_all USING GIN((dr_grading_details_json::jsonb));")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_glaucoma_grading_details_json ON mvw_image_listing_all USING GIN((glaucoma_grading_details_json::jsonb));")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_amd_grading_details_json ON mvw_image_listing_all USING GIN((amd_grading_details_json::jsonb));")
 
     # Composite indexes for common query patterns
-    op.execute("CREATE INDEX idx_image_listing_composite_upload_date_type ON mvw_image_listing_all(upload_date_utc, upload_type);")
-    op.execute("CREATE INDEX idx_image_listing_composite_disease_tasks ON mvw_image_listing_all(original_disease_uploaded, has_dr_task, has_glaucoma_task, has_amd_task);")
-    op.execute("CREATE INDEX idx_image_listing_composite_lab_unit_date ON mvw_image_listing_all(lab_unit_name, upload_date_utc);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_composite_upload_date_type ON mvw_image_listing_all(upload_date_utc, upload_type);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_composite_disease_tasks ON mvw_image_listing_all(original_disease_uploaded, has_dr_task, has_glaucoma_task, has_amd_task);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_image_listing_composite_lab_unit_date ON mvw_image_listing_all(lab_unit_name, upload_date_utc);")
 
     # Create refresh function for automated updates
     op.execute("""

@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Create the comprehensive encounter pivot materialized view
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS mvw_encounter_pivot")
     op.execute("""
     CREATE MATERIALIZED VIEW mvw_encounter_pivot AS
     SELECT

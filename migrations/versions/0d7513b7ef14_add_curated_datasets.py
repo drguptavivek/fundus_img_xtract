@@ -19,7 +19,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.create_table(
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+
+    def _create_table(table_name: str, *args: object, **kwargs: object) -> None:
+        if table_name in existing_tables:
+            return
+        op.create_table(table_name, *args, **kwargs)
+        existing_tables.add(table_name)
+
+    def _create_index(index_name: str, table_name: str, columns: list[str], **kwargs: object) -> None:
+        if table_name not in existing_tables:
+            return
+        if op.get_context().dialect.has_index(conn, table_name, index_name):
+            return
+        op.create_index(index_name, table_name, columns, **kwargs)
+
+    _create_table(
         "curated_datasets",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("uuid", sa.String(length=36), nullable=False),
@@ -34,21 +51,21 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["disease_id"], ["diseases.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(
+    _create_index(
         op.f("ix_curated_datasets_created_by_user_id"),
         "curated_datasets",
         ["created_by_user_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index(
         op.f("ix_curated_datasets_disease_id"),
         "curated_datasets",
         ["disease_id"],
         unique=False,
     )
-    op.create_index(op.f("ix_curated_datasets_uuid"), "curated_datasets", ["uuid"], unique=True)
+    _create_index(op.f("ix_curated_datasets_uuid"), "curated_datasets", ["uuid"], unique=True)
 
-    op.create_table(
+    _create_table(
         "curated_dataset_items",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("dataset_id", sa.Integer(), nullable=False),
@@ -66,19 +83,19 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("dataset_id", "task_id", name="uq_curated_dataset_items_dataset_task"),
     )
-    op.create_index(
+    _create_index(
         op.f("ix_curated_dataset_items_dataset_id"),
         "curated_dataset_items",
         ["dataset_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index(
         op.f("ix_curated_dataset_items_selected_by_user_id"),
         "curated_dataset_items",
         ["selected_by_user_id"],
         unique=False,
     )
-    op.create_index(
+    _create_index(
         op.f("ix_curated_dataset_items_task_id"),
         "curated_dataset_items",
         ["task_id"],

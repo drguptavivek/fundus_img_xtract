@@ -22,7 +22,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     # Create table to track materialized view refresh timestamps
     op.execute("""
-        CREATE TABLE materialized_view_refresh_log (
+        CREATE TABLE IF NOT EXISTS materialized_view_refresh_log (
             id SERIAL PRIMARY KEY,
             materialized_view_name VARCHAR(255) NOT NULL DEFAULT 'mvw_grading_data_all',
             refresh_type VARCHAR(50) NOT NULL, -- 'scheduled', 'manual', 'startup'
@@ -36,9 +36,9 @@ def upgrade() -> None:
         );
 
         -- Create index for efficient querying
-        CREATE INDEX idx_mv_refresh_log_view_name ON materialized_view_refresh_log(materialized_view_name);
-        CREATE INDEX idx_mv_refresh_log_completed_at ON materialized_view_refresh_log(refresh_completed_at);
-        CREATE INDEX idx_mv_refresh_log_success ON materialized_view_refresh_log(success);
+        CREATE INDEX IF NOT EXISTS idx_mv_refresh_log_view_name ON materialized_view_refresh_log(materialized_view_name);
+        CREATE INDEX IF NOT EXISTS idx_mv_refresh_log_completed_at ON materialized_view_refresh_log(refresh_completed_at);
+        CREATE INDEX IF NOT EXISTS idx_mv_refresh_log_success ON materialized_view_refresh_log(success);
 
         -- Create trigger to update updated_at column
         CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -49,6 +49,7 @@ def upgrade() -> None:
         END;
         $$ language plpgsql;
 
+        DROP TRIGGER IF EXISTS update_materialized_view_refresh_log_updated_at ON materialized_view_refresh_log;
         CREATE TRIGGER update_materialized_view_refresh_log_updated_at
             BEFORE UPDATE ON materialized_view_refresh_log
             FOR EACH ROW

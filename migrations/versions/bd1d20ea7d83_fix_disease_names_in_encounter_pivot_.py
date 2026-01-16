@@ -296,56 +296,56 @@ def upgrade() -> None:
 
     # Recreate all the indexes
     # Primary Key and Core Indexes
-    op.execute("CREATE UNIQUE INDEX idx_mvw_encounter_pivot_pkey ON mvw_encounter_pivot(encounter_id)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_hospital ON mvw_encounter_pivot(hospital_id)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_lab_unit ON mvw_encounter_pivot(lab_unit_id)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_capture_date ON mvw_encounter_pivot(capture_date)")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_pkey ON mvw_encounter_pivot(encounter_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_hospital ON mvw_encounter_pivot(hospital_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_lab_unit ON mvw_encounter_pivot(lab_unit_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_capture_date ON mvw_encounter_pivot(capture_date)")
 
     # Disease Result Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_dr_result ON mvw_encounter_pivot(dr_result)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_glaucoma_result ON mvw_encounter_pivot(glaucoma_result)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_dr_qualitative ON mvw_encounter_pivot(dr_qualitative_result)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_glaucoma_qualitative ON mvw_encounter_pivot(glaucoma_qualitative_result)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_dr_result ON mvw_encounter_pivot(dr_result)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_glaucoma_result ON mvw_encounter_pivot(glaucoma_result)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_dr_qualitative ON mvw_encounter_pivot(dr_qualitative_result)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_glaucoma_qualitative ON mvw_encounter_pivot(glaucoma_qualitative_result)")
 
     # Task Analysis Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_dr_tasks ON mvw_encounter_pivot(dr_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_glaucoma_tasks ON mvw_encounter_pivot(glaucoma_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_amd_tasks ON mvw_encounter_pivot(amd_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_additional_tasks ON mvw_encounter_pivot(additional_disease_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_total_tasks ON mvw_encounter_pivot(total_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_dr_tasks ON mvw_encounter_pivot(dr_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_glaucoma_tasks ON mvw_encounter_pivot(glaucoma_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_amd_tasks ON mvw_encounter_pivot(amd_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_additional_tasks ON mvw_encounter_pivot(additional_disease_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_total_tasks ON mvw_encounter_pivot(total_task_count)")
 
     # Task Status Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_completed_tasks ON mvw_encounter_pivot(completed_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_pending_tasks ON mvw_encounter_pivot(pending_task_count)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_in_progress_tasks ON mvw_encounter_pivot(in_progress_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_completed_tasks ON mvw_encounter_pivot(completed_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_pending_tasks ON mvw_encounter_pivot(pending_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_in_progress_tasks ON mvw_encounter_pivot(in_progress_task_count)")
 
     # Image Analysis Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_total_images ON mvw_encounter_pivot(total_images)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_total_images ON mvw_encounter_pivot(total_images)")
 
     # JSON Query Indexes for Split Image Grades
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_dr_image_grades ON mvw_encounter_pivot USING GIN((dr_image_grades::jsonb))")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_glaucoma_image_grades ON mvw_encounter_pivot USING GIN((glaucoma_image_grades::jsonb))")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_amd_image_grades ON mvw_encounter_pivot USING GIN((amd_image_grades::jsonb))")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_additional_image_grades ON mvw_encounter_pivot USING GIN((additional_disease_image_grades::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_dr_image_grades ON mvw_encounter_pivot USING GIN((dr_image_grades::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_glaucoma_image_grades ON mvw_encounter_pivot USING GIN((glaucoma_image_grades::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_amd_image_grades ON mvw_encounter_pivot USING GIN((amd_image_grades::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_additional_image_grades ON mvw_encounter_pivot USING GIN((additional_disease_image_grades::jsonb))")
 
     # General JSON Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_image_uuids ON mvw_encounter_pivot USING GIN((image_uuids::jsonb))")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_eye_sides ON mvw_encounter_pivot USING GIN((eye_sides::jsonb))")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_image_types ON mvw_encounter_pivot USING GIN((image_types::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_image_uuids ON mvw_encounter_pivot USING GIN((image_uuids::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_eye_sides ON mvw_encounter_pivot USING GIN((eye_sides::jsonb))")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_image_types ON mvw_encounter_pivot USING GIN((image_types::jsonb))")
 
     # Composite Indexes for Common Queries
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_hospital_glaucoma ON mvw_encounter_pivot(hospital_id, glaucoma_result)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_lab_dr_status ON mvw_encounter_pivot(lab_unit_id, dr_result, dr_verified_status)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_capture_date_hospital ON mvw_encounter_pivot(capture_date, hospital_id)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_total_images_tasks ON mvw_encounter_pivot(total_images, total_task_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_hospital_glaucoma ON mvw_encounter_pivot(hospital_id, glaucoma_result)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_lab_dr_status ON mvw_encounter_pivot(lab_unit_id, dr_result, dr_verified_status)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_capture_date_hospital ON mvw_encounter_pivot(capture_date, hospital_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_total_images_tasks ON mvw_encounter_pivot(total_images, total_task_count)")
 
     # Time-based Analysis Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_last_activity ON mvw_encounter_pivot(last_task_activity_at)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_glaucoma_updated ON mvw_encounter_pivot(glaucoma_result_updated_at)")
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_last_consensus ON mvw_encounter_pivot(last_consensus_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_last_activity ON mvw_encounter_pivot(last_task_activity_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_glaucoma_updated ON mvw_encounter_pivot(glaucoma_result_updated_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_last_consensus ON mvw_encounter_pivot(last_consensus_at)")
 
     # Consensus Analysis Indexes
-    op.execute("CREATE INDEX idx_mvw_encounter_pivot_consensus_count ON mvw_encounter_pivot(consensus_count)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_encounter_pivot_consensus_count ON mvw_encounter_pivot(consensus_count)")
 
     print("Fixed mvw_encounter_pivot with correct disease names ('DR' instead of 'Diabetic Retinopathy')")
 

@@ -21,10 +21,16 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Add password_salt column to email_settings table
-    op.add_column('email_settings', sa.Column('password_salt', sa.String(length=64), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = {column["name"] for column in inspector.get_columns("email_settings")}
+
+    if "password_salt" not in columns:
+        op.add_column('email_settings', sa.Column('password_salt', sa.String(length=64), nullable=True))
 
     # Add index for faster lookups if needed
-    op.create_index('idx_email_settings_password_salt', 'email_settings', ['password_salt'], unique=False)
+    if not op.get_context().dialect.has_index(conn, "email_settings", "idx_email_settings_password_salt"):
+        op.create_index('idx_email_settings_password_salt', 'email_settings', ['password_salt'], unique=False)
 
 
 def downgrade() -> None:

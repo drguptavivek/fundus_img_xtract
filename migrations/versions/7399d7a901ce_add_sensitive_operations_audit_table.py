@@ -22,7 +22,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create sensitive_operations_audit table for tracking sensitive data operations."""
-    op.create_table('sensitive_operations_audit',
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+
+    def _create_table(table_name: str, *args: object, **kwargs: object) -> None:
+        if table_name in existing_tables:
+            return
+        op.create_table(table_name, *args, **kwargs)
+        existing_tables.add(table_name)
+
+    def _create_index(index_name: str, table_name: str, columns: list[str], **kwargs: object) -> None:
+        if table_name not in existing_tables:
+            return
+        if op.get_context().dialect.has_index(conn, table_name, index_name):
+            return
+        op.create_index(index_name, table_name, columns, **kwargs)
+
+    _create_table('sensitive_operations_audit',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=True),
         sa.Column('operation_type', sa.String(length=100), nullable=False),
@@ -35,25 +52,25 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(
+    _create_index(
         op.f('ix_sensitive_operations_audit_created_at'), 
         'sensitive_operations_audit', 
         ['created_at'], 
         unique=False
     )
-    op.create_index(
+    _create_index(
         op.f('ix_sensitive_operations_audit_operation_type'), 
         'sensitive_operations_audit', 
         ['operation_type'], 
         unique=False
     )
-    op.create_index(
+    _create_index(
         op.f('ix_sensitive_operations_audit_status'), 
         'sensitive_operations_audit', 
         ['status'], 
         unique=False
     )
-    op.create_index(
+    _create_index(
         op.f('ix_sensitive_operations_audit_user_id'), 
         'sensitive_operations_audit', 
         ['user_id'], 

@@ -21,10 +21,16 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Add IP address column to flask_sessions table
-    op.add_column('flask_sessions', sa.Column('ip_address', sa.String(length=45), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = {column["name"] for column in inspector.get_columns("flask_sessions")}
+
+    if "ip_address" not in columns:
+        op.add_column('flask_sessions', sa.Column('ip_address', sa.String(length=45), nullable=True))
 
     # Create index for IP address for better performance
-    op.create_index('ix_flask_sessions_ip_address', 'flask_sessions', ['ip_address'])
+    if not op.get_context().dialect.has_index(conn, "flask_sessions", "ix_flask_sessions_ip_address"):
+        op.create_index('ix_flask_sessions_ip_address', 'flask_sessions', ['ip_address'])
 
 
 def downgrade() -> None:

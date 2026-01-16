@@ -19,27 +19,48 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Add AI review feedback fields and constraint."""
-    op.add_column("grades", sa.Column("ai_review_status", sa.String(length=32), nullable=True))
-    op.add_column("grades", sa.Column("ai_review_comment", sa.Text(), nullable=True))
-    op.add_column(
-        "grades",
-        sa.Column("ai_reviewed_by_user_id", sa.Integer(), nullable=True),
-    )
-    op.add_column("grades", sa.Column("ai_reviewed_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_index(op.f("ix_grades_ai_reviewed_by_user_id"), "grades", ["ai_reviewed_by_user_id"], unique=False)
-    op.create_foreign_key(
-        "fk_grades_ai_reviewed_by_user_id_users",
-        "grades",
-        "users",
-        ["ai_reviewed_by_user_id"],
-        ["id"],
-        ondelete="SET NULL",
-    )
-    op.create_check_constraint(
-        "ck_grade_ai_review_status_valid",
-        "grades",
-        "ai_review_status IS NULL OR ai_review_status IN ('ok','minor_miss','major_miss')",
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = {column["name"] for column in inspector.get_columns("grades")}
+
+    if "ai_review_status" not in columns:
+        op.add_column("grades", sa.Column("ai_review_status", sa.String(length=32), nullable=True))
+    if "ai_review_comment" not in columns:
+        op.add_column("grades", sa.Column("ai_review_comment", sa.Text(), nullable=True))
+    if "ai_reviewed_by_user_id" not in columns:
+        op.add_column(
+            "grades",
+            sa.Column("ai_reviewed_by_user_id", sa.Integer(), nullable=True),
+        )
+    if "ai_reviewed_at" not in columns:
+        op.add_column("grades", sa.Column("ai_reviewed_at", sa.DateTime(timezone=True), nullable=True))
+
+    if not op.get_context().dialect.has_index(conn, "grades", op.f("ix_grades_ai_reviewed_by_user_id")):
+        op.create_index(
+            op.f("ix_grades_ai_reviewed_by_user_id"),
+            "grades",
+            ["ai_reviewed_by_user_id"],
+            unique=False,
+        )
+
+    foreign_keys = {fk["name"] for fk in inspector.get_foreign_keys("grades")}
+    if "fk_grades_ai_reviewed_by_user_id_users" not in foreign_keys:
+        op.create_foreign_key(
+            "fk_grades_ai_reviewed_by_user_id_users",
+            "grades",
+            "users",
+            ["ai_reviewed_by_user_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+
+    check_constraints = {ck["name"] for ck in inspector.get_check_constraints("grades")}
+    if "ck_grade_ai_review_status_valid" not in check_constraints:
+        op.create_check_constraint(
+            "ck_grade_ai_review_status_valid",
+            "grades",
+            "ai_review_status IS NULL OR ai_review_status IN ('ok','minor_miss','major_miss')",
+        )
 
 
 def downgrade() -> None:

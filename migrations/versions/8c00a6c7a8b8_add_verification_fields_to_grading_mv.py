@@ -142,41 +142,41 @@ def upgrade() -> None:
     )
 
     # Recreate indexes
-    op.execute("CREATE INDEX idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
-    op.execute("CREATE INDEX idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_image_source_task_id ON mvw_grading_data_all(image_source, task_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_disease_task_created ON mvw_grading_data_all(disease_id, task_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_role_slot_grade_created ON mvw_grading_data_all(grade_role_slot, grade_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_lab_unit_task_created ON mvw_grading_data_all(lab_unit_id, task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_source_task_id ON mvw_grading_data_all(image_source, task_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_disease_task_created ON mvw_grading_data_all(disease_id, task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_role_slot_grade_created ON mvw_grading_data_all(grade_role_slot, grade_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_lab_unit_task_created ON mvw_grading_data_all(lab_unit_id, task_created_at);")
 
     # Verification-related indexes
-    op.execute("CREATE INDEX idx_mvw_grading_patient_encounter_id ON mvw_grading_data_all(patient_encounter_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_encounter_capture_date ON mvw_grading_data_all(encounter_capture_date);")
-    op.execute("CREATE INDEX idx_mvw_grading_encounter_verified_status ON mvw_grading_data_all(encounter_verified_status);")
-    op.execute("CREATE INDEX idx_mvw_grading_verification_id ON mvw_grading_data_all(verification_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_verified_status ON mvw_grading_data_all(direct_image_verified_status);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_patient_encounter_id ON mvw_grading_data_all(patient_encounter_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_encounter_capture_date ON mvw_grading_data_all(encounter_capture_date);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_encounter_verified_status ON mvw_grading_data_all(encounter_verified_status);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_verification_id ON mvw_grading_data_all(verification_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_verified_status ON mvw_grading_data_all(direct_image_verified_status);")
 
     # Unique index to allow concurrent refreshes
-    op.execute("CREATE UNIQUE INDEX idx_mvw_grading_unique_task_grade ON mvw_grading_data_all(task_id, grade_id);")
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mvw_grading_unique_task_grade ON mvw_grading_data_all(task_id, grade_id);")
 
 
 def downgrade() -> None:
@@ -273,28 +273,28 @@ def downgrade() -> None:
         """
     )
 
-    op.execute("CREATE INDEX idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
-    op.execute("CREATE INDEX idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
 
-    op.execute("CREATE INDEX idx_mvw_grading_image_source_task_id ON mvw_grading_data_all(image_source, task_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_disease_task_created ON mvw_grading_data_all(disease_id, task_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_role_slot_grade_created ON mvw_grading_data_all(grade_role_slot, grade_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_lab_unit_task_created ON mvw_grading_data_all(lab_unit_id, task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_source_task_id ON mvw_grading_data_all(image_source, task_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_disease_task_created ON mvw_grading_data_all(disease_id, task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_role_slot_grade_created ON mvw_grading_data_all(grade_role_slot, grade_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_lab_unit_task_created ON mvw_grading_data_all(lab_unit_id, task_created_at);")

@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Create materialized view for comprehensive grading data analytics
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS mvw_grading_data_all")
     op.execute("""
         CREATE MATERIALIZED VIEW mvw_grading_data_all AS
         SELECT
@@ -119,30 +120,30 @@ def upgrade() -> None:
 
     # Create performance indexes on the materialized view
     # Image-related indexes
-    op.execute("CREATE INDEX idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
-    op.execute("CREATE INDEX idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_uuid ON mvw_grading_data_all(image_uuid);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_source ON mvw_grading_data_all(image_source);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_image_id ON mvw_grading_data_all(image_id);")
 
     # Grade-related indexes
-    op.execute("CREATE INDEX idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
-    op.execute("CREATE INDEX idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_id ON mvw_grading_data_all(task_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_id ON mvw_grading_data_all(grade_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grader_user ON mvw_grading_data_all(grader_user_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_role_slot ON mvw_grading_data_all(grade_role_slot);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_disease ON mvw_grading_data_all(disease_id);")
 
     # Time-based indexes
-    op.execute("CREATE INDEX idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_task_created ON mvw_grading_data_all(task_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_grade_created ON mvw_grading_data_all(grade_created_at);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_date ON mvw_grading_data_all(consensus_created_at);")
 
     # Consensus-specific indexes
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_id ON mvw_grading_data_all(consensus_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_consensus_method ON mvw_grading_data_all(consensus_method);")
 
     # Context-related indexes
-    op.execute("CREATE INDEX idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
-    op.execute("CREATE INDEX idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_hospital_id ON mvw_grading_data_all(hospital_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_lab_unit_id ON mvw_grading_data_all(lab_unit_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_mvw_grading_camera_id ON mvw_grading_data_all(camera_id);")
 
     # Create refresh function for automated updates
     op.execute("""

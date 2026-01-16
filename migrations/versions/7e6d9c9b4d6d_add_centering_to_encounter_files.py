@@ -19,16 +19,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column(
-        "encounter_files",
-        sa.Column("centering", sa.String(length=16), nullable=True),
-    )
-    op.create_index(
-        op.f("ix_encounter_files_centering"),
-        "encounter_files",
-        ["centering"],
-        unique=False,
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = {column["name"] for column in inspector.get_columns("encounter_files")}
+
+    if "centering" not in columns:
+        op.add_column(
+            "encounter_files",
+            sa.Column("centering", sa.String(length=16), nullable=True),
+        )
+
+    if not op.get_context().dialect.has_index(conn, "encounter_files", op.f("ix_encounter_files_centering")):
+        op.create_index(
+            op.f("ix_encounter_files_centering"),
+            "encounter_files",
+            ["centering"],
+            unique=False,
+        )
 
 
 def downgrade() -> None:

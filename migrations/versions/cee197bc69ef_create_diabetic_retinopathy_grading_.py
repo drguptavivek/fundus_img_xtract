@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Create materialized view for Diabetic Retinopathy grading data with pivoted grader columns
+    op.execute("DROP MATERIALIZED VIEW IF EXISTS mvw_diabetic_retinopathy_grading_pivot")
     op.execute("""
         CREATE MATERIALIZED VIEW mvw_diabetic_retinopathy_grading_pivot AS
         SELECT
@@ -177,51 +178,51 @@ def upgrade() -> None:
     # Create performance indexes
     op.execute("""
         -- Image identification indexes
-        CREATE INDEX idx_mvw_dr_pivot_image_uuid ON mvw_diabetic_retinopathy_grading_pivot(image_uuid);
-        CREATE INDEX idx_mvw_dr_pivot_image_source ON mvw_diabetic_retinopathy_grading_pivot(image_source);
-        CREATE INDEX idx_mvw_dr_pivot_image_id ON mvw_diabetic_retinopathy_grading_pivot(image_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_image_uuid ON mvw_diabetic_retinopathy_grading_pivot(image_uuid);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_image_source ON mvw_diabetic_retinopathy_grading_pivot(image_source);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_image_id ON mvw_diabetic_retinopathy_grading_pivot(image_id);
 
         -- Grade ID indexes for direct access
-        CREATE INDEX idx_mvw_dr_pivot_resident_grade_id ON mvw_diabetic_retinopathy_grading_pivot(resident_grade_id);
-        CREATE INDEX idx_mvw_dr_pivot_resident2_grade_id ON mvw_diabetic_retinopathy_grading_pivot(resident2_grade_id);
-        CREATE INDEX idx_mvw_dr_pivot_arbitrator_grade_id ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grade_id);
-        CREATE INDEX idx_mvw_dr_pivot_review_grade_id ON mvw_diabetic_retinopathy_grading_pivot(review_grade_id);
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_1_grade_id ON mvw_diabetic_retinopathy_grading_pivot(aimodel_1_grade_id);
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_2_grade_id ON mvw_diabetic_retinopathy_grading_pivot(aimodel_2_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident_grade_id ON mvw_diabetic_retinopathy_grading_pivot(resident_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident2_grade_id ON mvw_diabetic_retinopathy_grading_pivot(resident2_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_arbitrator_grade_id ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_review_grade_id ON mvw_diabetic_retinopathy_grading_pivot(review_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_1_grade_id ON mvw_diabetic_retinopathy_grading_pivot(aimodel_1_grade_id);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_2_grade_id ON mvw_diabetic_retinopathy_grading_pivot(aimodel_2_grade_id);
 
         -- Grade-specific indexes for analysis
-        CREATE INDEX idx_mvw_dr_pivot_resident_grade ON mvw_diabetic_retinopathy_grading_pivot(resident_grade);
-        CREATE INDEX idx_mvw_dr_pivot_resident2_grade ON mvw_diabetic_retinopathy_grading_pivot(resident2_grade);
-        CREATE INDEX idx_mvw_dr_pivot_arbitrator_grade ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grade);
-        CREATE INDEX idx_mvw_dr_pivot_consensus_grade ON mvw_diabetic_retinopathy_grading_pivot(consensus_grade);
-        CREATE INDEX idx_mvw_dr_pivot_review_grade ON mvw_diabetic_retinopathy_grading_pivot(review_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident_grade ON mvw_diabetic_retinopathy_grading_pivot(resident_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident2_grade ON mvw_diabetic_retinopathy_grading_pivot(resident2_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_arbitrator_grade ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_consensus_grade ON mvw_diabetic_retinopathy_grading_pivot(consensus_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_review_grade ON mvw_diabetic_retinopathy_grading_pivot(review_grade);
 
         -- AI model grade indexes
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_1_grade ON mvw_diabetic_retinopathy_grading_pivot(aimodel_1_grade);
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_2_grade ON mvw_diabetic_retinopathy_grading_pivot(aimodel_2_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_1_grade ON mvw_diabetic_retinopathy_grading_pivot(aimodel_1_grade);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_2_grade ON mvw_diabetic_retinopathy_grading_pivot(aimodel_2_grade);
 
         -- Features JSON indexes for feature analysis
-        CREATE INDEX idx_mvw_dr_pivot_resident_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident_features::jsonb));
-        CREATE INDEX idx_mvw_dr_pivot_resident2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident2_features::jsonb));
-        CREATE INDEX idx_mvw_dr_pivot_arbitrator_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((arbitrator_features::jsonb));
-        CREATE INDEX idx_mvw_dr_pivot_review_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((review_features::jsonb));
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_1_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_1_features::jsonb));
-        CREATE INDEX idx_mvw_dr_pivot_aimodel_2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_2_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((resident2_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_arbitrator_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((arbitrator_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_review_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((review_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_1_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_1_features::jsonb));
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_aimodel_2_features ON mvw_diabetic_retinopathy_grading_pivot USING GIN((aimodel_2_features::jsonb));
 
         -- Time-based indexes for trending analysis
-        CREATE INDEX idx_mvw_dr_pivot_task_created ON mvw_diabetic_retinopathy_grading_pivot(task_created_at);
-        CREATE INDEX idx_mvw_dr_pivot_consensus_time ON mvw_diabetic_retinopathy_grading_pivot(consensus_time);
-        CREATE INDEX idx_mvw_dr_pivot_last_updated ON mvw_diabetic_retinopathy_grading_pivot(last_updated);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_task_created ON mvw_diabetic_retinopathy_grading_pivot(task_created_at);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_consensus_time ON mvw_diabetic_retinopathy_grading_pivot(consensus_time);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_last_updated ON mvw_diabetic_retinopathy_grading_pivot(last_updated);
 
         -- DR-specific indexes
-        CREATE INDEX idx_mvw_dr_pivot_disease_name ON mvw_diabetic_retinopathy_grading_pivot(disease_name);
-        CREATE INDEX idx_mvw_dr_pivot_lab_unit ON mvw_diabetic_retinopathy_grading_pivot(lab_unit_name);
-        CREATE INDEX idx_mvw_dr_pivot_hospital ON mvw_diabetic_retinopathy_grading_pivot(hospital_name);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_disease_name ON mvw_diabetic_retinopathy_grading_pivot(disease_name);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_lab_unit ON mvw_diabetic_retinopathy_grading_pivot(lab_unit_name);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_hospital ON mvw_diabetic_retinopathy_grading_pivot(hospital_name);
 
         -- Grader analysis indexes
-        CREATE INDEX idx_mvw_dr_pivot_resident_grader ON mvw_diabetic_retinopathy_grading_pivot(resident_grader);
-        CREATE INDEX idx_mvw_dr_pivot_arbitrator_grader ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grader);
-        CREATE INDEX idx_mvw_dr_pivot_consensus_decider ON mvw_diabetic_retinopathy_grading_pivot(consensus_decider);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_resident_grader ON mvw_diabetic_retinopathy_grading_pivot(resident_grader);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_arbitrator_grader ON mvw_diabetic_retinopathy_grading_pivot(arbitrator_grader);
+        CREATE INDEX IF NOT EXISTS idx_mvw_dr_pivot_consensus_decider ON mvw_diabetic_retinopathy_grading_pivot(consensus_decider);
     """)
 
     # Create refresh function for automated updates

@@ -676,10 +676,10 @@ def dataset_share_create(dataset_uuid: str):
                     f"Dataset: {dataset.name}",
                     f"Purpose: {dataset.purpose}",
                     f"Created for: {created_for}",
-                    f"Expires at: {expires_at.isoformat()}",
-                    "",
                     "Download link:",
                     link,
+                    "",
+                    f"Expires at: {expires_at.isoformat()}",
                     "",
                     "OTP will be shared separately by the dataset creator.",
                 ]
@@ -693,6 +693,7 @@ def dataset_share_create(dataset_uuid: str):
                 expires_at=expires_at.isoformat(),
                 logo_cid=logo_cid,
                 link=link,
+                link_note="OTP will be shared separately by the dataset creator.",
             )
             try:
                 send_email(
@@ -722,7 +723,7 @@ def dataset_share_create(dataset_uuid: str):
                     "",
                     f"OTP: {otp}",
                     "",
-                    "Share this OTP separately with the recipient.",
+                    "Kindly share the OTP securely with the dataset recipient.",
                 ]
             )
             logo_cid, inline_images = build_inline_logo_image()

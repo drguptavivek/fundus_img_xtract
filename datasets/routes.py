@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
-from auth.utils import get_client_ip
+from auth.utils import get_client_ip, utcnow
 from auth.roles import roles_required
 from auth.security import validate_email
 from db_transaction_manager import get_db_session
@@ -258,10 +258,10 @@ def share_dataset():
                         f"Dataset: {dataset.name}",
                         f"Purpose: {dataset.purpose}",
                         f"Created for: {created_for}",
-                        f"Expires at: {expires_at.isoformat()}",
-                        "",
                         "Download link:",
                         link,
+                        "",
+                        f"Expires at: {expires_at.isoformat()}",
                         "",
                         "OTP will be shared separately by the dataset creator.",
                     ]
@@ -275,6 +275,7 @@ def share_dataset():
                     expires_at=expires_at.isoformat(),
                     logo_cid=logo_cid,
                     link=link,
+                    link_note="OTP will be shared separately by the dataset creator.",
                 )
                 try:
                     send_email(
@@ -304,7 +305,7 @@ def share_dataset():
                         "",
                         f"OTP: {otp}",
                         "",
-                        "Share this OTP separately with the recipient.",
+                        "Kindly share the OTP securely with the dataset recipient.",
                     ]
                 )
                 logo_cid, inline_images = build_inline_logo_image()
@@ -599,6 +600,20 @@ def _set_verified_session(share: DatasetShare) -> None:
 
 def _clear_verified_session() -> None:
     session.pop("dataset_share_verified", None)
+    session.pop("dataset_share_terms", None)
+    session.modified = True
+
+
+def _is_terms_accepted(share: DatasetShare) -> bool:
+    accepted = session.get("dataset_share_terms") or {}
+    return share.terms_accepted_at is not None or accepted.get("share_id") == share.id
+
+
+def _set_terms_accepted(share: DatasetShare) -> None:
+    session["dataset_share_terms"] = {
+        "share_id": share.id,
+        "accepted_at": int(datetime.now(timezone.utc).timestamp()),
+    }
     session.modified = True
 
 
@@ -639,6 +654,7 @@ def _build_verified_context(db, share: DatasetShare, token: str) -> dict:
         "export_job": export_job,
         "export_files": export_files,
         "latest_job": latest_job,
+        "terms_accepted": _is_terms_accepted(share),
     }
 
 
@@ -742,6 +758,13 @@ def download_generate(token: str):
         if not _is_verified_session(share):
             register_failure(ip, token_hash)
             return _render_invalid()
+        if not _is_terms_accepted(share):
+            return render_template(
+                "datasets/download_welcome.html",
+                verified=True,
+                error_message="Please accept the Terms & Conditions to continue.",
+                **_build_verified_context(db, share, token),
+            )
 
         latest_job = _get_latest_export_job(db, share.dataset_id)
         export_files: List[str] = []
@@ -821,6 +844,47 @@ def download_generate(token: str):
         return render_template("datasets/download_welcome.html", verified=True, **ctx)
 
 
+@bp.route("/download/<token>/accept", methods=["POST"])
+@rate_limit("10 per minute")
+def download_accept(token: str):
+    ip = get_client_ip()
+    if not validate_share_token(token):
+        return _render_invalid()
+    token_hash = hash_share_token(token)
+    if is_locked_out(ip, token_hash):
+        return _render_invalid(status_code=429)
+
+    with get_db_session() as db:
+        share = (
+            db.query(DatasetShare)
+            .filter(DatasetShare.token_hash == token_hash, DatasetShare.is_active.is_(True))
+            .first()
+        )
+        if not share or not _share_is_valid(share):
+            register_failure(ip, token_hash)
+            return _render_invalid()
+
+        if not _is_verified_session(share):
+            register_failure(ip, token_hash)
+            return _render_invalid()
+
+        if not request.form.get("terms_accept"):
+            return render_template(
+                "datasets/download_welcome.html",
+                verified=True,
+                error_message="Please accept the Terms & Conditions to continue.",
+                **_build_verified_context(db, share, token),
+            )
+
+        if share.terms_accepted_at is None:
+            share.terms_accepted_at = utcnow()
+            share.terms_accepted_ip = ip
+            db.add(share)
+        _set_terms_accepted(share)
+        ctx = _build_verified_context(db, share, token)
+        return render_template("datasets/download_welcome.html", verified=True, **ctx)
+
+
 @bp.route("/download/<token>/file/<job_token>/<path:filename>", methods=["GET"])
 @rate_limit("30 per minute")
 def download_file(token: str, job_token: str, filename: str):
@@ -844,6 +908,16 @@ def download_file(token: str, job_token: str, filename: str):
         )
         if not share or not _share_is_valid(share):
             return _render_invalid()
+        if not _is_verified_session(share):
+            register_failure(ip, token_hash)
+            return _render_invalid()
+        if not _is_terms_accepted(share):
+            return render_template(
+                "datasets/download_welcome.html",
+                verified=True,
+                error_message="Please accept the Terms & Conditions to download files.",
+                **_build_verified_context(db, share, token),
+            )
 
         export_job = (
             db.query(Job)

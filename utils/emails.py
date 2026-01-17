@@ -80,6 +80,7 @@ def build_dataset_share_email_html(
     logo_cid: str | None = None,
     link: str | None = None,
     otp: str | None = None,
+    link_note: str | None = None,
 ) -> str:
     logo_html = ""
     if logo_cid:
@@ -99,15 +100,29 @@ def build_dataset_share_email_html(
             'style="background:#0d6efd;color:#fff;text-decoration:none;padding:10px 16px;border-radius:6px;display:inline-block;">'
             "Open Download Link</a>"
         )
-    link_row = ""
-    if link:
-        link_row = (
-            "<tr>"
-            "<td style='padding:6px 0;color:#6b7280;'>Download link</td>"
-            f"<td style='padding:6px 0;font-weight:600;'><a href='{link}'>{link}</a></td>"
-            "</tr>"
+        button_html += (
+            '<p style="margin:10px 0 0 0;font-size:12px;color:#6b7280;">'
+            "If the button doesn't work, copy and paste this link into your browser:</p>"
+            f'<p style="margin:6px 0 0 0;font-size:12px;"><a href="{link}">{link}</a></p>'
+        )
+    link_note_html = ""
+    expires_html = ""
+    expires_row = (
+        "<tr><td style='padding:6px 0;color:#6b7280;'>Expires at</td>"
+        f"<td style='padding:6px 0;font-weight:600;'>{expires_at}</td></tr>"
+    )
+    if link and not otp:
+        if link_note:
+            link_note_html = (
+                '<p style="margin:12px 0 0 0;color:#6b7280;font-size:12px;">'
+                f"{link_note}</p>"
+            )
+        expires_html = (
+            '<p style="margin:12px 0 0 0;color:#6b7280;font-size:12px;">'
+            f"Expires at: <span style='font-weight:600;color:#1f2a37;'>{expires_at}</span></p>"
         )
     otp_html = ""
+    otp_first_html = ""
     if otp:
         otp_html = (
             '<div style="font-family:Consolas,Menlo,Monaco,\'Liberation Mono\',\'Courier New\',monospace;'
@@ -115,25 +130,33 @@ def build_dataset_share_email_html(
             'display:inline-block;">'
             f"{otp}</div>"
         )
+        if not link:
+            otp_first_html = (
+                '<p style="margin:0 0 8px 0;color:#6b7280;font-size:12px;">'
+                "One-time passcode (OTP)</p>"
+                f"{otp_html}"
+                '<p style="margin:8px 0 0 0;color:#6b7280;font-size:12px;">'
+                "Kindly share the OTP securely with the dataset recipient.</p>"
+            )
 
     return (
         '<div style="font-family:Arial,sans-serif;background:#f5f7fb;padding:24px;">'
         '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:10px;padding:24px;">'
         f"{logo_html}"
         f'<h2 style="margin:0 0 12px 0;color:#1f2a37;">{title}</h2>'
+        f"{otp_first_html}"
         '<table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;margin-bottom:16px;">'
         f"<tr><td style='padding:6px 0;color:#6b7280;'>Dataset</td><td style='padding:6px 0;font-weight:600;'>{dataset_name}</td></tr>"
-        f"{link_row}"
         f"<tr><td style='padding:6px 0;color:#6b7280;'>Purpose</td><td style='padding:6px 0;font-weight:600;'>{purpose}</td></tr>"
         f"<tr><td style='padding:6px 0;color:#6b7280;'>Created for</td><td style='padding:6px 0;font-weight:600;'>{created_for}</td></tr>"
-        f"<tr><td style='padding:6px 0;color:#6b7280;'>Expires at</td><td style='padding:6px 0;font-weight:600;'>{expires_at}</td></tr>"
+        f"{'' if (link and not otp) else expires_row}"
         "</table>"
         f"{button_html}"
-        f"{otp_html}"
-        '<p style="margin-top:16px;color:#6b7280;font-size:12px;">'
-        "If you did not expect this email, please ignore it.</p>"
-        '<p style="margin-top:8px;color:#9ca3af;font-size:12px;">'
-        "Eye Image Manager, AIIMS, New Delhi</p>"
+        f"{expires_html}"
+        f"{link_note_html}"
+        f"{'' if otp_first_html else otp_html}"
+        f"{'' if otp and not link else '<p style=\"margin-top:16px;color:#6b7280;font-size:12px;\">If you did not expect this email, please ignore it.</p>'}"
+        f"{'' if otp and not link else '<p style=\"margin-top:8px;color:#9ca3af;font-size:12px;\">Eye Image Manager, AIIMS, New Delhi</p>'}"
         "</div></div>"
     )
 

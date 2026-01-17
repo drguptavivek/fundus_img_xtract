@@ -56,34 +56,63 @@
             <div class="alert alert-danger">{{ error_message }}</div>
             {% endif %}
 
-            {% if export_files %}
-              <div class="alert alert-success">
-                Export is ready. Download below.
+            {% if not terms_accepted %}
+              <div class="alert alert-warning small">
+                <div class="fw-semibold mb-2">Terms &amp; Conditions</div>
+                <ul class="mb-2">
+                  <li>Use the dataset only for the stated purpose and approved scope.</li>
+                  <li>Use the data only for bona fide research, educational, or operational needs.</li>
+                  <li>Do not attempt to identify individuals or re-link identities.</li>
+                  <li>Do not share download credentials, links, or OTPs with others.</li>
+                  <li>Do not share, redistribute, or sublicense files, links, or OTPs.</li>
+                  <li>Store data securely and delete it when no longer needed.</li>
+                  <li>Comply with applicable laws, ethics approvals, and institutional policies.</li>
+                </ul>
+                <form method="POST" action="{{ url_for('datasets.download_accept', token=token) }}">
+                  {{ csrf_field() }}
+                  <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="terms_accept" name="terms_accept" required>
+                    <label class="form-check-label" for="terms_accept">I agree to the Terms &amp; Conditions.</label>
+                  </div>
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Continue</button>
+                </form>
               </div>
-              <ul class="list-group mb-3">
-                {% for file in export_files %}
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                  <span>{{ file }}</span>
-                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('datasets.download_file', token=token, job_token=export_job.token, filename=file) }}">Download</a>
-                </li>
-                {% endfor %}
-              </ul>
-            {% else %}
-              {% if latest_job %}
-                <div class="alert alert-info">
-                  Export status: {{ latest_job.status }}. Refresh this page after a few minutes.
+            {% endif %}
+
+            {% if terms_accepted %}
+              {% if export_files %}
+                <div class="alert alert-success">
+                  Export is ready. Download below.
                 </div>
+                <ul class="list-group mb-3">
+                  {% for file in export_files %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ file }}</span>
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('datasets.download_file', token=token, job_token=export_job.token, filename=file) }}">Download</a>
+                  </li>
+                  {% endfor %}
+                </ul>
               {% else %}
-                <div class="alert alert-info">
-                  No export is ready yet. Click Generate Export to continue. Exports are available for 20 hours.
-                </div>
+                {% if latest_job %}
+                  <div class="alert alert-info">
+                    Export status: {{ latest_job.status }}. Refresh this page after a few minutes.
+                  </div>
+                {% else %}
+                  <div class="alert alert-info">
+                    No export is ready yet. Click Generate Export to continue. Exports are available for 20 hours.
+                  </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">
+                  {{ csrf_field() }}
+                  <button type="submit" class="btn btn-outline-primary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
+                    Generate Export
+                  </button>
+                </form>
               {% endif %}
-              <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">
-                {{ csrf_field() }}
-                <button type="submit" class="btn btn-outline-primary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
-                  Generate Export
-                </button>
-              </form>
+            {% else %}
+              <div class="alert alert-info small">
+                Accept the Terms &amp; Conditions to download the dataset.
+              </div>
             {% endif %}
           {% endif %}
         </div>

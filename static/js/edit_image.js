@@ -460,10 +460,11 @@ document.addEventListener('DOMContentLoaded', function() {
     saveImageBtn.addEventListener('click', function() {
         const imageData = canvas.toDataURL();
         const saveUrl = saveImageBtn.dataset.saveUrl;
+        const allowGradedEdit = saveImageBtn.dataset.allowGradedEdit === 'true';
         fetch(saveUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
-            body: JSON.stringify({ image_data: imageData })
+            body: JSON.stringify({ image_data: imageData, allow_graded_edit: allowGradedEdit })
         })
         .then(response => response.json())
         .then(data => {

@@ -313,6 +313,32 @@
       <small class="text-muted">Included vs excluded based on your decisions.</small>
     </div>
     <div class="card-body">
+      {% if selected_image and selected_row %}
+      <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <span class="fw-semibold">Selected Task {{ selected_row.task_id }}</span>
+            {% if selected_row.final_impression %}
+              <span class="text-muted small">({{ selected_row.final_impression }})</span>
+            {% endif %}
+          </div>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}">Cancel</a>
+        </div>
+        <div class="card-body">
+          {% set image = selected_image %}
+          {% set image_uuid = selected_row.encounter_file_uuid or selected_row.direct_image_uuid %}
+          {% include "partials/_viewer_card.html" with context %}
+          <form class="mt-3" method="POST" action="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}">
+            {{ csrf_field() }}
+            <input type="hidden" name="task_id" value="{{ selected_row.task_id }}">
+            <input type="hidden" name="decision" value="exclude">
+            <button type="submit" class="btn btn-sm btn-outline-danger" {% if dataset.is_finalized %}disabled{% endif %}>
+              Exclude from Dataset
+            </button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
       <div class="row">
         <div class="col-lg-6">
           <h6>Included ({{ included_rows|length }})</h6>
@@ -324,6 +350,7 @@
                   <th>Final</th>
                   <th>AI</th>
                   <th>Lab Unit</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -333,9 +360,14 @@
                   <td>{{ row.final_impression or '—' }}</td>
                   <td>{{ row.ai_summary or '—' }}</td>
                   <td>{{ row.lab_unit }}</td>
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, selected_task_id=row.task_id) }}">
+                      View
+                    </a>
+                  </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="text-muted text-center">No tasks included yet.</td></tr>
+                <tr><td colspan="5" class="text-muted text-center">No tasks included yet.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -351,6 +383,7 @@
                   <th>Final</th>
                   <th>AI</th>
                   <th>Lab Unit</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -360,9 +393,19 @@
                   <td>{{ row.final_impression or '—' }}</td>
                   <td>{{ row.ai_summary or '—' }}</td>
                   <td>{{ row.lab_unit }}</td>
+                  <td class="text-end">
+                    <form method="POST" action="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}">
+                      {{ csrf_field() }}
+                      <input type="hidden" name="task_id" value="{{ row.task_id }}">
+                      <input type="hidden" name="decision" value="include">
+                      <button type="submit" class="btn btn-sm btn-outline-success" {% if dataset.is_finalized %}disabled{% endif %}>
+                        Include
+                      </button>
+                    </form>
+                  </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="text-muted text-center">No tasks excluded yet.</td></tr>
+                <tr><td colspan="5" class="text-muted text-center">No tasks excluded yet.</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -405,6 +448,11 @@
         </div>
         <div class="modal-body">
           Unfinalizing re-opens manual screening and changes selections for future exports.
+          {% if override_required %}
+          <div class="alert alert-warning mt-3 mb-0">
+            Admin override: this dataset was finalized outside the standard window.
+          </div>
+          {% endif %}
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>

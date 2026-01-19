@@ -37,6 +37,11 @@
       Editing tools are disabled because grading tasks are in progress{% if blocking_task_states %} ({{ blocking_task_states | join(', ') }}){% endif %}.
     </div>
   {% endif %}
+  {% if override_required %}
+    <div class="alert alert-warning py-2">
+      This image is already graded ({{ blocking_task_states | join(', ') }}). Edits are allowed here and will be audited.
+    </div>
+  {% endif %}
 
   <div class="row" style="padding: 1rem 0rem;">
     <div class="col-10">
@@ -91,7 +96,8 @@
                   <i class="bi bi-check-lg"></i> Apply Crop
                 </button>
                 <button id="save-image" class="btn btn-success btn-sm" {% if editing_locked %}disabled data-edit-lock="true"{% endif %}
-                        data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
+                        data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}"
+                        data-allow-graded-edit="{{ 'true' if override_required else 'false' }}">
                   <i class="bi bi-save"></i> Save
                 </button>
                 {% if has_edited_version %}

@@ -25,6 +25,10 @@ docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs
 
 docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web  uv run alembic upgrade head
 
+# Database backup (timestamped)
+mkdir -p backups
+docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec -T db bash -lc 'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"' > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+
 # Alembic Commnsa
 uv run alembic  history
 uv run alembic heads

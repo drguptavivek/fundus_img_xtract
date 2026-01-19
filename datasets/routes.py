@@ -11,6 +11,7 @@ from typing import List, Optional
 from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user
 import sqlalchemy as sa
+from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
@@ -25,11 +26,12 @@ from models import (
     DatasetExport,
     DatasetShare,
     Disease,
+    GradingTask,
     Job,
     LabUnit,
     User,
 )
-from review.discrepancy_export import EXPORT_DIR, enqueue_dataset_export
+from review.discrepancy_export import EXPORT_DIR, _build_task_payload, _fetch_rows_by_task_ids, enqueue_dataset_export
 from utils.dataset_share import (
     format_expiry_delta,
     generate_share_otp,
@@ -87,6 +89,7 @@ def _render_invalid(status_code: int = 404):
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
 def list_datasets():
     """List curated datasets with summary details."""
+    selected_dataset_uuid = (request.args.get("dataset_uuid") or "").strip()
     with get_db_session() as db:
         db_user = (
             db.query(User)
@@ -138,10 +141,163 @@ def list_datasets():
                 }
             )
 
+        browse_dataset = None
+        browse_items = []
+        browse_message = None
+        if selected_dataset_uuid:
+            browse_dataset = (
+                db.query(CuratedDataset)
+                .filter(CuratedDataset.uuid == selected_dataset_uuid, CuratedDataset.is_active.is_(True))
+                .first()
+            )
+            if not browse_dataset:
+                browse_message = "Dataset not found."
+            else:
+                lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+                allowed_lab_units = {lu.id for lu in lab_units_query.all()}
+                stored_filters = {}
+                try:
+                    stored_filters = json.loads(browse_dataset.filters_json or "{}")
+                except Exception:
+                    stored_filters = {}
+                stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+                if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+                    browse_message = "You do not have permission to browse this dataset."
+                elif not browse_dataset.is_finalized:
+                    browse_message = "Finalize the dataset before browsing."
+                else:
+                    included_task_ids = [
+                        row[0]
+                        for row in (
+                            db.query(CuratedDatasetItem.task_id)
+                            .filter(
+                                CuratedDatasetItem.dataset_id == browse_dataset.id,
+                                CuratedDatasetItem.include_in_export.is_(True),
+                            )
+                            .all()
+                        )
+                    ]
+                    rows = _fetch_rows_by_task_ids(included_task_ids, browse_dataset.disease_id)
+                    rows_sorted = sorted(rows, key=lambda r: r.task_id)
+                    browse_items = []
+                    for idx, row in enumerate(rows_sorted, start=1):
+                        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+                        if not image_uuid:
+                            continue
+                        browse_items.append(
+                            {
+                                "index": idx,
+                                "image_uuid": image_uuid,
+                                "final_impression": row.final_impression,
+                            }
+                        )
+
         return render_template(
             "datasets/list.html",
             summaries=summaries,
             can_share=can_share,
+            browse_dataset=browse_dataset,
+            browse_items=browse_items,
+            browse_message=browse_message,
+        )
+
+
+@bp.route("/list/viewer/<string:dataset_uuid>/<string:image_uuid>")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_browse_viewer(dataset_uuid: str, image_uuid: str):
+    """Serve the dataset browse viewer card for an included image."""
+    with get_db_session() as db:
+        index = request.args.get("index", type=int)
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(
+                CuratedDataset.uuid == dataset_uuid,
+                CuratedDataset.is_active.is_(True),
+                CuratedDataset.is_finalized.is_(True),
+            )
+            .first()
+        )
+        if not dataset:
+            return ("Not found", 404)
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = {lu.id for lu in lab_units_query.all()}
+        stored_filters = {}
+        try:
+            stored_filters = json.loads(dataset.filters_json or "{}")
+        except Exception:
+            stored_filters = {}
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+            return ("Forbidden", 403)
+
+        query = (
+            db.query(GradingTask)
+            .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
+            .filter(
+                CuratedDatasetItem.dataset_id == dataset.id,
+                CuratedDatasetItem.include_in_export.is_(True),
+                or_(
+                    GradingTask.encounter_file.has(uuid=image_uuid),
+                    GradingTask.direct_image.has(uuid=image_uuid),
+                ),
+            )
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+        )
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
+        if not task:
+            return ("Not found", 404)
+
+        image_obj = task.encounter_file or task.direct_image
+        export_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
+        export_payload = _build_task_payload(export_rows)[0] if export_rows else {}
+        export_payload.pop("task_uuid", None)
+        export_payload.pop("image_path", None)
+
+        field_labels = {
+            "task_id": "Task ID",
+            "disease": "Disease",
+            "hospital": "Hospital",
+            "lab_unit": "Lab unit",
+            "state": "State",
+            "consensus_status": "Consensus status",
+            "consensus_method": "Consensus method",
+            "has_review": "Has review",
+            "resident_grade": "Resident grade",
+            "resident_comment": "Resident comment",
+            "resident2_grade": "Resident2 grade",
+            "resident2_comment": "Resident2 comment",
+            "arbitrator_grade": "Arbitrator grade",
+            "arbitrator_comment": "Arbitrator comment",
+            "review_grade": "Review grade",
+            "review_comment": "Review comment",
+            "ai_grade": "AI grade",
+            "ai_model_name": "AI model name",
+            "ai_model_version": "AI model version",
+            "ai_probability": "AI probability",
+            "ai_review_statuses": "AI review statuses",
+            "ai_review_comments": "AI review comments",
+            "image_filename": "Image filename",
+        }
+        ordered_keys = list(field_labels.keys())
+        display_fields = [
+            {
+                "label": field_labels[key],
+                "value": export_payload.get(key),
+            }
+            for key in ordered_keys
+            if key in export_payload
+        ]
+
+        return render_template(
+            "datasets/_browse_viewer.html",
+            dataset=dataset,
+            image=image_obj,
+            image_uuid=image_uuid,
+            export_payload=export_payload,
+            display_fields=display_fields,
+            browse_index=index,
         )
 
 

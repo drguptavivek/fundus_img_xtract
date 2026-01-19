@@ -1,7 +1,7 @@
 import base64, traceback
 import logging
 from pathlib import Path
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, session
 from flask_login import current_user
 from sqlalchemy import select
 from . import bp
@@ -11,6 +11,7 @@ from models import DirectImageUpload, BASE_DIR, GradingTask
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
+from utils.sensitive_operations import _log_sensitive_operation
 
 
 editing_logger = logging.getLogger("editing")
@@ -69,7 +70,15 @@ def save_edited_image(upload_id: int):
             task_states = db.execute(
                 select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
             ).scalars().all()
-            if any(_normalize_task_state(state) not in ("", "pending") for state in task_states):
+            has_non_pending = any(_normalize_task_state(state) not in ("", "pending") for state in task_states)
+            payload = request.get_json(silent=True) if request.is_json else None
+            allow_graded_edit = False
+            if payload is not None:
+                allow_graded_edit = bool(payload.get("allow_graded_edit"))
+            else:
+                allow_graded_edit = (request.form.get("allow_graded_edit") or "").lower() == "true"
+            override_allowed = allow_graded_edit and session.get("anonymize_edit_uuid") == str(upload.uuid)
+            if has_non_pending and not override_allowed:
                 editing_logger.warning(
                     "Save blocked for upload %s due to task states %s",
                     sanitize_log_value(upload_id),
@@ -77,7 +86,7 @@ def save_edited_image(upload_id: int):
                 )
                 return jsonify({"error": "Cannot edit image while grading tasks are in progress."}), 409
 
-            image_data = request.get_json().get('image_data') if request.is_json else request.form.get('image_data')
+            image_data = payload.get('image_data') if payload is not None else request.form.get('image_data')
             if not image_data:
                 editing_logger.warning(
                     "No image data for upload %s",
@@ -140,10 +149,22 @@ def save_edited_image(upload_id: int):
             db.commit()
 
             editing_logger.info(
-                "Saved edited image for upload %s by user %s",
+                "Saved edited image for upload %s image_uuid %s by user %s",
                 sanitize_log_value(upload_id),
+                sanitize_log_value(upload.uuid),
                 sanitize_log_value(current_user.id),
             )
+            if has_non_pending and override_allowed:
+                _log_sensitive_operation(
+                    operation="direct_upload_anonymize_override",
+                    status="completed",
+                    details={
+                        "upload_id": upload.id,
+                        "upload_uuid": str(upload.uuid),
+                        "task_states": task_states,
+                        "source": "anonymize_ui",
+                    },
+                )
             return jsonify({"message": "Image saved successfully."}, 200)
 
         except Exception as e:

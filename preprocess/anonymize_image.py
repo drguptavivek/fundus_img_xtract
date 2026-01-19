@@ -6,7 +6,7 @@ import os
 from uuid import UUID
 import logging
 
-from flask import render_template, redirect, url_for, flash, current_app, jsonify, request
+from flask import render_template, redirect, url_for, flash, current_app, jsonify, request, session
 from flask_login import current_user
 from sqlalchemy import select, func, exists, and_
 from sqlalchemy.orm import selectinload
@@ -17,6 +17,7 @@ from auth.roles import roles_required
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
+from utils.sensitive_operations import _log_sensitive_operation
 
 
 editing_logger = logging.getLogger("editing")
@@ -431,7 +432,7 @@ def anonymize_image(uuid: UUID):
         if task_state_rows:
             normalized_task_states = [_normalize_task_state(state) for state in task_state_rows]
             blocking_task_states = sorted({state for state in normalized_task_states if state and state != "pending"})
-            editing_locked = bool(blocking_task_states)
+            editing_locked = False
 
         # Access control logging scoped to assigned lab units
         editing_logger.debug(
@@ -446,6 +447,9 @@ def anonymize_image(uuid: UUID):
             upload.lab_unit_id,
             upload.lab_unit_id in allowed_lab_unit_ids
         )
+
+        session["anonymize_edit_uuid"] = uuid_val
+        override_required = bool(blocking_task_states)
 
         # Build URLs for media endpoints (prefer edited if present for display)
         image_url = url_for(
@@ -695,6 +699,7 @@ def anonymize_image(uuid: UUID):
             next_unverified_uuid=next_unverified_uuid,
             editing_locked=editing_locked,
             blocking_task_states=blocking_task_states,
+            override_required=override_required,
         )
 
     finally:
@@ -728,7 +733,9 @@ def restore_original_anonymized_image(uuid: UUID):
         task_states = db_session.execute(
             select(GradingTask.state).where(GradingTask.direct_image_upload_id == upload.id)
         ).scalars().all()
-        if any(_normalize_task_state(state) not in ("", "pending") for state in task_states):
+        has_non_pending = any(_normalize_task_state(state) not in ("", "pending") for state in task_states)
+        override_allowed = session.get("anonymize_edit_uuid") == uuid_val
+        if has_non_pending and not override_allowed:
             return jsonify({"error": "Cannot restore image while grading tasks are in progress."}), 409
 
         # Must have an edited file recorded
@@ -756,6 +763,18 @@ def restore_original_anonymized_image(uuid: UUID):
 
         try:
             db_session.commit()
+            if has_non_pending and override_allowed:
+                _log_sensitive_operation(
+                    operation="direct_upload_anonymize_override",
+                    status="completed",
+                    details={
+                        "upload_id": upload.id,
+                        "upload_uuid": str(upload.uuid),
+                        "task_states": task_states,
+                        "action": "restore_original",
+                        "source": "anonymize_ui",
+                    },
+                )
             flash("Original image restored successfully!", "success")
             return jsonify({"redirect_url": url_for("preprocess.anonymize_image", uuid=uuid_val)})
         except Exception as e:

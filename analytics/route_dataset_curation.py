@@ -26,6 +26,7 @@ from models import (
     LabUnit,
     Session,
     DirectImageUpload,
+    GradingTask,
     User,
     Job,
 )
@@ -423,6 +424,32 @@ def dataset_detail(dataset_uuid: str):
                 flash("Decision saved.", "success")
                 return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
+        selected_task_id = request.args.get("selected_task_id", type=int)
+        selected_row = None
+        selected_image = None
+        if selected_task_id:
+            selected_item = (
+                db.query(CuratedDatasetItem)
+                .filter(
+                    CuratedDatasetItem.dataset_id == dataset.id,
+                    CuratedDatasetItem.task_id == selected_task_id,
+                    CuratedDatasetItem.include_in_export.is_(True),
+                )
+                .first()
+            )
+            if selected_item:
+                task_query = (
+                    db.query(GradingTask)
+                    .filter(GradingTask.id == selected_task_id)
+                    .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+                )
+                task_query = apply_scoping(task_query, GradingTask, current_user, "view")
+                selected_task = task_query.first()
+                if selected_task:
+                    selected_image = selected_task.encounter_file or selected_task.direct_image
+                    selected_rows = _fetch_rows_by_task_ids([selected_task_id], dataset.disease_id)
+                    selected_row = selected_rows[0] if selected_rows else None
+
         next_row = None if dataset.is_finalized else _get_next_pending_row(filters, decided_task_ids)
         next_image = None
         next_grades: Dict[str, Any] = {}
@@ -473,11 +500,15 @@ def dataset_detail(dataset_uuid: str):
         now = datetime.now(timezone.utc)
         can_finalize = ("dataset_creator" in user_roles or "admin" in user_roles or current_user.is_master_admin) and not dataset.is_finalized
         can_unfinalize = False
+        override_required = False
+        within_window = False
+        is_creator = False
+        is_admin = "admin" in user_roles or current_user.is_master_admin
         if dataset.is_finalized and dataset.finalized_at:
             within_window = (now - dataset.finalized_at) <= timedelta(minutes=30)
             is_creator = dataset.finalized_by_user_id == current_user.id
-            is_admin = "admin" in user_roles or current_user.is_master_admin
             can_unfinalize = (within_window and is_creator) or is_admin
+            override_required = bool(is_admin and not (within_window and is_creator))
 
         share_display = session.pop("dataset_share_display", None)
         if share_display and share_display.get("dataset_uuid") != dataset.uuid:
@@ -503,6 +534,10 @@ def dataset_detail(dataset_uuid: str):
             total_downloads=total_downloads,
             can_finalize=can_finalize,
             can_unfinalize=can_unfinalize,
+            override_required=override_required,
+            selected_task_id=selected_task_id,
+            selected_row=selected_row,
+            selected_image=selected_image,
         )
 
 
@@ -831,18 +866,29 @@ def dataset_unfinalize(dataset_uuid: str):
         if not ((within_window and is_creator) or is_admin):
             flash("Unfinalize window expired. Contact an admin.", "error")
             return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+        override_used = bool(is_admin and not (within_window and is_creator))
 
         dataset.is_finalized = False
         dataset.finalized_at = None
         dataset.finalized_by_user_id = None
         db.add(dataset)
+        deactivated_shares = (
+            db.query(DatasetShare)
+            .filter(DatasetShare.dataset_id == dataset.id, DatasetShare.is_active.is_(True))
+            .update({"is_active": False})
+        )
         logger.info(
-            "Dataset unfinalized dataset_id=%s dataset_uuid=%s user_id=%s",
+            "Dataset unfinalized dataset_id=%s dataset_uuid=%s user_id=%s override=%s shares_deactivated=%s",
             dataset.id,
             dataset.uuid,
             current_user.id,
+            override_used,
+            deactivated_shares,
         )
-        flash("Dataset unfinalized. You can edit selections again.", "warning")
+        if deactivated_shares:
+            flash("Dataset unfinalized. Existing shares were deactivated.", "warning")
+        else:
+            flash("Dataset unfinalized. You can edit selections again.", "warning")
         return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
 
 

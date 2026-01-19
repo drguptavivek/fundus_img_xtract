@@ -48,6 +48,11 @@
                 <a class="btn btn-sm btn-outline-primary" href="{{ url_for('analytics.dataset_detail', dataset_uuid=ds.uuid) }}">
                   {{ "View" if ds.is_finalized else "Screen" }}
                 </a>
+                {% if ds.is_finalized %}
+                <a class="btn btn-sm btn-outline-info" href="{{ url_for('datasets.list_datasets', dataset_uuid=ds.uuid) }}#dataset-browse">
+                  Browse
+                </a>
+                {% endif %}
                 {% if can_share and ds.is_finalized %}
                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('datasets.share_dataset', dataset_uuid=ds.uuid) }}">
                   Share
@@ -65,5 +70,414 @@
       </div>
     </div>
   </div>
+
+  <div class="card shadow-sm mt-3" id="dataset-browse">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div>
+        <h5 class="card-title mb-0">Browse Dataset</h5>
+        {% if browse_dataset %}
+          <small class="text-muted">{{ browse_dataset.name }}</small>
+        {% else %}
+          <small class="text-muted">Select a finalized dataset to browse its included images.</small>
+        {% endif %}
+      </div>
+      {% if browse_dataset %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('datasets.list_datasets') }}">Clear</a>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if browse_message %}
+        <div class="alert alert-info mb-0">{{ browse_message }}</div>
+      {% elif browse_dataset %}
+        {% if browse_items %}
+        <div class="row g-3">
+          <div class="col-lg-3">
+            <div class="input-group input-group-sm mb-2">
+              <span class="input-group-text">Search UUID</span>
+              <input type="text" class="form-control" id="datasetBrowseSearch" placeholder="Type to filter...">
+              <button class="btn btn-outline-secondary" type="button" id="datasetBrowseClear">Clear</button>
+            </div>
+            <div class="list-group list-group-flush border rounded" id="datasetBrowseList" data-dataset-uuid="{{ browse_dataset.uuid }}" style="max-height: 90vh; overflow: auto;">
+              {% for item in browse_items %}
+                <div
+                  class="list-group-item list-group-item-action dataset-browse-row"
+                  role="button"
+                  data-image-uuid="{{ item.image_uuid }}"
+                  hx-get="{{ url_for('datasets.dataset_browse_viewer', dataset_uuid=browse_dataset.uuid, image_uuid=item.image_uuid) }}?index={{ item.index }}"
+                  hx-target="#datasetBrowseViewer"
+                  hx-swap="innerHTML"
+                >
+                  <div class="fw-semibold">
+                    <span class="text-muted">#{{ item.index }}</span>
+                    {{ item.image_uuid }}
+                  </div>
+                  <div class="small text-muted">{{ item.final_impression or '—' }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="col-lg-9">
+            <div id="datasetBrowseViewer">
+              <div class="alert alert-info mb-0">Select an image to view the export details.</div>
+            </div>
+            <div class="text-center mt-3 d-none" id="datasetBrowseLoading" aria-live="polite">
+              <div class="spinner-border text-secondary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-0">No included items found for this dataset.</div>
+        {% endif %}
+      {% else %}
+        <div class="alert alert-info mb-0">Choose a dataset and click Browse to view included images.</div>
+      {% endif %}
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/exif-js.js') }}"></script>
+  {% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+  {% else %}
+<script>
+  {% endif %}
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.dataset-browse-row').forEach(function(row) {
+        row.addEventListener('click', function() {
+          document.querySelectorAll('.dataset-browse-row.active').forEach(function(el) {
+            el.classList.remove('active');
+          });
+          row.classList.add('active');
+          setLoading(true);
+          const datasetUuid = browseList ? browseList.dataset.datasetUuid : '';
+          const imageUuid = row.dataset.imageUuid || '';
+          const url = new URL(window.location);
+          if (datasetUuid) {
+            url.searchParams.set('dataset_uuid', datasetUuid);
+          }
+          if (imageUuid) {
+            url.searchParams.set('image_uuid', imageUuid);
+          } else {
+            url.searchParams.delete('image_uuid');
+          }
+          url.hash = '#dataset-browse';
+          window.history.replaceState({ image_uuid: imageUuid }, '', url.toString());
+        });
+      });
+
+      const searchInput = document.getElementById('datasetBrowseSearch');
+      const clearBtn = document.getElementById('datasetBrowseClear');
+      const rows = Array.from(document.querySelectorAll('.dataset-browse-row'));
+      const browseList = document.getElementById('datasetBrowseList');
+      const visibleRows = function() {
+        return rows.filter(function(row) {
+          return row.style.display !== 'none';
+        });
+      };
+      const setLoading = function(isLoading) {
+        const spinner = document.getElementById('datasetBrowseLoading');
+        if (!spinner) {
+          return;
+        }
+        spinner.classList.toggle('d-none', !isLoading);
+      };
+      let pendingActivate = null;
+      const activateRow = function(row, options) {
+        if (!row) {
+          return;
+        }
+        if (row.classList.contains('active')) {
+          return;
+        }
+        const settings = options || {};
+        if (pendingActivate) {
+          clearTimeout(pendingActivate);
+        }
+        pendingActivate = setTimeout(function() {
+          document.querySelectorAll('.dataset-browse-row.active').forEach(function(el) {
+            el.classList.remove('active');
+          });
+          row.classList.add('active');
+          if (window.htmx) {
+            window.htmx.trigger(row, 'click');
+          } else {
+            row.click();
+          }
+          row.scrollIntoView({ block: 'nearest' });
+          if (settings.showSpinner) {
+            setLoading(true);
+          }
+          if (settings.push !== false) {
+            const datasetUuid = browseList ? browseList.dataset.datasetUuid : '';
+            const imageUuid = row.dataset.imageUuid || '';
+            const url = new URL(window.location);
+            if (datasetUuid) {
+              url.searchParams.set('dataset_uuid', datasetUuid);
+            }
+            if (imageUuid) {
+              url.searchParams.set('image_uuid', imageUuid);
+            } else {
+              url.searchParams.delete('image_uuid');
+            }
+            url.hash = '#dataset-browse';
+            window.history.replaceState({ image_uuid: imageUuid }, '', url.toString());
+          }
+          pendingActivate = null;
+        }, 250);
+      };
+      const autoSelectFirstVisible = function(options) {
+        const firstVisible = visibleRows()[0];
+        activateRow(firstVisible, options);
+      };
+      const applyFilter = function() {
+        const term = (searchInput ? searchInput.value : '').trim().toLowerCase();
+        rows.forEach(function(row) {
+          const uuid = (row.dataset.imageUuid || '').toLowerCase();
+          row.style.display = (!term || uuid.includes(term)) ? '' : 'none';
+        });
+        autoSelectFirstVisible({ push: true, showSpinner: true });
+      };
+      if (searchInput) {
+        searchInput.addEventListener('input', applyFilter);
+      }
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function() {
+          if (searchInput) {
+            searchInput.value = '';
+          }
+          applyFilter();
+        });
+      }
+
+      const syncFromUrl = function() {
+        const params = new URL(window.location).searchParams;
+        const imageUuid = params.get('image_uuid');
+        if (!imageUuid) {
+          return;
+        }
+        rows.forEach(function(row) {
+          row.style.display = '';
+        });
+        if (searchInput) {
+          searchInput.value = '';
+        }
+        const target = rows.find(function(row) {
+          return row.dataset.imageUuid === imageUuid;
+        });
+        if (target) {
+          activateRow(target, { push: false });
+        }
+      };
+
+      document.body.addEventListener('click', function(event) {
+        const trigger = event.target.closest('[data-edit-url]');
+        if (!trigger) {
+          return;
+        }
+        const modal = document.getElementById('datasetEditConfirmModal');
+        const link = document.getElementById('datasetEditConfirmLink');
+        if (modal && link) {
+          modal.dataset.editUrl = trigger.dataset.editUrl || '';
+          link.href = trigger.dataset.editUrl || '#';
+          link.textContent = 'Continue';
+          link.target = '_blank';
+        }
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const link = event.target.closest('#datasetEditConfirmLink');
+        if (!link) {
+          return;
+        }
+        const modal = document.getElementById('datasetEditConfirmModal');
+        const editUrl = (modal && modal.dataset.editUrl) ? modal.dataset.editUrl : link.href;
+        if (editUrl) {
+          window.open(editUrl, '_blank', 'noopener');
+        }
+      });
+
+      const exifCache = new Map();
+      const normalizeExifValue = function(value) {
+        if (value === null || value === undefined) {
+          return '';
+        }
+        if (Array.isArray(value)) {
+          return value.join(', ');
+        }
+        if (typeof value === 'object') {
+          if (typeof value.numerator === 'number' && typeof value.denominator === 'number') {
+            if (!value.denominator) {
+              return String(value.numerator);
+            }
+            return (value.numerator / value.denominator).toFixed(3);
+          }
+          return String(value);
+        }
+        return String(value);
+      };
+      const formatExif = function(tags) {
+        const lines = [];
+        Object.keys(tags || {}).forEach(function(key) {
+          const value = normalizeExifValue(tags[key]);
+          if (value) {
+            lines.push(key + ': ' + value);
+          }
+        });
+        return lines.join(' | ');
+      };
+      const updateExifBadge = function(badge, result) {
+        if (!badge) {
+          return;
+        }
+        if (!result || !result.hasExif) {
+          badge.textContent = 'Clear';
+          badge.classList.remove('text-bg-success');
+          badge.classList.add('text-bg-light');
+          badge.removeAttribute('data-bs-toggle');
+          badge.removeAttribute('title');
+          return;
+        }
+        const detailText = formatExif(result.tags);
+        badge.textContent = 'Present';
+        badge.classList.remove('text-bg-light');
+        badge.classList.add('text-bg-success');
+        if (detailText) {
+          badge.setAttribute('data-bs-toggle', 'tooltip');
+          badge.setAttribute('title', detailText);
+          if (window.bootstrap && window.bootstrap.Tooltip) {
+            const existing = window.bootstrap.Tooltip.getInstance(badge);
+            if (existing) {
+              existing.dispose();
+            }
+            new window.bootstrap.Tooltip(badge);
+          }
+        }
+      };
+      const extractExif = function(badge) {
+        const url = badge.dataset.imageUrl;
+        const uuid = badge.dataset.imageUuid;
+        if (!url || !window.EXIF) {
+          updateExifBadge(badge, { hasExif: false, tags: {} });
+          return;
+        }
+        const cacheKey = uuid || url;
+        if (exifCache.has(cacheKey)) {
+          updateExifBadge(badge, exifCache.get(cacheKey));
+          return;
+        }
+        badge.textContent = 'Loading...';
+        const viewerImg = document.querySelector('#datasetBrowseViewer img.imggr-main-img');
+        const useExisting = viewerImg && viewerImg.src && viewerImg.src.indexOf(url) !== -1;
+        const img = useExisting ? viewerImg : new Image();
+        if (!useExisting) {
+          img.src = url;
+        }
+        img.onload = function() {
+          window.EXIF.getData(img, function() {
+            const tags = window.EXIF.getAllTags(this) || {};
+            const hasExif = Object.keys(tags).length > 0;
+            const result = { hasExif: hasExif, tags: tags };
+            exifCache.set(cacheKey, result);
+            updateExifBadge(badge, result);
+          });
+        };
+        img.onerror = function() {
+          updateExifBadge(badge, { hasExif: false, tags: {} });
+        };
+      };
+      const initExifBadges = function(container) {
+        const scope = container || document;
+        const badges = scope.querySelectorAll('[data-exif-info="true"]');
+        badges.forEach(function(badge) {
+          if (badge.dataset.exifInit === 'true') {
+            return;
+          }
+          badge.dataset.exifInit = 'true';
+          extractExif(badge);
+        });
+      };
+      initExifBadges(document);
+
+      document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.target) {
+          initExifBadges(event.target);
+        }
+      });
+
+      document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.target && event.target.id === 'datasetBrowseViewer') {
+          setLoading(false);
+          const viewer = event.target;
+          const alertEl = viewer.querySelector('[data-image-error="true"]');
+          const imgEl = viewer.querySelector('img.imggr-main-img');
+          if (imgEl && alertEl) {
+            const baseSrc = imgEl.getAttribute('src') ? imgEl.getAttribute('src').split('?')[0] : '';
+            alertEl.classList.add('d-none');
+            imgEl.addEventListener('load', function() {
+              alertEl.classList.add('d-none');
+              setLoading(false);
+            }, { once: true });
+            imgEl.addEventListener('error', function() {
+              alertEl.classList.remove('d-none');
+              setLoading(false);
+            }, { once: true });
+            const retryBtn = alertEl.querySelector('[data-image-retry="true"]');
+            if (retryBtn && baseSrc) {
+              retryBtn.addEventListener('click', function() {
+                setLoading(true);
+                alertEl.classList.add('d-none');
+                imgEl.src = baseSrc + '?t=' + Date.now();
+              });
+            }
+          }
+        }
+      });
+
+      document.body.addEventListener('htmx:responseError', function() {
+        setLoading(false);
+      });
+
+      let lastNavAt = 0;
+      const NAV_THROTTLE_MS = 200;
+      document.addEventListener('keydown', function(event) {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+          return;
+        }
+        if (event.repeat) {
+          return;
+        }
+        const now = Date.now();
+        if (now - lastNavAt < NAV_THROTTLE_MS) {
+          return;
+        }
+        lastNavAt = now;
+        const activeEl = document.querySelector('.dataset-browse-row.active');
+        const list = visibleRows();
+        if (!list.length) {
+          return;
+        }
+        const activeIndex = activeEl ? list.indexOf(activeEl) : -1;
+        if (event.key === 'ArrowDown') {
+          const nextIndex = Math.min(activeIndex + 1, list.length - 1);
+          activateRow(list[nextIndex] || list[0], { push: true, showSpinner: true });
+        } else {
+          const prevIndex = Math.max(activeIndex - 1, 0);
+          activateRow(list[prevIndex] || list[0], { push: true, showSpinner: true });
+        }
+        event.preventDefault();
+      });
+
+      window.addEventListener('popstate', function() {
+        syncFromUrl();
+      });
+
+      syncFromUrl();
+    });
+  </script>
 {% endblock %}

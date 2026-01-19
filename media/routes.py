@@ -45,7 +45,7 @@ def _directImgFinalByUUID(uuid_str: str):
 
 @bp.route("/img/<uuid_str>", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
-@rate_limit("1000 per hour; 100 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+@rate_limit("1000 per hour; 300 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
 def _imgForGradingByUUID(uuid_str: str):
     return imgForGradingByUUID(uuid_str)
 

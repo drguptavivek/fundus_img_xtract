@@ -1,0 +1,52 @@
+<div class="mb-3">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+    <div>
+      <div class="small text-muted">Image UUID</div>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <div class="fw-semibold">
+          {% if browse_index %}
+            <span class="text-muted">#{{ browse_index }}</span>
+          {% endif %}
+          {{ row.encounter_file_uuid or row.direct_image_uuid if row else image_uuid }}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <form method="POST" action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-target="#datasetScreenViewer" hx-swap="innerHTML">
+          {% from "_forms.html" import csrf_field %}
+          {{ csrf_field() }}
+          <input type="hidden" name="task_id" value="{{ row.task_id if row else '' }}">
+          <input type="hidden" name="sort" value="{{ screen_sort }}">
+          <button type="submit" class="btn btn-sm {% if is_excluded %}btn-outline-success{% else %}btn-outline-danger{% endif %}" {% if dataset.is_finalized or not row %}disabled{% endif %}>
+            {% if is_excluded %}Include{% else %}Exclude{% endif %}
+          </button>
+          </form>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-warning"
+            data-bs-toggle="modal"
+            data-bs-target="#datasetEditConfirmModal"
+            data-edit-url="{{ url_for('preprocess.anonymize_image', uuid=image_uuid) }}"
+            {% if not row %}disabled{% endif %}
+          >
+            Edit Image
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-gallery-close="true">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="small text-muted">Final impression</div>
+      <div class="fw-semibold">{{ row.final_impression if row else '—' }}</div>
+    </div>
+  </div>
+</div>
+
+{% include "partials/_viewer_card.html" %}
+
+{% if row_update %}
+  <div hx-swap-oob="true" id="datasetScreenRow-{{ row_update.image_uuid }}">
+    {% set row = row_update %}
+    {% include "review/_dataset_screen_row.html" with context %}
+  </div>
+{% endif %}

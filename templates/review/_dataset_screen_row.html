@@ -1,0 +1,28 @@
+<div
+  id="datasetScreenRow-{{ row.image_uuid }}"
+  class="list-group-item list-group-item-action dataset-screen-row{% if row_is_new %} is-new{% endif %}"
+  role="button"
+  data-image-uuid="{{ row.image_uuid }}"
+  data-excluded="{{ 'true' if row.is_excluded else 'false' }}"
+  {% if oob_swap %}hx-swap-oob="{{ oob_swap }}"{% endif %}
+  hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort) }}"
+  hx-target="#datasetScreenViewer"
+  hx-swap="innerHTML"
+>
+  <div class="fw-semibold d-flex align-items-center gap-2">
+    {% if row.index %}
+      <span class="text-muted">#{{ row.index }}</span>
+    {% endif %}
+    <span>{{ row.image_uuid }}</span>
+    {% if row.is_excluded %}
+      <span class="badge text-bg-danger">Excluded</span>
+    {% endif %}
+    {% if row.selection_method == 'auto' %}
+      <span class="badge text-bg-info">Auto</span>
+    {% endif %}
+  </div>
+  <div class="small text-muted">{{ row.final_impression or '—' }}</div>
+  {% if row.selected_at %}
+    <div class="small text-muted">Added {{ row.selected_at | user_datetime }}</div>
+  {% endif %}
+</div>

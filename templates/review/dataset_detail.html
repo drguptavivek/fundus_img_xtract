@@ -2,11 +2,54 @@
 {% block title %}Dataset {{ dataset.name }}{% endblock %}
 {% block extra_styles %}
 <style>
+  .dataset-screen-row[data-excluded="true"] {
+    color: var(--bs-danger);
+    opacity: 0.75;
+  }
+  .dataset-screen-row[data-excluded="true"] .text-muted {
+    color: rgba(var(--bs-danger-rgb), 0.65);
+  }
+  .dataset-screen-thumb {
+    cursor: pointer;
+    position: relative;
+    background: var(--bs-body-bg);
+  }
+  .dataset-screen-thumb .ratio {
+    background: var(--bs-body-bg);
+  }
+  .dataset-screen-thumb img {
+    display: block;
+  }
+  .dataset-screen-thumb.is-excluded {
+    border-color: var(--bs-danger) !important;
+  }
+  .dataset-screen-thumb .thumb-status {
+    align-items: center;
+    background: rgba(var(--bs-body-bg-rgb), 0.9);
+    border-radius: 0.5rem;
+    color: #6c757d;
+    display: flex;
+    inset: 0.5rem;
+    justify-content: center;
+    opacity: 0;
+    padding: 0.5rem;
+    position: absolute;
+    text-align: center;
+    transition: opacity 0.2s ease;
+  }
+  .dataset-screen-thumb.is-loading .thumb-status,
+  .dataset-screen-thumb.is-error .thumb-status {
+    opacity: 1;
+  }
   .otp-code {
     font-family: "Consolas", "Menlo", "Monaco", "Liberation Mono", "Courier New", monospace;
     font-variant-numeric: slashed-zero;
     font-feature-settings: "zero" 1;
     letter-spacing: 0.08em;
+  }
+  .dataset-screen-row.is-new {
+    background: rgba(var(--bs-primary-rgb), 0.12);
+    border-color: rgba(var(--bs-primary-rgb), 0.4);
   }
 </style>
 {% endblock %}
@@ -93,7 +136,7 @@
     </div>
   </div>
 
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm mb-4" id="screen-images">
     <div class="card-header">
       <h5 class="card-title mb-0">Filters</h5>
     </div>
@@ -153,8 +196,95 @@
     </div>
   </div>
 
-  {% if can_share %}
   <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="card-title mb-0">Screen Images</h5>
+      <div class="d-flex align-items-center gap-2">
+        <small class="text-muted">Included images for screening.</small>
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">Sort</span>
+          <select class="form-select form-select-sm" id="screenSortSelect" style="width: 180px;">
+            <option value="task_asc" {% if screen_sort == 'task_asc' %}selected{% endif %}>Task ID (Asc)</option>
+            <option value="added_desc" {% if screen_sort == 'added_desc' %}selected{% endif %}>Date Added (Desc)</option>
+            <option value="added_asc" {% if screen_sort == 'added_asc' %}selected{% endif %}>Date Added (Asc)</option>
+          </select>
+        </div>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Screen view toggle">
+          <button type="button" class="btn btn-outline-secondary" id="screenViewList">List</button>
+          <button type="button" class="btn btn-outline-secondary" id="screenViewGallery"
+                  hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=1, view='gallery', sort=screen_sort) }}"
+                  hx-target="#datasetScreenGalleryView"
+                  hx-swap="innerHTML"
+                  hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=1, sort=screen_sort) }}#screen-images">
+            Gallery
+          </button>
+        </div>
+        {% if not dataset.is_finalized %}
+        <form method="POST"
+              action="{{ url_for('analytics.dataset_add_more', dataset_uuid=dataset.uuid) }}"
+              hx-post="{{ url_for('analytics.dataset_add_more', dataset_uuid=dataset.uuid) }}"
+              hx-target="#datasetScreenList"
+              hx-swap="none">
+          {{ csrf_field() }}
+          <input type="hidden" name="sort" value="{{ screen_sort }}">
+          <button type="submit" class="btn btn-sm btn-outline-primary">Add More</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% if screen_rows %}
+      <div class="row g-3">
+        <div class="col-lg-4" id="datasetScreenListColumn">
+          <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Filter screen list" id="screenFilterGroup">
+            <input type="radio" class="btn-check" name="screenFilter" id="screenFilterAll" value="all" checked>
+            <label class="btn btn-outline-secondary" for="screenFilterAll">All (<span id="screenCountAll">{{ screen_rows|length }}</span>)</label>
+            <input type="radio" class="btn-check" name="screenFilter" id="screenFilterIncluded" value="included">
+            <label class="btn btn-outline-secondary" for="screenFilterIncluded">Included (<span id="screenCountIncluded">{{ include_count }}</span>)</label>
+            <input type="radio" class="btn-check" name="screenFilter" id="screenFilterExcluded" value="excluded">
+            <label class="btn btn-outline-secondary" for="screenFilterExcluded">Excluded (<span id="screenCountExcluded">{{ exclude_count }}</span>)</label>
+          </div>
+          <div id="datasetScreenListView">
+            <div class="list-group list-group-flush border rounded" id="datasetScreenList" style="max-height: 80vh; overflow: auto;">
+              {% for row in screen_rows %}
+                {% include "review/_dataset_screen_row.html" with context %}
+              {% endfor %}
+            </div>
+          </div>
+          <div id="datasetScreenGalleryView" class="d-none"></div>
+        </div>
+        <div class="col-lg-8" id="datasetScreenViewerColumn">
+          <div id="datasetScreenViewer">
+            <div class="alert alert-info mb-0">Select an image to review and exclude.</div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="alert alert-info mb-0">No included images to screen yet.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="modal fade" id="datasetEditConfirmModal" tabindex="-1" aria-labelledby="datasetEditConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="datasetEditConfirmLabel">Edit Image</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          This image is part of the dataset. Continue to the anonymization editor?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <a class="btn btn-warning" id="datasetEditConfirmLink" href="#" target="_blank" rel="noopener" data-bs-dismiss="modal">Continue</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if can_share %}
+  <div class="card shadow-sm mb-4 d-none">
     <div class="card-header">
       <h5 class="card-title mb-0">Share Dataset Download</h5>
     </div>
@@ -207,7 +337,7 @@
   </div>
   {% endif %}
 
-  <div class="card shadow-sm">
+  <div class="card shadow-sm d-none">
     <div class="card-header d-flex align-items-center justify-content-between">
       <h5 class="card-title mb-0">Manual Screening</h5>
       <small class="text-muted">Decide include / exclude then move to the next image.</small>
@@ -307,10 +437,18 @@
     </div>
   </div>
 
-  <div class="card shadow-sm mb-4">
+  <div class="card shadow-sm mb-4 d-none">
     <div class="card-header d-flex justify-content-between align-items-center">
       <h5 class="card-title mb-0">Selected Tasks</h5>
-      <small class="text-muted">Included vs excluded based on your decisions.</small>
+      <div class="d-flex align-items-center gap-2">
+        <small class="text-muted">Included vs excluded based on your decisions.</small>
+        {% if not dataset.is_finalized %}
+        <form method="POST" action="{{ url_for('analytics.dataset_add_more', dataset_uuid=dataset.uuid) }}">
+          {{ csrf_field() }}
+          <button type="submit" class="btn btn-sm btn-outline-primary">Add More</button>
+        </form>
+        {% endif %}
+      </div>
     </div>
     <div class="card-body">
       {% if selected_image and selected_row %}
@@ -493,4 +631,455 @@
 
 
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
+  {% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+  {% else %}
+<script>
+  {% endif %}
+    document.addEventListener('DOMContentLoaded', function() {
+      const listView = document.getElementById('datasetScreenListView');
+      const galleryView = document.getElementById('datasetScreenGalleryView');
+      const listButton = document.getElementById('screenViewList');
+      const galleryButton = document.getElementById('screenViewGallery');
+      const filterGroup = document.getElementById('screenFilterGroup');
+      const viewerColumn = document.getElementById('datasetScreenViewerColumn');
+      const listColumn = document.getElementById('datasetScreenListColumn');
+      const sortSelect = document.getElementById('screenSortSelect');
+      let pendingGalleryImageUuid = null;
+      let lastGalleryThumb = null;
+
+      const thumbQueue = [];
+      let thumbInFlight = 0;
+      const maxThumbConcurrent = 2;
+
+      const pumpThumbQueue = function() {
+        while (thumbInFlight < maxThumbConcurrent && thumbQueue.length) {
+          const img = thumbQueue.shift();
+          if (!img || !img.dataset || !img.dataset.src) {
+            continue;
+          }
+          thumbInFlight += 1;
+          const src = img.dataset.src;
+          const container = img.closest('.dataset-screen-thumb');
+          if (container) {
+            container.classList.add('is-loading');
+            const status = container.querySelector('.thumb-status');
+            if (status) {
+              status.textContent = 'Loading...';
+            }
+          }
+          const finish = function(isError) {
+            thumbInFlight = Math.max(0, thumbInFlight - 1);
+            if (container) {
+              container.classList.remove('is-loading');
+              if (isError) {
+                container.classList.add('is-error');
+                const status = container.querySelector('.thumb-status');
+                if (status) {
+                  status.textContent = 'Thumbnail unavailable (rate limit or missing).';
+                }
+              } else {
+                container.classList.remove('is-error');
+              }
+            }
+            pumpThumbQueue();
+          };
+          img.addEventListener('load', function() {
+            finish(false);
+          }, { once: true });
+          img.addEventListener('error', function() {
+            finish(true);
+          }, { once: true });
+          img.src = src;
+          img.removeAttribute('data-src');
+        }
+      };
+
+      const enqueueThumb = function(img) {
+        if (!img || !img.dataset || !img.dataset.src) {
+          return;
+        }
+        if (img.dataset.thumbQueued === 'true') {
+          return;
+        }
+        img.dataset.thumbQueued = 'true';
+        thumbQueue.push(img);
+        pumpThumbQueue();
+      };
+
+      const initThumbLazy = function(root) {
+        if (!root) {
+          return;
+        }
+        const images = Array.from(root.querySelectorAll('img.dataset-screen-thumb-img[data-src]'));
+        if (!images.length) {
+          return;
+        }
+        const eagerCount = 6;
+        images.slice(0, eagerCount).forEach(enqueueThumb);
+        if (!window.IntersectionObserver) {
+          images.slice(eagerCount).forEach(enqueueThumb);
+          return;
+        }
+        const observer = new IntersectionObserver(function(entries, obs) {
+          entries.forEach(function(entry) {
+            if (!entry.isIntersecting) {
+              return;
+            }
+            const img = entry.target;
+            enqueueThumb(img);
+            obs.unobserve(img);
+          });
+        }, { rootMargin: '400px' });
+        images.slice(eagerCount).forEach(function(img) {
+          observer.observe(img);
+        });
+      };
+
+      const showListView = function() {
+        if (listView) {
+          listView.classList.remove('d-none');
+        }
+        if (galleryView) {
+          galleryView.classList.add('d-none');
+        }
+        if (filterGroup) {
+          filterGroup.classList.remove('d-none');
+        }
+        if (viewerColumn) {
+          viewerColumn.classList.remove('d-none');
+          viewerColumn.classList.remove('col-lg-5');
+          viewerColumn.classList.add('col-lg-8');
+        }
+        if (listColumn) {
+          listColumn.classList.remove('col-12');
+          listColumn.classList.add('col-lg-4');
+          listColumn.classList.remove('col-lg-7');
+          listColumn.classList.remove('col-lg-6');
+          listColumn.classList.remove('col-lg-5');
+        }
+      };
+      const showGalleryView = function() {
+        if (listView) {
+          listView.classList.add('d-none');
+        }
+        if (galleryView) {
+          galleryView.classList.remove('d-none');
+        }
+        if (filterGroup) {
+          filterGroup.classList.add('d-none');
+        }
+        if (viewerColumn) {
+          viewerColumn.classList.add('d-none');
+          viewerColumn.classList.remove('col-lg-5');
+          viewerColumn.classList.add('col-lg-8');
+        }
+        if (listColumn) {
+          listColumn.classList.remove('col-lg-4');
+          listColumn.classList.add('col-12');
+          listColumn.classList.remove('col-lg-7');
+          listColumn.classList.remove('col-lg-6');
+          listColumn.classList.remove('col-lg-5');
+        }
+      };
+      const showGalleryWithViewer = function() {
+        if (listView) {
+          listView.classList.add('d-none');
+        }
+        if (galleryView) {
+          galleryView.classList.remove('d-none');
+        }
+        if (filterGroup) {
+          filterGroup.classList.add('d-none');
+        }
+        if (viewerColumn) {
+          viewerColumn.classList.remove('d-none');
+          viewerColumn.classList.remove('col-lg-8');
+          viewerColumn.classList.add('col-lg-7');
+        }
+        if (listColumn) {
+          listColumn.classList.remove('col-12');
+          listColumn.classList.remove('col-lg-4');
+          listColumn.classList.add('col-lg-5');
+          listColumn.classList.remove('col-lg-7');
+          listColumn.classList.remove('col-lg-6');
+        }
+      };
+      if (listButton) {
+        listButton.addEventListener('click', function() {
+          showListView();
+          const url = new URL(window.location);
+          url.searchParams.set('view', 'list');
+          url.searchParams.delete('page');
+          url.hash = '#screen-images';
+          window.history.replaceState({ view: 'list' }, '', url.toString());
+        });
+      }
+      if (galleryButton) {
+        galleryButton.addEventListener('click', function() {
+          showGalleryView();
+        });
+      }
+      if (sortSelect) {
+        sortSelect.addEventListener('change', function() {
+          const value = sortSelect.value || 'task_asc';
+          const url = new URL(window.location);
+          url.searchParams.set('sort', value);
+          const view = url.searchParams.get('view') || 'list';
+          if (view === 'gallery') {
+            const page = url.searchParams.get('page') || '1';
+            url.searchParams.set('page', page);
+            url.hash = '#screen-images';
+            window.history.replaceState({ view: 'gallery' }, '', url.toString());
+            if (window.htmx) {
+              window.htmx.ajax('GET', "{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid) }}" + '?page=' + page + '&view=gallery&sort=' + value, '#datasetScreenGalleryView');
+            }
+            return;
+          }
+          url.hash = '#screen-images';
+          window.location.href = url.toString();
+        });
+      }
+
+      document.body.addEventListener('click', function(event) {
+        const row = event.target.closest('.dataset-screen-row');
+        if (!row) {
+          return;
+        }
+        document.querySelectorAll('.dataset-screen-row.active').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        row.classList.add('active');
+        const imageUuid = row.dataset.imageUuid || '';
+        if (imageUuid) {
+          const url = new URL(window.location);
+          url.searchParams.set('image_uuid', imageUuid);
+          url.hash = '#screen-images';
+          window.history.replaceState({ image_uuid: imageUuid }, '', url.toString());
+        }
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const galleryLink = event.target.closest('[data-gallery-open]');
+        if (!galleryLink) {
+          return;
+        }
+        showGalleryWithViewer();
+        document.querySelectorAll('[data-gallery-open].active').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        galleryLink.classList.add('active');
+        lastGalleryThumb = galleryLink;
+        const viewer = document.getElementById('datasetScreenViewer');
+        if (viewer) {
+          viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const closeBtn = event.target.closest('[data-gallery-close]');
+        if (!closeBtn) {
+          return;
+        }
+        const viewer = document.getElementById('datasetScreenViewer');
+        if (viewer) {
+          viewer.innerHTML = '<div class="alert alert-info mb-0">Select an image to review and exclude.</div>';
+        }
+        const params = new URL(window.location).searchParams;
+        if (params.get('view') === 'gallery') {
+          const url = new URL(window.location);
+          url.searchParams.delete('image_uuid');
+          url.hash = '#screen-images';
+          window.history.replaceState({ view: 'gallery' }, '', url.toString());
+          showGalleryView();
+          const targetThumb = lastGalleryThumb || document.querySelector('[data-gallery-open].active');
+          if (targetThumb) {
+            targetThumb.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const trigger = event.target.closest('[data-edit-url]');
+        if (!trigger) {
+          return;
+        }
+        const modal = document.getElementById('datasetEditConfirmModal');
+        const link = document.getElementById('datasetEditConfirmLink');
+        if (modal && link) {
+          modal.dataset.editUrl = trigger.dataset.editUrl || '';
+          link.href = trigger.dataset.editUrl || '#';
+        }
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const link = event.target.closest('#datasetEditConfirmLink');
+        if (!link) {
+          return;
+        }
+        const modal = document.getElementById('datasetEditConfirmModal');
+        const editUrl = (modal && modal.dataset.editUrl) ? modal.dataset.editUrl : link.href;
+        if (editUrl) {
+          window.open(editUrl, '_blank', 'noopener');
+        }
+      });
+
+      const filterInputs = document.querySelectorAll('input[name="screenFilter"]');
+      const screenList = document.getElementById('datasetScreenList');
+      const applyScreenFilter = function() {
+        if (!screenList) {
+          return;
+        }
+        const active = document.querySelector('input[name="screenFilter"]:checked');
+        const mode = active ? active.value : 'all';
+        screenList.querySelectorAll('.dataset-screen-row').forEach(function(row) {
+          const excluded = row.dataset.excluded === 'true';
+        if (mode === 'all') {
+          row.style.display = '';
+        } else if (mode === 'excluded') {
+          row.style.display = excluded ? '' : 'none';
+        } else {
+          row.style.display = excluded ? 'none' : '';
+        }
+      });
+        try {
+          localStorage.setItem('datasetScreenFilter', mode);
+        } catch (err) {}
+      };
+      filterInputs.forEach(function(input) {
+        input.addEventListener('change', applyScreenFilter);
+      });
+      try {
+        const savedFilter = localStorage.getItem('datasetScreenFilter');
+        if (savedFilter) {
+          const savedInput = document.querySelector('input[name="screenFilter"][value="' + savedFilter + '"]');
+          if (savedInput) {
+            savedInput.checked = true;
+          }
+        }
+      } catch (err) {}
+      applyScreenFilter();
+
+      const syncFromUrl = function() {
+        const params = new URL(window.location).searchParams;
+        const view = params.get('view') || 'list';
+        const page = params.get('page') || '1';
+        const sort = params.get('sort') || '{{ screen_sort }}';
+        if (sortSelect) {
+          sortSelect.value = sort;
+        }
+        if (view === 'gallery') {
+          showGalleryView();
+          if (galleryButton && window.htmx) {
+            window.htmx.ajax('GET', "{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid) }}" + '?page=' + page + '&view=gallery&sort=' + sort, '#datasetScreenGalleryView');
+          }
+        } else {
+          showListView();
+        }
+        const imageUuid = params.get('image_uuid');
+        if (!imageUuid) {
+          return;
+        }
+        if (view === 'gallery') {
+          pendingGalleryImageUuid = imageUuid;
+          return;
+        }
+        const target = document.querySelector('.dataset-screen-row[data-image-uuid=\"' + imageUuid + '\"]');
+        if (target) {
+          if (window.htmx) {
+            window.htmx.trigger(target, 'click');
+          } else {
+            target.click();
+          }
+        }
+      };
+      syncFromUrl();
+
+      document.body.addEventListener('htmx:afterSwap', function(event) {
+        const target = event.target;
+        if (!target) {
+          return;
+        }
+        if (target.id === 'datasetScreenGalleryView' || (target.id && target.id.startsWith('datasetScreenThumb-'))) {
+          initThumbLazy(target);
+        }
+        if (target.id === 'datasetScreenGalleryView' && pendingGalleryImageUuid) {
+          const pending = pendingGalleryImageUuid;
+          pendingGalleryImageUuid = null;
+          const galleryTarget = document.querySelector('[data-gallery-open][href*="' + pending + '"]');
+          if (galleryTarget) {
+            showGalleryWithViewer();
+            if (window.htmx) {
+              window.htmx.trigger(galleryTarget, 'click');
+            } else {
+              galleryTarget.click();
+            }
+          }
+        }
+      });
+      document.body.addEventListener('datasetAddMore', function(event) {
+        const detail = event.detail || {};
+        const imageUuid = detail.image_uuid;
+        if (!imageUuid) {
+          return;
+        }
+        const countAll = document.getElementById('screenCountAll');
+        const countIncluded = document.getElementById('screenCountIncluded');
+        if (countAll) {
+          countAll.textContent = String(parseInt(countAll.textContent || '0', 10) + 1);
+        }
+        if (countIncluded) {
+          countIncluded.textContent = String(parseInt(countIncluded.textContent || '0', 10) + 1);
+        }
+        const row = document.querySelector('.dataset-screen-row[data-image-uuid="' + imageUuid + '"]');
+        if (!row) {
+          return;
+        }
+        if (window.htmx) {
+          window.htmx.process(row);
+        }
+        document.querySelectorAll('.dataset-screen-row.active').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        row.classList.add('active');
+        row.classList.add('is-new');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(function() {
+          row.classList.remove('is-new');
+        }, 2500);
+        if (window.htmx) {
+          window.htmx.trigger(row, 'click');
+        } else {
+          row.click();
+        }
+        applyScreenFilter();
+      });
+      const setGalleryNavDisabled = function(disabled) {
+        document.querySelectorAll('.dataset-screen-pager-btn').forEach(function(btn) {
+          if (disabled) {
+            btn.classList.add('disabled');
+            btn.setAttribute('aria-disabled', 'true');
+          } else if (!btn.dataset.forceDisabled) {
+            btn.classList.remove('disabled');
+            btn.removeAttribute('aria-disabled');
+          }
+        });
+      };
+      document.body.addEventListener('htmx:beforeRequest', function(event) {
+        if (event.target && event.target.id === 'datasetScreenGalleryView') {
+          setGalleryNavDisabled(true);
+        }
+      });
+      document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.target && event.target.id === 'datasetScreenGalleryView') {
+          setGalleryNavDisabled(false);
+        }
+      });
+      initThumbLazy(document);
+    });
+  </script>
 {% endblock %}

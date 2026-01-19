@@ -1,0 +1,55 @@
+<div
+  id="datasetScreenThumb-{{ row.image_uuid }}"
+  class="border rounded dataset-screen-thumb bg-body d-flex flex-column {% if row.is_excluded %}is-excluded{% endif %}"
+  data-image-uuid="{{ row.image_uuid }}"
+  style="width: 300px;"
+>
+  <a class="ratio ratio-1x1 bg-body"
+     href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort) }}#screen-images"
+     hx-get="{{ url_for('analytics.dataset_screen_viewer', dataset_uuid=dataset.uuid, image_uuid=row.image_uuid, sort=screen_sort) }}"
+     hx-target="#datasetScreenViewer"
+     hx-swap="innerHTML"
+     hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page|default(1), image_uuid=row.image_uuid, sort=screen_sort) }}#screen-images"
+     data-gallery-open="true"
+     style="text-decoration: none;">
+    {% if row.image_kind == 'encounter' %}
+      {% set thumb_url = url_for('media._encounterImageThumbnailByUUID', uuid_str=row.image_uuid) %}
+    {% else %}
+      {% set thumb_url = url_for('media._directImgFinalThumbnailByUUID', uuid_str=row.image_uuid) %}
+    {% endif %}
+    <img
+      src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+      data-src="{{ thumb_url }}"
+      alt="Thumbnail"
+      class="w-100 h-100 object-fit-cover rounded dataset-screen-thumb-img"
+      loading="lazy"
+      decoding="async"
+    >
+    <div class="thumb-status small text-muted">Thumbnail unavailable</div>
+  </a>
+    <div class="small px-2 py-1 d-flex align-items-center justify-content-between gap-2">
+      <div>
+        <span class="text-muted">#{{ row.index }}</span>
+        {% if row.is_excluded %}
+          <span class="badge text-bg-danger ms-1">Excluded</span>
+        {% endif %}
+        {% if row.selection_method == 'auto' %}
+          <span class="badge text-bg-info ms-1">Auto</span>
+        {% endif %}
+      </div>
+    <form method="POST"
+          action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}"
+          hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}"
+          hx-target="#datasetScreenThumb-{{ row.image_uuid }}"
+          hx-swap="outerHTML">
+      {% from "_forms.html" import csrf_field %}
+      {{ csrf_field() }}
+      <input type="hidden" name="task_id" value="{{ row.task_id }}">
+      <input type="hidden" name="page" value="{{ page|default(1) }}">
+      <input type="hidden" name="sort" value="{{ screen_sort }}">
+      <button type="submit" class="btn btn-sm {% if row.is_excluded %}btn-outline-success{% else %}btn-outline-danger{% endif %}">
+        {% if row.is_excluded %}Include{% else %}Exclude{% endif %}
+      </button>
+    </form>
+  </div>
+</div>

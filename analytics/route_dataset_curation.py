@@ -7,12 +7,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import sqlalchemy as sa
-from flask import abort, flash, redirect, render_template, request, session, url_for, send_file, current_app
+import random
+from flask import abort, flash, redirect, render_template, request, session, url_for, send_file, current_app, make_response
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
 from auth.roles import roles_required
 from auth.security import validate_email
+from auth.utils import utcnow
 from job_store import db_create_job
 from models import (
     AIModel,
@@ -149,6 +151,98 @@ def _fetch_options(db: Session, user: Any) -> Tuple[List[Disease], List[LabUnit]
     grade_options = db.query(DiseaseGrading).distinct(DiseaseGrading.impression).all()
     ai_models = db.query(AIModel).order_by(AIModel.name, AIModel.version).all()
     return diseases, lab_units, grade_options, ai_models
+
+
+def _build_screen_rows(
+    items: Sequence[CuratedDatasetItem],
+    disease_id: int,
+    sort_by: str,
+) -> tuple[list[dict], list[dict], list[dict]]:
+    if sort_by == "added_desc":
+        ordered_items = sorted(items, key=lambda item: item.selected_at or utcnow(), reverse=True)
+    elif sort_by == "added_asc":
+        ordered_items = sorted(items, key=lambda item: item.selected_at or utcnow())
+    else:
+        ordered_items = sorted(items, key=lambda item: item.task_id)
+    task_ids = [item.task_id for item in ordered_items]
+    if not task_ids:
+        return [], [], []
+
+    rows = _fetch_rows_by_task_ids(task_ids, disease_id)
+    row_by_id = {row.task_id: row for row in rows}
+    include_map = {item.task_id: item.include_in_export for item in items}
+    selected_map = {item.task_id: item.selected_at for item in items}
+    method_map = {item.task_id: item.selection_method for item in items}
+
+    screen_rows: list[dict] = []
+    for idx, task_id in enumerate(task_ids, start=1):
+        row = row_by_id.get(task_id)
+        if not row:
+            continue
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        if not image_uuid:
+            continue
+        image_kind = "encounter" if row.encounter_file_uuid else "direct"
+        screen_rows.append(
+            {
+                "task_id": row.task_id,
+                "image_uuid": image_uuid,
+                "image_kind": image_kind,
+                "final_impression": row.final_impression,
+                "lab_unit": row.lab_unit,
+                "ai_summary": _ai_summary(row),
+                "is_excluded": not include_map.get(task_id, True),
+                "index": idx,
+                "selected_at": selected_map.get(task_id),
+                "selection_method": method_map.get(task_id),
+            }
+        )
+
+    included_display = [row for row in screen_rows if not row["is_excluded"]]
+    excluded_display = [row for row in screen_rows if row["is_excluded"]]
+    return screen_rows, included_display, excluded_display
+
+
+def _build_screen_page_rows(
+    items: Sequence[Any],
+    disease_id: int,
+    offset: int,
+) -> list[dict]:
+    """Return paginated screen rows for the current page."""
+    task_ids = [item.task_id for item in items]
+    if not task_ids:
+        return []
+
+    rows = _fetch_rows_by_task_ids(task_ids, disease_id)
+    row_by_id = {row.task_id: row for row in rows}
+    include_map = {item.task_id: item.include_in_export for item in items}
+    selected_map = {item.task_id: item.selected_at for item in items}
+    method_map = {item.task_id: item.selection_method for item in items}
+
+    screen_rows: list[dict] = []
+    for idx, task_id in enumerate(task_ids, start=offset + 1):
+        row = row_by_id.get(task_id)
+        if not row:
+            continue
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        if not image_uuid:
+            continue
+        image_kind = "encounter" if row.encounter_file_uuid else "direct"
+        screen_rows.append(
+            {
+                "task_id": row.task_id,
+                "image_uuid": image_uuid,
+                "image_kind": image_kind,
+                "final_impression": row.final_impression,
+                "lab_unit": row.lab_unit,
+                "ai_summary": _ai_summary(row),
+                "is_excluded": not include_map.get(task_id, True),
+                "index": idx,
+                "selected_at": selected_map.get(task_id),
+                "selection_method": method_map.get(task_id),
+            }
+        )
+    return screen_rows
 
 
 def _ai_summary(row: ExportTaskRow) -> str:
@@ -355,6 +449,10 @@ def dataset_detail(dataset_uuid: str):
         )
         user_roles = {r.name for r in (db_user.roles or [])} if db_user else set()
 
+        screen_sort = request.args.get("sort", "task_asc")
+        if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+            screen_sort = "task_asc"
+
         # Track decisions
         items = (
             db.query(CuratedDatasetItem)
@@ -362,32 +460,14 @@ def dataset_detail(dataset_uuid: str):
             .all()
         )
         decided_task_ids = {item.task_id for item in items}
-        included_task_ids = [item.task_id for item in items if item.include_in_export]
-        excluded_task_ids = [item.task_id for item in items if not item.include_in_export]
-
         # Evaluate total matches for the stored filters
         matching_rows = _fetch_filtered_rows(filters)
         total_matching = len(matching_rows)
-        included_rows: List[ExportTaskRow] = _fetch_rows_by_task_ids(included_task_ids, dataset.disease_id) if included_task_ids else []
-        excluded_rows: List[ExportTaskRow] = _fetch_rows_by_task_ids(excluded_task_ids, dataset.disease_id) if excluded_task_ids else []
-        included_display = [
-            {
-                "task_id": r.task_id,
-                "final_impression": r.final_impression,
-                "lab_unit": r.lab_unit,
-                "ai_summary": _ai_summary(r),
-            }
-            for r in included_rows
-        ]
-        excluded_display = [
-            {
-                "task_id": r.task_id,
-                "final_impression": r.final_impression,
-                "lab_unit": r.lab_unit,
-                "ai_summary": _ai_summary(r),
-            }
-            for r in excluded_rows
-        ]
+        screen_rows, included_display, excluded_display = _build_screen_rows(
+            items,
+            dataset.disease_id,
+            screen_sort,
+        )
 
         if request.method == "POST":
             if dataset.is_finalized:
@@ -528,6 +608,8 @@ def dataset_detail(dataset_uuid: str):
             filters_display=filters,
             included_rows=included_display,
             excluded_rows=excluded_display,
+            screen_rows=screen_rows,
+            screen_sort=screen_sort,
             can_share="dataset_creator" in user_roles,
             share_display=share_display,
             active_share=active_share,
@@ -539,6 +621,366 @@ def dataset_detail(dataset_uuid: str):
             selected_row=selected_row,
             selected_image=selected_image,
         )
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/viewer/<string:image_uuid>")
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
+    """Serve the screening viewer card for an included dataset image."""
+    screen_sort = request.args.get("sort", "task_asc")
+    if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+        screen_sort = "task_asc"
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = {lu.id for lu in lab_units_query.all()}
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(allowed_lab_units) and not current_user.is_master_admin:
+            return ("Forbidden", 403)
+
+        query = (
+            db.query(GradingTask)
+            .join(CuratedDatasetItem, CuratedDatasetItem.task_id == GradingTask.id)
+            .filter(
+                CuratedDatasetItem.dataset_id == dataset.id,
+                sa.or_(
+                    GradingTask.encounter_file.has(uuid=image_uuid),
+                    GradingTask.direct_image.has(uuid=image_uuid),
+                ),
+            )
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+        )
+        query = apply_scoping(query, GradingTask, current_user, "view")
+        task = query.first()
+        if not task:
+            return ("Not found", 404)
+
+        dataset_item = (
+            db.query(CuratedDatasetItem)
+            .filter(CuratedDatasetItem.dataset_id == dataset.id, CuratedDatasetItem.task_id == task.id)
+            .first()
+        )
+        is_excluded = bool(dataset_item and not dataset_item.include_in_export)
+        index = None
+        if dataset_item:
+            if screen_sort == "added_asc":
+                order_by = CuratedDatasetItem.selected_at.asc()
+            elif screen_sort == "added_desc":
+                order_by = CuratedDatasetItem.selected_at.desc()
+            else:
+                order_by = CuratedDatasetItem.task_id.asc()
+            all_items = (
+                db.query(CuratedDatasetItem.task_id)
+                .filter(CuratedDatasetItem.dataset_id == dataset.id)
+                .order_by(order_by)
+                .all()
+            )
+            ordered_ids = [i.task_id for i in all_items]
+            if task.id in ordered_ids:
+                index = ordered_ids.index(task.id) + 1
+
+        image_obj = task.encounter_file or task.direct_image
+        display_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
+        display_row = display_rows[0] if display_rows else None
+
+        return render_template(
+            "review/_dataset_screen_viewer.html",
+            dataset=dataset,
+            image=image_obj,
+            image_uuid=image_uuid,
+            row=display_row,
+            is_excluded=is_excluded,
+            browse_index=index,
+            screen_sort=screen_sort,
+        )
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/screen-gallery", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_screen_gallery(dataset_uuid: str):
+    """Return a paginated thumbnail gallery for screening."""
+    page = request.args.get("page", 1, type=int)
+    screen_sort = request.args.get("sort", "task_asc")
+    if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+        screen_sort = "task_asc"
+    per_page = 25
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            return ("Forbidden", 403)
+
+        total = (
+            db.query(sa.func.count(CuratedDatasetItem.id))
+            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .scalar()
+        )
+        total = int(total or 0)
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+
+        if screen_sort == "added_asc":
+            order_by = CuratedDatasetItem.selected_at.asc()
+        elif screen_sort == "added_desc":
+            order_by = CuratedDatasetItem.selected_at.desc()
+        else:
+            order_by = CuratedDatasetItem.task_id.asc()
+
+        items = (
+            db.query(
+                CuratedDatasetItem.task_id.label("task_id"),
+                CuratedDatasetItem.include_in_export.label("include_in_export"),
+                CuratedDatasetItem.selected_at.label("selected_at"),
+                CuratedDatasetItem.selection_method.label("selection_method"),
+            )
+            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .order_by(order_by)
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
+        page_rows = _build_screen_page_rows(items, dataset.disease_id, offset)
+
+        return render_template(
+            "review/_dataset_screen_gallery.html",
+            dataset=dataset,
+            rows=page_rows,
+            page=page,
+            total_pages=total_pages,
+            screen_sort=screen_sort,
+            has_prev=page > 1,
+            has_next=page < total_pages,
+        )
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/toggle-item", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_toggle_item(dataset_uuid: str):
+    """Toggle include/exclude for a dataset item and return updated viewer."""
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+        if dataset.is_finalized:
+            return ("Dataset is finalized.", 409)
+
+        task_id = request.form.get("task_id", type=int)
+        if not task_id:
+            return ("Missing task", 400)
+
+        item = (
+            db.query(CuratedDatasetItem)
+            .filter(CuratedDatasetItem.dataset_id == dataset.id, CuratedDatasetItem.task_id == task_id)
+            .first()
+        )
+        if not item:
+            return ("Not found", 404)
+
+        item.include_in_export = not item.include_in_export
+        item.selection_method = "manual"
+        item.selected_by_user_id = current_user.id
+        db.add(item)
+
+        task_query = (
+            db.query(GradingTask)
+            .filter(GradingTask.id == task_id)
+            .options(joinedload(GradingTask.encounter_file), joinedload(GradingTask.direct_image))
+        )
+        task_query = apply_scoping(task_query, GradingTask, current_user, "view")
+        task = task_query.first()
+        if not task:
+            return ("Not found", 404)
+
+        image_uuid = task.encounter_file.uuid if task.encounter_file else task.direct_image.uuid
+        display_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
+        display_row = display_rows[0] if display_rows else None
+        all_items = (
+            db.query(CuratedDatasetItem.task_id)
+            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .all()
+        )
+        ordered_ids = sorted([i.task_id for i in all_items])
+        index = ordered_ids.index(task.id) + 1 if task.id in ordered_ids else None
+        image_kind = "encounter" if task.encounter_file else "direct"
+        row_update = {
+            "task_id": task.id,
+            "image_uuid": image_uuid,
+            "image_kind": image_kind,
+            "final_impression": display_row.final_impression if display_row else None,
+            "is_excluded": not item.include_in_export,
+            "index": index,
+            "selected_at": item.selected_at,
+            "selection_method": item.selection_method,
+        }
+
+        if (request.headers.get("HX-Target") or "").startswith("datasetScreenThumb-"):
+            page_value = request.form.get("page")
+            try:
+                page = int(page_value) if page_value else 1
+            except (TypeError, ValueError):
+                page = 1
+            screen_sort = request.form.get("sort") or "task_asc"
+            if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+                screen_sort = "task_asc"
+            return render_template(
+                "review/_dataset_screen_thumb.html",
+                dataset=dataset,
+                row=row_update,
+                page=page,
+                screen_sort=screen_sort,
+            )
+
+        screen_sort = request.form.get("sort") or "task_asc"
+        if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+            screen_sort = "task_asc"
+        return render_template(
+            "review/_dataset_screen_viewer.html",
+            dataset=dataset,
+            image=task.encounter_file or task.direct_image,
+            image_uuid=image_uuid,
+            row=display_row,
+            is_excluded=not item.include_in_export,
+            row_update=row_update,
+            browse_index=index,
+            screen_sort=screen_sort,
+        )
+
+
+@bp.route("/dataset-curation/<dataset_uuid>/add-more", methods=["POST"])
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_add_more(dataset_uuid: str):
+    """Add one random matching task to the dataset."""
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+        if dataset.is_finalized:
+            flash("Dataset is finalized and cannot be edited.", "warning")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            flash("You do not have access to the lab units for this dataset.", "error")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        filters = _filters_with_allowed(stored_filters, allowed_lab_units)
+        rows = _fetch_filtered_rows(filters)
+        decided_task_ids = {
+            row[0]
+            for row in (
+                db.query(CuratedDatasetItem.task_id)
+                .filter(CuratedDatasetItem.dataset_id == dataset.id)
+                .all()
+            )
+        }
+        candidates = [row for row in rows if row.task_id not in decided_task_ids]
+        if not candidates:
+            flash("No more matching tasks are available to add.", "info")
+            return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
+
+        picked = random.choice(candidates)
+        selected_at = utcnow()
+        db.add(
+            CuratedDatasetItem(
+                dataset_id=dataset.id,
+                task_id=picked.task_id,
+                include_in_export=True,
+                selection_method="auto",
+                selected_by_user_id=current_user.id,
+                selected_at=selected_at,
+            )
+        )
+        flash("Added one more task to the dataset.", "success")
+        if request.headers.get("HX-Request") == "true":
+            screen_sort = request.form.get("sort") or "task_asc"
+            if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+                screen_sort = "task_asc"
+            if screen_sort == "added_asc":
+                order_by = CuratedDatasetItem.selected_at.asc()
+            elif screen_sort == "added_desc":
+                order_by = CuratedDatasetItem.selected_at.desc()
+            else:
+                order_by = CuratedDatasetItem.task_id.asc()
+            ordered_ids = [
+                row.task_id
+                for row in (
+                    db.query(CuratedDatasetItem.task_id)
+                    .filter(CuratedDatasetItem.dataset_id == dataset.id)
+                    .order_by(order_by)
+                    .all()
+                )
+            ]
+            index = ordered_ids.index(picked.task_id) + 1 if picked.task_id in ordered_ids else None
+            next_task_id = None
+            if index and index < len(ordered_ids):
+                next_task_id = ordered_ids[index]
+            next_image_uuid = None
+            if next_task_id:
+                next_rows = _fetch_rows_by_task_ids([next_task_id], dataset.disease_id)
+                if next_rows:
+                    next_image_uuid = next_rows[0].encounter_file_uuid or next_rows[0].direct_image_uuid
+            image_uuid = picked.encounter_file_uuid or picked.direct_image_uuid
+            image_kind = "encounter" if picked.encounter_file_uuid else "direct"
+            oob_swap = None
+            if next_image_uuid:
+                oob_swap = f"beforebegin:#datasetScreenRow-{next_image_uuid}"
+            else:
+                oob_swap = "beforeend:#datasetScreenList"
+            row_payload = {
+                "task_id": picked.task_id,
+                "image_uuid": image_uuid,
+                "image_kind": image_kind,
+                "final_impression": picked.final_impression,
+                "is_excluded": False,
+                "index": index,
+                "selected_at": selected_at,
+                "selection_method": "auto",
+            }
+            response = make_response(
+                render_template(
+                    "review/_dataset_screen_row.html",
+                    dataset=dataset,
+                    row=row_payload,
+                    oob_swap=oob_swap,
+                    row_is_new=True,
+                    screen_sort=screen_sort,
+                )
+            )
+            response.headers["HX-Trigger"] = json.dumps(
+                {"datasetAddMore": {"image_uuid": image_uuid}}
+            )
+            return response
+        return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid, selected_task_id=picked.task_id))
 
 
 

@@ -91,8 +91,8 @@ def generate_thumbnail(
                 if img.mode == 'P' and 'transparency' in img.info:
                     img = img.convert('RGBA')
                 if img.mode in ('RGBA', 'LA'):
-                    # Create white background for transparent images
-                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    # Create black background for transparent images
+                    background = Image.new('RGB', img.size, (0, 0, 0))
                     if img.mode == 'P':
                         img = img.convert('RGBA')
                     background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
@@ -102,16 +102,11 @@ def generate_thumbnail(
             # First, create thumbnail that fits within the size bounds
             img.thumbnail(size, Image.Resampling.LANCZOS)
 
-            # If image is not square, create square thumbnail with center crop
+            # If image is not square, create square thumbnail with black background
             if img.size != size:
-                # Create new square image with white background
-                thumbnail = Image.new('RGB', size, (255, 255, 255))
-
-                # Calculate paste position (center)
+                thumbnail = Image.new('RGB', size, (0, 0, 0))
                 x = (size[0] - img.size[0]) // 2
                 y = (size[1] - img.size[1]) // 2
-
-                # Paste the thumbnail in center
                 thumbnail.paste(img, (x, y))
                 img = thumbnail
 

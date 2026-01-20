@@ -198,7 +198,7 @@
 
           {% if current_user_has('optometrist') or current_user_has('data_manager') or current_user_has('admin') %}
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] or (request.endpoint|default('', true)) == 'results.images_without_tasks') else '' }}"
+            <a class="nav-link dropdown-toggle {{ 'active' if (request.blueprint in ['verify_remedio', 'verify_remedio_glaucoma', 'verify_remedio_dr', 'preprocess'] or (request.endpoint|default('', true)) == 'results.images_without_tasks') else '' }}"
               href="#" id="verifyMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
               Verify
             </a>
@@ -206,6 +206,10 @@
 
               <li class="dropdown-item" style="font-weight: 800;">Verify Remedio</li>
 
+              <li>
+                <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio.verify_list' else '' }}"
+                  href="{{ url_for('verify_remedio.verify_list') }}">Combined Verification</a>
+              </li>
               <li>
                 <a class="dropdown-item {{ 'active' if (request.endpoint|default('', true)) == 'verify_remedio_dr.verify_dr_list' else '' }}"
                   href="{{ url_for('verify_remedio_dr.verify_dr_list') }}">DR PDF Reports</a>

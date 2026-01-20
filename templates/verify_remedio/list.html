@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Verify Remedio (Combined){% endblock %}
+
+{% block content %}
+<div class="container py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h4 class="mb-0">Verify Remedio (Combined)</h4>
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Verification filter">
+      <a class="btn btn-outline-secondary {% if ver == 'all' %}active{% endif %}"
+        href="{{ url_for('verify_remedio.verify_list', page=page, ver='all') }}">All</a>
+      <a class="btn btn-outline-secondary {% if ver == 'yes' %}active{% endif %}"
+        href="{{ url_for('verify_remedio.verify_list', page=page, ver='yes') }}">Verified</a>
+      <a class="btn btn-outline-secondary {% if ver == 'no' %}active{% endif %}"
+        href="{{ url_for('verify_remedio.verify_list', page=page, ver='no') }}">Unverified</a>
+    </div>
+
+    <form class="d-flex align-items-center gap-2" method="get" action="{{ url_for('verify_remedio.verify_list') }}">
+      <input class="form-control form-control-sm" type="date" name="date" value="{{ selected_date or '' }}">
+      <button class="btn btn-sm btn-outline-primary" type="submit">Go</button>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('verify_remedio.verify_list') }}">Clear</a>
+    </form>
+
+    {% if recent_unverified_url %}
+    <a class="btn btn-sm btn-warning" href="{{ recent_unverified_url }}">Most Recent Unverified</a>
+    {% endif %}
+  </div>
+
+  <nav class="d-flex justify-content-between align-items-center mb-3">
+    <div class="small text-muted">Page {{ page }} of {{ total_pages }}</div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Pagination">
+      <a class="btn btn-outline-secondary {% if not has_prev %}disabled{% endif %}" href="{{ prev_url or '#' }}">&larr;
+        Prev</a>
+      <a class="btn btn-outline-secondary {% if not has_next %}disabled{% endif %}" href="{{ next_url or '#' }}">Next
+        &rarr;</a>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Capture Date</th>
+          <th>Patient ID</th>
+          <th>Patient Name</th>
+          <th>Reports</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        {% set enc = entry.encounter %}
+        <tr>
+          <td>
+            {% if enc.capture_date_dt %}
+            {{ enc.capture_date_dt|user_datetime('%Y-%m-%d') }}
+            {% else %}
+            {{ enc.capture_date or '-' }}
+            {% endif %}
+          </td>
+          <td>{{ enc.patient_id | default('Hidden', true) }}</td>
+          <td>{{ enc.name | default('Anonymous', true) }}</td>
+          <td>
+            {% if entry.has_dr %}
+            <span class="badge bg-info text-dark">DR {{ entry.dr_count }}</span>
+            {% endif %}
+            {% if entry.has_glaucoma %}
+            <span class="badge bg-warning text-dark">Glaucoma {{ entry.glaucoma_count }}</span>
+            {% endif %}
+            {% if entry.has_nodr %}
+            <span class="badge bg-secondary">No DR PDF</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if entry.has_dr %}
+            <span class="badge {% if entry.dr_verified %}bg-success{% else %}bg-danger{% endif %}">
+              DR {{ 'Verified' if entry.dr_verified else 'Not verified' }}
+            </span>
+            {% endif %}
+            {% if entry.has_glaucoma %}
+            <span class="badge {% if entry.glaucoma_verified %}bg-success{% else %}bg-danger{% endif %}">
+              Glaucoma {{ 'Verified' if entry.glaucoma_verified else 'Not verified' }}
+            </span>
+            {% endif %}
+            {% if entry.has_nodr %}
+            <span class="badge {% if entry.nodr_verified %}bg-success{% else %}bg-danger{% endif %}">
+              Encounter {{ 'Verified' if entry.nodr_verified else 'Not verified' }}
+            </span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if entry.has_dr and not entry.dr_verified and entry.dr_report_id %}
+            <a class="btn btn-sm btn-outline-success me-1"
+              href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=entry.dr_report_id) }}">Verify DR</a>
+            {% endif %}
+            {% if entry.has_glaucoma and not entry.glaucoma_verified and entry.glaucoma_clean_id %}
+            <a class="btn btn-sm btn-outline-success me-1"
+              href="{{ url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=entry.glaucoma_clean_id) }}">Verify
+              Glaucoma</a>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-primary"
+              href="{{ url_for('verify_remedio.verify_detail', encounter_id=enc.id) }}">View</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-muted">No encounters found for this date.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

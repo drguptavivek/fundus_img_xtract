@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Verify Remedio Encounter #{{ encounter.id }}{% endblock %}
+
+{% block content %}
+<div class="py-3">
+  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ back_url }}" aria-label="Back" title="Back">
+        &larr; {{ back_label or 'All encounters' }}
+      </a>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      {% if prev_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ prev_url }}" aria-label="Previous encounter"
+        title="Previous encounter">
+        &larr; Prev
+      </a>
+      {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous encounter">
+        &larr; Prev
+      </button>
+      {% endif %}
+
+      {% if next_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ next_url }}" aria-label="Next encounter"
+        title="Next encounter">
+        Next &rarr;
+      </a>
+      {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next encounter">
+        Next &rarr;
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 align-items-start">
+    <div class="col-12 col-md-5 col-lg-5 col-xl-4">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Patient & Encounter</strong></div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5">Patient Name</dt>
+            <dd class="col-7">{{ encounter.name | default('Anonymous', true) }}</dd>
+            <dt class="col-5">Patient ID</dt>
+            <dd class="col-7">{{ encounter.patient_id | default('Hidden', true) }}</dd>
+            <dt class="col-5">Capture Date</dt>
+            <dd class="col-7">
+              {% if encounter.capture_date_dt %}
+              {{ encounter.capture_date_dt|user_datetime('%Y-%m-%d') }}
+              {% elif encounter.capture_date %}
+              {{ encounter.capture_date }}
+              {% else %}
+              -
+              {% endif %}
+            </dd>
+            {% if encounter.lab_unit %}
+            <dt class="col-5">Hospital</dt>
+            <dd class="col-7">{{ encounter.lab_unit.hospital.name if encounter.lab_unit.hospital else "-" }}</dd>
+            <dt class="col-5">Lab Unit</dt>
+            <dd class="col-7">{{ encounter.lab_unit.name or "-" }}</dd>
+            {% endif %}
+            <dt class="col-5">Zip File</dt>
+            <dd class="col-7">{% if encounter.zip_file %}{{ encounter.zip_file.zip_filename }}{% else %}-{% endif %}
+            </dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Verification Status</strong></div>
+        <div class="card-body">
+          {% if dr_reports %}
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span>DR PDF</span>
+            <span
+              class="badge {% if encounter.dr_verified_status == 'verified' %}bg-success{% else %}bg-danger{% endif %}">
+              {{ 'Verified' if encounter.dr_verified_status == 'verified' else 'Not verified' }}
+            </span>
+          </div>
+          {% endif %}
+          {% if glaucoma_rows %}
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span>Glaucoma PDF</span>
+            <span
+              class="badge {% if encounter.glaucoma_verified_status == 'verified' %}bg-success{% else %}bg-danger{% endif %}">
+              {{ 'Verified' if encounter.glaucoma_verified_status == 'verified' else 'Not verified' }}
+            </span>
+          </div>
+          {% endif %}
+          {% if not dr_reports %}
+          <div class="d-flex align-items-center justify-content-between">
+            <span>Encounter (No DR PDF)</span>
+            <span
+              class="badge {% if encounter.encounter_verified_status == 'verified' %}bg-success{% else %}bg-danger{% endif %}">
+              {{ 'Verified' if encounter.encounter_verified_status == 'verified' else 'Not verified' }}
+            </span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Main Report PDF</strong></div>
+        <div class="card-body">
+          {% set pdf_files = encounter.encounter_file_pdfs or [] %}
+          {% if pdf_files %}
+          {% for pdf in pdf_files %}
+          <div class="mb-2">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('media._encounterPDFByUUID', uuid_str=pdf.uuid) }}"
+              target="_blank" rel="noopener">
+              <i class="bi bi-file-pdf"></i> Open Original PDF
+            </a>
+            <small class="text-muted d-block mt-1">{{ pdf.filename }}</small>
+          </div>
+          {% endfor %}
+          {% else %}
+          <em class="text-muted">No PDF files available for this encounter.</em>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Diabetic Retinopathy (DR) Reports</strong></div>
+        <div class="card-body">
+          {% if dr_reports %}
+          <ul class="list-group list-group-flush">
+            {% for dr in dr_reports %}
+            <li class="list-group-item">
+              <div><strong>Result:</strong> {{ dr.result or "-" }}</div>
+              {% if dr.qualitative_result %}
+              <div><strong>Qualitative:</strong> {{ dr.qualitative_result }}</div>
+              {% endif %}
+              <div class="mt-2 d-flex flex-wrap gap-2">
+                {% if dr.uuid %}
+                <a class="btn btn-sm btn-outline-dark"
+                  href="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" target="_blank" rel="noopener">
+                  Open PDF
+                </a>
+                {% elif dr.report_file_name %}
+                <a class="btn btn-sm btn-outline-dark"
+                  href="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}" target="_blank"
+                  rel="noopener">
+                  Open PDF
+                </a>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-primary"
+                  href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=dr.id) }}">Review/Verify</a>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <em class="text-muted">No DR reports linked.</em>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>Glaucoma Reports</strong></div>
+        <div class="card-body">
+          {% if glaucoma_rows %}
+          <ul class="list-group list-group-flush">
+            {% for gl in glaucoma_rows %}
+            <li class="list-group-item">
+              <div><strong>Result:</strong> {{ gl.result or "-" }}</div>
+              {% if gl.qualitative_result %}
+              <div><strong>Qualitative:</strong> {{ gl.qualitative_result }}</div>
+              {% endif %}
+              <div><strong>VCDR (R/L):</strong>
+                {% if gl.vcdr_right_num is not none %}{{ '%.2f'|format(gl.vcdr_right_num) }}{% else %}-{% endif %}
+                /
+                {% if gl.vcdr_left_num is not none %}{{ '%.2f'|format(gl.vcdr_left_num) }}{% else %}-{% endif %}
+              </div>
+              {% if gl.original_vcdr_right or gl.original_vcdr_left %}
+              <div class="small text-muted">
+                OCR Raw (R/L): {{ gl.original_vcdr_right or '-' }} / {{ gl.original_vcdr_left or '-' }}
+              </div>
+              {% endif %}
+              <div class="mt-2 d-flex flex-wrap gap-2">
+                {% if gl.report_uuid %}
+                <a class="btn btn-sm btn-outline-dark"
+                  href="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gl.report_uuid) }}" target="_blank"
+                  rel="noopener">
+                  Open PDF
+                </a>
+                {% elif gl.report_file_name %}
+                <a class="btn btn-sm btn-outline-dark"
+                  href="{{ url_for('reports.serve_glaucoma_pdf', filename=gl.report_file_name) }}" target="_blank"
+                  rel="noopener">
+                  Open PDF
+                </a>
+                {% endif %}
+                <a class="btn btn-sm btn-outline-primary"
+                  href="{{ url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=gl.id) }}">Review/Verify</a>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <em class="text-muted">No Glaucoma reports linked.</em>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-md-7 col-lg-7 col-xl-8">
+      <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong>Images</strong>
+          <div class="sv-filters btn-group btn-group-sm" role="group" aria-label="Image filters">
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-none-{{ encounter.id }}"
+              value="none" checked>
+            <label class="btn btn-outline-secondary" for="svf-none-{{ encounter.id }}">None</label>
+
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-r-{{ encounter.id }}"
+              value="redfree">
+            <label class="btn btn-outline-secondary" for="svf-r-{{ encounter.id }}">R</label>
+
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-g-{{ encounter.id }}"
+              value="greenboost">
+            <label class="btn btn-outline-secondary" for="svf-g-{{ encounter.id }}">G</label>
+
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-b-{{ encounter.id }}"
+              value="bluemono">
+            <label class="btn btn-outline-secondary" for="svf-b-{{ encounter.id }}">B</label>
+
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-y-{{ encounter.id }}"
+              value="gray">
+            <label class="btn btn-outline-secondary" for="svf-y-{{ encounter.id }}">Y</label>
+
+            <input class="btn-check" type="radio" name="svFilter-{{ encounter.id }}" id="svf-h-{{ encounter.id }}"
+              value="contrast">
+            <label class="btn btn-outline-secondary" for="svf-h-{{ encounter.id }}">H</label>
+          </div>
+          <small class="text-muted">{{ images|length }} file(s)</small>
+        </div>
+
+        <div class="card-body">
+          {% if images %}
+          <div class="sv-viewer-root" data-enc-id="{{ encounter.id }}">
+            <div class="sv-main bg-black rounded position-relative mb-2">
+              <img class="sv-main-img" src="{{ url_for('media._encounterImageByUUID', uuid_str=images[0].uuid) }}"
+                alt="Image" data-index="0" />
+              <div class="sv-counter">1 / {{ images|length }}</div>
+              <button class="sv-nav sv-prev" type="button" aria-label="Previous image">&larr;</button>
+              <button class="sv-nav sv-next" type="button" aria-label="Next image">&rarr;</button>
+              <button class="sv-full btn btn-sm btn-light position-absolute top-0 end-0 m-2"
+                type="button">Fullscreen</button>
+            </div>
+
+            <div class="sv-thumbs">
+              {% for img in images %}
+              <a href="javascript:void(0)" class="sv-thumb-link {{ 'active' if loop.first }}"
+                data-index="{{ loop.index0 }}" title="Thumbnail">
+                <img class="sv-thumb-img" src="{{ url_for('media._encounterImageByUUID', uuid_str=img.uuid) }}"
+                  alt="Thumbnail" loading="lazy" />
+              </a>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <em class="text-muted">No images found for this encounter.</em>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/screening-viewer.js') }}?v={{ v }}"></script>
+{% endblock %}

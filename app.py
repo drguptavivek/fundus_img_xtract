@@ -484,6 +484,7 @@ def _register_blueprints(app: Flask) -> None:
     from reports import bp as reports_bp
     from analytics import bp as analytics_bp
     from search import bp as search_bp
+    from verify_remedio import bp as verify_remedio_bp
     from verify_remedio_glaucoma import bp as verify_remedio_glaucoma_bp
     from verify_remedio_dr import bp as verify_remedio_dr_bp
     from verify_remedio_nodr import bp as verify_remedio_nodr_bp
@@ -513,6 +514,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(reports_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(search_bp)
+    app.register_blueprint(verify_remedio_bp)
     app.register_blueprint(verify_remedio_glaucoma_bp)
     app.register_blueprint(verify_remedio_dr_bp)
     app.register_blueprint(verify_remedio_nodr_bp)

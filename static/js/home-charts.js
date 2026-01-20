@@ -12,195 +12,207 @@ function getPercentageLabel(value, total) {
 function initializeCharts() {
   // Grading Distribution Chart
   if (typeof gradingData !== 'undefined' && gradingData) {
-    var gradingCtx = document.getElementById('gradingChart').getContext('2d');
-    var gradingTotal = gradingData.reduce((a, b) => a + b, 0);
-    var gradingColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
-    
-    var gradingChart = new Chart(gradingCtx, {
-      type: 'doughnut',
-      data: {
-        labels: gradingLabels,
-        datasets: [{
-          data: gradingData,
-          backgroundColor: gradingColors.slice(0, gradingLabels.length),
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-          },
-          datalabels: {
-            color: '#fff',
-            font: {
-              weight: 'bold'
+    var gradingCanvas = document.getElementById('gradingChart');
+    if (gradingCanvas) {
+      var gradingCtx = gradingCanvas.getContext('2d');
+      var gradingTotal = gradingData.reduce((a, b) => a + b, 0);
+      var gradingColors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd'];
+      
+      var gradingChart = new Chart(gradingCtx, {
+        type: 'doughnut',
+        data: {
+          labels: gradingLabels,
+          datasets: [{
+            data: gradingData,
+            backgroundColor: gradingColors.slice(0, gradingLabels.length),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
             },
-            formatter: function(value, context) {
-              return getPercentageLabel(value, gradingTotal);
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, gradingTotal) + ')';
+            datalabels: {
+              color: '#fff',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value, context) {
+                return getPercentageLabel(value, gradingTotal);
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, gradingTotal) + ')';
+                }
               }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
   
   // Images by Disease Chart
   if (typeof diseaseImagesData !== 'undefined' && diseaseImagesData) {
-    var diseaseCtx = document.getElementById('diseaseImagesChart').getContext('2d');
-    var diseaseTotal = diseaseImagesData.reduce((a, b) => a + b, 0);
-    var diseaseColors = ['#4b8df8', '#f39c12', '#1abc9c', '#9b59b6', '#e74c3c', '#2ecc71', '#8e44ad', '#16a085', '#f1c40f'];
+    var diseaseCanvas = document.getElementById('diseaseImagesChart');
+    if (diseaseCanvas) {
+      var diseaseCtx = diseaseCanvas.getContext('2d');
+      var diseaseTotal = diseaseImagesData.reduce((a, b) => a + b, 0);
+      var diseaseColors = ['#4b8df8', '#f39c12', '#1abc9c', '#9b59b6', '#e74c3c', '#2ecc71', '#8e44ad', '#16a085', '#f1c40f'];
 
-    new Chart(diseaseCtx, {
-      type: 'doughnut',
-      data: {
-        labels: diseaseImagesLabels,
-        datasets: [{
-          data: diseaseImagesData,
-          backgroundColor: diseaseColors.slice(0, diseaseImagesLabels.length),
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-          },
-          datalabels: {
-            color: '#fff',
-            font: {
-              weight: 'bold'
+      new Chart(diseaseCtx, {
+        type: 'doughnut',
+        data: {
+          labels: diseaseImagesLabels,
+          datasets: [{
+            data: diseaseImagesData,
+            backgroundColor: diseaseColors.slice(0, diseaseImagesLabels.length),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
             },
-            formatter: function(value) {
-              return getPercentageLabel(value, diseaseTotal);
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, diseaseTotal) + ')';
+            datalabels: {
+              color: '#fff',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value) {
+                return getPercentageLabel(value, diseaseTotal);
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, diseaseTotal) + ')';
+                }
               }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
   
   // VCDR Ranges Chart (with adjusted cutoffs)
   if (typeof vcdrData !== 'undefined' && vcdrData) {
-    var vcdrCtx = document.getElementById('vcdrChart').getContext('2d');
-    var vcdrChart = new Chart(vcdrCtx, {
-      type: 'bar',
-      data: {
-        labels: ['Right Eye', 'Left Eye'],
-        datasets: [
-          {
-            label: 'Normal (< 0.5)',
-            data: [vcdrData.normal_right, vcdrData.normal_left],
-            backgroundColor: '#2ca02c'
-          },
-          {
-            label: 'Borderline (0.5-0.7)',
-            data: [vcdrData.borderline_right, vcdrData.borderline_left],
-            backgroundColor: '#ff7f0e'
-          },
-          {
-            label: 'Abnormal (0.7-0.8)',
-            data: [vcdrData.abnormal_right, vcdrData.abnormal_left],
-            backgroundColor: '#d62728'
-          },
-          {
-            label: 'Severely Abnormal (≥ 0.8)',
-            data: [vcdrData.severely_abnormal_right, vcdrData.severely_abnormal_left],
-            backgroundColor: '#9467bd'
-          }
-        ]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: {
-            stacked: true,
-            ticks: {
-              precision: 0
+    var vcdrCanvas = document.getElementById('vcdrChart');
+    if (vcdrCanvas) {
+      var vcdrCtx = vcdrCanvas.getContext('2d');
+      var vcdrChart = new Chart(vcdrCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Right Eye', 'Left Eye'],
+          datasets: [
+            {
+              label: 'Normal (< 0.5)',
+              data: [vcdrData.normal_right, vcdrData.normal_left],
+              backgroundColor: '#2ca02c'
+            },
+            {
+              label: 'Borderline (0.5-0.7)',
+              data: [vcdrData.borderline_right, vcdrData.borderline_left],
+              backgroundColor: '#ff7f0e'
+            },
+            {
+              label: 'Abnormal (0.7-0.8)',
+              data: [vcdrData.abnormal_right, vcdrData.abnormal_left],
+              backgroundColor: '#d62728'
+            },
+            {
+              label: 'Severely Abnormal (≥ 0.8)',
+              data: [vcdrData.severely_abnormal_right, vcdrData.severely_abnormal_left],
+              backgroundColor: '#9467bd'
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              stacked: true,
+              ticks: {
+                precision: 0
+              }
+            },
+            y: {
+              stacked: true
             }
           },
-          y: {
-            stacked: true
-          }
-        },
-        plugins: {
-          datalabels: {
-            display: false // No data labels for bar charts as requested
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.dataset.label + ': ' + context.raw;
+          plugins: {
+            datalabels: {
+              display: false // No data labels for bar charts as requested
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.raw;
+                }
               }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
   
   // Ungradable Images Chart
   if (typeof ungradableData !== 'undefined' && ungradableData) {
-    var ungradableCtx = document.getElementById('ungradableChart').getContext('2d');
-    var ungradableTotal = ungradableData.graded + ungradableData.ungraded;
-    var ungradableLabels = ['Gradable Images', 'Not Gradable Images'];
-    
-    var ungradableChart = new Chart(ungradableCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ungradableLabels,
-        datasets: [{
-          data: [ungradableData.graded, ungradableData.ungraded],
-          backgroundColor: ['#2ca02c', '#d62728'],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-          },
-          datalabels: {
-            color: '#fff',
-            font: {
-              weight: 'bold'
+    var ungradableCanvas = document.getElementById('ungradableChart');
+    if (ungradableCanvas) {
+      var ungradableCtx = ungradableCanvas.getContext('2d');
+      var ungradableTotal = ungradableData.graded + ungradableData.ungraded;
+      var ungradableLabels = ['Gradable Images', 'Not Gradable Images'];
+      
+      var ungradableChart = new Chart(ungradableCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ungradableLabels,
+          datasets: [{
+            data: [ungradableData.graded, ungradableData.ungraded],
+            backgroundColor: ['#2ca02c', '#d62728'],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
             },
-            formatter: function(value, context) {
-              return getPercentageLabel(value, ungradableTotal);
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, ungradableTotal) + ')';
+            datalabels: {
+              color: '#fff',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value, context) {
+                return getPercentageLabel(value, ungradableTotal);
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, ungradableTotal) + ')';
+                }
               }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
   
   // Images by Lab Unit and Disease Chart
@@ -234,44 +246,47 @@ function initializeCharts() {
         };
       });
       
-      var labUnitDiseaseCtx = document.getElementById('labUnitDiseaseChart').getContext('2d');
-      var labUnitDiseaseChart = new Chart(labUnitDiseaseCtx, {
-        type: 'bar',
-        data: {
-          labels: labUnits,
-          datasets: datasets
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              stacked: true,
-              ticks: {
-                precision: 0
-              }
-            },
-            y: {
-              stacked: true,
-              ticks: {
-                precision: 0
-              }
-            }
+      var labUnitDiseaseCanvas = document.getElementById('labUnitDiseaseChart');
+      if (labUnitDiseaseCanvas) {
+        var labUnitDiseaseCtx = labUnitDiseaseCanvas.getContext('2d');
+        var labUnitDiseaseChart = new Chart(labUnitDiseaseCtx, {
+          type: 'bar',
+          data: {
+            labels: labUnits,
+            datasets: datasets
           },
-          plugins: {
-            datalabels: {
-              display: false // No data labels for bar charts as requested
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                stacked: true,
+                ticks: {
+                  precision: 0
+                }
+              },
+              y: {
+                stacked: true,
+                ticks: {
+                  precision: 0
+                }
+              }
             },
-            tooltip: {
-              mode: 'index',
-              intersect: false
-            },
-            legend: {
-              position: 'right'
+            plugins: {
+              datalabels: {
+                display: false // No data labels for bar charts as requested
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false
+              },
+              legend: {
+                position: 'right'
+              }
             }
           }
-        }
-      });
+        });
+      }
     }
   }
   
@@ -297,47 +312,99 @@ function initializeCharts() {
         return verificationData[key].percentage;
       });
       
-      var verifiedLabUnitDiseaseCtx = document.getElementById('verifiedLabUnitDiseaseChart').getContext('2d');
-      var verifiedLabUnitDiseaseChart = new Chart(verifiedLabUnitDiseaseCtx, {
-        type: 'bar',
+      var verifiedLabUnitDiseaseCanvas = document.getElementById('verifiedLabUnitDiseaseChart');
+      if (verifiedLabUnitDiseaseCanvas) {
+        var verifiedLabUnitDiseaseCtx = verifiedLabUnitDiseaseCanvas.getContext('2d');
+        var verifiedLabUnitDiseaseChart = new Chart(verifiedLabUnitDiseaseCtx, {
+          type: 'bar',
+          data: {
+            labels: verificationLabels,
+            datasets: [{
+              label: 'Percentage Verified',
+              data: verificationPercentages,
+              backgroundColor: '#1f77b4'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                  callback: function(value) {
+                    return value + '%';
+                  }
+                }
+              }
+            },
+            plugins: {
+              datalabels: {
+                color: '#000',
+                font: {
+                  weight: 'bold'
+                },
+                formatter: function(value, context) {
+                  return value.toFixed(1) + '%';
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    var key = context.label;
+                    var data = verificationData[key];
+                    return 'Verified: ' + data.verified + '/' + data.total + ' (' + data.percentage.toFixed(1) + '%)';
+                  }
+                }
+              }
+            }
+          }
+        });
+      }
+    }
+  }
+  
+  // DR Impression Distribution Chart
+  if (typeof drImpressionData !== 'undefined' && drImpressionData) {
+    var drCanvas = document.getElementById('drImpressionChart');
+    if (drCanvas) {
+      var drCtx = drCanvas.getContext('2d');
+      var drTotal = drImpressionData.reduce((a, b) => a + b, 0);
+      
+      var drChart = new Chart(drCtx, {
+        type: 'pie',
         data: {
-          labels: verificationLabels,
+          labels: drImpressionLabels,
           datasets: [{
-            label: 'Percentage Verified',
-            data: verificationPercentages,
-            backgroundColor: '#1f77b4'
+            data: drImpressionData,
+            backgroundColor: [
+              '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+            ],
+            borderWidth: 1
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              ticks: {
-                callback: function(value) {
-                  return value + '%';
-                }
-              }
-            }
-          },
           plugins: {
+            legend: {
+              position: 'right',
+            },
             datalabels: {
-              color: '#000',
+              color: '#fff',
               font: {
                 weight: 'bold'
               },
               formatter: function(value, context) {
-                return value.toFixed(1) + '%';
+                return getPercentageLabel(value, drTotal);
               }
             },
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  var key = context.label;
-                  var data = verificationData[key];
-                  return 'Verified: ' + data.verified + '/' + data.total + ' (' + data.percentage.toFixed(1) + '%)';
+                  return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, drTotal) + ')';
                 }
               }
             }
@@ -347,96 +414,53 @@ function initializeCharts() {
     }
   }
   
-  // DR Impression Distribution Chart
-  if (typeof drImpressionData !== 'undefined' && drImpressionData) {
-    var drCtx = document.getElementById('drImpressionChart').getContext('2d');
-    var drTotal = drImpressionData.reduce((a, b) => a + b, 0);
-    
-    var drChart = new Chart(drCtx, {
-      type: 'pie',
-      data: {
-        labels: drImpressionLabels,
-        datasets: [{
-          data: drImpressionData,
-          backgroundColor: [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-          ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-          },
-          datalabels: {
-            color: '#fff',
-            font: {
-              weight: 'bold'
-            },
-            formatter: function(value, context) {
-              return getPercentageLabel(value, drTotal);
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, drTotal) + ')';
-              }
-            }
-          }
-        }
-      }
-    });
-  }
-  
   // Glaucoma Impression Distribution Chart
   if (typeof glaucomaImpressionData !== 'undefined' && glaucomaImpressionData) {
-    var glaucomaCtx = document.getElementById('glaucomaImpressionChart').getContext('2d');
-    var glaucomaTotal = glaucomaImpressionData.reduce((a, b) => a + b, 0);
-    
-    var glaucomaChart = new Chart(glaucomaCtx, {
-      type: 'pie',
-      data: {
-        labels: glaucomaImpressionLabels,
-        datasets: [{
-          data: glaucomaImpressionData,
-          backgroundColor: [
-            '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
-            '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
-          ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            position: 'right',
-          },
-          datalabels: {
-            color: '#fff',
-            font: {
-              weight: 'bold'
+    var glaucomaCanvas = document.getElementById('glaucomaImpressionChart');
+    if (glaucomaCanvas) {
+      var glaucomaCtx = glaucomaCanvas.getContext('2d');
+      var glaucomaTotal = glaucomaImpressionData.reduce((a, b) => a + b, 0);
+      
+      var glaucomaChart = new Chart(glaucomaCtx, {
+        type: 'pie',
+        data: {
+          labels: glaucomaImpressionLabels,
+          datasets: [{
+            data: glaucomaImpressionData,
+            backgroundColor: [
+              '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+            ],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
             },
-            formatter: function(value, context) {
-              return getPercentageLabel(value, glaucomaTotal);
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, glaucomaTotal) + ')';
+            datalabels: {
+              color: '#fff',
+              font: {
+                weight: 'bold'
+              },
+              formatter: function(value, context) {
+                return getPercentageLabel(value, glaucomaTotal);
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.label + ': ' + context.raw + ' (' + getPercentageLabel(context.raw, glaucomaTotal) + ')';
+                }
               }
             }
           }
         }
-      }
-    });
+      });
+    }
   }
 }
 

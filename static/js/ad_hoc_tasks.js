@@ -161,10 +161,10 @@
       const imageBlock = uuid ? `
         <div class="mb-2">
           <div class="rounded border overflow-hidden" style="height: 200px; width: 200px;">
-            <img src="${urlForMedia(uuid)}" class="w-100 h-100 object-fit-cover" alt="Preview ${uuid}">
+            <img src="${urlForMediaThumb(uuid)}" class="w-100 h-100 object-fit-cover" alt="Preview ${uuid}">
           </div>
           <div id="${galleryId}" class="d-none pswp-gallery">
-            <a href="${urlForMedia(uuid)}" data-pswp-type="image" title="Preview ${uuid}"></a>
+            <a href="${urlForMediaFull(uuid)}" data-pswp-type="image" title="Preview ${uuid}"></a>
           </div>
           <button type="button" class="btn btn-sm btn-outline-primary mt-2 view-image-btn" data-gallery="${galleryId}">View Image</button>
         </div>
@@ -224,7 +224,11 @@
     });
   }
 
-  function urlForMedia(uuid) {
+  function urlForMediaThumb(uuid) {
+    return `/media/img/${uuid}/thumbnail`;
+  }
+
+  function urlForMediaFull(uuid) {
     return `/media/img/${uuid}`;
   }
 

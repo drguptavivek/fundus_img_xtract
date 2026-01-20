@@ -12,6 +12,7 @@ from sqlalchemy import select
 from models import DirectImageUpload, Hospital, LabUnit, Camera, Disease, Area, User, GradingTask
 from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.media_cache import bump_media_cache_version
 
 
 editing_logger = logging.getLogger("editing")
@@ -206,6 +207,7 @@ def restore_original(upload_id: int):
             # Update the database
             upload.edited_filename = None
             db.commit()
+            bump_media_cache_version(str(upload.uuid))
 
             flash("Original image has been restored.", "success")
             return jsonify({"message": "Original image restored.", "redirect_url": flask_url_for('direct_uploads.edit_image', upload_id=upload_id)}), 200

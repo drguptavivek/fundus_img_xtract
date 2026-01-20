@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from flask_login import current_user
 
 from models import (
@@ -63,12 +63,14 @@ def get_task_summary(
     # Calculate offset for pagination
     offset = (page - 1) * per_page
     
-    # Base query for tasks with joined data
-    # We need to join differently since GradingTask has encounter_file or direct_image_upload
-    query = db_session.query(Task).join(LabUnit).join(Disease)
-    
-    # Join with appropriate image association
-    query = query.outerjoin(Image, Task.encounter_file_id == Image.id).outerjoin(DirectImageUpload, Task.direct_image_upload_id == DirectImageUpload.id)
+    # Base query for tasks with eager loads to avoid N+1s.
+    # Avoid explicit joins here because apply_scoping() adds its own joins.
+    query = db_session.query(Task).options(
+        joinedload(Task.disease),
+        joinedload(Task.lab_unit).joinedload(LabUnit.hospital),
+        joinedload(Task.encounter_file),
+        joinedload(Task.direct_image),
+    )
     
     # Apply scoping based on user's lab units or admin override
     query = apply_scoping(query, Task, current_user, "analytics")
@@ -81,20 +83,24 @@ def get_task_summary(
         query = query.filter(Task.disease_id == disease_filter)
         
     if hospital_filter:
-        query = query.filter(LabUnit.hospital_id == hospital_filter)
+        query = query.filter(Task.lab_unit.has(LabUnit.hospital_id == hospital_filter))
         
     if lab_unit_filter:
         query = query.filter(Task.lab_unit_id == lab_unit_filter)
         
     if lab_unit_name_filter:
-        query = query.filter(LabUnit.name.ilike(f'%{lab_unit_name_filter}%'))
+        query = query.filter(Task.lab_unit.has(LabUnit.name.ilike(f'%{lab_unit_name_filter}%')))
         
     if search_query:
         query = query.filter(
             or_(
-                Image.uuid.contains(search_query),
-                Image.patient_encounter.has(Encounter.patient_id.contains(search_query)),
-                DirectImageUpload.uuid.contains(search_query)
+                Task.encounter_file.has(
+                    or_(
+                        Image.uuid.contains(search_query),
+                        Image.patient_encounter.has(Encounter.patient_id.contains(search_query)),
+                    )
+                ),
+                Task.direct_image.has(DirectImageUpload.uuid.contains(search_query)),
             )
         )
     

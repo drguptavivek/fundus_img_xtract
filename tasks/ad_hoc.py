@@ -10,7 +10,7 @@ from datetime import timezone
 import json
 from uuid import uuid4
 
-from models import Session, AdHocTaskCreation, GradingTask, Disease
+from models import Session, AdHocTaskCreation, GradingTask, Disease, LabUnit
 from auth.utils import utcnow
 from flask_login import current_user
 from auth.roles import roles_required
@@ -256,8 +256,7 @@ def search():
         area_ids = [area_id] if area_id else None
         image_type = None if source == 'all' else source
 
-        # Parse dates and booleans like route_search_images does
-        from search.route_search_images import _parse_date, _parse_bool_param
+        from utils.search_params import parse_bool_param, parse_search_date
         try:
             images, total = search_images_strict(
                 db_session=db,
@@ -265,16 +264,16 @@ def search():
                 per_page=per_page,
                 hospital_id=hospital_id,
                 lab_unit_ids=lab_unit_ids,
-                upload_start=_parse_date(upload_start),
-                upload_end=_parse_date(upload_end),
+                upload_start=parse_search_date(upload_start),
+                upload_end=parse_search_date(upload_end),
                 camera_ids=camera_ids,
                 disease_ids=disease_ids,
                 area_ids=area_ids,
-                is_mydriatic=_parse_bool_param(is_mydriatic),
-                has_dr_report=_parse_bool_param(has_dr_report),
-                has_glaucoma_report=_parse_bool_param(has_glaucoma_report),
-                capture_start=_parse_date(capture_start),
-                capture_end=_parse_date(capture_end),
+                is_mydriatic=parse_bool_param(is_mydriatic),
+                has_dr_report=parse_bool_param(has_dr_report),
+                has_glaucoma_report=parse_bool_param(has_glaucoma_report),
+                capture_start=parse_search_date(capture_start),
+                capture_end=parse_search_date(capture_end),
                 image_type=image_type,
             )
         except ImageSearchError as e:
@@ -331,23 +330,23 @@ def preview():
 
     with get_db_session() as db:
         try:
-            from search.route_search_images import _parse_date, _parse_bool_param
+            from utils.search_params import parse_bool_param, parse_search_date
             images, total = search_images_strict(
                 db_session=db,
                 page=page,
                 per_page=per_page,
                 hospital_id=hospital_id,
                 lab_unit_ids=[lab_unit_id] if lab_unit_id else None,
-                upload_start=_parse_date(upload_start),
-                upload_end=_parse_date(upload_end),
+                upload_start=parse_search_date(upload_start),
+                upload_end=parse_search_date(upload_end),
                 camera_ids=[camera_id] if camera_id else None,
                 disease_ids=[disease_id] if disease_id else None,
                 area_ids=[area_id] if area_id else None,
-                is_mydriatic=_parse_bool_param(is_mydriatic),
-                has_dr_report=_parse_bool_param(has_dr_report),
-                has_glaucoma_report=_parse_bool_param(has_glaucoma_report),
-                capture_start=_parse_date(capture_start),
-                capture_end=_parse_date(capture_end),
+                is_mydriatic=parse_bool_param(is_mydriatic),
+                has_dr_report=parse_bool_param(has_dr_report),
+                has_glaucoma_report=parse_bool_param(has_glaucoma_report),
+                capture_start=parse_search_date(capture_start),
+                capture_end=parse_search_date(capture_end),
                 image_type=None if source == 'all' else source,
             )
         except ImageSearchError as e:
@@ -393,16 +392,16 @@ def preview():
                     per_page=per_page,
                     hospital_id=hospital_id,
                     lab_unit_ids=[lab_unit_id] if lab_unit_id else None,
-                    upload_start=_parse_date(upload_start),
-                    upload_end=_parse_date(upload_end),
+                    upload_start=parse_search_date(upload_start),
+                    upload_end=parse_search_date(upload_end),
                     camera_ids=[camera_id] if camera_id else None,
                     disease_ids=[disease_id] if disease_id else None,
                     area_ids=[area_id] if area_id else None,
-                    is_mydriatic=_parse_bool_param(is_mydriatic),
-                    has_dr_report=_parse_bool_param(has_dr_report),
-                    has_glaucoma_report=_parse_bool_param(has_glaucoma_report),
-                    capture_start=_parse_date(capture_start),
-                    capture_end=_parse_date(capture_end),
+                    is_mydriatic=parse_bool_param(is_mydriatic),
+                    has_dr_report=parse_bool_param(has_dr_report),
+                    has_glaucoma_report=parse_bool_param(has_glaucoma_report),
+                    capture_start=parse_search_date(capture_start),
+                    capture_end=parse_search_date(capture_end),
                     image_type=None if source == 'all' else source,
                 )
             except ImageSearchError:
@@ -508,7 +507,7 @@ def create():
         # If randomize requested and no manual selections, sample server-side across all matches
         if randomize and not refs_to_use:
             # Rebuild search args like preview
-            from search.route_search_images import _parse_date, _parse_bool_param
+            from utils.search_params import parse_bool_param, parse_search_date
             page = 1
             per_page = min(200, max_images)
             try:
@@ -518,16 +517,16 @@ def create():
                     per_page=per_page,
                     hospital_id=filters_norm.get('hospital_id'),
                     lab_unit_ids=[filters_norm.get('lab_unit_id')] if filters_norm.get('lab_unit_id') else None,
-                    upload_start=_parse_date(filters_norm.get('upload_start')),
-                    upload_end=_parse_date(filters_norm.get('upload_end')),
+                    upload_start=parse_search_date(filters_norm.get('upload_start')),
+                    upload_end=parse_search_date(filters_norm.get('upload_end')),
                     camera_ids=[filters_norm.get('camera_id')] if filters_norm.get('camera_id') else None,
                     disease_ids=[filters_norm.get('disease_id')] if filters_norm.get('disease_id') else None,
                     area_ids=[filters_norm.get('area_id')] if filters_norm.get('area_id') else None,
-                    is_mydriatic=_parse_bool_param(filters_norm.get('is_mydriatic')),
-                    has_dr_report=_parse_bool_param(filters_norm.get('has_dr_report')),
-                    has_glaucoma_report=_parse_bool_param(filters_norm.get('has_glaucoma_report')),
-                    capture_start=_parse_date(filters_norm.get('capture_start')),
-                    capture_end=_parse_date(filters_norm.get('capture_end')),
+                    is_mydriatic=parse_bool_param(filters_norm.get('is_mydriatic')),
+                    has_dr_report=parse_bool_param(filters_norm.get('has_dr_report')),
+                    has_glaucoma_report=parse_bool_param(filters_norm.get('has_glaucoma_report')),
+                    capture_start=parse_search_date(filters_norm.get('capture_start')),
+                    capture_end=parse_search_date(filters_norm.get('capture_end')),
                     image_type=filters_norm.get('image_type'),
                 )
             except ImageSearchError:
@@ -548,16 +547,16 @@ def create():
                         per_page=per_page,
                         hospital_id=filters_norm.get('hospital_id'),
                         lab_unit_ids=[filters_norm.get('lab_unit_id')] if filters_norm.get('lab_unit_id') else None,
-                        upload_start=_parse_date(filters_norm.get('upload_start')),
-                        upload_end=_parse_date(filters_norm.get('upload_end')),
+                        upload_start=parse_search_date(filters_norm.get('upload_start')),
+                        upload_end=parse_search_date(filters_norm.get('upload_end')),
                         camera_ids=[filters_norm.get('camera_id')] if filters_norm.get('camera_id') else None,
                         disease_ids=[filters_norm.get('disease_id')] if filters_norm.get('disease_id') else None,
                         area_ids=[filters_norm.get('area_id')] if filters_norm.get('area_id') else None,
-                        is_mydriatic=_parse_bool_param(filters_norm.get('is_mydriatic')),
-                        has_dr_report=_parse_bool_param(filters_norm.get('has_dr_report')),
-                        has_glaucoma_report=_parse_bool_param(filters_norm.get('has_glaucoma_report')),
-                        capture_start=_parse_date(filters_norm.get('capture_start')),
-                        capture_end=_parse_date(filters_norm.get('capture_end')),
+                        is_mydriatic=parse_bool_param(filters_norm.get('is_mydriatic')),
+                        has_dr_report=parse_bool_param(filters_norm.get('has_dr_report')),
+                        has_glaucoma_report=parse_bool_param(filters_norm.get('has_glaucoma_report')),
+                        capture_start=parse_search_date(filters_norm.get('capture_start')),
+                        capture_end=parse_search_date(filters_norm.get('capture_end')),
                         image_type=filters_norm.get('image_type'),
                     )
                 except ImageSearchError:

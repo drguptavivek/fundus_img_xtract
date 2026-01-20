@@ -18,6 +18,7 @@ from models import (
 from db_transaction_manager import transaction_scope
 from job_store import db_set_job_status, db_set_item_state, db_any_item_error
 from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+from utils.media_cache import bump_media_cache_version
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
     abs_from_parts, IMAGE_DIR
@@ -369,6 +370,7 @@ def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
                         thumbnail_filename = get_thumbnail_filename(edited_filename)
                         direct_upload.edited_thumbnail_filename = thumbnail_filename
                     db.add(direct_upload)
+                    bump_media_cache_version(str(direct_upload.uuid))
 
             elif job_type == ThumbnailJobType.ENCOUNTER:
                 # Update EncounterFile record
@@ -378,6 +380,7 @@ def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
                     thumbnail_filename = get_thumbnail_filename(encounter_file.filename)
                     encounter_file.thumbnail_filename = thumbnail_filename
                     db.add(encounter_file)
+                    bump_media_cache_version(str(encounter_file.uuid))
 
     except Exception as e:
         logger.error(

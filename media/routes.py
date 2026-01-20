@@ -18,6 +18,7 @@ from utils.utilsImgServe import (
 
 from . import bp
 
+
 @bp.route("/encounter/img/<uuid_str>", methods=["GET"])
 @roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
 @rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")

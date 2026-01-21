@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+{% block title %}Verify Remedio Encounter #{{ encounter.id }}{% endblock %}
+{% from "_forms.html" import csrf_field %}
+
+{% block content %}
+<div class="py-3">
+  <div class="d-flex align-items-center justify-content-between gap-2 mb-2 small text-muted">
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ back_url }}" aria-label="Back" title="Back">
+        &larr; {{ back_label or 'All encounters' }}
+      </a>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      {% if prev_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ prev_url }}" aria-label="Previous encounter"
+        title="Previous encounter">
+        &larr; Prev
+      </a>
+      {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No previous encounter">
+        &larr; Prev
+      </button>
+      {% endif %}
+
+      {% if next_url %}
+      <a class="btn btn-sm btn-outline-secondary btn-subtle" href="{{ next_url }}" aria-label="Next encounter"
+        title="Next encounter">
+        Next &rarr;
+      </a>
+      {% else %}
+      <button class="btn btn-sm btn-outline-secondary btn-subtle" disabled aria-label="No next encounter">
+        Next &rarr;
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <form id="encounter-form" method="post" action="{{ url_for('verify_remedio.verify_save', encounter_id=encounter.id) }}">
+    {{ csrf_field() }}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header">
+        <div class="row align-items-center g-2">
+          <div class="col-12 col-md-6">
+            <strong>Encounter Details</strong>
+          </div>
+          <div class="col-12 col-md-6 d-flex justify-content-end">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Save Changes</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-6 col-md-3">
+            <label class="form-label" for="patient-id-input">Patient ID (PEC ID)</label>
+            <input id="patient-id-input" type="text" name="patient_id" class="form-control" maxlength="15"
+              value="{{ encounter.patient_id | default('Hidden', true) }}">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Patient Name</label>
+            <input type="text" class="form-control" value="{{ encounter.name | default('Anonymous', true) }}" readonly>
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="capture-date">Capture Date</label>
+            <input id="capture-date" type="date" name="capture_date_dt" class="form-control"
+              value="{{ encounter.capture_date_dt or '' }}">
+          </div>
+          <div class="col-12 col-md-3">
+            <label class="form-label">Zip File</label>
+            <input type="text" class="form-control" value="{{ encounter.zip_file.zip_filename if encounter.zip_file else '-' }}"
+              readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {% if dr_reports %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>DR Reports</strong>
+        <div class="text-end">
+          <div class="form-check form-switch">
+            <input class="form-check-input verify-toggle {% if encounter.dr_verified_status != 'verified' %}state-not-verified{% endif %}"
+              type="checkbox" role="switch" id="verify-toggle-dr"
+              data-form-id="encounter-form"
+              data-verify-url="{{ url_for('verify_remedio.verify_dr', encounter_id=encounter.id) }}"
+              data-unverify-url="{{ url_for('verify_remedio.unverify_dr', encounter_id=encounter.id) }}"
+              data-status-id="verify-status-dr"
+              {% if not dr_reports %}disabled{% endif %}
+              {% if encounter.dr_verified_status == 'verified' %}checked{% endif %}>
+            <label class="form-check-label ms-2" for="verify-toggle-dr">DR Verified</label>
+          </div>
+          <div id="verify-status-dr" class="small mt-1 {% if encounter.dr_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+            {% if encounter.dr_verified_status == 'verified' %}
+            Verified by {{ encounter.dr_verified_by or '—' }}
+            {% else %}
+            Not verified
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        {% for dr in dr_reports %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>DR Report #{{ dr.id }}</strong>
+          </div>
+          <div class="row g-3 align-items-start">
+            <div class="col-12 col-lg-3">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">Result</label>
+                  <textarea name="dr_result_{{ dr.id }}" class="form-control" rows="5">{{ dr.result or '' }}</textarea>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Qualitative Result</label>
+                  <textarea name="dr_qualitative_result_{{ dr.id }}" class="form-control" rows="5">{{ dr.qualitative_result or '' }}</textarea>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-9">
+              {% if dr.uuid %}
+              <div style="height: 50vh;">
+                <iframe src="{{ url_for('reports.serve_dr_pdf_by_uuid', uuid=dr.uuid) }}" title="DR PDF" frameborder="0"
+                  style="width:90%; height:100%;"></iframe>
+              </div>
+              {% elif dr.report_file_name %}
+              <div style="height: 50vh;">
+                <iframe src="{{ url_for('reports.serve_dr_pdf', filename=dr.report_file_name) }}" title="DR PDF"
+                  frameborder="0" style="width:90%; height:100%;"></iframe>
+              </div>
+              {% else %}
+              <em class="text-muted">No PDF linked for this report.</em>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if glaucoma_rows %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Glaucoma Reports</strong>
+        <div class="text-end">
+          <div class="form-check form-switch">
+            <input class="form-check-input verify-toggle {% if encounter.glaucoma_verified_status != 'verified' %}state-not-verified{% endif %}"
+              type="checkbox" role="switch" id="verify-toggle-glaucoma"
+              data-form-id="encounter-form"
+              data-verify-url="{{ url_for('verify_remedio.verify_glaucoma', encounter_id=encounter.id) }}"
+              data-unverify-url="{{ url_for('verify_remedio.unverify_glaucoma', encounter_id=encounter.id) }}"
+              data-status-id="verify-status-glaucoma"
+              {% if not glaucoma_rows %}disabled{% endif %}
+              {% if encounter.glaucoma_verified_status == 'verified' %}checked{% endif %}>
+            <label class="form-check-label ms-2" for="verify-toggle-glaucoma">Glaucoma Verified</label>
+          </div>
+          <div id="verify-status-glaucoma" class="small mt-1 {% if encounter.glaucoma_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+            {% if encounter.glaucoma_verified_status == 'verified' %}
+            Verified by {{ encounter.glaucoma_verified_by or '—' }}
+            {% else %}
+            Not verified
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        {% for gl in glaucoma_rows %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong>Glaucoma Report #{{ gl.id }}</strong>
+          </div>
+          <div class="row g-3 align-items-start">
+            <div class="col-12 col-lg-3">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label">VCDR Right</label>
+                  <input type="number" step="0.01" min="0" max="1" name="gl_vcdr_right_num_{{ gl.id }}"
+                    class="form-control" value="{{ '%.2f'|format(gl.vcdr_right_num) if gl.vcdr_right_num is not none else '' }}">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">VCDR Left</label>
+                  <input type="number" step="0.01" min="0" max="1" name="gl_vcdr_left_num_{{ gl.id }}"
+                    class="form-control" value="{{ '%.2f'|format(gl.vcdr_left_num) if gl.vcdr_left_num is not none else '' }}">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Result</label>
+                  <textarea name="gl_result_{{ gl.id }}" class="form-control" rows="4">{{ gl.result or '' }}</textarea>
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Qualitative Result</label>
+                  <textarea name="gl_qualitative_result_{{ gl.id }}" class="form-control" rows="4">{{ gl.qualitative_result or '' }}</textarea>
+                </div>
+                {% if gl.original_vcdr_right or gl.original_vcdr_left %}
+                <div class="col-12 small text-muted">OCR Raw (R/L): {{ gl.original_vcdr_right or '-' }} / {{ gl.original_vcdr_left or '-' }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="col-12 col-lg-9">
+              {% if gl.report_uuid %}
+              <div style="height: 50vh;">
+                <iframe src="{{ url_for('reports.serve_glaucoma_pdf_by_uuid', uuid=gl.report_uuid) }}"
+                  title="Glaucoma PDF" frameborder="0" style="width:90%; height:100%;"></iframe>
+              </div>
+              {% elif gl.report_file_name %}
+              <div style="height: 50vh;">
+                <iframe src="{{ url_for('reports.serve_glaucoma_pdf', filename=gl.report_file_name) }}"
+                  title="Glaucoma PDF" frameborder="0" style="width:90%; height:100%;"></iframe>
+              </div>
+              {% else %}
+              <em class="text-muted">No PDF linked for this report.</em>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Encounter Images</strong>
+        <span class="small text-muted d-block">Laterality + Centering (Macula/Disk/Cannot tell)</span>
+      </div>
+      <div class="text-end">
+        <div class="form-check form-switch">
+          <input class="form-check-input verify-toggle {% if encounter.encounter_verified_status != 'verified' %}state-not-verified{% endif %}"
+            type="checkbox" role="switch" id="verify-toggle-encounter"
+            data-form-id="encounter-form"
+            data-verify-url="{{ url_for('verify_remedio.verify_encounter', encounter_id=encounter.id) }}"
+            data-unverify-url="{{ url_for('verify_remedio.unverify_encounter', encounter_id=encounter.id) }}"
+            data-status-id="verify-status-encounter"
+            data-autonext="true"
+            {% if not can_encounter_verify %}disabled{% endif %}
+            {% if encounter.encounter_verified_status == 'verified' %}checked{% endif %}>
+          <label class="form-check-label ms-2" for="verify-toggle-encounter">Encounter Verified</label>
+        </div>
+        <div id="verify-status-encounter" class="small mt-1 {% if encounter.encounter_verified_status == 'verified' %}text-success{% else %}text-danger{% endif %}">
+          {% if encounter.encounter_verified_status == 'verified' %}
+          Verified by {{ encounter.encounter_verified_by or '—' }}
+          {% else %}
+          Not verified
+          {% endif %}
+        </div>
+        {% if not can_encounter_verify %}
+        <div class="small text-muted">Verify DR/Glaucoma first (if present).</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="card-body">
+      {% if images %}
+      {% set image = images[0] %}
+      {% set viewer_height = '320px' %}
+      <div class="row g-3">
+        <div class="col-12 col-lg-2">
+          <div class="list-group">
+            {% for ef in images %}
+            {% set side_ok = ef.eye_side in ['right','left','cannot_tell'] %}
+            {% set centering_ok = ef.centering in ['macula','disk','cannot_tell'] %}
+            {% set tag_ok = side_ok and centering_ok %}
+            <button type="button" class="list-group-item list-group-item-action p-2 position-relative"
+              hx-get="{{ url_for('verify_remedio.viewer_panel', encounter_id=encounter.id, image_id=ef.id) }}"
+              hx-target="#encounter-viewer-panel" hx-swap="innerHTML">
+              <span class="position-absolute top-50 end-0 translate-middle p-1 border border-light rounded-circle"
+                style="background-color: {{ '#198754' if tag_ok else '#dc3545' }};"
+                title="{{ 'Tagged' if tag_ok else 'Pending tags' }}"></span>
+              <img src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=ef.uuid) }}" alt="Thumbnail"
+                style="width:100px; height:100px; object-fit:cover; display:block; background:#f8f9fa;" />
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-12 col-lg-9" id="encounter-viewer-panel" >
+          {% include "verify_remedio/_viewer_panel.html" with context %}
+        </div>
+      </div>
+      {% else %}
+      <em class="text-muted">No images found for this encounter.</em>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}"></script>
+<script src="{{ url_for('static', filename='js/verify_remedio_edit.js') }}?v={{ v }}"></script>
+{% endblock %}

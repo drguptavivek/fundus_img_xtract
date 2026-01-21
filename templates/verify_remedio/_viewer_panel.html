@@ -1,0 +1,40 @@
+{% from "_forms.html" import csrf_field %}
+
+<div class="row g-3">
+  <div class="col-12 col-lg-8">
+    {% include "partials/_viewer_card.html" with context %}
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-header"><strong>Image Tags</strong></div>
+      <div class="card-body d-flex flex-column gap-2">
+        <form method="post" action="{{ url_for('verify_remedio.mark_eye', encounter_id=encounter.id) }}"
+          class="d-flex gap-2 flex-nowrap eye-mark-form">
+          {{ csrf_field() }}
+          <input type="hidden" name="ef_id" value="{{ image.id }}">
+          {% set sel = (image.eye_side or '') %}
+          <button name="side" value="right" type="submit"
+            class="btn btn-sm flex-fill {% if sel=='right' %}btn-primary{% else %}btn-outline-primary{% endif %}">Right</button>
+          <button name="side" value="left" type="submit"
+            class="btn btn-sm flex-fill {% if sel=='left' %}btn-primary{% else %}btn-outline-primary{% endif %}">Left</button>
+          <button name="side" value="cannot_tell" type="submit"
+            class="btn btn-sm flex-fill {% if sel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+            tell</button>
+        </form>
+        <form method="post" action="{{ url_for('verify_remedio.mark_eye', encounter_id=encounter.id) }}"
+          class="d-flex gap-2 flex-nowrap center-mark-form">
+          {{ csrf_field() }}
+          <input type="hidden" name="ef_id" value="{{ image.id }}">
+          {% set csel = (image.centering or '') %}
+          <button name="centering" value="macula" type="submit"
+            class="btn btn-sm flex-fill {% if csel=='macula' %}btn-primary{% else %}btn-outline-primary{% endif %}">Macula</button>
+          <button name="centering" value="disk" type="submit"
+            class="btn btn-sm flex-fill {% if csel=='disk' %}btn-primary{% else %}btn-outline-primary{% endif %}">Disk</button>
+          <button name="centering" value="cannot_tell" type="submit"
+            class="btn btn-sm flex-fill {% if csel=='cannot_tell' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Cannot
+            tell</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

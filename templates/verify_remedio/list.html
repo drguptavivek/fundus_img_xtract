@@ -53,6 +53,10 @@
       <tbody>
         {% for entry in entries %}
         {% set enc = entry.encounter %}
+        {% set dr_ok = (entry.dr_verified if entry.has_dr else true) %}
+        {% set gl_ok = (entry.glaucoma_verified if entry.has_glaucoma else true) %}
+        {% set nodr_ok = (entry.nodr_verified if entry.has_nodr else true) %}
+        {% set all_verified = dr_ok and gl_ok and nodr_ok %}
         <tr>
           <td>
             {% if enc.capture_date_dt %}
@@ -92,17 +96,12 @@
             {% endif %}
           </td>
           <td class="text-end">
-            {% if entry.has_dr and not entry.dr_verified and entry.dr_report_id %}
-            <a class="btn btn-sm btn-outline-success me-1"
-              href="{{ url_for('verify_remedio_dr.verify_dr_edit', report_id=entry.dr_report_id) }}">Verify DR</a>
-            {% endif %}
-            {% if entry.has_glaucoma and not entry.glaucoma_verified and entry.glaucoma_clean_id %}
-            <a class="btn btn-sm btn-outline-success me-1"
-              href="{{ url_for('verify_remedio_glaucoma.glaucoma_edit', clean_id=entry.glaucoma_clean_id) }}">Verify
-              Glaucoma</a>
-            {% endif %}
             <a class="btn btn-sm btn-outline-primary"
+              href="{{ url_for('verify_remedio.verify_edit', encounter_id=enc.id) }}">Verify</a>
+            {% if all_verified %}
+            <a class="btn btn-sm btn-outline-secondary"
               href="{{ url_for('verify_remedio.verify_detail', encounter_id=enc.id) }}">View</a>
+            {% endif %}
           </td>
         </tr>
         {% else %}

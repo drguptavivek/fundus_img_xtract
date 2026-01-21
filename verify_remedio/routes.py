@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, date as _date
+from datetime import datetime, date as _date, time as _time, timedelta
 from typing import Any
 
-from flask import abort, current_app, flash, redirect, render_template, request, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from auth.roles import roles_required
@@ -17,6 +17,7 @@ from models import (
     PatientEncounters,
 )
 from auth.utils import utcnow
+from app_cache import cache
 from services.taskCreationServices import can_unverify_image, ensure_task, remove_pending_tasks
 from utils.log_sanitize import sanitize_log_value
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
@@ -238,6 +239,96 @@ def verify_list():
             .filter(PatientEncounters.zip_file_id.isnot(None))
             .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
         )
+        hospital_ids = list(
+            {unit.hospital_id for unit in (getattr(current_user, "lab_units", []) or []) if unit}
+        )
+        if hospital_ids:
+            pending_base = (
+                db.query(PatientEncounters)
+                .join(LabUnit, PatientEncounters.lab_unit_id == LabUnit.id)
+                .filter(PatientEncounters.zip_file_id.isnot(None))
+                .filter(LabUnit.hospital_id.in_(hospital_ids))
+            )
+        else:
+            pending_base = base_query
+        now = utcnow()
+        day_start = datetime.combine(now.date(), _time.min, tzinfo=now.tzinfo)
+        username = getattr(current_user, "username", None)
+        dr_all_today = (
+            base_query.filter(PatientEncounters.dr_verified_status == "verified")
+            .filter(PatientEncounters.dr_verified_at >= day_start)
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+        dr_pending_all = (
+            pending_base.filter(
+                or_(
+                    PatientEncounters.dr_verified_status.is_(None),
+                    PatientEncounters.dr_verified_status != "verified",
+                )
+            )
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+        glaucoma_all_today = (
+            base_query.filter(PatientEncounters.glaucoma_verified_status == "verified")
+            .filter(PatientEncounters.glaucoma_verified_at >= day_start)
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+        glaucoma_pending_all = (
+            pending_base.filter(
+                or_(
+                    PatientEncounters.glaucoma_verified_status.is_(None),
+                    PatientEncounters.glaucoma_verified_status != "verified",
+                )
+            )
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+        encounter_all_today = (
+            base_query.filter(PatientEncounters.encounter_verified_status == "verified")
+            .filter(PatientEncounters.encounter_verified_at >= day_start)
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+        encounter_pending_all = (
+            pending_base.filter(
+                or_(
+                    PatientEncounters.encounter_verified_status.is_(None),
+                    PatientEncounters.encounter_verified_status != "verified",
+                )
+            )
+            .with_entities(func.count(PatientEncounters.id))
+            .scalar()
+        )
+
+        if username:
+            dr_count_today = (
+                base_query.filter(PatientEncounters.dr_verified_status == "verified")
+                .filter(PatientEncounters.dr_verified_by == username)
+                .filter(PatientEncounters.dr_verified_at >= day_start)
+                .with_entities(func.count(PatientEncounters.id))
+                .scalar()
+            )
+            glaucoma_count_today = (
+                base_query.filter(PatientEncounters.glaucoma_verified_status == "verified")
+                .filter(PatientEncounters.glaucoma_verified_by == username)
+                .filter(PatientEncounters.glaucoma_verified_at >= day_start)
+                .with_entities(func.count(PatientEncounters.id))
+                .scalar()
+            )
+            encounter_count_today = (
+                base_query.filter(PatientEncounters.encounter_verified_status == "verified")
+                .filter(PatientEncounters.encounter_verified_by == username)
+                .filter(PatientEncounters.encounter_verified_at >= day_start)
+                .with_entities(func.count(PatientEncounters.id))
+                .scalar()
+            )
+        else:
+            dr_count_today = 0
+            glaucoma_count_today = 0
+            encounter_count_today = 0
 
         date_rows = (
             base_query.filter(PatientEncounters.capture_date_dt.isnot(None))
@@ -368,6 +459,87 @@ def verify_list():
             selected_date=selected_date,
             ver=ver,
             recent_unverified_url=recent_unverified_url,
+            kpi={
+                "dr": dr_count_today or 0,
+                "glaucoma": glaucoma_count_today or 0,
+                "encounter": encounter_count_today or 0,
+                "dr_all": dr_all_today or 0,
+                "glaucoma_all": glaucoma_all_today or 0,
+                "encounter_all": encounter_all_today or 0,
+                "dr_pending_all": dr_pending_all or 0,
+                "glaucoma_pending_all": glaucoma_pending_all or 0,
+                "encounter_pending_all": encounter_pending_all or 0,
+            },
+        )
+
+
+@bp.route("/kpi_trend", methods=["GET"])
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+@cache.cached(timeout=5 * 60, key_prefix=lambda: f"verify-remedio:kpi-trend:{current_user.id}:{request.query_string.decode('utf-8')}")
+def kpi_trend():
+    days = request.args.get("days", default=7, type=int) or 7
+    days = min(max(days, 1), 31)
+    username = getattr(current_user, "username", None)
+
+    with with_session() as db:
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if not allowed_lab_units:
+            return jsonify({"labels": [], "dr": [], "glaucoma": [], "encounter": []})
+
+        now = utcnow()
+        start_date = now.date() - timedelta(days=days - 1)
+        start_dt = datetime.combine(start_date, _time.min, tzinfo=now.tzinfo)
+        labels = [start_date + timedelta(days=offset) for offset in range(days)]
+        label_strings = [label.isoformat() for label in labels]
+
+        if not username:
+            zeros = [0 for _ in labels]
+            return jsonify(
+                {
+                    "labels": label_strings,
+                    "dr": zeros,
+                    "glaucoma": zeros,
+                    "encounter": zeros,
+                }
+            )
+
+        base_query = (
+            db.query(PatientEncounters)
+            .filter(PatientEncounters.zip_file_id.isnot(None))
+            .filter(PatientEncounters.lab_unit_id.in_(allowed_lab_units))
+        )
+
+        def _counts_for(status_col, by_col, at_col):
+            rows = (
+                base_query.filter(status_col == "verified")
+                .filter(by_col == username)
+                .filter(at_col >= start_dt)
+                .with_entities(func.date(at_col).label("day"), func.count(PatientEncounters.id))
+                .group_by(func.date(at_col))
+                .all()
+            )
+            row_map = {row.day: row[1] for row in rows}
+            return [int(row_map.get(label, 0)) for label in labels]
+
+        return jsonify(
+            {
+                "labels": label_strings,
+                "dr": _counts_for(
+                    PatientEncounters.dr_verified_status,
+                    PatientEncounters.dr_verified_by,
+                    PatientEncounters.dr_verified_at,
+                ),
+                "glaucoma": _counts_for(
+                    PatientEncounters.glaucoma_verified_status,
+                    PatientEncounters.glaucoma_verified_by,
+                    PatientEncounters.glaucoma_verified_at,
+                ),
+                "encounter": _counts_for(
+                    PatientEncounters.encounter_verified_status,
+                    PatientEncounters.encounter_verified_by,
+                    PatientEncounters.encounter_verified_at,
+                ),
+            }
         )
 
 

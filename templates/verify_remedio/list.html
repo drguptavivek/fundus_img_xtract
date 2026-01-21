@@ -5,6 +5,52 @@
 <div class="container py-3">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
     <h4 class="mb-0">Verify Remedio (Combined)</h4>
+    <a class="btn btn-sm btn-outline-info"
+      href="{{ url_for('verify_remedio_glaucoma.glaucoma_results') }}">Glaucoma PDF data Dashboard</a>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-4 d-flex flex-column gap-3">
+      <div class="card kpi-card kpi--primary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">DR Verifications</div>
+          <div class="display-6 fw-bold">{{ kpi.dr }}</div>
+          <div class="small opacity-75">Today</div>
+        </div>
+        <div class="card-footer small text-body-secondary">All: {{ kpi.dr_all }} | Pending: {{ kpi.dr_pending_all }}</div>
+      </div>
+      <div class="card kpi-card kpi--info h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Glaucoma Verifications</div>
+          <div class="display-6 fw-bold">{{ kpi.glaucoma }}</div>
+          <div class="small opacity-75">Today</div>
+        </div>
+        <div class="card-footer small text-body-secondary">All: {{ kpi.glaucoma_all }} | Pending: {{ kpi.glaucoma_pending_all }}</div>
+      </div>
+      <div class="card kpi-card kpi--success h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Encounter Verifications</div>
+          <div class="display-6 fw-bold">{{ kpi.encounter }}</div>
+          <div class="small opacity-75">Today</div>
+        </div>
+        <div class="card-footer small text-body-secondary">All: {{ kpi.encounter_all }} | Pending: {{ kpi.encounter_pending_all }}</div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-8">
+      <div class="card kpi-card kpi--secondary h-100">
+        <div class="card-body">
+          <div class="text-uppercase small fw-semibold opacity-75">Last 7 Days</div>
+          <div class="small opacity-75 mb-2">Logged-in user verifications</div>
+          <div style="height: 260px;">
+            <canvas id="verify-remedio-kpi-chart" data-url="{{ url_for('verify_remedio.kpi_trend') }}"></canvas>
+          </div>
+        </div>
+        <div class="card-footer small text-body-secondary d-flex justify-content-between">
+          <span>DR, Glaucoma, Encounter</span>
+          <span id="verify-remedio-kpi-updated">Updated -</span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
@@ -114,4 +160,10 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+  {{ super() }}
+  <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/verify_remedio_kpis.js') }}"></script>
 {% endblock %}

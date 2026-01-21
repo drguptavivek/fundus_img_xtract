@@ -198,7 +198,11 @@
 
   <div class="card shadow-sm mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
-      <h5 class="card-title mb-0">Screen Images</h5>
+      <div class="d-flex align-items-center gap-2">
+        <h5 class="card-title mb-0">Screen Images</h5>
+        <span class="small text-muted">PII detected:</span>
+        <span class="badge text-bg-danger" id="ocrDetectedCount">0</span>
+      </div>
       <div class="d-flex align-items-center gap-2">
         <small class="text-muted">Included images for screening.</small>
         <div class="d-flex align-items-center gap-2">
@@ -655,6 +659,170 @@
       const thumbQueue = [];
       let thumbInFlight = 0;
       const maxThumbConcurrent = 2;
+      const ocrStatusCache = {};
+      const ocrCountBadge = document.getElementById('ocrDetectedCount');
+
+      const updateOcrSummary = function() {
+        if (!ocrCountBadge) {
+          return;
+        }
+        const detectedCount = Object.values(ocrStatusCache).filter(function(entry) {
+          return entry && entry.status === 'detected';
+        }).length;
+        ocrCountBadge.textContent = String(detectedCount);
+      };
+
+      const updateOcrBadges = function(imageUuid, status, detail) {
+        if (!imageUuid) {
+          return;
+        }
+        const badges = document.querySelectorAll('[data-image-uuid="' + imageUuid + '"].ocr-list-badge, [data-image-uuid="' + imageUuid + '"].ocr-thumb-badge, [data-image-uuid="' + imageUuid + '"].ocr-viewer-badge');
+        badges.forEach(function(badge) {
+          const isThumb = badge.classList.contains('ocr-thumb-badge');
+          const isViewer = badge.classList.contains('ocr-viewer-badge');
+          const baseClass = isThumb
+            ? 'badge rounded-pill ocr-thumb-badge ms-1'
+            : (isViewer ? 'badge rounded-pill ocr-viewer-badge' : 'badge rounded-pill ocr-list-badge');
+          if (status === 'detected') {
+            badge.dataset.ocrLoaded = 'true';
+            badge.textContent = 'PII detected';
+            badge.className = baseClass + ' bg-danger';
+            if (detail) {
+              badge.setAttribute('title', detail);
+            }
+            return;
+          }
+          if (status === 'clear') {
+            badge.dataset.ocrLoaded = 'true';
+            badge.textContent = 'No PII';
+            badge.className = baseClass + ' bg-success';
+            if (detail) {
+              badge.setAttribute('title', detail);
+            }
+            return;
+          }
+          delete badge.dataset.ocrLoaded;
+          badge.textContent = 'OCR unavailable';
+          badge.className = baseClass + ' bg-warning text-dark';
+          badge.setAttribute('title', 'OCR unavailable');
+        });
+      };
+
+      const setOcrChecking = function(imageUuid) {
+        if (!imageUuid) {
+          return;
+        }
+        const badges = document.querySelectorAll('[data-image-uuid="' + imageUuid + '"].ocr-list-badge, [data-image-uuid="' + imageUuid + '"].ocr-thumb-badge, [data-image-uuid="' + imageUuid + '"].ocr-viewer-badge');
+        badges.forEach(function(badge) {
+          const isThumb = badge.classList.contains('ocr-thumb-badge');
+          const isViewer = badge.classList.contains('ocr-viewer-badge');
+          const baseClass = isThumb
+            ? 'badge rounded-pill ocr-thumb-badge ms-1'
+            : (isViewer ? 'badge rounded-pill ocr-viewer-badge' : 'badge rounded-pill ocr-list-badge');
+          badge.textContent = 'Checking...';
+          badge.className = baseClass + ' bg-secondary';
+        });
+      };
+
+      const applyCachedOcrStatus = function(root) {
+        const scope = root || document;
+        const badges = scope.querySelectorAll('[data-image-uuid].ocr-list-badge, [data-image-uuid].ocr-thumb-badge, [data-image-uuid].ocr-viewer-badge');
+        badges.forEach(function(badge) {
+          const imageUuid = badge.getAttribute('data-image-uuid');
+          if (!imageUuid) {
+            return;
+          }
+          const cached = ocrStatusCache[imageUuid];
+          if (cached) {
+            updateOcrBadges(imageUuid, cached.status, cached.detail);
+          }
+        });
+      };
+
+      const triggerOcrForUuid = function(imageUuid) {
+        if (!imageUuid) {
+          return;
+        }
+        const badge = document.querySelector('[data-image-uuid="' + imageUuid + '"].ocr-list-badge, [data-image-uuid="' + imageUuid + '"].ocr-thumb-badge');
+        if (badge && badge.dataset.ocrLoaded === 'true') {
+          return;
+        }
+        setOcrChecking(imageUuid);
+        fetch('/api/ocr/pii/' + encodeURIComponent(imageUuid), {
+          headers: { 'Accept': 'application/json' }
+        })
+          .then(function(response) { return response.json(); })
+          .then(function(payload) {
+            const data = payload && payload.data ? payload.data : null;
+            if (!data || data.status === 'error') {
+              ocrStatusCache[imageUuid] = { status: 'error' };
+              updateOcrBadges(imageUuid, 'error');
+              updateOcrSummary();
+              console.log('OCR PII check', imageUuid, 'error', data && data.duration_ms != null ? data.duration_ms + 'ms' : '');
+              return;
+            }
+            const detail = 'Valid detections: ' + (data.valid_detections || 0) +
+              ', pattern matches: ' + (data.pattern_matches || 0);
+            if (data.status === 'detected') {
+              ocrStatusCache[imageUuid] = { status: 'detected', detail: detail };
+              updateOcrBadges(imageUuid, 'detected', detail);
+              updateOcrSummary();
+              console.log('OCR PII check', imageUuid, 'detected', data.duration_ms != null ? data.duration_ms + 'ms' : '');
+              return;
+            }
+            ocrStatusCache[imageUuid] = { status: 'clear', detail: detail };
+            updateOcrBadges(imageUuid, 'clear', detail);
+            updateOcrSummary();
+            console.log('OCR PII check', imageUuid, 'clear', data.duration_ms != null ? data.duration_ms + 'ms' : '');
+          })
+          .catch(function() {
+            ocrStatusCache[imageUuid] = { status: 'error' };
+            updateOcrBadges(imageUuid, 'error');
+            updateOcrSummary();
+            console.log('OCR PII check', imageUuid, 'error');
+          });
+      };
+
+      const forceOcrForUuid = function(imageUuid) {
+        if (!imageUuid) {
+          return;
+        }
+        delete ocrStatusCache[imageUuid];
+        setOcrChecking(imageUuid);
+        fetch('/api/ocr/pii/' + encodeURIComponent(imageUuid) + '?refresh=1', {
+          headers: { 'Accept': 'application/json' }
+        })
+          .then(function(response) { return response.json(); })
+          .then(function(payload) {
+            const data = payload && payload.data ? payload.data : null;
+            if (!data || data.status === 'error') {
+              ocrStatusCache[imageUuid] = { status: 'error' };
+              updateOcrBadges(imageUuid, 'error');
+              updateOcrSummary();
+              console.log('OCR PII check', imageUuid, 'error', data && data.duration_ms != null ? data.duration_ms + 'ms' : '');
+              return;
+            }
+            const detail = 'Valid detections: ' + (data.valid_detections || 0) +
+              ', pattern matches: ' + (data.pattern_matches || 0);
+            if (data.status === 'detected') {
+              ocrStatusCache[imageUuid] = { status: 'detected', detail: detail };
+              updateOcrBadges(imageUuid, 'detected', detail);
+              updateOcrSummary();
+              console.log('OCR PII check', imageUuid, 'detected', data.duration_ms != null ? data.duration_ms + 'ms' : '');
+              return;
+            }
+            ocrStatusCache[imageUuid] = { status: 'clear', detail: detail };
+            updateOcrBadges(imageUuid, 'clear', detail);
+            updateOcrSummary();
+            console.log('OCR PII check', imageUuid, 'clear', data.duration_ms != null ? data.duration_ms + 'ms' : '');
+          })
+          .catch(function() {
+            ocrStatusCache[imageUuid] = { status: 'error' };
+            updateOcrBadges(imageUuid, 'error');
+            updateOcrSummary();
+            console.log('OCR PII check', imageUuid, 'error');
+          });
+      };
 
       const pumpThumbQueue = function() {
         while (thumbInFlight < maxThumbConcurrent && thumbQueue.length) {
@@ -861,6 +1029,7 @@
           url.hash = '#screen-images';
           window.history.replaceState({ image_uuid: imageUuid }, '', url.toString());
         }
+        triggerOcrForUuid(imageUuid);
       });
 
       document.body.addEventListener('click', function(event) {
@@ -878,6 +1047,21 @@
         if (viewer) {
           viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+        const href = galleryLink.getAttribute('href') || '';
+        const match = href.match(/image_uuid=([^&#]+)/);
+        const container = galleryLink.closest('.dataset-screen-thumb');
+        const fallbackUuid = container ? (container.dataset.imageUuid || '') : '';
+        const imageUuid = match ? decodeURIComponent(match[1]) : fallbackUuid;
+        triggerOcrForUuid(imageUuid);
+      });
+
+      document.body.addEventListener('click', function(event) {
+        const button = event.target.closest('.ocr-redetect-btn');
+        if (!button) {
+          return;
+        }
+        const imageUuid = button.getAttribute('data-image-uuid');
+        forceOcrForUuid(imageUuid);
       });
 
       document.body.addEventListener('click', function(event) {
@@ -1004,6 +1188,7 @@
         if (!target) {
           return;
         }
+        applyCachedOcrStatus(target);
         if (target.id === 'datasetScreenGalleryView' || (target.id && target.id.startsWith('datasetScreenThumb-'))) {
           initThumbLazy(target);
         }
@@ -1080,6 +1265,8 @@
         }
       });
       initThumbLazy(document);
+      applyCachedOcrStatus(document);
+      updateOcrSummary();
     });
   </script>
 {% endblock %}

@@ -14,6 +14,9 @@
       <span class="text-muted">#{{ row.index }}</span>
     {% endif %}
     <span>{{ row.image_uuid }}</span>
+    <span class="badge rounded-pill bg-secondary ocr-list-badge" data-image-uuid="{{ row.image_uuid }}">
+      OCR...
+    </span>
     {% if row.is_excluded %}
       <span class="badge text-bg-danger">Excluded</span>
     {% endif %}

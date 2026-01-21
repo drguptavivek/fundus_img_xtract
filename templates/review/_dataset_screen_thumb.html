@@ -30,6 +30,9 @@
     <div class="small px-2 py-1 d-flex align-items-center justify-content-between gap-2">
       <div>
         <span class="text-muted">#{{ row.index }}</span>
+        <span class="badge rounded-pill bg-secondary ms-1 ocr-thumb-badge" data-image-uuid="{{ row.image_uuid }}">
+          OCR...
+        </span>
         {% if row.is_excluded %}
           <span class="badge text-bg-danger ms-1">Excluded</span>
         {% endif %}

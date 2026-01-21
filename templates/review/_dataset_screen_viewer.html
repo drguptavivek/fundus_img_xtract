@@ -9,6 +9,12 @@
           {% endif %}
           {{ row.encounter_file_uuid or row.direct_image_uuid if row else image_uuid }}
         </div>
+        <span class="badge rounded-pill bg-secondary ocr-viewer-badge" data-image-uuid="{{ image_uuid }}">
+          OCR...
+        </span>
+        <button type="button" class="btn btn-sm btn-outline-danger ocr-redetect-btn" data-image-uuid="{{ image_uuid }}">
+          Redetect
+        </button>
         <div class="d-flex align-items-center gap-2">
           <form method="POST" action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-target="#datasetScreenViewer" hx-swap="innerHTML">
           {% from "_forms.html" import csrf_field %}

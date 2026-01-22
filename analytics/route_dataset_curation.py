@@ -30,6 +30,7 @@ from models import (
     Session,
     DirectImageUpload,
     GradingTask,
+    ImagePiiVerification,
     User,
     Job,
 )
@@ -249,6 +250,41 @@ def _build_screen_page_rows(
 _SCREEN_CACHE_TIMEOUT = 10 * 60  # 10 minutes
 
 
+def _apply_pii_filter(query, pii_filter: str):
+    if pii_filter != "detected":
+        return query
+    variant_case = sa.case(
+        (DirectImageUpload.edited_filename.isnot(None), "edited"),
+        else_="orig",
+    )
+    join_clause = sa.or_(
+        sa.and_(
+            EncounterFile.uuid.isnot(None),
+            ImagePiiVerification.image_uuid == EncounterFile.uuid,
+            ImagePiiVerification.image_variant == "orig",
+        ),
+        sa.and_(
+            DirectImageUpload.uuid.isnot(None),
+            ImagePiiVerification.image_uuid == DirectImageUpload.uuid,
+            ImagePiiVerification.image_variant == variant_case,
+        ),
+    )
+    return query.join(ImagePiiVerification, join_clause).filter(ImagePiiVerification.pii_status == "detected")
+
+
+def _count_dataset_items(db: Session, dataset_id: int, pii_filter: str) -> int:
+    base_query = (
+        db.query(sa.func.count(sa.distinct(CuratedDatasetItem.id)))
+        .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
+        .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+        .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
+        .filter(CuratedDatasetItem.dataset_id == dataset_id)
+    )
+    base_query = _apply_pii_filter(base_query, pii_filter)
+    total = base_query.scalar()
+    return int(total or 0)
+
+
 @cache.memoize(timeout=_SCREEN_CACHE_TIMEOUT)
 def _get_dataset_screen_page_cached(
     dataset_id: int,
@@ -256,6 +292,7 @@ def _get_dataset_screen_page_cached(
     screen_sort: str,
     page: int,
     per_page: int,
+    pii_filter: str,
 ) -> list[dict]:
     """Return paginated screen rows cached in Redis."""
     if screen_sort == "added_desc":
@@ -267,19 +304,20 @@ def _get_dataset_screen_page_cached(
 
     offset = (page - 1) * per_page
     with get_db_session() as db:
-        items = (
+        query = (
             db.query(
                 CuratedDatasetItem.task_id.label("task_id"),
                 CuratedDatasetItem.include_in_export.label("include_in_export"),
                 CuratedDatasetItem.selected_at.label("selected_at"),
                 CuratedDatasetItem.selection_method.label("selection_method"),
             )
+            .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
+            .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+            .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
             .filter(CuratedDatasetItem.dataset_id == dataset_id)
-            .order_by(order_by)
-            .offset(offset)
-            .limit(per_page)
-            .all()
         )
+        query = _apply_pii_filter(query, pii_filter)
+        items = query.order_by(order_by).offset(offset).limit(per_page).all()
     return _build_screen_page_rows(items, disease_id, offset)
 
 
@@ -495,6 +533,9 @@ def dataset_detail(dataset_uuid: str):
         if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
             screen_sort = "task_asc"
         page = request.args.get("page", 1, type=int)
+        pii_filter = request.args.get("pii_filter", "all")
+        if pii_filter not in {"all", "detected"}:
+            pii_filter = "all"
         per_page = 50
 
         decided_task_ids = {
@@ -507,12 +548,7 @@ def dataset_detail(dataset_uuid: str):
         matching_rows = _fetch_filtered_rows(filters)
         total_matching = len(matching_rows)
 
-        total_screen = (
-            db.query(sa.func.count(CuratedDatasetItem.id))
-            .filter(CuratedDatasetItem.dataset_id == dataset.id)
-            .scalar()
-        )
-        total_screen = int(total_screen or 0)
+        total_screen = _count_dataset_items(db, dataset.id, pii_filter)
 
         include_count = (
             db.query(sa.func.count(CuratedDatasetItem.id))
@@ -534,6 +570,7 @@ def dataset_detail(dataset_uuid: str):
             screen_sort,
             page,
             per_page,
+            pii_filter,
         )
         included_display = [row for row in screen_rows if not row["is_excluded"]]
         excluded_display = [row for row in screen_rows if row["is_excluded"]]
@@ -678,6 +715,7 @@ def dataset_detail(dataset_uuid: str):
             excluded_rows=excluded_display,
             screen_rows=screen_rows,
             screen_sort=screen_sort,
+            pii_filter=pii_filter,
             screen_total=total_screen,
             screen_page=page,
             screen_total_pages=total_pages,
@@ -784,6 +822,9 @@ def dataset_screen_gallery(dataset_uuid: str):
     screen_sort = request.args.get("sort", "task_asc")
     if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
         screen_sort = "task_asc"
+    pii_filter = request.args.get("pii_filter", "all")
+    if pii_filter not in {"all", "detected"}:
+        pii_filter = "all"
     per_page = 25
     with get_db_session() as db:
         dataset = (
@@ -801,12 +842,7 @@ def dataset_screen_gallery(dataset_uuid: str):
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
             return ("Forbidden", 403)
 
-        total = (
-            db.query(sa.func.count(CuratedDatasetItem.id))
-            .filter(CuratedDatasetItem.dataset_id == dataset.id)
-            .scalar()
-        )
-        total = int(total or 0)
+        total = _count_dataset_items(db, dataset.id, pii_filter)
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
         offset = (page - 1) * per_page
@@ -818,19 +854,20 @@ def dataset_screen_gallery(dataset_uuid: str):
         else:
             order_by = CuratedDatasetItem.task_id.asc()
 
-        items = (
+        query = (
             db.query(
                 CuratedDatasetItem.task_id.label("task_id"),
                 CuratedDatasetItem.include_in_export.label("include_in_export"),
                 CuratedDatasetItem.selected_at.label("selected_at"),
                 CuratedDatasetItem.selection_method.label("selection_method"),
             )
+            .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
+            .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
+            .outerjoin(DirectImageUpload, GradingTask.direct_image_upload_id == DirectImageUpload.id)
             .filter(CuratedDatasetItem.dataset_id == dataset.id)
-            .order_by(order_by)
-            .offset(offset)
-            .limit(per_page)
-            .all()
         )
+        query = _apply_pii_filter(query, pii_filter)
+        items = query.order_by(order_by).offset(offset).limit(per_page).all()
         page_rows = _build_screen_page_rows(items, dataset.disease_id, offset)
 
         return render_template(
@@ -840,6 +877,7 @@ def dataset_screen_gallery(dataset_uuid: str):
             page=page,
             total_pages=total_pages,
             screen_sort=screen_sort,
+            pii_filter=pii_filter,
             has_prev=page > 1,
             has_next=page < total_pages,
         )
@@ -853,6 +891,9 @@ def dataset_screen_list(dataset_uuid: str):
     screen_sort = request.args.get("sort", "task_asc")
     if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
         screen_sort = "task_asc"
+    pii_filter = request.args.get("pii_filter", "all")
+    if pii_filter not in {"all", "detected"}:
+        pii_filter = "all"
     per_page = 50
     with get_db_session() as db:
         dataset = (
@@ -870,12 +911,7 @@ def dataset_screen_list(dataset_uuid: str):
         if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
             return ("Forbidden", 403)
 
-        total_screen = (
-            db.query(sa.func.count(CuratedDatasetItem.id))
-            .filter(CuratedDatasetItem.dataset_id == dataset.id)
-            .scalar()
-        )
-        total_screen = int(total_screen or 0)
+        total_screen = _count_dataset_items(db, dataset.id, pii_filter)
         total_pages = max(1, (total_screen + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
 
@@ -885,6 +921,7 @@ def dataset_screen_list(dataset_uuid: str):
             screen_sort,
             page,
             per_page,
+            pii_filter,
         )
         include_count = (
             db.query(sa.func.count(CuratedDatasetItem.id))
@@ -902,6 +939,7 @@ def dataset_screen_list(dataset_uuid: str):
             dataset=dataset,
             screen_rows=screen_rows,
             screen_sort=screen_sort,
+            pii_filter=pii_filter,
             screen_total=total_screen,
             screen_page=page,
             screen_total_pages=total_pages,

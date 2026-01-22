@@ -758,6 +758,13 @@ def pii_override(uuid: UUID):
                 )
             )
 
+        try:
+            from analytics.route_dataset_curation import _clear_dataset_screen_cache
+
+            _clear_dataset_screen_cache()
+        except Exception:
+            editing_logger.warning("Failed to clear dataset screen cache after PII override.")
+
         db_session.commit()
         flash(f"PII status set to {pii_status} (manual).", "success")
         return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))

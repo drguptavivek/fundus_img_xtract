@@ -12,11 +12,11 @@
   <ul class="pagination pagination-sm mb-0 flex-wrap">
     <li class="page-item {% if not screen_has_prev %}disabled{% endif %}">
       <a class="page-link"
-         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort) }}#screen-images"
-         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page-1, sort=screen_sort, view='list') }}"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page-1, sort=screen_sort, view='list', pii_filter=pii_filter) }}"
          hx-target="#datasetScreenListView"
          hx-swap="innerHTML"
-         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort) }}#screen-images"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
          aria-label="Previous">
         <span aria-hidden="true">&laquo;</span>
       </a>
@@ -24,11 +24,11 @@
     {% if start_page > 1 %}
     <li class="page-item">
       <a class="page-link"
-         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort) }}#screen-images"
-         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=1, sort=screen_sort, view='list') }}"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=1, sort=screen_sort, view='list', pii_filter=pii_filter) }}"
          hx-target="#datasetScreenListView"
          hx-swap="innerHTML"
-         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort) }}#screen-images">
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images">
         1
       </a>
     </li>
@@ -39,11 +39,11 @@
     {% for page_num in range(start_page, end_page + 1) %}
     <li class="page-item {% if page_num == screen_page %}active{% endif %}">
       <a class="page-link"
-         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort) }}#screen-images"
-         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=page_num, sort=screen_sort, view='list') }}"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=page_num, sort=screen_sort, view='list', pii_filter=pii_filter) }}"
          hx-target="#datasetScreenListView"
          hx-swap="innerHTML"
-         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort) }}#screen-images">
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images">
         {{ page_num }}
       </a>
     </li>
@@ -54,22 +54,22 @@
     {% endif %}
     <li class="page-item">
       <a class="page-link"
-         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort) }}#screen-images"
-         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_total_pages, sort=screen_sort, view='list') }}"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_total_pages, sort=screen_sort, view='list', pii_filter=pii_filter) }}"
          hx-target="#datasetScreenListView"
          hx-swap="innerHTML"
-         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort) }}#screen-images">
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images">
         {{ screen_total_pages }}
       </a>
     </li>
     {% endif %}
     <li class="page-item {% if not screen_has_next %}disabled{% endif %}">
       <a class="page-link"
-         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort) }}#screen-images"
-         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page+1, sort=screen_sort, view='list') }}"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page+1, sort=screen_sort, view='list', pii_filter=pii_filter) }}"
          hx-target="#datasetScreenListView"
          hx-swap="innerHTML"
-         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort) }}#screen-images"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
          aria-label="Next">
         <span aria-hidden="true">&raquo;</span>
       </a>

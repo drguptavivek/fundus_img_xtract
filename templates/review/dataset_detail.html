@@ -23,6 +23,10 @@
   .dataset-screen-thumb.is-excluded {
     border-color: var(--bs-danger) !important;
   }
+  .dataset-screen-thumb.is-active {
+    border-color: var(--bs-success) !important;
+    box-shadow: 0 0 0 0.2rem rgba(var(--bs-success-rgb), 0.25);
+  }
   .dataset-screen-thumb .thumb-status {
     align-items: center;
     background: rgba(var(--bs-body-bg-rgb), 0.9);
@@ -50,6 +54,14 @@
   .dataset-screen-row.is-new {
     background: rgba(var(--bs-primary-rgb), 0.12);
     border-color: rgba(var(--bs-primary-rgb), 0.4);
+  }
+  #datasetScreenGalleryView {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+  #datasetScreenViewerColumn .card {
+    position: sticky;
+    top: 1rem;
   }
 </style>
 {% endblock %}
@@ -200,8 +212,10 @@
        id="datasetScreenRoot"
        data-dataset-uuid="{{ dataset.uuid }}"
        data-gallery-url="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid) }}"
+       data-list-url="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid) }}"
        data-detail-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid) }}"
-       data-default-sort="{{ screen_sort }}">
+       data-default-sort="{{ screen_sort }}"
+       data-default-pii-filter="{{ pii_filter }}">
     <div class="card-header d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center gap-2">
         <h5 class="card-title mb-0">Screen Images</h5>
@@ -210,6 +224,13 @@
       </div>
       <div class="d-flex align-items-center gap-2">
         <small class="text-muted">Included images for screening.</small>
+        <div class="d-flex align-items-center gap-2">
+          <span class="small text-muted">PII Filter</span>
+          <select class="form-select form-select-sm" id="piiFilterSelect" style="width: 140px;">
+            <option value="all" {% if pii_filter == 'all' %}selected{% endif %}>All</option>
+            <option value="detected" {% if pii_filter == 'detected' %}selected{% endif %}>Detected</option>
+          </select>
+        </div>
         <button type="button" class="btn btn-sm btn-outline-info" id="refreshPiiStatusBtn">
           Refresh PII status
         </button>
@@ -239,6 +260,7 @@
               hx-swap="none">
           {{ csrf_field() }}
           <input type="hidden" name="sort" value="{{ screen_sort }}">
+          <input type="hidden" name="pii_filter" value="{{ pii_filter }}">
           <button type="submit" class="btn btn-sm btn-outline-primary">Add More</button>
         </form>
         {% endif %}

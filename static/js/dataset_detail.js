@@ -8,8 +8,10 @@
 
   const datasetUuid = root.dataset.datasetUuid || '';
   const galleryUrl = root.dataset.galleryUrl || '';
+  const listUrl = root.dataset.listUrl || '';
   const detailUrl = root.dataset.detailUrl || '';
   const defaultSort = root.dataset.defaultSort || 'task_asc';
+  const defaultPiiFilter = root.dataset.defaultPiiFilter || 'all';
 
   const listView = document.getElementById('datasetScreenListView');
   const galleryView = document.getElementById('datasetScreenGalleryView');
@@ -21,6 +23,7 @@
   const sortSelect = document.getElementById('screenSortSelect');
   const refreshPiiBtn = document.getElementById('refreshPiiStatusBtn');
   const ocrCountBadge = document.getElementById('ocrDetectedCount');
+  const piiFilterSelect = document.getElementById('piiFilterSelect');
 
   let pendingGalleryImageUuid = null;
   let lastGalleryThumb = null;
@@ -30,6 +33,7 @@
   const maxThumbConcurrent = 2;
 
   const cacheKey = datasetUuid ? `datasetOcrStatusCache:${datasetUuid}` : 'datasetOcrStatusCache';
+  const selectedThumbKey = datasetUuid ? `datasetScreenSelectedThumb:${datasetUuid}` : 'datasetScreenSelectedThumb';
   const ocrStatusCache = {};
 
   const updateOcrSummary = function() {
@@ -121,6 +125,29 @@
   const saveCacheToStorage = function() {
     try {
       localStorage.setItem(cacheKey, JSON.stringify(ocrStatusCache));
+    } catch (err) {}
+  };
+
+  const saveSelectedThumb = function(imageUuid) {
+    if (!imageUuid) {
+      return;
+    }
+    try {
+      localStorage.setItem(selectedThumbKey, imageUuid);
+    } catch (err) {}
+  };
+
+  const getSelectedThumb = function() {
+    try {
+      return localStorage.getItem(selectedThumbKey);
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const clearSelectedThumb = function() {
+    try {
+      localStorage.removeItem(selectedThumbKey);
     } catch (err) {}
   };
 
@@ -286,6 +313,44 @@
       return;
     }
     fetchOcrStatusBatch(document, true, [imageUuid]);
+  };
+
+  const setManualPiiStatus = function(imageUuid, status) {
+    if (!imageUuid || !status) {
+      return;
+    }
+    setOcrChecking(imageUuid);
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = meta ? meta.getAttribute('content') : '';
+    fetch('/api/ocr/pii/override', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({ image_uuid: imageUuid, pii_status: status })
+    })
+      .then(function(response) { return response.json(); })
+      .then(function(payload) {
+        const data = payload && payload.data ? payload.data : null;
+        if (!data || !data.status) {
+          ocrStatusCache[imageUuid] = { status: 'error' };
+          updateOcrBadges(imageUuid, 'error');
+          updateOcrSummary();
+          return;
+        }
+        const detail = 'Manual override';
+        ocrStatusCache[imageUuid] = { status: data.status, detail: detail, source: 'manual' };
+        updateOcrBadges(imageUuid, data.status, detail);
+        updateOcrSummary();
+        saveCacheToStorage();
+      })
+      .catch(function() {
+        ocrStatusCache[imageUuid] = { status: 'error' };
+        updateOcrBadges(imageUuid, 'error');
+        updateOcrSummary();
+      });
   };
 
   const pumpThumbQueue = function() {
@@ -466,6 +531,10 @@
       const value = sortSelect.value || 'task_asc';
       const url = new URL(window.location);
       url.searchParams.set('sort', value);
+      const currentPii = (piiFilterSelect && piiFilterSelect.value) ? piiFilterSelect.value : defaultPiiFilter;
+      if (currentPii) {
+        url.searchParams.set('pii_filter', currentPii);
+      }
       const view = url.searchParams.get('view') || 'list';
       if (view === 'gallery') {
         const page = url.searchParams.get('page') || '1';
@@ -473,12 +542,37 @@
         url.hash = '#screen-images';
         window.history.replaceState({ view: 'gallery' }, '', url.toString());
         if (window.htmx && galleryUrl) {
-          window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + value, '#datasetScreenGalleryView');
+          window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + value + '&pii_filter=' + currentPii, '#datasetScreenGalleryView');
         }
         return;
       }
       url.hash = '#screen-images';
       window.location.href = url.toString();
+    });
+  }
+
+  if (piiFilterSelect) {
+    piiFilterSelect.addEventListener('change', function() {
+      const value = piiFilterSelect.value || 'all';
+      const url = new URL(window.location);
+      url.searchParams.set('pii_filter', value);
+      url.searchParams.set('page', '1');
+      const view = url.searchParams.get('view') || 'list';
+      const sort = url.searchParams.get('sort') || defaultSort;
+      url.hash = '#screen-images';
+      if (view === 'gallery') {
+        window.history.replaceState({ view: 'gallery' }, '', url.toString());
+        if (window.htmx && galleryUrl) {
+          window.htmx.ajax('GET', galleryUrl + '?page=1&view=gallery&sort=' + sort + '&pii_filter=' + value, '#datasetScreenGalleryView');
+        }
+        return;
+      }
+      window.history.replaceState({ view: 'list' }, '', url.toString());
+      if (window.htmx && listUrl) {
+        window.htmx.ajax('GET', listUrl + '?page=1&view=list&sort=' + sort + '&pii_filter=' + value, '#datasetScreenListView');
+      } else {
+        window.location.href = url.toString();
+      }
     });
   }
 
@@ -517,6 +611,36 @@
     }
     const params = new URL(window.location).searchParams;
     const view = params.get('view') || 'list';
+    if (view === 'gallery') {
+      const thumbs = Array.from(document.querySelectorAll('.dataset-screen-thumb'))
+        .filter(function(thumb) { return thumb.offsetParent !== null; });
+      if (!thumbs.length) {
+        return;
+      }
+      const selectedUuid = params.get('image_uuid') || getSelectedThumb();
+      let currentIndex = thumbs.findIndex(function(thumb) {
+        return (thumb.dataset.imageUuid || '') === selectedUuid || thumb.classList.contains('is-active');
+      });
+      if (currentIndex < 0) {
+        currentIndex = event.key === 'ArrowDown' ? -1 : thumbs.length;
+      }
+      const nextIndex = event.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+      if (nextIndex < 0 || nextIndex >= thumbs.length) {
+        return;
+      }
+      event.preventDefault();
+      const nextThumb = thumbs[nextIndex];
+      const link = nextThumb ? nextThumb.querySelector('[data-gallery-open]') : null;
+      if (link) {
+        if (window.htmx) {
+          window.htmx.trigger(link, 'click');
+        } else {
+          link.click();
+        }
+      }
+      nextThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      return;
+    }
     if (view !== 'list') {
       return;
     }
@@ -557,6 +681,14 @@
       el.classList.remove('active');
     });
     galleryLink.classList.add('active');
+    document.querySelectorAll('.dataset-screen-thumb.is-active').forEach(function(el) {
+      el.classList.remove('is-active');
+    });
+    const thumb = galleryLink.closest('.dataset-screen-thumb');
+    if (thumb) {
+      thumb.classList.add('is-active');
+      saveSelectedThumb(thumb.dataset.imageUuid || '');
+    }
     lastGalleryThumb = galleryLink;
     const viewer = document.getElementById('datasetScreenViewer');
     if (viewer) {
@@ -586,6 +718,24 @@
     }
     const imageUuid = button.getAttribute('data-image-uuid');
     refreshOcrForUuid(imageUuid);
+  });
+
+  document.body.addEventListener('click', function(event) {
+    const button = event.target.closest('.ocr-manual-clear-btn');
+    if (!button) {
+      return;
+    }
+    const imageUuid = button.getAttribute('data-image-uuid');
+    setManualPiiStatus(imageUuid, 'clear');
+  });
+
+  document.body.addEventListener('click', function(event) {
+    const button = event.target.closest('.ocr-manual-detected-btn');
+    if (!button) {
+      return;
+    }
+    const imageUuid = button.getAttribute('data-image-uuid');
+    setManualPiiStatus(imageUuid, 'detected');
   });
 
   document.body.addEventListener('click', function(event) {
@@ -678,13 +828,39 @@
     const view = params.get('view') || 'list';
     const page = params.get('page') || '1';
     const sort = params.get('sort') || defaultSort;
+    const piiFilter = params.get('pii_filter') || defaultPiiFilter;
     if (sortSelect) {
       sortSelect.value = sort;
+    }
+    if (piiFilterSelect) {
+      piiFilterSelect.value = piiFilter;
     }
     if (view === 'gallery') {
       showGalleryView();
       if (galleryButton && window.htmx && galleryUrl) {
-        window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + sort, '#datasetScreenGalleryView');
+        window.htmx.ajax('GET', galleryUrl + '?page=' + page + '&view=gallery&sort=' + sort + '&pii_filter=' + piiFilter, '#datasetScreenGalleryView');
+      }
+      const imageUuid = params.get('image_uuid');
+      if (imageUuid) {
+        const viewerTarget = document.querySelector('[data-gallery-open][href*="' + imageUuid + '"]');
+        if (viewerTarget) {
+          showGalleryWithViewer();
+          if (window.htmx) {
+            window.htmx.trigger(viewerTarget, 'click');
+          } else {
+            viewerTarget.click();
+          }
+        } else {
+          pendingGalleryImageUuid = imageUuid;
+        }
+      } else {
+        const stored = getSelectedThumb();
+        if (stored) {
+          const storedThumb = document.querySelector('.dataset-screen-thumb[data-image-uuid="' + stored + '"]');
+          if (storedThumb) {
+            storedThumb.classList.add('is-active');
+          }
+        }
       }
     } else {
       showListView();
@@ -692,11 +868,7 @@
       saveCacheToStorage();
     }
     const imageUuid = params.get('image_uuid');
-    if (!imageUuid) {
-      return;
-    }
-    if (view === 'gallery') {
-      pendingGalleryImageUuid = imageUuid;
+    if (!imageUuid || view === 'gallery') {
       return;
     }
     const target = document.querySelector('.dataset-screen-row[data-image-uuid="' + imageUuid + '"]');
@@ -718,6 +890,19 @@
     fetchOcrStatusBatch(target);
     if (target.id === 'datasetScreenGalleryView' || (target.id && target.id.startsWith('datasetScreenThumb-'))) {
       initThumbLazy(target);
+    }
+    if (target.id === 'datasetScreenGalleryView' || target.id === 'datasetScreenViewer') {
+      const params = new URL(window.location).searchParams;
+      const imageUuid = params.get('image_uuid') || getSelectedThumb();
+      if (imageUuid) {
+        document.querySelectorAll('.dataset-screen-thumb.is-active').forEach(function(el) {
+          el.classList.remove('is-active');
+        });
+        const activeThumb = document.querySelector('.dataset-screen-thumb[data-image-uuid="' + imageUuid + '"]');
+        if (activeThumb) {
+          activeThumb.classList.add('is-active');
+        }
+      }
     }
     if (target.id === 'datasetScreenListView') {
       applyScreenFilter();

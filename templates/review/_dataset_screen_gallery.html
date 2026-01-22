@@ -7,6 +7,7 @@
           hx-swap="innerHTML"
           hx-push-url="true">
       <input type="hidden" name="sort" value="{{ screen_sort }}">
+      <input type="hidden" name="pii_filter" value="{{ pii_filter }}">
       <label class="small text-muted" for="screenGalleryJumpTop">Jump to</label>
       <input id="screenGalleryJumpTop"
              name="page"
@@ -22,10 +23,10 @@
   <div class="btn-group btn-group-sm" role="group">
     <a class="btn btn-outline-secondary dataset-screen-pager-btn {% if not has_prev %}disabled{% endif %}"
        {% if has_prev %}
-       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page-1, view='gallery', sort=screen_sort) }}"
+       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page-1, view='gallery', sort=screen_sort, pii_filter=pii_filter) }}"
        hx-target="#datasetScreenGalleryView"
        hx-swap="innerHTML"
-       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page-1, sort=screen_sort) }}#screen-images"
+       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page-1, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
        {% else %}
        data-force-disabled="true"
        href="#"
@@ -33,10 +34,10 @@
     >Prev</a>
     <a class="btn btn-outline-secondary dataset-screen-pager-btn {% if not has_next %}disabled{% endif %}"
        {% if has_next %}
-       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page+1, view='gallery', sort=screen_sort) }}"
+       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page+1, view='gallery', sort=screen_sort, pii_filter=pii_filter) }}"
        hx-target="#datasetScreenGalleryView"
        hx-swap="innerHTML"
-       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page+1, sort=screen_sort) }}#screen-images"
+       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page+1, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
        {% else %}
        data-force-disabled="true"
        href="#"
@@ -46,7 +47,7 @@
 </div>
 
 
-<div class="d-flex flex-wrap gap-2">
+<div class="d-flex flex-wrap gap-2" id="datasetScreenGalleryGrid">
   {% for row in rows %}
     {% include "review/_dataset_screen_thumb.html" with context %}
   {% endfor %}
@@ -61,6 +62,7 @@
           hx-swap="innerHTML"
           hx-push-url="true">
       <input type="hidden" name="sort" value="{{ screen_sort }}">
+      <input type="hidden" name="pii_filter" value="{{ pii_filter }}">
       <label class="small text-muted" for="screenGalleryJumpBottom">Jump to</label>
       <input id="screenGalleryJumpBottom"
              name="page"
@@ -76,10 +78,10 @@
   <div class="btn-group btn-group-sm" role="group">
     <a class="btn btn-outline-secondary dataset-screen-pager-btn {% if not has_prev %}disabled{% endif %}"
        {% if has_prev %}
-       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page-1, view='gallery', sort=screen_sort) }}"
+       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page-1, view='gallery', sort=screen_sort, pii_filter=pii_filter) }}"
        hx-target="#datasetScreenGalleryView"
        hx-swap="innerHTML"
-       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page-1, sort=screen_sort) }}#screen-images"
+       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page-1, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
        {% else %}
        data-force-disabled="true"
        href="#"
@@ -87,10 +89,10 @@
     >Prev</a>
     <a class="btn btn-outline-secondary dataset-screen-pager-btn {% if not has_next %}disabled{% endif %}"
        {% if has_next %}
-       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page+1, view='gallery', sort=screen_sort) }}"
+       hx-get="{{ url_for('analytics.dataset_screen_gallery', dataset_uuid=dataset.uuid, page=page+1, view='gallery', sort=screen_sort, pii_filter=pii_filter) }}"
        hx-target="#datasetScreenGalleryView"
        hx-swap="innerHTML"
-       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page+1, sort=screen_sort) }}#screen-images"
+       hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, view='gallery', page=page+1, sort=screen_sort, pii_filter=pii_filter) }}#screen-images"
        {% else %}
        data-force-disabled="true"
        href="#"

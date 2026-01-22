@@ -454,6 +454,24 @@ bd create --title="Fix XSS vulnerability" --type=security --priority=1
 
 ---
 
+### BD Troubleshooting
+
+**Symptom**: `bd create` fails with permission errors for `/home/eyeimg/.beads-planning/.beads/beads.db`  
+**Fix**: Force bd to use the repo-local DB in `.beads/beads.db`:
+
+```bash
+bd --no-daemon --db /home/eyeimg/fundus_img_xtract/.beads/beads.db create \
+  --repo /home/eyeimg/fundus_img_xtract \
+  --title="..." --type=feature --priority=2 \
+  --description="..."
+```
+
+**Notes**:
+- `bd where` should show the active repo path and DB location.
+- If `bd` is not on PATH, use the full path or add it in `.bashrc`.
+
+---
+
 ### Creation Workflow (Beads-First)
 
 **Standard workflow - always create Bead first:**

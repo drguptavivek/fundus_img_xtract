@@ -105,6 +105,10 @@ def _resolve_image_path(image_uuid: str) -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
+def _resolve_image_variant(image_uuid: str) -> Optional[str]:
+    return _resolve_image_variant_map([image_uuid]).get(image_uuid)
+
+
 def _record_pii_verification(
     image_uuid: str,
     image_variant: str,
@@ -425,3 +429,74 @@ def api_ocr_pii(image_uuid: str):
         }
         cache.set(cache_key, result, timeout=_OCR_CACHE_TTL_SECONDS)
         return jsonify({"success": True, "data": result, "cached": False})
+
+
+@api_bp.route("/ocr/pii/override", methods=["POST"])
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "data_exporter",
+    "dataset_creator",
+    "analytics_viewer",
+    "fileUploader",
+    "optometrist",
+    "ophthalmologist",
+    "resident",
+)
+def api_ocr_pii_override():
+    payload = request.get_json(silent=True) or {}
+    image_uuid = (payload.get("image_uuid") or "").strip()
+    pii_status = (payload.get("pii_status") or "").strip()
+    if not image_uuid:
+        return jsonify({"success": False, "error": "image_uuid is required"}), 400
+    if pii_status not in {"clear", "detected"}:
+        return jsonify({"success": False, "error": "Invalid pii_status"}), 400
+
+    image_variant = _resolve_image_variant(image_uuid)
+    if not image_variant:
+        return jsonify({"success": False, "error": "Image not found"}), 404
+
+    checked_at = utcnow()
+    with with_session() as db:
+        record = (
+            db.query(ImagePiiVerification)
+            .filter(
+                ImagePiiVerification.image_uuid == image_uuid,
+                ImagePiiVerification.image_variant == image_variant,
+            )
+            .first()
+        )
+        if record:
+            record.pii_status = pii_status
+            record.source = "manual"
+            record.checked_at = checked_at
+        else:
+            db.add(
+                ImagePiiVerification(
+                    image_uuid=image_uuid,
+                    image_variant=image_variant,
+                    pii_status=pii_status,
+                    source="manual",
+                    checked_at=checked_at,
+                )
+            )
+
+    try:
+        from analytics.route_dataset_curation import _clear_dataset_screen_cache
+
+        _clear_dataset_screen_cache()
+    except Exception:
+        logger = logging.getLogger("ocr_pii")
+        logger.warning("Failed to clear dataset screen cache after PII override.")
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "status": pii_status,
+            "label": "PII detected" if pii_status == "detected" else "No PII detected",
+            "source": "manual",
+            "image_uuid": image_uuid,
+            "image_variant": image_variant,
+        },
+    })

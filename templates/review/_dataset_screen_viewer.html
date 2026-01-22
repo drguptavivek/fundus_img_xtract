@@ -18,6 +18,12 @@
         <button type="button" class="btn btn-sm btn-outline-danger ocr-redetect-btn" data-image-uuid="{{ image_uuid }}">
           Redetect
         </button>
+        <button type="button" class="btn btn-sm btn-outline-success ocr-manual-clear-btn" data-image-uuid="{{ image_uuid }}">
+          Mark PII Clear (manual)
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-warning ocr-manual-detected-btn" data-image-uuid="{{ image_uuid }}">
+          Mark PII Detected (manual)
+        </button>
         <div class="d-flex align-items-center gap-2">
           <form method="POST" action="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-post="{{ url_for('analytics.dataset_toggle_item', dataset_uuid=dataset.uuid) }}" hx-target="#datasetScreenViewer" hx-swap="innerHTML">
           {% from "_forms.html" import csrf_field %}

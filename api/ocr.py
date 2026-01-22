@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from flask import jsonify, request
@@ -9,12 +10,13 @@ from flask_login import current_user
 
 from app_cache import cache
 from auth.roles import roles_required
-from models import DirectImageUpload, EncounterFile, IMAGE_DIR, PatientEncounters, ZipFile
+from models import DirectImageUpload, EncounterFile, IMAGE_DIR, ImagePiiVerification, PatientEncounters, ZipFile
 from utils.fileUtils import abs_from_parts
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import get_media_cache_version
 from utils.ocr_pii import detect_pii_for_path
+from auth.utils import utcnow
 from utils.utils import with_session
 
 from . import api_bp
@@ -23,7 +25,7 @@ from . import api_bp
 _OCR_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30
 
 
-def _resolve_image_path(image_uuid: str) -> Optional[str]:
+def _resolve_image_path(image_uuid: str) -> tuple[Optional[str], Optional[str]]:
     context = determine_scoping_context()
     with with_session() as db:
         encounter_query = (
@@ -40,29 +42,66 @@ def _resolve_image_path(image_uuid: str) -> Optional[str]:
         direct_image = direct_query.first()
 
         if encounter_result and direct_image:
-            return None
+            return None, None
 
         if encounter_result:
             encounter_file, patient_encounter, zip_file = encounter_result
             if not encounter_file or not encounter_file.filename:
-                return None
+                return None, None
             upload_date = zip_file.upload_date if zip_file else None
             if not upload_date:
-                return None
+                return None, None
             upload_date_str = upload_date.strftime("%Y_%m_%d")
-            return str(IMAGE_DIR / upload_date_str / encounter_file.filename)
+            return str(IMAGE_DIR / upload_date_str / encounter_file.filename), "orig"
 
         if direct_image:
             if not direct_image.filename:
-                return None
+                return None, None
             filename = direct_image.edited_filename or direct_image.filename
             kind = "edited" if direct_image.edited_filename else "orig"
             try:
-                return str(abs_from_parts(direct_image.folder_rel, filename, kind))
+                return str(abs_from_parts(direct_image.folder_rel, filename, kind)), kind
             except (OSError, ValueError):
-                return None
+                return None, None
 
-    return None
+    return None, None
+
+
+def _record_pii_verification(
+    image_uuid: str,
+    image_variant: str,
+    status: str,
+    checked_at: datetime,
+) -> None:
+    try:
+        with with_session() as db:
+            existing = (
+                db.query(ImagePiiVerification)
+                .filter(
+                    ImagePiiVerification.image_uuid == image_uuid,
+                    ImagePiiVerification.image_variant == image_variant,
+                )
+                .first()
+            )
+            if existing:
+                existing.pii_status = status
+                existing.checked_at = checked_at
+            else:
+                db.add(
+                    ImagePiiVerification(
+                        image_uuid=image_uuid,
+                        image_variant=image_variant,
+                        pii_status=status,
+                        checked_at=checked_at,
+                    )
+                )
+    except Exception as exc:
+        logger = logging.getLogger("ocr_pii")
+        logger.warning(
+            "PII OCR DB update failed for image_uuid=%s: %s",
+            sanitize_log_value(image_uuid),
+            sanitize_log_value(str(exc)),
+        )
 
 
 @api_bp.route("/ocr/pii/<string:image_uuid>", methods=["GET"])
@@ -89,14 +128,16 @@ def api_ocr_pii(image_uuid: str):
         cached = {**cached, "duration_ms": duration_ms}
         return jsonify({"success": True, "data": cached, "cached": True})
 
-    image_path = _resolve_image_path(image_uuid)
-    if not image_path:
+    image_path, image_variant = _resolve_image_path(image_uuid)
+    if not image_path or not image_variant:
         return jsonify({"success": False, "error": "Image not found"}), 404
 
     try:
         ocr_result = detect_pii_for_path(image_path)
         status = "detected" if ocr_result.get("is_pii") else "clear"
         duration_ms = int((time.perf_counter() - start) * 1000)
+        checked_at = utcnow()
+        _record_pii_verification(image_uuid, image_variant, status, checked_at)
         result: Dict[str, Any] = {
             "status": status,
             "label": "PII detected" if status == "detected" else "No PII detected",
@@ -115,6 +156,9 @@ def api_ocr_pii(image_uuid: str):
             sanitize_log_value(str(exc)),
         )
         duration_ms = int((time.perf_counter() - start) * 1000)
+        checked_at = utcnow()
+        if image_variant:
+            _record_pii_verification(image_uuid, image_variant, "error", checked_at)
         result = {
             "status": "error",
             "label": "OCR unavailable",

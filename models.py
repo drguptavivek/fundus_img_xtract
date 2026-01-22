@@ -498,6 +498,23 @@ class DirectImageVerify(Base):
     )
 
 
+class ImagePiiVerification(Base):
+    __tablename__ = "image_pii_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    image_variant: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    pii_status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("image_uuid", "image_variant", name="uq_image_pii_verification_uuid_variant"),
+        CheckConstraint("image_variant IN ('orig', 'edited')", name="ck_pii_verification_variant"),
+        CheckConstraint("pii_status IN ('detected', 'clear', 'error')", name="ck_pii_verification_status"),
+    )
+
 
 # --- Dual Grading Models ---
 

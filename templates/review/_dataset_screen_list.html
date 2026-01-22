@@ -1,0 +1,79 @@
+<div class="list-group list-group-flush border rounded" id="datasetScreenList" style="max-height: 80vh; overflow: auto;">
+  {% for row in screen_rows %}
+    {% include "review/_dataset_screen_row.html" with context %}
+  {% endfor %}
+</div>
+{% if screen_total_pages > 1 %}
+{% set start_page = screen_page - 2 %}
+{% if start_page < 1 %}{% set start_page = 1 %}{% endif %}
+{% set end_page = screen_page + 2 %}
+{% if end_page > screen_total_pages %}{% set end_page = screen_total_pages %}{% endif %}
+<nav class="mt-3" aria-label="Screen list pagination">
+  <ul class="pagination pagination-sm mb-0 flex-wrap">
+    <li class="page-item {% if not screen_has_prev %}disabled{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page-1, sort=screen_sort, view='list') }}"
+         hx-target="#datasetScreenListView"
+         hx-swap="innerHTML"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page-1, view='list', sort=screen_sort) }}#screen-images"
+         aria-label="Previous">
+        <span aria-hidden="true">&laquo;</span>
+      </a>
+    </li>
+    {% if start_page > 1 %}
+    <li class="page-item">
+      <a class="page-link"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=1, sort=screen_sort, view='list') }}"
+         hx-target="#datasetScreenListView"
+         hx-swap="innerHTML"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=1, view='list', sort=screen_sort) }}#screen-images">
+        1
+      </a>
+    </li>
+    {% if start_page > 2 %}
+    <li class="page-item disabled"><span class="page-link">…</span></li>
+    {% endif %}
+    {% endif %}
+    {% for page_num in range(start_page, end_page + 1) %}
+    <li class="page-item {% if page_num == screen_page %}active{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=page_num, sort=screen_sort, view='list') }}"
+         hx-target="#datasetScreenListView"
+         hx-swap="innerHTML"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=page_num, view='list', sort=screen_sort) }}#screen-images">
+        {{ page_num }}
+      </a>
+    </li>
+    {% endfor %}
+    {% if end_page < screen_total_pages %}
+    {% if end_page < screen_total_pages - 1 %}
+    <li class="page-item disabled"><span class="page-link">…</span></li>
+    {% endif %}
+    <li class="page-item">
+      <a class="page-link"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_total_pages, sort=screen_sort, view='list') }}"
+         hx-target="#datasetScreenListView"
+         hx-swap="innerHTML"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_total_pages, view='list', sort=screen_sort) }}#screen-images">
+        {{ screen_total_pages }}
+      </a>
+    </li>
+    {% endif %}
+    <li class="page-item {% if not screen_has_next %}disabled{% endif %}">
+      <a class="page-link"
+         href="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort) }}#screen-images"
+         hx-get="{{ url_for('analytics.dataset_screen_list', dataset_uuid=dataset.uuid, page=screen_page+1, sort=screen_sort, view='list') }}"
+         hx-target="#datasetScreenListView"
+         hx-swap="innerHTML"
+         hx-push-url="{{ url_for('analytics.dataset_detail', dataset_uuid=dataset.uuid, page=screen_page+1, view='list', sort=screen_sort) }}#screen-images"
+         aria-label="Next">
+        <span aria-hidden="true">&raquo;</span>
+      </a>
+    </li>
+  </ul>
+</nav>
+{% endif %}

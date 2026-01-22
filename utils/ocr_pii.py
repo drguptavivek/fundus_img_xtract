@@ -16,7 +16,7 @@ class OcrPiiConfig:
     min_confidence: int = 50
     min_valid_detections: int = 1
     max_roi_dim: int = 1200
-    tesseract_timeout_seconds: float = 10.0
+    tesseract_timeout_seconds: float = 20.0
 
 
 def preprocess_roi_multi(roi: np.ndarray) -> List[np.ndarray]:
@@ -97,16 +97,30 @@ def extract_text_multi_strategy(
             except pytesseract.TesseractError:
                 continue
             conf_values = data.get("conf") or []
+            left_values = data.get("left") or []
+            top_values = data.get("top") or []
+            width_values = data.get("width") or []
+            height_values = data.get("height") or []
             for i, txt in enumerate(data.get("text", [])):
                 txt_clean = (txt or "").strip()
                 conf_raw = conf_values[i] if i < len(conf_values) else -1
                 conf = _safe_int(conf_raw)
+                left = _safe_int(left_values[i]) if i < len(left_values) else 0
+                top = _safe_int(top_values[i]) if i < len(top_values) else 0
+                width = _safe_int(width_values[i]) if i < len(width_values) else 0
+                height = _safe_int(height_values[i]) if i < len(height_values) else 0
                 if len(txt_clean) >= config.min_text_length and conf > config.min_confidence:
                     all_detections.append(
                         {
                             "text": txt_clean,
                             "conf": conf,
                             "matches_pattern": detect_text_patterns(txt_clean),
+                            "box": {
+                                "x": max(0, left),
+                                "y": max(0, top),
+                                "w": max(0, width),
+                                "h": max(0, height),
+                            },
                         }
                     )
 
@@ -157,8 +171,68 @@ def detect_pii_for_image(img: np.ndarray, config: OcrPiiConfig | None = None) ->
     }
 
 
+def detect_pii_details_for_image(
+    img: np.ndarray, config: OcrPiiConfig | None = None
+) -> Dict[str, Any]:
+    config = config or OcrPiiConfig()
+    h, w = img.shape[:2]
+    roi_h = int(h * config.roi_height_ratio)
+    roi_w = int(w * config.roi_width_ratio)
+    roi = img[0:roi_h, 0:roi_w]
+    max_dim = config.max_roi_dim
+    scale_x = 1.0
+    scale_y = 1.0
+    if max_dim and (roi.shape[0] > max_dim or roi.shape[1] > max_dim):
+        scale = min(max_dim / roi.shape[0], max_dim / roi.shape[1])
+        new_w = max(1, int(roi.shape[1] * scale))
+        new_h = max(1, int(roi.shape[0] * scale))
+        scale_x = roi.shape[1] / new_w
+        scale_y = roi.shape[0] / new_h
+        roi = cv2.resize(roi, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    has_text_structure = analyze_roi_structure(roi)
+    detections = extract_text_multi_strategy(roi, config)
+    valid_detections = [
+        d for d in detections if d["conf"] > config.min_confidence
+    ]
+    pattern_matches = [d for d in valid_detections if d["matches_pattern"]]
+
+    for det in valid_detections:
+        box = det.get("box") or {}
+        det["box"] = {
+            "x": int((box.get("x", 0) or 0) * scale_x),
+            "y": int((box.get("y", 0) or 0) * scale_y),
+            "w": int((box.get("w", 0) or 0) * scale_x),
+            "h": int((box.get("h", 0) or 0) * scale_y),
+        }
+
+    has_text = len(valid_detections) >= config.min_valid_detections
+    has_patterns = bool(pattern_matches)
+    is_pii = (has_text_structure and has_text) or has_patterns
+
+    return {
+        "is_pii": is_pii,
+        "valid_detections": len(valid_detections),
+        "pattern_matches": len(pattern_matches),
+        "detections": valid_detections,
+        "roi": {
+            "x": 0,
+            "y": 0,
+            "w": roi_w,
+            "h": roi_h,
+        },
+    }
+
+
 def detect_pii_for_path(image_path: str, config: OcrPiiConfig | None = None) -> Dict[str, Any]:
     img = cv2.imread(image_path)
     if img is None:
         raise ValueError("Unable to read image")
     return detect_pii_for_image(img, config=config)
+
+
+def detect_pii_details_for_path(image_path: str, config: OcrPiiConfig | None = None) -> Dict[str, Any]:
+    img = cv2.imread(image_path)
+    if img is None:
+        raise ValueError("Unable to read image")
+    return detect_pii_details_for_image(img, config=config)

@@ -15,6 +15,7 @@ from sqlalchemy.orm import joinedload
 from auth.roles import roles_required
 from auth.security import validate_email
 from auth.utils import utcnow
+from app_cache import cache
 from job_store import db_create_job
 from models import (
     AIModel,
@@ -245,6 +246,47 @@ def _build_screen_page_rows(
     return screen_rows
 
 
+_SCREEN_CACHE_TIMEOUT = 10 * 60  # 10 minutes
+
+
+@cache.memoize(timeout=_SCREEN_CACHE_TIMEOUT)
+def _get_dataset_screen_page_cached(
+    dataset_id: int,
+    disease_id: int,
+    screen_sort: str,
+    page: int,
+    per_page: int,
+) -> list[dict]:
+    """Return paginated screen rows cached in Redis."""
+    if screen_sort == "added_desc":
+        order_by = CuratedDatasetItem.selected_at.desc()
+    elif screen_sort == "added_asc":
+        order_by = CuratedDatasetItem.selected_at.asc()
+    else:
+        order_by = CuratedDatasetItem.task_id.asc()
+
+    offset = (page - 1) * per_page
+    with get_db_session() as db:
+        items = (
+            db.query(
+                CuratedDatasetItem.task_id.label("task_id"),
+                CuratedDatasetItem.include_in_export.label("include_in_export"),
+                CuratedDatasetItem.selected_at.label("selected_at"),
+                CuratedDatasetItem.selection_method.label("selection_method"),
+            )
+            .filter(CuratedDatasetItem.dataset_id == dataset_id)
+            .order_by(order_by)
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
+    return _build_screen_page_rows(items, disease_id, offset)
+
+
+def _clear_dataset_screen_cache() -> None:
+    cache.delete_memoized(_get_dataset_screen_page_cached)
+
+
 def _ai_summary(row: ExportTaskRow) -> str:
     """Return concise AI info: grade, probability, model, review statuses/comments."""
     grade = None
@@ -452,22 +494,49 @@ def dataset_detail(dataset_uuid: str):
         screen_sort = request.args.get("sort", "task_asc")
         if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
             screen_sort = "task_asc"
+        page = request.args.get("page", 1, type=int)
+        per_page = 50
 
-        # Track decisions
-        items = (
-            db.query(CuratedDatasetItem)
+        decided_task_ids = {
+            task_id
+            for (task_id,) in db.query(CuratedDatasetItem.task_id)
             .filter(CuratedDatasetItem.dataset_id == dataset.id)
             .all()
-        )
-        decided_task_ids = {item.task_id for item in items}
+        }
         # Evaluate total matches for the stored filters
         matching_rows = _fetch_filtered_rows(filters)
         total_matching = len(matching_rows)
-        screen_rows, included_display, excluded_display = _build_screen_rows(
-            items,
+
+        total_screen = (
+            db.query(sa.func.count(CuratedDatasetItem.id))
+            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .scalar()
+        )
+        total_screen = int(total_screen or 0)
+
+        include_count = (
+            db.query(sa.func.count(CuratedDatasetItem.id))
+            .filter(
+                CuratedDatasetItem.dataset_id == dataset.id,
+                CuratedDatasetItem.include_in_export.is_(True),
+            )
+            .scalar()
+        )
+        include_count = int(include_count or 0)
+        exclude_count = total_screen - include_count
+
+        total_pages = max(1, (total_screen + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+
+        screen_rows = _get_dataset_screen_page_cached(
+            dataset.id,
             dataset.disease_id,
             screen_sort,
+            page,
+            per_page,
         )
+        included_display = [row for row in screen_rows if not row["is_excluded"]]
+        excluded_display = [row for row in screen_rows if row["is_excluded"]]
 
         if request.method == "POST":
             if dataset.is_finalized:
@@ -500,6 +569,7 @@ def dataset_detail(dataset_uuid: str):
                         )
                     )
                 db.commit()
+                _clear_dataset_screen_cache()
                 decided_task_ids.add(task_id)
                 flash("Decision saved.", "success")
                 return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset_uuid))
@@ -563,8 +633,6 @@ def dataset_detail(dataset_uuid: str):
                 "hospital": next_row.hospital,
             }
 
-        include_count = sum(1 for i in items if i.include_in_export)
-        exclude_count = sum(1 for i in items if not i.include_in_export)
         active_share = (
             db.query(DatasetShare)
             .filter(DatasetShare.dataset_id == dataset.id, DatasetShare.is_active.is_(True))
@@ -610,6 +678,11 @@ def dataset_detail(dataset_uuid: str):
             excluded_rows=excluded_display,
             screen_rows=screen_rows,
             screen_sort=screen_sort,
+            screen_total=total_screen,
+            screen_page=page,
+            screen_total_pages=total_pages,
+            screen_has_prev=page > 1,
+            screen_has_next=page < total_pages,
             can_share="dataset_creator" in user_roles,
             share_display=share_display,
             active_share=active_share,
@@ -772,6 +845,73 @@ def dataset_screen_gallery(dataset_uuid: str):
         )
 
 
+@bp.route("/dataset-curation/<dataset_uuid>/screen-list", methods=["GET"])
+@roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
+def dataset_screen_list(dataset_uuid: str):
+    """Return a paginated list for screening without a full page reload."""
+    page = request.args.get("page", 1, type=int)
+    screen_sort = request.args.get("sort", "task_asc")
+    if screen_sort not in {"task_asc", "added_asc", "added_desc"}:
+        screen_sort = "task_asc"
+    per_page = 50
+    with get_db_session() as db:
+        dataset = (
+            db.query(CuratedDataset)
+            .filter(CuratedDataset.uuid == dataset_uuid, CuratedDataset.is_active.is_(True))
+            .first()
+        )
+        if not dataset:
+            abort(404)
+
+        lab_units_query = apply_scoping(db.query(LabUnit), LabUnit, current_user, "dataset_creation")
+        allowed_lab_units = [lu.id for lu in lab_units_query.all()]
+        stored_filters = json.loads(dataset.filters_json or "{}")
+        stored_allowed = set(stored_filters.get("allowed_lab_units") or [])
+        if stored_allowed and not stored_allowed.intersection(set(allowed_lab_units)) and not current_user.is_master_admin:
+            return ("Forbidden", 403)
+
+        total_screen = (
+            db.query(sa.func.count(CuratedDatasetItem.id))
+            .filter(CuratedDatasetItem.dataset_id == dataset.id)
+            .scalar()
+        )
+        total_screen = int(total_screen or 0)
+        total_pages = max(1, (total_screen + per_page - 1) // per_page)
+        page = max(1, min(page, total_pages))
+
+        screen_rows = _get_dataset_screen_page_cached(
+            dataset.id,
+            dataset.disease_id,
+            screen_sort,
+            page,
+            per_page,
+        )
+        include_count = (
+            db.query(sa.func.count(CuratedDatasetItem.id))
+            .filter(
+                CuratedDatasetItem.dataset_id == dataset.id,
+                CuratedDatasetItem.include_in_export.is_(True),
+            )
+            .scalar()
+        )
+        include_count = int(include_count or 0)
+        exclude_count = total_screen - include_count
+
+        return render_template(
+            "review/_dataset_screen_list.html",
+            dataset=dataset,
+            screen_rows=screen_rows,
+            screen_sort=screen_sort,
+            screen_total=total_screen,
+            screen_page=page,
+            screen_total_pages=total_pages,
+            screen_has_prev=page > 1,
+            screen_has_next=page < total_pages,
+            include_count=include_count,
+            exclude_count=exclude_count,
+        )
+
+
 @bp.route("/dataset-curation/<dataset_uuid>/toggle-item", methods=["POST"])
 @roles_required("admin", "local_admin", "data_manager", "data_exporter", "dataset_creator", "analytics_viewer")
 def dataset_toggle_item(dataset_uuid: str):
@@ -835,6 +975,7 @@ def dataset_toggle_item(dataset_uuid: str):
             "selected_at": item.selected_at,
             "selection_method": item.selection_method,
         }
+        _clear_dataset_screen_cache()
 
         if (request.headers.get("HX-Target") or "").startswith("datasetScreenThumb-"):
             page_value = request.form.get("page")
@@ -921,6 +1062,7 @@ def dataset_add_more(dataset_uuid: str):
             )
         )
         flash("Added one more task to the dataset.", "success")
+        _clear_dataset_screen_cache()
         if request.headers.get("HX-Request") == "true":
             screen_sort = request.form.get("sort") or "task_asc"
             if screen_sort not in {"task_asc", "added_asc", "added_desc"}:

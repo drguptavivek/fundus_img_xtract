@@ -15,6 +15,8 @@ function getCSRFToken() {
 document.addEventListener('DOMContentLoaded', function() {
     const canvas = document.getElementById('imageCanvas');
     const ctx = canvas.getContext('2d');
+    const overlayCanvas = document.getElementById('ocrOverlayCanvas');
+    const overlayCtx = overlayCanvas ? overlayCanvas.getContext('2d') : null;
     let img = new Image();
 
     // --- STATE ---
@@ -52,6 +54,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveImageBtn = document.getElementById('save-image');
     const restoreBtn = document.getElementById('restore-original');
     const applyCropBtn = document.getElementById('apply-crop');
+    const toggleOcrBtn = document.getElementById('toggle-ocr-overlay');
+    const ocrStatusBadge = document.getElementById('ocr-status-badge');
+    const ocrRedetectBtn = document.getElementById('ocr-redetect');
+
+    const imageUuid = canvas.dataset.imageUuid;
+    let ocrOverlayEnabled = false;
+    let ocrOverlayLoaded = false;
+    let ocrDetections = [];
+    let ocrStatusLoaded = false;
 
     // --- INITIALIZATION ---
     img.onload = function() {
@@ -59,6 +70,10 @@ document.addEventListener('DOMContentLoaded', function() {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
+        if (overlayCanvas) {
+            overlayCanvas.width = img.width;
+            overlayCanvas.height = img.height;
+        }
         saveState();
         brushColor = brushColorPicker.value; // Initialize brush color from the picker
     };
@@ -75,7 +90,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 el.disabled = true;
             }
         });
-        return;
     }
 
     document.querySelectorAll('input[name="tool"]').forEach(radio => {
@@ -100,6 +114,174 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateCursor() {
         canvas.style.cursor = currentTool === 'crop' ? 'crosshair' : 'default';
     }
+
+    function clearOcrOverlay() {
+        if (!overlayCtx || !overlayCanvas) return;
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+
+    function setOcrStatusBadge(status, label, source) {
+        if (!ocrStatusBadge) return;
+        const sourceTag = source ? ` (${source})` : '';
+        const text = label ? `OCR: ${label}${sourceTag}` : `OCR: ${status || 'pending'}${sourceTag}`;
+        ocrStatusBadge.textContent = text;
+        ocrStatusBadge.className = 'badge';
+        if (status === 'detected') {
+            ocrStatusBadge.classList.add('text-bg-danger');
+        } else if (status === 'clear') {
+            ocrStatusBadge.classList.add('text-bg-success');
+        } else if (status === 'error') {
+            ocrStatusBadge.classList.add('text-bg-warning');
+        } else {
+            ocrStatusBadge.classList.add('text-bg-secondary');
+        }
+    }
+
+    function fetchOcrStatus() {
+        if (ocrStatusLoaded || !imageUuid) return;
+        fetch(`/api/ocr/pii/${encodeURIComponent(imageUuid)}`, {
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(payload => {
+                const data = payload && payload.data ? payload.data : null;
+                if (!data || !data.status) return;
+                ocrStatusLoaded = true;
+                setOcrStatusBadge(
+                    data.status,
+                    data.status === 'detected' ? 'PII detected' : (data.status === 'clear' ? 'No PII' : 'OCR unavailable'),
+                    data.source
+                );
+            })
+            .catch(() => {});
+    }
+
+    function drawOcrOverlay() {
+        if (!overlayCtx || !overlayCanvas) return;
+        clearOcrOverlay();
+        if (!ocrOverlayEnabled || !ocrDetections.length) return;
+        overlayCtx.save();
+        overlayCtx.lineWidth = 2;
+        overlayCtx.font = '12px sans-serif';
+        overlayCtx.textBaseline = 'top';
+        ocrDetections.forEach(det => {
+            const box = det.box || {};
+            const x = box.x || 0;
+            const y = box.y || 0;
+            const w = box.w || 0;
+            const h = box.h || 0;
+            if (!w || !h) return;
+            const isMatch = !!det.matches_pattern;
+            const color = isMatch ? 'rgba(220, 53, 69, 0.9)' : 'rgba(13, 110, 253, 0.9)';
+            overlayCtx.strokeStyle = color;
+            overlayCtx.strokeRect(x, y, w, h);
+            const label = `${det.text || ''} (${det.conf || 0})`;
+            const padding = 2;
+            const textWidth = overlayCtx.measureText(label).width;
+            const labelX = x;
+            const labelY = y > 14 ? y - 14 : y + 2;
+            overlayCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            overlayCtx.fillRect(labelX, labelY, textWidth + padding * 2, 14);
+            overlayCtx.fillStyle = color;
+            overlayCtx.fillText(label, labelX + padding, labelY + 1);
+        });
+        overlayCtx.restore();
+    }
+
+    function fetchOcrOverlay() {
+        if (ocrOverlayLoaded || !imageUuid) return;
+        fetch(`/api/ocr/pii/boxes/${encodeURIComponent(imageUuid)}`, {
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(payload => {
+                const data = payload && payload.data ? payload.data : null;
+                if (!data || !data.detections) return;
+                ocrDetections = data.detections;
+                ocrOverlayLoaded = true;
+                if (!ocrDetections.length) {
+                    setOcrStatusBadge(data.status || 'clear', 'No OCR detections', data.source);
+                } else {
+                    setOcrStatusBadge(
+                        data.status,
+                        data.status === 'detected' ? 'PII detected' : (data.status === 'clear' ? 'No PII' : 'OCR unavailable'),
+                        data.source
+                    );
+                }
+                drawOcrOverlay();
+            })
+            .catch(() => {});
+    }
+
+    if (toggleOcrBtn) {
+        toggleOcrBtn.addEventListener('click', () => {
+            ocrOverlayEnabled = !ocrOverlayEnabled;
+            toggleOcrBtn.classList.toggle('active', ocrOverlayEnabled);
+            if (ocrOverlayEnabled) {
+                fetchOcrOverlay();
+            } else {
+                clearOcrOverlay();
+            }
+        });
+    }
+
+    if (ocrRedetectBtn) {
+        ocrRedetectBtn.addEventListener('click', () => {
+            if (!imageUuid) return;
+            ocrOverlayLoaded = false;
+            ocrDetections = [];
+            clearOcrOverlay();
+            fetch(`/api/ocr/pii/${encodeURIComponent(imageUuid)}?refresh=1`, {
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(payload => {
+                    const data = payload && payload.data ? payload.data : null;
+                    if (!data || !data.status) return;
+                    ocrStatusLoaded = true;
+                    setOcrStatusBadge(
+                        data.status,
+                        data.status === 'detected' ? 'PII detected' : (data.status === 'clear' ? 'No PII' : 'OCR unavailable'),
+                        data.source
+                    );
+                    if (ocrOverlayEnabled) {
+                        fetchOcrOverlay();
+                    }
+                })
+                .catch(() => {});
+        });
+    }
+
+    document.addEventListener('click', (event) => {
+        const btn = event.target.closest('#ocr-redetect');
+        if (!btn || ocrRedetectBtn) {
+            return;
+        }
+        if (!imageUuid) return;
+        ocrOverlayLoaded = false;
+        ocrDetections = [];
+        clearOcrOverlay();
+        fetch(`/api/ocr/pii/${encodeURIComponent(imageUuid)}?refresh=1`, {
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(response => response.json())
+            .then(payload => {
+                const data = payload && payload.data ? payload.data : null;
+                if (!data || !data.status) return;
+                ocrStatusLoaded = true;
+                setOcrStatusBadge(
+                    data.status,
+                    data.status === 'detected' ? 'PII detected' : (data.status === 'clear' ? 'No PII' : 'OCR unavailable'),
+                    data.source
+                );
+                if (ocrOverlayEnabled) {
+                    fetchOcrOverlay();
+                }
+            })
+            .catch(() => {});
+    });
+
+    fetchOcrStatus();
 
     // --- BRUSH CONTROLS ---
     brushSizeSlider.addEventListener('input', () => {

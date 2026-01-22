@@ -28,6 +28,14 @@
         cursor: crosshair
     }
 
+    #ocrOverlayCanvas {
+        position: absolute;
+        inset: 0;
+        max-width: 100%;
+        max-height: 100%;
+        pointer-events: none;
+    }
+
     .color-picker-container label,
     .slider-container label {
         font-size: .7rem;
@@ -150,6 +158,10 @@
                             data-save-url="{{ url_for('direct_uploads.save_edited_image', upload_id=upload.id) }}">
                             <i class="bi bi-save"></i> Save
                         </button>
+                        <button id="toggle-ocr-overlay" class="btn btn-outline-info btn-sm" type="button">
+                            <i class="bi bi-eye"></i> OCR Overlay
+                        </button>
+                        <span id="ocr-status-badge" class="badge text-bg-secondary">OCR: pending</span>
                         {% if has_edited_version %}
                         <button id="restore-original" class="btn btn-danger btn-sm"
                             data-restore-url="{{ url_for('direct_uploads.restore_original', upload_id=upload.id) }}">
@@ -162,7 +174,8 @@
 
             <!-- Canvas Container (90% width) -->
             <div class="canvas-container">
-                <canvas id="imageCanvas" data-image-url="{{ image_url }}"></canvas>
+                <canvas id="imageCanvas" data-image-url="{{ image_url }}" data-image-uuid="{{ upload.uuid }}"></canvas>
+                <canvas id="ocrOverlayCanvas"></canvas>
             </div>
         </div>
     </div><!-- Image Editor Wrapper -->

@@ -18,6 +18,7 @@ from utils.fileUtils import abs_from_parts
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.log_sanitize import sanitize_log_value
 from utils.sensitive_operations import _log_sensitive_operation
+from auth.utils import utcnow
 
 
 editing_logger = logging.getLogger("editing")
@@ -33,6 +34,7 @@ from models import (
     Disease,
     Area,
     GradingTask,
+    ImagePiiVerification,
 )
 
 # Import task creation services
@@ -702,6 +704,72 @@ def anonymize_image(uuid: UUID):
             override_required=override_required,
         )
 
+    finally:
+        db_session.close()
+
+
+@bp.route("/anonymize_image/<uuid:uuid>/pii_override", methods=["POST"])
+@roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager")
+def pii_override(uuid: UUID):
+    db_session = Session()
+    try:
+        allowed_lab_unit_ids, _ = _allowed_lab_and_hospital_ids(db_session)
+        if not allowed_lab_unit_ids:
+            flash("No lab unit access.", "warning")
+            return redirect(url_for("home.index"))
+
+        uuid_val = _uuid_str(uuid)
+        upload = db_session.execute(
+            select(DirectImageUpload).where(DirectImageUpload.uuid == uuid_val)
+        ).scalar_one_or_none()
+        if not upload:
+            flash("Image not found.", "danger")
+            return redirect(url_for("preprocess.anonymization_dashboard"))
+        if upload.lab_unit_id not in allowed_lab_unit_ids:
+            flash("You do not have permission to update PII status for this image.", "danger")
+            return redirect(url_for("preprocess.anonymization_dashboard"))
+
+        pii_status = request.form.get("pii_status")
+        if pii_status not in {"clear", "detected"}:
+            flash("Invalid PII status.", "danger")
+            return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
+
+        image_variant = "edited" if upload.edited_filename else "orig"
+        record = db_session.execute(
+            select(ImagePiiVerification)
+            .where(
+                ImagePiiVerification.image_uuid == upload.uuid,
+                ImagePiiVerification.image_variant == image_variant,
+            )
+        ).scalar_one_or_none()
+
+        if record:
+            record.pii_status = pii_status
+            record.source = "manual"
+            record.checked_at = utcnow()
+        else:
+            db_session.add(
+                ImagePiiVerification(
+                    image_uuid=upload.uuid,
+                    image_variant=image_variant,
+                    pii_status=pii_status,
+                    source="manual",
+                    checked_at=utcnow(),
+                )
+            )
+
+        db_session.commit()
+        flash(f"PII status set to {pii_status} (manual).", "success")
+        return redirect(url_for("preprocess.anonymize_image", uuid=uuid_val))
+    except Exception as exc:
+        db_session.rollback()
+        editing_logger.exception(
+            "Failed to update PII override for uuid=%s: %s",
+            sanitize_log_value(str(uuid)),
+            sanitize_log_value(str(exc)),
+        )
+        flash("Failed to update PII override.", "danger")
+        return redirect(url_for("preprocess.anonymize_image", uuid=_uuid_str(uuid)))
     finally:
         db_session.close()
 

@@ -505,6 +505,9 @@ class ImagePiiVerification(Base):
     image_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     image_variant: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
     pii_status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(16), default="auto", nullable=False, index=True)
+    detections_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    roi_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -513,6 +516,7 @@ class ImagePiiVerification(Base):
         UniqueConstraint("image_uuid", "image_variant", name="uq_image_pii_verification_uuid_variant"),
         CheckConstraint("image_variant IN ('orig', 'edited')", name="ck_pii_verification_variant"),
         CheckConstraint("pii_status IN ('detected', 'clear', 'error')", name="ck_pii_verification_status"),
+        CheckConstraint("source IN ('auto', 'manual')", name="ck_pii_verification_source"),
     )
 
 

@@ -217,8 +217,10 @@ sequenceDiagram
 
 ## Data Pre-processing Note
 
-Tasks are created only for images that have completed the verification and anonymization workflows:
-- **EXIF Stripping**: Technical metadata removed during upload/ingestion
-- **PII Detection**: Images scanned for burned-in patient data
-- **Verification**: Manual or automated verification completed before task creation
-- **Quality Assurance**: Images meet technical quality standards for grading
+Tasks are created only for images that have completed **verification**:
+- **Verification Requirement** (Hard Gate): `ensure_task()` checks that:
+  - Direct uploads: `DirectImageVerify.verified_status = 'verified'`
+  - Encounter files (DR): `PatientEncounters.dr_verified_status = 'verified'` OR `encounter_verified_status = 'verified'`
+  - Encounter files (Glaucoma): `PatientEncounters.glaucoma_verified_status = 'verified'`
+
+**Note**: While EXIF stripping and PII detection occur earlier in the upload/ingestion workflows, `ensure_task()` does NOT explicitly verify their completion. The verification workflow is expected to ensure images are anonymized before marking them as verified.

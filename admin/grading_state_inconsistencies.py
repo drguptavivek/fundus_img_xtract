@@ -62,6 +62,7 @@ def grading_state_inconsistencies():
             )
             .join(Disease, Disease.id == GradingTask.disease_id)
             .join(LabUnit, LabUnit.id == GradingTask.lab_unit_id)
+            .filter(GradingTask.state == "resident2_done")
             .filter(resident_missing)
             .filter(resident2_exists.exists())
             .order_by(Disease.name, GradingTask.id.desc())

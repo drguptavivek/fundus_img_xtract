@@ -223,4 +223,7 @@ Tasks are created only for images that have completed **verification**:
   - Encounter files (DR): `PatientEncounters.dr_verified_status = 'verified'` OR `encounter_verified_status = 'verified'`
   - Encounter files (Glaucoma): `PatientEncounters.glaucoma_verified_status = 'verified'`
 
-**Note**: While EXIF stripping and PII detection occur earlier in the upload/ingestion workflows, `ensure_task()` does NOT explicitly verify their completion. The verification workflow is expected to ensure images are anonymized before marking them as verified.
+**Important**: The following processes occur **independently** and do NOT block task creation:
+- **EXIF Stripping**: Happens synchronously during upload/ingestion (before verification)
+- **PII Detection**: Enqueued asynchronously during upload; runs in background **parallel** to verification and task creation
+- **Quality Assurance**: The verification workflow is responsible for ensuring images are anonymized before marking them as verified, but `ensure_task()` does not enforce this programmatically

@@ -11,7 +11,8 @@ sequenceDiagram
     participant TaskService as Task Service
     participant Consensus as Consensus Utils
 
-    box "Phase 1: Image Upload" #f9f9f9
+    rect rgb(249, 249, 249)
+    note right of User: Phase 1: Image Upload
     User->>WebServer: Upload Images (POST /direct/pregraded)
     WebServer->>WebServer: Validate (Size, Quota, LabUnit)
     WebServer->>DB: Create Job
@@ -26,7 +27,8 @@ sequenceDiagram
     end
     end
 
-    box "Phase 2: Grade Import" #e6f3ff
+    rect rgb(230, 243, 255)
+    note right of User: Phase 2: Grade Import
     User->>WebServer: Upload Excel (POST /direct/pregraded/grades)
     WebServer->>WebServer: Parse Excel (openpyxl)
     

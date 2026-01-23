@@ -601,6 +601,9 @@ def toggle_share_status(share_id: int):
 def regenerate_share_otp(share_id: int):
     """Regenerate OTP for an existing dataset share."""
     dataset_uuid = request.form.get("dataset_uuid")
+    dataset_uuid_value = None
+    share_id_value = None
+    otp_value = None
     with get_db_session() as db:
         share = (
             db.query(DatasetShare)
@@ -623,6 +626,9 @@ def regenerate_share_otp(share_id: int):
         otp = generate_share_otp()
         share.otp_hash = hash_share_otp(otp)
         db.add(share)
+        dataset_uuid_value = dataset.uuid
+        share_id_value = share.id
+        otp_value = otp
         logging.getLogger("audit").info(
             "Dataset share OTP regenerated share_id=%s dataset_id=%s dataset_uuid=%s user_id=%s",
             share.id,
@@ -682,15 +688,15 @@ def regenerate_share_otp(share_id: int):
             email_failed = True
 
     session["dataset_share_otp_display"] = {
-        "dataset_uuid": dataset.uuid,
-        "share_id": share.id,
-        "otp": otp,
+        "dataset_uuid": dataset_uuid_value,
+        "share_id": share_id_value,
+        "otp": otp_value,
     }
     session.modified = True
     flash("OTP regenerated. Save it now; it will not be shown again.", "success")
     if email_failed:
         flash("OTP email failed to send. Please share the OTP manually.", "warning")
-    target_uuid = dataset_uuid or dataset.uuid
+    target_uuid = dataset_uuid or dataset_uuid_value
     return redirect(url_for("datasets.share_dataset", dataset_uuid=target_uuid))
 
 

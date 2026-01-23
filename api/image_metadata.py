@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Optional
+
+from flask import jsonify, request
+from flask_login import current_user
+
+from app_cache import cache
+from auth.roles import roles_required
+from db_transaction_manager import get_db_session
+from models import DirectImageUpload, EncounterFile, IMAGE_DIR, ImageMetadata, PatientEncounters, ZipFile
+from utils.fileUtils import abs_from_parts
+from utils.hospital_scoping import apply_scoping, determine_scoping_context
+from utils.image_metadata import extract_image_metadata, upsert_image_metadata
+from utils.log_sanitize import sanitize_log_value
+
+from . import api_bp
+
+_LOGGER = logging.getLogger("image_metadata_api")
+_METADATA_CACHE_TTL_SECONDS = 10 * 60
+
+
+def _serialize_metadata(meta: ImageMetadata, include_raw: bool) -> dict:
+    payload = {
+        "image_uuid": meta.image_uuid,
+        "image_variant": meta.image_variant,
+        "width": meta.width,
+        "height": meta.height,
+        "format": meta.format,
+        "mode": meta.mode,
+        "bit_depth": meta.bit_depth,
+        "is_grayscale": meta.is_grayscale,
+        "has_alpha": meta.has_alpha,
+        "file_size_bytes": meta.file_size_bytes,
+        "dpi_x": meta.dpi_x,
+        "dpi_y": meta.dpi_y,
+        "avg_luminance": meta.avg_luminance,
+        "max_luminance": meta.max_luminance,
+        "luminance_std": meta.luminance_std,
+        "mean_r": meta.mean_r,
+        "mean_g": meta.mean_g,
+        "mean_b": meta.mean_b,
+        "median_r": meta.median_r,
+        "median_g": meta.median_g,
+        "median_b": meta.median_b,
+        "exif_present": bool(meta.exif_json),
+        "iptc_present": bool(meta.iptc_json),
+        "size_ok": bool(meta.width and meta.height and meta.width >= 1024 and meta.height >= 768),
+        "created_at": meta.created_at.isoformat() + "Z" if meta.created_at else None,
+        "updated_at": meta.updated_at.isoformat() + "Z" if meta.updated_at else None,
+    }
+    if include_raw:
+        payload.update(
+            {
+                "histogram_json": meta.histogram_json,
+                "exif_json": meta.exif_json,
+                "iptc_json": meta.iptc_json,
+            }
+        )
+    return payload
+
+
+def _resolve_image_info(
+    db,
+    image_uuid: str,
+    variant: Optional[str] = None,
+) -> tuple[Optional[str], Optional[str], Optional[int], Optional[int]]:
+    context = determine_scoping_context()
+    encounter_query = (
+        db.query(EncounterFile, PatientEncounters, ZipFile)
+        .join(PatientEncounters, EncounterFile.patient_encounter_id == PatientEncounters.id)
+        .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+        .filter(EncounterFile.uuid == image_uuid)
+    )
+    encounter_query = apply_scoping(encounter_query, PatientEncounters, current_user, context)
+    encounter_result = encounter_query.first()
+
+    direct_query = db.query(DirectImageUpload).filter(DirectImageUpload.uuid == image_uuid)
+    direct_query = apply_scoping(direct_query, DirectImageUpload, current_user, context)
+    direct_image = direct_query.first()
+
+    if encounter_result and direct_image:
+        return None, None, None, None
+
+    if encounter_result:
+        encounter_file, patient_encounter, zip_file = encounter_result
+        if not encounter_file or not encounter_file.filename:
+            return None, None, None, None
+        upload_date = zip_file.upload_date if zip_file else None
+        if not upload_date:
+            return None, None, None, None
+        upload_date_str = upload_date.strftime("%Y_%m_%d")
+        path = str(IMAGE_DIR / upload_date_str / encounter_file.filename)
+        return path, "orig", encounter_file.id, None
+
+    if direct_image:
+        if not direct_image.filename:
+            return None, None, None, None
+        requested_variant = variant if variant in {"orig", "edited"} else None
+        if requested_variant == "edited" and not direct_image.edited_filename:
+            return None, None, None, None
+        if requested_variant == "orig":
+            filename = direct_image.filename
+            kind = "orig"
+        else:
+            filename = direct_image.edited_filename or direct_image.filename
+            kind = "edited" if direct_image.edited_filename else "orig"
+        try:
+            return str(abs_from_parts(direct_image.folder_rel, filename, kind)), kind, None, direct_image.id
+        except (OSError, ValueError):
+            return None, None, None, None
+
+    return None, None, None, None
+
+
+def _cache_key(image_uuid: str, variant: str, include_raw: bool) -> str:
+    return f"image-metadata:{image_uuid}:{variant}:{'raw' if include_raw else 'summary'}"
+
+
+@api_bp.route("/image-metadata/<string:image_uuid>", methods=["GET"])
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "data_exporter",
+    "dataset_creator",
+    "analytics_viewer",
+    "fileUploader",
+    "optometrist",
+    "ophthalmologist",
+    "resident",
+)
+def get_image_metadata(image_uuid: str):
+    variant = request.args.get("variant")
+    include_raw = request.args.get("include_raw", "0") in {"1", "true", "yes"}
+
+    with get_db_session() as db:
+        image_path, resolved_variant, _, _ = _resolve_image_info(db, image_uuid, variant)
+        if not image_path or not resolved_variant:
+            return jsonify({"success": False, "error": "Image not found"}), 404
+        cache_key = _cache_key(image_uuid, resolved_variant, include_raw)
+        cached = cache.get(cache_key)
+        if isinstance(cached, dict):
+            return jsonify({"success": True, "data": cached, "cached": True})
+
+        meta = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == resolved_variant,
+            )
+            .first()
+        )
+        if not meta:
+            return jsonify({"success": False, "error": "Metadata not found"}), 404
+        payload = _serialize_metadata(meta, include_raw)
+
+    cache.set(cache_key, payload, timeout=_METADATA_CACHE_TTL_SECONDS)
+    return jsonify({"success": True, "data": payload, "cached": False})
+
+
+@api_bp.route("/image-metadata/<string:image_uuid>", methods=["POST"])
+@roles_required(
+    "admin",
+    "local_admin",
+    "data_manager",
+    "data_exporter",
+    "dataset_creator",
+    "analytics_viewer",
+    "fileUploader",
+    "optometrist",
+    "ophthalmologist",
+    "resident",
+)
+def extract_image_metadata_api(image_uuid: str):
+    payload = request.get_json(silent=True) or {}
+    variant = payload.get("variant")
+    include_raw = payload.get("include_raw", False) in {True, "true", "1", "yes"}
+    force = payload.get("force", False) in {True, "true", "1", "yes"}
+
+    with get_db_session() as db:
+        image_path, resolved_variant, encounter_id, direct_id = _resolve_image_info(db, image_uuid, variant)
+        if not image_path or not resolved_variant:
+            return jsonify({"success": False, "error": "Image not found"}), 404
+
+        meta = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == image_uuid,
+                ImageMetadata.image_variant == resolved_variant,
+            )
+            .first()
+        )
+        if meta and not force:
+            payload_out = _serialize_metadata(meta, include_raw)
+            cache.set(_cache_key(image_uuid, resolved_variant, include_raw), payload_out, timeout=_METADATA_CACHE_TTL_SECONDS)
+            return jsonify({"success": True, "data": payload_out, "cached": False, "updated": False})
+
+        try:
+            meta_result = extract_image_metadata(image_path=Path(image_path))
+            meta = upsert_image_metadata(
+                db,
+                image_uuid=image_uuid,
+                image_variant=resolved_variant,
+                encounter_file_id=encounter_id,
+                direct_image_upload_id=direct_id,
+                metadata=meta_result,
+            )
+        except Exception as exc:
+            _LOGGER.warning(
+                "Metadata extraction failed for %s: %s",
+                sanitize_log_value(image_uuid),
+                sanitize_log_value(exc),
+            )
+            return jsonify({"success": False, "error": "Metadata extraction failed"}), 500
+
+        payload_out = _serialize_metadata(meta, include_raw)
+
+    cache.set(_cache_key(image_uuid, resolved_variant, include_raw), payload_out, timeout=_METADATA_CACHE_TTL_SECONDS)
+    return jsonify({"success": True, "data": payload_out, "cached": False, "updated": True})

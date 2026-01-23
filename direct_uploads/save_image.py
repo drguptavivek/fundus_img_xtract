@@ -147,6 +147,40 @@ def save_edited_image(upload_id: int):
             # Update the database with the basename of the edited file and its thumbnail
             upload.edited_filename = edited_basename
             upload.edited_thumbnail_filename = edited_thumbnail_filename
+            try:
+                from utils.image_metadata import extract_image_metadata, upsert_image_metadata
+                metadata_result = extract_image_metadata(
+                    image_bytes=image_bytes,
+                    file_size_bytes=len(image_bytes),
+                )
+                upsert_image_metadata(
+                    db,
+                    image_uuid=str(upload.uuid),
+                    image_variant="edited",
+                    direct_image_upload_id=upload.id,
+                    metadata=metadata_result,
+                )
+            except Exception as e:
+                editing_logger.warning(
+                    "Failed to store edited metadata for upload %s: %s",
+                    sanitize_log_value(upload_id),
+                    sanitize_log_value(e),
+                )
+
+            try:
+                from utils.pii_verification import enqueue_pii_detection
+                enqueue_pii_detection(
+                    current_app._get_current_object(),
+                    str(upload.uuid),
+                    "edited",
+                    str(edited_path),
+                )
+            except Exception as e:
+                editing_logger.warning(
+                    "Failed to enqueue PII detection for edited upload %s: %s",
+                    sanitize_log_value(upload_id),
+                    sanitize_log_value(e),
+                )
             db.commit()
             bump_media_cache_version(str(upload.uuid))
 

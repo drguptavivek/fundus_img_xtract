@@ -349,6 +349,7 @@ def upload():
                                             sanitize_log_value(e)
                                         )
                                         dest.write_bytes(content)
+                                        clean_content = content
 
                                     # Generate thumbnail for the uploaded image
                                     thumbnail_filename = None
@@ -376,8 +377,23 @@ def upload():
                                             sanitize_log_value(e),
                                         )
 
+                                    # capture image metadata before DB insert
+                                    metadata_result = None
+                                    try:
+                                        from utils.image_metadata import extract_image_metadata
+                                        metadata_result = extract_image_metadata(
+                                            image_bytes=content,
+                                            file_size_bytes=len(clean_content),
+                                        )
+                                    except Exception as e:
+                                        current_app.logger.warning(
+                                            "Failed to extract metadata for %s: %s",
+                                            sanitize_log_value(filename),
+                                            sanitize_log_value(e),
+                                        )
+
                                     # create DB row (folder-based; store basenames only)
-                                    db_session.add(DirectImageUpload(
+                                    upload = DirectImageUpload(
                                         original_filename=filename,
                                         filename=dest.name,                 # basename stored
                                         folder_rel=folder_rel,
@@ -392,7 +408,41 @@ def upload():
                                         area_id=area.id,
                                         is_mydriatic=is_mydriatic,
                                         thumbnail_filename=thumbnail_filename,
-                                    ))
+                                    )
+                                    db_session.add(upload)
+                                    db_session.flush()
+
+                                    if metadata_result is not None:
+                                        try:
+                                            from utils.image_metadata import upsert_image_metadata
+                                            upsert_image_metadata(
+                                                db_session,
+                                                image_uuid=str(upload.uuid),
+                                                image_variant="orig",
+                                                direct_image_upload_id=upload.id,
+                                                metadata=metadata_result,
+                                            )
+                                        except Exception as e:
+                                            current_app.logger.warning(
+                                                "Failed to store metadata for %s: %s",
+                                                sanitize_log_value(dest.name),
+                                                sanitize_log_value(e),
+                                            )
+
+                                    try:
+                                        from utils.pii_verification import enqueue_pii_detection
+                                        enqueue_pii_detection(
+                                            current_app._get_current_object(),
+                                            str(upload.uuid),
+                                            "orig",
+                                            str(dest),
+                                        )
+                                    except Exception as e:
+                                        current_app.logger.warning(
+                                            "Failed to enqueue PII detection for %s: %s",
+                                            sanitize_log_value(dest.name),
+                                            sanitize_log_value(e),
+                                        )
                                     current_user.file_upload_count += 1
                                     state, detail = "completed", "File uploaded successfully"
                                     current_app.logger.info(

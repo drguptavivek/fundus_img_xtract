@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import html
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -108,6 +110,7 @@ def _run_export_job(app, job_token: str, filters: Dict[str, Any], user_context: 
 
             graded_rows = _build_task_payload(rows)
             excel_path = _write_excel(graded_rows, filters, export_dir)
+            _write_grading_scheme(filters.get("disease_id"), export_dir)
             zip_paths, warnings = _write_zips(graded_rows, export_dir)
 
             if warnings:
@@ -145,7 +148,8 @@ def _run_dataset_export_job(
 
             graded_rows = _build_task_payload(rows)
             export_filters = {"dataset_id": dataset_id, **(metadata or {})}
-            excel_path = _write_excel(graded_rows, export_filters, export_dir)
+            excel_path = _write_excel(graded_rows, export_filters, export_dir, drop_ai_columns=True)
+            _write_grading_scheme(metadata.get("disease_id"), export_dir)
             zip_paths, warnings = _write_zips(graded_rows, export_dir)
 
             if warnings:
@@ -465,11 +469,35 @@ def _extract_grades_by_role(details_json: str) -> Dict[str, Dict[str, Any]]:
         result[role] = {
             "impression": item.get("grade_name"),
             "comment": item.get("comment"),
+            "selected_features": item.get("selected_features"),
             "ai_model_name": item.get("ai_model_name"),
             "ai_model_version": item.get("ai_model_version"),
             "ai_probability": item.get("ai_probability"),
         }
     return result
+
+
+def _serialize_features_json(features: Any) -> Optional[str]:
+    if features is None:
+        return None
+    if isinstance(features, str):
+        return features
+    if isinstance(features, list):
+        labels: list[str] = []
+        for item in features:
+            if isinstance(item, dict):
+                label = item.get("label")
+                if label:
+                    labels.append(str(label))
+            elif isinstance(item, str):
+                labels.append(item)
+        if labels:
+            return json.dumps(labels, ensure_ascii=True, separators=(",", ":"))
+        return None
+    try:
+        return json.dumps(features, ensure_ascii=True, separators=(",", ":"))
+    except Exception:
+        return None
 
 
 def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
@@ -515,12 +543,24 @@ def _build_task_payload(rows: Sequence[ExportTaskRow]) -> List[Dict[str, Any]]:
                 "has_review": "yes" if has_review else "no",
                 "resident_grade": grades.get("resident", {}).get("impression"),
                 "resident_comment": grades.get("resident", {}).get("comment"),
+                "resident_features_json": _serialize_features_json(
+                    grades.get("resident", {}).get("selected_features")
+                ),
                 "resident2_grade": grades.get("resident2", {}).get("impression"),
                 "resident2_comment": grades.get("resident2", {}).get("comment"),
+                "resident2_features_json": _serialize_features_json(
+                    grades.get("resident2", {}).get("selected_features")
+                ),
                 "arbitrator_grade": grades.get("arbitrator", {}).get("impression"),
                 "arbitrator_comment": grades.get("arbitrator", {}).get("comment"),
+                "arbitrator_features_json": _serialize_features_json(
+                    grades.get("arbitrator", {}).get("selected_features")
+                ),
                 "review_grade": grades.get("review", {}).get("impression"),
                 "review_comment": grades.get("review", {}).get("comment"),
+                "review_features_json": _serialize_features_json(
+                    grades.get("review", {}).get("selected_features")
+                ),
                 "ai_grade": ai_grade.get("impression"),
                 "ai_model_name": ai_grade.get("ai_model_name"),
                 "ai_model_version": ai_grade.get("ai_model_version"),
@@ -691,9 +731,26 @@ def _load_direct_paths(direct_ids: Sequence[int]) -> Dict[int, tuple[Path, str]]
     return mapping
 
 
-def _write_excel(rows: List[Dict[str, Any]], filters: Dict[str, Any], export_dir: Path) -> Path:
+def _write_excel(
+    rows: List[Dict[str, Any]],
+    filters: Dict[str, Any],
+    export_dir: Path,
+    drop_ai_columns: bool = False,
+) -> Path:
     # Hide internal paths from the spreadsheet
-    sanitized_rows = [{k: v for k, v in row.items() if k != "image_path"} for row in rows]
+    excluded_keys = {"image_path"}
+    if drop_ai_columns:
+        excluded_keys.update(
+            {
+                "ai_grade",
+                "ai_model_name",
+                "ai_model_version",
+                "ai_probability",
+                "ai_review_statuses",
+                "ai_review_comments",
+            }
+        )
+    sanitized_rows = [{k: v for k, v in row.items() if k not in excluded_keys} for row in rows]
     df = pd.DataFrame(sanitized_rows)
     filters_df = pd.DataFrame(
         [
@@ -727,6 +784,59 @@ def _write_excel(rows: List[Dict[str, Any]], filters: Dict[str, Any], export_dir
         pass
 
     return excel_path
+
+
+def _write_grading_scheme(disease_id: Optional[int], export_dir: Path) -> None:
+    if not disease_id:
+        return
+    with get_db_session() as db:
+        disease = db.get(Disease, disease_id)
+        disease_name = disease.name if disease else None
+        gradings = (
+            db.query(DiseaseGrading.impression, DiseaseGrading.guidelines)
+            .filter(DiseaseGrading.disease_id == disease_id, DiseaseGrading.is_active.is_(True))
+            .order_by(DiseaseGrading.display_order)
+            .all()
+        )
+        grading_rows = [(row.impression, row.guidelines) for row in gradings]
+    if not grading_rows:
+        return
+
+    lines: List[str] = []
+    lines.append("Grading Scheme")
+    if disease_name:
+        lines.append(f"Disease: {disease_name}")
+    lines.append("")
+    def _strip_html(text: str) -> str:
+        clean = text or ""
+        clean = re.sub(r"(?i)<br\s*/?>", "\n", clean)
+        clean = re.sub(r"(?i)</p\s*>", "\n", clean)
+        clean = re.sub(r"(?i)<p[^>]*>", "", clean)
+        clean = re.sub(r"(?i)<li[^>]*>", "\n- ", clean)
+        clean = re.sub(r"(?i)</li>", "", clean)
+        clean = re.sub(r"(?i)</(ul|ol)\s*>", "\n", clean)
+        clean = re.sub(r"(?i)<(ul|ol)[^>]*>", "", clean)
+        clean = re.sub(r"<[^>]+>", " ", clean)
+        clean = html.unescape(clean)
+        lines = [re.sub(r"\s+", " ", line).strip() for line in clean.splitlines()]
+        lines = [line for line in lines if line]
+        return "\n".join(lines)
+
+    for idx, (impression_val, guidelines_val) in enumerate(grading_rows, start=1):
+        impression = impression_val or "Unlabeled"
+        guidelines = _strip_html(guidelines_val or "")
+        lines.append(f"{idx}. {impression}")
+        if guidelines:
+            lines.append("   Instructions:")
+            for gline in guidelines.splitlines():
+                lines.append(f"   {gline}")
+        lines.append("")
+
+    scheme_path = export_dir / "Grading_Scheme.txt"
+    try:
+        scheme_path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _write_zips(rows: List[Dict[str, Any]], export_dir: Path) -> tuple[List[Path], List[str]]:

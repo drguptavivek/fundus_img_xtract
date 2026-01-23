@@ -389,6 +389,36 @@ class JobItem(Base):
     job: Mapped["Job"] = relationship(back_populates="items")
 
 
+class TaskBackfillJob(Base):
+    __tablename__ = "task_backfill_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    requested_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_candidates: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_by_username: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    hospital_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    allowed_lab_unit_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','running','completed','failed')",
+            name="ck_task_backfill_job_status",
+        ),
+        Index("ix_task_backfill_jobs_hospital_created", "hospital_id", "created_at"),
+    )
+
+    created_by: Mapped["User"] = relationship("User")
+    hospital: Mapped["Hospital"] = relationship("Hospital")
+
 
 
 
@@ -517,6 +547,49 @@ class ImagePiiVerification(Base):
         CheckConstraint("image_variant IN ('orig', 'edited')", name="ck_pii_verification_variant"),
         CheckConstraint("pii_status IN ('detected', 'clear', 'error')", name="ck_pii_verification_status"),
         CheckConstraint("source IN ('auto', 'manual')", name="ck_pii_verification_source"),
+    )
+
+
+class ImageMetadata(Base):
+    __tablename__ = "image_metadata"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    image_variant: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    encounter_file_id: Mapped[int | None] = mapped_column(
+        ForeignKey("encounter_files.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    direct_image_upload_id: Mapped[int | None] = mapped_column(
+        ForeignKey("direct_image_uploads.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    format: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    bit_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_grayscale: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    has_alpha: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dpi_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dpi_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_luminance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_luminance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    luminance_std: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mean_r: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mean_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mean_b: Mapped[float | None] = mapped_column(Float, nullable=True)
+    median_r: Mapped[float | None] = mapped_column(Float, nullable=True)
+    median_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    median_b: Mapped[float | None] = mapped_column(Float, nullable=True)
+    histogram_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exif_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    iptc_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("image_uuid", "image_variant", name="uq_image_metadata_uuid_variant"),
+        CheckConstraint("image_variant IN ('orig', 'edited')", name="ck_image_metadata_variant"),
     )
 
 

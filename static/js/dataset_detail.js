@@ -234,6 +234,97 @@
       .catch(function() {});
   };
 
+  const getCsrfToken = function() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  };
+
+  const formatMetadataSummary = function(data) {
+    if (!data) {
+      return 'Metadata pending';
+    }
+    const parts = [];
+    if (data.width && data.height) {
+      parts.push(`${data.width}x${data.height}`);
+    }
+    if (data.is_grayscale !== null && data.is_grayscale !== undefined) {
+      parts.push(data.is_grayscale ? 'Grayscale' : 'Color');
+    }
+    if (data.avg_luminance !== null && data.avg_luminance !== undefined) {
+      parts.push(`Avg ${data.avg_luminance.toFixed(1)}`);
+    }
+    if (data.max_luminance !== null && data.max_luminance !== undefined) {
+      parts.push(`Max ${data.max_luminance.toFixed(1)}`);
+    }
+    if (data.exif_present) {
+      parts.push('EXIF');
+    }
+    if (data.iptc_present) {
+      parts.push('IPTC');
+    }
+    if (data.size_ok === false) {
+      parts.push('Below 1024×768');
+    }
+    return parts.join(' • ') || 'Metadata pending';
+  };
+
+  document.addEventListener('click', function(evt) {
+    const btn = evt.target.closest('.metadata-extract-btn');
+    if (!btn) {
+      return;
+    }
+    evt.preventDefault();
+    const imageUuid = btn.getAttribute('data-image-uuid');
+    const variant = btn.getAttribute('data-variant') || 'orig';
+    const statusEl = document.getElementById('metadataStatus');
+    const summaryEl = document.getElementById('metadataSummary');
+    if (!imageUuid) {
+      return;
+    }
+    btn.disabled = true;
+    if (statusEl) {
+      statusEl.textContent = 'Extracting...';
+    }
+    fetch(`/api/image-metadata/${encodeURIComponent(imageUuid)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken()
+      },
+      body: JSON.stringify({
+        variant: variant,
+        include_raw: false,
+        force: false
+      })
+    })
+      .then(function(res) { return res.json(); })
+      .then(function(payload) {
+        if (payload && payload.success) {
+          if (summaryEl) {
+            summaryEl.textContent = formatMetadataSummary(payload.data);
+          }
+          if (statusEl) {
+            statusEl.textContent = 'Updated';
+          }
+        } else if (statusEl) {
+          statusEl.textContent = 'Failed';
+        }
+      })
+      .catch(function() {
+        if (statusEl) {
+          statusEl.textContent = 'Failed';
+        }
+      })
+      .finally(function() {
+        btn.disabled = false;
+        window.setTimeout(function() {
+          if (statusEl) {
+            statusEl.textContent = '';
+          }
+        }, 2000);
+      });
+  });
+
   const triggerOcrForUuid = function(imageUuid) {
     if (!imageUuid) {
       return;

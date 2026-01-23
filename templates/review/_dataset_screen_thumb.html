@@ -55,4 +55,23 @@
       </button>
     </form>
   </div>
+  <div class="small px-2 pb-2 text-muted">
+    {% if row.metadata %}
+      {% if row.metadata.width and row.metadata.height %}{{ row.metadata.width }}x{{ row.metadata.height }}{% endif %}
+      {% if row.metadata.is_grayscale is not none %}
+        • {{ 'Grayscale' if row.metadata.is_grayscale else 'Color' }}
+      {% endif %}
+      {% if row.metadata.avg_luminance is not none %}
+        • Avg {{ '%.1f'|format(row.metadata.avg_luminance) }}
+      {% endif %}
+      {% if row.metadata.max_luminance is not none %}
+        • Max {{ '%.1f'|format(row.metadata.max_luminance) }}
+      {% endif %}
+      {% if row.metadata.size_ok is not none and not row.metadata.size_ok %}
+        • <span class="text-danger">Below 1024×768</span>
+      {% endif %}
+    {% else %}
+      Metadata pending
+    {% endif %}
+  </div>
 </div>

@@ -451,6 +451,13 @@ def discrepancy_export():
             upload_type="discrepancy_export",
         )
         from flask import current_app, flash, redirect, url_for
+        export_dir = (EXPORT_DIR / job_token).resolve()
+        try:
+            export_dir.mkdir(parents=True, exist_ok=True)
+            filters_path = export_dir / "filters.json"
+            filters_path.write_text(json.dumps(filters, ensure_ascii=True), encoding="utf-8")
+        except Exception:
+            pass
 
         enqueue_discrepancy_export(current_app._get_current_object(), job_token, filters, {"user_id": current_user.id})
         flash("Export queued. You can monitor progress in Jobs.", "info")

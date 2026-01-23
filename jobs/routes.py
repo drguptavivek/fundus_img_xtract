@@ -1,13 +1,16 @@
 # jobs/routes.py
-from flask import flash, jsonify, redirect, render_template, url_for
+import json
+
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from auth.roles import roles_required
-from job_store import db_get_job_payload
+from job_store import db_create_job, db_get_job_payload
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select
-from models import Job, JobItem, LabUnit
+from models import CuratedDataset, CuratedDatasetItem, DatasetExport, Job, JobItem, LabUnit
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
+from utils.rate_limiter import rate_limit
 from review.discrepancy_export import EXPORT_DIR
 
 from . import jobs_bp
@@ -152,14 +155,163 @@ def job_status_json(job_token: str):
                 else "analytics.dataset_export_download"
             )
             payload["download_base"] = url_for(download_endpoint, job_token=job.token, filename="", _external=True)
+        if job.upload_type == "dataset_export":
+            dataset_export = db.query(DatasetExport).filter(DatasetExport.job_id == job.id).first()
+            if dataset_export and dataset_export.dataset:
+                payload["dataset_name"] = dataset_export.dataset.name
+                payload["dataset_uuid"] = dataset_export.dataset.uuid
+                payload["dataset_detail_url"] = url_for(
+                    "analytics.dataset_detail",
+                    dataset_uuid=dataset_export.dataset.uuid,
+                )
         return jsonify(payload)
 
 @jobs_bp.route("/<job_token>/view", methods=["GET"])
 @login_required
 @roles_required("admin", "local_admin", "fileUploader", "optometrist", "data_manager", "discrepancy_reviewer", "data_exporter")
 def job_status_page(job_token: str):
-    # simple HTML page that polls <token> JSON
+    with get_db_session() as db:
+        job = db.query(Job.upload_type).filter(Job.token == job_token).first()
+    if job and job.upload_type in ("discrepancy_export", "dataset_export"):
+        return render_template("jobs/export_job_status.html", job_id=job_token)
     return render_template("jobs/job_status.html", job_id=job_token)
+
+
+@jobs_bp.route("/<job_token>/regenerate", methods=["POST"])
+@login_required
+@roles_required("admin", "local_admin", "data_manager", "discrepancy_reviewer", "data_exporter", "dataset_creator")
+@rate_limit("1 per minute")
+def regenerate_export(job_token: str):
+    from flask import current_app
+    from review.discrepancy_export import enqueue_dataset_export, enqueue_discrepancy_export
+
+    with get_db_session() as db:
+        job = db.query(Job).filter(Job.token == job_token).first()
+        if not job or job.upload_type not in ("dataset_export", "discrepancy_export"):
+            abort(404)
+
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        if job.lab_unit_id not in allowed_lab_units and job.lab_unit_id is not None and job.uploader_user_id != current_user.id:
+            abort(404)
+
+        xff = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        ip = xff or (request.remote_addr or "-")
+        uploader_username = getattr(current_user, "username", None)
+        uploader_user_id = getattr(current_user, "id", None)
+
+        if job.upload_type == "dataset_export":
+            dataset_export = db.query(DatasetExport).filter(DatasetExport.job_id == job.id).first()
+            if not dataset_export:
+                flash("Dataset export metadata not found. Please re-export from the dataset page.", "warning")
+                return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+            dataset = (
+                db.query(CuratedDataset)
+                .filter(CuratedDataset.id == dataset_export.dataset_id, CuratedDataset.is_active.is_(True))
+                .first()
+            )
+            if not dataset:
+                flash("Dataset not found or inactive.", "warning")
+                return redirect(url_for("jobs.job_status_page", job_token=job_token))
+            if not dataset.is_finalized:
+                flash("Finalize the dataset before exporting.", "warning")
+                return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
+
+            items = (
+                db.query(CuratedDatasetItem)
+                .filter(
+                    CuratedDatasetItem.dataset_id == dataset.id,
+                    CuratedDatasetItem.include_in_export.is_(True),
+                )
+                .all()
+            )
+            task_ids = [item.task_id for item in items]
+            if not task_ids:
+                flash("No tasks selected for export in this dataset.", "warning")
+                return redirect(url_for("analytics.dataset_detail", dataset_uuid=dataset.uuid))
+
+            stored_filters = {}
+            try:
+                stored_filters = json.loads(dataset.filters_json or "{}")
+            except Exception:
+                stored_filters = {}
+
+            job_token = db_create_job(
+                ["dataset_export"],
+                [],
+                uploader_user_id=uploader_user_id,
+                uploader_username=uploader_username,
+                uploader_ip=ip,
+                upload_type="dataset_export",
+            )
+            job_record = db.query(Job).filter(Job.token == job_token).first()
+            if job_record:
+                db.add(
+                    DatasetExport(
+                        dataset_id=dataset.id,
+                        job_id=job_record.id,
+                        created_by_user_id=uploader_user_id,
+                    )
+                )
+                db.flush()
+
+            metadata = {
+                "dataset_name": dataset.name,
+                "dataset_purpose": dataset.purpose,
+                "disease_id": dataset.disease_id,
+                **stored_filters,
+            }
+            enqueue_dataset_export(
+                current_app._get_current_object(),
+                job_token,
+                dataset.id,
+                task_ids,
+                metadata,
+            )
+            flash("Dataset export regeneration queued.", "info")
+            return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+        filters_path = (EXPORT_DIR / job_token / "filters.json").resolve()
+        if not filters_path.exists() or EXPORT_DIR not in filters_path.parents:
+            flash("Export filters not found. Please re-export from the discrepancy review page.", "warning")
+            return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+        try:
+            with filters_path.open("r", encoding="utf-8") as handle:
+                filters = json.load(handle)
+        except Exception:
+            flash("Unable to read export filters. Please re-export from the discrepancy review page.", "warning")
+            return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+        allowed_lab_units = get_user_lab_unit_ids_no_admin_override(current_user.id)
+        filters_allowed = set(filters.get("allowed_lab_units") or [])
+        if filters_allowed:
+            filters["allowed_lab_units"] = [lu for lu in filters_allowed if lu in allowed_lab_units]
+        else:
+            filters["allowed_lab_units"] = list(allowed_lab_units)
+
+        lab_unit_id = filters.get("lab_unit_id")
+        if lab_unit_id and lab_unit_id not in filters["allowed_lab_units"]:
+            flash("You are not allowed to export for this lab unit.", "warning")
+            return redirect(url_for("jobs.job_status_page", job_token=job_token))
+
+        job_token = db_create_job(
+            ["discrepancy_export"],
+            [],
+            uploader_user_id=uploader_user_id,
+            uploader_username=uploader_username,
+            uploader_ip=ip,
+            lab_unit_id=lab_unit_id,
+            upload_type="discrepancy_export",
+        )
+        enqueue_discrepancy_export(
+            current_app._get_current_object(),
+            job_token,
+            filters,
+            {"user_id": current_user.id},
+        )
+        flash("Discrepancy export regeneration queued.", "info")
+        return redirect(url_for("jobs.job_status_page", job_token=job_token))
 
 @jobs_bp.route("/results/details/<job_token>", methods=["GET"])
 @login_required

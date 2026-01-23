@@ -478,6 +478,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                 # Extract file (intercept images for EXIF stripping)
                 if file_ext in {'.jpg', '.jpeg'}:
                     try:
+                        content = b""
                         with zf.open(member_info) as source:
                             content = source.read()
                             
@@ -495,6 +496,7 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                         # Fallback to direct copy
                         with zf.open(member_info) as source, open(target_path, "wb") as target:
                             shutil.copyfileobj(source, target)
+                        clean_content = content
                 else:
                     # Direct stream copy for PDFs
                     with zf.open(member_info) as source, open(target_path, "wb") as target:
@@ -529,7 +531,50 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                     except Exception as e:
                         print(f"  - Error generating thumbnail for {new_filename}: {e}")
 
-                    files_to_add.append(EncounterFile(filename=new_filename, file_type=file_type, uuid=str(uuid4()), lab_unit_id=lab_unit_id, thumbnail_filename=thumbnail_filename))
+                    metadata_result = None
+                    try:
+                        from utils.image_metadata import extract_image_metadata
+                        metadata_result = extract_image_metadata(
+                            image_bytes=content,
+                            file_size_bytes=len(clean_content),
+                        )
+                    except Exception as e:
+                        print(f"  - Failed to extract metadata for {new_filename}: {e}")
+
+                    encounter_file = EncounterFile(
+                        filename=new_filename,
+                        file_type=file_type,
+                        uuid=str(uuid4()),
+                        lab_unit_id=lab_unit_id,
+                        thumbnail_filename=thumbnail_filename,
+                    )
+                    session.add(encounter_file)
+                    session.flush()
+                    files_to_add.append(encounter_file)
+
+                    if metadata_result is not None:
+                        try:
+                            from utils.image_metadata import upsert_image_metadata
+                            upsert_image_metadata(
+                                session,
+                                image_uuid=str(encounter_file.uuid),
+                                image_variant="orig",
+                                encounter_file_id=encounter_file.id,
+                                metadata=metadata_result,
+                            )
+                        except Exception as e:
+                            print(f"  - Failed to store metadata for {new_filename}: {e}")
+
+                    try:
+                        from utils.pii_verification import run_pii_detection_for_path
+                        run_pii_detection_for_path(
+                            session,
+                            image_uuid=str(encounter_file.uuid),
+                            image_variant="orig",
+                            image_path=str(target_path),
+                        )
+                    except Exception as e:
+                        print(f"  - Failed to run PII detection for {new_filename}: {e}")
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add

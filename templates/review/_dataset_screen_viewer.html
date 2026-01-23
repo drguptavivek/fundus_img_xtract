@@ -12,6 +12,13 @@
         <span class="badge rounded-pill bg-secondary ocr-viewer-badge" data-image-uuid="{{ image_uuid }}">
           OCR...
         </span>
+        <button type="button"
+                class="btn btn-sm btn-outline-primary metadata-extract-btn"
+                data-image-uuid="{{ image_uuid }}"
+                data-variant="{{ image_variant or 'orig' }}">
+          Extract Metadata
+        </button>
+        <span class="small text-muted" id="metadataStatus"></span>
         <button type="button" class="btn btn-sm btn-outline-info ocr-refresh-btn" data-image-uuid="{{ image_uuid }}">
           Refresh
         </button>
@@ -54,6 +61,27 @@
       <div class="small text-muted">Final impression</div>
       <div class="fw-semibold">{{ row.final_impression if row else '—' }}</div>
     </div>
+  </div>
+  <div class="small text-muted mt-2" id="metadataSummary">
+    {% if metadata %}
+      {% if metadata.width and metadata.height %}{{ metadata.width }}x{{ metadata.height }}{% endif %}
+      {% if metadata.is_grayscale is not none %}
+        • {{ 'Grayscale' if metadata.is_grayscale else 'Color' }}
+      {% endif %}
+      {% if metadata.avg_luminance is not none %}
+        • Avg {{ '%.1f'|format(metadata.avg_luminance) }}
+      {% endif %}
+      {% if metadata.max_luminance is not none %}
+        • Max {{ '%.1f'|format(metadata.max_luminance) }}
+      {% endif %}
+      {% if metadata.exif_present %} • EXIF{% endif %}
+      {% if metadata.iptc_present %} • IPTC{% endif %}
+      {% if metadata.size_ok is not none and not metadata.size_ok %}
+        • <span class="text-danger">Below 1024×768</span>
+      {% endif %}
+    {% else %}
+      Metadata pending
+    {% endif %}
   </div>
 </div>
 

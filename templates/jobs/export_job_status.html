@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Job Status{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8 col-md-10">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h5 class="mb-0">Job <code>{{ job_id }}</code></h5>
+          <span class="badge bg-info text-dark">Export Job</span>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-3">Status</dt>
+          <dd class="col-sm-9">
+            <span id="status" class="badge bg-secondary">queued</span>
+          </dd>
+          <dt class="col-sm-3">Created</dt>
+          <dd class="col-sm-9"><span id="created_at">-</span></dd>
+          <dt class="col-sm-3">Job Type</dt>
+          <dd class="col-sm-9"><span id="upload_type">-</span></dd>
+        </dl>
+
+        <div id="datasetInfo" class="alert alert-light border mt-3 mb-3 d-none">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <div class="fw-semibold">Dataset</div>
+              <div id="datasetName" class="text-muted small">-</div>
+            </div>
+            <a id="datasetLink" class="btn btn-outline-primary btn-sm d-none" href="#">Dataset detail</a>
+          </div>
+        </div>
+
+        <hr>
+
+        <h6 class="mb-2">Files</h6>
+        <ul id="items" class="list-group mb-3"></ul>
+
+        <div id="exportFiles" class="mb-3" style="display: none;">
+          <h6 class="mb-2">Exports</h6>
+          <ul id="exportList" class="list-group"></ul>
+        </div>
+
+        <h6 class="mb-2">Rejected (client-side checks)</h6>
+        <ul id="rejected" class="list-group"></ul>
+
+        <div class="d-flex gap-2 mt-3 flex-wrap">
+          <button id="refreshBtn" class="btn btn-outline-primary">Refresh now</button>
+          <div id="regenerateWrap" style="display: none;">
+            <form id="regenerateForm" method="POST" action="{{ url_for('jobs.regenerate_export', job_token=job_id) }}">
+              {{ csrf_field() }}
+              <button id="regenerateBtn" class="btn btn-outline-warning" type="submit">Regenerate Export Bundle</button>
+            </form>
+          </div>
+          <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if csp_script_nonce %}
+<script nonce="{{ csp_script_nonce() }}">
+{% else %}
+<script>
+{% endif %}
+  function badgeClassForState(state) {
+    switch ((state || '').toLowerCase()) {
+      case 'ok': return 'success';
+      case 'error': return 'danger';
+      case 'processing': return 'warning text-dark';
+      case 'queued': return 'secondary';
+      default: return 'secondary';
+    }
+  }
+
+  function badgeHtml(state) {
+    const c = badgeClassForState(state);
+    return `<span class="badge bg-${c}">${state || 'unknown'}</span>`;
+  }
+
+  async function poll() {
+    const jobId = "{{ job_id }}";
+    try {
+      const res = await fetch(`/jobs/${jobId}`, { cache: 'no-store' });
+      const data = await res.json();
+
+      const statusEl = document.getElementById('status');
+      const createdEl = document.getElementById('created_at');
+      const listEl = document.getElementById('items');
+      const rejEl = document.getElementById('rejected');
+      const uploadTypeEl = document.getElementById('upload_type');
+      const exportWrap = document.getElementById('exportFiles');
+      const exportList = document.getElementById('exportList');
+      const regenWrap = document.getElementById('regenerateWrap');
+      const datasetInfo = document.getElementById('datasetInfo');
+      const datasetName = document.getElementById('datasetName');
+      const datasetLink = document.getElementById('datasetLink');
+
+      // header status
+      statusEl.className = `badge bg-${badgeClassForState(data.status)}`;
+      statusEl.textContent = (data.status || 'unknown');
+
+      createdEl.textContent = data.created_at || '-';
+      // Display upload type with appropriate formatting
+      if (data.upload_type) {
+        const formattedType = data.upload_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        uploadTypeEl.textContent = formattedType;
+      } else {
+        uploadTypeEl.textContent = '-';
+      }
+
+      // dataset info
+      datasetInfo.classList.add('d-none');
+      datasetLink.classList.add('d-none');
+      if (data.dataset_name || data.dataset_detail_url) {
+        datasetInfo.classList.remove('d-none');
+        datasetName.textContent = data.dataset_name || '-';
+        if (data.dataset_detail_url) {
+          datasetLink.href = data.dataset_detail_url;
+          datasetLink.classList.remove('d-none');
+        }
+      }
+
+      // files list
+      listEl.innerHTML = '';
+      (data.items || []).forEach((it) => {
+        const li = document.createElement('li');
+        li.className = 'list-group-item';
+        const rejected = (it.state || '').toLowerCase() === 'error';
+        li.innerHTML = `
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="me-3">
+              <div class="fw-semibold">${it.filename}</div>
+              ${it.detail ? `<div class="small ${rejected ? 'text-danger' : 'text-muted'}">${it.detail}</div>` : ''}
+            </div>
+            <div class="d-flex gap-2 align-items-center">${rejected ? `<span class="badge bg-danger">Rejected</span>` : ''}${badgeHtml(it.state)}</div>
+          </div>
+          <div class="small text-muted mt-1">
+            ${it.started_at ? `Started: ${it.started_at}` : ''} ${it.finished_at ? ` | Finished: ${it.finished_at}` : ''}
+          </div>
+        `;
+        listEl.appendChild(li);
+      });
+
+      // export files (for discrepancy_export / dataset_export)
+      exportList.innerHTML = '';
+      exportWrap.style.display = 'none';
+      regenWrap.style.display = 'block';
+      const uploadType = (data.upload_type || '').toLowerCase();
+      if ((uploadType === 'discrepancy_export' || uploadType === 'dataset_export') && data.export_files && data.export_files.length) {
+        exportWrap.style.display = 'block';
+        const base = (data.download_base || '').replace(/\/$/, '');
+        data.export_files.forEach((fname) => {
+          const li = document.createElement('li');
+          li.className = 'list-group-item d-flex justify-content-between align-items-center';
+          const link = document.createElement('a');
+          link.href = `${base}/${encodeURIComponent(fname)}`;
+          link.textContent = fname;
+          link.rel = 'noopener';
+          link.className = 'text-decoration-none';
+          li.appendChild(link);
+          exportList.appendChild(li);
+        });
+      }
+
+      // rejected (single summary)
+      rejEl.innerHTML = '';
+      if (data.rejected_summary) {
+        const li = document.createElement('li');
+        li.className = 'list-group-item list-group-item-danger';
+        li.textContent = data.rejected_summary;
+        rejEl.appendChild(li);
+      }
+
+      if (!data.status || !['done', 'error'].includes(data.status.toLowerCase())) {
+        window._jobPollTimer = setTimeout(poll, 1500);
+      }
+    } catch (e) {
+      // keep polling in case of transient errors
+      window._jobPollTimer = setTimeout(poll, 3000);
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('refreshBtn').addEventListener('click', () => {
+      if (window._jobPollTimer) clearTimeout(window._jobPollTimer);
+      poll();
+    });
+    const regenBtn = document.getElementById('regenerateBtn');
+    const regenKey = `export_regen_${"{{ job_id }}"}`;
+    const disableUntil = parseInt(window.localStorage.getItem(regenKey) || '0', 10);
+    const now = Date.now();
+    if (disableUntil && now < disableUntil) {
+      const remaining = Math.ceil((disableUntil - now) / 1000);
+      regenBtn.disabled = true;
+      regenBtn.textContent = `Regenerate Export Bundle (${remaining}s)`;
+      const timer = setInterval(() => {
+        const left = Math.ceil((disableUntil - Date.now()) / 1000);
+        if (left <= 0) {
+          clearInterval(timer);
+          regenBtn.disabled = false;
+          regenBtn.textContent = 'Regenerate Export Bundle';
+          window.localStorage.removeItem(regenKey);
+          return;
+        }
+        regenBtn.textContent = `Regenerate Export Bundle (${left}s)`;
+      }, 1000);
+    }
+    document.getElementById('regenerateForm').addEventListener('submit', () => {
+      const until = Date.now() + 60 * 1000;
+      window.localStorage.setItem(regenKey, String(until));
+      regenBtn.disabled = true;
+      regenBtn.textContent = 'Regenerate Export Bundle (60s)';
+    });
+    poll();
+  });
+</script>
+{% endblock %}

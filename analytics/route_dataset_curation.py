@@ -30,6 +30,7 @@ from models import (
     Session,
     DirectImageUpload,
     GradingTask,
+    ImageMetadata,
     ImagePiiVerification,
     User,
     Job,
@@ -206,6 +207,7 @@ def _build_screen_rows(
 
 
 def _build_screen_page_rows(
+    db: Session,
     items: Sequence[Any],
     disease_id: int,
     offset: int,
@@ -220,6 +222,28 @@ def _build_screen_page_rows(
     include_map = {item.task_id: item.include_in_export for item in items}
     selected_map = {item.task_id: item.selected_at for item in items}
     method_map = {item.task_id: item.selection_method for item in items}
+    edited_map = {item.task_id: getattr(item, "edited_filename", None) for item in items}
+
+    image_keys: list[tuple[str, str]] = []
+    for row in rows:
+        image_uuid = row.encounter_file_uuid or row.direct_image_uuid
+        if not image_uuid:
+            continue
+        if row.encounter_file_uuid:
+            variant = "orig"
+        else:
+            variant = "edited" if edited_map.get(row.task_id) else "orig"
+        image_keys.append((image_uuid, variant))
+
+    metadata_map: dict[tuple[str, str], ImageMetadata] = {}
+    if image_keys:
+        uuids = list({uuid for uuid, _ in image_keys})
+        for meta in (
+            db.query(ImageMetadata)
+            .filter(ImageMetadata.image_uuid.in_(uuids))
+            .all()
+        ):
+            metadata_map[(meta.image_uuid, meta.image_variant)] = meta
 
     screen_rows: list[dict] = []
     for idx, task_id in enumerate(task_ids, start=offset + 1):
@@ -230,14 +254,43 @@ def _build_screen_page_rows(
         if not image_uuid:
             continue
         image_kind = "encounter" if row.encounter_file_uuid else "direct"
+        variant = "orig" if row.encounter_file_uuid else ("edited" if edited_map.get(task_id) else "orig")
+        meta = metadata_map.get((image_uuid, variant))
+        metadata_payload = None
+        if meta:
+            metadata_payload = {
+                "width": meta.width,
+                "height": meta.height,
+                "format": meta.format,
+                "mode": meta.mode,
+                "is_grayscale": meta.is_grayscale,
+                "has_alpha": meta.has_alpha,
+                "dpi_x": meta.dpi_x,
+                "dpi_y": meta.dpi_y,
+                "avg_luminance": meta.avg_luminance,
+                "max_luminance": meta.max_luminance,
+                "luminance_std": meta.luminance_std,
+                "mean_r": meta.mean_r,
+                "mean_g": meta.mean_g,
+                "mean_b": meta.mean_b,
+                "median_r": meta.median_r,
+                "median_g": meta.median_g,
+                "median_b": meta.median_b,
+                "file_size_bytes": meta.file_size_bytes,
+                "exif_present": bool(meta.exif_json),
+                "iptc_present": bool(meta.iptc_json),
+                "size_ok": bool(meta.width and meta.height and meta.width >= 1024 and meta.height >= 768),
+            }
         screen_rows.append(
             {
                 "task_id": row.task_id,
                 "image_uuid": image_uuid,
                 "image_kind": image_kind,
+                "image_variant": variant,
                 "final_impression": row.final_impression,
                 "lab_unit": row.lab_unit,
                 "ai_summary": _ai_summary(row),
+                "metadata": metadata_payload,
                 "is_excluded": not include_map.get(task_id, True),
                 "index": idx,
                 "selected_at": selected_map.get(task_id),
@@ -310,6 +363,7 @@ def _get_dataset_screen_page_cached(
                 CuratedDatasetItem.include_in_export.label("include_in_export"),
                 CuratedDatasetItem.selected_at.label("selected_at"),
                 CuratedDatasetItem.selection_method.label("selection_method"),
+                DirectImageUpload.edited_filename.label("edited_filename"),
             )
             .join(GradingTask, GradingTask.id == CuratedDatasetItem.task_id)
             .outerjoin(EncounterFile, GradingTask.encounter_file_id == EncounterFile.id)
@@ -318,7 +372,7 @@ def _get_dataset_screen_page_cached(
         )
         query = _apply_pii_filter(query, pii_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
-    return _build_screen_page_rows(items, disease_id, offset)
+    return _build_screen_page_rows(db, items, disease_id, offset)
 
 
 def _clear_dataset_screen_cache() -> None:
@@ -801,6 +855,42 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
         image_obj = task.encounter_file or task.direct_image
         display_rows = _fetch_rows_by_task_ids([task.id], dataset.disease_id)
         display_row = display_rows[0] if display_rows else None
+        variant = "orig"
+        if task.direct_image and task.direct_image.edited_filename:
+            variant = "edited"
+        meta = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == str(image_uuid),
+                ImageMetadata.image_variant == variant,
+            )
+            .first()
+        )
+        metadata_payload = None
+        if meta:
+            metadata_payload = {
+                "width": meta.width,
+                "height": meta.height,
+                "format": meta.format,
+                "mode": meta.mode,
+                "is_grayscale": meta.is_grayscale,
+                "has_alpha": meta.has_alpha,
+                "dpi_x": meta.dpi_x,
+                "dpi_y": meta.dpi_y,
+                "avg_luminance": meta.avg_luminance,
+                "max_luminance": meta.max_luminance,
+                "luminance_std": meta.luminance_std,
+                "mean_r": meta.mean_r,
+                "mean_g": meta.mean_g,
+                "mean_b": meta.mean_b,
+                "median_r": meta.median_r,
+                "median_g": meta.median_g,
+                "median_b": meta.median_b,
+                "file_size_bytes": meta.file_size_bytes,
+                "exif_present": bool(meta.exif_json),
+                "iptc_present": bool(meta.iptc_json),
+                "size_ok": bool(meta.width and meta.height and meta.width >= 1024 and meta.height >= 768),
+            }
 
         return render_template(
             "review/_dataset_screen_viewer.html",
@@ -808,6 +898,8 @@ def dataset_screen_viewer(dataset_uuid: str, image_uuid: str):
             image=image_obj,
             image_uuid=image_uuid,
             row=display_row,
+            metadata=metadata_payload,
+            image_variant=variant,
             is_excluded=is_excluded,
             browse_index=index,
             screen_sort=screen_sort,
@@ -868,7 +960,7 @@ def dataset_screen_gallery(dataset_uuid: str):
         )
         query = _apply_pii_filter(query, pii_filter)
         items = query.order_by(order_by).offset(offset).limit(per_page).all()
-        page_rows = _build_screen_page_rows(items, dataset.disease_id, offset)
+        page_rows = _build_screen_page_rows(db, items, dataset.disease_id, offset)
 
         return render_template(
             "review/_dataset_screen_gallery.html",
@@ -1003,12 +1095,50 @@ def dataset_toggle_item(dataset_uuid: str):
         ordered_ids = sorted([i.task_id for i in all_items])
         index = ordered_ids.index(task.id) + 1 if task.id in ordered_ids else None
         image_kind = "encounter" if task.encounter_file else "direct"
+        variant = "orig"
+        if task.direct_image and task.direct_image.edited_filename:
+            variant = "edited"
+        meta = (
+            db.query(ImageMetadata)
+            .filter(
+                ImageMetadata.image_uuid == str(image_uuid),
+                ImageMetadata.image_variant == variant,
+            )
+            .first()
+        )
+        metadata_payload = None
+        if meta:
+            metadata_payload = {
+                "width": meta.width,
+                "height": meta.height,
+                "format": meta.format,
+                "mode": meta.mode,
+                "is_grayscale": meta.is_grayscale,
+                "has_alpha": meta.has_alpha,
+                "dpi_x": meta.dpi_x,
+                "dpi_y": meta.dpi_y,
+                "avg_luminance": meta.avg_luminance,
+                "max_luminance": meta.max_luminance,
+                "luminance_std": meta.luminance_std,
+                "mean_r": meta.mean_r,
+                "mean_g": meta.mean_g,
+                "mean_b": meta.mean_b,
+                "median_r": meta.median_r,
+                "median_g": meta.median_g,
+                "median_b": meta.median_b,
+                "file_size_bytes": meta.file_size_bytes,
+                "exif_present": bool(meta.exif_json),
+                "iptc_present": bool(meta.iptc_json),
+                "size_ok": bool(meta.width and meta.height and meta.width >= 1024 and meta.height >= 768),
+            }
         row_update = {
             "task_id": task.id,
             "image_uuid": image_uuid,
             "image_kind": image_kind,
+            "image_variant": variant,
             "final_impression": display_row.final_impression if display_row else None,
             "is_excluded": not item.include_in_export,
+            "metadata": metadata_payload,
             "index": index,
             "selected_at": item.selected_at,
             "selection_method": item.selection_method,

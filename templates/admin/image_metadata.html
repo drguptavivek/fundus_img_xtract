@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Image Metadata Backfill{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Image Metadata Backfill</h4>
+    <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Encounter Images</div>
+          <div class="fs-5 fw-semibold">{{ totals.encounter }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Direct Images</div>
+          <div class="fs-5 fw-semibold">{{ totals.direct }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Edited Variants</div>
+          <div class="fs-5 fw-semibold">{{ totals.edited }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Metadata Rows</div>
+          <div class="fs-5 fw-semibold">{{ totals.metadata }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">PII Rows</div>
+          <div class="fs-5 fw-semibold">{{ totals.pii }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h6 class="mb-3">Run Backfill</h6>
+      <form method="POST" action="{{ url_for('admin.image_metadata_backfill') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        {% from "_forms.html" import csrf_field %}
+        {{ csrf_field() }}
+        <div>
+          <label class="form-label">Limit (optional)</label>
+          <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 100">
+        </div>
+        <button type="submit" class="btn btn-primary">Start Backfill</button>
+      </form>
+      <div class="small text-muted mt-2">
+        Runs one image at a time with a 1s delay and low CPU priority.
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -19,6 +19,8 @@ from .database_excel_export import database_excel_export, get_database_tables
 from .database_restore import bp as database_restore_bp
 from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 from .thumbnail_management import register_thumbnail_admin_routes
+from .image_metadata import image_metadata_admin, image_metadata_backfill
+from .task_backfill import task_backfill_admin, task_backfill_run
 from .status import (
     admin_status,
     api_admin_status,
@@ -169,6 +171,14 @@ admin_bp.add_url_rule("/api/materialized-view/refresh", view_func=manual_refresh
 admin_bp.add_url_rule("/api/materialized-view/schedule", view_func=api_schedule_status, methods=["GET"])
 admin_bp.add_url_rule("/sequences/refresh", view_func=refresh_sequences, methods=["POST"])
 admin_bp.add_url_rule("/api/sequences/status", view_func=api_sequences_status, methods=["GET"])
+
+# Image metadata backfill
+admin_bp.add_url_rule("/image-metadata", view_func=image_metadata_admin, methods=["GET"])
+admin_bp.add_url_rule("/image-metadata/backfill", view_func=image_metadata_backfill, methods=["POST"])
+
+# Task backfill
+admin_bp.add_url_rule("/task-backfill", view_func=task_backfill_admin, methods=["GET"])
+admin_bp.add_url_rule("/task-backfill/run", view_func=task_backfill_run, methods=["POST"])
 
 # Register thumbnail management routes
 register_thumbnail_admin_routes(admin_bp)

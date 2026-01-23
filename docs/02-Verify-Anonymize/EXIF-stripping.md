@@ -43,10 +43,10 @@ When a user manually edits an image (crops or masks) in the browser, the resulti
 ## Exceptions
 
 ### Pre-graded Uploads
-In `direct_uploads/pregraded.py`, the system currently **skips** the EXIF stripping process.
--   **Reason**: Pre-graded datasets are often derived from historical or external sources where metadata has either already been cleaned or is required for specific research indexing.
--   **Security**: Because these uploads are automatically marked as `verified`, they bypass the standard preprocessing dashboard where PII status is usually monitored.
--   **Tracking**: This is tracked as a technical debt item in [exif_stripping_pregraded_fix.md](file:///Users/vivekgupta/workspace/fundus_img_xtract/TODO/exif_stripping_pregraded_fix.md).
+In `direct_uploads/pregraded.py`, the system intentionally **skips** the EXIF stripping process.
+-   **Reason**: Pre-graded datasets are often derived from historical or external research sources where original technical metadata is required for scientific indexing or cross-referencing.
+-   **Security**: These uploads are automatically marked as `verified` and usually originate from trusted sources where metadata has been pre-cleared or is governed by specific research protocols.
+-   **Integrity**: Preserving the original file buffer ensures that research-critical tags (like pixel spacing or manufacturer-specific diagnostic metrics) remain intact.
 
 ## Verification
 

@@ -5,7 +5,60 @@ last_updated: 2026-01-23
 ---
 # Pre-graded Images and Excel Workflow
 
-This workflow allows importing existing datasets where images have already been graded (e.g., historical data or external datasets). It involves two distinct steps: uploading the images and then importing the corresponding grades.
+This workflow allows importing existing datasets where images have already been graded (e.g., historical data or external datasets). It involves two distinct steps: uploading the images and then importing the corresponding grades via Excel.
+
+## List of Steps
+
+### Phase 1: Image Ingestion
+1.  **Form Submission**: User selects metadata (Hospital, Lab Unit, etc.) and uploads image files via `POST /direct/pregraded`.
+2.  **Validation**:
+    -   Checks user's "pregarded_uploader" role.
+    -   Validates required fields and lab unit access.
+    -   Checks batch size (`DIRECT_UPLOAD_MAX_FILES`) and file size (`DIRECT_UPLOAD_MAX_FILE_SIZE_MB`).
+3.  **Security validation**:
+    -   **Magic-byte Sniffing**: Uses `python-magic` to extract the true MIME type from the file buffer.
+    -   **MIME Whitelist**: Strictly allows only `image/jpeg` and `image/png`.
+4.  **Deduplication**: 
+    -   Calculates **MD5** hash of the image.
+    -   Checks for duplicates. If found, the file is saved to a `dup/` directory, and a `JobItem` error is recorded.
+5.  **Storage & Record Creation**:
+    -   Saves the original image to disk (no EXIF stripping is performed).
+    -   Creates a `DirectImageUpload` record with `is_pregraded=True`.
+6.  **Automated Verification**:
+    -   Creates a `DirectImageVerify` record with status `verified`.
+    -   This allows the system to bypass the manual anonymization dashboard.
+7.  **Task Initialization**: 
+    -   Calls `ensure_task()` to create a `GradingTask` immediately.
+    -   The task starts in `pending` state, ready for grade import.
+8.  **Post-Processing**: Background worker triggers thumbnail generation for the batch.
+
+### Phase 2: Grade Import
+1.  **Excel Submission**: User uploads a `.xlsx` file containing filenames and their corresponding grades.
+2.  **Workbook Parsing**: System uses `openpyxl` to extract data from the spreadsheet.
+3.  **Dynamic Mapping**: If grade text in Excel doesn't match the DB schema, the user is presented with a UI to manually map values (e.g., "R1-Severe" -> "Severe NPDR").
+4.  **Bulk Matching**: System Iterates through rows, matching them to `DirectImageUpload` records using filename, hospital, lab unit, and disease.
+5.  **Grade Application**:
+    -   Creates/updates records in the `Grade` table.
+    -   **Consensus Trigger**: If grades are imported for 'Resident' or 'Resident 2', the system's dual-grading consensus logic automatically runs to determine if the task should advance to Arbitration.
+6.  **Job reporting**: Final summary displays total successful imports vs. errors (e.g., missing images).
+
+## Key Components
+
+1.  **Phase 1: Image Ingestion Engine**:
+    -   **Flagging**: Images are permanently marked `is_pregraded=True`.
+    -   **Bypass Mechanism**: Automated verification allows legacy data to skip the manual PII dashboard.
+    -   **Deduplication**: Uses MD5 hashing.
+    -   **Processing Note (Intentional Omissions)**: 
+        -   **Intentional Bypass of EXIF Stripping**: Preserves technical metadata which is crucial for research indexing and manufacturer-specific diagnostic metrics in historical datasets.
+        -   **Simplified PII Handling**: Assumes datasets have been pre-cleared by the source or are governed by specific research data sharing agreements, bypassing the manual PII dashboard to optimize ingestion throughput.
+        -   **No Metadata Extraction**: Synchronous extraction is skipped to optimize high-volume transfers.
+
+2.  **Phase 2: Grade Ingestion Engine**:
+    -   **Excel Compatibility**: Supports `.xlsx` format with flexible column structures.
+    -   **Fuzzy Mapping**: UI-driven value alignment for mismatched grade nomenclature.
+    -   **Dual-Grading Integration**: Full support for the multi-tier grading workflow, including automated state transitions and consensus calculation.
+
+## Mermaid Workflow Diagram
 
 ```mermaid
 sequenceDiagram
@@ -56,19 +109,3 @@ sequenceDiagram
     WebServer->>DB: Update Job Status
     WebServer-->>User: Show Import Summary
 ```
-
-## Key Components
-
-1.  **Phase 1: Image Ingestion**:
-    -   Images are uploaded similarly to the Direct Upload workflow but are flagged as `is_pregraded`.
-    -   **Deduplication**: Uses MD5 hashing to detect and prevent duplicate uploads.
-    -   **Automated Verification**: Crucially, they are automatically verified, skipping the manual verification step usually required for new uploads.
-    -   **Grading Tasks**: Tasks are created immediately upon upload to allow for subsequent grade matching.
-    -   **Note on Pre-processing**: Current logic for pre-graded uploads (`pregraded.py`) **skips** the synchronous metadata extraction and asynchronous PII detection triggered in other upload workflows (this may be intentional for pre-verified/legacy datasets).
-
-2.  **Phase 2: Grade Ingestion**:
-    -   Uses Excel files to bulk-apply grades to the previously uploaded images.
-    -   **Matching Logic**: Matches rows to images based on `filename`, `hospital_id`, `lab_unit_id`, and `disease_id`.
-    -   **Flexible Mapping**: If the Excel contains grade text that doesn't exactly match the database (e.g., "Severe" vs "Severe NPDR"), the system prompts the user to map these values via a UI before processing.
-    -   **Roles**: Supports importing grades as 'Resident', 'Resident 2', or 'AI'.
-    -   **Consensus**: Automatically triggers the system's dual-grading consensus logic (e.g., if Resident 1 & 2 disagree, move to Arbitration) just as if the grades were entered manually.

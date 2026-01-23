@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 23 Jan 2026: Dataset Curation, PII Security, and Enterprise Hardening
+
+### Dataset Management Ecosystem
+- **Secure Sharing Portal**: Implemented end-to-end workflow for external dataset sharing with OTP verification and terms acceptance
+- **Automated Curation**: Added tools for random image selection, exclusivity enforcement, and metadata-rich exports
+- **Metadata Intelligence**: Built systems for extracting, backfilling, and querying comprehensive image metadata (EXIF, technical details)
+- **PII Protection**: Integrated OCR-based automated PII detection with visual badges and manual verification workflows
+
+### Enterprise Security & Isolation
+- **Hospital Scoping**: Implemented strict "Context-Aware Scoping" to isolate data access by hospital association across all APIs and views
+- **PII Anonymization**: Enforced mandatory masking of patient data in analytics, search, and exports; added automatic EXIF stripping
+- **Identity Management**: Upgraded to auto-generated strong passwords, implemented strict password policies, and enhanced session security
+- **Audit & Compliance**: Created Sensitive Operations Dashboard with re-authentication gates for critical admin actions
+
+### Infrastructure & Reliability
+- **Testing Framework**: Deployed comprehensive Pytest suite with isolated PostgreSQL test database and extensive fixture libraries
+- **Performance Optimization**: Implemented caching layers for media/notifications and detailed database query logging
+- **Admin Capabilities**: Added dashboards for Upload Statistics, User Activity Monitoring, and Async Task Backfill
+- **Developer Experience**: Integrated automatic synchronization between Beads planning tool and GitHub issues
+
 ## 10 Nov 2025: Comprehensive Documentation Overhaul
 
 ### Complete Documentation System Update

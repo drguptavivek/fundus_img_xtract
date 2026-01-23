@@ -93,9 +93,7 @@ def create_intra_rater_batch() -> Response:
 
     with get_db_session() as db:
         allowed_lab_units = _allowed_lab_units()
-        if params.lab_unit_id is None:
-            return _json_error("lab_unit_id is required for scoped batch creation")
-        if params.lab_unit_id not in allowed_lab_units:
+        if params.lab_unit_id is not None and params.lab_unit_id not in allowed_lab_units:
             return _json_error("You cannot create batches for this lab unit", HTTPStatus.FORBIDDEN)
         try:
             if params.lab_unit_id is not None:
@@ -240,7 +238,7 @@ def _parse_create_payload(payload: dict) -> BatchCreateParams:
         payload.get("target_images_per_grader"), "target_images_per_grader"
     )
 
-    lab_unit_id = _require_positive_int(payload.get("lab_unit_id"), "lab_unit_id")
+    lab_unit_id = _optional_positive_int(payload.get("lab_unit_id"), "lab_unit_id")
     cooldown_days_override = _optional_positive_int(
         payload.get("cooldown_days_override"), "cooldown_days_override"
     )

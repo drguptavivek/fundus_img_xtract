@@ -21,9 +21,10 @@ The system automatically enqueues PII detection jobs for new images to ensure th
 
 ## Exceptions
 ### Pre-graded Uploads
-In `direct_uploads/pregraded.py`, the system intentionally **skips** the automated PII detection background enqueuing.
-- **Reason**: Similar to EXIF stripping, pre-graded data is often assumed to be pre-cleared or legacy data where automated scanning is not required by the source or is handled under separate research protocols.
-- **Integrity**: This facilitates rapid ingestion of large historical datasets while assuming the uploader has verified the anonymization status prior to submission.
+In `direct_uploads/pregraded.py`, the system currently **skips** the automated PII detection background enqueuing.
+-   > [!WARNING]
+    > **Bug Notification**: This is an unintentional bypass. Pre-graded images should undergo the same automated PII scanning as clinical uploads to ensure no burned-in patient data is missed.
+-   **Status**: This bug is tracked in [pii_detection_pregraded_fix.md](file:///Users/vivekgupta/workspace/fundus_img_xtract/TODO/pii_detection_pregraded_fix.md).
 
 ## ROI (Region of Interest)
 The detector only inspects a small ROI in the top-left corner:

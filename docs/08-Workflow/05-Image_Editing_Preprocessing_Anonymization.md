@@ -1,3 +1,8 @@
+---
+title: Image Editing, Preprocessing & Anonymization Workflow
+description: Post-ingestion lifecycle of direct uploads, including PII detection and edits.
+last_updated: 2026-01-23
+---
 # Image Editing, Preprocessing & Anonymization Workflow
 
 This workflow manages the lifecycle of direct image uploads after initial ingestion, including manual edits, automated PII detection, and final anonymization verification before grading tasks are created.
@@ -37,11 +42,7 @@ sequenceDiagram
             WebServer->>FileSys: Generate Thumbnail (Edited)
             WebServer->>DB: Update DirectImageUpload (edited_filename)
             
-            opt Metadata Extraction
-                WebServer->>WebServer: Extract Metadata (Dimensions, EXIF)
-                WebServer->>DB: Upsert ImageMetadata
-            end
-            
+            WebServer->>WebServer: Extract & Upsert Metadata (edited)
             WebServer->>Worker: Enqueue PII Detection (Edited)
             WebServer->>DB: Bump Media Cache Version
             WebServer-->>User: Success: Image Saved
@@ -104,7 +105,7 @@ sequenceDiagram
 ## Key Components
 
 1.  **Background PII Detection**:
-    -   **Trigger**: Enqueued automatically after any image save (Upload, Edit).
+    -   **Trigger**: Enqueued automatically after any image save (Upload via `upload.py`, Edit via `save_image.py`).
     -   **Process**: Uses OCR (`ocr_pii`) to scan for text (names, IDs, etc.) in images.
     -   **Result**: Stores `clear` or `detected` status in `ImagePiiVerification` table for both `orig` and `edited` image variants.
 
@@ -112,7 +113,11 @@ sequenceDiagram
     -   **Route**: `/direct/upload/save_image/<id>`
     -   **Functionality**: Allows users to crop, mask, or modify images post-upload.
     -   **Safety**: Blocks editing if grading tasks are already in progress (unless override flag is set).
-    -   **Side Effects**: Saves edited copy, generates new thumbnail, re-runs metadata extraction, and queues PII detection for the edited version.
+    -   **Side Effects**: 
+        -   Saves edited copy.
+        -   Generates new thumbnail.
+        -   **Metadata Re-extraction**: Calls `extract_image_metadata` and `upsert_image_metadata` for the "edited" variant.
+        -   **PII Detection**: Enqueues a new detection job specifically for the "edited" variant.
 
 3.  **Anonymization Verification**:
     -   **Purpose**: Manual confirmation that an image is safe (PII-free) for clinical use/dataset curation.

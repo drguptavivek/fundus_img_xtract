@@ -1,3 +1,8 @@
+---
+title: Verify Remedio Workflow
+description: Manual verification and tagging of batch-ingested zip data.
+last_updated: 2026-01-23
+---
 # Verify Remedio Workflow
 
 This workflow handles the verification of data ingested from Remedio Zip files. It ensures that the OCR-extracted data and image metadata are accurate before the data is committed to the main clinical records.
@@ -71,3 +76,9 @@ sequenceDiagram
 4.  **Unverification**:
     -   Allows reverting a verified status *only if* no grading tasks are already in progress.
     -   Removes any pending grading tasks associated with the encounter.
+
+## Data Pre-processing Note
+The verification interface presents data (Patient Details, Reports, and Images) that has already undergone automated pre-processing:
+- **EXIF Stripping**: Technical metadata (GPS, Device IDs) was removed during Zip ingestion for clinical safety.
+- **Metadata**: Image dimensions and technical details were extracted during Zip ingestion.
+- **PII Detection**: Images were scanned for PII; while the verification UI focuses on clinical data, the underlying images have been queued for/processed by the PII service.

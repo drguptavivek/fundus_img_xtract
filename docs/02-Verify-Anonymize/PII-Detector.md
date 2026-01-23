@@ -1,3 +1,8 @@
+---
+title: PII Detector (OCR)
+description: Automated detection of patient identifiers in medical image overlays.
+last_updated: 2026-01-23
+---
 # PII Detector (OCR)
 
 ## Purpose
@@ -7,6 +12,18 @@ The PII detector scans the top-left region of each image for text overlays that 
 - Dataset curation screen (PII badges) via `/api/ocr/pii/*`
 - Anonymize image page via OCR overlay + manual override
 - Direct upload edit page via OCR overlay
+
+## Background Triggers (Async)
+The system automatically enqueues PII detection jobs for new images to ensure they are pre-scanned before manual verification:
+- **Zip Ingestion**: `zip_processor.py` enqueues detection for every extracted JPG/JPEG.
+- **Direct Uploads**: `direct_uploads/upload.py` enqueues detection for the `orig` variant immediately upon receipt.
+- **Image Editing**: `direct_uploads/save_image.py` enqueues a new detection job for the `edited` variant after any modification.
+
+## Exceptions
+### Pre-graded Uploads
+In `direct_uploads/pregraded.py`, the system currently **skips** the automated PII detection enqueueing.
+- **Reason**: Similar to EXIF stripping, pre-graded data is often assumed to be pre-cleared or legacy data where automated scanning is not required by the source.
+- **Security**: This is tracked as a deficiency in [pii_detection_pregraded_fix.md](file:///Users/vivekgupta/workspace/fundus_img_xtract/TODO/pii_detection_pregraded_fix.md).
 
 ## ROI (Region of Interest)
 The detector only inspects a small ROI in the top-left corner:

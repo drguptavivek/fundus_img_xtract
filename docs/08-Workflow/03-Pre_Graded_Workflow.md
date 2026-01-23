@@ -1,3 +1,8 @@
+---
+title: Pre-graded Images and Excel Workflow
+description: Importing historical or external datasets with pre-existing grades.
+last_updated: 2026-01-23
+---
 # Pre-graded Images and Excel Workflow
 
 This workflow allows importing existing datasets where images have already been graded (e.g., historical data or external datasets). It involves two distinct steps: uploading the images and then importing the corresponding grades.
@@ -24,6 +29,7 @@ sequenceDiagram
         WebServer->>DB: Create GradingTask (Pending)
         WebServer->>DB: Update Job Item (Completed)
     end
+    WebServer->>Worker: Trigger Thumbnail Regen (Background)
 
     note right of User: Phase 2: Grade Import
     User->>WebServer: Upload Excel (POST /direct/pregraded/grades)
@@ -55,8 +61,10 @@ sequenceDiagram
 
 1.  **Phase 1: Image Ingestion**:
     -   Images are uploaded similarly to the Direct Upload workflow but are flagged as `is_pregraded`.
-    -   Crucially, they are **automatically verified**, skipping the manual verification step usually required for new uploads.
-    -   Grading tasks are created immediately.
+    -   **Deduplication**: Uses MD5 hashing to detect and prevent duplicate uploads.
+    -   **Automated Verification**: Crucially, they are automatically verified, skipping the manual verification step usually required for new uploads.
+    -   **Grading Tasks**: Tasks are created immediately upon upload to allow for subsequent grade matching.
+    -   **Note on Pre-processing**: Current logic for pre-graded uploads (`pregraded.py`) **skips** the synchronous metadata extraction and asynchronous PII detection triggered in other upload workflows (this may be intentional for pre-verified/legacy datasets).
 
 2.  **Phase 2: Grade Ingestion**:
     -   Uses Excel files to bulk-apply grades to the previously uploaded images.

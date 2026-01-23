@@ -1,3 +1,8 @@
+---
+title: Zip Upload Workflow
+description: Batch ingestion of image and PDF clinical data via Zip files.
+last_updated: 2026-01-23
+---
 # Zip Upload Workflow
 
 This workflow describes the process of ingesting large batches of images and PDFs via Zip files.
@@ -40,7 +45,8 @@ sequenceDiagram
                 alt Image (JPG/JPEG)
                     ZipProcessor->>FileSystem: Extract & Strip EXIF
                     ZipProcessor->>FileSystem: Generate Thumbnail
-                    ZipProcessor->>DB: Create EncounterFile & Metadata
+                    ZipProcessor->>DB: Create EncounterFile
+                    ZipProcessor->>DB: Extract & Upsert Metadata
                     ZipProcessor->>DB: Enqueue PII Detection
                 else PDF
                     ZipProcessor->>FileSystem: Extract PDF
@@ -70,5 +76,8 @@ sequenceDiagram
     -   **Structure Requirement**: Folders inside Zip must follow `Name_ID_Date` format to auto-create Patient Encounters.
     -   **Security**: Checks for "zip slip" vulnerabilities (path traversal) and strictly allows only specific extensions.
     -   **Deduplication**: Uses MD5 hashing to prevent re-processing identical files.
-    -   **Image Processing**: Strips EXIF data and generates thumbnails immediately.
+    -   **Image Processing**: 
+        -   Strips EXIF data and generates thumbnails.
+        -   **Metadata Extraction**: Performs synchronous extraction (dimensions, format, average luminance, etc.) using `utils/image_metadata.py`.
+        -   **PII Detection**: Enqueues an asynchronous detection job for each extracted image via `utils/pii_detection_queue.py`.
 4.  **OCR Integration**: If PDFs are found, they are passed to the OCR service for text extraction.

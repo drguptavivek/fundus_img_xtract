@@ -1,3 +1,8 @@
+---
+title: Direct Upload Workflow
+description: Manual image upload and editing workflow for non-batch data.
+last_updated: 2026-01-23
+---
 # Direct Upload Workflow
 
 This workflow describes the process for users to manually upload specific images (non-batch) directly via the web interface.
@@ -22,7 +27,7 @@ sequenceDiagram
         
         loop For Each File
             WebServer->>WebServer: Validate Filename & MimeType
-            WebServer->>WebServer: Calculate Hash (SHA-256)
+            WebServer->>WebServer: Calculate Hash (MD5)
             WebServer->>DB: Check Duplicate
             
             alt Is Duplicate
@@ -35,8 +40,8 @@ sequenceDiagram
                 WebServer->>FileSystem: Save Thumbnail
                 
                 WebServer->>DB: Create DirectImageUpload Record
-                WebServer->>DB: Upsert Image Metadata
-                WebServer->>PII: Enqueue PII Detection
+                WebServer->>DB: Extract & Upsert Metadata (orig)
+                WebServer->>PII: Enqueue PII Detection (orig)
                 WebServer->>JobSystem: Add Job Item (Completed)
             end
         end
@@ -58,9 +63,12 @@ sequenceDiagram
 ## Key Components
 
 1.  **Quota Management**: Checks both user-specific and system-wide upload quotas (`DIRECT_UPLOAD_LIFETIME_QUOTA`) before processing.
-2.  **Synchronous Processing**: Unlike Zip uploads, direct uploads are processed synchronously within the request (though PII detection is enqueued). The "Job" record is used for consistency in status tracking.
+2.  **Synchronous Processing**: Unlike Zip uploads, direct uploads are processed synchronously within the request.
+    -   **Metadata Extraction**: Performed immediately after EXIF stripping using `extract_image_metadata`. Results are stored in the `ImageMetadata` table for the "orig" variant.
+    -   **PII Detection**: Enqueued as an asynchronous job using `enqueue_pii_detection`.
 3.  **Security**:
     -   **Validation**: Strict filename validation (sanitization) and MIME type checking (magic bytes).
-    -   **Hashing**: Uses SHA-256 (truncated) to detect duplicates.
-    -   **EXIF Stripping**: Removes potentially sensitive metadata from images before storage.
-4.  **Editing**: Users can edit images (e.g., crop, mask) after upload. This creates a separate "edited" variant while preserving the original.
+    -   **Hashing**: Uses MD5 to detect duplicates.
+    -   **EXIF Stripping**: Removes potentially sensitive metadata from images before storage (`utils.image_processing.strip_exif_data`).
+4.  **Editing**: Users can edit images (e.g., crop, mask) after upload.
+    -   Saving an edited image triggers a **re-extraction of metadata** and a **new PII detection job** specifically for the "edited" variant.

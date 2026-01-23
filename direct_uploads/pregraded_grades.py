@@ -542,7 +542,7 @@ def _process_rows(
                 continue  # Skip to next row without processing grades
 
             try:
-                ensure_task(upload.uuid, pending.disease_id)
+                ensure_task(upload.uuid, pending.disease_id, db_session)
             except Exception as exc:  # noqa: BLE001
                 current_app.logger.warning(
                     "ensure_task failed for pre-graded import (uuid=%s): %s",

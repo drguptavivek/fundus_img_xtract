@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Task Backfill{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Task Backfill</h4>
+    <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Glaucoma Verified (No Task)</div>
+          <div class="fs-5 fw-semibold">{{ totals.glaucoma }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">DR Verified (No Task)</div>
+          <div class="fs-5 fw-semibold">{{ totals.dr }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">No-DR Verified (No Task)</div>
+          <div class="fs-5 fw-semibold">{{ totals.no_dr }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Direct Verified (No Task)</div>
+          <div class="fs-5 fw-semibold">{{ totals.direct }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <h6 class="mb-3">Run Backfill</h6>
+      <form method="POST" action="{{ url_for('admin.task_backfill_run') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        {% from "_forms.html" import csrf_field %}
+        {{ csrf_field() }}
+        <div>
+          <label class="form-label">Limit (optional)</label>
+          <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 100">
+        </div>
+        <button type="submit" class="btn btn-primary">Run Backfill</button>
+      </form>
+      <div class="small text-muted mt-2">
+        Creates grading tasks for verified images that are missing tasks within your assigned lab units.
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Recent Runs</h6>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.task_backfill_admin') }}">Refresh</a>
+      </div>
+      {% if jobs %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Progress</th>
+                <th>Limit</th>
+                <th>Created By</th>
+                <th>Hospital</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for job in jobs %}
+                <tr>
+                  <td>{{ job.id }}</td>
+                  <td>
+                    <span class="badge bg-{{ 'success' if job.status == 'completed' else 'danger' if job.status == 'failed' else 'warning' if job.status == 'running' else 'secondary' }}">
+                      {{ job.status }}
+                    </span>
+                  </td>
+                  <td>{{ job.created_at | user_datetime }}</td>
+                  <td>{{ job.started_at | user_datetime if job.started_at else '-' }}</td>
+                  <td>{{ job.finished_at | user_datetime if job.finished_at else '-' }}</td>
+                  <td>
+                    {{ job.processed_count }}/{{ job.total_candidates or '-' }}
+                    ({{ job.created_count }} ok / {{ job.error_count }} err)
+                  </td>
+                  <td>{{ job.requested_limit or '-' }}</td>
+                  <td>{{ job.created_by_username or job.created_by_id }}</td>
+                  <td>{{ job.hospital_id or '-' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-muted">No runs recorded yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if jobs and (jobs | selectattr('status', 'in', ['queued', 'running']) | list) %}
+  {% block page_scripts %}
+  {{ super() }}
+  <script>
+    setTimeout(function () {
+      window.location.reload();
+    }, 10000);
+  </script>
+  {% endblock %}
+{% endif %}
+{% endblock %}

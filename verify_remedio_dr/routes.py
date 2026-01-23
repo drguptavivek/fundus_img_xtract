@@ -494,7 +494,7 @@ def verify_dr_verify(report_id: int):
                 if dr_disease:
                     for image in images:
                         try:
-                            ensure_task(image.uuid, dr_disease.id)
+                            ensure_task(image.uuid, dr_disease.id, db)
                             current_app.logger.info(
                                 "Created DR grading task for image UUID %s",
                                 sanitize_log_value(image.uuid),

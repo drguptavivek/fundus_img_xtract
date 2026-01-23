@@ -560,7 +560,7 @@ def anonymize_image(uuid: UUID):
                     
                     try:
                         # Create a grading task for the verified direct image
-                        ensure_task(upload.uuid, upload.disease_id)
+                        ensure_task(upload.uuid, upload.disease_id, db_session)
                         editing_logger.info(
                             "Created grading task for verified direct image UUID %s", upload.uuid
                         )

@@ -294,7 +294,7 @@ def pregraded_upload():
             # Create tasks using a fresh session to ensure committed data is visible
             for uuid_value, job_item in pending_tasks:
                 try:
-                    ensure_task(uuid_value, disease_id)
+                    ensure_task(uuid_value, disease_id, db_session)
                     job_item.state = "completed"
                     job_item.detail = "Imported with pre-graded task"
                 except Exception as task_error:  # noqa: BLE001

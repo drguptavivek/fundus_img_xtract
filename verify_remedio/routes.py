@@ -917,7 +917,7 @@ def verify_dr(encounter_id: int):
             images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
             for image in images:
                 try:
-                    ensure_task(image.uuid, dr_disease.id)
+                    ensure_task(image.uuid, dr_disease.id, db)
                 except Exception as task_error:
                     current_app.logger.exception(
                         "Failed to create DR grading task for image UUID %s: %s",
@@ -1025,7 +1025,7 @@ def verify_glaucoma(encounter_id: int):
             images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
             for image in images:
                 try:
-                    ensure_task(image.uuid, glaucoma_disease.id)
+                    ensure_task(image.uuid, glaucoma_disease.id, db)
                 except Exception as task_error:
                     current_app.logger.exception(
                         "Failed to create glaucoma grading task for image UUID %s: %s",
@@ -1118,7 +1118,7 @@ def verify_encounter(encounter_id: int):
                 images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
                 for image in images:
                     try:
-                        ensure_task(image.uuid, dr_disease.id)
+                        ensure_task(image.uuid, dr_disease.id, db)
                     except Exception as task_error:
                         current_app.logger.exception(
                             "Failed to create DR grading task for image UUID %s: %s",

@@ -401,7 +401,7 @@ def nodr_verify(encounter_id: int):
                 images = db.query(EncounterFile).filter(EncounterFile.patient_encounter_id == encounter.id).all()
                 for image in images:
                     try:
-                        ensure_task(image.uuid, dr_disease.id)
+                        ensure_task(image.uuid, dr_disease.id, db)
                         current_app.logger.info(
                             "Created DR grading task for image UUID %s via No-DR verification",
                             sanitize_log_value(image.uuid),

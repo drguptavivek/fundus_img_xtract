@@ -844,7 +844,7 @@ def glaucoma_verify(clean_id: int):
                 if glaucoma_disease:
                     for image in images:
                         try:
-                            ensure_task(image.uuid, glaucoma_disease.id)
+                            ensure_task(image.uuid, glaucoma_disease.id, db)
                             current_app.logger.info(
                                 "Created glaucoma grading task for image UUID %s",
                                 sanitize_log_value(image.uuid),

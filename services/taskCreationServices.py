@@ -1,10 +1,11 @@
 from sqlalchemy import select, exists, and_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session as OrmSession
 from typing import Optional, Tuple
 
+from db_transaction_manager import transaction_scope
 from models import (
-    Session, GradingTask, Grade, Consensus, DirectImageUpload, DirectImageVerify,
+    GradingTask, Grade, Consensus, DirectImageUpload, DirectImageVerify,
     EncounterFile, PatientEncounters, Disease, DiseaseGrading, LabUnit
 )
 
@@ -171,29 +172,35 @@ def remove_pending_tasks(db, *, kind: str, image_id: int) -> int:
     return removed_count
 
 
-def ensure_task(image_uuid: str, disease_id: int) -> GradingTask:
+def ensure_task(image_uuid: str, disease_id: int, db: Optional[OrmSession] = None) -> GradingTask:
     """
     Resolve image by UUID, verify gating, and create-or-return the task.
     Additional rules:
       - If a task already exists and is final, return it as-is; block any attempt to move/reassign labs.
       - Never change lab_unit_id on an existing task.
     """
-    with Session() as db:
-        kind, image_id, lab_unit_id = _resolve_image_by_uuid(db, image_uuid)
-        # Optional: check lock flags
-        if kind == 'direct':
-            diu = db.get(DirectImageUpload, image_id)
-            if getattr(diu, 'is_locked', False):
-                raise PermissionError('Image is locked')
-        else:
-            ef = db.get(EncounterFile, image_id)
-            if getattr(ef, 'is_locked', False):
-                raise PermissionError('Image is locked')
-        if not _is_verified_for_disease(db, kind, image_id, disease_id):
-            raise PermissionError('Image not verified for this disease')
-        task = create_or_get_task(db, kind=kind, image_id=image_id, disease_id=disease_id, lab_unit_id=lab_unit_id)
-        # Gold standard guard: do not permit cross-lab reassignment after final
-        if task.state == 'final' and task.lab_unit_id != lab_unit_id:
-            # Visible to callers for UX feedback; also log via app success/error loggers in real implementation
-            raise PermissionError('Gold standard already set - cross-lab reassignment is disabled for finalized tasks')
-        return task
+    if db is None:
+        with transaction_scope() as scoped_db:
+            return _ensure_task_with_db(scoped_db, image_uuid, disease_id)
+    return _ensure_task_with_db(db, image_uuid, disease_id)
+
+
+def _ensure_task_with_db(db: OrmSession, image_uuid: str, disease_id: int) -> GradingTask:
+    kind, image_id, lab_unit_id = _resolve_image_by_uuid(db, image_uuid)
+    # Optional: check lock flags
+    if kind == 'direct':
+        diu = db.get(DirectImageUpload, image_id)
+        if getattr(diu, 'is_locked', False):
+            raise PermissionError('Image is locked')
+    else:
+        ef = db.get(EncounterFile, image_id)
+        if getattr(ef, 'is_locked', False):
+            raise PermissionError('Image is locked')
+    if not _is_verified_for_disease(db, kind, image_id, disease_id):
+        raise PermissionError('Image not verified for this disease')
+    task = create_or_get_task(db, kind=kind, image_id=image_id, disease_id=disease_id, lab_unit_id=lab_unit_id)
+    # Gold standard guard: do not permit cross-lab reassignment after final
+    if task.state == 'final' and task.lab_unit_id != lab_unit_id:
+        # Visible to callers for UX feedback; also log via app success/error loggers in real implementation
+        raise PermissionError('Gold standard already set - cross-lab reassignment is disabled for finalized tasks')
+    return task

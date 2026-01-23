@@ -783,6 +783,36 @@ def _write_excel(
     except Exception:
         pass
 
+    # Write metadata.txt (based on disease + final_impression columns in excel)
+    try:
+        metadata_lines: List[str] = []
+        if "disease" in df.columns and "final_impression" in df.columns:
+            working = df.assign(
+                disease=df["disease"].fillna("Unknown").astype(str),
+                final_impression=df["final_impression"].fillna("Unlabeled").astype(str),
+            )
+            for disease_val in sorted(working["disease"].unique()):
+                disease_rows = working[working["disease"] == disease_val]
+                metadata_lines.append(f"Number of Images: {int(disease_rows.shape[0])}")
+                metadata_lines.append(f"Disease: {disease_val}")
+                metadata_lines.append("Grades:")
+                grade_counts = disease_rows["final_impression"].value_counts(dropna=False)
+                for grade_name, count in grade_counts.items():
+                    metadata_lines.append(f"- {grade_name}: {int(count)}")
+                metadata_lines.append("")
+        else:
+            # Fallback to overall summary when columns are missing
+            total_images = len(df.index)
+            metadata_lines.append(f"Number of Images: {total_images}")
+            metadata_lines.append("Disease: ")
+            metadata_lines.append("Grades:")
+            metadata_lines.append("- final_impression column not found")
+
+        metadata_path = export_dir / "metadata.txt"
+        metadata_path.write_text("\n".join(metadata_lines).strip() + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
     return excel_path
 
 

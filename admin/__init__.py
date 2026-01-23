@@ -24,6 +24,9 @@ from .image_metadata import (
     image_metadata_backfill,
     image_metadata_run_pii_queue,
     image_metadata_status,
+    image_metadata_stop_all,
+    image_metadata_clear_queued,
+    image_metadata_clear_running,
 )
 from .task_backfill import task_backfill_admin, task_backfill_run
 from .status import (
@@ -180,6 +183,24 @@ admin_bp.add_url_rule("/api/sequences/status", view_func=api_sequences_status, m
 # Image metadata backfill
 admin_bp.add_url_rule("/image-metadata", view_func=image_metadata_admin, methods=["GET"])
 admin_bp.add_url_rule("/image-metadata/backfill", view_func=image_metadata_backfill, methods=["POST"])
+admin_bp.add_url_rule(
+    "/image-metadata/stop",
+    view_func=image_metadata_stop_all,
+    methods=["POST"],
+    endpoint="image_metadata_stop_all",
+)
+admin_bp.add_url_rule(
+    "/image-metadata/clear-queued",
+    view_func=image_metadata_clear_queued,
+    methods=["POST"],
+    endpoint="image_metadata_clear_queued",
+)
+admin_bp.add_url_rule(
+    "/image-metadata/clear-running",
+    view_func=image_metadata_clear_running,
+    methods=["POST"],
+    endpoint="image_metadata_clear_running",
+)
 admin_bp.add_url_rule(
     "/image-metadata/pii-queue/run",
     view_func=image_metadata_run_pii_queue,

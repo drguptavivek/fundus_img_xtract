@@ -11,6 +11,11 @@
     </div>
     <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
   </div>
+  <div class="alert alert-warning d-none" id="activeJobBanner" role="alert">
+    Backfill running: job <span id="activeJobId">-</span>
+    • processed <span id="activeJobProcessed">0</span>/<span id="activeJobTotal">0</span>
+    • meta <span id="activeJobMeta">0</span> / pii <span id="activeJobPii">0</span> / err <span id="activeJobErr">0</span>
+  </div>
 
   <div class="card mb-4">
     <div class="card-body">
@@ -87,6 +92,18 @@
         <button type="submit" class="btn btn-primary" name="mode" value="metadata">Backfill Metadata</button>
         <button type="submit" class="btn btn-outline-primary" name="mode" value="pii">Backfill PII</button>
         <button type="submit" class="btn btn-outline-secondary" name="mode" value="both">Backfill Both</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.image_metadata_stop_all') }}" class="mt-2">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-outline-danger">Stop All Backfill</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.image_metadata_clear_queued') }}" class="mt-2">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-outline-secondary">Clear Queued Jobs</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.image_metadata_clear_running') }}" class="mt-2">
+        {{ csrf_field() }}
+        <button type="submit" class="btn btn-outline-secondary">Clear Running Jobs</button>
       </form>
       <div class="small text-muted mt-2">
         Runs one image at a time with a 3s delay and low CPU priority. PII runs are serialized via the queue.
@@ -170,6 +187,22 @@ if (!window.__imageMetadataPageInit) {
     const processed = data.pii_processed || {};
     setText('pii-processed-hour', processed.last_60_min ?? 0);
     setText('pii-processed-day', processed.today ?? 0);
+
+    const banner = document.getElementById('activeJobBanner');
+    const active = data.active_job;
+    if (banner) {
+      if (active && (active.status === 'running' || active.status === 'queued')) {
+        setText('activeJobId', active.id ?? '-');
+        setText('activeJobProcessed', active.processed_count ?? 0);
+        setText('activeJobTotal', active.total_candidates ?? 0);
+        setText('activeJobMeta', active.metadata_created_count ?? 0);
+        setText('activeJobPii', active.pii_created_count ?? 0);
+        setText('activeJobErr', active.error_count ?? 0);
+        banner.classList.remove('d-none');
+      } else {
+        banner.classList.add('d-none');
+      }
+    }
   }
 
   function refreshStatus() {

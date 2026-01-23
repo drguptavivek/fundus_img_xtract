@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from auth.utils import utcnow
+from app_cache import cache
 from db_transaction_manager import get_db_session
 from models import ImagePiiVerification, PiiDetectionJob
 from utils.log_sanitize import sanitize_log_value
@@ -15,6 +16,11 @@ from utils.pii_verification import run_pii_detection_for_path
 _LOGGER = logging.getLogger("pii_detection_queue")
 _PII_LOGGER = logging.getLogger("pii_detection")
 _LOCK_KEY = 912348761
+_STOP_KEY = "image_metadata_backfill_stop:global"
+
+
+def _stop_requested() -> bool:
+    return bool(cache.get(_STOP_KEY))
 
 
 def enqueue_pii_detection_job(
@@ -83,10 +89,14 @@ def _release_lock(db) -> None:
 def run_pii_detection_queue(max_jobs: Optional[int] = None) -> int:
     processed = 0
     with get_db_session() as db:
+        if _stop_requested():
+            return 0
         if not _try_acquire_lock(db):
             return 0
         try:
             while True:
+                if _stop_requested():
+                    break
                 if max_jobs is not None and processed >= max_jobs:
                     break
                 job = (
@@ -106,6 +116,13 @@ def run_pii_detection_queue(max_jobs: Optional[int] = None) -> int:
                 db.commit()
 
                 try:
+                    if _stop_requested():
+                        job.status = "failed"
+                        job.error_message = "Stopped by admin"
+                        job.finished_at = utcnow()
+                        db.add(job)
+                        db.commit()
+                        break
                     result = run_pii_detection_for_path(
                         db,
                         image_uuid=job.image_uuid,

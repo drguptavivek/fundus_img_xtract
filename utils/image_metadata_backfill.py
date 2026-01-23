@@ -9,6 +9,7 @@ from typing import Iterable, Optional
 
 import json
 from auth.utils import utcnow
+from app_cache import cache
 from sqlalchemy import func
 from db_transaction_manager import get_db_session
 from models import (
@@ -30,6 +31,11 @@ _LOGGER = logging.getLogger("image_metadata_backfill")
 _METADATA_LOGGER = logging.getLogger("image_metadata")
 _PII_SLEEP_SECONDS = 3
 _ITEM_SLEEP_SECONDS = 3
+_STOP_KEY = "image_metadata_backfill_stop:global"
+
+
+def _stop_requested() -> bool:
+    return bool(cache.get(_STOP_KEY))
 
 
 @dataclass(frozen=True)
@@ -394,6 +400,13 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
         job = db.get(ImageMetadataBackfillJob, job_id)
         if not job or job.status not in {"queued", "running"}:
             return
+        if _stop_requested():
+            job.status = "failed"
+            job.error_message = "Stopped by admin"
+            job.finished_at = utcnow()
+            db.add(job)
+            db.commit()
+            return
 
         allowed_lab_unit_ids: set[int] = set()
         if job.allowed_lab_unit_ids:
@@ -444,6 +457,13 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
                 _iter_direct_items(db, allowed_lab_unit_ids=allowed_lab_unit_ids)
             )
             for item in items:
+                if _stop_requested():
+                    job.status = "failed"
+                    job.error_message = "Stopped by admin"
+                    job.finished_at = utcnow()
+                    db.add(job)
+                    db.commit()
+                    return
                 if job.requested_limit is not None and job.processed_count >= job.requested_limit:
                     break
                 if not item.path.exists():
@@ -461,6 +481,18 @@ def run_image_metadata_backfill_job(job_id: int) -> None:
 
                 metadata_needed = job.run_metadata and _needs_metadata(db, item.image_uuid, item.image_variant)
                 pii_needed = job.run_pii and _needs_pii(db, item.image_uuid, item.image_variant)
+                if not metadata_needed:
+                    _METADATA_LOGGER.info(
+                        "Metadata already present for %s (%s)",
+                        sanitize_log_value(item.image_uuid),
+                        sanitize_log_value(item.image_variant),
+                    )
+                if not pii_needed and job.run_pii:
+                    _LOGGER.info(
+                        "PII already present for %s (%s)",
+                        sanitize_log_value(item.image_uuid),
+                        sanitize_log_value(item.image_variant),
+                    )
                 if not metadata_needed and not pii_needed:
                     continue
 

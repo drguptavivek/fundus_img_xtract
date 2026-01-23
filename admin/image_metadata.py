@@ -59,6 +59,7 @@ def image_metadata_backfill():
     if not run_metadata and not run_pii:
         flash("Select a valid backfill mode.", "danger")
         return redirect(url_for("admin.image_metadata_admin"))
+    cache.delete("image_metadata_backfill_stop:global")
     with get_db_session() as db:
         allowed_lab_unit_ids = get_user_lab_units_in_hospital(
             current_user.id,
@@ -202,4 +203,60 @@ def image_metadata_run_pii_queue():
     limit = request.form.get("limit", type=int)
     processed = run_pii_detection_queue(max_jobs=limit)
     flash(f"PII queue processed {processed} job(s).", "info")
+    return redirect(url_for("admin.image_metadata_admin"))
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def image_metadata_stop_all():
+    cache.set("image_metadata_backfill_stop:global", True, timeout=3600)
+    flash("Stop requested. Metadata and PII backfill will halt within the next item.", "warning")
+    return redirect(url_for("admin.image_metadata_admin"))
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def image_metadata_clear_queued():
+    with get_db_session() as db:
+        jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "queued")
+        if not current_user.is_master_admin:
+            if current_user.hospital_id:
+                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
+            else:
+                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
+        cleared = 0
+        for job in jobs_query.all():
+            job.status = "failed"
+            job.error_message = "Cleared by admin"
+            job.finished_at = utcnow()
+            db.add(job)
+            cleared += 1
+        if cleared:
+            db.commit()
+    cache.delete("image_metadata_backfill_stop:global")
+    flash(f"Cleared {cleared} queued job(s).", "info")
+    return redirect(url_for("admin.image_metadata_admin"))
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def image_metadata_clear_running():
+    with get_db_session() as db:
+        jobs_query = db.query(ImageMetadataBackfillJob).filter(ImageMetadataBackfillJob.status == "running")
+        if not current_user.is_master_admin:
+            if current_user.hospital_id:
+                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.hospital_id == current_user.hospital_id)
+            else:
+                jobs_query = jobs_query.filter(ImageMetadataBackfillJob.created_by_id == current_user.id)
+        cleared = 0
+        for job in jobs_query.all():
+            job.status = "failed"
+            job.error_message = "Cleared by admin"
+            job.finished_at = utcnow()
+            db.add(job)
+            cleared += 1
+        if cleared:
+            db.commit()
+    cache.delete("image_metadata_backfill_stop:global")
+    flash(f"Cleared {cleared} running job(s).", "info")
     return redirect(url_for("admin.image_metadata_admin"))

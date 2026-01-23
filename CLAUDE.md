@@ -60,15 +60,33 @@ $DC exec web uv run python -m scripts.create_user <username>
 ## MANDATORY Patterns
 
 ### 1. Database Sessions
-Always use `@with_session()` decorator (never create sessions manually):
-```python
-from utils.utils import with_session
+Always use  db conmtext manager  (never create sessions manually):
 
-@with_session()
-def my_function(db):
-    user = db.query(User).filter_by(username='admin').first()
-    return user  # Auto-commit/rollback/close
-```
+**Preferred Method**: Use context managers from `utils.utils`
+see `docs/10-DEVELOP/DB CONTEXT MANAGER.md`
+
+    - Example:
+        ```python
+        from db_transaction_manager import transaction_scope
+        
+        @bp.route('/submit-grade', methods=['POST'])
+        @login_required
+        def submit_grade():
+            # Get form data
+            grade_data = request.form
+            
+            with transaction_scope() as db:
+                try:
+                    # Call utility function, passing the database session
+                    result = process_grade_submission(db, grade_data, current_user.id)
+                    flash('Grade submitted successfully', 'success')
+                    return redirect(url_for('grading.index'))
+                except Exception as e:
+                    flash(f'Error submitting grade: {str(e)}', 'error')
+                    # Transaction automatically rolled back
+        ```
+      
+       
 
 ### 2. CSRF Protection
 All forms/AJAX must include CSRF tokens:

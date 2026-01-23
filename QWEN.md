@@ -32,15 +32,6 @@ This directory contains comprehensive instructions for KiloCode to work effectiv
 **Preferred Method**: Use context managers from `utils.utils`
 see `docs/10-DEVELOP/DB CONTEXT MANAGER.md`
 
-```python
-from utils.utils import with_session
-
-@with_session()
-def my_function(db):
-    # Use db session here
-    user = db.get(User, user_id)
-    # No need to commit/close - handled automatically
-```
 
 ### Route Protection
 **Role-based access control**:

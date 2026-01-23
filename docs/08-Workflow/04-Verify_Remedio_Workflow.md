@@ -7,6 +7,30 @@ last_updated: 2026-01-23
 
 This workflow handles the verification of data ingested from Remedio Zip files. It ensures that the OCR-extracted data and image metadata are accurate before the data is committed to the main clinical records.
 
+## List of Steps
+
+1.  **List & Selection**: User views the verification list via `GET /verify_remedio/list`.
+    -   System fetches patient encounters filtered by Lab Unit and date.
+    -   Displays statistics (DR, Glaucoma, verified counts).
+2.  **Details & Edit**: User selects an encounter via `GET /verify_remedio/edit/<id>`.
+    -   System fetches encounter details including images, reports, and cleaned OCR data.
+3.  **Correction**: User saves changes via `POST /verify_remedio/edit/<id>/save`.
+    -   Updates patient details (ID, capture date).
+    -   Updates DR reports (results, qualitative assessments).
+    -   Updates Glaucoma results (VCDR, qualitative assessments).
+4.  **Image Tagging**: User marks eye side and centering via `POST /edit/<id>/mark_eye`.
+    -   Updates `EncounterFile` records with eye laterality (Right/Left) and centering (Macula/Disk).
+    -   **Critical**: Images must be tagged before verification can proceed.
+5.  **Verification**:
+    -   **DR Verification** (`POST .../verify/dr`): Checks image tags, marks DR as verified, creates DR grading tasks.
+    -   **Glaucoma Verification** (`POST .../verify/glaucoma`): Checks image tags, marks Glaucoma as verified, creates Glaucoma grading tasks.
+    -   **Encounter Verification** (`POST .../verify/encounter`): Final step requiring DR/Glaucoma to be verified first (if reports exist). Creates grading tasks for NoDR cases.
+6.  **Unverification** (Optional):
+    -   Allows reverting verified status only if no grading tasks are in progress.
+    -   Removes any pending grading tasks associated with the encounter.
+
+## Mermaid Workflow Diagram
+
 ```mermaid
 sequenceDiagram
     participant User

@@ -299,6 +299,207 @@ If Excel contains 100 rows:
 
 ---
 
+---
+
+## Admin Tools for Task State Fixes
+
+### Problem: Tasks Stuck Without Resident Grade
+
+**Scenario**: Tasks in `'resident2_done'` state but missing Resident grade
+
+**Cause**: 
+- Pre-graded Excel import with only Resident2 grades
+- Data migration or import errors
+- Manual database manipulation
+
+**Impact**:
+- Task cannot progress to consensus
+- Workflow stuck - cannot reach `'final'` or `'arbitration'` state
+- Task invisible to Resident graders (they only see `'pending'` tasks)
+
+### Solution 1: Grading State Inconsistencies Tool
+
+**Route**: `/admin/grading_state_inconsistencies`  
+**File**: `admin/grading_state_inconsistencies.py`  
+**Access**: Requires `admin` role
+
+#### Detection Logic
+
+Finds tasks where:
+1. Task state = `'resident2_done'`
+2. Resident2 grade exists (`role_slot = 'resident2'`)
+3. Resident grade missing (`role_slot = 'resident'` not found)
+
+```python
+# Code: grading_state_inconsistencies.py:44-67
+resident2_exists = (
+    db.query(Grade.task_id)
+    .filter(and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident2"))
+)
+resident_missing = ~exists().where(
+    and_(Grade.task_id == GradingTask.id, Grade.role_slot == "resident")
+)
+```
+
+#### Remediation Process
+
+**Admin Action**: Select tasks and click "Reset to Pending"
+
+**What Happens**:
+```python
+# Code: grading_state_inconsistencies.py:30-38
+db.query(GradingTask)
+    .filter(
+        GradingTask.id.in_(selected_task_ids),
+        GradingTask.state == "resident2_done",
+    )
+    .update({GradingTask.state: "pending"}, synchronize_session=False)
+```
+
+**Result**:
+- Task state changed from `'resident2_done'` → `'pending'`
+- Task now visible to Resident graders
+- Resident2 grade preserved (not deleted)
+
+**After Resident Grades**:
+- System runs `update_task_state_based_on_grades()`
+- If Resident + Resident2 match → state becomes `'final'`, consensus created
+- If Resident + Resident2 differ → state becomes `'arbitration'`
+
+---
+
+### Solution 2: Task Backfill Tool
+
+**Route**: `/admin/task_backfill`  
+**File**: `admin/task_backfill.py`  
+**Access**: Requires `admin` or `local_admin` role
+
+#### Purpose
+
+Creates missing grading tasks for verified images that should have tasks but don't.
+
+**Common Causes**:
+- `ensure_task()` failed during verification
+- Database transaction rollback
+- System errors during task creation
+- Manual image verification without task creation
+
+#### Detection Logic
+
+**File**: `utils/task_backfill.py`
+
+Finds images where:
+1. Image is verified (`DirectImageVerify.verified_status = 'verified'` OR `PatientEncounters.dr_verified_status = 'verified'`)
+2. No corresponding `GradingTask` exists for the image×disease combination
+
+```python
+# Pseudo-code from task_backfill.py
+missing_tasks = (
+    SELECT images WHERE verified = true
+    AND NOT EXISTS (
+        SELECT 1 FROM grading_tasks 
+        WHERE grading_tasks.image_id = images.id
+        AND grading_tasks.disease_id = target_disease_id
+    )
+)
+```
+
+#### Backfill Process
+
+**Admin Action**: 
+1. View missing task counts by disease and lab unit
+2. Set limit (number of tasks to create)
+3. Click "Run Backfill"
+
+**What Happens**:
+```python
+# Code: task_backfill.py:83-95
+job = TaskBackfillJob(
+    status="queued",
+    requested_limit=limit,
+    created_by_id=current_user.id,
+    hospital_id=current_user.hospital_id,
+    allowed_lab_unit_ids=json.dumps(sorted(allowed_lab_unit_ids)),
+)
+db.add(job)
+db.commit()
+
+enqueue_task_backfill(current_app, job_id)
+```
+
+**Background Processing**:
+1. Job status: `'queued'` → `'running'`
+2. For each missing task (up to limit):
+   - Call `ensure_task(image_uuid, disease_id, db)`
+   - Create `GradingTask` with `state = 'pending'`
+3. Job status: `'running'` → `'completed'`
+4. Job records: `created_count`, `error_count`, `processed_count`
+
+**Safety Features**:
+- Only one backfill job can run at a time
+- Lab unit scoping (admins only see their hospital's tasks)
+- Limit parameter prevents overwhelming the system
+- Job history tracked in `TaskBackfillJob` table
+
+---
+
+## Comparison: State Inconsistencies vs Task Backfill
+
+| Aspect | State Inconsistencies | Task Backfill |
+|--------|----------------------|---------------|
+| **Problem** | Tasks exist but in wrong state | Tasks don't exist at all |
+| **Detection** | Resident2 grade without Resident grade | Verified images without tasks |
+| **Solution** | Reset task state to `'pending'` | Create missing tasks |
+| **Preserves** | All existing grades | N/A (no grades exist yet) |
+| **Access** | `admin` only | `admin` or `local_admin` |
+| **Processing** | Synchronous (immediate) | Asynchronous (background job) |
+| **Scope** | Specific inconsistent tasks | All missing tasks (up to limit) |
+
+---
+
+## Best Practices
+
+### When to Use State Inconsistencies Tool
+
+1. **After pre-graded import** with only Resident2 grades
+2. **After data migration** that created incomplete grade sets
+3. **When tasks are stuck** in `'resident2_done'` state
+4. **Before running reports** to ensure accurate task state counts
+
+### When to Use Task Backfill Tool
+
+1. **After system errors** during verification workflow
+2. **After manual database operations** that bypassed `ensure_task()`
+3. **When KPIs show** verified images > grading tasks
+4. **During system recovery** after database issues
+
+### Verification After Fixes
+
+**For State Inconsistencies**:
+```sql
+-- Verify no tasks stuck in resident2_done without Resident grade
+SELECT COUNT(*) FROM grading_tasks gt
+WHERE gt.state = 'resident2_done'
+AND EXISTS (SELECT 1 FROM grades WHERE task_id = gt.id AND role_slot = 'resident2')
+AND NOT EXISTS (SELECT 1 FROM grades WHERE task_id = gt.id AND role_slot = 'resident');
+-- Should return 0
+```
+
+**For Task Backfill**:
+```sql
+-- Verify all verified images have tasks
+SELECT COUNT(*) FROM direct_image_uploads diu
+JOIN direct_image_verify div ON div.image_upload_id = diu.id
+WHERE div.verified_status = 'verified'
+AND NOT EXISTS (
+    SELECT 1 FROM grading_tasks 
+    WHERE direct_image_upload_id = diu.id
+);
+-- Should return 0 (or low number if backfill limit was set)
+```
+
+---
+
 ## Code References
 
 - **Task Creation**: `direct_uploads/pregraded.py:297`

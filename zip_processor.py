@@ -566,15 +566,18 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
                             print(f"  - Failed to store metadata for {new_filename}: {e}")
 
                     try:
-                        from utils.pii_verification import run_pii_detection_for_path
-                        run_pii_detection_for_path(
+                        from utils.pii_detection_queue import enqueue_pii_detection_job, run_pii_detection_queue
+
+                        enqueue_pii_detection_job(
                             session,
                             image_uuid=str(encounter_file.uuid),
                             image_variant="orig",
                             image_path=str(target_path),
+                            source="auto",
                         )
+                        run_pii_detection_queue(max_jobs=1)
                     except Exception as e:
-                        print(f"  - Failed to run PII detection for {new_filename}: {e}")
+                        print(f"  - Failed to enqueue PII detection for {new_filename}: {e}")
                 print(f"  - Extracted and renamed '{original_filepath.name}' to '{new_filename}'")
 
             new_patient_encounter.encounter_files = files_to_add

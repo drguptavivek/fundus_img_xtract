@@ -120,6 +120,8 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_handler = _make_handler("materialized_view.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     thumbnail_maintenance_handler = _make_handler("thumbnail_maintenance.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     startup_env_handler = _make_handler("startup_env_error.log", logging.INFO, detailed_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+    pii_detection_handler = _make_handler("pii_detection.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+    image_metadata_handler = _make_handler("image_metadata.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     db_query_handler = TimedRotatingFileHandler(
         log_dir / "db_query.log",
         when="midnight",
@@ -166,6 +168,8 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_logger = _configure_logger("materialized_view", logging.INFO, materialized_view_handler)
     thumbnail_maintenance_logger = _configure_logger("thumbnail_maintenance", logging.INFO, thumbnail_maintenance_handler)
     startup_env_logger = _configure_logger("startup_env", logging.INFO, startup_env_handler)
+    pii_detection_logger = _configure_logger("pii_detection", logging.INFO, pii_detection_handler)
+    image_metadata_logger = _configure_logger("image_metadata", logging.INFO, image_metadata_handler)
     db_query_logger = _configure_logger("db_query", logging.INFO, db_query_handler)
     db_query_slow_logger = _configure_logger("db_query_slow", logging.WARNING, db_query_slow_handler)
 
@@ -225,6 +229,8 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     materialized_view_logger.info("Materialized view logger initialized at %s", str(log_dir / "materialized_view.log"))
     thumbnail_maintenance_logger.info("Thumbnail maintenance logger initialized at %s", str(log_dir / "thumbnail_maintenance.log"))
     startup_env_logger.info("Startup environment logger initialized at %s", str(log_dir / "startup_env_error.log"))
+    pii_detection_logger.info("PII detection logger initialized at %s", str(log_dir / "pii_detection.log"))
+    image_metadata_logger.info("Image metadata logger initialized at %s", str(log_dir / "image_metadata.log"))
     db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
 
     return {
@@ -245,6 +251,8 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         "materialized_view": materialized_view_logger,
         "thumbnail_maintenance": thumbnail_maintenance_logger,
         "startup_env": startup_env_logger,
+        "pii_detection": pii_detection_logger,
+        "image_metadata": image_metadata_logger,
         "db_query": db_query_logger,
         "db_query_slow": db_query_slow_logger,
         "app": app_logger,

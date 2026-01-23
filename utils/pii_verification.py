@@ -88,27 +88,6 @@ def run_pii_detection_for_path(
 
 
 def enqueue_pii_detection(app, image_uuid: str, image_variant: str, image_path: str) -> None:
-    def _worker(app_ref, uuid_val, variant_val, path_val):
-        from db_transaction_manager import get_db_session
+    from utils.pii_detection_queue import enqueue_pii_detection as enqueue_pii_detection_queue
 
-        with app_ref.app_context():
-            with get_db_session() as db:
-                run_pii_detection_for_path(
-                    db,
-                    image_uuid=uuid_val,
-                    image_variant=variant_val,
-                    image_path=path_val,
-                )
-
-    try:
-        executor = app.config.get("EXECUTOR")
-        if executor is None:
-            return
-        executor.submit(_worker, app, image_uuid, image_variant, image_path)
-    except Exception as exc:
-        _LOGGER.warning(
-            "Failed to enqueue PII detection for %s (%s): %s",
-            sanitize_log_value(image_uuid),
-            sanitize_log_value(image_variant),
-            sanitize_log_value(exc),
-        )
+    enqueue_pii_detection_queue(app, image_uuid, image_variant, image_path)

@@ -256,6 +256,9 @@
             <button class="btn btn-outline-primary" onclick="refreshStatus()">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin.metadata_backfill_admin') }}">
+                <i class="fas fa-database"></i> Metadata Backfill
+            </a>
             <div class="text-muted small">
                 Last updated: <span id="last-updated">{{ current_time|user_datetime('%Y-%m-%d %H:%M:%S') }}</span>
             </div>

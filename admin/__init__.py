@@ -19,7 +19,12 @@ from .database_excel_export import database_excel_export, get_database_tables
 from .database_restore import bp as database_restore_bp
 from .materialized_view_status import materialized_view_status, api_materialized_view_status, api_last_refresh, manual_refresh, api_schedule_status
 from .thumbnail_management import register_thumbnail_admin_routes
-from .image_metadata import image_metadata_admin, image_metadata_backfill
+from .image_metadata import (
+    image_metadata_admin,
+    image_metadata_backfill,
+    image_metadata_run_pii_queue,
+    image_metadata_status,
+)
 from .task_backfill import task_backfill_admin, task_backfill_run
 from .status import (
     admin_status,
@@ -175,6 +180,16 @@ admin_bp.add_url_rule("/api/sequences/status", view_func=api_sequences_status, m
 # Image metadata backfill
 admin_bp.add_url_rule("/image-metadata", view_func=image_metadata_admin, methods=["GET"])
 admin_bp.add_url_rule("/image-metadata/backfill", view_func=image_metadata_backfill, methods=["POST"])
+admin_bp.add_url_rule(
+    "/image-metadata/pii-queue/run",
+    view_func=image_metadata_run_pii_queue,
+    methods=["POST"],
+    endpoint="image_metadata_run_pii_queue",
+)
+admin_bp.add_url_rule("/image-metadata/status", view_func=image_metadata_status, methods=["GET"])
+admin_bp.add_url_rule("/metadata-backfill", view_func=image_metadata_admin, methods=["GET"], endpoint="metadata_backfill_admin")
+admin_bp.add_url_rule("/metadata-backfill/run", view_func=image_metadata_backfill, methods=["POST"], endpoint="metadata_backfill_run")
+admin_bp.add_url_rule("/metadat-backfilll", view_func=image_metadata_admin, methods=["GET"], endpoint="metadata_backfill_admin_alias")
 
 # Task backfill
 admin_bp.add_url_rule("/task-backfill", view_func=task_backfill_admin, methods=["GET"])

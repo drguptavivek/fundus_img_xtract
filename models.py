@@ -420,6 +420,72 @@ class TaskBackfillJob(Base):
     hospital: Mapped["Hospital"] = relationship("Hospital")
 
 
+class ImageMetadataBackfillJob(Base):
+    __tablename__ = "image_metadata_backfill_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    requested_limit: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    run_metadata: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    run_pii: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    metadata_created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pii_created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_candidates: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_by_username: Mapped[Optional[str]] = mapped_column(String(150), nullable=True, index=True)
+    hospital_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    allowed_lab_unit_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','running','completed','failed')",
+            name="ck_image_metadata_backfill_job_status",
+        ),
+        Index("ix_image_metadata_backfill_jobs_hospital_created", "hospital_id", "created_at"),
+    )
+
+    created_by: Mapped["User"] = relationship("User")
+    hospital: Mapped["Hospital"] = relationship("Hospital")
+
+
+class PiiDetectionJob(Base):
+    __tablename__ = "pii_detection_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    image_uuid: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    image_variant: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    image_path: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    source: Mapped[str] = mapped_column(String(16), default="auto", nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','running','completed','failed')",
+            name="ck_pii_detection_job_status",
+        ),
+        CheckConstraint(
+            "image_variant IN ('orig','edited')",
+            name="ck_pii_detection_job_variant",
+        ),
+        CheckConstraint(
+            "source IN ('auto','manual')",
+            name="ck_pii_detection_job_source",
+        ),
+        Index("ix_pii_detection_jobs_status_created", "status", "created_at"),
+    )
+
+
 
 
 class LoginAttempt(Base):

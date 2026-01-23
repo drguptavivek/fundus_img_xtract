@@ -16,7 +16,7 @@ from utils.fileUtils import abs_from_parts
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import get_media_cache_version
-from utils.ocr_pii import detect_pii_details_for_path
+from utils.pii_detection_queue import enqueue_pii_detection_job, run_pii_detection_queue
 from auth.utils import utcnow
 from utils.utils import with_session
 
@@ -24,6 +24,28 @@ from . import api_bp
 
 
 _OCR_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30
+
+
+def _run_pii_detection(image_uuid: str, image_variant: str, image_path: str) -> tuple[Optional[ImagePiiVerification], int]:
+    with with_session() as db:
+        enqueue_pii_detection_job(
+            db,
+            image_uuid=image_uuid,
+            image_variant=image_variant,
+            image_path=image_path,
+            source="auto",
+        )
+    processed = run_pii_detection_queue(max_jobs=1)
+    with with_session() as db:
+        record = (
+            db.query(ImagePiiVerification)
+            .filter(
+                ImagePiiVerification.image_uuid == image_uuid,
+                ImagePiiVerification.image_variant == image_variant,
+            )
+            .first()
+        )
+    return record, processed
 
 
 def _resolve_image_variant_map(image_uuids: Iterable[str]) -> Dict[str, Optional[str]]:
@@ -291,28 +313,39 @@ def api_ocr_pii_boxes(image_uuid: str):
                 },
             })
 
-        ocr_result = detect_pii_details_for_path(image_path)
-        status = "detected" if ocr_result.get("is_pii") else "clear"
+        record, processed = _run_pii_detection(image_uuid, image_variant, image_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        checked_at = utcnow()
-        _record_pii_verification(
-            image_uuid,
-            image_variant,
-            status,
-            checked_at,
-            source="auto",
-            detections=ocr_result.get("detections"),
-            roi=ocr_result.get("roi"),
-        )
-        result: Dict[str, Any] = {
-            "status": status,
-            "label": "PII detected" if status == "detected" else "No PII detected",
-            "valid_detections": ocr_result.get("valid_detections", 0),
-            "pattern_matches": ocr_result.get("pattern_matches", 0),
-            "detections": ocr_result.get("detections", []),
-            "roi": ocr_result.get("roi"),
+        if record and record.detections_json:
+            detections = json.loads(record.detections_json)
+            roi = json.loads(record.roi_json) if record.roi_json else None
+            result: Dict[str, Any] = {
+                "status": record.pii_status,
+                "label": "PII detected" if record.pii_status == "detected" else "No PII detected",
+                "valid_detections": len(detections),
+                "pattern_matches": len([d for d in detections if d.get("matches_pattern")]),
+                "detections": detections,
+                "roi": roi,
+                "duration_ms": duration_ms,
+                "source": record.source,
+            }
+            return jsonify({"success": True, "data": result})
+        if record:
+            result = {
+                "status": record.pii_status,
+                "label": "PII detected" if record.pii_status == "detected" else "No PII detected",
+                "valid_detections": 0,
+                "pattern_matches": 0,
+                "detections": [],
+                "roi": None,
+                "duration_ms": duration_ms,
+                "source": record.source,
+            }
+            return jsonify({"success": True, "data": result})
+
+        result = {
+            "status": "pending" if processed == 0 else "error",
+            "label": "Pending" if processed == 0 else "OCR unavailable",
             "duration_ms": duration_ms,
-            "source": "auto",
         }
         return jsonify({"success": True, "data": result})
     except Exception as exc:
@@ -385,24 +418,24 @@ def api_ocr_pii(image_uuid: str):
         return jsonify({"success": False, "error": "Image not found"}), 404
 
     try:
-        ocr_result = detect_pii_details_for_path(image_path)
-        status = "detected" if ocr_result.get("is_pii") else "clear"
+        record, processed = _run_pii_detection(image_uuid, image_variant, image_path)
         duration_ms = int((time.perf_counter() - start) * 1000)
-        checked_at = utcnow()
-        _record_pii_verification(
-            image_uuid,
-            image_variant,
-            status,
-            checked_at,
-            source="auto",
-            detections=ocr_result.get("detections"),
-            roi=ocr_result.get("roi"),
-        )
-        result: Dict[str, Any] = {
-            "status": status,
-            "label": "PII detected" if status == "detected" else "No PII detected",
-            "valid_detections": ocr_result.get("valid_detections", 0),
-            "pattern_matches": ocr_result.get("pattern_matches", 0),
+        if record:
+            result: Dict[str, Any] = {
+                "status": record.pii_status,
+                "label": "PII detected" if record.pii_status == "detected" else "No PII detected",
+                "valid_detections": 0,
+                "pattern_matches": 0,
+                "version": cache_version,
+                "duration_ms": duration_ms,
+                "source": record.source,
+            }
+            cache.set(cache_key, result, timeout=_OCR_CACHE_TTL_SECONDS)
+            return jsonify({"success": True, "data": result, "cached": False})
+
+        result = {
+            "status": "pending" if processed == 0 else "error",
+            "label": "Pending" if processed == 0 else "OCR unavailable",
             "version": cache_version,
             "duration_ms": duration_ms,
             "source": "auto",

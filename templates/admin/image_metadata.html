@@ -5,32 +5,70 @@
 {% block content %}
 <div class="container py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Image Metadata Backfill</h4>
+    <div class="d-flex align-items-center gap-2">
+      <h4 class="mb-0">Image Metadata Backfill</h4>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin.admin_status') }}">Admin Status</a>
+    </div>
     <button class="btn btn-outline-secondary" type="button" onclick="history.back()">Back</button>
   </div>
 
   <div class="card mb-4">
     <div class="card-body">
       <div class="row g-3">
-        <div class="col-md-3">
-          <div class="small text-muted">Encounter Images</div>
-          <div class="fs-5 fw-semibold">{{ totals.encounter }}</div>
+        <div class="col-md-4">
+          <div class="small text-muted">Encounter Missing Metadata</div>
+          <div class="fs-5 fw-semibold" id="meta-missing-encounter">{{ totals.encounter }}</div>
         </div>
-        <div class="col-md-3">
-          <div class="small text-muted">Direct Images</div>
-          <div class="fs-5 fw-semibold">{{ totals.direct }}</div>
+        <div class="col-md-4">
+          <div class="small text-muted">Direct Missing Metadata</div>
+          <div class="fs-5 fw-semibold" id="meta-missing-direct">{{ totals.direct }}</div>
         </div>
-        <div class="col-md-3">
-          <div class="small text-muted">Edited Variants</div>
-          <div class="fs-5 fw-semibold">{{ totals.edited }}</div>
+        <div class="col-md-4">
+          <div class="small text-muted">Edited Missing Metadata</div>
+          <div class="fs-5 fw-semibold" id="meta-missing-edited">{{ totals.direct_edited }}</div>
         </div>
-        <div class="col-md-3">
-          <div class="small text-muted">Metadata Rows</div>
-          <div class="fs-5 fw-semibold">{{ totals.metadata }}</div>
+      </div>
+      <div class="row g-3 mt-2">
+        <div class="col-md-4">
+          <div class="small text-muted">Encounter Metadata Present</div>
+          <div class="fs-5 fw-semibold" id="meta-present-encounter">{{ (total_images.encounter - totals.encounter) if total_images else 0 }}</div>
         </div>
-        <div class="col-md-3">
-          <div class="small text-muted">PII Rows</div>
-          <div class="fs-5 fw-semibold">{{ totals.pii }}</div>
+        <div class="col-md-4">
+          <div class="small text-muted">Direct Metadata Present</div>
+          <div class="fs-5 fw-semibold" id="meta-present-direct">{{ (total_images.direct - totals.direct) if total_images else 0 }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Edited Metadata Present</div>
+          <div class="fs-5 fw-semibold" id="meta-present-edited">{{ (total_images.direct_edited - totals.direct_edited) if total_images else 0 }}</div>
+        </div>
+      </div>
+      <hr class="my-3">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="small text-muted">Encounter Missing PII</div>
+          <div class="fs-5 fw-semibold" id="pii-missing-encounter">{{ pii_totals.encounter }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Direct Missing PII</div>
+          <div class="fs-5 fw-semibold" id="pii-missing-direct">{{ pii_totals.direct }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Edited Missing PII</div>
+          <div class="fs-5 fw-semibold" id="pii-missing-edited">{{ pii_totals.direct_edited }}</div>
+        </div>
+      </div>
+      <div class="row g-3 mt-2">
+        <div class="col-md-4">
+          <div class="small text-muted">Encounter PII Present</div>
+          <div class="fs-5 fw-semibold" id="pii-present-encounter">{{ (total_images.encounter - pii_totals.encounter) if total_images else 0 }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Direct PII Present</div>
+          <div class="fs-5 fw-semibold" id="pii-present-direct">{{ (total_images.direct - pii_totals.direct) if total_images else 0 }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Edited PII Present</div>
+          <div class="fs-5 fw-semibold" id="pii-present-edited">{{ (total_images.direct_edited - pii_totals.direct_edited) if total_images else 0 }}</div>
         </div>
       </div>
     </div>
@@ -46,12 +84,104 @@
           <label class="form-label">Limit (optional)</label>
           <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 100">
         </div>
-        <button type="submit" class="btn btn-primary">Start Backfill</button>
+        <button type="submit" class="btn btn-primary" name="mode" value="metadata">Backfill Metadata</button>
+        <button type="submit" class="btn btn-outline-primary" name="mode" value="pii">Backfill PII</button>
+        <button type="submit" class="btn btn-outline-secondary" name="mode" value="both">Backfill Both</button>
       </form>
       <div class="small text-muted mt-2">
-        Runs one image at a time with a 1s delay and low CPU priority.
+        Runs one image at a time with a 3s delay and low CPU priority. PII runs are serialized via the queue.
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">PII Detection Queue</h6>
+      </div>
+      <form method="POST" action="{{ url_for('admin.image_metadata_run_pii_queue') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        {% from "_forms.html" import csrf_field %}
+        {{ csrf_field() }}
+        <div>
+          <label class="form-label">Process Count (optional)</label>
+          <input type="number" name="limit" min="1" class="form-control" placeholder="e.g. 10">
+        </div>
+        <button type="submit" class="btn btn-primary">Run PII Queue</button>
+      </form>
+      <div class="row g-3 mt-3">
+        <div class="col-md-3">
+          <div class="small text-muted">Processed (Last 60 Minutes)</div>
+          <div class="fs-6 fw-semibold" id="pii-processed-hour">0</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">Processed (Today)</div>
+          <div class="fs-6 fw-semibold" id="pii-processed-day">0</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">PII Assessed (Auto)</div>
+          <div class="fs-6 fw-semibold" id="pii-assessed-auto">{{ pii_assessed.get('auto', 0) }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="small text-muted">PII Assessed (Manual)</div>
+          <div class="fs-6 fw-semibold" id="pii-assessed-manual">{{ pii_assessed.get('manual', 0) }}</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+{% block page_scripts %}
+{{ super() }}
+<script>
+if (!window.__imageMetadataPageInit) {
+  window.__imageMetadataPageInit = true;
+  function updateCounters(data) {
+    if (!data) return;
+    const meta = data.metadata_missing || {};
+    const pii = data.pii_missing || {};
+    const metaPresent = data.metadata_present || {};
+    const piiPresent = data.pii_present || {};
+    const piiAssessed = data.pii_assessed || {};
+
+    const setText = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+
+    setText('meta-missing-encounter', meta.encounter ?? 0);
+    setText('meta-missing-direct', meta.direct ?? 0);
+    setText('meta-missing-edited', meta.direct_edited ?? 0);
+
+    setText('meta-present-encounter', metaPresent.encounter ?? 0);
+    setText('meta-present-direct', metaPresent.direct ?? 0);
+    setText('meta-present-edited', metaPresent.direct_edited ?? 0);
+
+    setText('pii-missing-encounter', pii.encounter ?? 0);
+    setText('pii-missing-direct', pii.direct ?? 0);
+    setText('pii-missing-edited', pii.direct_edited ?? 0);
+
+    setText('pii-present-encounter', piiPresent.encounter ?? 0);
+    setText('pii-present-direct', piiPresent.direct ?? 0);
+    setText('pii-present-edited', piiPresent.direct_edited ?? 0);
+
+    setText('pii-assessed-auto', piiAssessed.auto ?? 0);
+    setText('pii-assessed-manual', piiAssessed.manual ?? 0);
+
+    const processed = data.pii_processed || {};
+    setText('pii-processed-hour', processed.last_60_min ?? 0);
+    setText('pii-processed-day', processed.today ?? 0);
+  }
+
+  function refreshStatus() {
+    fetch('{{ url_for("admin.image_metadata_status") }}', { credentials: 'same-origin' })
+      .then((resp) => resp.ok ? resp.json() : null)
+      .then(updateCounters)
+      .catch(() => {});
+  }
+
+  refreshStatus();
+  setInterval(refreshStatus, 60000);
+}
+</script>
+{% endblock %}
 {% endblock %}

@@ -64,7 +64,7 @@ sequenceDiagram
         
         loop For Each File
             WebServer->>WebServer: Validate Filename & MimeType
-            WebServer->>WebServer: Calculate Hash (MD5)
+            WebServer->>WebServer: Calculate Hash (SHA-256)
             WebServer->>DB: Check Duplicate
             
             alt Is Duplicate
@@ -105,7 +105,7 @@ sequenceDiagram
     -   **PII Detection**: Enqueued as an asynchronous job using `enqueue_pii_detection`.
 3.  **Security**:
     -   **Validation**: Strict filename validation (sanitization) and MIME type checking (magic bytes).
-    -   **Hashing**: Uses MD5 to detect duplicates.
+    -   **Hashing**: Uses SHA-256 (truncated to 32 chars) to detect duplicates.
     -   **EXIF Stripping**: Removes potentially sensitive metadata from images before storage (`utils.image_processing.strip_exif_data`).
 4.  **Editing**: Users can edit images (e.g., crop, mask) after upload.
     -   Saving an edited image triggers a **re-extraction of metadata** and a **new PII detection job** specifically for the "edited" variant.

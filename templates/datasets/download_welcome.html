@@ -51,6 +51,21 @@
               <div class="small text-muted mt-2">Share created</div>
               <div class="fw-semibold">{{ share_created_at | user_datetime }}</div>
             </div>
+            <div id="export-section-anchor"></div>
+
+            {% if terms_accepted and export_files %}
+              <div class="alert alert-success mt-3" id="export-ready">
+                Export is ready. Download below.
+              </div>
+              <ul class="list-group mb-3" id="export-files">
+                {% for file in export_files %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span>{{ file }}</span>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('datasets.download_file', token=token, job_token=export_job.token, filename=file) }}">Download</a>
+                </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
 
             {% if error_message %}
             <div class="alert alert-danger">{{ error_message }}</div>
@@ -81,33 +96,38 @@
 
             {% if terms_accepted %}
               {% if export_files %}
-                <div class="alert alert-success">
-                  Export is ready. Download below.
-                </div>
-                <ul class="list-group mb-3">
-                  {% for file in export_files %}
-                  <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>{{ file }}</span>
-                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('datasets.download_file', token=token, job_token=export_job.token, filename=file) }}">Download</a>
-                  </li>
-                  {% endfor %}
-                </ul>
+                <form method="POST" action="{{ url_for('datasets.download_regenerate', token=token) }}" data-async-regenerate="1" data-status-url="{{ url_for('datasets.download_status', token=token) }}" data-download-template="{{ url_for('datasets.download_file', token=token, job_token='__JOB__', filename='__FILE__') }}">
+                  {{ csrf_field() }}
+                  <button type="submit" class="btn btn-outline-secondary">
+                    Regenerate Download Bundle
+                  </button>
+                </form>
               {% else %}
                 {% if latest_job %}
-                  <div class="alert alert-info">
-                    Export status: {{ latest_job.status }}. Refresh this page after a few minutes.
+                  <div class="alert alert-info" id="export-status" data-token="{{ token }}" data-status-url="{{ url_for('datasets.download_status', token=token) }}" data-download-template="{{ url_for('datasets.download_file', token=token, job_token='__JOB__', filename='__FILE__') }}">
+                    Export status: {{ latest_job.status }}. Updates automatically.
                   </div>
                 {% else %}
                   <div class="alert alert-info">
                     No export is ready yet. Click Generate Export to continue. Exports are available for 20 hours.
                   </div>
                 {% endif %}
-                <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">
-                  {{ csrf_field() }}
-                  <button type="submit" class="btn btn-outline-primary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
-                    Generate Export
-                  </button>
-                </form>
+                <div class="d-flex gap-2 flex-wrap">
+                  <form method="POST" action="{{ url_for('datasets.download_generate', token=token) }}">
+                    {{ csrf_field() }}
+                    <button type="submit" class="btn btn-outline-primary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
+                      Generate Export
+                    </button>
+                  </form>
+                  {% if latest_job %}
+                  <form method="POST" action="{{ url_for('datasets.download_regenerate', token=token) }}" data-async-regenerate="1" data-status-url="{{ url_for('datasets.download_status', token=token) }}" data-download-template="{{ url_for('datasets.download_file', token=token, job_token='__JOB__', filename='__FILE__') }}">
+                    {{ csrf_field() }}
+                    <button type="submit" class="btn btn-outline-secondary" {% if latest_job and latest_job.status in ['queued','processing'] %}disabled{% endif %}>
+                      Regenerate Download Bundle
+                    </button>
+                  </form>
+                  {% endif %}
+                </div>
               {% endif %}
             {% else %}
               <div class="alert alert-info small">
@@ -120,4 +140,188 @@
     </div>
   </div>
 </div>
+
+{% if verified and terms_accepted %}
+<script>
+  (function () {
+    const statusEl = document.getElementById("export-status");
+    const regenForms = document.querySelectorAll("form[data-async-regenerate]");
+    const formWithData = regenForms.length ? regenForms[0] : null;
+    const statusUrl = statusEl
+      ? statusEl.getAttribute("data-status-url")
+      : formWithData?.getAttribute("data-status-url");
+    const downloadTemplate = statusEl
+      ? statusEl.getAttribute("data-download-template")
+      : formWithData?.getAttribute("data-download-template");
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");
+
+    let statusNode = statusEl || null;
+    const buildStatusEl = () => {
+      if (statusNode) {
+        return statusNode;
+      }
+      const container = document.createElement("div");
+      container.className = "alert alert-info";
+      container.id = "export-status";
+      if (statusUrl) {
+        container.setAttribute("data-status-url", statusUrl);
+      }
+      if (downloadTemplate) {
+        container.setAttribute("data-download-template", downloadTemplate);
+      }
+      const anchor = document.getElementById("export-section-anchor");
+      if (anchor && anchor.parentNode) {
+        anchor.parentNode.insertBefore(container, anchor.nextSibling);
+      }
+      statusNode = container;
+      return statusNode;
+    };
+
+    let polling = false;
+    let pollTimer = null;
+    const setRegenerateDisabled = (disabled) => {
+      regenForms.forEach((form) => {
+        const button = form.querySelector("button");
+        if (button) {
+          button.disabled = disabled;
+        }
+      });
+    };
+
+    const poll = async () => {
+      if (!polling || !statusUrl || !downloadTemplate) return;
+      try {
+        const resp = await fetch(statusUrl, { credentials: "same-origin" });
+        if (!resp.ok) {
+          return;
+        }
+        const data = await resp.json();
+        if (!data || !data.ok) {
+          return;
+        }
+        if (data.status === "done" && Array.isArray(data.export_files) && data.export_files.length) {
+          setRegenerateDisabled(false);
+          const list = document.createElement("ul");
+          list.className = "list-group mb-3";
+          list.id = "export-files";
+          data.export_files.forEach((file) => {
+            const item = document.createElement("li");
+            item.className = "list-group-item d-flex justify-content-between align-items-center";
+            const nameSpan = document.createElement("span");
+            nameSpan.textContent = file;
+            const link = document.createElement("a");
+            link.className = "btn btn-sm btn-outline-primary";
+            link.textContent = "Download";
+            const href = downloadTemplate.replace("__JOB__", data.job_token || "").replace("__FILE__", file);
+            link.setAttribute("href", href);
+            item.appendChild(nameSpan);
+            item.appendChild(link);
+            list.appendChild(item);
+          });
+          const existingReady = document.getElementById("export-ready");
+          if (existingReady) {
+            existingReady.remove();
+          }
+          const existing = document.getElementById("export-files");
+          if (existing) {
+            existing.replaceWith(list);
+          } else {
+            const anchor = statusNode || buildStatusEl();
+            if (anchor && anchor.parentNode) {
+              anchor.parentNode.insertBefore(list, anchor.nextSibling);
+            }
+          }
+          if (statusNode) {
+            statusNode.classList.remove("alert-info");
+            statusNode.classList.add("alert-success");
+            statusNode.textContent = "Export is ready. Download below.";
+          }
+          polling = false;
+          return;
+        }
+        if (statusNode && data.status) {
+          statusNode.textContent = `Export status: ${data.status}. Updates automatically.`;
+        }
+        if (data.status === "queued" || data.status === "processing") {
+          setRegenerateDisabled(true);
+          const filesList = document.getElementById("export-files");
+          if (filesList) {
+            filesList.remove();
+          }
+          if (statusNode) {
+            statusNode.textContent = "Please wait as new Download Bundle is generated.";
+          }
+        } else {
+          setRegenerateDisabled(false);
+        }
+      } catch (err) {
+        return;
+      }
+    };
+
+    if (statusEl && statusUrl && downloadTemplate) {
+      polling = true;
+      poll();
+      pollTimer = setInterval(poll, 15000);
+    }
+
+    regenForms.forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!csrfToken) {
+          form.submit();
+          return;
+        }
+        const button = form.querySelector("button");
+        if (button) {
+          button.disabled = true;
+        }
+        const localStatus = buildStatusEl();
+        localStatus.textContent = "Please wait as new Download Bundle is generated.";
+        localStatus.classList.remove("alert-success");
+        localStatus.classList.add("alert-info");
+        const readyAlert = document.getElementById("export-ready");
+        if (readyAlert) {
+          readyAlert.remove();
+        }
+        const existingFiles = document.getElementById("export-files");
+        if (existingFiles) {
+          existingFiles.remove();
+        }
+        try {
+          const resp = await fetch(form.action, {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": csrfToken,
+              "X-Requested-With": "XMLHttpRequest",
+            },
+            credentials: "same-origin",
+          });
+          if (!resp.ok) {
+            localStatus.textContent = "Failed to regenerate export bundle.";
+            if (button) button.disabled = false;
+            return;
+          }
+          const data = await resp.json();
+          if (!data || !data.ok) {
+            localStatus.textContent = data?.message || "Failed to regenerate export bundle.";
+            if (button) button.disabled = false;
+            return;
+          }
+          localStatus.textContent = "Export status: queued. Updates automatically.";
+          setRegenerateDisabled(true);
+          polling = true;
+          if (!pollTimer) {
+            pollTimer = setInterval(poll, 15000);
+          }
+        } catch (err) {
+          localStatus.textContent = "Failed to regenerate export bundle.";
+          if (button) button.disabled = false;
+          return;
+        }
+      });
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

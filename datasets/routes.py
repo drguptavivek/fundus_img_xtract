@@ -8,7 +8,7 @@ import logging
 from types import SimpleNamespace
 from typing import List, Optional
 
-from flask import abort, current_app, flash, redirect, render_template, request, session, url_for
+from flask import abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user
 import sqlalchemy as sa
 from sqlalchemy import or_
@@ -820,6 +820,69 @@ def _build_verified_context(db, share: DatasetShare, token: str) -> dict:
     }
 
 
+def _queue_dataset_export_job(db, share: DatasetShare, ip: str) -> Optional[str]:
+    items = (
+        db.query(CuratedDatasetItem)
+        .filter(
+            CuratedDatasetItem.dataset_id == share.dataset_id,
+            CuratedDatasetItem.include_in_export.is_(True),
+        )
+        .all()
+    )
+    task_ids = [item.task_id for item in items]
+    if not task_ids:
+        return "No tasks selected for export."
+
+    job_token = db_create_job(
+        ["dataset_export"],
+        [],
+        uploader_user_id=None,
+        uploader_username="dataset_share",
+        uploader_ip=ip,
+        upload_type="dataset_export",
+    )
+    job = db.query(Job).filter(Job.token == job_token).first()
+    if job:
+        db.add(
+            DatasetExport(
+                dataset_id=share.dataset_id,
+                job_id=job.id,
+                created_by_user_id=None,
+            )
+        )
+        db.flush()
+
+    dataset = db.query(CuratedDataset).filter(CuratedDataset.id == share.dataset_id).first()
+    metadata = {}
+    if dataset:
+        stored_filters = {}
+        try:
+            stored_filters = json.loads(dataset.filters_json or "{}")
+        except Exception:
+            stored_filters = {}
+        metadata = {
+            "dataset_uuid": dataset.uuid,
+            "dataset_name": dataset.name,
+            "dataset_purpose": dataset.purpose,
+            "disease_id": dataset.disease_id,
+            **stored_filters,
+        }
+    enqueue_dataset_export(
+        current_app._get_current_object(),
+        job_token,
+        share.dataset_id,
+        task_ids,
+        metadata,
+    )
+    _LOGGER.info(
+        "Dataset share export queued share_id=%s job_token=%s ip=%s",
+        share.id,
+        sanitize_log_value(job_token),
+        sanitize_log_value(ip),
+    )
+    return None
+
+
 @bp.route("/download/<token>", methods=["GET"])
 @rate_limit("30 per minute")
 def download_welcome(token: str):
@@ -846,6 +909,49 @@ def download_welcome(token: str):
 
         _clear_verified_session()
         return render_template("datasets/download_welcome.html", verified=False, token=token)
+
+
+@bp.route("/download/<token>/status", methods=["GET"])
+@rate_limit("30 per minute")
+def download_status(token: str):
+    ip = get_client_ip()
+    if not validate_share_token(token):
+        return jsonify({"ok": False, "message": "invalid token"}), 404
+    token_hash = hash_share_token(token)
+    if is_locked_out(ip, token_hash):
+        return jsonify({"ok": False, "message": "locked"}), 429
+
+    with get_db_session() as db:
+        share = (
+            db.query(DatasetShare)
+            .filter(DatasetShare.token_hash == token_hash, DatasetShare.is_active.is_(True))
+            .first()
+        )
+        if not share or not _share_is_valid(share):
+            return jsonify({"ok": False, "message": "invalid share"}), 404
+        if not _is_verified_session(share):
+            return jsonify({"ok": False, "message": "not verified"}), 403
+        if not _is_terms_accepted(share):
+            return jsonify({"ok": False, "message": "terms not accepted"}), 403
+
+        latest_job = _get_latest_export_job(db, share.dataset_id)
+        export_files: List[str] = []
+        export_job_token = None
+        status = None
+        if latest_job:
+            status = latest_job.status
+            export_job_token = latest_job.token
+            if latest_job.status == "done":
+                export_files = _list_export_files(latest_job.token)
+
+        return jsonify(
+            {
+                "ok": True,
+                "status": status,
+                "export_files": export_files,
+                "job_token": export_job_token,
+            }
+        )
 
 
 @bp.route("/download/<token>/verify", methods=["POST"])
@@ -937,72 +1043,82 @@ def download_generate(token: str):
             return render_template("datasets/download_welcome.html", verified=True, **ctx)
 
         if not export_files:
-            items = (
-                db.query(CuratedDatasetItem)
-                .filter(
-                    CuratedDatasetItem.dataset_id == share.dataset_id,
-                    CuratedDatasetItem.include_in_export.is_(True),
-                )
-                .all()
-            )
-            task_ids = [item.task_id for item in items]
-            if not task_ids:
+            error_message = _queue_dataset_export_job(db, share, ip)
+            if error_message:
                 return render_template(
                     "datasets/download_welcome.html",
                     verified=True,
-                    error_message="No tasks selected for export.",
+                    error_message=error_message,
                     **_build_verified_context(db, share, token),
                 )
 
-            job_token = db_create_job(
-                ["dataset_export"],
-                [],
-                uploader_user_id=None,
-                uploader_username="dataset_share",
-                uploader_ip=ip,
-                upload_type="dataset_export",
-            )
-            job = db.query(Job).filter(Job.token == job_token).first()
-            if job:
-                db.add(
-                    DatasetExport(
-                        dataset_id=share.dataset_id,
-                        job_id=job.id,
-                        created_by_user_id=None,
-                    )
-                )
-                db.flush()
+        ctx = _build_verified_context(db, share, token)
+        return render_template("datasets/download_welcome.html", verified=True, **ctx)
 
-            dataset = db.query(CuratedDataset).filter(CuratedDataset.id == share.dataset_id).first()
-            metadata = {}
-            if dataset:
-                stored_filters = {}
-                try:
-                    stored_filters = json.loads(dataset.filters_json or "{}")
-                except Exception:
-                    stored_filters = {}
-                metadata = {
-                    "dataset_uuid": dataset.uuid,
-                    "dataset_name": dataset.name,
-                    "dataset_purpose": dataset.purpose,
-                    "disease_id": dataset.disease_id,
-                    **stored_filters,
-                }
-            enqueue_dataset_export(
-                current_app._get_current_object(),
-                job_token,
-                share.dataset_id,
-                task_ids,
-                metadata,
+
+@bp.route("/download/<token>/regenerate", methods=["POST"])
+@rate_limit("2 per minute")
+def download_regenerate(token: str):
+    ip = get_client_ip()
+    wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if not validate_share_token(token):
+        if wants_json:
+            return jsonify({"ok": False, "message": "invalid token"}), 404
+        return _render_invalid()
+    token_hash = hash_share_token(token)
+    if is_locked_out(ip, token_hash):
+        if wants_json:
+            return jsonify({"ok": False, "message": "locked"}), 429
+        return _render_invalid(status_code=429)
+
+    with get_db_session() as db:
+        share = (
+            db.query(DatasetShare)
+            .filter(DatasetShare.token_hash == token_hash, DatasetShare.is_active.is_(True))
+            .first()
+        )
+        if not share or not _share_is_valid(share):
+            register_failure(ip, token_hash)
+            if wants_json:
+                return jsonify({"ok": False, "message": "invalid share"}), 404
+            return _render_invalid()
+
+        if not _is_verified_session(share):
+            register_failure(ip, token_hash)
+            if wants_json:
+                return jsonify({"ok": False, "message": "not verified"}), 403
+            return _render_invalid()
+        if not _is_terms_accepted(share):
+            if wants_json:
+                return jsonify({"ok": False, "message": "terms not accepted"}), 403
+            return render_template(
+                "datasets/download_welcome.html",
+                verified=True,
+                error_message="Please accept the Terms & Conditions to continue.",
+                **_build_verified_context(db, share, token),
             )
-            _LOGGER.info(
-                "Dataset share export queued share_id=%s job_token=%s ip=%s",
-                share.id,
-                sanitize_log_value(job_token),
-                sanitize_log_value(ip),
+
+        latest_job = _get_latest_export_job(db, share.dataset_id)
+        if latest_job and latest_job.status in ("queued", "processing"):
+            if wants_json:
+                return jsonify({"ok": True, "status": latest_job.status}), 200
+            ctx = _build_verified_context(db, share, token)
+            return render_template("datasets/download_welcome.html", verified=True, **ctx)
+
+        error_message = _queue_dataset_export_job(db, share, ip)
+        if error_message:
+            if wants_json:
+                return jsonify({"ok": False, "message": error_message}), 400
+            return render_template(
+                "datasets/download_welcome.html",
+                verified=True,
+                error_message=error_message,
+                **_build_verified_context(db, share, token),
             )
 
         ctx = _build_verified_context(db, share, token)
+        if wants_json:
+            return jsonify({"ok": True, "status": "queued"}), 200
         return render_template("datasets/download_welcome.html", verified=True, **ctx)
 
 

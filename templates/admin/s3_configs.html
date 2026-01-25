@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}S3 Storage Configurations{% endblock %}
+
+{% block extra_styles %}
+<style>
+.config-card {
+    transition: all 0.2s ease;
+}
+.config-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.provider-badge {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+.status-active {
+    color: #198754;
+}
+.status-inactive {
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0">S3 Storage Configurations</h1>
+            <small class="text-muted">Multi-tenant S3-compatible storage with hospital isolation</small>
+        </div>
+        <div>
+            <a class="btn btn-primary" href="{{ url_for('admin.s3_config_create') }}">
+                <i class="fas fa-plus"></i> New Configuration
+            </a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('admin.users_list') }}">Back to Admin</a>
+        </div>
+    </div>
+
+    {% if not configs_by_hospital %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <strong>No S3 configurations found.</strong>
+        Create a configuration to enable S3 storage for your hospital.
+    </div>
+    {% else %}
+    {% for hospital_id, hospital_data in configs_by_hospital.items() %}
+    <div class="card mb-4">
+        <div class="card-header py-2 bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-hospital me-2"></i>
+                    <strong>{{ hospital_data.hospital.name }}</strong>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 25%">Name</th>
+                            <th style="width: 15%">Provider</th>
+                            <th style="width: 20%">Bucket</th>
+                            <th style="width: 10%">Status</th>
+                            <th style="width: 15%">Pepper Rotation</th>
+                            <th style="width: 15%" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for config in hospital_data.configs %}
+                        <tr class="{% if config.is_archived %}text-muted{% endif %}">
+                            <td>
+                                <strong>{{ config.name }}</strong>
+                                {% if config.is_archived %}
+                                <span class="badge bg-secondary ms-1">Archived</span>
+                                {% endif %}
+                                {% if config.fallback_policy == 'always' %}
+                                <span class="badge bg-warning ms-1" title="Fallback to local storage enabled">
+                                    <i class="fas fa-shield-alt"></i> Fallback
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge provider-badge
+                                    {% if config.provider == 'aws' %}bg-warning text-dark
+                                    {% elif config.provider == 'r2' %}bg-primary
+                                    {% elif config.provider == 'hetzner' %}bg-danger
+                                    {% elif config.provider == 'gcp' %}bg-info text-dark
+                                    {% elif config.provider == 'azure' %}bg-primary
+                                    {% elif config.provider == 'minio' %}bg-success text-dark
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ config.provider }}
+                                </span>
+                            </td>
+                            <td>
+                                <code class="text small">{{ config.bucket_name }}</code>
+                                {% if config.path_prefix %}
+                                <br><small class="text-muted">{{ config.path_prefix }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if config.is_active %}
+                                <span class="badge bg-success status-active">
+                                    <i class="fas fa-check-circle"></i> Active
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary status-inactive">
+                                    <i class="fas fa-pause-circle"></i> Inactive
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if config.pepper_rotated_at %}
+                                <small class="text-muted">
+                                    <i class="fas fa-clock"></i> {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
+                                </small>
+                                {% else %}
+                                <small class="text-muted">Never</small>
+                                {% endif %}
+                                {% if config.auto_rotate_pepper %}
+                                <span class="badge bg-info ms-1" title="Auto-rotation enabled">
+                                    <i class="fas fa-sync-alt"></i> Auto
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{{ url_for('admin.s3_config_edit', s3_config_id=config.id) }}"
+                                       class="btn btn-outline-primary" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% if not config.is_archived %}
+                                    <button type="button"
+                                            class="btn btn-outline-success"
+                                            onclick="activateConfig({{ config.id }}, {{ config.is_active|lower }})"
+                                            title="{% if config.is_active %}Deactivate{% else %}Activate{% endif %}">
+                                        <i class="fas {% if config.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-secondary"
+                                            onclick="testConnection({{ config.id }})"
+                                            title="Test Connection">
+                                        <i class="fas fa-plug"></i>
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-outline-warning"
+                                            onclick="rotatePepper({{ config.id }})"
+                                            title="Rotate Pepper">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if is_master_admin %}
+                                    <a href="{{ url_for('admin.s3_config_set_fallback', s3_config_id=config.id) }}"
+                                       class="btn btn-outline-dark" title="Fallback Policy">
+                                        <i class="fas fa-shield-alt"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if not config.is_archived %}
+                                    <button type="button"
+                                            class="btn btn-outline-danger"
+                                            onclick="deleteConfig({{ config.id }}, '{{ config.name }}')"
+                                            title="Archive">
+                                        <i class="fas fa-archive"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Info Cards -->
+    <div class="row g-3 mt-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-info-circle text-primary"></i> Supported Providers
+                    </h6>
+                    <small class="text-muted">
+                        Cloudflare R2, Hetzner, AWS S3, Google Cloud Storage, Azure Blob, MinIO, and other S3-compatible services.
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-shield-alt text-success"></i> Hospital Isolation
+                    </h6>
+                    <small class="text-muted">
+                        Each hospital has isolated encryption keys and URL signing peppers. Cross-hospital access is blocked.
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="fas fa-key text-warning"></i> Pepper Rotation
+                    </h6>
+                    <small class="text-muted">
+                        URL signing peppers can be rotated manually or automatically. Previous pepper valid for 24 hours.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function activateConfig(configId, isActive) {
+    const action = isActive ? 'deactivate' : 'activate';
+    if (!confirm(`Are you sure you want to ${action} this configuration?`)) {
+        return;
+    }
+
+    fetch(`/admin/s3-configs/${configId}/activate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+function testConnection(configId) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+
+    fetch(`/admin/s3-configs/${configId}/test-connection`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Connection successful!');
+        } else {
+            alert('Connection failed: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    })
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+function rotatePepper(configId) {
+    if (!confirm('Rotate the URL signing pepper? Previous pepper will be valid for 24 hours.')) {
+        return;
+    }
+
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    btn.disabled = true;
+
+    fetch(`/admin/s3-configs/${configId}/rotate-pepper`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pepper rotated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    })
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+function deleteConfig(configId, configName) {
+    if (!confirm(`Archive configuration "${configName}"? This will disable the config but keep it for reference.`)) {
+        return;
+    }
+
+    fetch(`/admin/s3-configs/${configId}/delete`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Error archiving configuration');
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+</script>
+{% endblock %}

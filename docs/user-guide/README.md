@@ -16,6 +16,7 @@
 12. [Dataset Creation](/help/dataset-creation)
 13. [Dataset Sharing](/help/dataset-sharing)
 14. [Dataset Download](/help/dataset-download)
+15. [S3 Storage Setup](/help/s3-storage-setup)
 
 ## About This System
 

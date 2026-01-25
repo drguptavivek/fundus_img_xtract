@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+{% block title %}Edit S3 Configuration{% endblock %}
+
+{% block extra_styles %}
+<style>
+.provider-badge {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+}
+.help-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0">Edit S3 Configuration</h1>
+            <small class="text-muted">{{ config.name }} ({{ hospital.name }})</small>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.s3_configs_list') }}">Back to Configurations</a>
+    </div>
+
+    <!-- Status Banner -->
+    <div class="alert {% if config.is_active %}alert-success{% else %}alert-warning{% endif %} mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <i class="fas {% if config.is_active %}fa-check-circle{% else %}fa-pause-circle{% endif %} me-2"></i>
+                <strong>
+                    Configuration is {% if config.is_active %}ACTIVE{% else %}INACTIVE{% endif %}
+                </strong>
+                {% if config.is_archived %}
+                <span class="badge bg-secondary ms-2">Archived</span>
+                {% endif %}
+            </div>
+            {% if not config.is_archived %}
+            <button type="button"
+                    class="btn {% if config.is_active %}btn-warning{% else %}btn-success%} btn-sm"
+                    onclick="toggleActivation()">
+                {% if config.is_active %}<i class="fas fa-pause"></i> Deactivate{% else %}<i class="fas fa-play"></i> Activate{% endif %}
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <form method="POST" id="s3ConfigForm">
+                {{ csrf_field() }}
+
+                <!-- Provider (Read-only) -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-cloud me-2"></i>Provider</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label text-muted">Provider Type</label>
+                                <div>
+                                    <span class="badge provider-badge
+                                        {% if config.provider == 'aws' %}bg-warning text-dark
+                                        {% elif config.provider == 'r2' %}bg-primary
+                                        {% elif config.provider == 'hetzner' %}bg-danger
+                                        {% elif config.provider == 'gcp' %}bg-info text-dark
+                                        {% elif config.provider == 'azure' %}bg-primary
+                                        {% elif config.provider == 'minio' %}bg-success text-dark
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ config.provider }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label text-muted">Configuration Name</label>
+                                <input type="text" class="form-control" name="name"
+                                       value="{{ form_data.get('name', config.name) }}" required>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Details -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-plug me-2"></i>Connection Details</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label for="bucket_name" class="form-label">Bucket Name *</label>
+                                <input type="text" class="form-control font-monospace" name="bucket_name" id="bucket_name"
+                                       value="{{ form_data.get('bucket_name', config.bucket_name) }}" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="region" class="form-label">Region *</label>
+                                <input type="text" class="form-control" name="region" id="region"
+                                       value="{{ form_data.get('region', config.region) }}" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3 mt-3">
+                            <label for="endpoint_url" class="form-label">Endpoint URL</label>
+                            <input type="url" class="form-control font-monospace" name="endpoint_url" id="endpoint_url"
+                                   value="{{ form_data.get('endpoint_url', config.endpoint_url or '') }}"
+                                   placeholder="https://...">
+                            <div class="help-text">Required for non-AWS providers.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="path_prefix" class="form-label">Path Prefix</label>
+                            <input type="text" class="form-control" name="path_prefix" id="path_prefix"
+                                   value="{{ form_data.get('path_prefix', config.path_prefix or '') }}"
+                                   placeholder="uploads/">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="addressing_style" class="form-label">S3 Addressing Style</label>
+                            <select class="form-select" name="addressing_style" id="addressing_style">
+                                <option value="auto" {% if (form_data.get('addressing_style') or config.addressing_style) == 'auto' %}selected{% endif %}>
+                                    Auto (Recommended)
+                                </option>
+                                <option value="virtual" {% if (form_data.get('addressing_style') or config.addressing_style) == 'virtual' %}selected{% endif %}>
+                                    Virtual (vhost-style: bucket.endpoint.com)
+                                </option>
+                                <option value="path" {% if (form_data.get('addressing_style') or config.addressing_style) == 'path' %}selected{% endif %}>
+                                    Path (path-style: endpoint.com/bucket)
+                                </option>
+                            </select>
+                            <div class="help-text small">
+                                <strong>Auto:</strong> Let boto3 decide based on endpoint.<br>
+                                <strong>Virtual:</strong> Use vhost-style (required for R2 and some providers).<br>
+                                <strong>Path:</strong> Use path-style (legacy, may not work with newer providers).
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="button" class="btn btn-outline-primary" onclick="testConnection()">
+                                <i class="fas fa-plug"></i> Test Connection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Credentials -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-key me-2"></i>Update Credentials</strong>
+                        <span class="badge bg-success ms-2">Encrypted</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info small">
+                            <i class="fas fa-info-circle"></i>
+                            Leave blank to keep existing credentials. New values will replace current credentials.
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="access_key" class="form-label">Access Key ID</label>
+                            <input type="text" class="form-control font-monospace" name="access_key" id="access_key"
+                                   value="***" placeholder="Leave blank to keep current">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="secret_key" class="form-label">Secret Access Key</label>
+                            <input type="password" class="form-control font-monospace" name="secret_key" id="secret_key"
+                                   value="***" placeholder="Leave blank to keep current">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Rotation Settings -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-sync-alt me-2"></i>URL Signing Pepper Auto-Rotation</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="auto_rotate_pepper" id="auto_rotate_pepper"
+                                   {% if config.auto_rotate_pepper or form_data.get('auto_rotate_pepper') %}checked{% endif %}>
+                            <label class="form-check-label" for="auto_rotate_pepper">
+                                Enable automatic daily pepper rotation
+                            </label>
+                        </div>
+
+                        <div class="row g-3" id="rotationSettings" style="{% if not config.auto_rotate_pepper and not form_data.get('auto_rotate_pepper') %}display: none;{% endif %}">
+                            <div class="col-md-6">
+                                <label for="rotation_time" class="form-label">Rotation Time *</label>
+                                <input type="time" class="form-control" name="rotation_time" id="rotation_time"
+                                       value="{{ form_data.get('rotation_time', config.rotation_time or '02:00') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="rotation_timezone" class="form-label">Timezone *</label>
+                                <select class="form-select" name="rotation_timezone" id="rotation_timezone">
+                                    {% for tz in common_timezones %}
+                                    <option value="{{ tz }}" {% if config.rotation_timezone == tz or form_data.get('rotation_timezone') == tz %}selected{% endif %}>
+                                        {{ tz }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Manual Rotation -->
+                        <hr class="my-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>Manual Pepper Rotation</strong>
+                                {% if config.pepper_rotated_at %}
+                                <div class="small text-muted">
+                                    Last rotated: {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="btn btn-outline-warning" onclick="rotatePepper()">
+                                <i class="fas fa-key"></i> Rotate Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fallback Policy (Master Admin Only) -->
+                {% if is_master_admin %}
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-shield-alt me-2"></i>Fallback Policy</strong>
+                        <span class="badge bg-warning ms-2">Master Admin</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-0">
+                            <label class="form-label">Current Policy</label>
+                            <div>
+                                <span class="badge {% if config.fallback_policy == 'never' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ config.fallback_policy.upper() }}
+                                </span>
+                                <span class="text-muted small ms-2">
+                                    {% if config.fallback_policy == 'never' %}
+                                    Fail hard with 503 error if S3 unavailable
+                                    {% else %}
+                                    Allow fallback to local filesystem
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <a href="{{ url_for('admin.s3_config_set_fallback', s3_config_id=config.id) }}"
+                               class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-edit"></i> Change Fallback Policy
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Submit -->
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <a href="{{ url_for('admin.s3_configs_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                    {% if not config.is_archived %}
+                    <button type="button" class="btn btn-outline-danger ms-auto" onclick="archiveConfig()">
+                        <i class="fas fa-archive"></i> Archive
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-header py-2">
+                    <strong>Configuration Info</strong>
+                </div>
+                <div class="card-body small">
+                    <div class="mb-2">
+                        <strong>ID:</strong> {{ config.id }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Hospital:</strong> {{ hospital.name }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Created:</strong> {{ config.created_at|datetime('%Y-%m-%d %H:%M') }}
+                    </div>
+                    <div class="mb-2">
+                        <strong>Updated:</strong> {{ config.updated_at|datetime('%Y-%m-%d %H:%M') }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header py-2">
+                    <strong>Security Status</strong>
+                </div>
+                <div class="card-body small">
+                    <div class="mb-2">
+                        <i class="fas fa-key text-success"></i> URL Signing Pepper: Active
+                    </div>
+                    {% if config.pepper_rotated_at %}
+                    <div class="mb-2">
+                        <i class="fas fa-clock text-info"></i> Last Rotation: {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
+                    </div>
+                    {% endif %}
+                    <div class="mb-2">
+                        <i class="fas fa-shield-alt text-warning"></i> Hospital Isolation: Enabled
+                    </div>
+                    <div class="text-muted">
+                        Credentials and pepper are encrypted with hospital-specific key.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function testConnection() {
+    const btn = event.target;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    btn.disabled = true;
+
+    fetch(`/admin/s3-configs/{{ config.id }}/test-connection`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Connection successful!');
+        } else {
+            alert('Connection failed: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    })
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+function rotatePepper() {
+    if (!confirm('Rotate the URL signing pepper? Previous pepper will be valid for 24 hours.')) {
+        return;
+    }
+
+    fetch(`/admin/s3-configs/{{ config.id }}/rotate-pepper`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pepper rotated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+function toggleActivation() {
+    const isActive = {{ config.is_active|lower }};
+    const action = isActive ? 'deactivate' : 'activate';
+    if (!confirm(`Are you sure you want to ${action} this configuration?`)) {
+        return;
+    }
+
+    fetch(`/admin/s3-configs/{{ config.id }}/activate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+function archiveConfig() {
+    if (!confirm('Archive this configuration? It will be disabled but kept for reference.')) {
+        return;
+    }
+
+    if (confirm('This is a destructive action. Are you sure?')) {
+        window.location.href = `/admin/s3-configs/{{ config.id }}/delete`;
+    }
+}
+
+document.getElementById('auto_rotate_pepper').addEventListener('change', function() {
+    document.getElementById('rotationSettings').style.display = this.checked ? 'flex' : 'none';
+});
+</script>
+{% endblock %}

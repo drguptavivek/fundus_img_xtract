@@ -4,6 +4,7 @@ services:
       - deploy.config.env
       - deploy.secrets.env
       - develop.config.env
+      - testing.secrets.env
     command:
       - uv
       - run

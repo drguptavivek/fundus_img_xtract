@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Create S3 Configuration{% endblock %}
+
+{% block extra_styles %}
+<style>
+.provider-option {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.provider-option:hover {
+    background-color: #f8f9fa;
+}
+.provider-option.selected {
+    background-color: #e7f3ff;
+    border-color: #0d6efd;
+}
+.help-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0">Create S3 Configuration</h1>
+            <small class="text-muted">Add a new S3-compatible storage configuration</small>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.s3_configs_list') }}">Back to Configurations</a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <form method="POST" id="s3ConfigForm">
+                {{ csrf_field() }}
+
+                <!-- Hospital Selection -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-hospital me-2"></i>Hospital</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="hospital_id" class="form-label">Hospital *</label>
+                            <select class="form-select" name="hospital_id" id="hospital_id" required>
+                                <option value="">Select Hospital</option>
+                                {% for hospital in hospitals %}
+                                <option value="{{ hospital.id }}" {% if form_data and form_data.get('hospital_id')|int == hospital.id %}selected{% endif %}>
+                                    {{ hospital.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="help-text">You can only create configs for your assigned hospitals.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Provider Selection -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-cloud me-2"></i>Storage Provider</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Provider *</label>
+                            <div class="row g-2" id="providerGrid">
+                                {% for provider in providers %}
+                                <div class="col-6 col-md-4">
+                                    <div class="provider-option card p-2 text-center {% if form_data and form_data.get('provider') == provider %}selected{% endif %}"
+                                         onclick="selectProvider('{{ provider }}')">
+                                        <input type="radio" name="provider" value="{{ provider }}"
+                                               class="d-none" {% if form_data and form_data.get('provider') == provider %}checked{% endif %}>
+                                        <div class="fw-bold text-uppercase small">{{ provider }}</div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Details -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-plug me-2"></i>Connection Details</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label for="name" class="form-label">Configuration Name *</label>
+                                <input type="text" class="form-control" name="name" id="name"
+                                       value="{{ form_data.get('name', '') }}" required>
+                                <div class="help-text">A friendly name to identify this configuration.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="region" class="form-label">Region *</label>
+                                <input type="text" class="form-control" name="region" id="region"
+                                       value="{{ form_data.get('region', 'us-east-1') }}" required
+                                       placeholder="us-east-1">
+                                <div class="help-text">AWS region format</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3 mt-3">
+                            <label for="bucket_name" class="form-label">Bucket Name *</label>
+                            <input type="text" class="form-control" name="bucket_name" id="bucket_name"
+                                   value="{{ form_data.get('bucket_name', '') }}" required>
+                            <div class="help-text">S3 bucket name (lowercase, letters, numbers, hyphens only).</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="endpoint_url" class="form-label">Endpoint URL (Optional)</label>
+                            <input type="url" class="form-control" name="endpoint_url" id="endpoint_url"
+                                   value="{{ form_data.get('endpoint_url', '') }}"
+                                   placeholder="https://...">
+                            <div class="help-text">Required for non-AWS providers (R2, Hetzner, MinIO, etc.).</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="path_prefix" class="form-label">Path Prefix (Optional)</label>
+                            <input type="text" class="form-control" name="path_prefix" id="path_prefix"
+                                   value="{{ form_data.get('path_prefix', '') }}"
+                                   placeholder="uploads/">
+                            <div class="help-text">Prefix to add to all object keys (e.g., "uploads/").</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="addressing_style" class="form-label">S3 Addressing Style</label>
+                            <select class="form-select" name="addressing_style" id="addressing_style">
+                                <option value="auto" {% if form_data.get('addressing_style', 'auto') == 'auto' %}selected{% endif %}>
+                                    Auto (Recommended)
+                                </option>
+                                <option value="virtual" {% if form_data.get('addressing_style') == 'virtual' %}selected{% endif %}>
+                                    Virtual (vhost-style: bucket.endpoint.com)
+                                </option>
+                                <option value="path" {% if form_data.get('addressing_style') == 'path' %}selected{% endif %}>
+                                    Path (path-style: endpoint.com/bucket)
+                                </option>
+                            </select>
+                            <div class="help-text">
+                                <strong>Auto:</strong> Let boto3 decide based on endpoint (recommended).<br>
+                                <strong>Virtual:</strong> Use vhost-style addressing (required for some providers like R2).<br>
+                                <strong>Path:</strong> Use path-style addressing (legacy, may not work with newer S3 providers).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Credentials -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-key me-2"></i>Credentials</strong>
+                        <span class="badge bg-success ms-2">Encrypted</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="access_key" class="form-label">Access Key ID *</label>
+                            <input type="text" class="form-control font-monospace" name="access_key" id="access_key"
+                                   value="{{ form_data.get('access_key', '') }}" required>
+                            <div class="help-text">Your S3 access key or access key ID.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="secret_key" class="form-label">Secret Access Key *</label>
+                            <input type="password" class="form-control font-monospace" name="secret_key" id="secret_key"
+                                   value="{{ form_data.get('secret_key', '') }}" required>
+                            <div class="help-text">Your S3 secret key. Will be encrypted with hospital-specific key.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Rotation Settings -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-sync-alt me-2"></i>URL Signing Pepper Auto-Rotation</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" name="auto_rotate_pepper" id="auto_rotate_pepper"
+                                   {% if form_data.get('auto_rotate_pepper') %}checked{% endif %}>
+                            <label class="form-check-label" for="auto_rotate_pepper">
+                                Enable automatic daily pepper rotation
+                            </label>
+                            <div class="help-text">Rotate URL signing pepper daily at specified time.</div>
+                        </div>
+
+                        <div class="row g-3" id="rotationSettings" style="{% if not form_data.get('auto_rotate_pepper') %}display: none;{% endif %}">
+                            <div class="col-md-6">
+                                <label for="rotation_time" class="form-label">Rotation Time *</label>
+                                <input type="time" class="form-control" name="rotation_time" id="rotation_time"
+                                       value="{{ form_data.get('rotation_time', '02:00') }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="rotation_timezone" class="form-label">Timezone *</label>
+                                <select class="form-select" name="rotation_timezone" id="rotation_timezone">
+                                    {% for tz in common_timezones %}
+                                    <option value="{{ tz }}" {% if form_data.get('rotation_timezone') == tz %}selected{% endif %}>
+                                        {{ tz }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fallback Policy -->
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong><i class="fas fa-shield-alt me-2"></i>Fallback Policy</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="fallback_policy" class="form-label">Fallback Policy *</label>
+                            <select class="form-select" name="fallback_policy" id="fallback_policy">
+                                <option value="never" {% if form_data.get('fallback_policy', 'never') == 'never' %}selected{% endif %}>
+                                    Never (Fail Hard) - Recommended
+                                </option>
+                                <option value="always" {% if form_data.get('fallback_policy') == 'always' %}selected{% endif %}>
+                                    Always (Allow Local) - Master Admin Only
+                                </option>
+                            </select>
+                            <div class="help-text">
+                                <strong>Never:</strong> Return 503 error if S3 fails (recommended for security).<br>
+                                <strong>Always:</strong> Fall back to local filesystem if S3 fails (master admin only).
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Create Configuration
+                    </button>
+                    <a href="{{ url_for('admin.s3_configs_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sidebar with help -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-header py-2">
+                    <strong><i class="fas fa-question-circle me-2"></i>Provider Help</strong>
+                </div>
+                <div class="card-body">
+                    <h6>Cloudflare R2</h6>
+                    <p class="small text-muted">Endpoint: <code>https://&lt;account_id&gt;.r2.cloudflarestorage.com</code></p>
+
+                    <h6>Hetzner</h6>
+                    <p class="small text-muted">Endpoint: Provided in Hetzner console</p>
+
+                    <h6>AWS S3</h6>
+                    <p class="small text-muted">Leave endpoint URL blank for AWS S3.</p>
+
+                    <h6>Google Cloud Storage</h6>
+                    <p class="small text-muted">Endpoint: <code>https://storage.googleapis.com</code></p>
+
+                    <h6>Azure Blob</h6>
+                    <p class="small text-muted">Requires Azure-specific configuration.</p>
+
+                    <h6>MinIO</h6>
+                    <p class="small text-muted">Endpoint: Your MinIO server URL</p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header py-2">
+                    <strong><i class="fas fa-info-circle me-2"></i>Security Notes</strong>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0">
+                        <li>Credentials are encrypted with hospital-specific keys</li>
+                        <li>Each hospital gets unique encryption keys</li>
+                        <li>URL signing peppers prevent cross-hospital access</li>
+                        <li>Master admin can override any setting</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectProvider(provider) {
+    document.querySelectorAll('.provider-option').forEach(el => {
+        el.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+    document.querySelector(`input[name="provider"][value="${provider}"]`).checked = true;
+}
+
+document.getElementById('auto_rotate_pepper').addEventListener('change', function() {
+    document.getElementById('rotationSettings').style.display = this.checked ? 'flex' : 'none';
+});
+</script>
+{% endblock %}

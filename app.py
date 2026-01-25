@@ -247,6 +247,23 @@ def _register_csrf_protection(app: Flask) -> None:
     csrf.init_app(app)
 
 
+def _register_crypto_cache_cleanup(app: Flask) -> None:
+    """
+    Register cleanup handler for S3 encryption derived key cache.
+
+    Clears hospital-specific derived keys after each request to limit
+    the window of exposure if process memory is compromised.
+
+    This is called automatically when S3Config is used.
+    """
+    from utils.s3_encryption_nacl import clear_key_cache
+
+    @app.teardown_request
+    def clear_crypto_cache(exception=None):
+        """Clear derived key cache after each request (security)."""
+        clear_key_cache()
+
+
 def _register_https_redirect(app: Flask) -> None:
     @app.before_request
     def _redirect_insecure_requests():
@@ -879,6 +896,7 @@ def create_app():
     force_https = _configure_session_and_proxy(app)
     _configure_executors(app)
     _register_csrf_protection(app)
+    _register_crypto_cache_cleanup(app)
     cache.init_app(app)
     app.session_interface = DatabaseSessionInterface()
     if force_https:

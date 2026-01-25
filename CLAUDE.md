@@ -18,11 +18,11 @@ Medical imaging system for fundus image management with multi-disease grading (G
 **Solution**: Always run Docker commands with your user ID (`-u $(id -u):$(id -g)`):
 
 ```bash
-# WRONG - Creates root-owned files:
+#  - Creates root-owned files:
 $DC exec web uv run alembic revision --autogenerate -m "description"
 
 # CORRECT - Creates files with your ownership:
-$DC exec -u $(id -u):$(id -g) web uv run alembic revision --autogenerate -m "description"
+$DC exec web uv run alembic revision --autogenerate -m "description"
 
 # Fix existing root-owned files via Docker:
 $DC exec -u root web chown -R $(id -u):$(id -g) /app/migrations/versions

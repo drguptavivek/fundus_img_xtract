@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from urllib.parse import quote, urlparse
-from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event)
+from sqlalchemy import (CheckConstraint, Date, create_engine, Integer, String, ForeignKey, Boolean, DateTime, Text, Index, UniqueConstraint, Table, Column, Float, event, text)
 from sqlalchemy.orm import sessionmaker, relationship, DeclarativeBase, Mapped, mapped_column
 from datetime import date, datetime, timezone
 from typing import Optional, List
@@ -179,6 +179,121 @@ class UserRole(Base):
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True)
     __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_user_roles_user_role"), Index("ix_user_roles_user", "user_id"), Index("ix_user_roles_role", "role_id"))
 
+class S3Config(Base):
+    """
+    Multi-Tenant S3-Compatible Storage Configuration
+
+    Each hospital can have its own S3-compatible bucket configuration.
+    - One active config per hospital (enforced by unique constraint)
+    - Provider support: R2, Hetzner, AWS, GCP, Azure, MinIO, Other
+    - Credentials encrypted with hospital-specific PyNaCl keys
+    - URL signing pepper for HMAC-based access control
+    - Auto-rotation support with timezone-aware scheduling
+    - Binary fallback policy: never (fail hard) or always (allow local)
+    """
+    __tablename__ = "s3_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # Hospital scoping (one active S3 config per hospital)
+    hospital_id: Mapped[int] = mapped_column(
+        ForeignKey("hospitals.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True
+    )
+
+    # Provider selection
+    provider: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="other",
+        server_default="other"
+    )
+    # Values: 'r2', 'hetzner', 'aws', 'gcp', 'azure', 'minio', 'other'
+
+    # S3-compatible storage details
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    bucket_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    region: Mapped[str] = mapped_column(String(50), nullable=False)
+    endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    path_prefix: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    # S3 addressing style: virtual (vhost/bucket.endpoint.com) or path (endpoint.com/bucket)
+    # Default: auto (let boto3 decide based on endpoint/bucket)
+    addressing_style: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="auto",
+        server_default="auto"
+    )  # Values: 'auto', 'virtual', 'path'
+
+    # Encrypted credentials (PyNaCl with hospital-specific derived key)
+    access_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    secret_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # URL signing (PyNaCl encrypted)
+    url_signing_pepper: Mapped[str] = mapped_column(Text, nullable=False)
+    url_signing_pepper_previous: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pepper_rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Auto-rotation settings
+    auto_rotate_pepper: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    rotation_time: Mapped[str | None] = mapped_column(String(8), nullable=True)  # TIME type: HH:MM:SS
+    rotation_timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rotation_last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Fallback policy (binary: never/always)
+    fallback_policy: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default="never",
+        server_default="never"
+    )
+
+    # Local cleanup policy
+    cleanup_local_after_s3: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default="false"
+    )  # If True, delete local files after S3 upload confirmed
+
+    # Status flags
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True, server_default="false")
+
+    # Audit fields
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    # Relationships
+    hospital: Mapped["Hospital"] = relationship(foreign_keys=[hospital_id])
+    created_by: Mapped["User"] = relationship(foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        # Unique name per hospital
+        UniqueConstraint("hospital_id", "name", name="uq_s3_config_hospital_name"),
+        # Only one active config per hospital
+        Index("ix_s3_config_active_per_hospital", "hospital_id", unique=True,
+              postgresql_where=text("is_active = TRUE")),
+        # Check constraints
+        CheckConstraint("NOT (is_active = TRUE AND is_archived = TRUE)",
+                       name="ck_s3_config_not_active_and_archived"),
+        CheckConstraint("fallback_policy IN ('never', 'always')",
+                       name="ck_s3_config_fallback_policy"),
+        CheckConstraint("provider IN ('r2', 'hetzner', 'aws', 'gcp', 'azure', 'minio', 'other')",
+                       name="ck_s3_config_provider"),
+        CheckConstraint("addressing_style IN ('auto', 'virtual', 'path')",
+                       name="ck_s3_config_addressing_style"),
+        # Indexes
+        Index("ix_s3_configs_hospital_id", "hospital_id"),
+        Index("ix_s3_configs_active", "hospital_id", "is_active",
+              postgresql_where=text("is_active = TRUE")),
+        Index("ix_s3_configs_auto_rotate", "auto_rotate_pepper", "rotation_last_run",
+              postgresql_where=text("auto_rotate_pepper = TRUE")),
+    )
+
 class Hospital(Base):
     __tablename__ = 'hospitals'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -287,13 +402,24 @@ class EncounterFile(Base):
     centering: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
+
+    # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
+    hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
+    s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for image
+    s3_object_key_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for thumbnail
+
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_files")
     lab_unit: Mapped["LabUnit"] = relationship()
+    s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
     # Note: ImageGrading relationship removed - now using Grade model through GradingTask
     # Add a check constraint to ensure only image files are stored in this table
     __table_args__ = (
         CheckConstraint("file_type != 'pdf'", name="ck_encounter_file_not_pdf"),
         CheckConstraint("thumbnail_filename IS NULL OR position('/' in thumbnail_filename) = 0", name="ck_ef_thumbnail_filename_no_slash"),
+        # S3 composite indexes for efficient queries
+        Index("ix_ef_s3_config_uuid", "s3_config_id", "uuid"),
+        Index("ix_ef_hospital_id", "hospital_id"),
     )
 
 class EncounterFilePDF(Base):
@@ -306,13 +432,23 @@ class EncounterFilePDF(Base):
     uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, nullable=True, default=lambda: str(uuid4()))
     eye_side: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     lab_unit_id: Mapped[int | None] = mapped_column(ForeignKey('lab_units.id'), nullable=True, index=True)
+
+    # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
+    hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
+    s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for PDF
+
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_file_pdfs")
     lab_unit: Mapped["LabUnit"] = relationship()
-    
+    s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
+
     # Add a check constraint to ensure only PDF files are stored in this table
     __table_args__ = (
         CheckConstraint("file_type = 'pdf'", name="ck_encounter_file_pdf_only"),
-        Index('ix_encounter_file_pdfs_patient_encounter_id', 'patient_encounter_id')
+        Index('ix_encounter_file_pdfs_patient_encounter_id', 'patient_encounter_id'),
+        # S3 composite indexes for efficient queries
+        Index("ix_efpdf_s3_config_uuid", "s3_config_id", "uuid"),
+        Index("ix_efpdf_hospital_id", "hospital_id"),
     )
 
 class DiabeticRetinopathyReport(Base):
@@ -539,6 +675,14 @@ class DirectImageUpload(Base):
     is_pregraded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # thumbnail basename (thm_uuid.ext)
     edited_thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # edited thumbnail basename (thm_uuid.ext)
+
+    # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
+    s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
+    s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
+    s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
+    s3_object_key_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for thumbnail
+    s3_object_key_edited_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited thumbnail
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
     # Relationships
     uploader: Mapped["User"] = relationship(foreign_keys=[uploader_id])
@@ -547,6 +691,7 @@ class DirectImageUpload(Base):
     camera: Mapped["Camera"] = relationship()
     disease: Mapped["Disease"] = relationship()
     area: Mapped["Area"] = relationship()
+    s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
 
     __table_args__ = (
         # Basename only (no slashes) - use PostgreSQL compatible functions
@@ -571,6 +716,10 @@ class DirectImageUpload(Base):
         Index("ix_diu_folder_created", "folder_rel", "created_at"),
         Index("ix_diu_content_hash", "content_hash"),
         Index("ix_diu_is_pregraded", "is_pregraded"),
+        # S3 composite indexes for efficient queries
+        Index("ix_diu_s3_config_uuid", "s3_config_id", "uuid"),
+        Index("ix_diu_s3_config_created", "s3_config_id", "created_at"),
+        Index("ix_diu_hospital_id", "hospital_id"),
     )
     
     verifications: Mapped[List["DirectImageVerify"]] = relationship(back_populates="image_upload", cascade="all, delete-orphan")

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Set Fallback Policy{% endblock %}
+
+{% block extra_styles %}
+<style>
+.policy-never {
+    border-left: 4px solid #dc3545;
+}
+.policy-always {
+    border-left: 4px solid #ffc107;
+}
+.help-text {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0">Set Fallback Policy</h1>
+            <small class="text-muted">{{ config.name }} ({{ hospital.name }})</small>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin.s3_config_edit', s3_config_id=config.id) }}">Back to Configuration</a>
+    </div>
+
+    <!-- Warning Banner -->
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Master Admin Only</strong><br>
+        Fallback policy controls what happens when S3 is unavailable. This setting affects security and reliability.
+    </div>
+
+    <form method="POST">
+        {{ csrf_field() }}
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card shadow-sm mb-3 policy-never">
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="fallback_policy" id="policy_never"
+                                   value="never" {% if config.fallback_policy == 'never' %}checked{% endif %}>
+                            <label class="form-check-label" for="policy_never">
+                                <strong>NEVER (Fail Hard)</strong> - Recommended
+                            </label>
+                        </div>
+                        <p class="help-text mt-2">
+                            Return a <strong>503 Service Unavailable</strong> error if S3 storage is inaccessible.
+                            This is the most secure option as it prevents silent fallback to local storage.
+                        </p>
+                        <ul class="small text-muted">
+                            <li><i class="fas fa-check text-success"></i> Maximum security</li>
+                            <li><i class="fas fa-check text-success"></i> Fail-fast behavior</li>
+                            <li><i class="fas fa-times text-danger"></i> May cause service disruption if S3 is down</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-3 policy-always">
+                    <div class="card-body">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="fallback_policy" id="policy_always"
+                                   value="always" {% if config.fallback_policy == 'always' %}checked{% endif %}>
+                            <label class="form-check-label" for="policy_always">
+                                <strong>ALWAYS (Allow Local)</strong> - Use with Caution
+                            </label>
+                        </div>
+                        <p class="help-text mt-2">
+                            Fall back to <strong>local filesystem</strong> if S3 storage is inaccessible.
+                            This provides continuity but may expose files unexpectedly.
+                        </p>
+                        <ul class="small text-muted">
+                            <li><i class="fas fa-check text-success"></i> Service continuity during S3 outages</li>
+                            <li><i class="fas fa-exclamation-triangle text-warning"></i> May cause unexpected behavior</li>
+                            <li><i class="fas fa-exclamation-triangle text-warning"></i> Files may be served from local instead of S3</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Fallback Policy
+                    </button>
+                    <a href="{{ url_for('admin.s3_config_edit', s3_config_id=config.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm mb-3">
+                    <div class="card-header py-2">
+                        <strong>Current Policy</strong>
+                    </div>
+                    <div class="card-body">
+                        <span class="badge {% if config.fallback_policy == 'never' %}bg-danger{% else %}bg-warning text-dark{% endif %} fs-6">
+                            {{ config.fallback_policy.upper() }}
+                        </span>
+                        <p class="small text-muted mt-2">
+                            {% if config.fallback_policy == 'never' %}
+                            This configuration will return 503 errors if S3 is unavailable.
+                            {% else %}
+                            This configuration will fall back to local storage if S3 is unavailable.
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-header py-2">
+                        <strong>Recommendation</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="small mb-0">
+                            <strong>Use "NEVER" (Fail Hard)</strong> for production environments where:
+                        </p>
+                        <ul class="small mb-3">
+                            <li>S3 reliability is high (e.g., AWS, Cloudflare R2)</li>
+                            <li>Security is more important than availability</li>
+                            <li>You want to be immediately notified of S3 issues</li>
+                        </ul>
+
+                        <p class="small mb-0">
+                            <strong>Use "ALWAYS" (Local Fallback)</strong> for:
+                        </p>
+                        <ul class="small">
+                            <li>Development/testing environments</li>
+                            <li>Migrating from local to S3 storage</li>
+                            <li>When service continuity is critical</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

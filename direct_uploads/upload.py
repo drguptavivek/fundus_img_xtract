@@ -328,7 +328,7 @@ def upload():
                                 else:
                                     # write original
                                     dest = uniquify(orig_dir, filename)
-                                     
+
                                     # Strip EXIF metadata before saving
                                     try:
                                         from utils.image_processing import strip_exif_data
@@ -351,6 +351,36 @@ def upload():
                                         dest.write_bytes(content)
                                         clean_content = content
 
+                                    # ==== S3 UPLOAD INTEGRATION ====
+                                    s3_metadata = None
+                                    thumbnail_s3_metadata = None
+                                    try:
+                                        # Upload original file to S3
+                                        s3_metadata = _upload_to_s3_and_get_metadata(
+                                            hospital.id,
+                                            clean_content,
+                                            filename,
+                                            file_type="original"
+                                        )
+                                    except Exception as e:
+                                        current_app.logger.error(
+                                            "S3 upload failed for %s: %s",
+                                            sanitize_log_value(filename),
+                                            sanitize_log_value(e)
+                                        )
+                                        # Re-raise if fallback is 'never'
+                                        from utils.s3_upload_handler import get_active_s3_config
+                                        s3_config = get_active_s3_config(hospital.id)
+                                        if s3_config and s3_config.fallback_policy == "never":
+                                            state, detail = "error", f"S3 upload failed: {e}"
+                                            job_items.append(JobItem(
+                                                filename=sanitize_filename_for_logging(filename),
+                                                state=state,
+                                                detail=detail,
+                                            ))
+                                            continue
+                                    # ==== END S3 UPLOAD INTEGRATION ====
+
                                     # Generate thumbnail for the uploaded image
                                     thumbnail_filename = None
                                     try:
@@ -365,6 +395,22 @@ def upload():
                                                 "Generated thumbnail: %s",
                                                 sanitize_log_value(thumb_filename),
                                             )
+
+                                            # ==== S3 THUMBNAIL UPLOAD ====
+                                            try:
+                                                thumb_content = thumb_path.read_bytes()
+                                                thumbnail_s3_metadata = _upload_thumbnail_to_s3(
+                                                    hospital.id,
+                                                    thumb_content,
+                                                    thumb_filename
+                                                )
+                                            except Exception as e:
+                                                current_app.logger.warning(
+                                                    "S3 thumbnail upload failed for %s: %s",
+                                                    sanitize_log_value(thumb_filename),
+                                                    sanitize_log_value(e)
+                                                )
+                                            # ==== END S3 THUMBNAIL UPLOAD ====
                                         else:
                                             current_app.logger.warning(
                                                 "Failed to generate thumbnail for: %s",
@@ -408,6 +454,11 @@ def upload():
                                         area_id=area.id,
                                         is_mydriatic=is_mydriatic,
                                         thumbnail_filename=thumbnail_filename,
+                                        # ==== S3 METADATA ====
+                                        s3_config_id=s3_metadata["s3_config_id"] if s3_metadata else None,
+                                        s3_object_key=s3_metadata["s3_object_key"] if s3_metadata else None,
+                                        s3_object_key_thumbnail=thumbnail_s3_metadata["s3_object_key"] if thumbnail_s3_metadata else None,
+                                        # ==== END S3 METADATA ====
                                     )
                                     db_session.add(upload)
                                     db_session.flush()
@@ -535,3 +586,124 @@ def upload():
             per_file_mb_limit=display_max_mb,
             lifetime_quota=lifetime_quota,
         )
+
+
+# ============================================================================
+# S3 Upload Integration (Multi-Tenant Storage)
+# ============================================================================
+
+def _upload_to_s3_and_get_metadata(
+    hospital_id: int,
+    file_content: bytes,
+    filename: str,
+    file_type: str = "original"
+) -> dict | None:
+    """
+    Upload file to S3 and return metadata for database storage.
+
+    Args:
+        hospital_id: Hospital ID
+        file_content: File content as bytes
+        filename: Original filename
+        file_type: Type of file (original, thumbnail, edited_thumbnail)
+
+    Returns:
+        Dict with S3 metadata or None if S3 not configured:
+        - s3_config_id
+        - s3_object_key
+        - backend: "s3"
+        Returns None if hospital has no S3 config
+    """
+    try:
+        from utils.s3_upload_handler import (
+            get_active_s3_config,
+            generate_s3_object_key,
+            upload_file_to_s3
+        )
+
+        # Check if hospital has active S3 config
+        s3_config = get_active_s3_config(hospital_id)
+        if not s3_config:
+            return None
+
+        # Generate S3 object key
+        date_str = datetime.utcnow().strftime("%Y_%m_%d")
+        object_key = generate_s3_object_key(hospital_id, file_type, filename, date_str)
+
+        # Upload to S3
+        upload_file_to_s3(s3_config, file_content, object_key)
+
+        current_app.logger.info(
+            "S3 upload successful for hospital_id=%d, file_type=%s, filename=%s, object_key=%s",
+            hospital_id,
+            file_type,
+            sanitize_log_value(filename),
+            sanitize_log_value(object_key)
+        )
+
+        return {
+            "s3_config_id": s3_config.id,
+            "s3_object_key": object_key,
+            "backend": "s3",
+            "provider": s3_config.provider,
+        }
+
+    except Exception as e:
+        current_app.logger.error(
+            "S3 upload failed for hospital_id=%d, filename=%s: %s",
+            hospital_id,
+            sanitize_log_value(filename),
+            sanitize_log_value(e),
+        )
+        # Check fallback policy before re-raising
+        from utils.s3_upload_handler import get_active_s3_config
+        s3_config = get_active_s3_config(hospital_id)
+        if s3_config and s3_config.fallback_policy == "never":
+            # Fail hard - no local fallback
+            raise ValueError(f"S3 upload failed and fallback is disabled: {e}")
+        return None
+
+
+def _upload_thumbnail_to_s3(
+    hospital_id: int,
+    thumbnail_content: bytes,
+    thumbnail_filename: str
+) -> dict | None:
+    """Upload thumbnail to S3. Returns S3 metadata or None."""
+    return _upload_to_s3_and_get_metadata(
+        hospital_id,
+        thumbnail_content,
+        thumbnail_filename,
+        file_type="thumbnail"
+    )
+
+
+def _generate_hmac_media_url(file_uuid: str, hospital_id: int) -> str | None:
+    """
+    Generate HMAC-signed media URL for a file.
+
+    Returns:
+        Media URL with token/expires parameters, or None if S3 not configured
+    """
+    try:
+        from utils.s3_url_signing import generate_media_url
+        return generate_media_url(file_uuid, hospital_id, variant="orig")
+    except Exception as e:
+        current_app.logger.warning(
+            "Failed to generate HMAC URL for uuid=%s, hospital_id=%s: %s",
+            file_uuid,
+            hospital_id,
+            e
+        )
+        return None
+
+
+def _get_storage_backend_info(hospital_id: int) -> dict:
+    """
+    Get storage backend information for API responses.
+
+    Returns:
+        Dict with backend info
+    """
+    from utils.s3_upload_handler import get_storage_backend_info
+    return get_storage_backend_info(hospital_id)

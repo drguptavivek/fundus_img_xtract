@@ -46,6 +46,11 @@ from .email_settings import (
 )
 from .grading_state_inconsistencies import grading_state_inconsistencies
 from .audit_routes import sensitive_operations_audit, sensitive_operation_details
+from .s3_config import (
+    s3_configs_list, s3_config_create, s3_config_edit, s3_config_delete,
+    s3_config_activate, s3_config_test_connection, s3_config_rotate_pepper,
+    s3_config_set_fallback,
+)
 
 
 # Register routes with the blueprint
@@ -221,6 +226,16 @@ register_thumbnail_admin_routes(admin_bp)
 
 # Register admin status routes
 register_status_routes(admin_bp)
+
+# S3 Configuration routes
+admin_bp.add_url_rule("/s3-configs", view_func=s3_configs_list, methods=["GET"])
+admin_bp.add_url_rule("/s3-configs/new", view_func=s3_config_create, methods=["GET", "POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/edit", view_func=s3_config_edit, methods=["GET", "POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/delete", view_func=s3_config_delete, methods=["POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/activate", view_func=s3_config_activate, methods=["POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/test-connection", view_func=s3_config_test_connection, methods=["POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/rotate-pepper", view_func=s3_config_rotate_pepper, methods=["POST"])
+admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/fallback", view_func=s3_config_set_fallback, methods=["GET", "POST"])
 
 # Register database restore blueprint
 admin_bp.register_blueprint(database_restore_bp)

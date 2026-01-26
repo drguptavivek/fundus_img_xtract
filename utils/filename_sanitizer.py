@@ -37,8 +37,6 @@ def sanitize_path_component(component: str, max_length: int = 200) -> str:
     """
     if not component or not component.strip():
         raise ValueError("Path component cannot be empty")
-    if "/" in component or "\\" in component:
-        raise ValueError(f"Invalid path component: {component!r}")
     if "\x00" in component:
         raise ValueError("Null bytes detected in path component")
 
@@ -69,8 +67,6 @@ def sanitize_storage_filename(filename: str, max_length: int = 255, allow_no_ext
     """
     if not filename or not filename.strip():
         raise ValueError("Filename is empty")
-    if "/" in filename or "\\" in filename:
-        raise ValueError(f"Invalid filename: {filename!r}")
     if "\x00" in filename:
         raise ValueError("Null bytes detected in filename")
 

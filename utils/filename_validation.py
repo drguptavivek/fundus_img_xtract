@@ -23,10 +23,7 @@ MAX_FILENAME_LENGTH = 255
 PATH_TRAVERSAL_PATTERNS = [
     r'\.\.',  # Parent directory
     r'~/',  # Home directory
-    r'[\\/]',  # Path separators
     r'%2e%2e',  # URL-encoded parent directory (case-insensitive)
-    r'%2f',  # URL-encoded forward slash
-    r'%5c',  # URL-encoded backslash
     r'\x00',  # Null byte
 ]
 
@@ -105,7 +102,7 @@ def validate_upload_filename(filename: str) -> tuple[bool, str]:
         return False, "Filename contains invalid control characters"
 
     # Check 7: Allowed characters (Unicode alnum + safe separators)
-    allowed_punct = {".", "_", "-", " "}
+    allowed_punct = {".", "_", "-", " ", "(", ")", "[", "]", ",", "/", "\\"}
     if any(not (ch.isalnum() or ch in allowed_punct) for ch in filename):
         logger.warning("Invalid characters in filename: %r", filename)
         return False, "Filename contains invalid characters"

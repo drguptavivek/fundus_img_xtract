@@ -262,9 +262,13 @@ def upload():
                         sanitize_filename_for_logging(original_filename),
                     )
                     job_items.append(JobItem(
+                        job_id=new_job.id,
                         filename=sanitize_filename_for_logging(original_filename),
                         state=state,
                         detail=detail,
+                        uploader_user_id=current_user.id,
+                        uploader_username=current_user.username,
+                        uploader_ip=request.remote_addr
                     ))
                     continue
 
@@ -278,9 +282,13 @@ def upload():
                         sanitize_filename_for_logging(original_filename),
                     )
                     job_items.append(JobItem(
+                        job_id=new_job.id,
                         filename=sanitize_filename_for_logging(original_filename),
                         state=state,
                         detail=detail,
+                        uploader_user_id=current_user.id,
+                        uploader_username=current_user.username,
+                        uploader_ip=request.remote_addr
                     ))
                     continue
                 state, detail = "queued", ""

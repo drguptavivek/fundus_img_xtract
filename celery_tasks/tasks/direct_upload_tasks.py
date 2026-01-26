@@ -3,7 +3,7 @@ from pathlib import Path
 from celery import chain
 from celery.utils.log import get_task_logger
 from celery_app import celery_app
-from models import Session, DirectImageUpload, BASE_DIR
+from models import Session, DirectImageUpload, BASE_DIR, DIRECT_UPLOAD_DIR
 from utils.upload_processing import process_file_visual, process_file_data_pipeline
 from job_store import db_set_item_state
 
@@ -20,7 +20,7 @@ def process_direct_upload_thumbnail_task(self, upload_id: int, job_token: str, u
     try:
         record = session.query(DirectImageUpload).get(upload_id)
         if not record: raise ValueError(f"DirectImageUpload {upload_id} not found")
-        filename, file_path = record.filename, BASE_DIR / "files" / record.folder_rel / record.filename
+        filename, file_path = record.filename, DIRECT_UPLOAD_DIR / record.folder_rel / record.filename
         
         db_set_item_state(job_token, filename, "processing", "Generating thumbnail...")
         process_file_visual(upload_id, 'direct_upload', str(file_path), session)

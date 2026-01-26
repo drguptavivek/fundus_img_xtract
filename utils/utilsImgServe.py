@@ -484,53 +484,55 @@ def directImgOrigThumbnailByUUID(uuid: str):
         if not direct_image or not direct_image.filename:
             abort(404)
 
-        # Check if thumbnail exists in database or on disk
-        if (not direct_image.thumbnail_filename or
-            not thumbnail_exists_direct(direct_image.folder_rel, direct_image.filename, 'orig')):
-            response = _serve_direct_image(direct_image, uuid, "orig")
-            if response:
-                return response
-            flash(f"Error: Original Image not found with UUID: {uuid}", "danger")
-            abort(404)
-
-        # Get thumbnail path
+        # 1. Try to serve existing thumbnail
         try:
             thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
                 direct_image.folder_rel, direct_image.filename, 'orig'
             )
             thumbnail_path = thumbnail_dir / thumbnail_filename
 
-            if not thumbnail_path.exists():
-                response = _serve_direct_image(direct_image, uuid, "orig")
-                if response:
-                    return response
-                flash(f"Error: Original Image not found with UUID: {uuid}", "danger")
-                abort(404)
-
-            file_extension = Path(thumbnail_filename).suffix.lower()
-            mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-                           '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
-            mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-
-            response = make_response(send_file(
-                str(thumbnail_path),
-                mimetype=mimetype,
-                as_attachment=False,
-                download_name=f"thm_{uuid}{file_extension}"
-            ))
-
-            # Add cache headers for thumbnails
-            response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour cache
-            response.headers['X-Thumbnail'] = 'true'
-
-            return response
-
+            if thumbnail_path.exists():
+                return _build_image_response(
+                    str(thumbnail_path),
+                    thumbnail_filename,
+                    uuid,
+                    cache_control='public, max-age=3600',
+                    extra_headers={'X-Thumbnail': 'true'},
+                    download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
+                )
         except Exception:
-            response = _serve_direct_image(direct_image, uuid, "orig")
-            if response:
-                return response
-            flash(f"Error: Original Image not found with UUID: {uuid}", "danger")
-            abort(404)
+            pass
+
+        # 2. If not exists, try to generate on-demand
+        try:
+            from utils.fileUtils import abs_from_parts
+            from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+
+            orig_path = abs_from_parts(direct_image.folder_rel, direct_image.filename, kind='orig')
+            if orig_path.exists():
+                thumb_basename = get_thumbnail_filename(direct_image.filename)
+                thumb_path = orig_path.parent / thumb_basename
+
+                success = generate_thumbnail(orig_path, thumb_path)
+                if success:
+                    direct_image.thumbnail_filename = thumb_basename
+                    bump_media_cache_version(uuid)
+                    return _build_image_response(
+                        str(thumb_path),
+                        thumb_basename,
+                        uuid,
+                        cache_control='public, max-age=3600',
+                        extra_headers={'X-Thumbnail': 'true'},
+                        download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
+                    )
+        except Exception as e:
+            current_app.logger.error(f"Error generating thumbnail on-demand for {uuid}: {e}")
+
+        # 3. Last resort fallback: serve full image (safely)
+        response = _serve_direct_image(direct_image, uuid, "orig")
+        if response:
+            return response
+        abort(404)
 
 
 def directImgEdThumbnailByUUID(uuid: str):
@@ -548,53 +550,55 @@ def directImgEdThumbnailByUUID(uuid: str):
         if not direct_image or not direct_image.edited_filename:
             abort(404)
 
-        # Check if thumbnail exists in database or on disk
-        if (not direct_image.edited_thumbnail_filename or
-            not thumbnail_exists_direct(direct_image.folder_rel, direct_image.edited_filename, 'edited')):
-            response = _serve_direct_image(direct_image, uuid, "edited")
-            if response:
-                return response
-            flash(f"Error: Edited Image not found with UUID: {uuid}", "danger")
-            abort(404)
-
-        # Get thumbnail path
+        # 1. Try to serve existing thumbnail
         try:
             thumbnail_dir, thumbnail_filename = get_direct_thumbnail_serving_path(
                 direct_image.folder_rel, direct_image.edited_filename, 'edited'
             )
             thumbnail_path = thumbnail_dir / thumbnail_filename
 
-            if not thumbnail_path.exists():
-                response = _serve_direct_image(direct_image, uuid, "edited")
-                if response:
-                    return response
-                flash(f"Error: Edited Image not found with UUID: {uuid}", "danger")
-                abort(404)
-
-            file_extension = Path(thumbnail_filename).suffix.lower()
-            mimetype_map = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-                           '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp'}
-            mimetype = mimetype_map.get(file_extension, 'image/jpeg')
-
-            response = make_response(send_file(
-                str(thumbnail_path),
-                mimetype=mimetype,
-                as_attachment=False,
-                download_name=f"thm_{uuid}{file_extension}"
-            ))
-
-            # Add cache headers for thumbnails
-            response.headers['Cache-Control'] = 'public, max-age=3600'  # 1 hour cache
-            response.headers['X-Thumbnail'] = 'true'
-
-            return response
-
+            if thumbnail_path.exists():
+                return _build_image_response(
+                    str(thumbnail_path),
+                    thumbnail_filename,
+                    uuid,
+                    cache_control='public, max-age=3600',
+                    extra_headers={'X-Thumbnail': 'true'},
+                    download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
+                )
         except Exception:
-            response = _serve_direct_image(direct_image, uuid, "edited")
-            if response:
-                return response
-            flash(f"Error: Edited Image not found with UUID: {uuid}", "danger")
-            abort(404)
+            pass
+
+        # 2. If not exists, try to generate on-demand
+        try:
+            from utils.fileUtils import abs_from_parts
+            from utils.image_processing import generate_thumbnail, get_thumbnail_filename
+
+            edited_path = abs_from_parts(direct_image.folder_rel, direct_image.edited_filename, kind='edited')
+            if edited_path.exists():
+                thumb_basename = get_thumbnail_filename(direct_image.edited_filename)
+                thumb_path = edited_path.parent / thumb_basename
+
+                success = generate_thumbnail(edited_path, thumb_path)
+                if success:
+                    direct_image.edited_thumbnail_filename = thumb_basename
+                    bump_media_cache_version(uuid)
+                    return _build_image_response(
+                        str(thumb_path),
+                        thumb_basename,
+                        uuid,
+                        cache_control='public, max-age=3600',
+                        extra_headers={'X-Thumbnail': 'true'},
+                        download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
+                    )
+        except Exception as e:
+            current_app.logger.error(f"Error generating edited thumbnail on-demand for {uuid}: {e}")
+
+        # 3. Last resort fallback: serve full image (safely)
+        response = _serve_direct_image(direct_image, uuid, "edited")
+        if response:
+            return response
+        abort(404)
 
 
 def _serve_direct_final_thumbnail(db, direct_image: DirectImageUpload, uuid: str):

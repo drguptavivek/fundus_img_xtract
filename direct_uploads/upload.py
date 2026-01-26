@@ -341,7 +341,8 @@ def upload():
                             else:
                                 # per-request quota (optional; your config key)
                                 lifetime_quota = _get_lifetime_quota(db_session, current_user)
-                                if lifetime_quota is not None and current_user.file_upload_count >= lifetime_quota:
+                                upload_count = getattr(current_user, "file_upload_count", 0) or 0
+                                if lifetime_quota is not None and upload_count >= lifetime_quota:
                                     state, detail = "error", "Upload quota exceeded"
                                     current_app.logger.warning(
                                         "Quota exceeded for user %s (%s)",

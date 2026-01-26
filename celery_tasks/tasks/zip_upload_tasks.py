@@ -7,7 +7,7 @@ from celery.utils.log import get_task_logger
 from celery_app import celery_app
 from models import Session, EncounterFile, EncounterFilePDF
 from zip_processor import ingest_zip_atomic, MaliciousZipError
-from utils.upload_processing import process_file_visual, process_file_metadata_strip
+from utils.upload_processing import process_file_visual, process_file_data_pipeline
 from utils.fileUtils import get_upload_dirs
 from job_store import db_set_job_status, db_set_item_state, db_any_item_error
 from celery_job_store import db_add_job_items, check_and_complete_job
@@ -52,9 +52,7 @@ def process_zip_coordinator_task(
         new_filenames = []
         
         # 2. Fan-Out (Chained Tasks)
-        # For Images: Visual (Thumbnail) -> Metadata+Strip
         for img_id in image_ids:
-            # Update item state to 'processing'
             file_rec = session.query(EncounterFile).get(img_id)
             if file_rec:
                 new_filenames.append(file_rec.filename)
@@ -64,7 +62,7 @@ def process_zip_coordinator_task(
             if file_rec:
                 new_filenames.append(file_rec.filename)
         
-        # Add the extracted files to the JobItem table so we can track their progress
+        # Add the extracted files to the JobItem table
         if new_filenames:
             db_add_job_items(job_token, new_filenames)
 
@@ -77,22 +75,19 @@ def process_zip_coordinator_task(
             if file_rec:
                 db_set_item_state(job_token, file_rec.filename, "processing", "Queued for thumbnail generation")
                 
-                # Chain: Thumbnail -> Metadata
+                # Chain: Thumbnail -> Metadata/PII/Strip Combined
                 chain(
-                    process_image_thumbnail_task.s(img_id, job_token),
-                    process_file_metadata_strip_task.s('encounter_file', job_token)
+                    process_image_thumbnail_task.s(img_id, job_token, user_id=user_id, hospital_id=hospital_id),
+                    process_zip_data_combined_task.s('encounter_file', job_token)
                 ).apply_async()
 
-        # For PDFs: OCR only (No metadata strip chain yet)
+        # For PDFs: OCR only
         for pdf_id in pdf_ids:
             file_rec = session.query(EncounterFilePDF).get(pdf_id)
             if file_rec:
                 db_set_item_state(job_token, file_rec.filename, "processing", "Queued for OCR")
-
-                # PDF Task
                 process_pdf_ocr_task.delay(pdf_id, job_token)
 
-        # Mark job as "processing" (it will be marked done by a monitoring task or we assume done when submitted?)
         db_set_job_status(job_token, "processing")
 
     except MaliciousZipError as e:
@@ -109,12 +104,14 @@ def process_zip_coordinator_task(
 def process_image_thumbnail_task(
     self,
     file_id: int,
-    job_token: str
+    job_token: str,
+    user_id: int | None = None,
+    hospital_id: int | None = None
 ) -> dict:
     """
     Phase 1a: Image Thumbnail Task.
-    Expected to run on 'thumbnails' queue.
     """
+    logger.info(f"ZIP Thumbnail task started for file {file_id} (user={user_id}, hospital={hospital_id})")
     session = Session()
     filename = "unknown"
     try:
@@ -124,43 +121,33 @@ def process_image_thumbnail_task(
             
         filename = record.filename
         
-        # Locate file (assuming daily structure)
         from models import IMAGE_DIR
-        # record.patient_encounter.zip_file.upload_date corresponds to the folder date
         if not record.patient_encounter or not record.patient_encounter.zip_file:
-             # Fallback if links missing (shouldn't happen for valid zips)
+             from datetime import datetime
              today_str = datetime.now().strftime("%Y_%m_%d")
         else:
              today_str = record.patient_encounter.zip_file.upload_date.strftime("%Y_%m_%d")
 
         file_path = IMAGE_DIR / today_str / filename
         
-        # Fallback search if date changed (unlikely for immediate task)
         if not file_path.exists():
-             # Try just the filename in IMAGE_DIR (if structure differs)
-             # or look in recent folders? 
-             # For now, strict check.
              raise FileNotFoundError(f"Image not found at {file_path}")
 
-        # Process
-        result = process_file_visual(file_id, 'encounter_file', str(file_path), session)
+        db_set_item_state(job_token, filename, "processing", "Generating thumbnail...")
+        process_file_visual(file_id, 'encounter_file', str(file_path), session)
         
-        if result.get("status") == "ok":
-            db_set_item_state(job_token, filename, "processing", "Thumbnail generated")
-        else:
-            db_set_item_state(job_token, filename, "error", result.get("error"))
-
         return {
             "file_id": file_id,
             "file_type": "encounter_file",
             "file_path": str(file_path),
-            "status": "ok"
+            "status": "ok",
+            "user_id": user_id,
+            "hospital_id": hospital_id
         }
 
     except Exception as e:
         logger.error(f"Thumbnail Task Failed for {filename}: {e}", exc_info=True)
         db_set_item_state(job_token, filename, "error", str(e))
-        # Ensure we check completion even on failure, as this might be terminal for this chain
         check_and_complete_job(job_token) 
         return {"status": "error", "file_id": file_id}
     finally:
@@ -175,7 +162,6 @@ def process_pdf_ocr_task(
 ) -> dict:
     """
     Phase 1b: PDF OCR Task.
-    Expected to run on 'zip_ocr' queue.
     """
     session = Session()
     filename = "unknown"
@@ -185,11 +171,9 @@ def process_pdf_ocr_task(
             raise ValueError(f"EncounterFilePDF {file_id} not found")
 
         filename = record.filename
-        
-        # Locate file
         from models import PDF_DIR
-        # record.patient_encounter.zip_file.upload_date corresponds to the folder date
         if not record.patient_encounter or not record.patient_encounter.zip_file:
+             from datetime import datetime
              today_str = datetime.now().strftime("%Y_%m_%d")
         else:
              today_str = record.patient_encounter.zip_file.upload_date.strftime("%Y_%m_%d")
@@ -199,9 +183,7 @@ def process_pdf_ocr_task(
         if not file_path.exists():
             raise FileNotFoundError(f"PDF not found at {file_path}")
 
-        # Run OCR
         from process_pdfs import process_all_pdfs_for_ocr
-        # This function handles DB update internally
         process_all_pdfs_for_ocr(limit_filenames={filename})
         
         db_set_item_state(job_token, filename, "ok", "OCR Complete")
@@ -218,58 +200,58 @@ def process_pdf_ocr_task(
         db_set_item_state(job_token, filename, "error", str(e))
         return {"status": "error", "file_id": file_id}
     finally:
-        # Terminal task for PDF: Check if job is complete
         check_and_complete_job(job_token)
         session.close()
 
+@celery_app.task(name="celery_tasks.tasks.zip_upload_tasks.process_zip_data_combined_task", bind=True, acks_late=True)
 
-@celery_app.task(name="celery_tasks.tasks.zip_upload_tasks.process_file_metadata_strip_task", bind=True, acks_late=True)
-def process_file_metadata_strip_task(
+def process_zip_data_combined_task(
+
     self,
-    prev_result: dict, # Result from previous task in chain
+
+    prev_result: dict,
+
     file_type: str,
+
     job_token: str
+
 ) -> None:
+
     """
-    Phase 2: Metadata + Strip
+
+    BACKGROUND: Metadata + PII + Strip (Combined optimized pass) for ZIP items.
+
     """
+
     if prev_result.get("status") != "ok":
-        # Previous step failed, so this chain branch is dead.
-        # We must check completion here because this task was *expected* to run.
-        # Actually, if prev failed, it might not even call this task if using immutable signatures?
-        # But 'chain' usually calls next.
-        # If prev returned {"status": "error"}, we enter here.
+
         check_and_complete_job(job_token)
+
         return 
 
-    file_id = prev_result["file_id"]
-    file_path = prev_result["file_path"]
-    
-    # We trust the file_type passed in args match what we expect (Images only typically)
-    # If PDF comes here, we might skip stripping.
 
+
+    file_id, file_path = prev_result["file_id"], prev_result["file_path"]
+
+    user_id = prev_result.get("user_id")
+
+    hospital_id = prev_result.get("hospital_id")
+
+    
+
+    logger.info(f"ZIP Combined data task started for file {file_id} (user={user_id}, hospital={hospital_id})")
     session = Session()
     filename = Path(file_path).name
     try:
-         # Only strip/metadata for Images for now
-         if file_type == 'encounter_file':
-             db_set_item_state(job_token, filename, "processing", "Extracting metadata...")
-             
-             result = process_file_metadata_strip(file_id, 'encounter_file', file_path, session)
-             
-             if result.get("status") == "ok":
-                 db_set_item_state(job_token, filename, "ok", "Ready")
-             else:
-                 db_set_item_state(job_token, filename, "error", result.get("message"))
-         
-         else:
-             # Just mark done for others if they reached here
-             db_set_item_state(job_token, filename, "ok", "Ready")
-
+        if file_type == 'encounter_file':
+            db_set_item_state(job_token, filename, "processing", "Extracting metadata & scanning PII...")
+            process_file_data_pipeline(file_id, 'encounter_file', file_path, session, run_metadata=True, run_pii=True, run_strip=True)
+            db_set_item_state(job_token, filename, "ok", "Ready")
+        else:
+            db_set_item_state(job_token, filename, "ok", "Ready")
     except Exception as e:
-        logger.error(f"Metadata Task Failed for {filename}: {e}", exc_info=True)
+        logger.error(f"ZIP Combined processing failed for {filename}: {e}", exc_info=True)
         db_set_item_state(job_token, filename, "error", str(e))
     finally:
-        # Terminal task for Images: Check if job is complete
         check_and_complete_job(job_token)
         session.close()

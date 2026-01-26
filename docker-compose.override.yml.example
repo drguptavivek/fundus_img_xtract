@@ -6,16 +6,14 @@ services:
       - develop.config.env
       - testing.secrets.env
     command:
-      - uv
-      - run
-      - flask
-      - --app
-      - app.py
-      - run
-      - --host
-      - "${FLASK_HOST:-0.0.0.0}"
-      - --port
-      - "${FLASK_PORT:-5001}"
+      - sh
+      - -c
+      - >
+        uv run python -m watchfiles
+        --filter utils.watchfiles_filter.py_html_filter
+        --target-type command
+        "flask --app app.py run --host ${FLASK_HOST:-0.0.0.0} --port ${FLASK_PORT:-5001} --no-reload"
+        /app
     environment:
       FLASK_ENV: development
       FLASK_DEBUG: "1"

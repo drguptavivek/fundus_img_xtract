@@ -76,10 +76,12 @@ def make_celery_app() -> Celery:
             "celery_tasks.tasks.zip_upload_tasks.process_zip_coordinator_task": {"queue": "zip_ocr"},
             "celery_tasks.tasks.zip_upload_tasks.process_image_thumbnail_task": {"queue": "thumbnails"},
             "celery_tasks.tasks.zip_upload_tasks.process_pdf_ocr_task": {"queue": "zip_ocr"},
-            "celery_tasks.tasks.zip_upload_tasks.process_file_metadata_strip_task": {"queue": "metadata"},
+            "celery_tasks.tasks.zip_upload_tasks.process_zip_data_combined_task": {"queue": "pii_detection"},
             # Direct Upload Routes
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_upload_file_task": {"queue": "thumbnails"},
-            "celery_tasks.tasks.direct_upload_tasks.process_direct_pii_task": {"queue": "pii_detection"},
+            "celery_tasks.tasks.direct_upload_tasks.process_direct_upload_thumbnail_task": {"queue": "thumbnails"},
+            "celery_tasks.tasks.direct_upload_tasks.process_direct_data_combined_task": {"queue": "pii_detection"},
+            "celery_tasks.tasks.direct_upload_tasks.process_direct_metadata_only_task": {"queue": "metadata"},
+            "celery_tasks.tasks.direct_upload_tasks.process_direct_pii_only_task": {"queue": "pii_detection"},
         },
     )
 

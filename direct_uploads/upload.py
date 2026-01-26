@@ -405,14 +405,14 @@ def upload():
                 if celery_enabled() and tasks_to_enqueue:
                     from celery import chain
                     from celery_tasks.tasks.direct_upload_tasks import (
-                        process_direct_upload_file_task, 
-                        process_direct_pii_task
+                        process_direct_upload_thumbnail_task, 
+                        process_direct_data_combined_task
                     )
                     
                     for uid, token in tasks_to_enqueue:
                         chain(
-                            process_direct_upload_file_task.s(uid, token),
-                            process_direct_pii_task.s(token)
+                            process_direct_upload_thumbnail_task.s(uid, token, user_id=current_user.id, hospital_id=hospital.id),
+                            process_direct_data_combined_task.s(token)
                         ).apply_async()
             except Exception as e:
                 current_app.logger.error("Failed to enqueue direct upload tasks: %s", e)

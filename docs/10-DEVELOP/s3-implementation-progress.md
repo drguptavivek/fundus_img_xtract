@@ -88,7 +88,7 @@ class S3Config(Base):
     bucket_name: Mapped[str] = mapped_column(String(255))
     region: Mapped[str] = mapped_column(String(50))
     endpoint_url: Mapped[str | None] = mapped_column(String(500))  # For non-AWS
-    path_prefix: Mapped[str | None] = mapped_column(String(200))
+    # Global prefix applied at upload/access time: /eyeimgmgr/
 
     # S3 addressing style (configurable)
     addressing_style: Mapped[str] = mapped_column(String(20), default="auto")  # auto, virtual, path
@@ -537,8 +537,7 @@ def generate_presigned_url(
 
     # Build full object key with path prefix
     full_key = object_key
-    if s3_config.path_prefix:
-        full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+    full_key = apply_global_prefix(object_key)  # /eyeimgmgr/...
 
     # Generate presigned URL
     url = s3_client.generate_presigned_url(
@@ -765,15 +764,15 @@ def get_active_s3_config(hospital_id: int) -> S3Config | None:
         return s3_config
 
 
-def generate_s3_object_key(hospital_id: int, file_type: str, filename: str) -> str:
+def generate_s3_object_key(local_rel_path: str) -> str:
     """
-    Generate S3 object key for a file.
+    Generate S3 object key from a local path relative to BASE_DIR.
 
-    Key format: {hospital_id}/{file_type}/{YYYY_MM_DD}/{filename}
+    Key format mirrors local /files layout.
 
     Example:
-        >>> generate_s3_object_key(1, "original", "image.jpg", "2025_01_25")
-        "1/original/2025_01_25/image.jpg"
+        >>> generate_s3_object_key("files/direct_uploads/2026_01_26_user7/image.jpg")
+        "files/direct_uploads/2026_01_26_user7/image.jpg"
     """
     date_str = datetime.utcnow().strftime("%Y_%m_%d")
     safe_filename = Path(filename).name.encode('ascii', 'ignore').decode('ascii').strip()

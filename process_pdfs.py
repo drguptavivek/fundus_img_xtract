@@ -4,7 +4,6 @@
 
 import re
 import os
-from pathlib import Path
 from sqlalchemy.orm import Session as DBSession # Renamed to avoid conflict with `session` variable
 from sqlalchemy import create_engine
 import fitz # Import PyMuPDF for PDF splitting
@@ -15,8 +14,6 @@ from utils.env_loader import load_environment
 from utils.pii_masking import mask_patient_name, mask_patient_id
 
 load_environment()
-
-BASE_DIR = Path(__file__).resolve().parent
 
 # Import database models and configurations
 from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG, Session, EncounterFile, PatientEncounters, DiabeticRetinopathyReport, GlaucomaReport, EncounterFilePDF, ZipFile

@@ -58,7 +58,7 @@ from models import (
     Consensus, Grade, GradingTask, DirectImageVerify, DirectImageUpload,
     GlaucomaResultsCleaned, GlaucomaReport, DiabeticRetinopathyReport,
     EncounterFilePDF, EncounterFile, PatientEncounters, ZipFile,
-    JobItem, Job
+    JobItem, Job, BASE_DIR
 )
 
 from utils.env_loader import load_environment
@@ -67,10 +67,6 @@ load_environment()
 def clear_files():
     """Clear all files in the files directory."""
     from dotenv import load_dotenv
-    from pathlib import Path
-    
-    # Load environment variables and get BASE_DIR like in models.py
-    BASE_DIR = Path(__file__).resolve().parent.parent
     files_dir = BASE_DIR / "files"
     
     if os.path.exists(files_dir):
@@ -91,9 +87,6 @@ def clear_files():
 
 def clear_logs():
     """Clear all log files in the logs directory."""
-    from pathlib import Path
-    
-    BASE_DIR = Path(__file__).resolve().parent.parent
     logs_dir = BASE_DIR / "logs"
     
     if os.path.exists(logs_dir):
@@ -114,10 +107,7 @@ def clear_logs():
 
 def recreate_directories():
     """Recreate essential directories based on environment variables."""
-    from pathlib import Path
-    
     # Load environment variables
-    BASE_DIR = Path(__file__).resolve().parent.parent
     
     # Define essential directories based on environment variables from models.py
     essential_dirs = [

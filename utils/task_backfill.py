@@ -304,7 +304,21 @@ def run_task_backfill_job(job_id: int) -> None:
             db.commit()
 
 
-def enqueue_task_backfill(app, job_id: int) -> None:
+def enqueue_task_backfill(
+    app,
+    job_id: int,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> None:
+    from utils.celery_helpers import enqueue_task, celery_enabled
+    if celery_enabled():
+        enqueue_task(
+            "celery_tasks.tasks.task_backfill_tasks.run_task_backfill_job_task",
+            job_id,
+            user_id=user_id,
+            hospital_id=hospital_id,
+        )
+        return
     executor = app.config.get("EXECUTOR")
     if executor is None:
         return

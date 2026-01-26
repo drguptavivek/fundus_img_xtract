@@ -11,9 +11,10 @@ Security utilities for validating S3-related inputs to prevent:
 import re
 import os
 from pathlib import Path
-from werkzeug.utils import secure_filename
 from typing import Optional
 from cryptography.fernet import Fernet, InvalidToken
+
+from utils.filename_sanitizer import sanitize_path_component, sanitize_storage_filename
 
 
 class S3ValidationError(ValueError):
@@ -58,7 +59,7 @@ def validate_s3_object_key(key: str, max_length: int = 500) -> str:
 
     # Sanitize each component
     sanitized_parts = []
-    for part in parts:
+    for idx, part in enumerate(parts):
         if not part:
             continue  # Skip empty parts
 
@@ -66,10 +67,14 @@ def validate_s3_object_key(key: str, max_length: int = 500) -> str:
         if part in ('.', '..'):
             raise S3ValidationError(f"Path traversal detected in S3 key: {key}")
 
-        # Secure the filename component
-        secured = secure_filename(part)
-        if not secured:
-            raise S3ValidationError(f"Invalid component in S3 key: {part}")
+        # Sanitize component (last component treated as filename)
+        try:
+            if idx == len(parts) - 1:
+                secured = sanitize_storage_filename(part, allow_no_ext=True)
+            else:
+                secured = sanitize_path_component(part)
+        except ValueError as e:
+            raise S3ValidationError(f"Invalid component in S3 key: {part}") from e
 
         sanitized_parts.append(secured)
 
@@ -142,13 +147,17 @@ def validate_bucket_name(name: str) -> str:
 
 def validate_s3_region(region: str) -> str:
     """
-    Validate AWS region name.
+    Validate S3 region name.
+
+    Supports:
+    - AWS regions: us-east-1, eu-west-2, ap-southeast-1, etc.
+    - Non-AWS providers: any alphanumeric string with hyphens/underscores
 
     Args:
-        region: AWS region identifier
+        region: S3 region identifier
 
     Returns:
-        Validated region (unchanged if valid)
+        Validated region (normalized to lowercase)
 
     Raises:
         S3ValidationError: If validation fails
@@ -158,9 +167,14 @@ def validate_s3_region(region: str) -> str:
 
     region = region.strip().lower()
 
-    # Pattern: us-east-1, eu-west-2, ap-southeast-1, etc.
-    if not re.match(r'^[a-z]{2}-[a-z]+-\d+$', region):
-        raise S3ValidationError(f"Invalid AWS region format: {region}")
+    # Allow flexible region format for non-AWS providers
+    # Supports: us-east-1, garage, eu, auto, us-east, etc.
+    # Must be 1-64 chars, alphanumeric with hyphens/underscores
+    if not re.match(r'^[a-z0-9_-]{1,64}$', region):
+        raise S3ValidationError(
+            f"Invalid region format: {region}. "
+            "Use alphanumeric characters, hyphens, or underscores (max 64 chars)."
+        )
 
     return region
 
@@ -308,19 +322,16 @@ def sanitize_for_s3_key(filename: str, prefix: str = "") -> str:
         >>> sanitize_for_s3_key("../../etc/passwd", "uploads/")
         'uploads/etc/passwd'  # Path traversal removed
     """
-    # Secure the filename
-    secured_filename = secure_filename(filename)
-    if not secured_filename:
+    if not filename:
         raise S3ValidationError(f"Filename sanitization resulted in empty name: {filename}")
 
     # Combine with prefix
     if prefix:
         prefix = validate_path_prefix(prefix) or ""
-        full_key = f"{prefix}{secured_filename}"
+        full_key = f"{prefix}{filename}"
     else:
-        full_key = secured_filename
+        full_key = filename
 
-    # Final validation
     return validate_s3_object_key(full_key)
 
 

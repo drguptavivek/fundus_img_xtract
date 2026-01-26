@@ -15,6 +15,7 @@ import logging
 from typing import Literal
 from botocore.client import Config
 from models import S3Config
+from utils.s3_prefix import apply_global_prefix
 
 logger = logging.getLogger('s3.storage')
 audit_logger = logging.getLogger('security.audit')
@@ -147,6 +148,84 @@ def get_s3_client(s3_config: S3Config):
         raise ValueError(f"Failed to create S3 client: {e}")
 
 
+def create_s3_client_from_creds(
+    access_key: str,
+    secret_key: str,
+    region: str,
+    endpoint_url: str | None = None,
+    addressing_style: str = "auto",
+    provider: str = "other"
+):
+    """
+    Create boto3 S3 client from raw credentials (for testing, before config is saved).
+
+    Args:
+        access_key: S3 access key ID
+        secret_key: S3 secret access key
+        region: AWS region or provider region
+        endpoint_url: Custom endpoint URL (for non-AWS providers)
+        addressing_style: S3 addressing style (auto, virtual, path)
+        provider: Provider type (r2, hetzner, aws, gcp, azure, minio, other)
+
+    Returns:
+        boto3.client: S3 client
+
+    Raises:
+        ValueError: If credentials are invalid or provider is unsupported
+    """
+    # Build boto3 config
+    boto_config = {
+        'region_name': region,
+    }
+
+    # Add endpoint_url for non-AWS providers
+    if endpoint_url:
+        boto_config['endpoint_url'] = endpoint_url
+    elif provider in PROVIDER_ENDPOINTS:
+        endpoint_template = PROVIDER_ENDPOINTS[provider]
+        if endpoint_template:
+            # For R2, we need to extract account_id from access_key
+            if provider == "r2":
+                account_id = access_key.split('/')[0] if '/' in access_key else None
+                if account_id:
+                    boto_config['endpoint_url'] = f"https://{account_id}.r2.cloudflarestorage.com"
+
+    # Create S3 client
+    try:
+        # Build Config with s3-specific settings
+        config_kwargs = {
+            'signature_version': 's3v4',
+            'max_pool_connections': 50,
+        }
+
+        # Use configured addressing style (if not 'auto')
+        if addressing_style != 'auto':
+            config_kwargs['s3'] = {'addressing_style': addressing_style}
+
+        client = boto3.client(
+            's3',
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(**config_kwargs),
+            **boto_config
+        )
+
+        logger.info(
+            "S3 client created from creds for provider=%s, region=%s",
+            provider,
+            region
+        )
+
+        return client
+
+    except Exception as e:
+        logger.error(
+            "Failed to create S3 client from creds: %s",
+            e
+        )
+        raise ValueError(f"Failed to create S3 client: {e}")
+
+
 def calculate_presigned_url_ttl(file_size_bytes: int | None = None) -> int:
     """
     Calculate presigned URL TTL based on file size.
@@ -216,10 +295,8 @@ def generate_presigned_url(
         if not 60 <= expires_in <= 900:
             raise ValueError(f"expires_in must be between 60 and 900 seconds, got {expires_in}")
 
-    # Build full object key with path prefix
-    full_key = object_key
-    if s3_config.path_prefix:
-        full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+    # Build full object key with global prefix
+    full_key = apply_global_prefix(object_key)
 
     try:
         url = s3_client.generate_presigned_url(
@@ -269,9 +346,7 @@ def check_s3_object_exists(
         True if object exists, False otherwise
     """
     try:
-        full_key = object_key
-        if s3_config.path_prefix:
-            full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+        full_key = apply_global_prefix(object_key)
 
         s3_client.head_object(
             Bucket=s3_config.bucket_name,
@@ -309,9 +384,7 @@ def get_object_metadata(
         Returns None if object doesn't exist
     """
     try:
-        full_key = object_key
-        if s3_config.path_prefix:
-            full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+        full_key = apply_global_prefix(object_key)
 
         response = s3_client.head_object(
             Bucket=s3_config.bucket_name,

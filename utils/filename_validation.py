@@ -12,10 +12,9 @@ This module provides strict validation for uploaded filenames to prevent:
 import re
 import logging
 
-# Regex pattern for safe filenames
-# Allows: alphanumeric, dots, underscores, hyphens
-# Requires: at least one dot followed by a file extension
-SAFE_FILENAME_PATTERN = re.compile(r'^[a-zA-Z0-9._-]+\.[a-zA-Z0-9]{2,4}$')
+# Regex pattern for safe file extensions
+# Allows: alphanumeric only, 2-10 chars
+EXTENSION_PATTERN = re.compile(r'^[a-zA-Z0-9]{2,10}$')
 
 # Maximum filename length
 MAX_FILENAME_LENGTH = 255
@@ -95,25 +94,35 @@ def validate_upload_filename(filename: str) -> tuple[bool, str]:
         logger.warning("Path traversal pattern detected in filename: %r", filename)
         return False, "Path traversal patterns detected in filename"
 
-    # Check 5: Special character validation
-    # Only allow alphanumeric, dots, underscores, and hyphens
-    # Also require at least one dot for file extension
-    if not SAFE_FILENAME_PATTERN.match(filename):
-        # Check if it has valid characters at all
-        if not re.match(r'^[a-zA-Z0-9._-]+$', filename):
-            logger.warning("Invalid characters in filename: %r", filename)
-            return False, "Filename contains invalid characters (only a-z, A-Z, 0-9, dot, underscore, hyphen allowed)"
+    # Check 5: UTF-8 validation
+    is_utf8, utf8_error = validate_utf8(filename)
+    if not is_utf8:
+        return False, utf8_error
 
-        # Check for missing extension
-        if '.' not in filename:
-            logger.warning("Filename missing extension: %r", filename)
-            return False, "Filename must include a file extension"
+    # Check 6: Control characters (disallow)
+    if any(ord(ch) < 32 for ch in filename):
+        logger.warning("Control characters detected in filename: %r", filename)
+        return False, "Filename contains invalid control characters"
 
-        # Check for invalid extension
-        parts = filename.rsplit('.', 1)
-        if len(parts) == 2 and not re.match(r'^[a-zA-Z0-9]{2,4}$', parts[1]):
-            logger.warning("Invalid file extension: %r", parts[1])
-            return False, "File extension must be 2-4 alphanumeric characters"
+    # Check 7: Allowed characters (Unicode alnum + safe separators)
+    allowed_punct = {".", "_", "-", " "}
+    if any(not (ch.isalnum() or ch in allowed_punct) for ch in filename):
+        logger.warning("Invalid characters in filename: %r", filename)
+        return False, "Filename contains invalid characters"
+
+    # Check 8: Extension validation (required)
+    if '.' not in filename:
+        logger.warning("Filename missing extension: %r", filename)
+        return False, "Filename must include a file extension"
+
+    base, ext = filename.rsplit('.', 1)
+    if not base.strip():
+        logger.warning("Filename missing base name: %r", filename)
+        return False, "Filename must include a base name"
+
+    if not EXTENSION_PATTERN.match(ext):
+        logger.warning("Invalid file extension: %r", ext)
+        return False, "File extension must be 2-10 alphanumeric characters"
 
     return True, ""
 

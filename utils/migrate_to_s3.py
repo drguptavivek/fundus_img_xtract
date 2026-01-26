@@ -91,7 +91,8 @@ def migrate_direct_upload_to_s3(upload_id: int, s3_config_id: int) -> bool:
         StorageError: If migration fails
     """
     from models import DirectImageUpload
-    from app import BASE_DIR
+    from utils.fileUtils import abs_from_parts, get_thumbnail_path_direct
+    from utils.s3_paths import s3_key_from_local_path
 
     with s3_migration_guard(s3_config_id) as (backend, uploaded_keys):
         upload = db.query(DirectImageUpload).get(upload_id)
@@ -99,9 +100,9 @@ def migrate_direct_upload_to_s3(upload_id: int, s3_config_id: int) -> bool:
             raise ValueError(f"DirectImageUpload {upload_id} not found")
 
         # 1. Upload original to S3
-        original_path = BASE_DIR / upload.folder_rel / upload.filename
+        original_path = abs_from_parts(upload.folder_rel, upload.filename, kind="orig")
         if original_path.exists():
-            s3_key_original = f"direct_uploads/{upload.uuid}/{upload.filename}"
+            s3_key_original = s3_key_from_local_path(original_path)
             backend.save_file(original_path, s3_key_original)
             uploaded_keys.append(s3_key_original)
             upload.s3_object_key = s3_key_original
@@ -110,26 +111,26 @@ def migrate_direct_upload_to_s3(upload_id: int, s3_config_id: int) -> bool:
 
         # 2. Upload edited if exists
         if upload.edited_filename:
-            edited_path = BASE_DIR / upload.folder_rel / "edited" / upload.edited_filename
+            edited_path = abs_from_parts(upload.folder_rel, upload.edited_filename, kind="edited")
             if edited_path.exists():
-                s3_key_edited = f"direct_uploads/{upload.uuid}/edited/{upload.edited_filename}"
+                s3_key_edited = s3_key_from_local_path(edited_path)
                 backend.save_file(edited_path, s3_key_edited)
                 uploaded_keys.append(s3_key_edited)
                 upload.s3_object_key_edited = s3_key_edited
 
         # 3. Upload thumbnails if exist
         if upload.thumbnail_filename:
-            thumb_path = BASE_DIR / upload.folder_rel / upload.thumbnail_filename
+            thumb_path = get_thumbnail_path_direct(upload.folder_rel, upload.filename, kind="orig")
             if thumb_path.exists():
-                s3_key_thumb = f"direct_uploads/{upload.uuid}/thumbnails/{upload.thumbnail_filename}"
+                s3_key_thumb = s3_key_from_local_path(thumb_path)
                 backend.save_file(thumb_path, s3_key_thumb)
                 uploaded_keys.append(s3_key_thumb)
                 upload.s3_object_key_thumbnail = s3_key_thumb
 
         if upload.edited_thumbnail_filename:
-            thumb_edited_path = BASE_DIR / upload.folder_rel / upload.edited_thumbnail_filename
+            thumb_edited_path = get_thumbnail_path_direct(upload.folder_rel, upload.edited_filename, kind="edited")
             if thumb_edited_path.exists():
-                s3_key_thumb_edited = f"direct_uploads/{upload.uuid}/thumbnails/{upload.edited_thumbnail_filename}"
+                s3_key_thumb_edited = s3_key_from_local_path(thumb_edited_path)
                 backend.save_file(thumb_edited_path, s3_key_thumb_edited)
                 uploaded_keys.append(s3_key_thumb_edited)
                 upload.s3_object_key_edited_thumbnail = s3_key_thumb_edited
@@ -157,6 +158,7 @@ def migrate_encounter_file_to_s3(file_id: int, s3_config_id: int) -> bool:
     """
     from models import EncounterFile, PatientEncounters
     from app import IMAGE_DIR
+    from utils.s3_paths import s3_key_from_local_path
 
     with s3_migration_guard(s3_config_id) as (backend, uploaded_keys):
         file = db.query(EncounterFile).get(file_id)
@@ -169,7 +171,7 @@ def migrate_encounter_file_to_s3(file_id: int, s3_config_id: int) -> bool:
         # 1. Upload image to S3
         image_path = IMAGE_DIR / encounter.zip_folder_name / file.filename
         if image_path.exists():
-            s3_key_image = f"encounter_files/{file.uuid}/{file.filename}"
+            s3_key_image = s3_key_from_local_path(image_path)
             backend.save_file(image_path, s3_key_image)
             uploaded_keys.append(s3_key_image)
             file.s3_object_key = s3_key_image
@@ -180,7 +182,7 @@ def migrate_encounter_file_to_s3(file_id: int, s3_config_id: int) -> bool:
         if file.thumbnail_filename:
             thumb_path = IMAGE_DIR / encounter.zip_folder_name / file.thumbnail_filename
             if thumb_path.exists():
-                s3_key_thumb = f"encounter_files/{file.uuid}/thumbnails/{file.thumbnail_filename}"
+                s3_key_thumb = s3_key_from_local_path(thumb_path)
                 backend.save_file(thumb_path, s3_key_thumb)
                 uploaded_keys.append(s3_key_thumb)
                 file.s3_object_key_thumbnail = s3_key_thumb
@@ -208,6 +210,7 @@ def migrate_encounter_file_pdf_to_s3(file_id: int, s3_config_id: int) -> bool:
     """
     from models import EncounterFilePDF, PatientEncounters
     from app import PDF_DIR
+    from utils.s3_paths import s3_key_from_local_path
 
     with s3_migration_guard(s3_config_id) as (backend, uploaded_keys):
         file = db.query(EncounterFilePDF).get(file_id)
@@ -220,7 +223,7 @@ def migrate_encounter_file_pdf_to_s3(file_id: int, s3_config_id: int) -> bool:
         # Upload PDF to S3
         pdf_path = PDF_DIR / encounter.zip_folder_name / file.filename
         if pdf_path.exists():
-            s3_key_pdf = f"encounter_pdfs/{file.uuid}/{file.filename}"
+            s3_key_pdf = s3_key_from_local_path(pdf_path)
             backend.save_file(pdf_path, s3_key_pdf)
             uploaded_keys.append(s3_key_pdf)
             file.s3_object_key = s3_key_pdf

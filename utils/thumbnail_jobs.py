@@ -389,7 +389,7 @@ def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
         )
 
 
-def queue_thumbnail_job(job_token: str, app):
+def queue_thumbnail_job(job_token: str, app, user_id: int | None = None, hospital_id: int | None = None):
     """
     Queue a thumbnail job for processing.
 
@@ -398,6 +398,20 @@ def queue_thumbnail_job(job_token: str, app):
         app: Flask application instance (for executor)
     """
     try:
+        from utils.celery_helpers import enqueue_task, celery_enabled
+        if celery_enabled():
+            enqueue_task(
+                "celery_tasks.tasks.thumbnail_tasks.process_thumbnail_job_task",
+                job_token,
+                user_id=user_id,
+                hospital_id=hospital_id,
+            )
+            logger.info(
+                "Queued thumbnail job via Celery: %s",
+                sanitize_log_value(job_token),
+            )
+            return
+
         executor = app.config.get("EXECUTOR")
         if not executor:
             raise ValueError("No executor found in app config")
@@ -472,7 +486,7 @@ def schedule_direct_upload_thumbnails(direct_upload_id: int, app, user_context: 
             )
 
             if job_token:
-                queue_thumbnail_job(job_token, app)
+                queue_thumbnail_job(job_token, app, user_id=user_context.get("user_id"), hospital_id=direct_upload.hospital_id)
                 logger.info(
                     "Scheduled thumbnails for direct upload %s: job %s",
                     sanitize_log_value(direct_upload_id),
@@ -537,7 +551,7 @@ def schedule_encounter_thumbnails(encounter_file_ids: List[int], app, user_conte
             )
 
             if job_token:
-                queue_thumbnail_job(job_token, app)
+                queue_thumbnail_job(job_token, app, user_id=user_context.get("user_id"), hospital_id=getattr(encounter_files[0], "hospital_id", None))
                 logger.info(
                     "Scheduled thumbnails for %s encounter files: job %s",
                     sanitize_log_value(len(encounter_file_ids)),

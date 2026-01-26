@@ -25,6 +25,17 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 from flask_login import FlaskLoginClient
 
+# Test database URL - uses dedicated test-db container
+# From inside docker, connect to 'test-db' service (not localhost)
+# From host, use localhost:5433
+TEST_DATABASE_URL = os.getenv(
+    'TEST_DATABASE_URL',
+    'postgresql://test_user:test_password_change_in_production@test-db:5432/fundus_test'
+)
+
+# Ensure all model and alembic imports resolve to the test DB.
+os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
+
 from models import Base
 
 # Global test session holder for monkeypatching
@@ -88,10 +99,7 @@ db_transaction_manager.transaction_scope = _mock_get_db_session
 # Test database URL - uses dedicated test-db container
 # From inside docker, connect to 'test-db' service (not localhost)
 # From host, use localhost:5433
-TEST_DATABASE_URL = os.getenv(
-    'TEST_DATABASE_URL',
-    'postgresql://test_user:test_password_change_in_production@test-db:5432/fundus_test'
-)
+# (Defined above to ensure models bind to test DB.)
 
 
 # ==============================================================================
@@ -132,8 +140,11 @@ def test_engine():
 
     from alembic import command
     try:
+        # Force Alembic env.py to target the test database
+        os.environ["DATABASE_URL"] = TEST_DATABASE_URL
         # Run all migrations from scratch (schema was just recreated)
-        command.upgrade(alembic_cfg, "head")
+        # Use "heads" to support multiple heads in test-only context.
+        command.upgrade(alembic_cfg, "heads")
 
         print("✅ Test database migrations applied successfully")
     except Exception as e:
@@ -782,5 +793,3 @@ from tests.fixtures.seeded_data import (
 
 # Import authentication fixtures
 from tests.fixtures.auth_client import auth_client, multi_auth_clients
-
-

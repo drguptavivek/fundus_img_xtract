@@ -204,7 +204,14 @@ Please keep this information secure.
     # Fetch roles, hospitals, and lab_units in the same session that will be used for rendering
     with get_db_session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
-        hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+
+        # Hospital isolation: admin sees all hospitals, local_admin sees only their own
+        user_roles = {r.name for r in (current_user.roles or [])}
+        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+            hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+        else:
+            hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
+
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
         
         default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
@@ -222,11 +229,18 @@ Please keep this information secure.
 
 def _add_user_err(msg, roles, hospitals, lab_units, username, active, selected_roles, full_name, phone, designation, email, yj, ldos, file_upload_quota, selected_lab_units, timezone_value):
     flash(msg, "danger")
-    
+
     # Fetch fresh data in a new session to avoid detached instance errors
     with get_db_session() as db:
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
-        hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+
+        # Hospital isolation: admin sees all hospitals, local_admin sees only their own
+        user_roles = {r.name for r in (current_user.roles or [])}
+        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+            hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+        else:
+            hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
+
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
         
         default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
@@ -263,7 +277,7 @@ def edit_user(user_id: int):
         user = db.get(User, user_id)
         if not user:
             flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
-            
+
         # Site Admin Enforcement: Cannot edit users from other hospitals (or system users like AI models)
         if not getattr(current_user, 'is_master_admin', False):
              if getattr(user, 'hospital_id', None) != current_user.hospital_id:
@@ -271,9 +285,20 @@ def edit_user(user_id: int):
                  return redirect(url_for("admin.users_list"))
 
         roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
-        hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+
+        # Hospital isolation: admin sees all hospitals, local_admin sees only their own
+        user_roles = {r.name for r in (current_user.roles or [])}
+        if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+            hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+        else:
+            # local_admin or other roles only see their hospital
+            hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
+
         lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
-        
+
+        # Convert lab units to dicts for JSON serialization
+        lab_units_dict = [{'id': lu.id, 'name': lu.name, 'hospital_id': lu.hospital_id} for lu in lab_units]
+
         if request.method == "GET":
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
             return render_template(
@@ -281,8 +306,8 @@ def edit_user(user_id: int):
                 user=user,
                 roles=roles,
                 hospitals=hospitals,
-                lab_units=lab_units,
-                selected_lab_units={lu.id for lu in user.lab_units},
+                lab_units=lab_units_dict,
+                selected_lab_units=list(lu.id for lu in user.lab_units),
                 timezone_choices=TIMEZONE_CHOICES,
                 timezone_labels=TIMEZONE_LABELS,
                 selected_timezone=user.timezone or default_tz,
@@ -297,8 +322,17 @@ def edit_user(user_id: int):
                 flash("User not found.", "danger"); return redirect(url_for("admin.users_list"))
 
             roles = db.execute(select(Role).order_by(Role.name.asc())).scalars().all()
-            hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+
+            # Hospital isolation: admin sees all hospitals, local_admin sees only their own
+            user_roles = {r.name for r in (current_user.roles or [])}
+            if 'admin' in user_roles or getattr(current_user, 'is_master_admin', False):
+                hospitals = db.execute(select(Hospital).order_by(Hospital.name.asc())).scalars().all()
+            else:
+                # local_admin or other roles only see their hospital
+                hospitals = [db.get(Hospital, current_user.hospital_id)] if current_user.hospital_id else []
+
             lab_units = db.execute(select(LabUnit).options(selectinload(LabUnit.hospital)).order_by(LabUnit.name.asc())).scalars().all()
+            lab_units_dict = [{'id': lu.id, 'name': lu.name, 'hospital_id': lu.hospital_id} for lu in lab_units]
             # Handle role assignments
             if "save_roles" in request.form:
                 selected_roles = set(request.form.getlist("roles"))
@@ -326,8 +360,8 @@ def edit_user(user_id: int):
                             user=user,
                             roles=roles,
                             hospitals=hospitals,
-                            lab_units=lab_units,
-                            selected_lab_units={lu.id for lu in user.lab_units},
+                            lab_units=lab_units_dict,
+                            selected_lab_units=list(lu.id for lu in user.lab_units),
                             timezone_choices=TIMEZONE_CHOICES,
                             timezone_labels=TIMEZONE_LABELS,
                             selected_timezone=user.timezone or default_tz,
@@ -360,6 +394,7 @@ def edit_user(user_id: int):
             ldos = (request.form.get("last_date_of_service") or "").strip()
             file_upload_quota = int(request.form.get("file_upload_quota") or 0)
             is_active = bool(request.form.get("is_active"))
+            hospital_id = request.form.get("hospital_id")
             selected_lab_unit_ids = set(int(x) for x in request.form.getlist("lab_units"))
             default_tz = current_app.config.get("DEFAULT_DISPLAY_TIMEZONE", DEFAULT_TIMEZONE)
 
@@ -372,7 +407,7 @@ def edit_user(user_id: int):
                     roles=roles,
                     hospitals=hospitals,
                     lab_units=lab_units,
-                    selected_lab_units={lu.id for lu in user.lab_units},
+                    selected_lab_units=list(lu.id for lu in user.lab_units),
                     timezone_choices=TIMEZONE_CHOICES,
                     timezone_labels=TIMEZONE_LABELS,
                     selected_timezone=timezone_pref or default_tz,
@@ -418,7 +453,32 @@ def edit_user(user_id: int):
             if file_upload_quota < 0:
                 return render_profile_error("File upload quota cannot be negative.")
 
+            # Hospital validation and assignment
+            if not hospital_id:
+                return render_profile_error("Hospital must be selected.")
+
+            hospital_id = int(hospital_id)
+
+            # Hospital isolation: admin can assign to any hospital, local_admin only to their own
+            user_roles = {r.name for r in (current_user.roles or [])}
+            if 'admin' not in user_roles and not getattr(current_user, 'is_master_admin', False):
+                if hospital_id != current_user.hospital_id:
+                    return render_profile_error("You can only assign users to your hospital.")
+
+            # Hospital isolation: Verify all lab units belong to the selected hospital
+            if selected_lab_unit_ids:
+                lab_unit_objs = db.execute(
+                    select(LabUnit).where(LabUnit.id.in_(selected_lab_unit_ids))
+                ).scalars().all()
+                for lu in lab_unit_objs:
+                    if lu.hospital_id != hospital_id:
+                        return render_profile_error(
+                            f"Lab unit '{lu.name}' belongs to a different hospital. "
+                            "Users can only be assigned lab units from their assigned hospital."
+                        )
+
             user.full_name = full_name or None
+            user.hospital_id = hospital_id
             user.designation = designation or None
             user.email = email or None
             user.phone = phone or None

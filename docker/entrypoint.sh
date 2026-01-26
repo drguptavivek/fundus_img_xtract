@@ -46,18 +46,22 @@ else
     uv sync
 fi
 
-# Run initial migration first
-echo "Running initial database migration..."
-uv run alembic upgrade 5a49784f68f1
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+    # Run initial migration first
+    echo "Running initial database migration..."
+    uv run alembic upgrade 5a49784f68f1
 
-# Wait 5 seconds for transaction to commit
-echo "Waiting 5 seconds for migration to settle..."
-sleep 5
+    # Wait 5 seconds for transaction to commit
+    echo "Waiting 5 seconds for migration to settle..."
+    sleep 5
 
-# Run all remaining migrations
-echo "Running remaining database migrations..."
-uv run alembic upgrade head
-echo "✅ Database migrations completed successfully!"
+    # Run all remaining migrations
+    echo "Running remaining database migrations..."
+    uv run alembic upgrade head
+    echo "✅ Database migrations completed successfully!"
+else
+    echo "Skipping database migrations (RUN_MIGRATIONS=false)"
+fi
 
 # Start cron daemon for log rotation
 echo "Starting cron daemon for log rotation..."

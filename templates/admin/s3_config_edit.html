@@ -19,7 +19,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h4 mb-0">Edit S3 Configuration</h1>
-            <small class="text-muted">{{ config.name }} ({{ hospital.name }})</small>
+            <small class="text-muted">{{ s3_config.name }} ({{ hospital.name }})</small>
         </div>
         <a class="btn btn-outline-secondary" href="{{ url_for('admin.s3_configs_list') }}">Back to Configurations</a>
     </div>
@@ -38,7 +38,7 @@
             </div>
             {% if not config.is_archived %}
             <button type="button"
-                    class="btn {% if config.is_active %}btn-warning{% else %}btn-success%} btn-sm"
+                    class="btn {% if config.is_active %}btn-warning{% else %}btn-success{% endif %} btn-sm"
                     onclick="toggleActivation()">
                 {% if config.is_active %}<i class="fas fa-pause"></i> Deactivate{% else %}<i class="fas fa-play"></i> Activate{% endif %}
             </button>
@@ -69,7 +69,7 @@
                                         {% elif config.provider == 'azure' %}bg-primary
                                         {% elif config.provider == 'minio' %}bg-success text-dark
                                         {% else %}bg-secondary{% endif %}">
-                                        {{ config.provider }}
+                                        {{ s3_config.provider }}
                                     </span>
                                 </div>
                             </div>
@@ -110,10 +110,9 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="path_prefix" class="form-label">Path Prefix</label>
-                            <input type="text" class="form-control" name="path_prefix" id="path_prefix"
-                                   value="{{ form_data.get('path_prefix', config.path_prefix or '') }}"
-                                   placeholder="uploads/">
+                            <label class="form-label">S3 Base Folder</label>
+                            <div class="form-control-plaintext">/eyeimgmgr/</div>
+                            <div class="help-text">All objects are stored under this fixed prefix for consistency.</div>
                         </div>
 
                         <div class="mb-3">
@@ -209,7 +208,7 @@
                                 <strong>Manual Pepper Rotation</strong>
                                 {% if config.pepper_rotated_at %}
                                 <div class="small text-muted">
-                                    Last rotated: {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
+                                    Last rotated: {{ s3_config.pepper_rotated_at|user_datetime('%Y-%m-%d %H:%M') }}
                                 </div>
                                 {% endif %}
                             </div>
@@ -232,7 +231,7 @@
                             <label class="form-label">Current Policy</label>
                             <div>
                                 <span class="badge {% if config.fallback_policy == 'never' %}bg-danger{% else %}bg-warning{% endif %}">
-                                    {{ config.fallback_policy.upper() }}
+                                    {{ s3_config.fallback_policy.upper() }}
                                 </span>
                                 <span class="text-muted small ms-2">
                                     {% if config.fallback_policy == 'never' %}
@@ -276,16 +275,16 @@
                 </div>
                 <div class="card-body small">
                     <div class="mb-2">
-                        <strong>ID:</strong> {{ config.id }}
+                        <strong>ID:</strong> {{ s3_config.id }}
                     </div>
                     <div class="mb-2">
                         <strong>Hospital:</strong> {{ hospital.name }}
                     </div>
                     <div class="mb-2">
-                        <strong>Created:</strong> {{ config.created_at|datetime('%Y-%m-%d %H:%M') }}
+                        <strong>Created:</strong> {{ s3_config.created_at|user_datetime('%Y-%m-%d %H:%M') }}
                     </div>
                     <div class="mb-2">
-                        <strong>Updated:</strong> {{ config.updated_at|datetime('%Y-%m-%d %H:%M') }}
+                        <strong>Updated:</strong> {{ s3_config.updated_at|user_datetime('%Y-%m-%d %H:%M') }}
                     </div>
                 </div>
             </div>
@@ -300,7 +299,7 @@
                     </div>
                     {% if config.pepper_rotated_at %}
                     <div class="mb-2">
-                        <i class="fas fa-clock text-info"></i> Last Rotation: {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
+                        <i class="fas fa-clock text-info"></i> Last Rotation: {{ s3_config.pepper_rotated_at|user_datetime('%Y-%m-%d %H:%M') }}
                     </div>
                     {% endif %}
                     <div class="mb-2">
@@ -322,7 +321,7 @@ function testConnection() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
     btn.disabled = true;
 
-    fetch(`/admin/s3-configs/{{ config.id }}/test-connection`, {
+    fetch(`/admin/s3-configs/{{ s3_config.id }}/test-connection`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -351,7 +350,7 @@ function rotatePepper() {
         return;
     }
 
-    fetch(`/admin/s3-configs/{{ config.id }}/rotate-pepper`, {
+    fetch(`/admin/s3-configs/{{ s3_config.id }}/rotate-pepper`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -373,13 +372,13 @@ function rotatePepper() {
 }
 
 function toggleActivation() {
-    const isActive = {{ config.is_active|lower }};
+    const isActive = {{ s3_config.is_active|lower }};
     const action = isActive ? 'deactivate' : 'activate';
     if (!confirm(`Are you sure you want to ${action} this configuration?`)) {
         return;
     }
 
-    fetch(`/admin/s3-configs/{{ config.id }}/activate`, {
+    fetch(`/admin/s3-configs/{{ s3_config.id }}/activate`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -405,7 +404,7 @@ function archiveConfig() {
     }
 
     if (confirm('This is a destructive action. Are you sure?')) {
-        window.location.href = `/admin/s3-configs/{{ config.id }}/delete`;
+        window.location.href = `/admin/s3-configs/{{ s3_config.id }}/delete`;
     }
 }
 

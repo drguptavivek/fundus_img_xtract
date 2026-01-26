@@ -25,6 +25,8 @@ from models import S3Config
 from utils.s3_storage_backends import get_s3_client
 from utils.log_sanitize import sanitize_log_value
 from utils.s3_validation import validate_s3_object_key, sanitize_for_s3_key
+from utils.s3_prefix import apply_global_prefix
+from utils.s3_paths import s3_key_from_rel_path
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger('security.audit')
@@ -52,41 +54,13 @@ def get_active_s3_config(hospital_id: int) -> S3Config | None:
         return s3_config
 
 
-def generate_s3_object_key(
-    hospital_id: int,
-    file_type: str,  # "original", "edited", "thumbnail", "edited_thumbnail"
-    filename: str,
-    date_str: str = None
-) -> str:
+def generate_s3_object_key(local_rel_path: str) -> str:
     """
-    Generate S3 object key for a file.
+    Generate S3 object key from a local path relative to BASE_DIR.
 
-    Key format: {hospital_id}/{file_type}/{YYYY_MM_DD}/{filename}
-
-    Args:
-        hospital_id: Hospital ID
-        file_type: Type of file (original, edited, thumbnail, edited_thumbnail)
-        filename: Original filename
-        date_str: Optional date string (defaults to today)
-
-    Returns:
-        S3 object key
-
-    Example:
-        >>> generate_s3_object_key(1, "original", "image.jpg", "2025_01_25")
-        "1/original/2025_01_25/image.jpg"
+    This enforces the local -> S3 mirror rule.
     """
-    if date_str is None:
-        date_str = datetime.now(timezone.utc).strftime("%Y_%m_%d")
-
-    # Sanitize filename for S3
-    safe_filename = Path(filename).name  # Get basename only
-    # Remove any non-ASCII characters for safety
-    safe_filename = safe_filename.encode('ascii', 'ignore').decode('ascii').strip()
-    if not safe_filename:
-        safe_filename = "file"
-
-    return f"{hospital_id}/{file_type}/{date_str}/{safe_filename}"
+    return s3_key_from_rel_path(local_rel_path)
 
 
 def calculate_file_hash(file_content: bytes | BinaryIO) -> str:
@@ -135,10 +109,8 @@ def upload_file_to_s3(
         # Get S3 client
         s3_client = get_s3_client(s3_config)
 
-        # Build full key with path prefix
-        full_key = object_key
-        if s3_config.path_prefix:
-            full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+        # Build full key with global prefix
+        full_key = apply_global_prefix(object_key)
 
         # Prepare upload parameters
         extra_args = {}
@@ -190,7 +162,8 @@ def upload_with_fallback(
     hospital_id: int,
     file_type: str = "original",
     local_save_func = None,
-    content_type: str = None
+    content_type: str = None,
+    local_rel_path: str | None = None
 ) -> UploadResult:
     """
     Upload file to S3 with fallback to local filesystem.
@@ -228,7 +201,9 @@ def upload_with_fallback(
     # Try S3 upload if config exists
     if s3_config:
         try:
-            object_key = generate_s3_object_key(hospital_id, file_type, filename)
+            if not local_rel_path:
+                raise ValueError("local_rel_path is required for S3 key mapping")
+            object_key = generate_s3_object_key(local_rel_path)
             etag = upload_file_to_s3(s3_config, file_content, object_key, content_type)
 
             logger.info(
@@ -294,10 +269,8 @@ def delete_from_s3(
     try:
         s3_client = get_s3_client(s3_config)
 
-        # Build full key with path prefix
-        full_key = object_key
-        if s3_config.path_prefix:
-            full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+        # Build full key with global prefix
+        full_key = apply_global_prefix(object_key)
 
         s3_client.delete_object(
             Bucket=s3_config.bucket_name,
@@ -422,7 +395,7 @@ class S3FileStorageAdapter:
         """Check if hospital has active S3 configuration."""
         return self.s3_config is not None
 
-    def save(self, file_content: bytes | BinaryIO, filename: str) -> tuple[str, str]:
+    def save(self, file_content: bytes | BinaryIO, filename: str, local_rel_path: str | None = None) -> tuple[str, str]:
         """
         Save file to S3 (or fallback to local).
 
@@ -440,11 +413,9 @@ class S3FileStorageAdapter:
         """
         if self.s3_config:
             try:
-                object_key = generate_s3_object_key(
-                    self.hospital_id,
-                    self.file_type,
-                    filename
-                )
+                if not local_rel_path:
+                    raise ValueError("local_rel_path is required for S3 key mapping")
+                object_key = generate_s3_object_key(local_rel_path)
                 upload_file_to_s3(self.s3_config, file_content, object_key)
                 self.s3_object_key = object_key
                 self.backend = "s3"

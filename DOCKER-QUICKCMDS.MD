@@ -7,6 +7,11 @@ rm develop.secrets.env
 cp deploy.secrets.env.example deploy.secrets.env
 nano deploy.secrets.env
 
+
+ln -sf deploy.secrets.env .env
+
+
+
 docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env down -v
 docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
 

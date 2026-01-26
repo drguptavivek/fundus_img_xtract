@@ -153,8 +153,6 @@ def run_tests():
         mock_config.bucket_name = "test-bucket"
         mock_config.region = "us-east-1"
         mock_config.endpoint_url = None
-        mock_config.path_prefix = None
-
         # Mock encrypted credentials (will be decrypted to test values)
         mock_config.access_key_encrypted = "v1:fake_encrypted_access_key"
         mock_config.secret_key_encrypted = "v1:fake_encrypted_secret_key"
@@ -199,8 +197,6 @@ def run_tests():
         mock_config.id = 1
         mock_config.hospital_id = 1
         mock_config.bucket_name = "test-bucket"
-        mock_config.path_prefix = None
-
         # Generate presigned URL
         url = generate_presigned_url(
             mock_s3_client,
@@ -217,24 +213,10 @@ def run_tests():
         assert mock_s3_client.generate_presigned_url.called
         call_kwargs = mock_s3_client.generate_presigned_url.call_args[1]
         assert call_kwargs['Params']['Bucket'] == "test-bucket"
-        assert call_kwargs['Params']['Key'] == "test-file.jpg"
+        assert call_kwargs['Params']['Key'] == "eyeimgmgr/test-file.jpg"
         # 5 MB file should get 120s TTL
         assert call_kwargs['ExpiresIn'] == 120
         add_pass("test_presigned_url_parameters")
-
-        # Test with path prefix
-        mock_config.path_prefix = "uploads/"
-        mock_s3_client.generate_presigned_url.reset_mock()  # Reset mock
-        url = generate_presigned_url(
-            mock_s3_client,
-            mock_config,
-            "test-file.jpg"
-        )
-
-        # Get the most recent call
-        call_kwargs = mock_s3_client.generate_presigned_url.call_args[1]
-        assert call_kwargs['Params']['Key'] == "uploads/test-file.jpg"
-        add_pass("test_presigned_url_with_prefix")
 
         # Test TTL validation
         try:

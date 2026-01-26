@@ -64,30 +64,31 @@
               <label class="form-check-label" for="is_active">Active User</label>
             </div>
           </div>
+          <div class="col-md-4">
+            <label class="form-label" for="hospital_id">Hospital <span class="text-danger">*</span></label>
+            <select class="form-select" id="hospital_id" name="hospital_id" required onchange="updateLabUnits()">
+              <option value="">Select Hospital</option>
+              {% for hospital in hospitals %}
+              <option value="{{ hospital.id }}" {% if user.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text text-warning">
+              <i class="fas fa-exclamation-triangle"></i> Hospital isolation: Users can only access lab units from their assigned hospital.
+            </div>
+          </div>
         </div>
 
         <div class="col-12 mt-3">
-            <label class="form-label">Associated Lab Units</label>
-            {% if hospitals %}
-            <div class="row g-2">
-                {% for hospital in hospitals %}
-                <div class="col-md-6">
-                    <div class="card card-body bg-light p-2">
-                        <h6 class="mb-2">{{ hospital.name }}</h6>
-                        {% for lu in lab_units if lu.hospital_id == hospital.id %}
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="labunit-{{ lu.id }}"
-                                name="lab_units" value="{{ lu.id }}" {% if lu.id in (selected_lab_units or []) %}checked{% endif %}>
-                            <label class="form-check-label" for="labunit-{{ lu.id }}">{{ lu.name }}</label>
-                        </div>
-                        {% endfor %}
+            <label class="form-label">Associated Lab Units <span class="text-muted">(from selected hospital only)</span></label>
+            <div id="lab-units-container">
+                <div class="card card-body bg-light p-2">
+                    <div id="lab-units-list">
+                        <!-- Lab units loaded dynamically based on selected hospital -->
                     </div>
                 </div>
-                {% endfor %}
             </div>
-            {% else %}
-            <div class="text-muted small">No hospitals or lab units defined yet.</div>
-            {% endif %}
+            <input type="hidden" id="all-lab-units" value='{{ lab_units|tojson }}'>
+            <input type="hidden" id="selected-lab-units" value='{{ (selected_lab_units or [])|tojson }}'>
         </div>
 
         <div class="mt-3">
@@ -133,4 +134,59 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+// Hospital isolation: Lab units are filtered by selected hospital
+const allLabUnits = JSON.parse(document.getElementById('all-lab-units').value);
+const selectedLabUnits = new Set(JSON.parse(document.getElementById('selected-lab-units').value));
+
+function updateLabUnits() {
+    const hospitalId = parseInt(document.getElementById('hospital_id').value);
+    const container = document.getElementById('lab-units-list');
+
+    if (!hospitalId) {
+        container.innerHTML = '<div class="text-muted small">Please select a hospital first.</div>';
+        return;
+    }
+
+    const filteredUnits = allLabUnits.filter(lu => lu.hospital_id === hospitalId);
+
+    if (filteredUnits.length === 0) {
+        container.innerHTML = '<div class="text-muted small">No lab units found for this hospital.</div>';
+        return;
+    }
+
+    let html = '';
+    filteredUnits.forEach(lu => {
+        const isChecked = selectedLabUnits.has(lu.id) ? 'checked' : '';
+        html += `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="labunit-${lu.id}"
+                    name="lab_units" value="${lu.id}" ${isChecked} data-hospital-id="${lu.hospital_id}">
+                <label class="form-check-label" for="labunit-${lu.id}">${lu.name}</label>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+// Update selected lab units when checkboxes change
+document.addEventListener('change', function(e) {
+    if (e.target.matches('#lab-units-list input[type="checkbox"]')) {
+        const labUnitId = parseInt(e.target.value);
+        if (e.target.checked) {
+            selectedLabUnits.add(labUnitId);
+        } else {
+            selectedLabUnits.delete(labUnitId);
+        }
+    }
+});
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateLabUnits();
+});
+</script>
 {% endblock %}

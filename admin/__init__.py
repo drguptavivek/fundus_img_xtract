@@ -50,6 +50,13 @@ from .s3_config import (
     s3_configs_list, s3_config_create, s3_config_edit, s3_config_delete,
     s3_config_activate, s3_config_test_connection, s3_config_rotate_pepper,
     s3_config_set_fallback,
+    s3_configs_api_list, s3_config_api_test_connection_modal, s3_config_api_create,
+)
+from .celery_schedule import (
+    celery_schedule_list,
+    celery_schedule_create,
+    celery_schedule_update,
+    celery_schedule_delete,
 )
 
 
@@ -117,6 +124,31 @@ admin_bp.add_url_rule(
     view_func=apply_review_as_final,
     methods=["POST"],
     endpoint="apply_review_as_final",
+)
+
+admin_bp.add_url_rule(
+    "/celery-schedules",
+    view_func=celery_schedule_list,
+    methods=["GET"],
+    endpoint="celery_schedule_list",
+)
+admin_bp.add_url_rule(
+    "/celery-schedules",
+    view_func=celery_schedule_create,
+    methods=["POST"],
+    endpoint="celery_schedule_create",
+)
+admin_bp.add_url_rule(
+    "/celery-schedules/<int:schedule_id>",
+    view_func=celery_schedule_update,
+    methods=["POST"],
+    endpoint="celery_schedule_update",
+)
+admin_bp.add_url_rule(
+    "/celery-schedules/<int:schedule_id>/delete",
+    view_func=celery_schedule_delete,
+    methods=["POST"],
+    endpoint="celery_schedule_delete",
 )
 admin_bp.add_url_rule(
     "/upload-quotas/<int:user_id>/update",
@@ -236,6 +268,10 @@ admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/activate", view_func=s3_co
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/test-connection", view_func=s3_config_test_connection, methods=["POST"])
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/rotate-pepper", view_func=s3_config_rotate_pepper, methods=["POST"])
 admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/fallback", view_func=s3_config_set_fallback, methods=["GET", "POST"])
+# API endpoints for JS-based UI
+admin_bp.add_url_rule("/s3-configs/api/list", view_func=s3_configs_api_list, methods=["GET"])
+admin_bp.add_url_rule("/s3-configs/api/test-connection-modal", view_func=s3_config_api_test_connection_modal, methods=["POST"])
+admin_bp.add_url_rule("/s3-configs/api/create", view_func=s3_config_api_create, methods=["POST"])
 
 # Register database restore blueprint
 admin_bp.register_blueprint(database_restore_bp)

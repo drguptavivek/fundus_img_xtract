@@ -810,6 +810,15 @@ def queue_missing_thumbnail_regeneration(app, schedule_time: str = "post_upload"
         limit: Max thumbnails to trigger in this run
     """
     try:
+        from utils.celery_helpers import enqueue_task, celery_enabled
+        if celery_enabled():
+            enqueue_task("celery_tasks.tasks.maintenance_tasks.regenerate_missing_thumbnails_task", limit)
+            logger.info(
+                "Queued thumbnail regeneration via Celery: schedule=%s limit=%s",
+                sanitize_log_value(schedule_time),
+                sanitize_log_value(limit),
+            )
+            return True
         # Import context wrapper from thumbnail_jobs
         from utils.thumbnail_jobs import with_app_context
 

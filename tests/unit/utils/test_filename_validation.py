@@ -36,6 +36,8 @@ class TestFilenameValidation:
             "my-file-123.JPG",
             "test.file.name.png",
             "Multiple.dots.in.name.jpg",
+            "café.jpg",
+            "病例图片.png",
         ]
 
         for filename in valid_filenames:
@@ -177,7 +179,7 @@ class TestFilenameValidation:
             "file",
             ".hiddenfile",  # Hidden files (no extension before dot)
             "file.with.a",  # Extension too short (1 char)
-            "file.extens",  # Extension with unknown characters
+            "file.exten$",  # Extension with invalid characters
         ]
 
         for filename in invalid_filenames:

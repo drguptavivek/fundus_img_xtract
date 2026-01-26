@@ -44,7 +44,7 @@ Before configuring S3 storage, you need:
 | **Bucket Name** | Your S3 bucket name | my-hospital-images |
 | **Region** | Bucket region | us-east-1, auto, etc. |
 | **Endpoint URL** | For non-AWS providers | https://...r2.cloudflarestorage.com |
-| **Path Prefix** | Optional prefix for all files | uploads/ (optional) |
+| **S3 Base Folder** | Fixed global prefix (not editable) | /eyeimgmgr/ |
 | **Addressing Style** | How to address the bucket | auto (recommended) |
 
 #### Addressing Style Options
@@ -72,12 +72,9 @@ Before configuring S3 storage, you need:
 
 > **Note**: Manual pepper rotation is always available via the S3 config edit page.
 
-#### Fallback Policy (Master Admin Only)
+#### Local-First Storage (Default)
 
-| Policy | Description |
-|---------|-------------|
-| **Never (Fail Hard)** | Return 503 error if S3 unavailable (recommended) |
-| **Always (Local)** | Fall back to local filesystem if S3 unavailable |
+All uploads are saved to local storage first. S3 sync is handled as a background process to ensure uploads are never lost if S3 is unavailable.
 
 ### Step 3: Test Connection
 
@@ -102,22 +99,21 @@ Before configuring S3 storage, you need:
 
 ## File Storage Behavior
 
-### What Gets Stored in S3
+### S3 Path Mapping (Local → S3)
 
-When S3 is active for your hospital:
+S3 keys mirror the local `/files/` path structure. The fixed global prefix `/eyeimgmgr/` is applied at upload/access time (not stored in the DB).
 
-| File Type | S3 Object Key Format | Example |
-|-----------|---------------------|---------|
-| Original Images | `{hospital_id}/original/{YYYY_MM_DD}/{filename}` | `1/original/2026_01_25/image.jpg` |
-| Thumbnails | `{hospital_id}/thumbnail/{YYYY_MM_DD}/{thumb_filename}` | `1/thumbnail/2026_01_25/thumb_image.jpg` |
-| Edited Images | `{hospital_id}/edited/{YYYY_MM_DD}/{filename}` | `1/edited/2026_01_25/edited_image.jpg` |
+**Rule**: `S3 full key = eyeimgmgr/<local path relative to BASE_DIR>`
 
-### Fallback Behavior
-
-| Fallback Policy | S3 Unavailable Behavior |
-|-----------------|------------------------|
-| **Never** | 503 Service Unavailable error (fail hard) |
-| **Always** | Files saved to local filesystem instead |
+| Variant | Local Path | Stored `s3_object_key` | S3 Full Key |
+|---|---|---|---|
+| Direct upload original | `files/direct_uploads/<folder_rel>/<filename>` | `files/direct_uploads/<folder_rel>/<filename>` | `eyeimgmgr/files/direct_uploads/<folder_rel>/<filename>` |
+| Direct upload edited | `files/direct_uploads/<folder_rel>/edited/<edited_filename>` | `files/direct_uploads/<folder_rel>/edited/<edited_filename>` | `eyeimgmgr/files/direct_uploads/<folder_rel>/edited/<edited_filename>` |
+| Direct upload thumbnail (orig) | `files/direct_uploads/<folder_rel>/<thumbnail_filename>` | `files/direct_uploads/<folder_rel>/<thumbnail_filename>` | `eyeimgmgr/files/direct_uploads/<folder_rel>/<thumbnail_filename>` |
+| Direct upload thumbnail (edited) | `files/direct_uploads/<folder_rel>/<edited_thumbnail_filename>` | `files/direct_uploads/<folder_rel>/<edited_thumbnail_filename>` | `eyeimgmgr/files/direct_uploads/<folder_rel>/<edited_thumbnail_filename>` |
+| Encounter image | `files/zip_upload_images/<zip_folder_name>/<filename>` | `files/zip_upload_images/<zip_folder_name>/<filename>` | `eyeimgmgr/files/zip_upload_images/<zip_folder_name>/<filename>` |
+| Encounter thumbnail | `files/zip_upload_images/<zip_folder_name>/<thumbnail_filename>` | `files/zip_upload_images/<zip_folder_name>/<thumbnail_filename>` | `eyeimgmgr/files/zip_upload_images/<zip_folder_name>/<thumbnail_filename>` |
+| Encounter PDF | `files/zip_upload_pdfs/<zip_folder_name>/<filename>` | `files/zip_upload_pdfs/<zip_folder_name>/<filename>` | `eyeimgmgr/files/zip_upload_pdfs/<zip_folder_name>/<filename>` |
 
 ## Accessing S3 Files
 

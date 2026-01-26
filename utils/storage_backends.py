@@ -27,9 +27,9 @@ from utils.s3_validation import (
     validate_bucket_name,
     validate_s3_region,
     validate_endpoint_url,
-    validate_path_prefix,
     S3ValidationError
 )
+from utils.s3_prefix import apply_global_prefix
 from utils.s3_fallback_control import should_delete_local_after_s3_upload
 from utils.log_sanitize import sanitize_log_value
 
@@ -107,12 +107,13 @@ class LocalStorageBackend(StorageBackend):
         Returns:
             StorageResult with local path
         """
-        from werkzeug.utils import secure_filename
+        from utils.filename_sanitizer import sanitize_storage_filename
 
-        # Sanitize filename
-        safe_filename = secure_filename(filename)
-        if not safe_filename:
-            raise StorageError(f"Invalid filename after sanitization: {filename}")
+        # Sanitize filename (ASCII-safe with hash on change)
+        try:
+            safe_filename = sanitize_storage_filename(filename)
+        except ValueError as e:
+            raise StorageError(f"Invalid filename after sanitization: {e}") from e
 
         # Build safe path
         if prefix:
@@ -210,7 +211,7 @@ class S3StorageBackend(StorageBackend):
             self.bucket_name = validate_bucket_name(s3_config.bucket_name)
             self.region = validate_s3_region(s3_config.region)
             self.endpoint_url = validate_endpoint_url(s3_config.endpoint_url)
-            self.path_prefix = validate_path_prefix(s3_config.path_prefix)
+            self.path_prefix = None
         except S3ValidationError as e:
             raise StorageError(f"Invalid S3 configuration: {e}")
 
@@ -251,14 +252,12 @@ class S3StorageBackend(StorageBackend):
         Returns:
             Validated S3 object key
         """
-        # Combine path prefix from config
+        # Combine optional prefix (caller-provided) without global prefix
         full_prefix = ""
-        if self.path_prefix:
-            full_prefix = self.path_prefix
         if prefix:
-            full_prefix += prefix.strip('/') + '/'
+            full_prefix = prefix.strip('/') + '/'
 
-        # Sanitize and validate
+        # Sanitize and validate (global prefix applied at access time)
         s3_key = sanitize_for_s3_key(filename, full_prefix)
 
         logger.debug(f"Built S3 key: {s3_key} from filename: {filename}, prefix: {full_prefix}")
@@ -280,6 +279,7 @@ class S3StorageBackend(StorageBackend):
             StorageError: If upload fails
         """
         s3_key = self._build_s3_key(filename, prefix)
+        full_key = apply_global_prefix(s3_key)
 
         try:
             # Upload to S3
@@ -287,7 +287,7 @@ class S3StorageBackend(StorageBackend):
             self.s3_client.upload_fileobj(
                 file,
                 self.bucket_name,
-                s3_key,
+                full_key,
                 ExtraArgs={
                     'ServerSideEncryption': 'AES256',  # Enable encryption at rest
                 }
@@ -296,7 +296,7 @@ class S3StorageBackend(StorageBackend):
             logger.info(
                 f"Uploaded file to S3 | "
                 f"bucket={self.bucket_name} | "
-                f"key={s3_key} | "
+                f"key={full_key} | "
                 f"config_id={self.config.id}"
             )
 
@@ -353,7 +353,7 @@ class S3StorageBackend(StorageBackend):
         from utils.s3_validation import validate_s3_object_key
 
         # Validate S3 key
-        s3_key = validate_s3_object_key(s3_key)
+        s3_key = apply_global_prefix(validate_s3_object_key(s3_key))
 
         if not local_path.exists():
             raise StorageError(f"Local file not found: {local_path}")
@@ -385,7 +385,7 @@ class S3StorageBackend(StorageBackend):
         """Get file from S3."""
         from utils.s3_validation import validate_s3_object_key
 
-        object_key = validate_s3_object_key(object_key)
+        object_key = apply_global_prefix(validate_s3_object_key(object_key))
 
         try:
             response = self.s3_client.get_object(Bucket=self.bucket_name, Key=object_key)
@@ -410,7 +410,7 @@ class S3StorageBackend(StorageBackend):
         """
         from utils.s3_validation import validate_s3_object_key
 
-        object_key = validate_s3_object_key(object_key)
+        object_key = apply_global_prefix(validate_s3_object_key(object_key))
 
         try:
             url = self.s3_client.generate_presigned_url(
@@ -427,7 +427,7 @@ class S3StorageBackend(StorageBackend):
         """Delete file from S3."""
         from utils.s3_validation import validate_s3_object_key
 
-        object_key = validate_s3_object_key(object_key)
+        object_key = apply_global_prefix(validate_s3_object_key(object_key))
 
         try:
             self.s3_client.delete_object(Bucket=self.bucket_name, Key=object_key)
@@ -441,7 +441,7 @@ class S3StorageBackend(StorageBackend):
         """Check if file exists in S3."""
         from utils.s3_validation import validate_s3_object_key
 
-        object_key = validate_s3_object_key(object_key)
+        object_key = apply_global_prefix(validate_s3_object_key(object_key))
 
         try:
             self.s3_client.head_object(Bucket=self.bucket_name, Key=object_key)

@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Literal
 from flask import Response, abort, send_file
-from werkzeug.utils import secure_filename
+from utils.filename_sanitizer import sanitize_storage_filename
 from werkzeug.exceptions import NotFound
 from models import ALLOWED_IMAGE_EXT, BASE_DIR, DIRECT_UPLOAD_DIR, IMAGE_DIR, PDF_DIR, EncounterFile, PatientEncounters, ZipFile, DirectImageUpload
 from utils.fileUtils import abs_from_parts, _ensure_under_root
@@ -236,8 +236,8 @@ def construct_secure_path(base_dir: Path, filename: str) -> Path:
     Raises:
         ValueError: If path traversal is detected
     """
-    # Use secure_filename to sanitize the filename
-    safe_filename = secure_filename(filename)
+    # Use storage-safe filename sanitizer (ASCII-safe with hash on change)
+    safe_filename = sanitize_storage_filename(filename)
     
     # Construct the full path
     full_path = base_dir / safe_filename

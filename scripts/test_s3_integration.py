@@ -279,14 +279,13 @@ def test_upload():
 
             print_info(f"Uploading test file: {test_filename}")
 
-            # Generate object key
-            from utils.s3_upload_handler import generate_s3_object_key
-            object_key = generate_s3_object_key(TEST_HOSPITAL_ID, "original", test_filename)
+            # Generate object key based on local path
+            from utils.s3_paths import s3_key_from_rel_path
+            object_key = s3_key_from_rel_path(f"files/direct_uploads/test/{test_filename}")
 
-            # Add path prefix if configured
-            full_key = object_key
-            if s3_config.path_prefix:
-                full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+            # Apply global S3 prefix
+            from utils.s3_prefix import apply_global_prefix
+            full_key = apply_global_prefix(object_key)
 
             # Upload to S3
             s3_client = get_s3_client(s3_config)
@@ -358,13 +357,12 @@ def test_presigned_url_access():
             test_filename = "s3-presigned-url-test.txt"
             test_content = b"Presigned URL accessibility test"
 
-            from utils.s3_upload_handler import generate_s3_object_key
-            object_key = generate_s3_object_key(TEST_HOSPITAL_ID, "original", test_filename)
+            from utils.s3_paths import s3_key_from_rel_path
+            object_key = s3_key_from_rel_path(f"files/direct_uploads/test/{test_filename}")
 
-            # Add path prefix if configured
-            full_key = object_key
-            if s3_config.path_prefix:
-                full_key = f"{s3_config.path_prefix.rstrip('/')}/{object_key}"
+            # Apply global S3 prefix
+            from utils.s3_prefix import apply_global_prefix
+            full_key = apply_global_prefix(object_key)
 
             s3_client = get_s3_client(s3_config)
 

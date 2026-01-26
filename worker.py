@@ -40,7 +40,7 @@ def _process_one_zip(zip_path: Path) -> dict:
     finally:
         db.close()
 
-def _job_worker(job_token: str, saved_paths: list[Path]):
+def process_zip_job(job_token: str, saved_paths: list[Path]):
     db_set_job_status(job_token, "processing")
     try:
         for p in saved_paths:
@@ -64,9 +64,25 @@ def _job_worker(job_token: str, saved_paths: list[Path]):
     except Exception as e:
         db_set_job_status(job_token, "error", error=str(e))
 
-def queue_job(app, job_token: str, saved_paths: list[Path]):
+def queue_job(
+    app,
+    job_token: str,
+    saved_paths: list[Path],
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+):
     """
     Submit a job to the shared executor (ThreadPoolExecutor stored in app.config).
     """
+    from utils.celery_helpers import enqueue_task, celery_enabled
+    if celery_enabled():
+        enqueue_task(
+            "celery_tasks.tasks.zip_tasks.process_zip_job_task",
+            job_token,
+            [str(p) for p in saved_paths],
+            user_id=user_id,
+            hospital_id=hospital_id,
+        )
+        return
     executor = app.config["EXECUTOR"]
-    executor.submit(_job_worker, job_token, saved_paths)
+    executor.submit(process_zip_job, job_token, saved_paths)

@@ -216,7 +216,6 @@ class S3Config(Base):
     bucket_name: Mapped[str] = mapped_column(String(255), nullable=False)
     region: Mapped[str] = mapped_column(String(50), nullable=False)
     endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    path_prefix: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # S3 addressing style: virtual (vhost/bucket.endpoint.com) or path (endpoint.com/bucket)
     # Default: auto (let boto3 decide based on endpoint/bucket)
@@ -621,6 +620,46 @@ class PiiDetectionJob(Base):
         Index("ix_pii_detection_jobs_status_created", "status", "created_at"),
     )
 
+
+class CeleryBeatSchedule(Base):
+    __tablename__ = "celery_beat_schedules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    task_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    queue: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    schedule_type: Mapped[str] = mapped_column(String(16), nullable=False, default="interval")
+    interval_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    crontab_minute: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    crontab_hour: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    crontab_day_of_week: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    crontab_day_of_month: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    crontab_month_of_year: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    hospital_id: Mapped[Optional[int]] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "schedule_type IN ('interval','crontab')",
+            name="ck_celery_beat_schedule_type",
+        ),
+        CheckConstraint(
+            "(schedule_type = 'interval' AND interval_seconds IS NOT NULL) "
+            "OR (schedule_type = 'crontab' AND interval_seconds IS NULL)",
+            name="ck_celery_beat_schedule_interval_consistency",
+        ),
+        Index("ix_celery_beat_enabled_type", "enabled", "schedule_type"),
+    )
+
+    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id])
+    hospital: Mapped[Optional["Hospital"]] = relationship("Hospital", foreign_keys=[hospital_id])
+    created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_id])
 
 
 

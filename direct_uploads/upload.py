@@ -1,10 +1,11 @@
 # direct_uploads/uploads.py
 
 import os, uuid, hashlib, magic
+from pathlib import Path
 
 from utils.file_hashing import hash_file_content, get_hash_algorithm, is_duplicate_file
 from datetime import datetime
-from werkzeug.utils import secure_filename
+from utils.filename_sanitizer import sanitize_storage_filename
 from flask import request, render_template, redirect, url_for, flash, current_app
 from flask_login import current_user
 from sqlalchemy import select
@@ -266,8 +267,21 @@ def upload():
                     ))
                     continue
 
-                # Filename is valid, proceed with secure_filename processing
-                filename = secure_filename(original_filename)
+                # Filename is valid, sanitize for storage (ASCII-safe with hash on change)
+                try:
+                    filename = sanitize_storage_filename(original_filename)
+                except ValueError as e:
+                    state, detail = "error", f"Invalid filename: {e}"
+                    current_app.logger.warning(
+                        "File upload error: invalid filename after sanitization (%s)",
+                        sanitize_filename_for_logging(original_filename),
+                    )
+                    job_items.append(JobItem(
+                        filename=sanitize_filename_for_logging(original_filename),
+                        state=state,
+                        detail=detail,
+                    ))
+                    continue
                 state, detail = "queued", ""
 
                 if not filename:
@@ -359,7 +373,7 @@ def upload():
                                         s3_metadata = _upload_to_s3_and_get_metadata(
                                             hospital.id,
                                             clean_content,
-                                            filename,
+                                            dest,
                                             file_type="original"
                                         )
                                     except Exception as e:
@@ -402,7 +416,7 @@ def upload():
                                                 thumbnail_s3_metadata = _upload_thumbnail_to_s3(
                                                     hospital.id,
                                                     thumb_content,
-                                                    thumb_filename
+                                                    thumb_path
                                                 )
                                             except Exception as e:
                                                 current_app.logger.warning(
@@ -595,7 +609,7 @@ def upload():
 def _upload_to_s3_and_get_metadata(
     hospital_id: int,
     file_content: bytes,
-    filename: str,
+    local_path,
     file_type: str = "original"
 ) -> dict | None:
     """
@@ -604,7 +618,7 @@ def _upload_to_s3_and_get_metadata(
     Args:
         hospital_id: Hospital ID
         file_content: File content as bytes
-        filename: Original filename
+        local_path: Local filesystem path for the file
         file_type: Type of file (original, thumbnail, edited_thumbnail)
 
     Returns:
@@ -617,18 +631,17 @@ def _upload_to_s3_and_get_metadata(
     try:
         from utils.s3_upload_handler import (
             get_active_s3_config,
-            generate_s3_object_key,
             upload_file_to_s3
         )
+        from utils.s3_paths import s3_key_from_local_path
 
         # Check if hospital has active S3 config
         s3_config = get_active_s3_config(hospital_id)
         if not s3_config:
             return None
 
-        # Generate S3 object key
-        date_str = datetime.utcnow().strftime("%Y_%m_%d")
-        object_key = generate_s3_object_key(hospital_id, file_type, filename, date_str)
+        # Generate S3 object key based on local path
+        object_key = s3_key_from_local_path(local_path)
 
         # Upload to S3
         upload_file_to_s3(s3_config, file_content, object_key)
@@ -637,7 +650,7 @@ def _upload_to_s3_and_get_metadata(
             "S3 upload successful for hospital_id=%d, file_type=%s, filename=%s, object_key=%s",
             hospital_id,
             file_type,
-            sanitize_log_value(filename),
+            sanitize_log_value(Path(local_path).name),
             sanitize_log_value(object_key)
         )
 
@@ -667,13 +680,13 @@ def _upload_to_s3_and_get_metadata(
 def _upload_thumbnail_to_s3(
     hospital_id: int,
     thumbnail_content: bytes,
-    thumbnail_filename: str
+    thumbnail_path
 ) -> dict | None:
     """Upload thumbnail to S3. Returns S3 metadata or None."""
     return _upload_to_s3_and_get_metadata(
         hospital_id,
         thumbnail_content,
-        thumbnail_filename,
+        thumbnail_path,
         file_type="thumbnail"
     )
 

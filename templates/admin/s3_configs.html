@@ -20,6 +20,10 @@
 .status-inactive {
     color: #6c757d;
 }
+.filter-btn.active {
+    background-color: #0d6efd;
+    color: white;
+}
 </style>
 {% endblock %}
 
@@ -31,151 +35,49 @@
             <small class="text-muted">Multi-tenant S3-compatible storage with hospital isolation</small>
         </div>
         <div>
-            <a class="btn btn-primary" href="{{ url_for('admin.s3_config_create') }}">
-                <i class="fas fa-plus"></i> New Configuration
-            </a>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addS3ConfigModal">
+                <i class="fas fa-plus"></i> Add S3 Config
+            </button>
             <a class="btn btn-outline-secondary" href="{{ url_for('admin.users_list') }}">Back to Admin</a>
         </div>
     </div>
 
-    {% if not configs_by_hospital %}
-    <div class="alert alert-info">
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body py-2">
+            <div class="btn-group btn-group-sm" role="group" id="filterButtons">
+                <button type="button" class="btn btn-outline-primary filter-btn active" data-filter="all">
+                    All (<span id="countAll">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-success filter-btn" data-filter="active">
+                    Active (<span id="countActive">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary filter-btn" data-filter="inactive">
+                    Inactive (<span id="countInactive">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="text-muted mt-2">Loading S3 configurations...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="alert alert-info" style="display: none;">
         <i class="fas fa-info-circle"></i>
         <strong>No S3 configurations found.</strong>
         Create a configuration to enable S3 storage for your hospital.
     </div>
-    {% else %}
-    {% for hospital_id, hospital_data in configs_by_hospital.items() %}
-    <div class="card mb-4">
-        <div class="card-header py-2 bg-light">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <i class="fas fa-hospital me-2"></i>
-                    <strong>{{ hospital_data.hospital.name }}</strong>
-                </div>
-            </div>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th style="width: 25%">Name</th>
-                            <th style="width: 15%">Provider</th>
-                            <th style="width: 20%">Bucket</th>
-                            <th style="width: 10%">Status</th>
-                            <th style="width: 15%">Pepper Rotation</th>
-                            <th style="width: 15%" class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for config in hospital_data.configs %}
-                        <tr class="{% if config.is_archived %}text-muted{% endif %}">
-                            <td>
-                                <strong>{{ config.name }}</strong>
-                                {% if config.is_archived %}
-                                <span class="badge bg-secondary ms-1">Archived</span>
-                                {% endif %}
-                                {% if config.fallback_policy == 'always' %}
-                                <span class="badge bg-warning ms-1" title="Fallback to local storage enabled">
-                                    <i class="fas fa-shield-alt"></i> Fallback
-                                </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge provider-badge
-                                    {% if config.provider == 'aws' %}bg-warning text-dark
-                                    {% elif config.provider == 'r2' %}bg-primary
-                                    {% elif config.provider == 'hetzner' %}bg-danger
-                                    {% elif config.provider == 'gcp' %}bg-info text-dark
-                                    {% elif config.provider == 'azure' %}bg-primary
-                                    {% elif config.provider == 'minio' %}bg-success text-dark
-                                    {% else %}bg-secondary{% endif %}">
-                                    {{ config.provider }}
-                                </span>
-                            </td>
-                            <td>
-                                <code class="text small">{{ config.bucket_name }}</code>
-                                {% if config.path_prefix %}
-                                <br><small class="text-muted">{{ config.path_prefix }}</small>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if config.is_active %}
-                                <span class="badge bg-success status-active">
-                                    <i class="fas fa-check-circle"></i> Active
-                                </span>
-                                {% else %}
-                                <span class="badge bg-secondary status-inactive">
-                                    <i class="fas fa-pause-circle"></i> Inactive
-                                </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if config.pepper_rotated_at %}
-                                <small class="text-muted">
-                                    <i class="fas fa-clock"></i> {{ config.pepper_rotated_at|datetime('%Y-%m-%d %H:%M') }}
-                                </small>
-                                {% else %}
-                                <small class="text-muted">Never</small>
-                                {% endif %}
-                                {% if config.auto_rotate_pepper %}
-                                <span class="badge bg-info ms-1" title="Auto-rotation enabled">
-                                    <i class="fas fa-sync-alt"></i> Auto
-                                </span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <div class="btn-group btn-group-sm" role="group">
-                                    <a href="{{ url_for('admin.s3_config_edit', s3_config_id=config.id) }}"
-                                       class="btn btn-outline-primary" title="Edit">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                    {% if not config.is_archived %}
-                                    <button type="button"
-                                            class="btn btn-outline-success"
-                                            onclick="activateConfig({{ config.id }}, {{ config.is_active|lower }})"
-                                            title="{% if config.is_active %}Deactivate{% else %}Activate{% endif %}">
-                                        <i class="fas {% if config.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
-                                    </button>
-                                    <button type="button"
-                                            class="btn btn-outline-secondary"
-                                            onclick="testConnection({{ config.id }})"
-                                            title="Test Connection">
-                                        <i class="fas fa-plug"></i>
-                                    </button>
-                                    <button type="button"
-                                            class="btn btn-outline-warning"
-                                            onclick="rotatePepper({{ config.id }})"
-                                            title="Rotate Pepper">
-                                        <i class="fas fa-key"></i>
-                                    </button>
-                                    {% endif %}
-                                    {% if is_master_admin %}
-                                    <a href="{{ url_for('admin.s3_config_set_fallback', s3_config_id=config.id) }}"
-                                       class="btn btn-outline-dark" title="Fallback Policy">
-                                        <i class="fas fa-shield-alt"></i>
-                                    </a>
-                                    {% endif %}
-                                    {% if not config.is_archived %}
-                                    <button type="button"
-                                            class="btn btn-outline-danger"
-                                            onclick="deleteConfig({{ config.id }}, '{{ config.name }}')"
-                                            title="Archive">
-                                        <i class="fas fa-archive"></i>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+
+    <!-- Configs Table -->
+    <div id="configsContainer" style="display: none;">
+        <!-- Dynamic content loaded via JS -->
     </div>
-    {% endfor %}
-    {% endif %}
 
     <!-- Info Cards -->
     <div class="row g-3 mt-4">
@@ -218,7 +120,355 @@
     </div>
 </div>
 
+<!-- Add S3 Config Modal -->
+<div class="modal fade" id="addS3ConfigModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cloud-upload-alt"></i> Add S3 Configuration
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="s3ConfigForm">
+                    {{ csrf_field() }}
+                    <input type="hidden" name="addressing_style" value="auto">
+
+                    <!-- Hospital & Provider -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="hospital_id" class="form-label">Hospital *</label>
+                            <select class="form-select" name="hospital_id" id="hospital_id" required>
+                                <option value="">Loading hospitals...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="provider" class="form-label">Provider *</label>
+                            <select class="form-select" name="provider" id="provider" required>
+                                <option value="other">Other (S3-compatible)</option>
+                                <option value="r2">Cloudflare R2</option>
+                                <option value="hetzner">Hetzner</option>
+                                <option value="aws">AWS S3</option>
+                                <option value="gcp">Google Cloud Storage</option>
+                                <option value="azure">Azure Blob Storage</option>
+                                <option value="minio">MinIO</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Connection Details -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">Configuration Name *</label>
+                            <input type="text" class="form-control" name="name" id="name" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="bucket_name" class="form-label">Bucket Name *</label>
+                            <input type="text" class="form-control" name="bucket_name" id="bucket_name" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">S3 Base Folder</label>
+                        <div class="form-control-plaintext">/eyeimgmgr/</div>
+                        <div class="help-text">All objects are stored under this fixed prefix for consistency.</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="region" class="form-label">Region *</label>
+                            <input type="text" class="form-control" name="region" id="region" required placeholder="auto or us-east-1">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="endpoint_url" class="form-label">Endpoint URL</label>
+                            <input type="url" class="form-control" name="endpoint_url" id="endpoint_url" placeholder="https://s3.example.com">
+                            <small class="text-muted">Required for non-AWS providers</small>
+                        </div>
+                    </div>
+
+                    <!-- Credentials -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="access_key" class="form-label">Access Key *</label>
+                            <input type="text" class="form-control font-monospace" name="access_key" id="access_key" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="secret_key" class="form-label">Secret Key *</label>
+                            <input type="password" class="form-control font-monospace" name="secret_key" id="secret_key" required>
+                        </div>
+                    </div>
+
+                    <!-- Pepper Options -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="auto_generate_pepper" checked disabled>
+                            <label class="form-check-label" for="auto_generate_pepper">
+                                <strong>Auto-generate Pepper</strong> - Enabled for security
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Test Connection Result -->
+                    <div id="testResult" class="alert" style="display: none;"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-info" id="testBtn" onclick="testConnectionModal()">
+                    <i class="fas fa-plug"></i> Test Connection
+                </button>
+                <button type="button" class="btn btn-primary" id="addConfigBtn" onclick="addConfig()" disabled>
+                    <i class="fas fa-plus"></i> Add Configuration
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// Global state
+let allConfigs = [];
+let currentFilter = 'all';
+let connectionTestPassed = false;
+
+// Provider badge colors
+const providerColors = {
+    'aws': 'bg-warning text-dark',
+    'r2': 'bg-primary',
+    'hetzner': 'bg-danger',
+    'gcp': 'bg-info text-dark',
+    'azure': 'bg-primary',
+    'minio': 'bg-success text-dark',
+    'other': 'bg-secondary'
+};
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadHospitals();
+    loadConfigs();
+    setupFilters();
+});
+
+// Load hospitals from server data (same as S3 config scoping)
+function loadHospitals() {
+    const select = document.getElementById('hospital_id');
+    select.innerHTML = '<option value="">Select Hospital</option>';
+
+    // Hospitals passed from backend using same logic as S3 config access
+    const hospitals = {{ user_hospitals|tojson }};
+
+    if (Array.isArray(hospitals) && hospitals.length > 0) {
+        hospitals.forEach(hospital => {
+            const option = document.createElement('option');
+            option.value = hospital.id;
+            option.textContent = hospital.name;
+            select.appendChild(option);
+        });
+    } else {
+        select.innerHTML = '<option value="">No hospitals assigned</option>';
+    }
+}
+
+// Load configs from API
+async function loadConfigs() {
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('configsContainer').style.display = 'none';
+    document.getElementById('emptyState').style.display = 'none';
+
+    try {
+        const response = await fetch('/admin/s3-configs/api/list');
+        const data = await response.json();
+
+        allConfigs = data.configs || [];
+        renderConfigs();
+        updateCounts();
+    } catch (error) {
+        console.error('Failed to load configs:', error);
+        document.getElementById('loadingState').innerHTML =
+            '<div class="alert alert-danger">Failed to load configurations. Please refresh the page.</div>';
+    }
+}
+
+// Setup filter buttons
+function setupFilters() {
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentFilter = this.dataset.filter;
+            renderConfigs();
+        });
+    });
+}
+
+// Update counts
+function updateCounts() {
+    const active = allConfigs.filter(c => c.is_active && !c.is_archived).length;
+    const inactive = allConfigs.filter(c => !c.is_active && !c.is_archived).length;
+
+    document.getElementById('countAll').textContent = allConfigs.filter(c => !c.is_archived).length;
+    document.getElementById('countActive').textContent = active;
+    document.getElementById('countInactive').textContent = inactive;
+}
+
+// Render configs table
+function renderConfigs() {
+    document.getElementById('loadingState').style.display = 'none';
+
+    let filteredConfigs = allConfigs.filter(c => !c.is_archived);
+
+    if (currentFilter === 'active') {
+        filteredConfigs = filteredConfigs.filter(c => c.is_active);
+    } else if (currentFilter === 'inactive') {
+        filteredConfigs = filteredConfigs.filter(c => !c.is_active);
+    }
+
+    if (filteredConfigs.length === 0) {
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('configsContainer').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('configsContainer').style.display = 'block';
+
+    // Group by hospital
+    const configsByHospital = {};
+    filteredConfigs.forEach(config => {
+        if (!configsByHospital[config.hospital_id]) {
+            configsByHospital[config.hospital_id] = {
+                hospital_name: config.hospital_name,
+                configs: []
+            };
+        }
+        configsByHospital[config.hospital_id].configs.push(config);
+    });
+
+    // Generate HTML
+    let html = '';
+    for (const hospitalId in configsByHospital) {
+        const hospital = configsByHospital[hospitalId];
+        html += `
+            <div class="card mb-4">
+                <div class="card-header py-2 bg-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-hospital me-2"></i>
+                            <strong>${hospital.hospital_name}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 22%">Name</th>
+                                    <th style="width: 12%">Provider</th>
+                                    <th style="width: 18%">Bucket</th>
+                                    <th style="width: 8%">Status</th>
+                                    <th style="width: 10%" class="text-center">Images</th>
+                                    <th style="width: 10%" class="text-center">PDFs</th>
+                                    <th style="width: 12%">Pepper Rotation</th>
+                                    <th style="width: 8%" class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${hospital.configs.map(config => renderConfigRow(config)).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    document.getElementById('configsContainer').innerHTML = html;
+}
+
+// Render single config row
+function renderConfigRow(config) {
+    const statusBadge = config.is_active
+        ? '<span class="badge bg-success status-active"><i class="fas fa-check-circle"></i> Active</span>'
+        : '<span class="badge bg-secondary status-inactive"><i class="fas fa-pause-circle"></i> Inactive</span>';
+
+    const fallbackBadge = config.fallback_policy === 'always'
+        ? '<span class="badge bg-warning ms-1" title="Fallback to local storage enabled"><i class="fas fa-shield-alt"></i> Fallback</span>'
+        : '';
+
+    const providerBadge = `<span class="badge provider-badge ${providerColors[config.provider] || 'bg-secondary'}">${config.provider}</span>`;
+
+    const bucketUrl = config.endpoint_url
+        ? `<br><a href="${config.endpoint_url}" target="_blank" class="small text-muted text-decoration-none"><i class="fas fa-external-link-alt"></i> ${config.endpoint_url}</a>`
+        : '';
+
+    const pepperInfo = config.pepper_rotated_at
+        ? `<small class="text-muted"><i class="fas fa-clock"></i> ${formatDateTime(config.pepper_rotated_at)}</small>`
+        : '<small class="text-muted">Never</small>';
+
+    const autoRotateBadge = config.auto_rotate_pepper
+        ? '<span class="badge bg-info ms-1" title="Auto-rotation enabled"><i class="fas fa-sync-alt"></i> Auto</span>'
+        : '';
+
+    const deleteDisabled = !config.can_delete ? 'disabled title="Cannot delete: config has files"' : '';
+    const deleteBtnAttr = config.can_delete
+        ? `onclick="deleteConfig(${config.id}, '${config.name.replace(/'/g, "\\'")}'")`
+        : '';
+
+    return `
+        <tr>
+            <td>
+                <strong>${config.name}</strong>
+                ${fallbackBadge}
+            </td>
+            <td>${providerBadge}</td>
+            <td>
+                <code class="text small">${config.bucket_name}</code>
+                ${bucketUrl}
+            </td>
+            <td>${statusBadge}</td>
+            <td class="text-center">
+                <span class="badge bg-info"><i class="fas fa-image"></i> ${config.image_count}</span>
+            </td>
+            <td class="text-center">
+                <span class="badge bg-warning text-dark"><i class="fas fa-file-pdf"></i> ${config.pdf_count}</span>
+            </td>
+            <td>
+                ${pepperInfo}
+                ${autoRotateBadge}
+            </td>
+            <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                    <a href="/admin/s3-configs/${config.id}/edit" class="btn btn-outline-primary" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <button type="button" class="btn btn-outline-success" onclick="activateConfig(${config.id}, ${config.is_active})" title="${config.is_active ? 'Deactivate' : 'Activate'}">
+                        <i class="fas ${config.is_active ? 'fa-pause' : 'fa-play'}"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="testConnection(${config.id})" title="Test Connection">
+                        <i class="fas fa-plug"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" onclick="rotatePepper(${config.id})" title="Rotate Pepper">
+                        <i class="fas fa-key"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" ${deleteDisabled} ${deleteBtnAttr} title="Delete">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+// Format date
+function formatDateTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleString();
+}
+
+// Activate/deactivate config
 function activateConfig(configId, isActive) {
     const action = isActive ? 'deactivate' : 'activate';
     if (!confirm(`Are you sure you want to ${action} this configuration?`)) {
@@ -235,16 +485,15 @@ function activateConfig(configId, isActive) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            location.reload();
+            loadConfigs();
         } else {
             alert('Error: ' + data.message);
         }
     })
-    .catch(error => {
-        alert('Error: ' + error);
-    });
+    .catch(error => alert('Error: ' + error));
 }
 
+// Test connection
 function testConnection(configId) {
     const btn = event.target.closest('button');
     const originalHtml = btn.innerHTML;
@@ -266,15 +515,14 @@ function testConnection(configId) {
             alert('Connection failed: ' + data.message);
         }
     })
-    .catch(error => {
-        alert('Error: ' + error);
-    })
+    .catch(error => alert('Error: ' + error))
     .finally(() => {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
     });
 }
 
+// Rotate pepper
 function rotatePepper(configId) {
     if (!confirm('Rotate the URL signing pepper? Previous pepper will be valid for 24 hours.')) {
         return;
@@ -296,22 +544,21 @@ function rotatePepper(configId) {
     .then(data => {
         if (data.success) {
             alert('Pepper rotated successfully!');
-            location.reload();
+            loadConfigs();
         } else {
             alert('Error: ' + data.message);
         }
     })
-    .catch(error => {
-        alert('Error: ' + error);
-    })
+    .catch(error => alert('Error: ' + error))
     .finally(() => {
         btn.innerHTML = originalHtml;
         btn.disabled = false;
     });
 }
 
+// Delete config (only if 0 images and 0 PDFs)
 function deleteConfig(configId, configName) {
-    if (!confirm(`Archive configuration "${configName}"? This will disable the config but keep it for reference.`)) {
+    if (!confirm(`Delete configuration "${configName}"? This can only be undone if you have no files stored with this config.`)) {
         return;
     }
 
@@ -324,14 +571,114 @@ function deleteConfig(configId, configName) {
     })
     .then(response => {
         if (response.ok) {
-            location.reload();
+            loadConfigs();
         } else {
-            alert('Error archiving configuration');
+            alert('Error deleting configuration');
+        }
+    })
+    .catch(error => alert('Error: ' + error));
+}
+
+// Test connection from modal
+function testConnectionModal() {
+    const form = document.getElementById('s3ConfigForm');
+    const formData = new FormData(form);
+    const testResult = document.getElementById('testResult');
+    const testBtn = document.getElementById('testBtn');
+    const originalHtml = testBtn.innerHTML;
+
+    testResult.style.display = 'none';
+    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    testBtn.disabled = true;
+
+    fetch('/admin/s3-configs/api/test-connection-modal', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        testResult.style.display = 'block';
+        if (data.success) {
+            testResult.className = 'alert alert-success';
+            testResult.innerHTML = '<i class="fas fa-check-circle"></i> Connection successful! You can now add the configuration.';
+            connectionTestPassed = true;
+            document.getElementById('addConfigBtn').disabled = false;
+        } else {
+            testResult.className = 'alert alert-danger';
+            testResult.innerHTML = '<i class="fas fa-times-circle"></i> Connection failed: ' + data.message;
+            connectionTestPassed = false;
+            document.getElementById('addConfigBtn').disabled = true;
+        }
+    })
+    .catch(error => {
+        testResult.style.display = 'block';
+        testResult.className = 'alert alert-danger';
+        testResult.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error: ' + error;
+        connectionTestPassed = false;
+        document.getElementById('addConfigBtn').disabled = true;
+    })
+    .finally(() => {
+        testBtn.innerHTML = originalHtml;
+        testBtn.disabled = false;
+    });
+}
+
+// Add config from modal
+function addConfig() {
+    if (!connectionTestPassed) {
+        alert('Please test the connection first.');
+        return;
+    }
+
+    const form = document.getElementById('s3ConfigForm');
+    const formData = new FormData(form);
+    const addBtn = document.getElementById('addConfigBtn');
+    const originalHtml = addBtn.innerHTML;
+
+    addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+    addBtn.disabled = true;
+
+    fetch('/admin/s3-configs/api/create', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal and reload
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addS3ConfigModal'));
+            modal.hide();
+            loadConfigs();
+        } else {
+            alert('Error: ' + data.message);
+            addBtn.innerHTML = originalHtml;
+            addBtn.disabled = false;
         }
     })
     .catch(error => {
         alert('Error: ' + error);
+        addBtn.innerHTML = originalHtml;
+        addBtn.disabled = false;
     });
 }
+
+// Reset modal on close
+document.getElementById('addS3ConfigModal').addEventListener('hidden.bs.modal', function () {
+    document.getElementById('s3ConfigForm').reset();
+    document.getElementById('testResult').style.display = 'none';
+    connectionTestPassed = false;
+    document.getElementById('addConfigBtn').disabled = true;
+    document.getElementById('testBtn').innerHTML = '<i class="fas fa-plug"></i> Test Connection';
+});
 </script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ config.get('ASSETS_VERSION','') }}"></script>
 {% endblock %}

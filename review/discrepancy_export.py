@@ -11,7 +11,6 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
-from flask import current_app
 from sqlalchemy import and_, or_, text
 
 from job_store import db_set_item_state, db_set_job_status
@@ -62,6 +61,17 @@ class ExportTaskRow:
 
 
 def enqueue_discrepancy_export(app, job_token: str, filters: Dict[str, Any], user_context: Dict[str, Any]) -> None:
+    from utils.celery_helpers import enqueue_task, celery_enabled
+    if celery_enabled():
+        enqueue_task(
+            "celery_tasks.tasks.export_tasks.run_discrepancy_export_task",
+            job_token,
+            filters,
+            user_context,
+            user_id=user_context.get("user_id") if user_context else None,
+            hospital_id=user_context.get("hospital_id") if user_context else None,
+        )
+        return
     executor = app.config["EXECUTOR"]
     executor.submit(_run_export_job, app, job_token, filters, user_context)
 
@@ -74,6 +84,18 @@ def enqueue_dataset_export(
     metadata: Dict[str, Any] | None = None,
 ) -> None:
     """Queue export for a curated dataset using explicit task ids."""
+    from utils.celery_helpers import enqueue_task, celery_enabled
+    if celery_enabled():
+        enqueue_task(
+            "celery_tasks.tasks.export_tasks.run_dataset_export_task",
+            job_token,
+            dataset_id,
+            list(task_ids),
+            metadata or {},
+            user_id=metadata.get("user_id") if metadata else None,
+            hospital_id=metadata.get("hospital_id") if metadata else None,
+        )
+        return
     executor = app.config["EXECUTOR"]
     executor.submit(_run_dataset_export_job, app, job_token, dataset_id, list(task_ids), metadata or {})
 
@@ -92,35 +114,81 @@ def _cleanup_old_exports() -> None:
             continue
 
 
+def run_discrepancy_export_job(job_token: str, filters: Dict[str, Any], user_context: Dict[str, Any]) -> None:
+    db_set_job_status(job_token, "processing")
+    db_set_item_state(job_token, "discrepancy_export", "processing")
+
+    try:
+        _cleanup_old_exports()
+        rows = _fetch_filtered_rows(filters)
+        if not rows:
+            db_set_job_status(job_token, "error", error="No tasks match filters")
+            db_set_item_state(job_token, "discrepancy_export", "error", "No tasks match filters")
+            return
+
+        export_dir = EXPORT_DIR / job_token
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        graded_rows = _build_task_payload(rows)
+        excel_path = _write_excel(graded_rows, filters, export_dir)
+        _write_grading_scheme(filters.get("disease_id"), export_dir)
+        zip_paths, warnings = _write_zips(graded_rows, export_dir)
+
+        if warnings:
+            (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
+
+        db_set_job_status(job_token, "done")
+        db_set_item_state(job_token, "discrepancy_export", "completed", f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}")
+    except Exception as exc:
+        db_set_job_status(job_token, "error", error=str(exc))
+        db_set_item_state(job_token, "discrepancy_export", "error", str(exc))
+
+
+def run_dataset_export_job(
+    job_token: str,
+    dataset_id: int,
+    task_ids: Sequence[int],
+    metadata: Dict[str, Any],
+) -> None:
+    """Export a curated dataset using existing discrepancy export pipeline."""
+    db_set_job_status(job_token, "processing")
+    db_set_item_state(job_token, "dataset_export", "processing")
+
+    try:
+        _cleanup_old_exports()
+        rows = _fetch_rows_by_task_ids(task_ids, metadata.get("disease_id"))
+        if not rows:
+            db_set_job_status(job_token, "error", error="No tasks to export")
+            db_set_item_state(job_token, "dataset_export", "error", "No tasks to export")
+            return
+
+        export_dir = EXPORT_DIR / job_token
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        graded_rows = _build_task_payload(rows)
+        export_filters = {"dataset_id": dataset_id, **(metadata or {})}
+        excel_path = _write_excel(graded_rows, export_filters, export_dir, drop_ai_columns=True)
+        _write_grading_scheme(metadata.get("disease_id"), export_dir)
+        zip_paths, warnings = _write_zips(graded_rows, export_dir)
+
+        if warnings:
+            (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
+
+        db_set_job_status(job_token, "done")
+        db_set_item_state(
+            job_token,
+            "dataset_export",
+            "completed",
+            f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}",
+        )
+    except Exception as exc:
+        db_set_job_status(job_token, "error", error=str(exc))
+        db_set_item_state(job_token, "dataset_export", "error", str(exc))
+
+
 def _run_export_job(app, job_token: str, filters: Dict[str, Any], user_context: Dict[str, Any]) -> None:
     with app.app_context():
-        db_set_job_status(job_token, "processing")
-        db_set_item_state(job_token, "discrepancy_export", "processing")
-
-        try:
-            _cleanup_old_exports()
-            rows = _fetch_filtered_rows(filters)
-            if not rows:
-                db_set_job_status(job_token, "error", error="No tasks match filters")
-                db_set_item_state(job_token, "discrepancy_export", "error", "No tasks match filters")
-                return
-
-            export_dir = EXPORT_DIR / job_token
-            export_dir.mkdir(parents=True, exist_ok=True)
-
-            graded_rows = _build_task_payload(rows)
-            excel_path = _write_excel(graded_rows, filters, export_dir)
-            _write_grading_scheme(filters.get("disease_id"), export_dir)
-            zip_paths, warnings = _write_zips(graded_rows, export_dir)
-
-            if warnings:
-                (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
-
-            db_set_job_status(job_token, "done")
-            db_set_item_state(job_token, "discrepancy_export", "completed", f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}")
-        except Exception as exc:
-            db_set_job_status(job_token, "error", error=str(exc))
-            db_set_item_state(job_token, "discrepancy_export", "error", str(exc))
+        run_discrepancy_export_job(job_token, filters, user_context)
 
 
 def _run_dataset_export_job(
@@ -130,41 +198,8 @@ def _run_dataset_export_job(
     task_ids: Sequence[int],
     metadata: Dict[str, Any],
 ) -> None:
-    """Export a curated dataset using existing discrepancy export pipeline."""
     with app.app_context():
-        db_set_job_status(job_token, "processing")
-        db_set_item_state(job_token, "dataset_export", "processing")
-
-        try:
-            _cleanup_old_exports()
-            rows = _fetch_rows_by_task_ids(task_ids, metadata.get("disease_id"))
-            if not rows:
-                db_set_job_status(job_token, "error", error="No tasks to export")
-                db_set_item_state(job_token, "dataset_export", "error", "No tasks to export")
-                return
-
-            export_dir = EXPORT_DIR / job_token
-            export_dir.mkdir(parents=True, exist_ok=True)
-
-            graded_rows = _build_task_payload(rows)
-            export_filters = {"dataset_id": dataset_id, **(metadata or {})}
-            excel_path = _write_excel(graded_rows, export_filters, export_dir, drop_ai_columns=True)
-            _write_grading_scheme(metadata.get("disease_id"), export_dir)
-            zip_paths, warnings = _write_zips(graded_rows, export_dir)
-
-            if warnings:
-                (export_dir / "warnings.txt").write_text("\n".join(warnings), encoding="utf-8")
-
-            db_set_job_status(job_token, "done")
-            db_set_item_state(
-                job_token,
-                "dataset_export",
-                "completed",
-                f"excel={excel_path.name}; zips={','.join(p.name for p in zip_paths)}",
-            )
-        except Exception as exc:
-            db_set_job_status(job_token, "error", error=str(exc))
-            db_set_item_state(job_token, "dataset_export", "error", str(exc))
+        run_dataset_export_job(job_token, dataset_id, task_ids, metadata)
 
 
 def _fetch_filtered_rows(filters: Dict[str, Any]) -> List[ExportTaskRow]:

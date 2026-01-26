@@ -21,7 +21,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h4 mb-0">Set Fallback Policy</h1>
-            <small class="text-muted">{{ config.name }} ({{ hospital.name }})</small>
+            <small class="text-muted">{{ s3_config.name }} ({{ hospital.name }})</small>
         </div>
         <a class="btn btn-outline-secondary" href="{{ url_for('admin.s3_config_edit', s3_config_id=config.id) }}">Back to Configuration</a>
     </div>
@@ -96,7 +96,7 @@
                     </div>
                     <div class="card-body">
                         <span class="badge {% if config.fallback_policy == 'never' %}bg-danger{% else %}bg-warning text-dark{% endif %} fs-6">
-                            {{ config.fallback_policy.upper() }}
+                            {{ s3_config.fallback_policy.upper() }}
                         </span>
                         <p class="small text-muted mt-2">
                             {% if config.fallback_policy == 'never' %}

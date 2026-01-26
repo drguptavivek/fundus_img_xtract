@@ -298,7 +298,8 @@ def reprocess_pdf(encounter_id: int):
             upload_type="pdf reprocess",
         )
 
-        queue_job(current_app, job_token, [])
+        hospital_id = getattr(encounter, "hospital_id", None)
+        queue_job(current_app, job_token, [], user_id=current_user.id, hospital_id=hospital_id)
 
         flash(f"PDF reprocessing job queued (Job ID: {job_token})", "info")
 

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="row">
+    <div class="col-12">
+      <h1 class="h3 mb-3">Celery Beat Schedules</h1>
+      <p class="text-muted">
+        Schedules are loaded by celery-beat from the database and applied globally.
+        Leave hospital empty to apply to all hospitals.
+      </p>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">
+      <strong>Create Schedule</strong>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('admin.celery_schedule_create') }}">
+        {{ csrf_field() }}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Name</label>
+            <input class="form-control" name="name" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Task name</label>
+            <input class="form-control" name="task_name" list="known-task-names" required>
+            <datalist id="known-task-names">
+              {% for task in known_tasks %}
+              <option value="{{ task }}"></option>
+              {% endfor %}
+            </datalist>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Queue (optional)</label>
+            <input class="form-control" name="queue">
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Schedule type</label>
+            <select class="form-select" name="schedule_type">
+              <option value="interval">Interval</option>
+              <option value="crontab">Crontab</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Interval seconds</label>
+            <input class="form-control" name="interval_seconds" type="number" min="1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Hospital (optional)</label>
+            <select class="form-select" name="hospital_id">
+              <option value="">All hospitals</option>
+              {% for hospital in hospitals %}
+              <option value="{{ hospital.id }}">{{ hospital.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">User ID (optional)</label>
+            <input class="form-control" name="user_id" type="number" min="1">
+          </div>
+
+          <div class="col-md-2">
+            <label class="form-label">Minute</label>
+            <input class="form-control" name="crontab_minute" placeholder="*">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Hour</label>
+            <input class="form-control" name="crontab_hour" placeholder="*">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Day of week</label>
+            <input class="form-control" name="crontab_day_of_week" placeholder="*">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Day of month</label>
+            <input class="form-control" name="crontab_day_of_month" placeholder="*">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Month of year</label>
+            <input class="form-control" name="crontab_month_of_year" placeholder="*">
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="enabled" checked>
+              <label class="form-check-label">Enabled</label>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <strong>Existing Schedules</strong>
+    </div>
+    <div class="card-body">
+      {% if schedules %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Task</th>
+              <th>Type</th>
+              <th>Interval</th>
+              <th>Crontab</th>
+              <th>Queue</th>
+              <th>Hospital</th>
+              <th>User</th>
+              <th>Enabled</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for schedule in schedules %}
+            <tr>
+              <td class="d-none">
+                <form method="POST" action="{{ url_for('admin.celery_schedule_update', schedule_id=schedule.id) }}" id="schedule-form-{{ schedule.id }}">
+                  {{ csrf_field() }}
+                </form>
+              </td>
+                <td><input class="form-control form-control-sm" name="name" value="{{ schedule.name }}" form="schedule-form-{{ schedule.id }}"></td>
+                <td><input class="form-control form-control-sm" name="task_name" value="{{ schedule.task_name }}" form="schedule-form-{{ schedule.id }}"></td>
+                <td>
+                  <select class="form-select form-select-sm" name="schedule_type" form="schedule-form-{{ schedule.id }}">
+                    <option value="interval" {% if schedule.schedule_type == 'interval' %}selected{% endif %}>Interval</option>
+                    <option value="crontab" {% if schedule.schedule_type == 'crontab' %}selected{% endif %}>Crontab</option>
+                  </select>
+                </td>
+                <td><input class="form-control form-control-sm" name="interval_seconds" type="number" min="1" value="{{ schedule.interval_seconds or '' }}" form="schedule-form-{{ schedule.id }}"></td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <input class="form-control form-control-sm" name="crontab_minute" placeholder="*" value="{{ schedule.crontab_minute or '' }}" form="schedule-form-{{ schedule.id }}">
+                    <input class="form-control form-control-sm" name="crontab_hour" placeholder="*" value="{{ schedule.crontab_hour or '' }}" form="schedule-form-{{ schedule.id }}">
+                    <input class="form-control form-control-sm" name="crontab_day_of_week" placeholder="*" value="{{ schedule.crontab_day_of_week or '' }}" form="schedule-form-{{ schedule.id }}">
+                    <input class="form-control form-control-sm" name="crontab_day_of_month" placeholder="*" value="{{ schedule.crontab_day_of_month or '' }}" form="schedule-form-{{ schedule.id }}">
+                    <input class="form-control form-control-sm" name="crontab_month_of_year" placeholder="*" value="{{ schedule.crontab_month_of_year or '' }}" form="schedule-form-{{ schedule.id }}">
+                  </div>
+                </td>
+                <td><input class="form-control form-control-sm" name="queue" value="{{ schedule.queue or '' }}" form="schedule-form-{{ schedule.id }}"></td>
+                <td>
+                  <select class="form-select form-select-sm" name="hospital_id" form="schedule-form-{{ schedule.id }}">
+                    <option value="" {% if schedule.hospital_id is none %}selected{% endif %}>All</option>
+                    {% for hospital in hospitals %}
+                    <option value="{{ hospital.id }}" {% if schedule.hospital_id == hospital.id %}selected{% endif %}>{{ hospital.name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td><input class="form-control form-control-sm" name="user_id" type="number" min="1" value="{{ schedule.user_id or '' }}" form="schedule-form-{{ schedule.id }}"></td>
+                <td class="text-center">
+                  <input class="form-check-input" type="checkbox" name="enabled" {% if schedule.enabled %}checked{% endif %} form="schedule-form-{{ schedule.id }}">
+                </td>
+                <td class="text-nowrap">
+                  <button class="btn btn-sm btn-outline-primary" type="submit" form="schedule-form-{{ schedule.id }}">Save</button>
+              <form method="POST" action="{{ url_for('admin.celery_schedule_delete', schedule_id=schedule.id) }}" class="d-inline">
+                {{ csrf_field() }}
+                <button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Delete schedule {{ schedule.name }}?')">Delete</button>
+              </form>
+                </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No schedules configured.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -313,7 +313,13 @@ def upload_files():
         lab_unit_id=lab_unit_id,
         upload_type="zip upload",
     )
-    queue_job(current_app, job_token, saved_paths)
+    queue_job(
+        current_app,
+        job_token,
+        saved_paths,
+        user_id=uploader_user_id,
+        hospital_id=hospital_id,
+    )
 
     flash(f"Queued {len(saved_paths)} file(s) for processing. Rejected: {len(rejected)}", "info")
     return redirect(url_for("jobs.job_status_page", job_token=job_token))

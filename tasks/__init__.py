@@ -1,12 +1,10 @@
 from flask import Blueprint
 
+bp = Blueprint("tasks", __name__, url_prefix="/tasks")
 
-bp = Blueprint('tasks', __name__, url_prefix='/tasks')
-
-from . import (
-    route_task_details,
-    route_organizationalTasks,
-    route_pending,
-    route_index,
-    route_intra_rater,
-)
+# Register routes
+from . import route_index  # noqa: F401
+from . import route_pending  # noqa: F401
+from . import route_task_details  # noqa: F401
+from . import route_intra_rater  # noqa: F401
+from . import route_organizationalTasks  # noqa: F401

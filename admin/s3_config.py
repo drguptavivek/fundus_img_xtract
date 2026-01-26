@@ -8,7 +8,7 @@ Provides hospital-scoped access control and RBAC enforcement.
 import logging
 from datetime import datetime, timezone
 from flask import render_template, request, redirect, url_for, flash, current_app, jsonify
-from sqlalchemy import select
+from sqlalchemy import select, func
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.log_sanitize import sanitize_log_value
@@ -19,14 +19,13 @@ from utils.s3_validation import (
     validate_bucket_name,
     validate_s3_region,
     validate_endpoint_url,
-    validate_path_prefix,
     validate_s3_config_name,
     validate_fallback_policy,
     S3ValidationError,
 )
 from utils.s3_storage_backends import get_s3_client, check_s3_object_exists
 from db_transaction_manager import get_db_session
-from models import S3Config, Hospital
+from models import S3Config, Hospital, EncounterFile, EncounterFilePDF
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger('security.audit')
@@ -62,12 +61,19 @@ def _check_s3_config_access(s3_config: S3Config, user_hospitals: list[int]) -> b
 
 
 def _get_user_hospitals() -> list[int]:
-    """Get list of hospital IDs for current user."""
+    """
+    Get list of hospital IDs for current user for S3 config management.
+
+    Hospital isolation: users can only manage S3 configs for their assigned hospital.
+    Lab units from other hospitals allow data access but NOT config creation.
+    """
     if not current_user or not current_user.is_authenticated:
         return []
 
-    if hasattr(current_user, 'lab_units') and current_user.lab_units:
-        return [u.id for u in current_user.lab_units]
+    # Only return the user's assigned hospital (for isolation)
+    # Lab units from other hospitals don't grant S3 config creation rights
+    if hasattr(current_user, 'hospital_id') and current_user.hospital_id:
+        return [current_user.hospital_id]
 
     return []
 
@@ -95,48 +101,28 @@ def _is_master_admin() -> bool:
 @roles_required("admin")
 def s3_configs_list():
     """
-    List S3 configurations (scoped by user's hospitals).
+    List S3 configurations (renders page template, data loaded via API).
     """
+    # Get hospitals for the modal - convert to dict for JSON serialization
     with get_db_session() as db:
         user_hospitals = _get_user_hospitals()
-        is_master = _is_master_admin()
 
-        # Query configs based on hospital access
-        if is_master and len(user_hospitals) > 10:  # Assume master if has many hospitals
-            # Master admin sees all configs
-            configs = db.execute(
-                select(S3Config, Hospital)
-                .join(Hospital, S3Config.hospital_id == Hospital.id)
-                .order_by(S3Config.is_active.desc(), S3Config.created_at.desc())
-            ).all()
+        if not user_hospitals:
+            hospitals_list = []
         else:
-            # Local admin sees only their hospital's configs
-            if not user_hospitals:
-                configs = []
-            else:
-                configs = db.execute(
-                    select(S3Config, Hospital)
-                    .join(Hospital, S3Config.hospital_id == Hospital.id)
-                    .filter(S3Config.hospital_id.in_(user_hospitals))
-                    .order_by(S3Config.is_active.desc(), S3Config.created_at.desc())
-                ).all()
+            hospitals = db.execute(
+                select(Hospital)
+                .where(Hospital.id.in_(user_hospitals))
+                .order_by(Hospital.name)
+            ).scalars().all()
+            hospitals_list = [{'id': h.id, 'name': h.name} for h in hospitals]
 
-        # Group by hospital
-        configs_by_hospital = {}
-        for config, hospital in configs:
-            if hospital.id not in configs_by_hospital:
-                configs_by_hospital[hospital.id] = {
-                    'hospital': hospital,
-                    'configs': []
-                }
-            configs_by_hospital[hospital.id]['configs'].append(config)
-
-        return render_template(
-            "admin/s3_configs.html",
-            configs_by_hospital=configs_by_hospital,
-            user_hospitals=user_hospitals,
-            is_master_admin=is_master
-        )
+    return render_template(
+        "admin/s3_configs.html",
+        configs_by_hospital={},  # Empty, data loaded via JS
+        user_hospitals=hospitals_list,
+        is_master_admin=_is_master_admin()
+    )
 
 
 @roles_required("admin")
@@ -156,7 +142,6 @@ def s3_config_create():
             bucket_name = request.form.get("bucket_name", "").strip()
             region = request.form.get("region", "").strip()
             endpoint_url = request.form.get("endpoint_url", "").strip() or None
-            path_prefix = request.form.get("path_prefix", "").strip() or None
             addressing_style = request.form.get("addressing_style", "auto").strip().lower()
             access_key = request.form.get("access_key", "").strip()
             secret_key = request.form.get("secret_key", "").strip()
@@ -203,12 +188,6 @@ def s3_config_create():
             # Endpoint URL validation
             try:
                 endpoint_url = validate_endpoint_url(endpoint_url)
-            except S3ValidationError as e:
-                errors.append(str(e))
-
-            # Path prefix validation
-            try:
-                path_prefix = validate_path_prefix(path_prefix)
             except S3ValidationError as e:
                 errors.append(str(e))
 
@@ -278,7 +257,6 @@ def s3_config_create():
                     bucket_name=bucket_name,
                     region=region,
                     endpoint_url=endpoint_url,
-                    path_prefix=path_prefix,
                     addressing_style=addressing_style,
                     access_key_encrypted=access_key_encrypted,
                     secret_key_encrypted=secret_key_encrypted,
@@ -288,6 +266,7 @@ def s3_config_create():
                     rotation_timezone=rotation_timezone,
                     fallback_policy=fallback_policy,
                     is_active=False,  # Requires activation
+                    created_by_id=current_user.id,
                 )
 
                 db.add(s3_config)
@@ -364,7 +343,6 @@ def s3_config_edit(s3_config_id: int):
             bucket_name = request.form.get("bucket_name", "").strip()
             region = request.form.get("region", "").strip()
             endpoint_url = request.form.get("endpoint_url", "").strip() or None
-            path_prefix = request.form.get("path_prefix", "").strip() or None
             addressing_style = request.form.get("addressing_style", "auto").strip().lower()
             access_key = request.form.get("access_key", "").strip()
             secret_key = request.form.get("secret_key", "").strip()
@@ -397,11 +375,6 @@ def s3_config_edit(s3_config_id: int):
             except S3ValidationError as e:
                 errors.append(str(e))
 
-            try:
-                path_prefix = validate_path_prefix(path_prefix)
-            except S3ValidationError as e:
-                errors.append(str(e))
-
             # Addressing style validation
             if addressing_style not in ("auto", "virtual", "path"):
                 errors.append("Invalid addressing style. Must be 'auto', 'virtual', or 'path'.")
@@ -422,7 +395,7 @@ def s3_config_edit(s3_config_id: int):
                     flash(error, "danger")
                 return render_template(
                     "admin/s3_config_edit.html",
-                    config=s3_config,
+                    s3_config=s3_config,
                     hospital=db.query(Hospital).get(s3_config.hospital_id),
                     form_data=request.form,
                     providers=["r2", "hetzner", "aws", "gcp", "azure", "minio", "other"],
@@ -446,7 +419,6 @@ def s3_config_edit(s3_config_id: int):
                 s3_config.bucket_name = bucket_name
                 s3_config.region = region
                 s3_config.endpoint_url = endpoint_url
-                s3_config.path_prefix = path_prefix
                 s3_config.addressing_style = addressing_style
                 s3_config.auto_rotate_pepper = auto_rotate_pepper
                 s3_config.rotation_time = rotation_time
@@ -473,7 +445,7 @@ def s3_config_edit(s3_config_id: int):
 
         return render_template(
             "admin/s3_config_edit.html",
-            config=s3_config,
+            s3_config=s3_config,
             hospital=hospital,
             form_data={},
             providers=["r2", "hetzner", "aws", "gcp", "azure", "minio", "other"],
@@ -706,6 +678,270 @@ def s3_config_set_fallback(s3_config_id: int):
         # GET request - show form
         return render_template(
             "admin/s3_config_fallback.html",
-            config=s3_config,
+            s3_config=s3_config,
             hospital=db.query(Hospital).get(s3_config.hospital_id)
         )
+
+
+# ============================================================================
+# API Endpoints for JS-based UI
+# ============================================================================
+
+@roles_required("admin")
+def s3_configs_api_list():
+    """
+    API endpoint to get S3 configurations as JSON for JS-based UI.
+    """
+    with get_db_session() as db:
+        user_hospitals = _get_user_hospitals()
+        is_master = _is_master_admin()
+
+        # Query configs based on hospital access
+        if is_master and len(user_hospitals) > 10:
+            configs = db.execute(
+                select(S3Config, Hospital)
+                .join(Hospital, S3Config.hospital_id == Hospital.id)
+                .order_by(S3Config.is_active.desc(), S3Config.created_at.desc())
+            ).all()
+        else:
+            if not user_hospitals:
+                configs = []
+            else:
+                configs = db.execute(
+                    select(S3Config, Hospital)
+                    .join(Hospital, S3Config.hospital_id == Hospital.id)
+                    .filter(S3Config.hospital_id.in_(user_hospitals))
+                    .order_by(S3Config.is_active.desc(), S3Config.created_at.desc())
+                ).all()
+
+        # Get config IDs for batch count queries
+        config_ids = [config.id for config, _ in configs]
+
+        # Batch query image counts
+        image_counts = {}
+        if config_ids:
+            image_counts_result = db.execute(
+                select(EncounterFile.s3_config_id, func.count(EncounterFile.id))
+                .where(EncounterFile.s3_config_id.in_(config_ids))
+                .group_by(EncounterFile.s3_config_id)
+            ).all()
+            image_counts = {s3_config_id: count for s3_config_id, count in image_counts_result}
+
+        # Batch query PDF counts
+        pdf_counts = {}
+        if config_ids:
+            pdf_counts_result = db.execute(
+                select(EncounterFilePDF.s3_config_id, func.count(EncounterFilePDF.id))
+                .where(EncounterFilePDF.s3_config_id.in_(config_ids))
+                .group_by(EncounterFilePDF.s3_config_id)
+            ).all()
+            pdf_counts = {s3_config_id: count for s3_config_id, count in pdf_counts_result}
+
+        # Build response
+        configs_data = []
+        for config, hospital in configs:
+            configs_data.append({
+                "id": config.id,
+                "name": config.name,
+                "provider": config.provider,
+                "bucket_name": config.bucket_name,
+                "region": config.region,
+                "endpoint_url": config.endpoint_url,
+                "is_active": config.is_active,
+                "is_archived": config.is_archived,
+                "fallback_policy": config.fallback_policy,
+                "auto_rotate_pepper": config.auto_rotate_pepper,
+                "pepper_rotated_at": config.pepper_rotated_at.isoformat() if config.pepper_rotated_at else None,
+                "created_at": config.created_at.isoformat() if config.created_at else None,
+                "updated_at": config.updated_at.isoformat() if config.updated_at else None,
+                "hospital_id": config.hospital_id,
+                "hospital_name": hospital.name,
+                "image_count": image_counts.get(config.id, 0),
+                "pdf_count": pdf_counts.get(config.id, 0),
+                "can_delete": (image_counts.get(config.id, 0) == 0 and pdf_counts.get(config.id, 0) == 0)
+            })
+
+        return jsonify({"success": True, "configs": configs_data})
+
+
+@roles_required("admin")
+def s3_config_api_test_connection_modal():
+    """
+    Test S3 connection from modal form data (doesn't save).
+    """
+    hospital_id = request.form.get("hospital_id", "").strip()
+    provider = request.form.get("provider", "other").strip().lower()
+    bucket_name = request.form.get("bucket_name", "").strip()
+    region = request.form.get("region", "").strip()
+    endpoint_url = request.form.get("endpoint_url", "").strip() or None
+    addressing_style = request.form.get("addressing_style", "auto").strip().lower() or "auto"
+    access_key = request.form.get("access_key", "").strip()
+    secret_key = request.form.get("secret_key", "").strip()
+
+    # Validate
+    errors = []
+    try:
+        hospital_id = int(hospital_id)
+    except ValueError:
+        errors.append("Invalid hospital selected.")
+
+    if not bucket_name:
+        errors.append("Bucket name is required.")
+    if not region:
+        errors.append("Region is required.")
+    if not access_key:
+        errors.append("Access key is required.")
+    if not secret_key:
+        errors.append("Secret key is required.")
+
+    if errors:
+        return jsonify({"success": False, "message": "; ".join(errors)})
+
+    # Test connection by creating temporary S3 client
+    try:
+        from utils.s3_storage_backends import create_s3_client_from_creds
+        
+        s3_client = create_s3_client_from_creds(
+            access_key=access_key,
+            secret_key=secret_key,
+            region=region,
+            endpoint_url=endpoint_url,
+            addressing_style=addressing_style
+        )
+
+        # Test connection by listing objects (max 1)
+        response = s3_client.list_objects_v2(
+            Bucket=bucket_name,
+            MaxKeys=1
+        )
+
+        audit_logger.info(
+            "S3_CONNECTION_TEST_MODAL | hospital_id=%s | bucket=%s | provider=%s | tested_by=%s",
+            hospital_id,
+            sanitize_log_value(bucket_name),
+            provider,
+            getattr(current_user, 'username', 'unknown')
+        )
+
+        return jsonify({"success": True, "message": "Connection successful! Bucket is accessible."})
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.warning("S3 connection test failed: %s", sanitize_log_value(error_msg))
+
+        # User-friendly error messages
+        if "NoSuchBucket" in error_msg:
+            return jsonify({"success": False, "message": "Bucket not found. Check bucket name."})
+        elif "AccessDenied" in error_msg or "403" in error_msg:
+            return jsonify({"success": False, "message": "Access denied. Check credentials."})
+        elif "NoCredentialsError" in error_msg:
+            return jsonify({"success": False, "message": "Credentials not configured."})
+        elif "EndpointConnectionError" in error_msg:
+            return jsonify({"success": False, "message": "Cannot connect to endpoint. Check endpoint URL."})
+        else:
+            return jsonify({"success": False, "message": f"Connection failed: {error_msg}"})
+
+
+@roles_required("admin")
+def s3_config_api_create():
+    """
+    Create S3 config from modal (after successful test connection).
+    """
+    hospital_id = request.form.get("hospital_id", "").strip()
+    provider = request.form.get("provider", "other").strip().lower()
+    name = request.form.get("name", "").strip()
+    bucket_name = request.form.get("bucket_name", "").strip()
+    region = request.form.get("region", "").strip()
+    endpoint_url = request.form.get("endpoint_url", "").strip() or None
+    addressing_style = request.form.get("addressing_style", "auto").strip().lower() or "auto"
+    access_key = request.form.get("access_key", "").strip()
+    secret_key = request.form.get("secret_key", "").strip()
+
+    # Validate
+    errors = []
+    try:
+        hospital_id = int(hospital_id)
+    except ValueError:
+        errors.append("Invalid hospital selected.")
+
+    if not validate_provider(provider):
+        errors.append("Invalid storage provider.")
+
+    try:
+        name = validate_s3_config_name(name)
+    except S3ValidationError as e:
+        errors.append(str(e))
+
+    try:
+        bucket_name = validate_bucket_name(bucket_name)
+    except S3ValidationError as e:
+        errors.append(str(e))
+
+    try:
+        region = validate_s3_region(region)
+    except S3ValidationError as e:
+        errors.append(str(e))
+
+    try:
+        endpoint_url = validate_endpoint_url(endpoint_url)
+    except S3ValidationError as e:
+        errors.append(str(e))
+
+    if not access_key:
+        errors.append("Access key is required.")
+    if not secret_key:
+        errors.append("Secret key is required.")
+
+    if errors:
+        return jsonify({"success": False, "message": "; ".join(errors)})
+
+    # Create S3 config
+    with get_db_session() as db:
+        try:
+            # Encrypt credentials
+            access_key_encrypted = encrypt_secret(access_key, hospital_id)
+            secret_key_encrypted = encrypt_secret(secret_key, hospital_id)
+
+            # Generate initial pepper
+            pepper = generate_pepper()
+            pepper_encrypted = encrypt_secret(pepper, hospital_id)
+
+            # Create config
+            s3_config = S3Config(
+                hospital_id=hospital_id,
+                provider=provider,
+                name=name,
+                bucket_name=bucket_name,
+                region=region,
+            endpoint_url=endpoint_url,
+            addressing_style=addressing_style,
+                access_key_encrypted=access_key_encrypted,
+                secret_key_encrypted=secret_key_encrypted,
+                url_signing_pepper=pepper_encrypted,
+                auto_rotate_pepper=False,
+                fallback_policy="never",
+                is_active=False,
+                created_by_id=current_user.id,
+            )
+
+            db.add(s3_config)
+            db.commit()
+
+            audit_logger.info(
+                "S3_CONFIG_CREATED_MODAL | s3_config_id=%d | hospital_id=%s | provider=%s | bucket=%s | created_by=%s",
+                s3_config.id,
+                hospital_id,
+                provider,
+                sanitize_log_value(bucket_name),
+                getattr(current_user, 'username', 'unknown')
+            )
+
+            return jsonify({
+                "success": True,
+                "message": "S3 configuration created successfully.",
+                "config_id": s3_config.id
+            })
+
+        except Exception as e:
+            logger.error("Failed to create S3 config: %s", e)
+            return jsonify({"success": False, "message": f"Failed to create S3 config: {e}"}), 500

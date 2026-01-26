@@ -171,23 +171,39 @@ def run_pii_detection_queue(max_jobs: Optional[int] = None) -> int:
 
 
 def enqueue_pii_detection(app, image_uuid: str, image_variant: str, image_path: str) -> None:
-    def _worker(app_ref, uuid_val, variant_val, path_val):
-        with app_ref.app_context():
-            with get_db_session() as db:
-                enqueue_pii_detection_job(
-                    db,
-                    image_uuid=uuid_val,
-                    image_variant=variant_val,
-                    image_path=path_val,
-                    source="auto",
-                )
-            run_pii_detection_queue()
-
     try:
+        from models import DirectImageUpload, EncounterFile
+        with get_db_session() as db:
+            uploader_id = None
+            hospital_id = None
+            direct = db.query(DirectImageUpload).filter_by(uuid=image_uuid).first()
+            if direct:
+                uploader_id = direct.uploader_id
+                hospital_id = direct.hospital_id
+            else:
+                encounter = db.query(EncounterFile).filter_by(uuid=image_uuid).first()
+                if encounter:
+                    hospital_id = getattr(encounter, "hospital_id", None)
+            enqueue_pii_detection_job(
+                db,
+                image_uuid=image_uuid,
+                image_variant=image_variant,
+                image_path=image_path,
+                source="auto",
+            )
+        from utils.celery_helpers import enqueue_task, celery_enabled
+        if celery_enabled():
+            enqueue_task(
+                "celery_tasks.tasks.pii_tasks.run_pii_detection_queue_task",
+                1,
+                user_id=uploader_id,
+                hospital_id=hospital_id,
+            )
+            return
         executor = app.config.get("EXECUTOR")
         if executor is None:
             return
-        executor.submit(_worker, app, image_uuid, image_variant, image_path)
+        executor.submit(run_pii_detection_queue, 1)
     except Exception as exc:
         _LOGGER.warning(
             "Failed to enqueue PII detection for %s (%s): %s",

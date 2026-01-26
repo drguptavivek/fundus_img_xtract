@@ -26,5 +26,59 @@ services:
       - ./logs:/app/logs
       - web_venv:/app/.venv
 
+  celery-ocr-worker:
+    volumes:
+      - .:/app
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - web_venv:/app/.venv
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - watchdog.watchmedo
+      - auto-restart
+      - --directory=./
+      - --pattern=*.py
+      - --recursive
+      - --
+      - celery
+      - -A
+      - celery_worker
+      - worker
+      - --loglevel=info
+      - --concurrency=1
+      - -Q
+      - zip_ocr,pii_detection,pdf_processing
+      - --pool=solo
+
+  celery-general-worker:
+    volumes:
+      - .:/app
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - web_venv:/app/.venv
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - watchdog.watchmedo
+      - auto-restart
+      - --directory=./
+      - --pattern=*.py
+      - --recursive
+      - --
+      - celery
+      - -A
+      - celery_worker
+      - worker
+      - --loglevel=info
+      - --concurrency=2
+      - -Q
+      - thumbnails,metadata,exports,maintenance,s3_sync,default
+      - --pool=solo
+
 volumes:
   web_venv:

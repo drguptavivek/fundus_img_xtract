@@ -1,6 +1,5 @@
 from logging.config import fileConfig
 import os
-from pathlib import Path
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -8,13 +7,12 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import the Base metadata and database URL builder from models.py
-from models import Base, _build_database_url
+from models import Base, _build_database_url, BASE_DIR
 from utils.env_loader import load_environment
 
 # Load environment variables (same as in models.py and app.py)
 load_environment()
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 DATABASE_URL = _build_database_url(BASE_DIR)
 
 # this is the Alembic Config object, which provides

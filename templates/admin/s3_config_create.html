@@ -119,11 +119,9 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="path_prefix" class="form-label">Path Prefix (Optional)</label>
-                            <input type="text" class="form-control" name="path_prefix" id="path_prefix"
-                                   value="{{ form_data.get('path_prefix', '') }}"
-                                   placeholder="uploads/">
-                            <div class="help-text">Prefix to add to all object keys (e.g., "uploads/").</div>
+                            <label class="form-label">S3 Base Folder</label>
+                            <div class="form-control-plaintext">/eyeimgmgr/</div>
+                            <div class="help-text">All objects are stored under this fixed prefix for consistency.</div>
                         </div>
 
                         <div class="mb-3">

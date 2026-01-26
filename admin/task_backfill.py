@@ -92,6 +92,11 @@ def task_backfill_run():
         db.commit()
         job_id = job.id
 
-    enqueue_task_backfill(current_app._get_current_object(), job_id)
+    enqueue_task_backfill(
+        current_app._get_current_object(),
+        job_id,
+        user_id=current_user.id,
+        hospital_id=current_user.hospital_id,
+    )
     flash("Task backfill queued.", "info")
     return redirect(url_for("admin.task_backfill_admin"))

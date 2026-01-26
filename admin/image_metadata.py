@@ -93,7 +93,12 @@ def image_metadata_backfill():
         db.commit()
         job_id = job.id
 
-    enqueue_image_metadata_backfill(current_app._get_current_object(), job_id)
+    enqueue_image_metadata_backfill(
+        current_app._get_current_object(),
+        job_id,
+        user_id=current_user.id,
+        hospital_id=current_user.hospital_id,
+    )
     mode_label = "metadata" if run_metadata and not run_pii else "PII" if run_pii and not run_metadata else "metadata + PII"
     flash(f"Image backfill queued ({mode_label}).", "info")
     return redirect(url_for("admin.image_metadata_admin"))

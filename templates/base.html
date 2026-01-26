@@ -34,6 +34,8 @@
   <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}?v={{ v }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/photoswipe.css') }}?v={{ v }}">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
   <style>
     @media (max-width: 991.98px) {
@@ -415,6 +417,9 @@
                   export</a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.email_settings_list') }}">
                   <i class="fas fa-envelope"></i> Email Settings
+                </a></li>
+              <li><a class="dropdown-item" href="{{ url_for('admin.s3_configs_list') }}">
+                  <i class="fas fa-cloud"></i> S3 Config
                 </a></li>
               <li><a class="dropdown-item" href="{{ url_for('admin.thumbnail_management') }}">Thumbnail Management</a>
               </li>

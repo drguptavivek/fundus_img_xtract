@@ -268,6 +268,13 @@ cp deploy.secrets.env.example deploy.secrets.env  # edit values!
 nano  deploy.secrets.env
 # POSTGRES_HOST_LOCAL=127.0.0.1 <-- ENSURE THIS IS REMOVED this for development so that docker hostname can be used to resolve the db container 
 
+
+ symlimnk .env to the secrets.env
+
+
+# Symlink .env to deploy.secrets.env so Compose picks up the REDIS vars for interpolation:
+ln -sf deploy.secrets.env .env
+
 # BUILD App
 docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env  build web
 

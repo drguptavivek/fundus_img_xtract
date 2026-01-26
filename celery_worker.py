@@ -33,7 +33,11 @@ def setup_worker_logging(*args, **kwargs) -> None:
 
     mock_app = MockApp()
     configure_logging(mock_app)
-    logging.getLogger("app").info("Worker process logging initialized.")
+    
+    from app_cache import init_cache
+    init_cache()
+    
+    logging.getLogger("app").info("Worker process logging and cache initialized.")
 
 
 def main() -> None:

@@ -31,7 +31,7 @@ from utils.log_sanitize import sanitize_log_value, sanitize_log_headers
 from app_init.logging_config import configure_logging
 from app_init.security_headers import register_csp
 from app_init.startup_checks import run_startup_env_checks
-from app_cache import cache
+from app_cache import cache, init_cache
 from utils.db_query_logger import init_db_query_logger
 
 
@@ -897,7 +897,7 @@ def create_app():
     _configure_executors(app)
     _register_csrf_protection(app)
     _register_crypto_cache_cleanup(app)
-    cache.init_app(app)
+    init_cache(app)
     app.session_interface = DatabaseSessionInterface()
     if force_https:
         _register_https_redirect(app)

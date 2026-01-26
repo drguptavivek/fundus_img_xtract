@@ -20,6 +20,9 @@ _STOP_KEY = "image_metadata_backfill_stop:global"
 
 
 def _stop_requested() -> bool:
+    from app_cache import init_cache, cache
+    if not hasattr(cache, 'app') or cache.app is None:
+        init_cache()
     return bool(cache.get(_STOP_KEY))
 
 

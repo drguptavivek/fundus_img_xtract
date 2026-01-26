@@ -132,7 +132,7 @@ def _serve_encounter_thumbnail(encounter_file: EncounterFile, zip_file: ZipFile,
             str(thumbnail_path),
             thumbnail_filename,
             uuid,
-            cache_control='public, max-age=3600',
+            cache_control='private, max-age=60',
             extra_headers={'X-Thumbnail': 'true'},
             download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
         )
@@ -496,7 +496,7 @@ def directImgOrigThumbnailByUUID(uuid: str):
                     str(thumbnail_path),
                     thumbnail_filename,
                     uuid,
-                    cache_control='public, max-age=3600',
+                    cache_control='private, max-age=60',
                     extra_headers={'X-Thumbnail': 'true'},
                     download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
                 )
@@ -521,7 +521,7 @@ def directImgOrigThumbnailByUUID(uuid: str):
                         str(thumb_path),
                         thumb_basename,
                         uuid,
-                        cache_control='public, max-age=3600',
+                        cache_control='private, max-age=60',
                         extra_headers={'X-Thumbnail': 'true'},
                         download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
                     )
@@ -562,7 +562,7 @@ def directImgEdThumbnailByUUID(uuid: str):
                     str(thumbnail_path),
                     thumbnail_filename,
                     uuid,
-                    cache_control='public, max-age=3600',
+                    cache_control='private, max-age=60',
                     extra_headers={'X-Thumbnail': 'true'},
                     download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
                 )
@@ -587,7 +587,7 @@ def directImgEdThumbnailByUUID(uuid: str):
                         str(thumb_path),
                         thumb_basename,
                         uuid,
-                        cache_control='public, max-age=3600',
+                        cache_control='private, max-age=60',
                         extra_headers={'X-Thumbnail': 'true'},
                         download_name=f"thm_{uuid}{thumb_path.suffix.lower()}",
                     )
@@ -615,7 +615,7 @@ def _serve_direct_final_thumbnail(db, direct_image: DirectImageUpload, uuid: str
                 str(thumbnail_path),
                 thumbnail_filename,
                 uuid,
-                cache_control='public, max-age=3600',
+                cache_control='private, max-age=60',
                 extra_headers={'X-Thumbnail': 'true'},
                 download_name=f"thm_{uuid}{thumbnail_path.suffix.lower()}",
             )

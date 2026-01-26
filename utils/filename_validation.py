@@ -21,7 +21,7 @@ MAX_FILENAME_LENGTH = 255
 
 # Path traversal patterns to detect
 PATH_TRAVERSAL_PATTERNS = [
-    r'\.\.',  # Parent directory
+    r'\.\.[/\\]',  # Parent directory with separator (illegal)
     r'~/',  # Home directory
     r'%2e%2e',  # URL-encoded parent directory (case-insensitive)
     r'\x00',  # Null byte

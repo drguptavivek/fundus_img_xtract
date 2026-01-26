@@ -24,6 +24,7 @@ def _ascii_slug(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
     ascii_value = _NONSAFE_RE.sub("_", ascii_value)
+    ascii_value = ascii_value.replace("..", "_")
     ascii_value = _UNDERSCORE_RE.sub("_", ascii_value).strip("._-")
     return ascii_value
 

@@ -631,6 +631,203 @@ def process_zip_file(zip_path: Path, session) -> tuple[list[str], str]:
             log_status(zip_path.name, "ERROR", f"PermissionError: {pe}")
         # Do not return here; allow previous return or raised exceptions to propagate
 
+
+def ingest_zip_atomic(zip_path: Path, session: Session) -> tuple[list[int], list[int]]:
+    """
+    New Async Workflow Coordinator:
+    1. Validates entire ZIP (All-or-Nothing).
+    2. Extracts all files to local disk.
+    3. Creates DB records (PatientEncounter, EncounterFile/PDF) in one transaction.
+    4. Does NOT generate thumbnails or strip EXIF (delegated to async tasks).
+
+    Returns:
+        tuple(image_file_ids, pdf_file_ids) - lists of IDs for chained tasks.
+    
+    Raises:
+        MaliciousZipError: If validation fails.
+        Exception: For other errors.
+    """
+    
+    # 1. Validation & Setup
+    if not zipfile.is_zipfile(zip_path):
+        raise MaliciousZipError("Not a valid ZIP file")
+
+    daily_dirs = get_daily_dirs()
+    md5_hash = calculate_md5(zip_path)
+    
+    # Check duplicate ZIP
+    existing = session.query(ZipFile).filter_by(md5_hash=md5_hash).first()
+    if existing:
+        # Move to dup folder
+        dup_dir = daily_dup_dir()
+        try:
+            shutil.move(str(zip_path), str(dup_dir / zip_path.name))
+        except Exception:
+            pass
+        return [], []
+
+    extracted_images = [] # (path, uuid, encounter_file_obj)
+    extracted_pdfs = []   # (path, uuid, encounter_file_pdf_obj)
+    
+    # Get metadata for Lab Unit
+    lab_unit_id = None
+    try:
+        meta_dir = UPLOAD_DIR.parent / "upload_meta"
+        meta_path = meta_dir / f"{zip_path.name}.json"
+        if meta_path.exists():
+            import json
+            with open(meta_path, "r", encoding="utf-8") as mf:
+                meta = json.load(mf)
+                lab_unit_id = meta.get("lab_unit_id")
+    except Exception:
+        pass
+
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            # --- 1. Validate ALL entries first ---
+            for info in zf.infolist():
+                if info.is_dir(): continue
+                inner_name = info.filename
+                if inner_name.startswith("__MACOSX/") or Path(inner_name).name.startswith("._"):
+                    continue
+                
+                # Path traversal check
+                p = Path(inner_name)
+                if inner_name.startswith("/") or any(part == ".." for part in p.parts):
+                    raise MaliciousZipError(f"Path traversal detected: {inner_name}")
+                
+                # Extension check
+                ext = p.suffix.lower()
+                if ext not in ALLOWED_EXTS:
+                    raise MaliciousZipError(f"Disallowed file extension: {inner_name}")
+                
+                # Magic bytes check
+                detected = _sniff_member_type(zf, info)
+                expected = 'pdf' if ext == '.pdf' else ('jpg' if ext in {'.jpg', '.jpeg'} else 'unknown')
+                
+                # Strict mismatch check
+                if expected == 'pdf' and detected != 'pdf':
+                    raise MaliciousZipError(f"Type mismatch (expected PDF): {inner_name}")
+                if expected == 'jpg' and detected != 'jpg':
+                    raise MaliciousZipError(f"Type mismatch (expected JPG): {inner_name}")
+
+            # --- 2. Identify Directory Structure (Name_ID_Date) ---
+            dir_in_zip = None
+            all_dirs = {Path(p).parent for p in zf.namelist()}
+            for d in all_dirs:
+                current_path = Path(d)
+                for i in range(len(current_path.parts)):
+                    test_path_str = '/'.join(current_path.parts[:i+1])
+                    dir_parts = test_path_str.split('_')
+                    if len(dir_parts) >= 3:
+                        dir_in_zip = Path(test_path_str)
+                        break
+                if dir_in_zip:
+                    break
+            
+            if not dir_in_zip:
+                raise ValueError("No directory matching 'Name_ID_Date' format found.")
+
+            # Parse Folder Name
+            dir_parts = dir_in_zip.name.rstrip('/').split('_')
+            capture_date = dir_parts[-1]
+            patient_id = dir_parts[-2]
+            name = ' '.join(dir_parts[:-2])
+            
+            # Create ZIP Record
+            clean_name = clean_filename(zip_path.name)
+            new_zip_file = ZipFile(zip_filename=clean_name, md5_hash=md5_hash)
+            session.add(new_zip_file)
+            
+            # Create Patient Encounter
+            new_patient_encounter = PatientEncounters(
+                name=name,
+                patient_id=patient_id,
+                capture_date=capture_date,
+                lab_unit_id=lab_unit_id,
+            )
+            parsed_dt = parse_capture_date(capture_date)
+            if parsed_dt:
+                new_patient_encounter.capture_date_dt = parsed_dt
+            new_zip_file.patient_encounter = new_patient_encounter
+
+            # --- 3. Extract & Create Objects ---
+            valid_files = [info for info in zf.infolist() 
+                          if not info.is_dir() and info.filename.startswith(str(dir_in_zip)) and
+                          not info.filename.startswith("__MACOSX/") and 
+                          not Path(info.filename).name.startswith("._")]
+
+            files_to_add = []
+            files_to_add_pdfs = []
+
+            for member_info in valid_files:
+                original_filepath = Path(member_info.filename)
+                file_ext = original_filepath.suffix.lower()
+                new_filename = f"{uuid4()}{file_ext}"
+                file_uuid = str(uuid4())
+
+                # Destinations
+                if file_ext in {'.jpg', '.jpeg'}:
+                    dest_dir = daily_dirs['image']
+                    dest_dir.mkdir(parents=True, exist_ok=True) # Ensure dir exists
+                    target_path = dest_dir / new_filename
+                    
+                    # Create DB Object
+                    ef = EncounterFile(
+                        filename=new_filename,
+                        file_type='image',
+                        uuid=file_uuid,
+                        lab_unit_id=lab_unit_id,
+                        thumbnail_filename=None # Will be set by async task
+                    )
+                    files_to_add.append(ef)
+                    extracted_images.append((target_path, ef))
+                    
+                elif file_ext == '.pdf':
+                    dest_dir = daily_dirs['pdf']
+                    dest_dir.mkdir(parents=True, exist_ok=True) # Ensure dir exists
+                    target_path = dest_dir / new_filename
+                    
+                    # Create DB Object
+                    ef_pdf = EncounterFilePDF(
+                        filename=new_filename,
+                        file_type='pdf',
+                        uuid=file_uuid,
+                        lab_unit_id=lab_unit_id
+                    )
+                    files_to_add_pdfs.append(ef_pdf)
+                    extracted_pdfs.append((target_path, ef_pdf))
+
+                # Extract File (Raw copy, no stripping yet)
+                with zf.open(member_info) as source, open(target_path, "wb") as target:
+                    shutil.copyfileobj(source, target)
+            
+            # Link to Encounter
+            new_patient_encounter.encounter_files = files_to_add
+            new_patient_encounter.encounter_file_pdfs = files_to_add_pdfs
+            
+            # Commit Transaction
+            session.commit()
+            
+            # Move ZIP to processed
+            try:
+                shutil.move(str(zip_path), str(daily_dirs['processed'] / zip_path.name))
+            except Exception:
+                pass # Non-critical if move fails
+            
+            # Return IDs for async processing
+            return ([f.id for f in files_to_add], [f.id for f in files_to_add_pdfs])
+
+    except Exception:
+        session.rollback()
+        # Move to error
+        try:
+            shutil.move(str(zip_path), str(daily_dirs['error'] / zip_path.name))
+        except Exception:
+            pass
+        raise
+
+
 # --- Main Execution ---
 
 def main():

@@ -243,6 +243,7 @@ def upload():
                 sanitize_log_value(len(files)),
             )
 
+            tasks_to_enqueue = []
             job_items = []
 
             for file in files:
@@ -342,117 +343,10 @@ def upload():
                                 else:
                                     # write original
                                     dest = uniquify(orig_dir, filename)
-
-                                    # Strip EXIF metadata before saving
-                                    try:
-                                        from utils.image_processing import strip_exif_data
-                                        clean_content = strip_exif_data(content)
-                                        dest.write_bytes(clean_content)
-                                        # Update content length for logging if changed
-                                        if len(clean_content) != len(content):
-                                            current_app.logger.info(
-                                                "Stripped EXIF data from %s. Size reduced: %s -> %s bytes",
-                                                sanitize_log_value(filename),
-                                                sanitize_log_value(len(content)),
-                                                sanitize_log_value(len(clean_content))
-                                            )
-                                    except Exception as e:
-                                        current_app.logger.error(
-                                            "Failed to strip EXIF from %s: %s. Saving original.",
-                                            sanitize_log_value(filename),
-                                            sanitize_log_value(e)
-                                        )
-                                        dest.write_bytes(content)
-                                        clean_content = content
-
-                                    # ==== S3 UPLOAD INTEGRATION ====
-                                    s3_metadata = None
-                                    thumbnail_s3_metadata = None
-                                    try:
-                                        # Upload original file to S3
-                                        s3_metadata = _upload_to_s3_and_get_metadata(
-                                            hospital.id,
-                                            clean_content,
-                                            dest,
-                                            file_type="original"
-                                        )
-                                    except Exception as e:
-                                        current_app.logger.error(
-                                            "S3 upload failed for %s: %s",
-                                            sanitize_log_value(filename),
-                                            sanitize_log_value(e)
-                                        )
-                                        # Re-raise if fallback is 'never'
-                                        from utils.s3_upload_handler import get_active_s3_config
-                                        s3_config = get_active_s3_config(hospital.id)
-                                        if s3_config and s3_config.fallback_policy == "never":
-                                            state, detail = "error", f"S3 upload failed: {e}"
-                                            job_items.append(JobItem(
-                                                filename=sanitize_filename_for_logging(filename),
-                                                state=state,
-                                                detail=detail,
-                                            ))
-                                            continue
-                                    # ==== END S3 UPLOAD INTEGRATION ====
-
-                                    # Generate thumbnail for the uploaded image
-                                    thumbnail_filename = None
-                                    try:
-                                        from utils.image_processing import generate_thumbnail, get_thumbnail_filename
-                                        thumb_filename = get_thumbnail_filename(dest.name)
-                                        thumb_path = dest.parent / thumb_filename
-
-                                        success = generate_thumbnail(dest, thumb_path)
-                                        if success:
-                                            thumbnail_filename = thumb_filename
-                                            current_app.logger.info(
-                                                "Generated thumbnail: %s",
-                                                sanitize_log_value(thumb_filename),
-                                            )
-
-                                            # ==== S3 THUMBNAIL UPLOAD ====
-                                            try:
-                                                thumb_content = thumb_path.read_bytes()
-                                                thumbnail_s3_metadata = _upload_thumbnail_to_s3(
-                                                    hospital.id,
-                                                    thumb_content,
-                                                    thumb_path
-                                                )
-                                            except Exception as e:
-                                                current_app.logger.warning(
-                                                    "S3 thumbnail upload failed for %s: %s",
-                                                    sanitize_log_value(thumb_filename),
-                                                    sanitize_log_value(e)
-                                                )
-                                            # ==== END S3 THUMBNAIL UPLOAD ====
-                                        else:
-                                            current_app.logger.warning(
-                                                "Failed to generate thumbnail for: %s",
-                                                sanitize_log_value(dest.name),
-                                            )
-                                    except Exception as e:
-                                        current_app.logger.error(
-                                            "Error generating thumbnail for %s: %s",
-                                            sanitize_log_value(dest.name),
-                                            sanitize_log_value(e),
-                                        )
-
-                                    # capture image metadata before DB insert
-                                    metadata_result = None
-                                    try:
-                                        from utils.image_metadata import extract_image_metadata
-                                        metadata_result = extract_image_metadata(
-                                            image_bytes=content,
-                                            file_size_bytes=len(clean_content),
-                                        )
-                                    except Exception as e:
-                                        current_app.logger.warning(
-                                            "Failed to extract metadata for %s: %s",
-                                            sanitize_log_value(filename),
-                                            sanitize_log_value(e),
-                                        )
+                                    dest.write_bytes(content)
 
                                     # create DB row (folder-based; store basenames only)
+                                    # Phase 2 Async: Create record immediately, process in background
                                     upload = DirectImageUpload(
                                         original_filename=filename,
                                         filename=dest.name,                 # basename stored
@@ -467,47 +361,16 @@ def upload():
                                         disease_id=disease.id,
                                         area_id=area.id,
                                         is_mydriatic=is_mydriatic,
-                                        thumbnail_filename=thumbnail_filename,
-                                        # ==== S3 METADATA ====
-                                        s3_config_id=s3_metadata["s3_config_id"] if s3_metadata else None,
-                                        s3_object_key=s3_metadata["s3_object_key"] if s3_metadata else None,
-                                        s3_object_key_thumbnail=thumbnail_s3_metadata["s3_object_key"] if thumbnail_s3_metadata else None,
-                                        # ==== END S3 METADATA ====
+                                        thumbnail_filename=None,           # Will be generated by async task
+                                        s3_config_id=None,                 # Will be handled by S3 sync task (Phase 3)
+                                        s3_object_key=None,
+                                        s3_object_key_thumbnail=None,
                                     )
                                     db_session.add(upload)
                                     db_session.flush()
 
-                                    if metadata_result is not None:
-                                        try:
-                                            from utils.image_metadata import upsert_image_metadata
-                                            upsert_image_metadata(
-                                                db_session,
-                                                image_uuid=str(upload.uuid),
-                                                image_variant="orig",
-                                                direct_image_upload_id=upload.id,
-                                                metadata=metadata_result,
-                                            )
-                                        except Exception as e:
-                                            current_app.logger.warning(
-                                                "Failed to store metadata for %s: %s",
-                                                sanitize_log_value(dest.name),
-                                                sanitize_log_value(e),
-                                            )
-
-                                    try:
-                                        from utils.pii_verification import enqueue_pii_detection
-                                        enqueue_pii_detection(
-                                            current_app._get_current_object(),
-                                            str(upload.uuid),
-                                            "orig",
-                                            str(dest),
-                                        )
-                                    except Exception as e:
-                                        current_app.logger.warning(
-                                            "Failed to enqueue PII detection for %s: %s",
-                                            sanitize_log_value(dest.name),
-                                            sanitize_log_value(e),
-                                        )
+                                    # Collect ID for post-commit enqueue
+                                    tasks_to_enqueue.append((upload.id, job_token))
                                     current_user.file_upload_count += 1
                                     state, detail = "completed", "File uploaded successfully"
                                     current_app.logger.info(
@@ -526,13 +389,38 @@ def upload():
                 ))
 
             db_session.add_all(job_items)
-            new_job.status = "completed" if all(i.state == "completed" for i in job_items) else "error"
+            # Determine job status (Async-aware)
+            if any(i.state == "queued" for i in job_items):
+                new_job.status = "processing"
+            elif all(i.state == "completed" for i in job_items):
+                new_job.status = "completed"
+            else:
+                new_job.status = "done"
+
             db_session.commit()
 
-            ok = sum(1 for i in job_items if i.state == "completed")
+            # Enqueue tasks now that DB records are committed
+            try:
+                from utils.celery_helpers import celery_enabled
+                if celery_enabled() and tasks_to_enqueue:
+                    from celery import chain
+                    from celery_tasks.tasks.direct_upload_tasks import (
+                        process_direct_upload_file_task, 
+                        process_direct_pii_task
+                    )
+                    
+                    for uid, token in tasks_to_enqueue:
+                        chain(
+                            process_direct_upload_file_task.s(uid, token),
+                            process_direct_pii_task.s(token)
+                        ).apply_async()
+            except Exception as e:
+                current_app.logger.error("Failed to enqueue direct upload tasks: %s", e)
+
+            ok = sum(1 for i in job_items if i.state in ("completed", "queued"))
             err = len(job_items) - ok
             current_app.logger.info(
-                "Job %s done. Success:%s Errors:%s",
+                "Job %s accepted. Queued/OK:%s Errors:%s",
                 sanitize_log_value(new_job.id),
                 sanitize_log_value(ok),
                 sanitize_log_value(err),

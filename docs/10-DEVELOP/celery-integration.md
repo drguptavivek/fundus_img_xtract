@@ -90,132 +90,102 @@ The system uses two worker services:
 
 Keep OCR and heavy compute off the general queue.
 
+## Recommended Architectural Patterns
+
+To maintain consistency, safety, and UI responsiveness, the project follows two primary patterns for background work.
+
+### 1. The Coordinator & Chain Model
+
+This is the **preferred pattern** for all multi-step or batch operations (e.g., ZIP uploads, complex exports).
+
+1.  **Coordinator Task**: A master task responsible for:
+    *   **Validation**: Early exit if inputs are invalid.
+    *   **Atomic Persistence**: Writing core DB records in a single transaction.
+    *   **Fan-Out**: Triggering independent sub-tasks or chains for each entity.
+2.  **Worker Chain**: A sequence of tasks for a single entity (e.g., `VisualTask` -> `DataTask`). 
+    *   **Prioritization**: Chains ensure heavy processing (metadata) happens only after priority assets (thumbnails/visuals) are ready for the UI.
+
+**Implementation Example:**
+```python
+# Coordinator
+@celery_app.task
+def process_batch_coordinator(items, job_token):
+    # 1. Atomic DB Writes
+    # 2. Fan-out
+    for item in items:
+        chain(priority_task.s(item), background_task.s(item)).apply_async()
+```
+
+### 2. Tracking Progress with Job Store
+
+For any user-facing batch operation, use the `Job` and `JobItem` models (managed via `celery_job_store.py`).
+
+*   **`db_add_job_items`**: Register sub-entities discovered during execution.
+*   **`db_set_item_state`**: Provide granular status (e.g., "Thumbnailing...").
+*   **`check_and_complete_job`**: Automatically aggregate item states to determine final Job status (`done`, `partial_error`, `error`).
+
+---
+
+## Dynamic Scheduling (Celery Beat)
+
+The project uses a custom DB-backed scheduler that allows managing recurring tasks without code changes or service restarts.
+
+### Configuration
+Controlled via environment variables:
+- `CELERY_BEAT_ENABLED`: Set to `true` to enable the beat process.
+- `CELERY_BEAT_USE_DB_SCHEDULES`: Set to `true` to load schedules from the database.
+- `CELERY_BEAT_DB_REFRESH_SECONDS`: Frequency (default 60s) at which Beat re-syncs with the DB.
+
+### Database Schema (`celery_beat_schedules`)
+Schedules are stored in the `celery_beat_schedules` table. Key fields include:
+- `name`: Unique identifier for the schedule.
+- `task`: Full python path to the task (e.g., `celery_tasks.tasks.maintenance_tasks.refresh_views`).
+- `schedule_type`: Either `interval` (fixed seconds) or `crontab` (standard cron format).
+- `enabled`: Boolean toggle.
+- `kwargs`: JSON object containing arguments passed to the task (e.g., `{"hospital_id": 1}`).
+
+### Managing Schedules
+Schedules are managed via the Admin UI at `/admin/celery-schedules`.
+
+1.  **Interval Schedules**: Define `interval_seconds`.
+2.  **Crontab Schedules**: Define standard cron fields (`minute`, `hour`, etc.).
+3.  **Scoping**: Use the `kwargs` field to scope tasks to specific hospitals or users.
+
+**Note:** The Beat process (`celery_tasks/beat_scheduler.py`) queries the DB every refresh interval. If a task is modified or disabled in the UI, the changes take effect within 60 seconds.
+
+---
+
+## Common Pitfalls & Learnings
+
+Based on recent implementations of high-volume async workflows, observe the following best practices:
+
+### 1. Memory Management & OOM
+- **Issue**: Processing large high-resolution images (EXIF stripping, complex resizing) consumes significant RAM. Default Docker memory limits (512MB) may cause OOM kills.
+- **Solution**: Monitor worker memory usage and set appropriate limits. For this project, `celery-ocr-worker` requires **2GB** and `celery-general-worker` requires **1GB** for stability.
+
+### 2. Explicit Database Commits
+- **Issue**: Sub-tasks in a chain often operate in their own transaction scope. Forgetting to `commit()` inside a task (expecting the parent to do it) leads to "missing" data records.
+- **Solution**: Every task that performs a DB write must explicitly call `session.commit()`. Always wrap task logic in `try/except/finally` to ensure `session.rollback()` on error and `session.close()` at the end.
+
+### 3. File System Synchronization
+- **Issue**: A coordinator task extracts files, and workers immediately try to read them. If the extraction directory wasn't created with `parents=True`, workers will throw `FileNotFoundError`.
+- **Solution**: Use `pathlib.Path.mkdir(parents=True, exist_ok=True)` in the coordinator *before* extraction.
+
+### 4. Handling "Zombie" Tasks
+- **Issue**: Redis persists tasks. If you purge the file system or database during development, old tasks in the queue will fail when picked up by workers.
+- **Solution**: Implement graceful handling for `FileNotFoundError` in tasks. Periodically flush Redis (`redis-cli FLUSHALL`) in development environments after major data wipes.
+
+### 5. Aggregate Status Management
+- **Issue**: In a fan-out architecture, the parent job doesn't know when it's "done" because it only triggered the children.
+- **Solution**: Implement a terminal check (e.g., `check_and_complete_job`) called by the *last* task in every sub-chain. This helper should query the DB to see if *all* siblings are in a terminal state.
+
+### 6. Verbose Error Reporting
+- **Issue**: "Internal Processing Error" is unhelpful for users.
+- **Solution**: Capture the `str(exception)` in the task's `except` block and pass it to the `JobStore`. This allows the UI to show specific errors (e.g., "Malicious ZIP detected" or "Corrupt JPEG header").
+
+---
+
 ## Adding a New Task (Step-by-Step)
-
-1) **Create the task module**
-- Add a module under `celery_tasks/tasks/` (or add to an existing file).
-- Do **not** import Flask app or blueprints.
-
-2) **Define the task**
-- Include `user_id` and `hospital_id` kwargs.
-- Add idempotency checks before work begins.
-- Log/audit task state transitions.
-
-Example:
-
-```python
-from celery import shared_task
-
-@shared_task(bind=True)
-def my_task(self, record_id: int, user_id: int | None = None, hospital_id: int | None = None):
-    # idempotency check here
-    # do work
-    return {"status": "ok"}
-```
-
-3) **Select a queue**
-- Choose a queue based on workload profile.
-- Update routing in `celery_app.py` if needed:
-
-```python
-app.conf.update(
-    task_routes={
-        "celery_tasks.tasks.my_task_module.*": {"queue": "metadata"},
-    }
-)
-```
-
-4) **Enqueue from the app**
-- Use helpers where possible.
-- Always pass `user_id` and `hospital_id`.
-
-```python
-from utils.celery_helpers import enqueue_task
-
-enqueue_task(
-    "celery_tasks.tasks.my_task_module.my_task",
-    args=[record_id],
-    kwargs={"user_id": current_user.id, "hospital_id": hospital_id},
-    queue="metadata",
-)
-```
-
-5) **Poll status (if needed)**
-- If you need status, store `task_id` and query Celery:
-
-```python
-from celery.result import AsyncResult
-from celery_app import celery_app
-
-result = AsyncResult(task_id, app=celery_app)
-state = result.state
-```
-
-6) **Document the use case**
-- Add the task to `docs/10-DEVELOP/celery-use-cases.md` with queue, trigger, and retry notes.
-
-## Common Pitfalls
-
-- Forgetting `user_id`/`hospital_id` in kwargs (audit scope loss)
-- Enqueuing before local persistence completes
-- Long-running tasks on the general queue (starves UI)
-- Using Celery for tasks that need immediate UI feedback
-
-## Logging and Audit
-
-- Use a dedicated logger for each task domain (e.g., `celery.pii`, `celery.thumbnails`).
-- Sanitize any user-provided input in logs using `sanitize_log_value`.
-- Record task lifecycle events (queued, started, completed, failed) in audit logs.
-- Include `user_id` and `hospital_id` in log context where possible.
-
-Example:
-
-```python
-import logging
-from utils.log_sanitize import sanitize_log_value
-
-logger = logging.getLogger("celery.thumbnails")
-logger.info(
-    "thumbnail task started: job_id=%s user_id=%s hospital_id=%s",
-    sanitize_log_value(job_id),
-    sanitize_log_value(user_id),
-    sanitize_log_value(hospital_id),
-)
-```
-
-## Handling Failures and Restarts
-
-### Checking failures
-
-- Review worker logs:
-  ```
-  $DC logs -f celery-ocr-worker
-  $DC logs -f celery-general-worker
-  ```
-- Inspect the app’s job tables (PII, metadata backfills, exports, thumbnails) for failed status.
-- Use admin dashboards where available (e.g., thumbnail maintenance).
-
-### Restarting workers
-
-Use Docker to restart the worker services:
-
-```
-$DC restart celery-ocr-worker celery-general-worker
-```
-
-### Retrying / re-queuing
-
-- If tasks are idempotent, you can re-enqueue safely.
-- Use existing admin actions where available (e.g., “run PII queue”, “backfill metadata”).
-- For S3 migrations, prefer per-hospital manual triggers.
-
-### Deleting failed records
-
-Do **not** delete job records unless you are certain they are unrecoverable:
-- Job records provide audit and traceability.
-- For retries, mark status as queued or create a new job entry instead of deleting.
-
-## Example: Enqueue Pattern
 
 ```python
 from utils.celery_helpers import enqueue_task

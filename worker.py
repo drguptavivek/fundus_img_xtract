@@ -72,17 +72,23 @@ def queue_job(
     hospital_id: int | None = None,
 ):
     """
-    Submit a job to the shared executor (ThreadPoolExecutor stored in app.config).
+    Submit a job to the shared executor or Celery.
+    Refactored to use the new Async Coordinator for ZIPs.
     """
     from utils.celery_helpers import enqueue_task, celery_enabled
+    
     if celery_enabled():
-        enqueue_task(
-            "celery_tasks.tasks.zip_tasks.process_zip_job_task",
-            job_token,
-            [str(p) for p in saved_paths],
-            user_id=user_id,
-            hospital_id=hospital_id,
-        )
+        # New Async Workflow: One Coordinator Task per ZIP
+        for zip_path in saved_paths:
+            enqueue_task(
+                "celery_tasks.tasks.zip_upload_tasks.process_zip_coordinator_task",
+                str(zip_path),
+                job_token,
+                user_id=user_id,
+                hospital_id=hospital_id,
+            )
         return
+
+    # Fallback to local executor (Legacy Synchronous/Threaded)
     executor = app.config["EXECUTOR"]
     executor.submit(process_zip_job, job_token, saved_paths)

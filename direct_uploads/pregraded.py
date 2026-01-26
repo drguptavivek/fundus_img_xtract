@@ -266,6 +266,9 @@ def pregraded_upload():
                                     state = "pending"
                                     detail = "Stored; creating grading task…"
                                     pending_tasks.append((direct_upload.uuid, None))  # placeholder for job item
+                                    # Handle legacy users where file_upload_count may be None
+                                    if current_user.file_upload_count is None:
+                                        current_user.file_upload_count = 0
                                     current_user.file_upload_count += 1
                             except Exception as processing_error:  # noqa: BLE001
                                 current_app.logger.exception(

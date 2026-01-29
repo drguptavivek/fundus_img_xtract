@@ -24,7 +24,7 @@ def process_direct_upload_thumbnail_task(self, upload_id: int, job_token: str, u
         
         db_set_item_state(job_token, filename, "processing", "Generating thumbnail...")
         process_file_visual(upload_id, 'direct_upload', str(file_path), session)
-        
+        db_set_item_state(job_token, filename, "ok", "Thumbnail generated")
         return {"upload_id": upload_id, "file_path": str(file_path), "status": "ok", "user_id": user_id, "hospital_id": hospital_id}
     except Exception as e:
         logger.error(f"Thumbnail failed for {filename}: {e}", exc_info=True)
@@ -51,7 +51,7 @@ def process_direct_data_combined_task(self, prev_result: dict, job_token: str) -
     try:
         db_set_item_state(job_token, filename, "processing", "Extracting metadata & scanning PII...")
         process_file_data_pipeline(upload_id, 'direct_upload', file_path, session, run_metadata=True, run_pii=True, run_strip=True)
-        db_set_item_state(job_token, filename, "ok", "Ready")
+        db_set_item_state(job_token, filename, "ok", "Metadata + PII complete")
     except Exception as e:
         logger.error(f"Combined processing failed for {filename}: {e}", exc_info=True)
         db_set_item_state(job_token, filename, "error", f"Processing failed: {e}")
@@ -101,4 +101,3 @@ def process_direct_pii_only_task(self, prev_result: dict, job_token: str) -> Non
         from celery_job_store import check_and_complete_job
         check_and_complete_job(job_token)
         session.close()
-

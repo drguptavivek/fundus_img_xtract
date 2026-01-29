@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from celery import chain
+from celery import chain, chord, group
 from celery.utils.log import get_task_logger
 
 from celery_app import celery_app
@@ -70,25 +70,36 @@ def process_zip_coordinator_task(
         db_set_item_state(job_token, zip_path.name, "ok", f"Extracted {total_files} files")
 
         # Now launch tasks for the new items
+        thumbnail_tasks = []
+        pdf_tasks = []
         for img_id in image_ids:
             file_rec = session.query(EncounterFile).get(img_id)
             if file_rec:
                 db_set_item_state(job_token, file_rec.filename, "processing", "Queued for thumbnail generation")
-                
-                # Chain: Thumbnail -> Metadata/PII/Strip Combined
-                chain(
-                    process_image_thumbnail_task.s(img_id, job_token, user_id=user_id, hospital_id=hospital_id),
-                    process_zip_data_combined_task.s('encounter_file', job_token)
-                ).apply_async()
+                thumbnail_tasks.append(
+                    process_image_thumbnail_task.s(
+                        img_id,
+                        job_token,
+                        user_id=user_id,
+                        hospital_id=hospital_id,
+                    )
+                )
 
         # For PDFs: OCR only
         for pdf_id in pdf_ids:
             file_rec = session.query(EncounterFilePDF).get(pdf_id)
             if file_rec:
                 db_set_item_state(job_token, file_rec.filename, "processing", "Queued for OCR")
-                process_pdf_ocr_task.delay(pdf_id, job_token)
+                pdf_tasks.append(process_pdf_ocr_task.s(pdf_id, job_token))
 
         db_set_job_status(job_token, "processing")
+
+        if thumbnail_tasks or pdf_tasks:
+            header = group(*(thumbnail_tasks + pdf_tasks))
+            if image_ids:
+                chord(header)(enqueue_zip_combined_tasks.s(image_ids, job_token, user_id=user_id, hospital_id=hospital_id))
+            else:
+                header.apply_async()
 
     except MaliciousZipError as e:
         logger.warning(f"Malicious ZIP rejected: {e}")
@@ -96,6 +107,44 @@ def process_zip_coordinator_task(
     except Exception as e:
         logger.error(f"ZIP Coordinator Failed: {e}", exc_info=True)
         db_set_job_status(job_token, "error", error=f"Internal processing error: {str(e)}")
+    finally:
+        session.close()
+
+
+@celery_app.task(name="celery_tasks.tasks.zip_upload_tasks.enqueue_zip_combined_tasks", bind=True, acks_late=True)
+def enqueue_zip_combined_tasks(
+    self,
+    results: list,
+    image_ids: list[int],
+    job_token: str,
+    user_id: int | None = None,
+    hospital_id: int | None = None,
+) -> None:
+    """Enqueue combined data tasks after all thumbnails + PDF OCR finish."""
+    session = Session()
+    try:
+        for file_id in image_ids:
+            record = session.query(EncounterFile).get(file_id)
+            if not record:
+                continue
+            filename = record.filename or "unknown"
+            from models import IMAGE_DIR
+            if not record.patient_encounter or not record.patient_encounter.zip_file:
+                from datetime import datetime
+                today_str = datetime.now().strftime("%Y_%m_%d")
+            else:
+                today_str = record.patient_encounter.zip_file.upload_date.strftime("%Y_%m_%d")
+
+            file_path = IMAGE_DIR / today_str / filename
+            prev_result = {
+                "file_id": file_id,
+                "file_type": "encounter_file",
+                "file_path": str(file_path),
+                "status": "ok",
+                "user_id": user_id,
+                "hospital_id": hospital_id,
+            }
+            process_zip_data_combined_task.delay(prev_result, "encounter_file", job_token)
     finally:
         session.close()
 
@@ -135,7 +184,7 @@ def process_image_thumbnail_task(
 
         db_set_item_state(job_token, filename, "processing", "Generating thumbnail...")
         process_file_visual(file_id, 'encounter_file', str(file_path), session)
-        
+        db_set_item_state(job_token, filename, "ok", "Thumbnail generated")
         return {
             "file_id": file_id,
             "file_type": "encounter_file",
@@ -246,7 +295,7 @@ def process_zip_data_combined_task(
         if file_type == 'encounter_file':
             db_set_item_state(job_token, filename, "processing", "Extracting metadata & scanning PII...")
             process_file_data_pipeline(file_id, 'encounter_file', file_path, session, run_metadata=True, run_pii=True, run_strip=True)
-            db_set_item_state(job_token, filename, "ok", "Ready")
+            db_set_item_state(job_token, filename, "ok", "Metadata + PII complete")
         else:
             db_set_item_state(job_token, filename, "ok", "Ready")
     except Exception as e:

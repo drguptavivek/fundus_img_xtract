@@ -12,9 +12,10 @@
         <div class="card-body">
             <h5 class="card-title">Upload Summary</h5>
             <p class="card-text">Overall Job Status: <span class="badge bg-{{ 'success' if job.status == 'completed' else 'danger' }}">{{ job.status.capitalize() }}</span></p>
-            <p class="card-text">Total files processed: <span class="badge bg-primary">{{ results.uploaded_count + results.failed_count }}</span></p>
+            <p class="card-text">Total files processed: <span class="badge bg-primary">{{ results.total_count }}</span></p>
             <p class="card-text">Files uploaded successfully: <span class="badge bg-success">{{ results.uploaded_count }}</span></p>
             <p class="card-text">Files failed to upload: <span class="badge bg-danger">{{ results.failed_count }}</span></p>
+            <p class="card-text">Files still processing: <span class="badge bg-warning text-dark">{{ results.pending_count }}</span></p>
         </div>
     </div>
 

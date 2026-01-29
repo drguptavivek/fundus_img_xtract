@@ -161,7 +161,7 @@ def requires_reauth(operation_name: str):
                     
                     verified = False
                     try:
-                        if user and user.password_hash and verify_password(password, user.password_hash.strip()):
+                        if user and user.password_hash and verify_password(user.password_hash.strip(), password):
                             verified = True
                     except (InvalidHashError, ValueError) as e:
                         logger.error("Password verification error (invalid hash) for user %s: %s", 

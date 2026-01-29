@@ -329,11 +329,18 @@ def upload_results(job_token):
             return redirect(url_for("direct_uploads.upload"))
 
         items = db.execute(select(JobItem).where(JobItem.job_id == job.id).order_by(JobItem.id)).scalars().all()
-        uploaded = sum(1 for it in items if it.state == "completed")
-        failed   = len(items) - uploaded
+        uploaded = sum(1 for it in items if it.state in {"ok", "completed"})
+        failed = sum(1 for it in items if it.state == "error")
+        pending = len(items) - uploaded - failed
         failures = [{"filename": it.filename, "reason": it.detail} for it in items if it.state == "error"]
         return render_template("jobs/upload_results.html",
-                               results={"uploaded_count": uploaded, "failed_count": failed, "failed_uploads": failures},
+                               results={
+                                   "uploaded_count": uploaded,
+                                   "failed_count": failed,
+                                   "pending_count": pending,
+                                   "total_count": len(items),
+                                   "failed_uploads": failures,
+                               },
                                job=job)
 
 @jobs_bp.route("/processing/<job_id>", methods=["GET"])

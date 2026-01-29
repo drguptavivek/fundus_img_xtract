@@ -1,5 +1,20 @@
 # Rapid Docker commands for setting up the app 
 
+Notes:
+- Docker Compose auto-loads `.env` in the repo root. No `--env-file` flags needed.
+- Runtime containers use `SKIP_UV_SYNC=true` and rely on the venv builders.
+
+Adding a new Python package:
+1) Add it to `pyproject.toml`.
+2) Update the appropriate venv requirements file:
+   - `requirements-web.txt` for web
+   - `requirements-ocr.txt` for OCR worker
+   - `requirements-general.txt` for general worker
+   - `requirements-beat.txt` for beat
+3) Rebuild and rerun the matching venv builder:
+   - `docker compose build <service>-venv-builder`
+   - `docker compose up <service>-venv-builder -d`
+
 ```bash
 rm docker-compose.override.yml 
 rm develop.secrets.env
@@ -12,27 +27,28 @@ ln -sf deploy.secrets.env .env
 
 
 
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env down -v
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+docker compose down -v
+docker compose up -d db cache
 
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env logs db cache
+docker compose logs db cache
 
-docker compose  --env-file deploy.config.env  --env-file deploy.secrets.env build web
+docker compose build web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder web celery-ocr-worker celery-general-worker celery-beat
 
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env up  web -d
+docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
+docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
 
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   stop web
+docker compose   stop web
 
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   start web
+docker compose   start web
 
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env logs web  --tail=20 -f
+docker compose logs web  --tail=20 -f
 
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web  uv run alembic upgrade head
+docker compose exec web  uv run alembic upgrade head
 
 # Database backup (timestamped)
 mkdir -p backups
-docker compose --env-file deploy.config.env --env-file deploy.secrets.env exec -T db bash -lc 'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"' > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+docker compose exec -T db bash -lc 'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"' > backups/backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Alembic Commnsa
 uv run alembic  history
@@ -42,7 +58,7 @@ uv run alembic upgrade head
  
 
 # User Creation
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env exec web /bin/bash
+docker compose exec web /bin/bash
 
 
 uv run python -m scripts.create_user admin
@@ -62,7 +78,7 @@ docker rm -f $(docker ps -a --filter name=fundus-img-xtract-stats --format '{{.I
 docker rmi -f $(docker images --format '{{.ID}} {{.Repository}}' | awk '$2 ~ /stats-logger/{print $1}') 2>/dev/null || true
 
 # 3) Rebuild and start fresh
-docker compose --env-file deploy.config.env   --env-file deploy.secrets.env  -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
+docker compose  -f docker-compose.yml -f docker-compose.stats.yml up -d --build stats-logger
 
 
 sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
@@ -75,13 +91,14 @@ sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 cp develop.config.env.example develop.config.env
 cp docker-compose.override.yml.example docker-compose.override.yml 
 
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   build  web
+docker compose   build  web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder web celery-ocr-worker celery-general-worker celery-beat
 
-docker compose   --env-file deploy.config.env   --env-file deploy.secrets.env up -d db cache
+docker compose up -d db cache
 
 
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   up web -d
-docker compose  --env-file deploy.config.env   --env-file deploy.secrets.env   logs web -f
+docker compose   up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
+docker compose   up web celery-ocr-worker celery-general-worker celery-beat -d
+docker compose   logs web -f
 
 
 

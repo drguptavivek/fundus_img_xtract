@@ -1,0 +1,15 @@
+celery[redis]==5.6.2
+redis>=5.0.4,<6.5
+sqlalchemy==2.0.43
+psycopg2-binary==2.9.11
+flask==3.1.2
+flask-caching>=2.3.1
+python-dotenv==1.1.1
+pytz==2025.2
+pyyaml>=6.0.3
+pillow==11.3.0
+numpy==2.3.2
+pandas==2.3.2
+openpyxl==3.1.5
+cryptography>=44.0.0
+pynacl==1.6.2

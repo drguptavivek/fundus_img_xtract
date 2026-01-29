@@ -38,7 +38,7 @@ done
 
 echo "✅ Database is ready!"
 
-# Check if virtual environment exists and is valid
+# Ensure venv exists (general uses a minimal dependency set)
 if [ -d "/app/.venv" ] && [ -f "/app/.venv/bin/python" ]; then
     echo "✅ Virtual environment already exists - skipping recreation"
 else
@@ -47,29 +47,12 @@ else
         exit 1
     fi
     echo "🔄 Virtual environment missing or invalid - creating..."
-    uv sync
+    if [ -f "/app/requirements-general.txt" ]; then
+        uv venv
+        uv pip install --no-cache -r /app/requirements-general.txt
+    else
+        uv sync --frozen --no-dev
+    fi
 fi
-
-if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-    # Run initial migration first
-    echo "Running initial database migration..."
-    uv run alembic upgrade 5a49784f68f1
-
-    # Wait 5 seconds for transaction to commit
-    echo "Waiting 5 seconds for migration to settle..."
-    sleep 5
-
-    # Run all remaining migrations
-    echo "Running remaining database migrations..."
-    uv run alembic upgrade head
-    echo "✅ Database migrations completed successfully!"
-else
-    echo "Skipping database migrations (RUN_MIGRATIONS=false)"
-fi
-
-# Start cron daemon for log rotation
-echo "Starting cron daemon for log rotation..."
-service cron start
-echo "✅ Cron daemon started"
 
 exec "$@"

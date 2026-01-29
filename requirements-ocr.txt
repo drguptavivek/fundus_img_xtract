@@ -1,0 +1,12 @@
+celery[redis]==5.6.2
+redis>=5.0.4,<6.5
+sqlalchemy==2.0.43
+psycopg2-binary==2.9.11
+flask==3.1.2
+flask-caching>=2.3.1
+python-dotenv==1.1.1
+numpy==2.3.2
+pillow==11.3.0
+opencv-python-headless>=4.13.0.90
+pytesseract==0.3.13
+pymupdf==1.26.4

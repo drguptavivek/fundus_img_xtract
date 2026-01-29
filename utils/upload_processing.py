@@ -4,9 +4,6 @@ from pathlib import Path
 from typing import Optional, Tuple
 from uuid import uuid4
 
-import cv2
-import numpy as np
-
 from models import (
     Session,
     EncounterFile,
@@ -24,7 +21,6 @@ from utils.image_metadata import (
     upsert_image_metadata
 )
 from utils.pii_verification import upsert_pii_verification
-from utils.ocr_pii import detect_pii_details_for_image
 from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
@@ -140,6 +136,10 @@ def process_file_data_pipeline(
     # 2. PII Stage
     if run_pii and content:
         try:
+            import cv2
+            import numpy as np
+            from utils.ocr_pii import detect_pii_details_for_image
+
             nparr = np.frombuffer(content, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is not None:

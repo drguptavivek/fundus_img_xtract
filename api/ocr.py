@@ -16,7 +16,7 @@ from utils.fileUtils import abs_from_parts
 from utils.hospital_scoping import apply_scoping, determine_scoping_context
 from utils.log_sanitize import sanitize_log_value
 from utils.media_cache import get_media_cache_version
-from utils.pii_detection_queue import enqueue_pii_detection_job, run_pii_detection_queue
+from utils.pii_detection_queue import enqueue_pii_detection_job
 from auth.utils import utcnow
 from utils.utils import with_session
 
@@ -35,7 +35,6 @@ def _run_pii_detection(image_uuid: str, image_variant: str, image_path: str) -> 
             image_path=image_path,
             source="auto",
         )
-    processed = run_pii_detection_queue(max_jobs=1)
     with with_session() as db:
         record = (
             db.query(ImagePiiVerification)
@@ -45,7 +44,7 @@ def _run_pii_detection(image_uuid: str, image_variant: str, image_path: str) -> 
             )
             .first()
         )
-    return record, processed
+    return record, 0
 
 
 def _resolve_image_variant_map(image_uuids: Iterable[str]) -> Dict[str, Optional[str]]:

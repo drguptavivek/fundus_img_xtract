@@ -1,11 +1,55 @@
 services:
+  ocr-venv-builder:
+    build:
+      context: .
+      target: ocr-venv-builder
+    image: fundus-img-xtract:ocr-venv-builder
+    container_name: fundus-img-xtract-ocr-venv-builder
+    volumes:
+      - ocr_venv:/app/.venv
+    restart: "no"
+
+  web-venv-builder:
+    build:
+      context: .
+      target: web-venv-builder
+    image: fundus-img-xtract:web-venv-builder
+    container_name: fundus-img-xtract-web-venv-builder
+    volumes:
+      - web_venv:/app/.venv
+    restart: "no"
+
+  beat-venv-builder:
+    build:
+      context: .
+      target: beat-venv-builder
+    image: fundus-img-xtract:beat-venv-builder
+    container_name: fundus-img-xtract-beat-venv-builder
+    volumes:
+      - beat_venv:/app/.venv
+    restart: "no"
+
+  general-venv-builder:
+    build:
+      context: .
+      target: general-venv-builder
+    image: fundus-img-xtract:general-venv-builder
+    container_name: fundus-img-xtract-general-venv-builder
+    volumes:
+      - general_venv:/app/.venv
+    restart: "no"
+
   web:
-    build: .
+    build:
+      context: .
+      target: web-base
     image: fundus-img-xtract:web
     container_name: fundus-img-xtract-web
     mem_reservation: 1500m
     mem_limit: 3g
     depends_on:
+      web-venv-builder:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       cache:
@@ -20,11 +64,15 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       REDIS_DB: ${REDIS_DB}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SKIP_UV_SYNC: "true"
+      CELERY_TASKS_PROFILE: "client"
     ports:
       - "${FLASK_PORT}:${FLASK_PORT}"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
+      - ./en_US-lessac-medium.onnx:/app/en_US-lessac-medium.onnx:ro
+      - ./en_US-lessac-medium.onnx.json:/app/en_US-lessac-medium.onnx.json:ro
       - web_venv:/app/.venv
     restart: on-failure:5
     healthcheck:
@@ -93,12 +141,16 @@ services:
     restart: unless-stopped
 
   celery-ocr-worker:
-    build: .
+    build:
+      context: .
+      target: ocr-base
     image: fundus-img-xtract:celery-ocr
     container_name: fundus-img-xtract-celery-ocr
     mem_reservation: 1g
     mem_limit: 2g
     depends_on:
+      ocr-venv-builder:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       cache:
@@ -110,10 +162,12 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_APP_DB}
       RUN_MIGRATIONS: "false"
       PYTHONPATH: /app
+      CELERY_TASKS_PROFILE: "ocr"
+      SKIP_UV_SYNC: "true"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
-      - web_venv:/app/.venv
+      - ocr_venv:/app/.venv
     command: >
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
@@ -122,12 +176,16 @@ services:
     restart: on-failure:5
 
   celery-general-worker:
-    build: .
+    build:
+      context: .
+      target: general-base
     image: fundus-img-xtract:celery-general
     container_name: fundus-img-xtract-celery-general
     mem_reservation: 512m
     mem_limit: 1g
     depends_on:
+      general-venv-builder:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       cache:
@@ -138,11 +196,13 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_APP_DB}
       RUN_MIGRATIONS: "false"
+      SKIP_UV_SYNC: "true"
       PYTHONPATH: /app
+      CELERY_TASKS_PROFILE: "general"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
-      - web_venv:/app/.venv
+      - general_venv:/app/.venv
     command: >
       uv run celery -A celery_worker worker
       --loglevel=${CELERY_LOG_LEVEL:-info}
@@ -151,12 +211,16 @@ services:
     restart: on-failure:5
 
   celery-beat:
-    build: .
+    build:
+      context: .
+      target: beat-base
     image: fundus-img-xtract:celery-beat
     container_name: fundus-img-xtract-celery-beat
     mem_reservation: 128m
     mem_limit: 256m
     depends_on:
+      beat-venv-builder:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       cache:
@@ -167,13 +231,14 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_APP_USER}:${POSTGRES_APP_PASSWORD}@db:5432/${POSTGRES_APP_DB}
       RUN_MIGRATIONS: "false"
+      SKIP_UV_SYNC: "true"
       PYTHONPATH: /app
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs
-      - web_venv:/app/.venv
+      - beat_venv:/app/.venv
     command: >
-      uv run celery -A celery_worker beat
+      uv run celery -A celery_beat_app beat
       --loglevel=${CELERY_LOG_LEVEL:-info}
     restart: on-failure:5
 
@@ -216,3 +281,6 @@ volumes:
   postgres_data:
   redis_data:
   web_venv:
+  beat_venv:
+  general_venv:
+  ocr_venv:

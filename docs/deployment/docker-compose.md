@@ -3,6 +3,34 @@
 This stack runs the Fundus Image Manager, PostgreSQL, and Redis in containers. The application container listens on port 5001 and is intended to sit behind an existing reverse proxy that terminates TLS.
 For Docker-based development, `develop.config.env` can be used as an override and is loaded via `docker-compose.override.yml` when present.
 
+## Architecture Overview (Runtime + Venv Builders)
+
+The deployment is split into **runtime services** and **venv builder services** to keep images small and isolate heavy dependencies:
+
+### Runtime Services
+- **web**: Flask/Gunicorn app (no OCR libs; PII/OCR is queued to workers)
+- **celery-ocr-worker**: ZIP/PDF OCR + PII detection (Tesseract/OpenCV/PyMuPDF)
+- **celery-general-worker**: Thumbnails, metadata, exports, maintenance
+- **celery-beat**: Scheduled tasks only (minimal deps)
+- **db**: PostgreSQL 18
+- **cache**: Redis 7
+
+### Venv Builder Services (one-time population)
+These populate named volumes so runtime containers don’t build deps at startup:
+- **web-venv-builder** → `web_venv`
+- **ocr-venv-builder** → `ocr_venv`
+- **general-venv-builder** → `general_venv`
+- **beat-venv-builder** → `beat_venv`
+
+### Key Design Notes
+- **No runtime `uv sync`**: runtime services use `SKIP_UV_SYNC=true` and rely on prebuilt venv volumes.
+- **Task profiles**: `CELERY_TASKS_PROFILE` limits task imports per worker (general vs OCR).
+- **OCR in workers only**: API endpoints enqueue OCR/PII; they no longer run OCR inside the web container.
+- **Ordering**: ZIP pipeline runs thumbnails + PDF OCR first, then queues combined metadata/PII tasks.
+- **Dependency split**: `pyproject.toml` is the full dependency set for the repo, while
+  `requirements-*.txt` files define minimal per-service runtime deps (web/ocr/general/beat).
+  This keeps images small by avoiding OCR/ML libs in services that don’t need them.
+
 ## 1. Prepare environment variables
 
 1. Copy `deploy.config.env.example` to `deploy.config.env` (non-sensitive runtime config).

@@ -432,6 +432,10 @@
               <li><a class="dropdown-item" href="{{ url_for('admin.sensitive_operations_audit') }}">
                   <i class="fas fa-shield-alt"></i> Sensitive Ops Audit
                 </a></li>
+              <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.cve_security_report') }}">
+                  <i class="fas fa-shield-virus"></i> CVE Security
+                  <span id="cveCountBadge" class="badge bg-secondary ms-auto">-</span>
+                </a></li>
 
               <li>
                 <hr class="dropdown-divider">
@@ -687,7 +691,31 @@
 
   <!-- {# Page-specific scripts go here #} -->
   {% block page_scripts %}
+  {% if current_user.is_authenticated and (current_user.is_admin or current_user.is_local_admin) %}
+  <script nonce="{{ csp_script_nonce() }}">
+  {% else %}
+  <script>
+  {% endif %}
+    // Update CVE badge in admin menu
+    (function() {
+      const badge = document.getElementById('cveCountBadge');
+      if (!badge) return;
 
+      fetch('{{ url_for('admin.api_cve_summary') }}')
+        .then(r => r.json())
+        .then(data => {
+          badge.textContent = data.total;
+          badge.className = 'badge ms-auto ' + (data.has_critical_or_high ? 'bg-danger' : 'bg-warning');
+          if (data.total > 0) {
+            badge.setAttribute('title', data.total + ' vulnerabilities detected');
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load CVE count:', err);
+          badge.textContent = '?';
+        });
+    })();
+  </script>
   {% endblock %}
 
   <!-- Floating theme toggle (fixed on right edge) -->

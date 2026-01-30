@@ -25,7 +25,7 @@ from models import DR_PDF_DIR, ERROR_LOG, GLAUCOMA_PDF_DIR, PDF_DIR, SUCCESS_LOG
 
 # Import the OCR extraction function from your separate file
 # Make sure your OCR function is in 'ocr_extraction.py' in the same directory
-from ocr_extraction import find_report_pages_by_coords_with_grid
+# NOTE: Lazy import - imported inside functions to avoid loading OCR deps in web container
 
 
 def clean_ocr_text(text: str | None) -> str | None:
@@ -185,6 +185,8 @@ def process_all_pdfs_for_ocr(limit_filenames: set[str] | None = None):
 
 
             # Perform OCR extraction
+            # Lazy import to avoid loading OCR deps in web container
+            from ocr_extraction import find_report_pages_by_coords_with_grid
             ocr_result = find_report_pages_by_coords_with_grid(str(pdf_path)) # find_report_pages_by_coords_with_grid expects string path
             
             # Handle different return formats from OCR function

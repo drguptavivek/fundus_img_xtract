@@ -35,6 +35,7 @@ web = [
     "numpy==2.4.1",
     "pandas==3.0.0",
     "pillow==12.1.0",
+    "pymupdf==1.26.7",
     "pytest==9.0.2",
     "python-magic==0.4.27",
     "typing-extensions==4.15.0",
@@ -103,12 +104,17 @@ ocr = [
     "pytesseract==0.3.13",
     "pymupdf==1.26.7",
     "flask-caching>=2.3.1",
+    "matplotlib==3.10.8"
 ]
 
 # Celery Beat scheduler container (minimal dependencies)
+# Only loads maintenance_tasks via CELERY_TASKS_PROFILE=maintenance
 beat = [
     "pytz==2025.2",
     "pyyaml>=6.0.3",
+    "flask-login==0.6.3",
+    # pandas, openpyxl, pillow, numpy removed - only needed by export tasks (which beat doesn't import)
+    # pynacl and cryptography removed - lazy-imported in tasks
 ]
 
 # General Celery worker container (thumbnails, exports, S3 sync)
@@ -120,6 +126,7 @@ general = [
     "cryptography>=44.0.0",
     "pynacl==1.6.2",
     "flask-caching>=2.3.1",
+    "flask-login==0.6.3",
     "pytz==2025.2",
     "pyyaml>=6.0.3",
 ]

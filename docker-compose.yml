@@ -233,6 +233,7 @@ services:
       RUN_MIGRATIONS: "false"
       SKIP_UV_SYNC: "true"
       PYTHONPATH: /app
+      CELERY_TASKS_PROFILE: "maintenance"
     volumes:
       - ./files:/app/files
       - ./logs:/app/logs

@@ -24,6 +24,10 @@ click-repl==0.3.0
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
 flask==3.1.2
+    # via
+    #   flask-login
+    #   fundus-img-xtract
+flask-login==0.6.3
     # via fundus-img-xtract
 greenlet==3.3.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -76,4 +80,6 @@ vine==5.1.0
 wcwidth==0.5.2
     # via prompt-toolkit
 werkzeug==3.1.5
-    # via flask
+    # via
+    #   flask
+    #   flask-login

@@ -288,6 +288,8 @@ pygments==2.19.2
     #   rich
 pymemcache==4.0.0
     # via fundus-img-xtract
+pymupdf==1.26.7
+    # via fundus-img-xtract
 pynacl==1.6.2
     # via fundus-img-xtract
 pyparsing==3.3.2

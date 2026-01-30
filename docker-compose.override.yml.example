@@ -1,10 +1,29 @@
 services:
+  beat-venv-builder:
+    volumes:
+      - .:/app
+      - beat_venv:/app/.venv
+
+  ocr-venv-builder:
+    volumes:
+      - .:/app
+      - ocr_venv:/app/.venv
+
+  web-venv-builder:
+    volumes:
+      - .:/app
+      - web_venv:/app/.venv
+
+  general-venv-builder:
+    volumes:
+      - .:/app
+      - general_venv:/app/.venv
+
   web:
     env_file:
       - deploy.config.env
       - deploy.secrets.env
       - develop.config.env
-      - testing.secrets.env
     command:
       - sh
       - -c
@@ -12,7 +31,7 @@ services:
         uv run python -m watchfiles
         --filter utils.watchfiles_filter.py_html_filter
         --target-type command
-        "flask --app app.py run --host ${FLASK_HOST:-0.0.0.0} --port ${FLASK_PORT:-5001} --no-reload"
+        "flask --app app.py run --host 0.0.0.0 --port 5001 --no-reload"
         /app
     environment:
       FLASK_ENV: development
@@ -28,7 +47,7 @@ services:
       - .:/app
       - ./files:/app/files
       - ./logs:/app/logs
-      - web_venv:/app/.venv
+      - ocr_venv:/app/.venv
     command:
       - uv
       - run
@@ -41,13 +60,15 @@ services:
       - -Q
       - zip_ocr,pii_detection,pdf_processing
       - --pool=solo
+    environment:
+      CELERY_TASKS_PROFILE: "ocr"
 
   celery-general-worker:
     volumes:
       - .:/app
       - ./files:/app/files
       - ./logs:/app/logs
-      - web_venv:/app/.venv
+      - general_venv:/app/.venv
     command:
       - uv
       - run
@@ -60,6 +81,20 @@ services:
       - -Q
       - thumbnails,metadata,exports,maintenance,s3_sync,default
       - --pool=solo
+    environment:
+      CELERY_TASKS_PROFILE: "general"
+
+  celery-beat:
+    volumes:
+      - .:/app
+      - ./files:/app/files
+      - ./logs:/app/logs
+      - beat_venv:/app/.venv
+    environment:
+      CELERY_TASKS_PROFILE: "maintenance"
 
 volumes:
   web_venv:
+  beat_venv:
+  general_venv:
+  ocr_venv:

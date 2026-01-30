@@ -657,12 +657,14 @@ dependencies = [
 
 [package.optional-dependencies]
 beat = [
+    { name = "flask-login" },
     { name = "pytz" },
     { name = "pyyaml" },
 ]
 general = [
     { name = "cryptography" },
     { name = "flask-caching" },
+    { name = "flask-login" },
     { name = "numpy" },
     { name = "openpyxl" },
     { name = "pandas" },
@@ -673,6 +675,7 @@ general = [
 ]
 ocr = [
     { name = "flask-caching" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "pillow" },
@@ -733,6 +736,7 @@ web = [
     { name = "pycparser" },
     { name = "pygments" },
     { name = "pymemcache" },
+    { name = "pymupdf" },
     { name = "pynacl" },
     { name = "pyparsing" },
     { name = "pytest" },
@@ -784,6 +788,8 @@ requires-dist = [
     { name = "flask-caching", marker = "extra == 'web'", specifier = ">=2.3.1" },
     { name = "flask-cors", marker = "extra == 'web'", specifier = "==6.0.2" },
     { name = "flask-limiter", marker = "extra == 'web'", specifier = "==4.1.1" },
+    { name = "flask-login", marker = "extra == 'beat'", specifier = "==0.6.3" },
+    { name = "flask-login", marker = "extra == 'general'", specifier = "==0.6.3" },
     { name = "flask-login", marker = "extra == 'web'", specifier = "==0.6.3" },
     { name = "flask-wtf", marker = "extra == 'web'", specifier = "==1.2.2" },
     { name = "fonttools", marker = "extra == 'web'", specifier = "==4.61.1" },
@@ -799,6 +805,7 @@ requires-dist = [
     { name = "markdown-it-py", marker = "extra == 'web'", specifier = "==4.0.0" },
     { name = "markdown-mermaid", marker = "extra == 'web'", specifier = "==0.2" },
     { name = "markupsafe", marker = "extra == 'web'", specifier = "==3.0.3" },
+    { name = "matplotlib", marker = "extra == 'ocr'", specifier = "==3.10.8" },
     { name = "matplotlib", marker = "extra == 'web'", specifier = "==3.10.8" },
     { name = "mdurl", marker = "extra == 'web'", specifier = "==0.1.2" },
     { name = "numpy", marker = "extra == 'general'", specifier = "==2.4.1" },
@@ -824,6 +831,7 @@ requires-dist = [
     { name = "pygments", marker = "extra == 'web'", specifier = "==2.19.2" },
     { name = "pymemcache", marker = "extra == 'web'", specifier = "==4.0.0" },
     { name = "pymupdf", marker = "extra == 'ocr'", specifier = "==1.26.7" },
+    { name = "pymupdf", marker = "extra == 'web'", specifier = "==1.26.7" },
     { name = "pynacl", marker = "extra == 'general'", specifier = "==1.6.2" },
     { name = "pynacl", marker = "extra == 'web'", specifier = "==1.6.2" },
     { name = "pyparsing", marker = "extra == 'web'", specifier = "==3.3.2" },

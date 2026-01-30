@@ -25,18 +25,26 @@ click-repl==0.3.0
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via click
+contourpy==1.3.3
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
 flask==3.1.2
     # via
     #   flask-caching
     #   fundus-img-xtract
 flask-caching==2.3.1
     # via fundus-img-xtract
+fonttools==4.61.1
+    # via matplotlib
 greenlet==3.3.1 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
 itsdangerous==2.2.0
     # via flask
 jinja2==3.1.6
     # via flask
+kiwisolver==1.4.9
+    # via matplotlib
 kombu==5.6.2
     # via celery
 markupsafe==3.0.3
@@ -44,19 +52,25 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
+matplotlib==3.10.8
+    # via fundus-img-xtract
 numpy==2.4.1
     # via
+    #   contourpy
     #   fundus-img-xtract
+    #   matplotlib
     #   opencv-python-headless
 opencv-python-headless==4.13.0.90
     # via fundus-img-xtract
 packaging==26.0
     # via
     #   kombu
+    #   matplotlib
     #   pytesseract
 pillow==12.1.0
     # via
     #   fundus-img-xtract
+    #   matplotlib
     #   pytesseract
 prompt-toolkit==3.0.52
     # via click-repl
@@ -64,10 +78,14 @@ psycopg2-binary==2.9.11
     # via fundus-img-xtract
 pymupdf==1.26.7
     # via fundus-img-xtract
+pyparsing==3.3.2
+    # via matplotlib
 pytesseract==0.3.13
     # via fundus-img-xtract
 python-dateutil==2.9.0.post0
-    # via celery
+    # via
+    #   celery
+    #   matplotlib
 python-dotenv==1.2.1
     # via fundus-img-xtract
 redis==6.4.0

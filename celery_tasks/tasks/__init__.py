@@ -28,6 +28,12 @@ def _import_general():
     from . import cve_tasks  # noqa: F401
     from . import package_update_tasks  # noqa: F401
 
+def _import_maintenance():
+    # Minimal imports for beat scheduler - only maintenance tasks
+    from . import maintenance_tasks  # noqa: F401
+    from . import cve_tasks  # noqa: F401
+    from . import package_update_tasks  # noqa: F401
+
 def _import_ocr():
     from . import pii_tasks  # noqa: F401
     from . import zip_tasks  # noqa: F401
@@ -36,7 +42,9 @@ def _import_ocr():
 
 if _PROFILE in ("client", "none", "minimal"):
     pass
-elif _PROFILE in ("general", "maintenance"):
+elif _PROFILE == "maintenance":
+    _import_maintenance()
+elif _PROFILE == "general":
     _import_general()
 elif _PROFILE in ("ocr", "pii", "zip"):
     _import_ocr()

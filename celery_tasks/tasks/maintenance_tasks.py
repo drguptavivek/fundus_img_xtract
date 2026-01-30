@@ -9,7 +9,8 @@ from utils.thumbnail_maintenance_scheduler import (
     validate_thumbnail_integrity,
     run_maintenance_tasks,
 )
-from utils.s3_url_signing import auto_rotate_peppers
+# Lazy import to avoid loading S3/nacl in beat container
+# from utils.s3_url_signing import auto_rotate_peppers
 
 
 @celery_app.task(name="celery_tasks.tasks.maintenance_tasks.refresh_materialized_views_task", bind=True, acks_late=True)
@@ -54,4 +55,6 @@ def validate_thumbnail_integrity_task(
 
 @celery_app.task(name="celery_tasks.tasks.maintenance_tasks.auto_rotate_peppers_task", bind=True, acks_late=True)
 def auto_rotate_peppers_task(self, user_id: int | None = None, hospital_id: int | None = None) -> dict:
+    # Lazy import to avoid loading S3/nacl in beat container
+    from utils.s3_url_signing import auto_rotate_peppers
     return auto_rotate_peppers()

@@ -7,6 +7,7 @@ from utils.dualGradingGetNextTasks import (
     get_next_eligible_resident2_task_atomic,
     get_next_eligible_arbitrator_task_atomic,
 )
+from utils.linkedGradingUtils import get_primary_disease_id
 from db_transaction_manager import transaction_scope
   
 
@@ -52,6 +53,12 @@ def start_grading(disease_id: int, role_slot: str):
     # Get the next eligible task based on role slot using a single transaction scope
     # This prevents DetachedInstanceError by keeping the session open until we access UUID
     with transaction_scope() as db:
+        if role_slot in ("resident", "resident2"):
+            primary_disease_id = get_primary_disease_id(db, disease_id)
+            if primary_disease_id != disease_id:
+                flash("Linked disease grading must be completed via the primary disease queue.", "info")
+                return redirect(url_for("grading.start_grading", disease_id=primary_disease_id, role_slot=role_slot))
+
         task = None
         effective_slot = role_slot
         can_grade_resident2 = current_user.has_role('ophthalmologist')

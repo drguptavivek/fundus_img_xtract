@@ -340,6 +340,28 @@ class DiseaseGrading(Base):
     )
 
 
+class LinkedDiseaseGrading(Base):
+    __tablename__ = "linked_disease_gradings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    primary_disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    linked_disease_id: Mapped[int] = mapped_column(ForeignKey("diseases.id"), nullable=False, index=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    primary_disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[primary_disease_id])
+    linked_disease: Mapped["Disease"] = relationship("Disease", foreign_keys=[linked_disease_id])
+
+    __table_args__ = (
+        UniqueConstraint("primary_disease_id", "linked_disease_id", name="uq_linked_disease_pair"),
+        UniqueConstraint("linked_disease_id", name="uq_linked_disease_unique"),
+        CheckConstraint("primary_disease_id <> linked_disease_id", name="ck_linked_disease_not_self"),
+        Index("ix_linked_disease_primary_active", "primary_disease_id", "is_active"),
+    )
+
+
 class GradingsFeatures(Base):
     __tablename__ = 'gradings_features'
     id: Mapped[int] = mapped_column(primary_key=True)

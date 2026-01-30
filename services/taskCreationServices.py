@@ -8,6 +8,7 @@ from models import (
     GradingTask, Grade, Consensus, DirectImageUpload, DirectImageVerify,
     EncounterFile, PatientEncounters, Disease, DiseaseGrading, LabUnit
 )
+from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 
 
 def _resolve_image_by_uuid(db, image_uuid: str) -> Tuple[str, int, int]:
@@ -32,7 +33,8 @@ def _is_verified_for_disease(db, kind: str, image_id: int, disease_id: int) -> b
     - encounter (Glaucoma): PatientEncounters.glaucoma_verified_status == 'verified'
     Other diseases: return False until policy exists (extend as needed).
     """
-    disease = db.get(Disease, disease_id)
+    primary_disease_id = get_primary_disease_id(db, disease_id)
+    disease = db.get(Disease, primary_disease_id)
     if not disease:
         return False
     name = (disease.name or '').strip().lower()
@@ -83,7 +85,15 @@ def can_unverify_image(db, *, kind: str, image_id: int) -> bool:
     return all(task.state == 'pending' for task in tasks)
 
 
-def create_or_get_task(db, *, kind: str, image_id: int, disease_id: int, lab_unit_id: int) -> GradingTask:
+def create_or_get_task(
+    db,
+    *,
+    kind: str,
+    image_id: int,
+    disease_id: int,
+    lab_unit_id: int,
+    create_linked: bool = True,
+) -> GradingTask:
     """
     Idempotently create a grading task for (image_ref, disease_id, lab_unit_id).
     Guardrails:
@@ -114,26 +124,38 @@ def create_or_get_task(db, *, kind: str, image_id: int, disease_id: int, lab_uni
 
     if existing is not None:
         # Do not mutate lab_unit_id or reassign across labs
-        return existing
-
-    # Create new task scoped to the provided lab unit
-    if kind == 'direct':
-        task = GradingTask(
-            direct_image_upload_id=image_id,
-            disease_id=disease_id,
-            lab_unit_id=lab_unit_id,
-            state='pending',
-        )
+        task = existing
     else:
-        task = GradingTask(
-            encounter_file_id=image_id,
-            disease_id=disease_id,
-            lab_unit_id=lab_unit_id,
-            state='pending',
-        )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
+        # Create new task scoped to the provided lab unit
+        if kind == 'direct':
+            task = GradingTask(
+                direct_image_upload_id=image_id,
+                disease_id=disease_id,
+                lab_unit_id=lab_unit_id,
+                state='pending',
+            )
+        else:
+            task = GradingTask(
+                encounter_file_id=image_id,
+                disease_id=disease_id,
+                lab_unit_id=lab_unit_id,
+                state='pending',
+            )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+    if create_linked:
+        linked_disease_ids = get_linked_disease_ids(db, disease_id)
+        for linked_disease_id in linked_disease_ids:
+            create_or_get_task(
+                db,
+                kind=kind,
+                image_id=image_id,
+                disease_id=linked_disease_id,
+                lab_unit_id=lab_unit_id,
+                create_linked=False,
+            )
     return task
 
 

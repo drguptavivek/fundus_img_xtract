@@ -56,7 +56,8 @@ CORE_AREAS = [
 CORE_DISEASES = {
     1: "Glaucoma",
     2: "DR",  # Diabetic Retinopathy
-    3: "AMD"  # Age-related Macular Degeneration
+    3: "AMD",  # Age-related Macular Degeneration
+    4: "DME"  # Diabetic Macular Edema
 }
 
 # Standard gradings for each core disease
@@ -89,6 +90,22 @@ STANDARD_GRADINGS = {
         {"impression": "Late AMD", "display_order": 4, "is_active": True, "guidelines": "Geographic atrophy (dry) or neovascular AMD (wet)."},
         {"impression": "Other Retinal", "display_order": 5, "is_active": True, "guidelines": "<p>If No AMD , <strong>BUT Any other retinal or disc pathology.</strong> Note disease in remarks.</p>"},
         {"impression": "Not Gradable", "display_order": 6, "is_active": True, "guidelines": "<p>If cannot grade, mark as not gradable. Note reasons in remarks.</p>"}
+    ],
+    # Diabetic Macular Edema (DME) gradings
+    "DME": [
+        {"impression": "M0 No DME", "display_order": 1, "is_active": True, "guidelines": "No diabetic macular edema."},
+        {
+            "impression": "M1 Referable Diabetic Maculopathy",
+            "display_order": 2,
+            "is_active": True,
+            "guidelines": (
+                "<ul>"
+                "<li>Exudate within 1 disc diameter (DD) of the centre of the fovea, OR</li>"
+                "<li>A group of exudates within the macula (area ≥ half the disc area) and this area is all within the macular area.</li>"
+                "</ul>"
+            ),
+        },
+        {"impression": "Not Gradable", "display_order": 3, "is_active": True, "guidelines": "If cannot grade, mark as not gradable. Note reasons in remarks."},
     ]
 }
 
@@ -165,6 +182,23 @@ SAMPLE_FEATURES = {
         "Other Retinal": {
             "features": [],
             "remarks": "No DR/DME BUT Any other retinal or disc pathology. Note disease in remarks"
+        },
+        "Not Gradable": {
+            "features": [],
+            "remarks": "Cannot grade due to poor image quality or other factors"
+        }
+    },
+    "DME": {
+        "M0 No DME": {
+            "features": [],
+            "remarks": "No diabetic macular edema"
+        },
+        "M1 Referable Diabetic Maculopathy": {
+            "features": [
+                {"sr_no": 1, "label": "Exudate within 1 disc diameter of the centre of the fovea"},
+                {"sr_no": 2, "label": "Group of exudates within macula (area ≥ half disc area) within macular area"}
+            ],
+            "remarks": "Referable diabetic maculopathy"
         },
         "Not Gradable": {
             "features": [],

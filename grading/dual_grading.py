@@ -53,6 +53,7 @@ from utils.dualGradingConsensusUtils import create_or_update_consensus, update_t
 from utils.dualGradingRevisionUtils import is_user_eligible_for_revision, is_arbitrator_eligible_for_revision, check_revision_eligibility_by_task_state, is_arbitrator_revision_allowed
 from utils.dualGradingStuckTaskCleanup import mark_task_started, cleanup_task_tracker
 from utils.notifications import send_notification_to_admins
+from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from db_transaction_manager import transaction_scope
 from utils.getNextIntraRaterTask import get_next_intra_rater_task
 
@@ -334,45 +335,60 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 flash(message, "danger")
                 return redirect(url_for("grading.index"))
             
-            # Fetch disease gradings for this disease using utility function
-            disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
-            
-            # Check if disease_gradings are missing or invalid
-            if not disease_gradings:
-                flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
-                # Send notification to admin about the missing disease gradings
-                send_notification_to_admins(
-                    title="Missing Disease Gradings in Task",
-                    message=f"Task ID {task_id} does not have associated disease gradings. Please investigate and resolve this issue.",
-                    notification_type="error"
-                )
-                return redirect(url_for("grading.index"))
-            
-            # Create a dictionary mapping grading IDs to their guidelines
-            grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+            def _build_grading_data(task_obj: GradingTask):
+                disease_gradings = fetch_active_disease_gradings(db, task_obj.disease_id)
+                if not disease_gradings:
+                    flash(
+                        "Error: No disease gradings available for this task. Please contact the system administrator.",
+                        "danger",
+                    )
+                    send_notification_to_admins(
+                        title="Missing Disease Gradings in Task",
+                        message=(
+                            f"Task ID {task_obj.id} does not have associated disease gradings."
+                            " Please investigate and resolve this issue."
+                        ),
+                        notification_type="error",
+                    )
+                    return None
 
-            grading_features = []
-            for grading in disease_gradings:
-                sorted_features = sorted(
-                    grading.features or [],
-                    key=lambda feature: ((feature.sr_no or 0), feature.id),
-                )
-                grading_features.append(
-                    {
-                        "id": grading.id,
-                        "impression": grading.impression,
-                        "display_order": grading.display_order,
-                        "guidelines": grading.guidelines,
-                        "features": [
-                            {
-                                "id": feature.id,
-                                "sr_no": feature.sr_no,
-                                "label": feature.label,
-                            }
-                            for feature in sorted_features
-                        ],
-                    }
-                )
+                grading_guidelines = {grading.id: grading.guidelines for grading in disease_gradings}
+                grading_features = []
+                for grading in disease_gradings:
+                    sorted_features = sorted(
+                        grading.features or [],
+                        key=lambda feature: ((feature.sr_no or 0), feature.id),
+                    )
+                    grading_features.append(
+                        {
+                            "id": grading.id,
+                            "impression": grading.impression,
+                            "display_order": grading.display_order,
+                            "guidelines": grading.guidelines,
+                            "features": [
+                                {
+                                    "id": feature.id,
+                                    "sr_no": feature.sr_no,
+                                    "label": feature.label,
+                                }
+                                for feature in sorted_features
+                            ],
+                        }
+                    )
+
+                return {
+                    "disease_gradings": disease_gradings,
+                    "grading_guidelines": grading_guidelines,
+                    "grading_features": grading_features,
+                }
+
+            grading_data = _build_grading_data(task)
+            if grading_data is None:
+                return redirect(url_for("grading.index"))
+
+            disease_gradings = grading_data["disease_gradings"]
+            grading_guidelines = grading_data["grading_guidelines"]
+            grading_features = grading_data["grading_features"]
             
             # Determine image URL
             image_uuid = None
@@ -413,6 +429,149 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             existing_selected_features = _parse_selected_features(
                 existing_grade.selected_features_json if existing_grade else None
             )
+
+            linked_mode = False
+            linked_panels = []
+            linked_grading_data = {}
+            show_save_next = existing_grade is None
+            primary_task_uuid = task.uuid
+
+            if slot_type in ("resident", "resident2"):
+                primary_disease_id = get_primary_disease_id(db, task.disease_id)
+                if primary_disease_id != task.disease_id:
+                    # Redirect linked disease grading to the primary task for this image
+                    primary_task = None
+                    if task.encounter_file_id:
+                        primary_task = db.query(GradingTask).filter(
+                            GradingTask.encounter_file_id == task.encounter_file_id,
+                            GradingTask.disease_id == primary_disease_id,
+                        ).first()
+                    elif task.direct_image_upload_id:
+                        primary_task = db.query(GradingTask).filter(
+                            GradingTask.direct_image_upload_id == task.direct_image_upload_id,
+                            GradingTask.disease_id == primary_disease_id,
+                        ).first()
+                    if primary_task:
+                        return redirect(
+                            url_for(
+                                "grading.dual_grading_task",
+                                task_uuid=primary_task.uuid,
+                                slot_type=slot_type,
+                            )
+                        )
+
+                linked_disease_ids = get_linked_disease_ids(db, task.disease_id)
+                if linked_disease_ids:
+                    linked_task_list = [task]
+                    for linked_disease_id in linked_disease_ids:
+                        linked_task = None
+                        if task.encounter_file_id:
+                            linked_task = db.query(GradingTask).filter(
+                                GradingTask.encounter_file_id == task.encounter_file_id,
+                                GradingTask.disease_id == linked_disease_id,
+                            ).first()
+                        elif task.direct_image_upload_id:
+                            linked_task = db.query(GradingTask).filter(
+                                GradingTask.direct_image_upload_id == task.direct_image_upload_id,
+                                GradingTask.disease_id == linked_disease_id,
+                            ).first()
+
+                        if linked_task is None and image_uuid:
+                            try:
+                                linked_task = svc_ensure_task(image_uuid, linked_disease_id, db)
+                            except Exception as ensure_error:
+                                grades_logger.exception(
+                                    "Failed to ensure linked task for disease %s: %s",
+                                    linked_disease_id,
+                                    ensure_error,
+                                )
+
+                        if linked_task is not None and linked_task.state == "final":
+                            continue
+
+                        if linked_task is not None:
+                            linked_task_list.append(linked_task)
+
+                    for panel_task in linked_task_list:
+                        panel_task_id = panel_task.id
+                        panel_conflicting_slots = []
+                        panel_conflict_message = None
+                        if slot_type == 'resident':
+                            panel_conflicting_slots = ['resident2']
+                            panel_conflict_message = "You already graded this task in the resident2 slot."
+                        elif slot_type == 'resident2':
+                            panel_conflicting_slots = ['resident']
+                            panel_conflict_message = "You already graded this task in the resident slot."
+
+                        if panel_conflicting_slots and has_user_graded_task(
+                            db, current_user.id, panel_task_id, panel_conflicting_slots
+                        ):
+                            flash(panel_conflict_message or "You already graded this task in the paired slot.", "warning")
+                            return redirect(url_for("grading.index"))
+
+                        if not get_user_eligibility_for_task(db, current_user.id, panel_task_id, slot_type):
+                            flash("You are not eligible to grade this task as the selected role.", "danger")
+                            return redirect(url_for("grading.index"))
+
+                        if slot_type == 'resident':
+                            allowed_states = ['pending']
+                            panel_has_resident_grade = any(
+                                grade.role_slot == "resident" for grade in panel_task.grades
+                            )
+                            panel_has_resident2_grade = any(
+                                grade.role_slot == "resident2" for grade in panel_task.grades
+                            )
+                            if panel_task.state == 'resident2_done' and panel_has_resident2_grade and not panel_has_resident_grade:
+                                allowed_states.append('resident2_done')
+                            if panel_task.state not in allowed_states:
+                                flash(
+                                    f"Task {panel_task.id} is no longer available for resident grading (state: {panel_task.state}).",
+                                    "danger",
+                                )
+                                return redirect(url_for("grading.index"))
+                        elif slot_type == 'resident2':
+                            if panel_task.state not in ['resident_done']:
+                                flash(
+                                    f"Task {panel_task.id} is no longer available for resident2 grading (state: {panel_task.state}).",
+                                    "danger",
+                                )
+                                return redirect(url_for("grading.index"))
+
+                        panel_grading_data = _build_grading_data(panel_task)
+                        if panel_grading_data is None:
+                            return redirect(url_for("grading.index"))
+
+                        panel_existing_grade = fetch_existing_grade_for_user(
+                            db, panel_task_id, current_user.id, slot_type, user=current_user
+                        )
+                        panel_existing_features = _parse_selected_features(
+                            panel_existing_grade.selected_features_json if panel_existing_grade else None
+                        )
+
+                        if panel_existing_grade is not None:
+                            show_save_next = False
+
+                        linked_panels.append(
+                            {
+                                "task": panel_task,
+                                "disease_gradings": panel_grading_data["disease_gradings"],
+                                "grading_guidelines": panel_grading_data["grading_guidelines"],
+                                "grading_features": panel_grading_data["grading_features"],
+                                "existing_grade": panel_existing_grade,
+                                "existing_selected_features": panel_existing_features,
+                                "read_only": panel_task.state == "final",
+                            }
+                        )
+
+                        linked_grading_data[panel_task.uuid] = {
+                            "guidelines": panel_grading_data["grading_guidelines"],
+                            "features": panel_grading_data["grading_features"],
+                            "existingSelectedFeatures": panel_existing_features,
+                            "readOnly": panel_task.state == "final",
+                            "taskUuid": panel_task.uuid,
+                        }
+
+                    linked_mode = len(linked_panels) > 1
             
             # If this is an arbitration task, fetch resident and resident2 grades to show to the arbitrator
             resident_grade = None
@@ -441,7 +600,11 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             
             # Mark that the user has started working on this task for stuck task tracking
             # but only if this is not a revision (i.e., user doesn't already have a grade for this slot)
-            if not is_revision:
+            if linked_mode and slot_type in ("resident", "resident2"):
+                for panel in linked_panels:
+                    if not panel.get("existing_grade"):
+                        mark_task_started(panel["task"].id, current_user.id, slot_type)
+            elif not is_revision:
                 mark_task_started(task_id, current_user.id, slot_type)
             
             # Pass grades for display in the template
@@ -456,7 +619,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 existing_grade=existing_grade,
                 image_uuid=image_uuid,
                 grades=grades,
-                existing_grade_in_header=True,
+                existing_grade_in_header=not linked_mode,
                 resident_grade=resident_grade,
                 resident2_grade=resident2_grade,
                 is_arbitrator_revising_recent=is_arbitrator_revising_recent,
@@ -464,6 +627,11 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                 current_user_id=getattr(current_user, "id", None),
                 grading_features=grading_features,
                 existing_selected_features=existing_selected_features,
+                linked_mode=linked_mode,
+                linked_panels=linked_panels,
+                linked_grading_data=linked_grading_data,
+                show_save_next=show_save_next,
+                primary_task_uuid=primary_task_uuid,
             )
         except Exception as e:
             grades_logger.exception("Failed to load grading task: %s", e)
@@ -477,9 +645,12 @@ def dual_grading_submit():
     from flask import session as flask_session
     
     task_uuid = (request.form.get("task_uuid") or "").strip()
+    linked_task_uuids_raw = (request.form.get("linked_task_uuids") or "").strip()
+    primary_task_uuid = (request.form.get("primary_task_uuid") or "").strip()
     slot = (request.form.get("slot") or "").strip().lower()
     label_id = request.form.get("label_id", type=int)
     comment = (request.form.get("comment") or "").strip() or None
+    is_linked_submission = bool(linked_task_uuids_raw)
     
     # Get selected features from form
     raw_selected_features = request.form.getlist("selected_features")
@@ -506,11 +677,11 @@ def dual_grading_submit():
     selected_features_json: str | None = None
     
     # Validate inputs
-    if not task_uuid:
+    if not task_uuid and not linked_task_uuids_raw:
         flash("Invalid task reference.", "danger")
         return redirect(url_for("grading.index"))
         
-    if not label_id or not isinstance(label_id, int) or label_id <= 0:
+    if not is_linked_submission and (not label_id or not isinstance(label_id, int) or label_id <= 0):
         flash("Invalid label ID.", "danger")
         return redirect(url_for("grading.index"))
     
@@ -521,270 +692,278 @@ def dual_grading_submit():
     from db_transaction_manager import transaction_scope
     with transaction_scope() as db:
         try:
-            # Use utility function to fetch the task with related data
-            task = fetch_task_with_related_data_by_uuid(db, task_uuid, user=current_user)
-            if not task:
-                flash("Error: Task not found. Please contact the system administrator.", "danger")
-                # Send notification to admin about the missing task
-                send_notification_to_admins(
-                    title="Missing Task Access Attempt",
-                    message=f"User {current_user.id} attempted to access non-existent task UUID {task_uuid}. Please investigate and resolve this issue.",
-                    notification_type="error"
-                )
-                return redirect(url_for("grading.index"))
-            
-            task_id = task.id
-            has_resident_grade = any(grade.role_slot == "resident" for grade in task.grades)
-            has_resident2_grade = any(grade.role_slot == "resident2" for grade in task.grades)
-            
-            # Check if this is an arbitrator's revision within 6 hours to allow modifying finalized tasks
-            arbitrator_revision_allowed = False
-            if slot == "arbitrator":
-                # Use utility function to check if arbitrator revision is allowed
-                from utils.dualGradingRevisionUtils import is_arbitrator_revision_allowed
-                revision_check = is_arbitrator_revision_allowed(db, current_user.id, task_id, slot)
-                arbitrator_revision_allowed = revision_check["allowed"]
-            
-            if task.state == "final" and not arbitrator_revision_allowed:
-                flash("This task is already finalized.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
-            
-            # Check task state validity at submission time to prevent race conditions 
-            # by revalidating the state that was expected when the task was assigned
-            state_validity = True
-            if slot == 'resident':
-                # Resident should only be grading 'pending' or 'resident_done' tasks (for revisions)
-                # Allow resident2_done when it was an inconsistency (Resident2 graded first)
-                resident_allowed_states = ['pending', 'resident_done']
-                if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
-                    resident_allowed_states.append('resident2_done')
+            task_uuids = []
+            if is_linked_submission:
+                task_uuids = [u.strip() for u in linked_task_uuids_raw.split(",") if u.strip()]
+            elif task_uuid:
+                task_uuids = [task_uuid]
 
-                if task.state not in resident_allowed_states:
-                    flash(f"Task state has changed and is no longer available for resident grading (current state: {task.state}).", "danger")
-                    state_validity = False
-            elif slot == 'resident2':
-                # Resident2 should only be grading 'resident_done', 'resident2_done', or 'arbitration' tasks (for revisions)
-                if task.state not in ['resident_done', 'resident2_done', 'arbitration']:
-                    flash(f"Task state has changed and is no longer available for resident2 grading (current state: {task.state}).", "danger")
-                    state_validity = False
-            elif slot == 'arbitrator':
-                # Arbitrator should only be grading 'arbitration' or 'final' tasks (for eligible revisions)
-                if task.state not in ['arbitration', 'final']:
-                    flash(f"Task state has changed and is no longer available for arbitration (current state: {task.state}).", "danger")
-                    state_validity = False
-                    
-            if not state_validity:
+            if not task_uuids:
+                flash("Invalid task reference.", "danger")
                 return redirect(url_for("grading.index"))
-            
-            # Eligibility check
-            if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):
-                flash("You are not eligible to grade this task for the selected role.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
-            
-            # Additional role validation for arbitrator
-            if slot == "arbitrator":
-                # Check if user has the required role for arbitration
-                if not current_user.has_role('ophthalmologist'):
-                    flash("You don't have permission to grade as arbitrator.", "danger")
+
+            redirect_task_uuid = primary_task_uuid or task_uuid or task_uuids[0]
+            primary_task = None
+
+            for current_task_uuid in task_uuids:
+                label_key = f"label_id_{current_task_uuid}" if is_linked_submission else "label_id"
+                comment_key = f"comment_{current_task_uuid}" if is_linked_submission else "comment"
+                features_key = f"selected_features_{current_task_uuid}" if is_linked_submission else "selected_features"
+                start_time_key_form = f"start_time_iso_{current_task_uuid}" if is_linked_submission else "start_time_iso"
+
+                current_label_id = request.form.get(label_key, type=int)
+                current_comment = (request.form.get(comment_key) or "").strip() or None
+
+                if not current_label_id or not isinstance(current_label_id, int) or current_label_id <= 0:
+                    flash("Invalid label ID.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                raw_selected_features = request.form.getlist(features_key)
+                selected_feature_ids = []
+                for raw_feature in raw_selected_features:
+                    if raw_feature is None or raw_feature == "":
+                        continue
+                    try:
+                        selected_feature_ids.append(int(raw_feature))
+                    except (TypeError, ValueError):
+                        flash("Invalid feature selection submitted.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                unique_feature_ids = []
+                seen_feature_ids = set()
+                for feature_id in selected_feature_ids:
+                    if feature_id not in seen_feature_ids:
+                        unique_feature_ids.append(feature_id)
+                        seen_feature_ids.add(feature_id)
+
+                selected_features_json = None
+
+                task = fetch_task_with_related_data_by_uuid(db, current_task_uuid, user=current_user)
+                if not task:
+                    flash("Error: Task not found. Please contact the system administrator.", "danger")
+                    send_notification_to_admins(
+                        title="Missing Task Access Attempt",
+                        message=(
+                            f"User {current_user.id} attempted to access non-existent task UUID"
+                            f" {current_task_uuid}. Please investigate and resolve this issue."
+                        ),
+                        notification_type="error",
+                    )
                     return redirect(url_for("grading.index"))
-                
-                # Check arbitration eligibility using utility function
-                eligibility = check_arbitration_eligibility(db, current_user.id, task.disease_id, task.lab_unit_id)
-                
-                if not eligibility:
-                    flash("You are not eligible to arbitrate for this task.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
-            
-            # Arbitrator exclusion: cannot be prior resident/resident2 grader within 2 weeks
-            # However, if this is a revision of an existing arbitrator grade by the same user, skip this check
-            if slot == "arbitrator":
-                # Check if this is a revision of an existing arbitrator grade by the same user
+
+                if primary_task is None:
+                    primary_task = task
+
+                task_id = task.id
+                has_resident_grade = any(grade.role_slot == "resident" for grade in task.grades)
+                has_resident2_grade = any(grade.role_slot == "resident2" for grade in task.grades)
+
+                arbitrator_revision_allowed = False
+                if slot == "arbitrator":
+                    from utils.dualGradingRevisionUtils import is_arbitrator_revision_allowed
+                    revision_check = is_arbitrator_revision_allowed(db, current_user.id, task_id, slot)
+                    arbitrator_revision_allowed = revision_check["allowed"]
+
+                if task.state == "final" and not arbitrator_revision_allowed:
+                    flash("This task is already finalized.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                state_validity = True
+                if slot == 'resident':
+                    resident_allowed_states = ['pending', 'resident_done']
+                    if task.state == 'resident2_done' and has_resident2_grade and not has_resident_grade:
+                        resident_allowed_states.append('resident2_done')
+                    if task.state not in resident_allowed_states:
+                        flash(
+                            f"Task state has changed and is no longer available for resident grading (current state: {task.state}).",
+                            "danger",
+                        )
+                        state_validity = False
+                elif slot == 'resident2':
+                    if task.state not in ['resident_done', 'resident2_done', 'arbitration']:
+                        flash(
+                            f"Task state has changed and is no longer available for resident2 grading (current state: {task.state}).",
+                            "danger",
+                        )
+                        state_validity = False
+                elif slot == 'arbitrator':
+                    if task.state not in ['arbitration', 'final']:
+                        flash(
+                            f"Task state has changed and is no longer available for arbitration (current state: {task.state}).",
+                            "danger",
+                        )
+                        state_validity = False
+
+                if not state_validity:
+                    return redirect(url_for("grading.index"))
+
+                if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):
+                    flash("You are not eligible to grade this task for the selected role.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                if slot == "arbitrator":
+                    if not current_user.has_role('ophthalmologist'):
+                        flash("You don't have permission to grade as arbitrator.", "danger")
+                        return redirect(url_for("grading.index"))
+
+                    eligibility = check_arbitration_eligibility(db, current_user.id, task.disease_id, task.lab_unit_id)
+                    if not eligibility:
+                        flash("You are not eligible to arbitrate for this task.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                if slot == "arbitrator":
+                    existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
+                    is_arbitrator_revision = (
+                        existing_grade and
+                        existing_grade.role_slot == "arbitrator" and
+                        existing_grade.grader_user_id == current_user.id
+                    )
+
+                    if not is_arbitrator_revision and _has_user_graded_task_2weeks(db, current_user.id, task_id):
+                        flash(
+                            "You cannot arbitrate a task you've graded as resident or resident2 within the last 2 weeks.",
+                            "danger",
+                        )
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
+                if not disease_gradings:
+                    flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
+                    return redirect(url_for("grading.index"))
+
+                label = next((dg for dg in disease_gradings if dg.id == current_label_id), None)
+                if not label:
+                    flash("Invalid label.", "danger")
+                    return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                if unique_feature_ids:
+                    available_features = (
+                        db.query(GradingsFeatures)
+                        .filter(GradingsFeatures.disease_grading_id == current_label_id)
+                        .all()
+                    )
+                    features_by_id = {feature.id: feature for feature in available_features}
+                    invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
+                    if invalid_features:
+                        flash("One or more selected features are not valid for the chosen grade.", "danger")
+                        return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
+
+                    selected_feature_entities = sorted(
+                        (features_by_id[fid] for fid in unique_feature_ids),
+                        key=lambda feature: ((feature.sr_no or 0), feature.id),
+                    )
+
+                    selected_features_json = json.dumps(
+                        [
+                            {
+                                "id": feature.id,
+                                "label": feature.label,
+                                "sr_no": feature.sr_no,
+                            }
+                            for feature in selected_feature_entities
+                        ]
+                    )
+
+                conflicting_slots = []
+                conflict_message = None
+                if slot == "resident":
+                    conflicting_slots = ["resident2"]
+                    conflict_message = "You already graded this task in the resident2 slot."
+                elif slot == "resident2":
+                    conflicting_slots = ["resident"]
+                    conflict_message = "You already graded this task in the resident slot."
+
+                if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
+                    flash(conflict_message or "You already graded this task in the paired slot.", "warning")
+                    return redirect(url_for("grading.index"))
+
                 existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
-                is_arbitrator_revision = (
-                    existing_grade and 
-                    existing_grade.role_slot == "arbitrator" and 
-                    existing_grade.grader_user_id == current_user.id
+                had_existing_grade = existing_grade is not None
+
+                prev_grade_id = None
+                prev_comment = None
+                if had_existing_grade:
+                    prev_grade_id = existing_grade.disease_grading_id
+                    prev_comment = existing_grade.comment
+
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+                grade_type = "revision" if had_existing_grade else "new"
+                grade_id = existing_grade.id if had_existing_grade and existing_grade else "N/A"
+                log_message = (
+                    f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] "
+                    f"[Task ID: {task_id}] [Task UUID: {current_task_uuid}] [Slot Type: {slot}] "
+                    f"[Disease ID: {task.disease_id}] [Grade: {current_label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
                 )
-                
-                # Only apply the exclusion check if this is not an arbitrator revising their own grade
-                if not is_arbitrator_revision and _has_user_graded_task_2weeks(db, current_user.id, task_id):
-                    flash("You cannot arbitrate a task you've graded as resident or resident2 within the last 2 weeks.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
-            
-            # Validate label belongs to task.disease_id using utility function
-            disease_gradings = fetch_active_disease_gradings(db, task.disease_id)
-            if not disease_gradings:
-                flash("Error: No disease gradings available for this task. Please contact the system administrator.", "danger")
-                return redirect(url_for("grading.index"))
+                if current_comment:
+                    log_message += f" [Comments - {current_comment}]"
+                if had_existing_grade and prev_grade_id is not None:
+                    prev_comment_display = prev_comment if prev_comment else "None"
+                    log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
+                grades_logger.info(log_message)
 
-            label = next((dg for dg in disease_gradings if dg.id == label_id), None)
-            if not label:
-                flash("Invalid label.", "danger")
-                return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
+                time_taken = None
+                session_key = f"grading_start_time_{current_task_uuid}_{slot}"
+                start_time_str = request.form.get(start_time_key_form)
+                if not start_time_str:
+                    start_time_str = flask_session.get(session_key)
+                if start_time_str:
+                    try:
+                        start_time = datetime.fromisoformat(start_time_str)
+                        if start_time.tzinfo is None:
+                            start_time = start_time.replace(tzinfo=timezone.utc)
+                        current_time = datetime.now(timezone.utc)
+                        time_taken = int((current_time - start_time).total_seconds())
+                        flask_session.pop(session_key, None)
+                    except (ValueError, TypeError):
+                        pass
 
-            # Validate selected features correspond to the chosen grading
-            if unique_feature_ids:
-                available_features = (
-                    db.query(GradingsFeatures)
-                    .filter(GradingsFeatures.disease_grading_id == label_id)
-                    .all()
-                )
-                features_by_id = {feature.id: feature for feature in available_features}
-                invalid_features = [fid for fid in unique_feature_ids if fid not in features_by_id]
-                if invalid_features:
-                    flash("One or more selected features are not valid for the chosen grade.", "danger")
-                    return redirect(url_for("grading.dual_grading_task", task_uuid=task_uuid, slot_type=slot))
-
-                selected_feature_entities = sorted(
-                    (features_by_id[fid] for fid in unique_feature_ids),
-                    key=lambda feature: ((feature.sr_no or 0), feature.id),
-                )
-
-                selected_features_json = json.dumps(
-                    [
-                        {
-                            "id": feature.id,
-                            "label": feature.label,
-                            "sr_no": feature.sr_no,
-                        }
-                        for feature in selected_feature_entities
-                    ]
-                )
-
-            conflicting_slots = []
-            conflict_message = None
-            if slot == "resident":
-                conflicting_slots = ["resident2"]
-                conflict_message = "You already graded this task in the resident2 slot."
-            elif slot == "resident2":
-                conflicting_slots = ["resident"]
-                conflict_message = "You already graded this task in the resident slot."
-
-            if conflicting_slots and has_user_graded_task(db, current_user.id, task_id, conflicting_slots):
-                flash(conflict_message or "You already graded this task in the paired slot.", "warning")
-                return redirect(url_for("grading.index"))
-            
-            # Fetch existing grade using utility function
-            existing_grade = fetch_existing_grade_for_user(db, task_id, current_user.id, slot, user=current_user)
-            had_existing_grade = existing_grade is not None
-
-            # Capture previous values for logging (before updating)
-            prev_grade_id = None
-            prev_comment = None
-
-            if had_existing_grade:
-                prev_grade_id = existing_grade.disease_grading_id
-                prev_comment = existing_grade.comment
-
-            # Log grade submission (including revisions) using dedicated grades logger
-            # Store in UTC for consistency
-            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            ip_address = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-            
-            grade_type = "revision" if had_existing_grade else "new"
-            grade_id = existing_grade.id if had_existing_grade and existing_grade else "N/A"
-            
-            # Create log message
-            log_message = (
-                f"Grade submission [IP: {ip_address}] [user_id: {current_user.id}] "
-                f"[Task ID: {task_id}] [Task UUID: {task_uuid}] [Slot Type: {slot}] "
-                f"[Disease ID: {task.disease_id}] [Grade: {label_id}] [Type: {grade_type}] [Grade ID: {grade_id}]"
-            )
-            if comment:
-                log_message += f" [Comments - {comment}]"
-                
-            # If this is a revision, also log the previous grade and comment
-            if had_existing_grade and prev_grade_id is not None:
-                prev_comment_display = prev_comment if prev_comment else "None"
-                log_message += f" [Previous Grade: {prev_grade_id}] [Previous Comment: {prev_comment_display}]"
-            
-            # Log using dedicated grades logger
-            grades_logger.info(log_message)
-            
-            # Calculate time taken
-            time_taken = None
-            start_time_key = f"grading_start_time_{task_uuid}_{slot}"
-            
-            # Try to get start time from form data first (to handle page refreshes)
-            start_time_str = request.form.get("start_time_iso")
-            
-            # If not in form, try to get from session
-            if not start_time_str:
-                start_time_str = flask_session.get(start_time_key)
-            
-            if start_time_str:
-                try:
-                    start_time = datetime.fromisoformat(start_time_str)
-                    # Handle timezone-naive datetimes by assuming they are UTC
-                    if start_time.tzinfo is None:
-                        start_time = start_time.replace(tzinfo=timezone.utc)
-                    current_time = datetime.now(timezone.utc)
-                    time_taken = int((current_time - start_time).total_seconds())
-                    # Remove the start time from session as we've used it
-                    flask_session.pop(start_time_key, None)
-                except (ValueError, TypeError):
-                    # If there's an error parsing the start time, just leave time_taken as None
-                    pass
-            
-            if existing_grade:
-                # Fetch the disease and grade information to populate denormalized fields
-                disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()
+                disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == current_label_id).first()
                 disease = None
                 if disease_grading:
                     disease = db.query(Disease).filter(Disease.id == disease_grading.disease_id).first()
-                
-                existing_grade.disease_grading_id = label_id
-                existing_grade.comment = comment
-                existing_grade.selected_features_json = selected_features_json
-                existing_grade.time_taken = time_taken
-                # Update denormalized fields as well
-                existing_grade.disease_name = disease.name if disease else None
-                existing_grade.grade_name = disease_grading.impression if disease_grading else None
-                existing_grade.grade_description = disease_grading.guidelines if disease_grading else None
-                db.add(existing_grade)
-                db.flush()  # Ensure the ID is available
-            else:
-                # Fetch the disease and grade information to populate denormalized fields
-                disease_grading = db.query(DiseaseGrading).filter(DiseaseGrading.id == label_id).first()
-                disease = None
-                if disease_grading:
-                    disease = db.query(Disease).filter(Disease.id == disease_grading.disease_id).first()
-                
-                new_grade = Grade(
-                    task_id=task.id,
-                    grader_user_id=current_user.id,
-                    role_slot=slot,
-                    disease_grading_id=label_id,
-                    comment=comment,
-                    selected_features_json=selected_features_json,
-                    time_taken=time_taken,
-                    disease_name=disease.name if disease else None,
-                    grade_name=disease_grading.impression if disease_grading else None,
-                    grade_description=disease_grading.guidelines if disease_grading else None
-                )
-                db.add(new_grade)
-                db.flush()  # Ensure the ID is available
-                existing_grade = new_grade  # So we can use existing_grade.id below
 
-            # Update task state based on grades using utility function
-            # Note: We need to call update_task_state_based_on_grades with just the task_id, not the whole task object
-            from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
-            update_task_state_based_on_grades(task.id, db)
-            
-            # Create or update consensus if applicable based on the grades
-            # This should be called after task state is updated to ensure proper consensus creation
-            from utils.dualGradingConsensusUtils import create_or_update_consensus
-            create_or_update_consensus(task.id, db)
-            
-            # Clean up the task tracker record if this is not a revision
-            # For revisions, no tracker was created in the first place, so no need to cleanup
-            # We'll pass the db session to the cleanup function to include it in the same transaction
-            if not had_existing_grade:
-                from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
-                cleanup_task_tracker(task_id, current_user.id, slot, db)
-            
-            # Store disease_id for later use
-            disease_id = task.disease_id
+                if existing_grade:
+                    existing_grade.disease_grading_id = current_label_id
+                    existing_grade.comment = current_comment
+                    existing_grade.selected_features_json = selected_features_json
+                    existing_grade.time_taken = time_taken
+                    existing_grade.disease_name = disease.name if disease else None
+                    existing_grade.grade_name = disease_grading.impression if disease_grading else None
+                    existing_grade.grade_description = disease_grading.guidelines if disease_grading else None
+                    db.add(existing_grade)
+                    db.flush()
+                else:
+                    new_grade = Grade(
+                        task_id=task.id,
+                        grader_user_id=current_user.id,
+                        role_slot=slot,
+                        disease_grading_id=current_label_id,
+                        comment=current_comment,
+                        selected_features_json=selected_features_json,
+                        time_taken=time_taken,
+                        disease_name=disease.name if disease else None,
+                        grade_name=disease_grading.impression if disease_grading else None,
+                        grade_description=disease_grading.guidelines if disease_grading else None,
+                    )
+                    db.add(new_grade)
+                    db.flush()
+                    existing_grade = new_grade
+
+                from utils.dualGradingConsensusUtils import update_task_state_based_on_grades
+                update_task_state_based_on_grades(task.id, db)
+
+                from utils.dualGradingConsensusUtils import create_or_update_consensus
+                create_or_update_consensus(task.id, db)
+
+                if not had_existing_grade:
+                    from utils.dualGradingStuckTaskCleanup import cleanup_task_tracker
+                    cleanup_task_tracker(task_id, current_user.id, slot, db)
+
+            disease_id = primary_task.disease_id if primary_task else None
+            if disease_id is None and task_uuids:
+                fallback_task = fetch_task_with_related_data_by_uuid(db, task_uuids[0], user=current_user)
+                disease_id = fallback_task.disease_id if fallback_task else None
             
             # Check if we should go to the next task
             action = (request.form.get("action") or "").strip().lower()

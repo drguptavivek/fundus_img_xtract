@@ -15,6 +15,7 @@ from auth.utils import utcnow
 from flask_login import current_user
 from auth.roles import roles_required
 from utils.imageSearchUtil import search_images_strict, ImageSearchError
+from utils.linkedGradingUtils import get_linked_disease_ids
 from db_transaction_manager import get_db_session
 from utils.upload_eligibility import get_user_lab_unit_ids_no_admin_override
 from utils.suitability import check_suitability
@@ -329,6 +330,14 @@ def preview():
     capture_end = filters.get('capture_end')
 
     with get_db_session() as db:
+        expanded_diseases: list[int] = []
+        for disease_id in diseases:
+            if disease_id not in expanded_diseases:
+                expanded_diseases.append(disease_id)
+            for linked_id in get_linked_disease_ids(db, disease_id):
+                if linked_id not in expanded_diseases:
+                    expanded_diseases.append(linked_id)
+
         try:
             from utils.search_params import parse_bool_param, parse_search_date
             images, total = search_images_strict(
@@ -410,7 +419,7 @@ def preview():
                 if len(sampled) >= max_images:
                     break
                 tasks_for = set(img.get('tasks_for_diseases_ids') or [])
-                available = [d for d in diseases if d not in tasks_for]
+                available = [d for d in expanded_diseases if d not in tasks_for]
                 if not available:
                     continue
                 src = (img.get('type') or '').lower()
@@ -432,7 +441,7 @@ def preview():
     else:
         for img in images:
             tasks_for = set(img.get('tasks_for_diseases_ids') or [])
-            available = [d for d in diseases if d not in tasks_for]
+            available = [d for d in expanded_diseases if d not in tasks_for]
             if available:
                 meta = _build_meta(img)
                 candidates.append({
@@ -485,6 +494,14 @@ def create():
     }
 
     with Session() as session:
+        expanded_diseases: list[int] = []
+        for disease_id in diseases:
+            if disease_id not in expanded_diseases:
+                expanded_diseases.append(disease_id)
+            for linked_id in get_linked_disease_ids(session, disease_id):
+                if linked_id not in expanded_diseases:
+                    expanded_diseases.append(linked_id)
+
         batch = AdHocTaskCreation(
             created_by_id=getattr(current_user, 'id', None) or 0,
             created_at=utcnow(),
@@ -565,7 +582,7 @@ def create():
                     if len(sampled_refs) >= max_images:
                         break
                     tasks_for = set(img.get('tasks_for_diseases_ids') or [])
-                    available = [d for d in diseases if d not in tasks_for]
+                    available = [d for d in expanded_diseases if d not in tasks_for]
                     if not available:
                         continue
                     src = (img.get('type') or '').lower()
@@ -581,7 +598,7 @@ def create():
             src = ref.get('source')
             image_id = ref.get('id')
             lab_unit_id = ref.get('lab_unit_id') or 1
-            for d in diseases:
+            for d in expanded_diseases:
                 try:
                     # Only enforce uniqueness: no duplicate task per image+disease
                     if src == 'direct':

@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading
 from utils.hospital_scoping import apply_scoping
+from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 from typing import Dict, Optional, List, Tuple
 
 
@@ -53,20 +54,25 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
     if not eligible_roles:
         return {}
     
-    # Group eligible lab units by disease
+    # Group eligible lab units by disease, including linked diseases from primary permissions
     disease_lab_units = {}
     for role in eligible_roles:
-        if role.disease_id not in disease_lab_units:
-            disease_lab_units[role.disease_id] = {
-                'lab_units': set(),
-                'can_grade_resident': False,
-                'can_grade_resident2': False,
-                'can_arbitrate': False
-            }
-        disease_lab_units[role.disease_id]['lab_units'].add(role.lab_unit_id)
-        disease_lab_units[role.disease_id]['can_grade_resident'] |= role.can_grade_resident
-        disease_lab_units[role.disease_id]['can_grade_resident2'] |= role.can_grade_resident2
-        disease_lab_units[role.disease_id]['can_arbitrate'] |= role.can_arbitrate
+        primary_id = role.disease_id
+        linked_ids = get_linked_disease_ids(db, primary_id)
+        all_ids = [primary_id] + linked_ids
+        for disease_id in all_ids:
+            if disease_id not in disease_lab_units:
+                disease_lab_units[disease_id] = {
+                    'lab_units': set(),
+                    'can_grade_resident': False,
+                    'can_grade_resident2': False,
+                    'can_arbitrate': False,
+                    'is_linked': disease_id != primary_id,
+                }
+            disease_lab_units[disease_id]['lab_units'].add(role.lab_unit_id)
+            disease_lab_units[disease_id]['can_grade_resident'] |= role.can_grade_resident
+            disease_lab_units[disease_id]['can_grade_resident2'] |= role.can_grade_resident2
+            disease_lab_units[disease_id]['can_arbitrate'] |= role.can_arbitrate
     
     # Calculate task counts for each disease
     kpi_data = {}
@@ -86,8 +92,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         has_resident_role = user.has_role('resident')
         has_resident2_role = user.has_role('ophthalmologist')
         
-        # Count resident pending tasks (user can do resident grading if they have resident role or resident2 role and resident eligibility)
-        if (has_resident_role or has_resident2_role) and info['can_grade_resident']:
+        # Count resident pending tasks (skip linked diseases: graded with primary)
+        if (has_resident_role or has_resident2_role) and info['can_grade_resident'] and not info.get('is_linked'):
             # Exclude tasks that the user has already graded as a resident
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'pending',
@@ -103,8 +109,8 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
             q = apply_scoping(q, GradingTask, user, 'grading')
             counts['resident_pending'] = q.count()
         
-        # Count resident2 pending tasks (only if user has resident2 eligibility)
-        if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']):
+        # Count resident2 pending tasks (skip linked diseases: graded with primary)
+        if (has_resident_role or has_resident2_role) and (info['can_grade_resident2'] or info['can_grade_resident']) and not info.get('is_linked'):
             # Exclude tasks that the user has already graded in either resident slot
             q = db.query(GradingTask).filter(
                 GradingTask.state == 'resident_done',
@@ -196,6 +202,7 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
     
     for disease_id in user_graded_disease_ids:
         disease_name = disease_names.get(disease_id, f"Unknown Disease {disease_id}")
+        is_linked = get_primary_disease_id(db, disease_id) != disease_id
         
         counts = {
             'resident_completed': 0,
@@ -205,7 +212,7 @@ def get_user_kpi_completed_task_count_data(db, user_id: int) -> Dict[str, Dict[s
         
         # Count resident completed tasks
         # Allow both residents and resident2 graders to count resident completed tasks
-        if has_resident_role or has_resident2_role:
+        if (has_resident_role or has_resident2_role) and not is_linked:
             q = db.query(Grade).filter(
                 Grade.grader_user_id == user_id,
                 Grade.role_slot == 'resident',

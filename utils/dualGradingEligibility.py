@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional, Sequence
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from models import Grade, User, Disease, LabUnit, UserDiseaseUnitRole, Hospital, GradingTask
+from utils.linkedGradingUtils import get_primary_disease_id
 
 
 def get_user_grading_eligibility_details(db, user_id: int) -> Dict[str, Any]:
@@ -110,9 +111,10 @@ def _get_user_eligible_lab_unit_ids(db, user_id: int, disease_id: int, role_slot
         return None
     
     # Build eligibility query based on role slot
+    effective_disease_id = get_primary_disease_id(db, disease_id)
     eligibility_query = db.query(UserDiseaseUnitRole).filter(
         UserDiseaseUnitRole.user_id == user_id,
-        UserDiseaseUnitRole.disease_id == disease_id,
+        UserDiseaseUnitRole.disease_id == effective_disease_id,
         UserDiseaseUnitRole.active == True
     )
     
@@ -150,9 +152,10 @@ def check_arbitration_eligibility(db, user_id: int, disease_id: int, lab_unit_id
     Returns:
         UserDiseaseUnitRole object if eligible, None otherwise
     """
+    effective_disease_id = get_primary_disease_id(db, disease_id)
     return db.query(UserDiseaseUnitRole).filter(
         UserDiseaseUnitRole.user_id == user_id,
-        UserDiseaseUnitRole.disease_id == disease_id,
+        UserDiseaseUnitRole.disease_id == effective_disease_id,
         UserDiseaseUnitRole.lab_unit_id == lab_unit_id,
         UserDiseaseUnitRole.active == True,
         UserDiseaseUnitRole.can_arbitrate == True
@@ -206,9 +209,10 @@ def get_user_eligibility_for_task(db, user_id: int, task_id: int, role_slot: str
         eligibility_filter = UserDiseaseUnitRole.can_arbitrate == True
         
     if eligibility_filter is not None:
+        effective_disease_id = get_primary_disease_id(db, task.disease_id)
         eligibility = db.query(UserDiseaseUnitRole).filter(
             UserDiseaseUnitRole.user_id == user_id,
-            UserDiseaseUnitRole.disease_id == task.disease_id,
+            UserDiseaseUnitRole.disease_id == effective_disease_id,
             UserDiseaseUnitRole.lab_unit_id == task.lab_unit_id,
             UserDiseaseUnitRole.active == True,
             eligibility_filter

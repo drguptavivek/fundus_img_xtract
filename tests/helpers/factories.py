@@ -353,6 +353,7 @@ class CoreEntityFactory:
         glaucoma = db_session.query(Disease).filter_by(name='Glaucoma').first()
         dr = db_session.query(Disease).filter_by(name='DR').first()
         amd = db_session.query(Disease).filter_by(name='AMD').first()
+        dme = db_session.query(Disease).filter_by(name='DME').first()
 
         # Query cameras (created by migration)
         camera = db_session.query(Camera).first()
@@ -367,6 +368,7 @@ class CoreEntityFactory:
             'glaucoma': glaucoma,
             'dr': dr,
             'amd': amd,
+            'dme': dme,
             'camera': camera,
             'area': area,
             # Extended entities for comprehensive testing

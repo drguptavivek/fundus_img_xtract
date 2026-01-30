@@ -16,7 +16,7 @@ flask-cors==6.0.1
 flask-limiter==4.0.0
 flask-login==0.6.3
 flask-wtf==1.2.2
-fonttools==4.60.1
+fonttools==4.60.2
 idna==3.11
 iniconfig==2.3.0
 itsdangerous==2.2.0

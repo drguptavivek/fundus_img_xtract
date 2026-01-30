@@ -1,0 +1,27 @@
+{% if packages %}
+<div class="table-responsive">
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Package Name</th>
+                <th>Version</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pkg in packages %}
+            <tr>
+                <td><code>{{ pkg.name }}</code></td>
+                <td>{{ pkg.version }}</td>
+                <td>
+                    <span class="badge bg-success">Scanned</span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p class="text-muted small mb-0">{{ packages|length }} packages scanned</p>
+{% else %}
+<p class="text-muted mb-0">No package data available for this scan.</p>
+{% endif %}

@@ -115,6 +115,18 @@ def make_celery_app() -> Celery:
                 "schedule": schedule,
             }
 
+        # Package update scan - daily at 3 AM UTC
+        beat_schedule["package-update-scan-daily"] = {
+            "task": "celery_tasks.tasks.package_update_tasks.run_package_update_scan_task",
+            "schedule": crontab(minute=0, hour="3"),
+        }
+
+        # Cleanup old package scans - daily at 4 AM UTC
+        beat_schedule["package-update-cleanup-daily"] = {
+            "task": "celery_tasks.tasks.package_update_tasks.cleanup_old_package_scans_task",
+            "schedule": crontab(minute=0, hour="4"),
+        }
+
         app.conf.beat_schedule = beat_schedule
 
     return app

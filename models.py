@@ -1864,6 +1864,9 @@ class CVEScanResult(Base):
         nullable=False
     )  # "completed", "failed", "running"
     
+    # Total packages scanned (for context)
+    packages_scanned_count: Mapped[int] = mapped_column(default=0, nullable=False)
+
     # Vulnerability counts
     total_count: Mapped[int] = mapped_column(default=0, nullable=False)
     critical_count: Mapped[int] = mapped_column(default=0, nullable=False)
@@ -1873,6 +1876,9 @@ class CVEScanResult(Base):
     
     # Full scan results as JSON
     vulnerabilities_json: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
+
+    # All packages scanned (for reference)
+    packages_scanned_json: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
     
     # Raw pip-audit output for debugging
     raw_output: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
@@ -1904,6 +1910,21 @@ class CVEScanResult(Base):
         """Serialize vulnerabilities list to JSON."""
         import json
         self.vulnerabilities_json = json.dumps(vulnerabilities) if vulnerabilities else None
+
+    def get_packages_scanned(self) -> list:
+        """Deserialize packages_scanned JSON to list."""
+        import json
+        if not self.packages_scanned_json:
+            return []
+        try:
+            return json.loads(self.packages_scanned_json)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_packages_scanned(self, packages: list) -> None:
+        """Serialize packages list to JSON."""
+        import json
+        self.packages_scanned_json = json.dumps(packages) if packages else None
     
     def has_critical_or_high(self) -> bool:
         """Check if scan found any critical or high vulnerabilities."""
@@ -1916,6 +1937,7 @@ class CVEScanResult(Base):
             "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
             "scan_type": self.scan_type,
             "status": self.status,
+            "packages_scanned": self.packages_scanned_count,
             "total_count": self.total_count,
             "by_severity": {
                 "critical": self.critical_count,
@@ -1925,6 +1947,93 @@ class CVEScanResult(Base):
             },
             "has_critical_or_high": self.has_critical_or_high(),
             "vulnerabilities": self.get_vulnerabilities(),
+            "error": self.error_message,
+            "triggered_by_user_id": self.triggered_by_user_id,
+            "duration_seconds": self.duration_seconds,
+        }
+
+
+class PackageUpdateScan(Base):
+    """
+    Stores results of Python package update scans from PyPI.
+
+    Checks ALL installed packages for available updates (not just vulnerable ones).
+    Scheduled scans run daily via Celery Beat at 3 AM UTC.
+    On-demand scans can be triggered by admins.
+    Results older than 200 days are automatically cleaned up.
+    """
+    __tablename__ = "package_update_scans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scanned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+    scan_type: Mapped[str] = mapped_column(
+        String(20),
+        default="scheduled",
+        nullable=False,
+        index=True
+    )  # "scheduled" or "on_demand"
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="completed",
+        nullable=False
+    )  # "completed", "failed", "running"
+
+    # Package counts
+    packages_scanned_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    updates_available_count: Mapped[int] = mapped_column(default=0, nullable=False)
+
+    # Full scan results as JSON (all packages with version info)
+    packages_json: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
+
+    # Error message if scan failed
+    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+    # Who triggered the scan (None for scheduled)
+    triggered_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+
+    # Scan duration in seconds
+    duration_seconds: Mapped[Optional[int]] = mapped_column(nullable=True)
+
+    def get_packages(self) -> list:
+        """Deserialize packages JSON to list."""
+        import json
+        if not self.packages_json:
+            return []
+        try:
+            return json.loads(self.packages_json)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_packages(self, packages: list) -> None:
+        """Serialize packages list to JSON."""
+        import json
+        self.packages_json = json.dumps(packages) if packages else None
+
+    def has_updates(self) -> bool:
+        """Check if scan found any available updates."""
+        return self.updates_available_count > 0
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
+            "scan_type": self.scan_type,
+            "status": self.status,
+            "packages_scanned": self.packages_scanned_count,
+            "updates_available": self.updates_available_count,
+            "has_updates": self.has_updates(),
+            "packages": self.get_packages(),
             "error": self.error_message,
             "triggered_by_user_id": self.triggered_by_user_id,
             "duration_seconds": self.duration_seconds,

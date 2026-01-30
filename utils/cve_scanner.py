@@ -32,7 +32,7 @@ class CVESeverity:
     LOW = "low"
 
 
-def parse_pip_audit_json(output: str) -> List[Dict]:
+def parse_pip_audit_json(output: str) -> tuple[List[Dict], int]:
     """
     Parse pip-audit JSON output into structured format.
 
@@ -40,24 +40,43 @@ def parse_pip_audit_json(output: str) -> List[Dict]:
         output: Raw JSON string from pip-audit
 
     Returns:
-        List of vulnerability dicts with keys:
-        - name: Package name
-        - version: Installed version
-        - vulns: List of vulnerability dicts:
-            - id: CVE ID (e.g., "CVE-2024-47882")
-            - severity: "critical", "high", "medium", "low"
-            - fix_versions: List of patched version strings
-            - description: Vulnerability description
-            - url: Advisory URL
+        Tuple of:
+        - List of vulnerability dicts with keys:
+            - name: Package name
+            - version: Installed version
+            - vulns: List of vulnerability dicts:
+                - id: CVE ID (e.g., "CVE-2024-47882")
+                - severity: "critical", "high", "medium", "low"
+                - fix_versions: List of patched version strings
+                - description: Vulnerability description
+                - url: Advisory URL
+        - Total number of packages scanned
     """
     try:
         data = json.loads(output)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse pip-audit JSON: {e}")
-        return []
+        return [], []
+
+    # Validate data structure
+    if not isinstance(data, dict):
+        logger.error(f"pip-audit output is not a dict: {type(data)}")
+        return [], []
 
     # pip-audit JSON has "dependencies" key at root level
     dependencies = data.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        logger.error(f"pip-audit dependencies is not a list: {type(dependencies)}")
+        return [], []
+
+    # Track all packages scanned
+    all_packages = []
+    for item in dependencies:
+        all_packages.append({
+            "name": item.get("name", "unknown"),
+            "version": item.get("version", "unknown"),
+        })
+
     vulnerabilities = []
 
     for item in dependencies:
@@ -108,7 +127,7 @@ def parse_pip_audit_json(output: str) -> List[Dict]:
         if pkg_vulns["vulns"]:
             vulnerabilities.append(pkg_vulns)
 
-    return vulnerabilities
+    return vulnerabilities, all_packages
 
 
 def _get_cve_severity(cve_id: str) -> str:
@@ -152,6 +171,8 @@ def scan_vulnerabilities() -> Dict:
     """
     Scan installed Python packages for security vulnerabilities using pip-audit.
 
+    Scans ALL containers (web, celery-ocr, celery-general, celery-beat) and merges results.
+
     Results are cached for 24 hours to avoid expensive repeated scans.
 
     Returns:
@@ -161,30 +182,8 @@ def scan_vulnerabilities() -> Dict:
         - by_severity: Dict of counts by severity level
         - vulnerabilities: List of vulnerability details (from parse_pip_audit_json)
         - raw_output: Raw pip-audit output for debugging
-
-    Example:
-        {
-            "scanned_at": "2025-01-30T12:00:00Z",
-            "total_count": 4,
-            "by_severity": {"critical": 0, "high": 3, "medium": 1, "low": 0},
-            "vulnerabilities": [
-                {
-                    "name": "urllib3",
-                    "version": "2.5.0",
-                    "vulns": [
-                        {
-                            "id": "CVE-2024-47882",
-                            "severity": "high",
-                            "fix_versions": ["2.6.0"],
-                            "description": "...",
-                            "url": "..."
-                        }
-                    ]
-                }
-            ]
-        }
     """
-    logger.info("Starting CVE vulnerability scan with pip-audit")
+    logger.info("Starting CVE vulnerability scan with pip-audit across all containers")
 
     result = {
         "scanned_at": datetime.utcnow().isoformat() + "Z",
@@ -196,66 +195,141 @@ def scan_vulnerabilities() -> Dict:
             CVESeverity.LOW: 0
         },
         "vulnerabilities": [],
+        "packages_scanned": [],
         "raw_output": "",
         "error": None
     }
 
-    try:
-        # Run pip-audit with JSON output format
-        # --format json: JSON output for parsing
-        # --desc: Include vulnerability descriptions
-        # Use `uv run` since pip-audit is venv-scoped
-        completed = subprocess.run(
-            ["uv", "run", "pip-audit", "--format", "json", "--desc"],
-            capture_output=True,
-            text=True,
-            timeout=120,  # 2 minute timeout
-            check=False  # Don't raise on non-zero (pip-audit returns 1 if vulns found)
-        )
+    # Container names to scan
+    containers = [
+        ('fundus-img-xtract-web', 'web'),
+        ('fundus-img-xtract-celery-ocr', 'celery-ocr'),
+        ('fundus-img-xtract-celery-general', 'celery-general'),
+        ('fundus-img-xtract-celery-beat', 'celery-beat'),
+    ]
 
-        result["raw_output"] = completed.stdout
+    # Track unique packages and vulnerabilities across all containers
+    all_packages_map = {}  # name -> {name, version, source}
+    all_vulnerabilities = []  # list of vulnerability dicts
 
-        if completed.returncode == 0:
-            # No vulnerabilities found
-            logger.info("No CVE vulnerabilities found")
-            return result
+    for container_name, container_type in containers:
+        try:
+            logger.info(f"Scanning container: {container_name}")
 
-        # Parse vulnerabilities
-        vulnerabilities = parse_pip_audit_json(completed.stdout)
-        result["vulnerabilities"] = vulnerabilities
+            # Run pip-audit in the container via docker exec
+            completed = subprocess.run(
+                ["docker", "exec", container_name, "uv", "run", "pip-audit", "--format", "json", "--desc"],
+                capture_output=True,
+                text=True,
+                timeout=120,  # 2 minute timeout per container
+                check=False
+            )
 
-        # Count by severity
-        for pkg in vulnerabilities:
-            for vuln in pkg["vulns"]:
-                severity = vuln.get("severity", CVESeverity.MEDIUM)
-                if severity in result["by_severity"]:
-                    result["by_severity"][severity] += 1
+            if completed.returncode not in (0, 1):  # 0 = no vulns, 1 = vulns found
+                logger.warning("pip-audit in %s returned code %d: %s", container_name, completed.returncode, completed.stderr)
+                # Continue anyway - might still have partial results
 
-        result["total_count"] = sum(result["by_severity"].values())
+            # Parse vulnerabilities and packages from this container
+            vulnerabilities, packages = parse_pip_audit_json(completed.stdout)
 
-        logger.info(
-            "CVE scan complete: %d vulnerabilities found (%d critical, %d high, %d medium, %d low)",
-            result["total_count"],
-            result["by_severity"][CVESeverity.CRITICAL],
-            result["by_severity"][CVESeverity.HIGH],
-            result["by_severity"][CVESeverity.MEDIUM],
-            result["by_severity"][CVESeverity.LOW]
-        )
+            # Merge packages, tracking highest version if duplicates
+            for pkg in packages:
+                pkg_name = pkg.get('name', '').lower()
+                pkg_version = pkg.get('version', '0.0.0')
 
-    except subprocess.TimeoutExpired:
-        error_msg = "CVE scan timed out after 2 minutes"
-        logger.error(error_msg)
-        result["error"] = error_msg
-    except FileNotFoundError:
-        error_msg = "pip-audit not found. Install with: pip install pip-audit"
-        logger.error(error_msg)
-        result["error"] = error_msg
-    except Exception as e:
-        error_msg = f"CVE scan failed: {str(e)}"
-        logger.exception(error_msg)
-        result["error"] = error_msg
+                if not pkg_name:
+                    continue
+
+                # If package not seen before, or this version is higher
+                if pkg_name not in all_packages_map or _version_compare(pkg_version, all_packages_map[pkg_name]['version']) > 0:
+                    all_packages_map[pkg_name] = {
+                        'name': pkg.get('name'),  # Keep original case for display
+                        'version': pkg_version,
+                        'source': container_type,
+                    }
+
+            # Collect all vulnerabilities (dedupe later)
+            all_vulnerabilities.extend(vulnerabilities)
+
+            logger.info("Container %s: %d packages, %d vulnerabilities", container_name, len(packages), len(vulnerabilities))
+
+        except subprocess.TimeoutExpired:
+            logger.warning("pip-audit in %s timed out", container_name)
+        except FileNotFoundError:
+            logger.warning("docker command not found")
+            result["error"] = "docker command not found"
+            break
+        except Exception as e:
+            logger.warning("Failed to scan %s: %s", container_name, e)
+
+    # Convert packages map to list
+    result["packages_scanned"] = list(all_packages_map.values())
+
+    # Deduplicate vulnerabilities by package name and CVE ID
+    # Keep the highest version's vulnerabilities
+    vuln_map = {}  # (pkg_name, cve_id) -> vulnerability dict
+    for pkg_vuln in all_vulnerabilities:
+        pkg_name = pkg_vuln.get("name", "").lower()
+        if not pkg_name:
+            continue
+
+        for vuln in pkg_vuln.get("vulns", []):
+            cve_id = vuln.get("id", "")
+            key = (pkg_name, cve_id)
+
+            # Only add if we haven't seen this (package, CVE) combination
+            if key not in vuln_map:
+                vuln_map[key] = {
+                    "name": pkg_vuln.get("name"),
+                    "version": pkg_vuln.get("version"),
+                    "vulns": [vuln]
+                }
+
+    result["vulnerabilities"] = list(vuln_map.values())
+
+    # Count by severity
+    for pkg in result["vulnerabilities"]:
+        for vuln in pkg["vulns"]:
+            severity = vuln.get("severity", CVESeverity.MEDIUM)
+            if severity in result["by_severity"]:
+                result["by_severity"][severity] += 1
+
+    result["total_count"] = sum(result["by_severity"].values())
+
+    logger.info(
+        "CVE scan complete: %d packages scanned, %d vulnerabilities found (%d critical, %d high, %d medium, %d low)",
+        len(result["packages_scanned"]),
+        result["total_count"],
+        result["by_severity"][CVESeverity.CRITICAL],
+        result["by_severity"][CVESeverity.HIGH],
+        result["by_severity"][CVESeverity.MEDIUM],
+        result["by_severity"][CVESeverity.LOW]
+    )
 
     return result
+
+
+def _version_compare(v1: str, v2: str) -> int:
+    """
+    Compare two version strings.
+
+    Returns:
+        1 if v1 > v2
+        -1 if v1 < v2
+        0 if equal
+    """
+    try:
+        from packaging import version as pkg_version
+        v1_parsed = pkg_version.parse(v1)
+        v2_parsed = pkg_version.parse(v2)
+        if v1_parsed > v2_parsed:
+            return 1
+        elif v1_parsed < v2_parsed:
+            return -1
+        return 0
+    except Exception:
+        # If comparison fails, assume they're equal
+        return 0
 
 
 def get_vulnerability_summary() -> Dict:
@@ -348,6 +422,7 @@ def format_cve_report(scan_result: Dict) -> str:
 
     summary = scan_result["by_severity"]
     lines.extend([
+        f"Packages Scanned: {scan_result.get('packages_scanned', len(scan_result.get('packages', [])))}",
         f"Total Vulnerabilities: {scan_result['total_count']}",
         f"  Critical: {summary['critical']}",
         f"  High:     {summary['high']}",
@@ -355,6 +430,14 @@ def format_cve_report(scan_result: Dict) -> str:
         f"  Low:      {summary['low']}",
         ""
     ])
+
+    # List all packages scanned
+    if scan_result.get("packages"):
+        lines.append("ALL PACKAGES SCANNED:")
+        lines.append("-" * 60)
+        for pkg in scan_result["packages"]:
+            lines.append(f"  {pkg['name']} ({pkg['version']})")
+        lines.append("")
 
     if scan_result["vulnerabilities"]:
         lines.append("AFFECTED PACKAGES:")
@@ -417,6 +500,8 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
 
         # Update scan result with findings
         scan_result_db.status = "completed"
+        packages_list = scan_result.get("packages_scanned", [])
+        scan_result_db.packages_scanned_count = len(packages_list)
         scan_result_db.total_count = scan_result["total_count"]
         scan_result_db.critical_count = scan_result["by_severity"][CVESeverity.CRITICAL]
         scan_result_db.high_count = scan_result["by_severity"][CVESeverity.HIGH]
@@ -429,6 +514,10 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         if scan_result["vulnerabilities"]:
             scan_result_db.set_vulnerabilities(scan_result["vulnerabilities"])
 
+        # Save all packages scanned
+        if packages_list:
+            scan_result_db.set_packages_scanned(packages_list)
+
         # Save error message if any
         if scan_result.get("error"):
             scan_result_db.error_message = scan_result["error"][:500]
@@ -436,8 +525,9 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
         db_session.commit()
 
         logger.info(
-            "CVE scan saved to DB: type=%s, total=%d, critical=%d, high=%d, duration=%ds",
+            "CVE scan saved to DB: type=%s, scanned=%d packages, vulns=%d (critical=%d, high=%d), duration=%ds",
             scan_type,
+            scan_result_db.packages_scanned_count,
             scan_result_db.total_count,
             scan_result_db.critical_count,
             scan_result_db.high_count,
@@ -448,6 +538,8 @@ def scan_vulnerabilities_and_save(db_session, scan_type: str = "scheduled", trig
             "status": "completed",
             "scan_id": scan_result_db.id,
             "scanned_at": scan_result_db.scanned_at.isoformat(),
+            "packages_scanned": scan_result_db.packages_scanned_count,
+            "packages": scan_result_db.get_packages_scanned(),
             "total_count": scan_result_db.total_count,
             "by_severity": {
                 "critical": scan_result_db.critical_count,

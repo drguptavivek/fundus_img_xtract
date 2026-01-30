@@ -15,6 +15,7 @@ def _import_all():
     from . import zip_upload_tasks  # noqa: F401
     from . import direct_upload_tasks  # noqa: F401
     from . import cve_tasks  # noqa: F401
+    from . import package_update_tasks  # noqa: F401
 
 def _import_general():
     from . import export_tasks  # noqa: F401
@@ -25,6 +26,7 @@ def _import_general():
     from . import zip_upload_tasks  # noqa: F401
     from . import direct_upload_tasks  # noqa: F401
     from . import cve_tasks  # noqa: F401
+    from . import package_update_tasks  # noqa: F401
 
 def _import_ocr():
     from . import pii_tasks  # noqa: F401

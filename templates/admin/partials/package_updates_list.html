@@ -1,0 +1,59 @@
+{# HTMX partial: Package updates list #}
+{% if packages %}
+<div class="row">
+    {% for pkg in packages %}
+    <div class="col-md-6 mb-3">
+        <div class="card package-card {{ 'has-update' if pkg.has_update else 'up-to-date' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-box"></i>
+                    <strong>{{ pkg.name }}</strong>
+                </h5>
+                {% if pkg.has_update %}
+                <span class="badge update-badge-available">
+                    Update Available
+                </span>
+                {% else %}
+                <span class="badge update-badge-up-to-date">
+                    Up to Date
+                </span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="mb-1">
+                            <strong>Installed:</strong>
+                            <span class="text-muted">{{ pkg.current_version }}</span>
+                        </p>
+                        {% if pkg.has_update %}
+                        <p class="mb-1">
+                            <strong>Latest:</strong>
+                            <span class="text-warning">{{ pkg.latest_version }}</span>
+                            {% if pkg.is_prerelease %}
+                            <span class="badge bg-secondary ms-1">prerelease</span>
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <a href="{{ pkg.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-external-link-alt"></i> PyPI
+                    </a>
+                </div>
+                {% if pkg.published_date %}
+                <small class="text-muted">
+                    <i class="fas fa-calendar"></i>
+                    Published: {{ pkg.published_date[:10] }}
+                </small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="fas fa-info-circle"></i>
+    No packages to display.
+</div>
+{% endif %}

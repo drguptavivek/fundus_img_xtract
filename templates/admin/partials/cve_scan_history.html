@@ -1,0 +1,16 @@
+{# HTMX partial: CVE scan history dropdown #}
+{% if recent_scans %}
+    {% for scan in recent_scans %}
+    <li>
+        <a class="dropdown-item" href="{{ url_for('admin.cve_security_report', scan_id=scan.id) }}">
+            <i class="fas fa-clock small me-2"></i>
+            {{ scan.scanned_at | user_datetime('%Y-%m-%d %H:%M') }}
+            <span class="badge bg-{{ 'danger' if scan.total_count > 0 else 'success' }} ms-auto">
+                {{ scan.total_count }} vulns
+            </span>
+        </a>
+    </li>
+    {% endfor %}
+{% else %}
+    <li><span class="dropdown-item text-muted">No scans yet</span></li>
+{% endif %}

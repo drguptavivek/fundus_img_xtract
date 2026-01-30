@@ -1,0 +1,67 @@
+{# HTMX partial: CVE vulnerabilities list #}
+{% if vulnerabilities %}
+    {% for pkg in vulnerabilities %}
+    <div class="card mb-3 cve-card {{ pkg.vulns[0].severity }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-box"></i>
+                <strong>{{ pkg.name }}</strong>
+                <span class="badge bg-secondary ms-2">v{{ pkg.version }}</span>
+            </h5>
+            <span class="badge severity-badge-{{ pkg.vulns[0].severity }}">
+                {{ pkg.vulns[0].severity|upper }}
+            </span>
+        </div>
+        <div class="card-body">
+            {% for vuln in pkg.vulns %}
+            <div class="vulnerability-item {{ 'mb-3' if not loop.last else '' }}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">
+                            <a href="{{ vuln.url }}" target="_blank" class="text-decoration-none">
+                                <i class="fas fa-external-link-alt small"></i>
+                                {{ vuln.id }}
+                            </a>
+                        </h6>
+                        <p class="mb-2 text-muted small">{{ vuln.description[:200] }}{% if vuln.description|length > 200 %}...{% endif %}</p>
+                        {% if vuln.fix_versions %}
+                        <p class="mb-0">
+                            <strong>Fixed in:</strong>
+                            {% for ver in vuln.fix_versions %}
+                            <span class="badge bg-success">{{ ver }}</span>
+                            {% endfor %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <span class="badge severity-badge-{{ vuln.severity }}">
+                        {{ vuln.severity|upper }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Actions -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-tools"></i> Remediation Steps</h5>
+        </div>
+        <div class="card-body">
+            <ol class="mb-0">
+                <li>Update <code>requirements-web.txt</code> with fixed versions shown above</li>
+                <li>Rebuild the venv: <code>docker compose build web-venv-builder</code></li>
+                <li>Run venv builder: <code>docker compose up web-venv-builder -d</code></li>
+                <li>Restart web service: <code>docker compose up web -d</code></li>
+                <li>Verify: Refresh this page and confirm vulnerabilities are resolved</li>
+            </ol>
+        </div>
+    </div>
+{% else %}
+<div class="alert alert-success">
+    <i class="fas fa-check-circle"></i>
+    <strong>No vulnerabilities at this severity level!</strong>
+    All dependencies are secure at or above the current filter level.
+</div>
+{% endif %}

@@ -29,25 +29,10 @@ def run_cve_scan_task(
         Dict with scan results including counts and any errors
     """
     from utils.cve_scanner import scan_vulnerabilities_and_save
-    from flask import current_app
 
-    try:
-        with get_db_session() as db:
-            result = scan_vulnerabilities_and_save(
-                db,
-                scan_type=scan_type,
-                triggered_by_user_id=user_id
-            )
-            current_app.logger.info(
-                "CVE scan %s completed: %d vulnerabilities found",
-                scan_type,
-                result.get("total_count", 0)
-            )
-            return result
-    except Exception as e:
-        current_app.logger.error("CVE scan %s failed: %s", scan_type, e)
-        return {
-            "status": "error",
-            "error": str(e),
-            "total_count": 0
-        }
+    with get_db_session() as db:
+        return scan_vulnerabilities_and_save(
+            db,
+            scan_type=scan_type,
+            triggered_by_user_id=user_id
+        )

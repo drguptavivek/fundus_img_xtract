@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Package Updates Report{% endblock %}
+
+{% block extra_styles %}
+<style>
+.update-available { color: #fd7e14; font-weight: bold; }
+.update-up-to-date { color: #198754; }
+.update-prerelease { color: #6c757d; }
+
+.update-badge-available { background-color: #fd7e14; }
+.update-badge-up-to-date { background-color: #198754; }
+.update-badge-prerelease { background-color: #6c757d; }
+
+.filter-btn.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.package-card {
+    border-left: 4px solid #dee2e6;
+}
+.package-card.has-update { border-left-color: #fd7e14; }
+.package-card.up-to-date { border-left-color: #198754; }
+
+/* HTMX spinner */
+.htmx-indicator {
+    display: none;
+}
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+.htmx-request.htmx-indicator {
+    display: inline-block;
+}
+
+/* Button spinner */
+.btn-loading .spinner-border {
+    display: inline-block !important;
+}
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4" data-scan-id="{{ scan_result.scan_id or '' }}" data-show-all="{{ show_all }}">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 mb-0">
+                <i class="fas fa-box-open text-warning"></i>
+                Package Updates Report
+            </h1>
+            <small class="text-muted">Available updates for Python dependencies</small>
+        </div>
+        <div>
+            <button
+                hx-get="{{ url_for('admin.api_package_updates_instructions') }}"
+                hx-target="#instructions-container"
+                hx-swap="innerHTML"
+                class="btn btn-outline-secondary me-2">
+                <i class="fas fa-code"></i> Update Instructions
+            </button>
+            <a href="{{ url_for('admin.api_package_updates_yaml') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-download"></i> Download YAML
+            </a>
+            <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-secondary">Back to Admin</a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted small">Scanned</h5>
+                    <h3 class="mb-0">{{ scan_result.packages_scanned or '-' }}</h3>
+                    <small class="text-muted">packages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-warning" style="border-color: #fd7e14;">
+                <div class="card-body">
+                    <h5 class="card-title" style="color: #fd7e14;">Updates Available</h5>
+                    <h2 class="mb-0" style="color: #fd7e14;">{{ scan_result.updates_available }}</h2>
+                    <small class="text-muted">packages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center border-success">
+                <div class="card-body">
+                    <h5 class="card-title text-success">Up to Date</h5>
+                    <h2 class="mb-0 text-success">{{ scan_result.packages_scanned - scan_result.updates_available if scan_result.packages_scanned else '-' }}</h2>
+                    <small class="text-muted">packages</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted small">Duration</h5>
+                    <h3 class="mb-0">{{ scan_result.duration_seconds }}s</h3>
+                    <small class="text-muted">scan time</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex gap-2 align-items-center flex-wrap">
+                    <!-- Scan History Dropdown - loaded inline for Bootstrap compatibility -->
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-history"></i> Scan History
+                        </button>
+                        <ul class="dropdown-menu">
+                            {% if recent_scans %}
+                            {% for scan in recent_scans %}
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('admin.package_updates_report', scan_id=scan.id) }}">
+                                    <i class="fas fa-clock small me-2"></i>
+                                    {{ scan.scanned_at | user_datetime('%Y-%m-%d %H:%M') }}
+                                    <span class="badge bg-{{ 'warning' if scan.updates_available_count > 0 else 'success' }} ms-auto">
+                                        {{ scan.updates_available_count }} updates
+                                    </span>
+                                </a>
+                            </li>
+                            {% endfor %}
+                            {% else %}
+                            <li><span class="dropdown-item text-muted">No scans yet</span></li>
+                            {% endif %}
+                        </ul>
+                    </div>
+
+                    <!-- Filter Toggle - HTMX replace with spinners -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button
+                            hx-get="{{ url_for('admin.htmx_package_list', scan_id=scan_result.scan_id, show_all='false') }}"
+                            hx-target="#package-list-container"
+                            hx-swap="innerHTML"
+                            class="btn btn-sm {{ 'btn-primary' if not show_all else 'btn-outline-secondary' }}">
+                            <span class="btn-text">Updates Only</span>
+                            <span class="htmx-indicator spinner-border spinner-border-sm ms-1"></span>
+                        </button>
+                        <button
+                            hx-get="{{ url_for('admin.htmx_package_list', scan_id=scan_result.scan_id, show_all='true') }}"
+                            hx-target="#package-list-container"
+                            hx-swap="innerHTML"
+                            class="btn btn-sm {{ 'btn-primary' if show_all else 'btn-outline-secondary' }}">
+                            <span class="btn-text">All Packages</span>
+                            <span class="htmx-indicator spinner-border spinner-border-sm ms-1"></span>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <small class="text-muted me-3">
+                        <i class="fas fa-clock"></i>
+                        Last scan: {% if scan_result.scanned_at %}{{ scan_result.scanned_at | user_datetime('%Y-%m-%d %H:%M') }}{% else %}Never{% endif %}
+                    </small>
+
+                    <!-- Refresh button with HTMX spinner -->
+                    <button
+                        hx-get="{{ url_for('admin.htmx_package_list', scan_id=scan_result.scan_id, show_all=show_all) }}"
+                        hx-target="#package-list-container"
+                        hx-swap="innerHTML"
+                        class="btn btn-sm btn-outline-secondary me-2"
+                        title="Refresh package list">
+                        <span class="icon-normal"><i class="fas fa-sync-alt"></i> Refresh</span>
+                        <span class="htmx-indicator spinner-border spinner-border-sm ms-1"></span>
+                    </button>
+
+                    <!-- Scan Now button with JS (for polling) -->
+                    <button id="scanNowBtn" onclick="triggerPackageScan()" class="btn btn-sm btn-primary">
+                        <span class="icon-normal"><i class="fas fa-play"></i> Scan Now</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if scan_result.error %}
+    <div class="alert alert-danger">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Scan Error:</strong> {{ scan_result.error }}
+    </div>
+    {% endif %}
+
+    {% if scan_result.updates_available == 0 %}
+    <div class="alert alert-success">
+        <i class="fas fa-check-circle"></i>
+        <strong>All packages up to date!</strong>
+        No updates available for installed packages.
+    </div>
+    {% elif not show_all %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        Showing <strong>{{ scan_result.updates_available }}</strong> packages
+        with available updates.
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        Showing <strong>all {{ scan_result.packages_scanned }}</strong> packages.
+    </div>
+    {% endif %}
+
+    <!-- Package List Container - HTMX loaded -->
+    <div id="package-list-container"
+         hx-get="{{ url_for('admin.htmx_package_list', scan_id=scan_result.scan_id, show_all='false') }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-muted">Loading packages...</div>
+    </div>
+
+    <!-- Update Instructions Container - HTMX loaded -->
+    <div id="instructions-container"
+         hx-get="{{ url_for('admin.api_package_updates_instructions') }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-muted">Loading update instructions...</div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
+<script src="{{ url_for('static', filename='js/package-updates.js') }}?v={{ v }}" defer></script>
+{% endblock %}

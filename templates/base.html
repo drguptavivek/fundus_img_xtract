@@ -436,6 +436,10 @@
                   <i class="fas fa-shield-virus"></i> CVE Security
                   <span id="cveCountBadge" class="badge bg-secondary ms-auto">-</span>
                 </a></li>
+              <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('admin.package_updates_report') }}">
+                  <i class="fas fa-box-open"></i> Package Updates
+                  <span id="packageUpdateCountBadge" class="badge bg-secondary ms-auto">-</span>
+                </a></li>
 
               <li>
                 <hr class="dropdown-divider">
@@ -712,6 +716,26 @@
         })
         .catch(err => {
           console.error('Failed to load CVE count:', err);
+          badge.textContent = '?';
+        });
+    })();
+
+    // Update Package Updates badge in admin menu
+    (function() {
+      const badge = document.getElementById('packageUpdateCountBadge');
+      if (!badge) return;
+
+      fetch('{{ url_for('admin.api_package_updates_summary') }}')
+        .then(r => r.json())
+        .then(data => {
+          badge.textContent = data.updates_available;
+          badge.className = 'badge ms-auto ' + (data.has_updates ? 'bg-warning' : 'bg-success');
+          if (data.updates_available > 0) {
+            badge.setAttribute('title', data.updates_available + ' packages have updates');
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load package update count:', err);
           badge.textContent = '?';
         });
     })();

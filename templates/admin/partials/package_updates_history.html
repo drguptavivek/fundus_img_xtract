@@ -1,0 +1,17 @@
+{# HTMX partial: Scan history dropdown #}
+{% if recent_scans %}
+{% for scan in recent_scans %}
+<li>
+    <a class="dropdown-item {% if scan.id == scan_id %}active{% endif %}"
+       href="{{ url_for('admin.package_updates_report', scan_id=scan.id) }}">
+        <i class="fas fa-clock small me-2"></i>
+        {{ scan.scanned_at | user_datetime('%Y-%m-%d %H:%M') }}
+        <span class="badge bg-{{ 'warning' if scan.updates_available_count > 0 else 'success' }} ms-auto">
+            {{ scan.updates_available_count }} updates
+        </span>
+    </a>
+</li>
+{% endfor %}
+{% else %}
+<li><span class="dropdown-item text-muted">No scans yet</span></li>
+{% endif %}

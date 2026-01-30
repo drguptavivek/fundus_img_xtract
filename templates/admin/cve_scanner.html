@@ -25,11 +25,32 @@
 .cve-card.severity-high { border-left-color: #fd7e14; }
 .cve-card.severity-medium { border-left-color: #ffc107; }
 .cve-card.severity-low { border-left-color: #6c757d; }
+
+/* HTMX spinner */
+.htmx-indicator {
+    display: none;
+}
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+.htmx-request.htmx-indicator {
+    display: inline-block;
+}
+
+/* Button spinner */
+.btn-loading .spinner-border {
+    display: inline-block !important;
+}
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container py-4" data-scan-id="{{ scan_result.scan_id or '' }}" data-min-severity="{{ min_severity }}">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h4 mb-0">
@@ -48,18 +69,28 @@
 
     <!-- Summary Cards -->
     <div class="row mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="card text-center">
                 <div class="card-body">
-                    <h5 class="card-title text-muted">Total</h5>
-                    <h2 class="mb-0">{{ scan_result.total_count }}</h2>
+                    <h5 class="card-title text-muted small">Scanned</h5>
+                    <h3 class="mb-0">{{ scan_result.packages_scanned or '-' }}</h3>
+                    <small class="text-muted">packages</small>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-muted small">Total</h5>
+                    <h2 class="mb-0">{{ scan_result.total_count }}</h2>
+                    <small class="text-muted">vulnerabilities</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
             <div class="card text-center border-danger">
                 <div class="card-body">
-                    <h5 class="card-title text-danger">Critical</h5>
+                    <h5 class="card-title text-danger small">Critical</h5>
                     <h2 class="mb-0 text-danger">{{ scan_result.by_severity.critical }}</h2>
                 </div>
             </div>
@@ -87,48 +118,54 @@
         <div class="card-body py-2">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div class="d-flex gap-2 align-items-center flex-wrap">
-                    <!-- Scan History Dropdown -->
-                    {% if recent_scans %}
+                    <!-- Scan History Dropdown - HTMX loaded -->
                     <div class="dropdown">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                             <i class="fas fa-history"></i> Scan History
                         </button>
-                        <ul class="dropdown-menu">
-                            {% for scan in recent_scans %}
-                            <li>
-                                <a class="dropdown-item {% if scan.id == scan_result.scan_id %}active{% endif %}"
-                                   href="{{ url_for('admin.cve_security_report', scan_id=scan.id, severity=min_severity) }}">
-                                    <i class="fas fa-clock small me-2"></i>
-                                    {{ scan.scanned_at.strftime('%Y-%m-%d %H:%M') }} UTC
-                                    <span class="badge bg-{{ 'danger' if scan.total_count > 0 else 'success' }} ms-auto">
-                                        {{ scan.total_count }} vulns
-                                    </span>
-                                </a>
-                            </li>
-                            {% endfor %}
+                        <ul class="dropdown-menu"
+                             hx-get="{{ url_for('admin.htmx_cve_scan_history') }}"
+                             hx-trigger="load"
+                             hx-swap="innerHTML">
+                            <li><span class="dropdown-item">Loading...</span></li>
                         </ul>
                     </div>
-                    {% endif %}
 
-                    <!-- Severity Filters -->
+                    <!-- Severity Filters - HTMX replace -->
                     <div class="btn-group btn-group-sm" role="group">
                         {% for value, label in severity_choices %}
-                        <a href="{{ url_for('admin.cve_security_report', severity=value) }}"
-                           class="btn btn-outline-{{ 'primary' if min_severity == value else 'secondary' }} filter-btn {{ 'active' if min_severity == value else '' }}">
-                            {{ label }}
-                        </a>
+                        <button
+                            hx-get="{{ url_for('admin.htmx_cve_vulnerabilities', scan_id=scan_result.scan_id, severity=value) }}"
+                            hx-target="#vulnerability-list-container"
+                            hx-swap="innerHTML"
+                            class="btn btn-sm {{ 'btn-primary' if min_severity == value else 'btn-outline-secondary' }}">
+                            <span class="btn-text">{{ label }}</span>
+                            <span class="htmx-indicator spinner-border spinner-border-sm ms-1"></span>
+                        </button>
                         {% endfor %}
                     </div>
                 </div>
                 <div>
                     <small class="text-muted me-3">
                         <i class="fas fa-clock"></i>
-                        Last scan: {% if scan_result.scanned_at %}{{ scan_result.scanned_at[:19] | replace('T', ' ') }} UTC{% else %}Never{% endif %}
+                        Last scan: {% if scan_result.scanned_at %}{{ scan_result.scanned_at | user_datetime('%Y-%m-%d %H:%M') }}{% else %}Never{% endif %}
                     </small>
-                    <a href="{{ url_for('admin.cve_security_report', trigger_scan=1) }}"
-                       class="btn btn-sm btn-primary">
-                        <i class="fas fa-play"></i> Scan Now
-                    </a>
+
+                    <!-- Refresh button with HTMX spinner -->
+                    <button
+                        hx-get="{{ url_for('admin.htmx_cve_vulnerabilities', scan_id=scan_result.scan_id, severity=min_severity) }}"
+                        hx-target="#vulnerability-list-container"
+                        hx-swap="innerHTML"
+                        class="btn btn-sm btn-outline-secondary me-2"
+                        title="Refresh vulnerabilities">
+                        <span class="icon-normal"><i class="fas fa-sync-alt"></i> Refresh</span>
+                        <span class="htmx-indicator spinner-border spinner-border-sm ms-1"></span>
+                    </button>
+
+                    <!-- Scan Now button with JS (for polling) -->
+                    <button id="scanNowBtn" onclick="triggerCveScan()" class="btn btn-sm btn-primary">
+                        <span class="icon-normal"><i class="fas fa-play"></i> Scan Now</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -147,91 +184,39 @@
         <strong>No vulnerabilities detected!</strong>
         All dependencies are secure.
     </div>
-    {% else %}
-    <div class="alert alert-info">
-        <i class="fas fa-info-circle"></i>
-        Showing <strong>{{ filtered_count }}</strong> vulnerabilities
-        at <strong>{{ min_severity }}</strong> severity level and above.
-    </div>
     {% endif %}
 
-    <!-- Vulnerabilities List -->
-    {% if vulnerabilities %}
-    {% for pkg in vulnerabilities %}
-    <div class="card mb-3 cve-card {{ pkg.vulns[0].severity }}">
+    <!-- Vulnerability List Container - HTMX loaded -->
+    <div id="vulnerability-list-container"
+         hx-get="{{ url_for('admin.htmx_cve_vulnerabilities', scan_id=scan_result.scan_id, severity=min_severity) }}"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        <div class="text-muted">Loading vulnerabilities...</div>
+    </div>
+
+    <!-- All Packages Scanned (HTMX-loaded) -->
+    {% if scan_result.scan_id %}
+    <div class="card mt-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
-                <i class="fas fa-box"></i>
-                <strong>{{ pkg.name }}</strong>
-                <span class="badge bg-secondary ms-2">v{{ pkg.version }}</span>
+                <i class="fas fa-box"></i> All Packages Scanned
             </h5>
-            <span class="badge severity-badge-{{ pkg.vulns[0].severity }}">
-                {{ pkg.vulns[0].severity|upper }}
-            </span>
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#packagesScannedCollapse">
+                <i class="fas fa-chevron-down"></i> Show/Hide
+            </button>
         </div>
-        <div class="card-body">
-            {% for vuln in pkg.vulns %}
-            <div class="vulnerability-item {{ 'mb-3' if not loop.last else '' }}">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">
-                            <a href="{{ vuln.url }}" target="_blank" class="text-decoration-none">
-                                <i class="fas fa-external-link-alt small"></i>
-                                {{ vuln.id }}
-                            </a>
-                        </h6>
-                        <p class="mb-2 text-muted small">{{ vuln.description[:200] }}{% if vuln.description|length > 200 %}...{% endif %}</p>
-                        {% if vuln.fix_versions %}
-                        <p class="mb-0">
-                            <strong>Fixed in:</strong>
-                            {% for ver in vuln.fix_versions %}
-                            <span class="badge bg-success">{{ ver }}</span>
-                            {% endfor %}
-                        </p>
-                        {% endif %}
-                    </div>
-                    <span class="badge severity-badge-{{ vuln.severity }}">
-                        {{ vuln.severity|upper }}
-                    </span>
-                </div>
+        <div class="collapse" id="packagesScannedCollapse">
+            <div class="card-body"
+                 hx-get="{{ url_for('admin.htmx_cve_packages', scan_id=scan_result.scan_id) }}"
+                 hx-trigger="load delay:100ms"
+                 hx-swap="innerHTML">
+                <div class="text-muted">Loading packages...</div>
             </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endfor %}
-    {% endif %}
-
-    <!-- Actions -->
-    {% if filtered_count > 0 %}
-    <div class="card mt-4">
-        <div class="card-header">
-            <h5 class="mb-0"><i class="fas fa-tools"></i> Remediation Steps</h5>
-        </div>
-        <div class="card-body">
-            <ol class="mb-0">
-                <li>Update <code>requirements-web.txt</code> with fixed versions shown above</li>
-                <li>Rebuild the venv: <code>docker compose build web-venv-builder</code></li>
-                <li>Run venv builder: <code>docker compose up web-venv-builder -d</code></li>
-                <li>Restart web service: <code>docker compose up web -d</code></li>
-                <li>Verify: Refresh this page and confirm vulnerabilities are resolved</li>
-            </ol>
         </div>
     </div>
     {% endif %}
 </div>
 
-<script>
-// Auto-refresh summary on dashboard
-fetch('{{ url_for("admin.api_cve_summary") }}')
-    .then(r => r.json())
-    .then(data => {
-        // Update dashboard badge if exists
-        const badge = document.getElementById('cveCountBadge');
-        if (badge) {
-            badge.textContent = data.total;
-            badge.className = 'badge ' + (data.has_critical_or_high ? 'bg-danger' : 'bg-warning');
-        }
-    })
-    .catch(console.error);
-</script>
+<script src="{{ url_for('static', filename='js/htmx.min.js') }}?v={{ v }}" defer></script>
+<script src="{{ url_for('static', filename='js/cve-scanner.js') }}?v={{ v }}" defer></script>
 {% endblock %}

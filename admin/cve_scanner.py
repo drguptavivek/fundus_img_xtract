@@ -67,6 +67,7 @@ def cve_security_report():
         if scan_result_db:
             scan_result = {
                 "scanned_at": scan_result_db.scanned_at.isoformat(),
+                "packages_scanned": scan_result_db.packages_scanned_count,
                 "total_count": scan_result_db.total_count,
                 "by_severity": {
                     CVESeverity.CRITICAL: scan_result_db.critical_count,
@@ -75,6 +76,7 @@ def cve_security_report():
                     CVESeverity.LOW: scan_result_db.low_count,
                 },
                 "vulnerabilities": scan_result_db.get_vulnerabilities(),
+                "packages": scan_result_db.get_packages_scanned(),
                 "scan_type": scan_result_db.scan_type,
                 "scan_id": scan_result_db.id,
                 "duration_seconds": scan_result_db.duration_seconds,
@@ -225,3 +227,88 @@ def api_cve_scan_history():
         return jsonify({
             "scans": [s.to_dict() for s in scans]
         })
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def htmx_cve_packages():
+    """
+    HTMX endpoint to return packages scanned for a specific scan.
+
+    Query params:
+    - scan_id: The scan result ID to fetch packages for
+    """
+    scan_id = request.args.get('scan_id', type=int)
+    if not scan_id:
+        return "<div class='alert alert-warning'>No scan ID provided</div>"
+
+    with get_db_session() as db:
+        from models import CVEScanResult
+        scan_result_db = db.query(CVEScanResult).get(scan_id)
+        if not scan_result_db:
+            return "<div class='alert alert-warning'>Scan not found</div>"
+
+        packages = scan_result_db.get_packages_scanned()
+
+    return render_template("admin/partials/cve_packages_list.html",
+                          packages=packages,
+                          scan_id=scan_id)
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def htmx_cve_vulnerabilities():
+    """
+    HTMX endpoint to return vulnerabilities for a specific scan.
+
+    Query params:
+    - scan_id: The scan result ID to fetch vulnerabilities for
+    - severity: Minimum severity level (critical, high, medium, low)
+    """
+    scan_id = request.args.get('scan_id', type=int)
+    severity = request.args.get('severity', CVESeverity.HIGH)
+
+    if not scan_id:
+        return "<div class='alert alert-warning'>No scan ID provided</div>"
+
+    if severity not in (CVESeverity.CRITICAL, CVESeverity.HIGH, CVESeverity.MEDIUM, CVESeverity.LOW):
+        severity = CVESeverity.HIGH
+
+    with get_db_session() as db:
+        from models import CVEScanResult
+        scan_result_db = db.query(CVEScanResult).get(scan_id)
+        if not scan_result_db:
+            return "<div class='alert alert-warning'>Scan not found</div>"
+
+        vulnerabilities = scan_result_db.get_vulnerabilities()
+
+    # Filter by severity
+    filtered_vulns = filter_vulnerabilities_by_severity(vulnerabilities, min_severity=severity)
+
+    return render_template("admin/partials/cve_vulnerabilities_list.html",
+                          vulnerabilities=filtered_vulns)
+
+
+@login_required
+@roles_required("admin", "local_admin")
+def htmx_cve_scan_history():
+    """
+    HTMX endpoint to return scan history dropdown.
+
+    Returns HTML list of recent scans with links.
+    """
+    with get_db_session() as db:
+        recent_scans = get_latest_scan_results(db, limit=20)
+        # Extract data before session closes to avoid DetachedInstanceError
+        scans_data = []
+        for scan in recent_scans:
+            # Convert datetime to Python datetime for filter
+            scanned_at = scan.scanned_at
+            scans_data.append({
+                'id': scan.id,
+                'scanned_at': scanned_at,  # datetime object for user_datetime filter
+                'total_count': scan.total_count,
+            })
+
+    return render_template("admin/partials/cve_scan_history.html",
+                          recent_scans=scans_data)

@@ -187,6 +187,11 @@ def encounterImageByUUID(uuid: str):
         return _serve_encounter_image(encounter_file, zip_file, uuid)
 
 def encounterDrReportByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
+    context = determine_scoping_context()
+
     with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
@@ -196,8 +201,15 @@ def encounterDrReportByUUID(uuid: str):
             sanitize_log_value(request.referrer),
             sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
         )
-        
-        result = (db.query(DiabeticRetinopathyReport, PatientEncounters, ZipFile).join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(DiabeticRetinopathyReport.uuid == uuid).first())
+
+        query = (db.query(DiabeticRetinopathyReport, PatientEncounters, ZipFile)
+                 .join(PatientEncounters, DiabeticRetinopathyReport.patient_encounter_id == PatientEncounters.id)
+                 .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                 .filter(DiabeticRetinopathyReport.uuid == uuid))
+
+        # Apply hospital scoping for security
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        result = query.first()
         if not result or not result[0].report_file_name:
             current_app.logger.warning(
                 "DR PDF NOT FOUND - UUID: %s",
@@ -249,6 +261,11 @@ def encounterDrReportByUUID(uuid: str):
         return response
 
 def encounterGlaucomaReportByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
+    context = determine_scoping_context()
+
     with transaction_scope() as db:
         # Log PDF access request for debugging partitioned cookie issues
         from flask import current_app, request
@@ -258,8 +275,15 @@ def encounterGlaucomaReportByUUID(uuid: str):
             sanitize_log_value(request.referrer),
             sanitize_log_value(request.headers.get("User-Agent", "Unknown")),
         )
-        
-        result = (db.query(GlaucomaReport, PatientEncounters, ZipFile).join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id).join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id).filter(GlaucomaReport.uuid == uuid).first())
+
+        query = (db.query(GlaucomaReport, PatientEncounters, ZipFile)
+                 .join(PatientEncounters, GlaucomaReport.patient_encounter_id == PatientEncounters.id)
+                 .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
+                 .filter(GlaucomaReport.uuid == uuid))
+
+        # Apply hospital scoping for security
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        result = query.first()
         if not result or not result[0].report_file_name:
             current_app.logger.warning(
                 "PDF NOT FOUND - UUID: %s",
@@ -317,14 +341,22 @@ def encounterPDFByUUID(uuid: str):
     """
     Serve the original PDF file from an encounter by UUID.
     """
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+
+    context = determine_scoping_context()
+
     with transaction_scope() as db:
-        result = (
+        query = (
             db.query(EncounterFilePDF, PatientEncounters, ZipFile)
             .join(PatientEncounters, EncounterFilePDF.patient_encounter_id == PatientEncounters.id)
             .join(ZipFile, PatientEncounters.zip_file_id == ZipFile.id)
             .filter(EncounterFilePDF.uuid == uuid)
-            .first()
         )
+
+        # Apply hospital scoping for security
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        result = query.first()
         if not result or not result[0].filename:
             flash(f"Error: Encounter PDF not found with UUID: {uuid}", "danger")
             abort(404)

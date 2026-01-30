@@ -34,7 +34,7 @@ $DC exec -u root web chown -R $(id -u):$(id -g) /app/migrations/versions
 
 ```bash
 # Docker compose prefix (use for all commands below)
-DC="docker compose --env-file deploy.config.env --env-file deploy.secrets.env"
+DC="docker compose "
 
 # Start services
 $DC up web -d
@@ -44,7 +44,7 @@ $DC exec web uv run pytest tests/
 
 # Database migrations (NOTE: use -u flag to avoid root-owned files)
 $DC exec web uv run alembic heads
-$DC exec -u $(id -u):$(id -g) web uv run alembic revision --autogenerate -m "description"
+$DC exec web uv run alembic revision --autogenerate -m "description"
 $DC exec web uv run alembic upgrade head
 
 # Create user

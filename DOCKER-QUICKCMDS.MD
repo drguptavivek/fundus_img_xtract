@@ -62,6 +62,8 @@ docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 # Logs
 docker compose logs --tail=100 -f
 
+#sizes
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Size}}" | grep -E "NAME|fundus"
 
 # Database backup (timestamped)
 mkdir -p backups
@@ -92,10 +94,16 @@ docker system df
 docker system df -v
  
 # 2. Remove dangling images only (safest)
+docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | sort -k3 -h 
 docker image prune -f
 
 # 3. Remove build cache (safe, rebuilds wiregenerate)
 docker builder prune -f
+
+# Unused vilume prune
+docker volume ls --filter dangling=true 
+docker system df -v | grep -A 20 "Local Volumes" | sort -k3 -h    
+docker volume prune -f
 
 # 4. Check space saved   
 docker system df

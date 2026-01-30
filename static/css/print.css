@@ -1,0 +1,249 @@
+/**
+ * Print Styles
+ *
+ * Print-specific styles to improve webpage printing across all pages.
+ * Hides navigation, controls, buttons, and footer while preserving
+ * colors and layout for print output.
+ */
+
+@media print {
+  /* Hide navbar but keep logo visible */
+  .navbar {
+    position: static !important;
+    border: none !important;
+    margin-bottom: 1rem !important;
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
+  .navbar .container {
+    display: block !important;
+  }
+
+  /* Hide navbar elements except logo */
+  .navbar-toggler,
+  .navbar-collapse,
+  .navbar-nav,
+  .dropdown-menu,
+  .dropdown-toggle {
+    display: none !important;
+  }
+
+  /* Show only the navbar-brand (logo) */
+  .navbar-brand {
+    display: flex !important;
+    margin: 0 !important;
+  }
+
+  /* Remove all navbar theme backgrounds */
+  .theme-auto,
+  .theme-light,
+  .theme-dark,
+  .bg-body,
+  [class*="theme-"],
+  .navbar[class*="bg-"] {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
+  /* Hide theme toggle button */
+  [data-theme-toggle] {
+    display: none !important;
+  }
+
+  /* Hide all buttons */
+  button,
+  .btn,
+  input[type="submit"],
+  input[type="button"] {
+    display: none !important;
+  }
+
+  /* Hide footer */
+  .site-footer,
+  footer {
+    display: none !important;
+  }
+
+  /* Hide flash toasts */
+  .toast-container,
+  .toast {
+    display: none !important;
+  }
+
+  /* Force light mode colors for print */
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Override any dark mode variables */
+  :root {
+    --bs-body-bg: white !important;
+    --bs-body-color: black !important;
+    --bs-text-color: black !important;
+  }
+
+  /* Preserve full color layout for images and colored elements */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Fix container layout for print */
+  .container,
+  .container-fluid {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 1rem !important;
+    margin: 0 !important;
+  }
+
+  /* Maintain Bootstrap grid columns - Define widths for print */
+  /* Large breakpoint columns - highest priority for print */
+  .col-lg-1 { width: 8.333% !important; }
+  .col-lg-2 { width: 16.666% !important; }
+  .col-lg-3 { width: 25% !important; }
+  .col-lg-4 { width: 33.333% !important; }
+  .col-lg-5 { width: 41.666% !important; }
+  .col-lg-6 { width: 50% !important; }
+  .col-lg-7 { width: 58.333% !important; }
+  .col-lg-8 { width: 66.666% !important; }
+  .col-lg-9 { width: 75% !important; }
+  .col-lg-10 { width: 83.333% !important; }
+  .col-lg-11 { width: 91.666% !important; }
+  .col-lg-12 { width: 100% !important; }
+
+  /* Medium breakpoint columns */
+  .col-md-1 { width: 8.333% !important; }
+  .col-md-2 { width: 16.666% !important; }
+  .col-md-3 { width: 25% !important; }
+  .col-md-4 { width: 33.333% !important; }
+  .col-md-5 { width: 41.666% !important; }
+  .col-md-6 { width: 50% !important; }
+  .col-md-7 { width: 58.333% !important; }
+  .col-md-8 { width: 66.666% !important; }
+  .col-md-9 { width: 75% !important; }
+  .col-md-10 { width: 83.333% !important; }
+  .col-md-11 { width: 91.666% !important; }
+  .col-md-12 { width: 100% !important; }
+
+  /* Small breakpoint columns */
+  .col-sm-1 { width: 8.333% !important; }
+  .col-sm-2 { width: 16.666% !important; }
+  .col-sm-3 { width: 25% !important; }
+  .col-sm-4 { width: 33.333% !important; }
+  .col-sm-5 { width: 41.666% !important; }
+  .col-sm-6 { width: 50% !important; }
+  .col-sm-7 { width: 58.333% !important; }
+  .col-sm-8 { width: 66.666% !important; }
+  .col-sm-9 { width: 75% !important; }
+  .col-sm-10 { width: 83.333% !important; }
+  .col-sm-11 { width: 91.666% !important; }
+  .col-sm-12 { width: 100% !important; }
+
+  /* Base columns - only apply if no breakpoint specified */
+  .col-1:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 8.333% !important; }
+  .col-2:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 16.666% !important; }
+  .col-3:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 25% !important; }
+  .col-4:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 33.333% !important; }
+  .col-5:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 41.666% !important; }
+  .col-6:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 50% !important; }
+  .col-7:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 58.333% !important; }
+  .col-8:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 66.666% !important; }
+  .col-9:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 75% !important; }
+  .col-10:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 83.333% !important; }
+  .col-11:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 91.666% !important; }
+  .col-12:not([class*="col-md"]):not([class*="col-lg"]):not([class*="col-sm"]) { width: 100% !important; }
+
+  /* Row columns (used in analytics KPI cards: row-cols-1 row-cols-sm-2 row-cols-lg-4) */
+  .row-cols-1 > * { width: 100% !important; }
+  .row-cols-2 > * { width: 50% !important; }
+  .row-cols-3 > * { width: 33.333% !important; }
+  .row-cols-4 > * { width: 25% !important; }
+  .row-cols-sm-1 > * { width: 100% !important; }
+  .row-cols-sm-2 > * { width: 50% !important; }
+  .row-cols-sm-3 > * { width: 33.333% !important; }
+  .row-cols-sm-4 > * { width: 25% !important; }
+  .row-cols-lg-1 > * { width: 100% !important; }
+  .row-cols-lg-2 > * { width: 50% !important; }
+  .row-cols-lg-3 > * { width: 33.333% !important; }
+  .row-cols-lg-4 > * { width: 25% !important; }
+
+  /* Ensure row maintains proper spacing */
+  .row {
+    margin: 0 -0.5rem !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+  }
+
+  .row > .col,
+  .row > [class*="col-"] {
+    padding: 0 0.5rem !important;
+  }
+
+  /* Prevent overlap - Add page breaks between major sections */
+  .row.mb-4,
+  .row.g-3 {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Add page break before system health section to prevent overlap */
+  .theme-jobs {
+    page-break-before: auto;
+  }
+
+  /* Ensure chart containers don't break */
+  .chart-container {
+    page-break-inside: avoid;
+    overflow: hidden !important;
+  }
+
+  /* Fix chart canvas overflow */
+  .chart-container canvas,
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+    overflow: hidden !important;
+  }
+
+  /* Fix charts in position:relative containers */
+  [style*="position: relative"] canvas,
+  [style*="height:300px"] canvas,
+  [style*="height: 300px"] canvas {
+    max-width: 100% !important;
+    max-height: 300px !important;
+  }
+
+  /* Hide data freshness indicator in print */
+  .data-freshness {
+    display: none !important;
+  }
+
+  /* Ensure images are not cut off */
+  img {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  /* Avoid breaking inside cards */
+  .card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Add page numbers */
+  @page {
+    margin: 1cm;
+  }
+
+  /* Hide any remaining interactive elements */
+  [data-bs-toggle],
+  [data-bs-dismiss],
+  [data-bs-target] {
+    display: none !important;
+  }
+}

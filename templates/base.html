@@ -37,6 +37,8 @@
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"/>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ v }}">
+  <!-- Print CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}?v={{ v }}" media="print">
   <style>
     @media (max-width: 991.98px) {
       .navbar.navbar-overlay-collapse {

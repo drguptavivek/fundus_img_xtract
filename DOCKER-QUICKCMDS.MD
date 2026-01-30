@@ -27,7 +27,8 @@ ln -sf deploy.secrets.env .env
 
 
 
-docker compose down -v
+docker compose down 
+
 docker compose up -d db cache
 
 docker compose logs db cache
@@ -35,6 +36,8 @@ docker compose logs db cache
 docker compose build web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder web celery-ocr-worker celery-general-worker celery-beat
 
 docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
+
+
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
 
@@ -42,7 +45,9 @@ docker compose   stop web
 
 docker compose   start web
 
-docker compose logs web  --tail=20 -f
+docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
+
+docker compose logs   --tail=20 -f
 
 docker compose exec web  uv run alembic upgrade head
 

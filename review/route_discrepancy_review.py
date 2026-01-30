@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import abort, jsonify, render_template, request, send_file
 from flask_login import current_user
+import sqlalchemy as sa
 from sqlalchemy import and_, or_, text
 from sqlalchemy.orm import joinedload, selectinload
 

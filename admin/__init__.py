@@ -46,7 +46,7 @@ from .email_settings import (
 )
 from .grading_state_inconsistencies import grading_state_inconsistencies
 from .audit_routes import sensitive_operations_audit, sensitive_operation_details
-from .cve_scanner import cve_security_report, api_cve_summary, api_cve_refresh, cve_report_text
+from .cve_scanner import cve_security_report, api_cve_summary, api_cve_refresh, cve_report_text, api_cve_scan_history
 from .s3_config import (
     s3_configs_list, s3_config_create, s3_config_edit, s3_config_delete,
     s3_config_activate, s3_config_test_connection, s3_config_rotate_pepper,
@@ -295,4 +295,5 @@ admin_bp.add_url_rule("/sensitive-operations/<int:log_id>", view_func=sensitive_
 admin_bp.add_url_rule("/security/cves", view_func=cve_security_report, methods=["GET"])
 admin_bp.add_url_rule("/api/security/cves/summary", view_func=api_cve_summary, methods=["GET"])
 admin_bp.add_url_rule("/api/security/cves/refresh", view_func=api_cve_refresh, methods=["POST"])
+admin_bp.add_url_rule("/api/security/cves/history", view_func=api_cve_scan_history, methods=["GET"])
 admin_bp.add_url_rule("/security/cves/report.txt", view_func=cve_report_text, methods=["GET"])

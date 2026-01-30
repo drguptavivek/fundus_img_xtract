@@ -1833,3 +1833,99 @@ class SensitiveOperationAudit(Base):
             return json.loads(self.result_details)
         except (json.JSONDecodeError, TypeError):
             return None
+
+
+class CVEScanResult(Base):
+    """
+    Stores results of pip-audit vulnerability scans.
+    
+    Scheduled scans run daily via Celery and results are stored here.
+    On-demand scans can also be triggered by admins.
+    """
+    __tablename__ = "cve_scan_results"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scanned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+    scan_type: Mapped[str] = mapped_column(
+        String(20),
+        default="scheduled",
+        nullable=False,
+        index=True
+    )  # "scheduled" or "on_demand"
+    
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="completed",
+        nullable=False
+    )  # "completed", "failed", "running"
+    
+    # Vulnerability counts
+    total_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    critical_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    high_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    medium_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    low_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    
+    # Full scan results as JSON
+    vulnerabilities_json: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
+    
+    # Raw pip-audit output for debugging
+    raw_output: Mapped[Optional[Text]] = mapped_column(Text, nullable=True)
+    
+    # Error message if scan failed
+    error_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    
+    # Who triggered the scan (None for scheduled)
+    triggered_by_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+    
+    # Scan duration in seconds
+    duration_seconds: Mapped[Optional[int]] = mapped_column(nullable=True)
+    
+    def get_vulnerabilities(self) -> list:
+        """Deserialize vulnerabilities JSON to list."""
+        import json
+        if not self.vulnerabilities_json:
+            return []
+        try:
+            return json.loads(self.vulnerabilities_json)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    
+    def set_vulnerabilities(self, vulnerabilities: list) -> None:
+        """Serialize vulnerabilities list to JSON."""
+        import json
+        self.vulnerabilities_json = json.dumps(vulnerabilities) if vulnerabilities else None
+    
+    def has_critical_or_high(self) -> bool:
+        """Check if scan found any critical or high vulnerabilities."""
+        return self.critical_count > 0 or self.high_count > 0
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for API responses."""
+        return {
+            "id": self.id,
+            "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
+            "scan_type": self.scan_type,
+            "status": self.status,
+            "total_count": self.total_count,
+            "by_severity": {
+                "critical": self.critical_count,
+                "high": self.high_count,
+                "medium": self.medium_count,
+                "low": self.low_count,
+            },
+            "has_critical_or_high": self.has_critical_or_high(),
+            "vulnerabilities": self.get_vulnerabilities(),
+            "error": self.error_message,
+            "triggered_by_user_id": self.triggered_by_user_id,
+            "duration_seconds": self.duration_seconds,
+        }

@@ -32,75 +32,48 @@ PYPI_API_URL = "https://pypi.org/pypi/{}/json"
 
 def get_installed_packages() -> List[Dict]:
     """
-    Get list of all installed packages from ALL containers (web, celery-ocr, celery-general, celery-beat).
+    Get list of all installed packages from uv.lock file.
 
-    Uses docker exec to run pip list in each container and merges results.
-    Packages appearing in multiple containers use the highest version.
+    Reads the uv.lock file which contains all package dependencies
+    for the project. This is safer than docker exec and doesn't require
+    giving containers access to the docker socket.
 
     Returns:
         List of dicts with keys:
             - name: Package name
-            - version: Installed version (highest if in multiple containers)
+            - version: Installed version
     """
-    import os
+    from pathlib import Path
 
-    # Container names to scan
-    containers = [
-        ('fundus-img-xtract-web', 'web'),
-        ('fundus-img-xtract-celery-ocr', 'celery-ocr'),
-        ('fundus-img-xtract-celery-general', 'celery-general'),
-        ('fundus-img-xtract-celery-beat', 'celery-beat'),
-    ]
+    lock_file = Path(__file__).parent.parent / "uv.lock"
 
-    all_packages = {}  # Use dict to dedupe by package name
+    if not lock_file.exists():
+        logger.error("uv.lock not found at %s", lock_file)
+        return []
 
-    for container_name, container_type in containers:
-        try:
-            # Run pip list in the container via docker exec
-            completed = subprocess.run(
-                ["docker", "exec", container_name, "uv", "run", "pip", "list", "--format=json"],
-                capture_output=True,
-                text=True,
-                timeout=90,  # Longer timeout for docker exec
-                check=False  # Don't fail if container is not running
-            )
+    try:
+        # Parse uv.lock TOML format
+        # Format: [[package]] sections with name and version
+        content = lock_file.read_text()
+        packages = []
 
-            if completed.returncode != 0:
-                logger.warning("Failed to get packages from %s: return code %d", container_name, completed.returncode)
-                continue
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith('name = '):
+                # Extract package name
+                name = line.split('=', 1)[1].strip().strip('"')
+                packages.append({'name': name})
+            elif line.startswith('version = ') and packages:
+                # Add version to the last package
+                version = line.split('=', 1)[1].strip().strip('"')
+                packages[-1]['version'] = version
 
-            packages = json.loads(completed.stdout)
-            logger.info("Retrieved %d packages from %s", len(packages), container_name)
+        logger.info("Retrieved %d packages from uv.lock", len(packages))
+        return packages
 
-            # Merge packages, keeping highest version if duplicates
-            for pkg in packages:
-                pkg_name = pkg.get('name', '').lower()
-                pkg_version = pkg.get('version', '0.0.0')
-
-                if not pkg_name:
-                    continue
-
-                # If package not seen before, or this version is higher
-                if pkg_name not in all_packages or _version_compare(pkg_version, all_packages[pkg_name]['version']) > 0:
-                    all_packages[pkg_name] = {
-                        'name': pkg.get('name'),  # Keep original case for display
-                        'version': pkg_version,
-                        'source': container_type,
-                    }
-
-        except subprocess.TimeoutExpired:
-            logger.warning("pip list in %s timed out", container_name)
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse pip list JSON from %s: %s", container_name, e)
-        except FileNotFoundError:
-            logger.warning("docker command not found")
-        except Exception as e:
-            logger.warning("Failed to get packages from %s: %s", container_name, e)
-
-    # Convert dict back to list
-    result = list(all_packages.values())
-    logger.info("Total unique packages found across all containers: %d", len(result))
-    return result
+    except Exception as e:
+        logger.exception("Failed to parse uv.lock: %s", e)
+        return []
 
 
 def _version_compare(v1: str, v2: str) -> int:

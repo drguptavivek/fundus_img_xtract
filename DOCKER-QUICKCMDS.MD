@@ -6,19 +6,20 @@ Notes:
 
 Adding a new Python package:
 1) Add it to `pyproject.toml`.
-2) Update the appropriate venv requirements file:
-   - `requirements-web.txt` for web
-   - `requirements-ocr.txt` for OCR worker
-   - `requirements-general.txt` for general worker
-   - `requirements-beat.txt` for beat
+2) Genherate the appropriate venv requirements file:
+     ./scripts/export_requirements.sh 
+   This uses uv inside web container.
 3) Rebuild and rerun the matching venv builder:
    - `docker compose build <service>-venv-builder`
    - `docker compose up <service>-venv-builder -d`
 
 ```bash
-rm docker-compose.override.yml 
-rm develop.secrets.env
 
+##  If you are in production
+# rm docker-compose.override.yml 
+# rm develop.secrets.env
+
+# If Fresh Install
 cp deploy.secrets.env.example deploy.secrets.env
 nano deploy.secrets.env
 
@@ -26,46 +27,55 @@ nano deploy.secrets.env
 ln -sf deploy.secrets.env .env
 
 
+# Bring down any existing conatiners
+docker compose down
 
-docker compose down 
-
+# PostGres and Redis
 docker compose up -d db cache
-
 docker compose logs db cache
 
-docker compose build web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder web celery-ocr-worker celery-general-worker celery-beat
+# VENV Builders FIRST
+docker compose down
+docker volume rm fundus_img_xtract_web_venv fundus_img_xtract_ocr_venv fundus_img_xtract_beat_venv fundus_img_xtract_general_venv
+# If Pckages changed
+docker compose build --no-cache web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder  
+# If App code only chjanged
+docker compose build web-venv-builder ocr-venv-builder beat-venv-builder general-venv-builder
 
 docker compose up web-venv-builder ocr-venv-builder general-venv-builder beat-venv-builder -d
 
-
+# Main Containers SERVICES SECOND
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
+docker compose down
+docker compose up
+docker compose up -d
 
+docker system df -v | grep -E "(fundus.*venv|Local Volumes)" 
+
+# Sytop Start
 docker compose   stop web
-
 docker compose   start web
 
 docker compose up web celery-ocr-worker celery-general-worker celery-beat -d
 
-docker compose logs   --tail=20 -f
+# Logs
+docker compose logs --tail=100 -f
 
-docker compose exec web  uv run alembic upgrade head
 
 # Database backup (timestamped)
 mkdir -p backups
 docker compose exec -T db bash -lc 'pg_dump -U "$POSTGRES_APP_USER" -d "$POSTGRES_APP_DB"' > backups/backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Alembic Commnsa
-uv run alembic  history
-uv run alembic heads
-uv run alembic current
-uv run alembic upgrade head
+# Alembic Commands
+docker compose exec web  uv run alembic history
+docker compose exec web  uv run alembic heads
+docker compose exec web  uv run alembic current
+docker compose exec web  uv run alembic upgrade head
  
 
 # User Creation
 docker compose exec web /bin/bash
-
-
 uv run python -m scripts.create_user admin
 uv run python -m scripts.assign_roles admin --roles admin ophthalmologist optometrist
 exit
@@ -74,9 +84,32 @@ exit
 docker compose ps
 docker compose logs web
 
+# Permissions
 sudo chown -R $USER:$USER /home/eyeimg/fundus_img_xtract
 
+# Clean up first to save space
+docker system df
+docker system df -v
+ 
+# 2. Remove dangling images only (safest)
+docker image prune -f
 
+# 3. Remove build cache (safe, rebuilds wiregenerate)
+docker builder prune -f
+
+# 4. Check space saved   
+docker system df
+docker system df 
+docker image prune -a -f
+docker builder prune -f  
+docker system prune -a -f
+```
+
+
+## STATS LOGGER
+
+
+```
 # 1) Stop/remove any stats-logger containers
 docker rm -f $(docker ps -a --filter name=fundus-img-xtract-stats --format '{{.ID}}') 2>/dev/null || true
 # 2) Remove all stats-logger images

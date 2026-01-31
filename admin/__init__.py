@@ -77,6 +77,10 @@ from .s3_config import (
     s3_config_set_fallback,
     s3_configs_api_list, s3_config_api_test_connection_modal, s3_config_api_create,
 )
+from .s3_sync_status import (
+    s3_sync_dashboard, s3_sync_hospital_detail,
+    s3_sync_status_api, s3_sync_stats_api, s3_sync_retry,
+)
 from .celery_schedule import (
     celery_schedule_list,
     celery_schedule_create,
@@ -317,6 +321,13 @@ admin_bp.add_url_rule("/s3-configs/<int:s3_config_id>/fallback", view_func=s3_co
 admin_bp.add_url_rule("/s3-configs/api/list", view_func=s3_configs_api_list, methods=["GET"])
 admin_bp.add_url_rule("/s3-configs/api/test-connection-modal", view_func=s3_config_api_test_connection_modal, methods=["POST"])
 admin_bp.add_url_rule("/s3-configs/api/create", view_func=s3_config_api_create, methods=["POST"])
+
+# S3 Sync Status routes
+admin_bp.add_url_rule("/s3-sync-dashboard", view_func=s3_sync_dashboard, methods=["GET"], endpoint="s3_sync_dashboard")
+admin_bp.add_url_rule("/s3-sync-dashboard/hospital/<int:hospital_id>", view_func=s3_sync_hospital_detail, methods=["GET"])
+admin_bp.add_url_rule("/api/s3-sync-status", view_func=s3_sync_status_api, methods=["GET"])
+admin_bp.add_url_rule("/api/s3-sync-retry/<int:sync_id>", view_func=s3_sync_retry, methods=["POST"])
+admin_bp.add_url_rule("/api/s3-sync-stats", view_func=s3_sync_stats_api, methods=["GET"])
 
 # Register database restore blueprint
 admin_bp.register_blueprint(database_restore_bp)

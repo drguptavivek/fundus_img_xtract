@@ -10,7 +10,6 @@ from flask import render_template, jsonify, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from sqlalchemy import select, and_, desc
 
-from admin import admin_bp
 from auth.roles import roles_required
 from models import S3Config, S3SyncStatus, Hospital
 from db_transaction_manager import transaction_scope
@@ -43,7 +42,6 @@ def _get_user_hospitals():
     return []
 
 
-@admin_bp.route("/s3-sync-dashboard")
 @login_required
 @roles_required("admin", "local_admin")
 def s3_sync_dashboard():
@@ -92,7 +90,6 @@ def s3_sync_dashboard():
     return render_template("admin/s3_sync_dashboard.html", hospitals=hospitals_data)
 
 
-@admin_bp.route("/s3-sync-dashboard/hospital/<int:hospital_id>")
 @login_required
 @roles_required("admin", "local_admin")
 def s3_sync_hospital_detail(hospital_id: int):
@@ -159,7 +156,6 @@ def s3_sync_hospital_detail(hospital_id: int):
     )
 
 
-@admin_bp.route("/api/s3-sync-status")
 @login_required
 @roles_required("admin", "local_admin")
 def s3_sync_status_api():
@@ -229,7 +225,6 @@ def s3_sync_status_api():
         })
 
 
-@admin_bp.route("/api/s3-sync-retry/<int:sync_id>", methods=["POST"])
 @login_required
 @roles_required("admin", "local_admin")
 def s3_sync_retry(sync_id: int):
@@ -280,7 +275,6 @@ def s3_sync_retry(sync_id: int):
         })
 
 
-@admin_bp.route("/api/s3-sync-stats")
 @login_required
 @roles_required("admin", "local_admin")
 def s3_sync_stats_api():

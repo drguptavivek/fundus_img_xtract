@@ -409,6 +409,7 @@ class PatientEncounters(Base):
     encounter_verified_status: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     encounter_verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
     encounter_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    disease_id: Mapped[int | None] = mapped_column(ForeignKey('diseases.id'), nullable=True, index=True)
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")

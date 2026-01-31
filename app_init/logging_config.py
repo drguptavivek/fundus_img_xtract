@@ -123,6 +123,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     pii_detection_handler = _make_handler("pii_detection.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     image_metadata_handler = _make_handler("image_metadata.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     encounter_set_handler = _make_handler("encounter_set.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
+    s3_sync_handler = _make_handler("s3_sync.log", logging.INFO, base_format, log_dir=log_dir, max_bytes=log_max_bytes, backup_count=log_backup_count)
     db_query_handler = TimedRotatingFileHandler(
         log_dir / "db_query.log",
         when="midnight",
@@ -172,6 +173,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     pii_detection_logger = _configure_logger("pii_detection", logging.INFO, pii_detection_handler)
     image_metadata_logger = _configure_logger("image_metadata", logging.INFO, image_metadata_handler)
     encounter_set_logger = _configure_logger("api.encounter_set", logging.INFO, encounter_set_handler)
+    s3_sync_logger = _configure_logger("admin.s3_sync_status", logging.INFO, s3_sync_handler)
     db_query_logger = _configure_logger("db_query", logging.INFO, db_query_handler)
     db_query_slow_logger = _configure_logger("db_query_slow", logging.WARNING, db_query_slow_handler)
 
@@ -234,6 +236,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
     pii_detection_logger.info("PII detection logger initialized at %s", str(log_dir / "pii_detection.log"))
     image_metadata_logger.info("Image metadata logger initialized at %s", str(log_dir / "image_metadata.log"))
     encounter_set_logger.info("Encounter set API logger initialized at %s", str(log_dir / "encounter_set.log"))
+    s3_sync_logger.info("S3 sync status logger initialized at %s", str(log_dir / "s3_sync.log"))
     db_query_logger.info("DB query logger initialized at %s", str(log_dir / "db_query.log"))
 
     return {
@@ -257,6 +260,7 @@ def configure_logging(app: Flask) -> Dict[str, logging.Logger]:
         "pii_detection": pii_detection_logger,
         "image_metadata": image_metadata_logger,
         "encounter_set": encounter_set_logger,
+        "s3_sync": s3_sync_logger,
         "db_query": db_query_logger,
         "db_query_slow": db_query_slow_logger,
         "app": app_logger,

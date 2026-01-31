@@ -204,25 +204,26 @@
                     </div>
                 </div>
 
-                <!-- Fallback Policy -->
-                <div class="card shadow-sm mb-3">
-                    <div class="card-header py-2">
-                        <strong><i class="fas fa-shield-alt me-2"></i>Fallback Policy</strong>
+                <!-- Fallback Policy (DEPRECATED) -->
+                <div class="card shadow-sm mb-3 border-warning">
+                    <div class="card-header py-2 bg-warning bg-opacity-10">
+                        <strong><i class="fas fa-exclamation-triangle me-2 text-warning"></i>Fallback Policy (Deprecated)</strong>
                     </div>
                     <div class="card-body">
+                        <div class="alert alert-info mb-2">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Local-First Policy:</strong> All uploads now automatically fall back to local storage on S3 failure. This setting is kept for backward compatibility but is ignored.
+                        </div>
                         <div class="mb-3">
-                            <label for="fallback_policy" class="form-label">Fallback Policy *</label>
-                            <select class="form-select" name="fallback_policy" id="fallback_policy">
-                                <option value="never" {% if form_data.get('fallback_policy', 'never') == 'never' %}selected{% endif %}>
-                                    Never (Fail Hard) - Recommended
-                                </option>
-                                <option value="always" {% if form_data.get('fallback_policy') == 'always' %}selected{% endif %}>
-                                    Always (Allow Local) - Master Admin Only
+                            <label for="fallback_policy" class="form-label text-muted">Fallback Policy (Read-only)</label>
+                            <select class="form-select" name="fallback_policy" id="fallback_policy" disabled>
+                                <option value="always" selected>
+                                    Always (Local-First) - System Default
                                 </option>
                             </select>
-                            <div class="help-text">
-                                <strong>Never:</strong> Return 503 error if S3 fails (recommended for security).<br>
-                                <strong>Always:</strong> Fall back to local filesystem if S3 fails (master admin only).
+                            <input type="hidden" name="fallback_policy" value="always">
+                            <div class="help-text text-muted">
+                                <em>This setting is now fixed to "Always" for all configurations.</em>
                             </div>
                         </div>
                     </div>

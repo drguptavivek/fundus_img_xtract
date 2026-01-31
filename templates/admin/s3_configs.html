@@ -393,9 +393,7 @@ function renderConfigRow(config) {
         ? '<span class="badge bg-success status-active"><i class="fas fa-check-circle"></i> Active</span>'
         : '<span class="badge bg-secondary status-inactive"><i class="fas fa-pause-circle"></i> Inactive</span>';
 
-    const fallbackBadge = config.fallback_policy === 'always'
-        ? '<span class="badge bg-warning ms-1" title="Fallback to local storage enabled"><i class="fas fa-shield-alt"></i> Fallback</span>'
-        : '';
+    const fallbackBadge = '<span class="badge bg-info ms-1" title="Local-first policy active"><i class="fas fa-check-circle"></i> Local-First</span>';
 
     const providerBadge = `<span class="badge provider-badge ${providerColors[config.provider] || 'bg-secondary'}">${config.provider}</span>`;
 

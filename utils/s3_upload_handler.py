@@ -166,11 +166,11 @@ def upload_with_fallback(
     local_rel_path: str | None = None
 ) -> UploadResult:
     """
-    Upload file to S3 with fallback to local filesystem.
+    Upload file to S3 with automatic fallback to local filesystem.
 
-    Upload strategy:
+    Upload strategy (local-first):
     1. If hospital has active S3 config, upload to S3
-    2. If S3 upload fails and fallback_policy="always", save to local
+    2. If S3 upload fails, automatically save to local (local-first policy)
     3. If no S3 config, save to local
 
     Args:
@@ -224,21 +224,9 @@ def upload_with_fallback(
                 e
             )
 
-            # Check fallback policy
-            if s3_config.fallback_policy == "never":
-                # Fail hard - don't save locally
-                audit_logger.error(
-                    "S3_UPLOAD_FAILED_NO_FALLBACK | hospital_id=%d | filename=%s | "
-                    "fallback_policy=never | error=%s",
-                    hospital_id,
-                    sanitize_log_value(filename),
-                    sanitize_log_value(str(e))
-                )
-                raise ValueError(f"S3 upload failed and fallback policy is 'never': {e}")
-
-            # Fallback to local storage
+            # Local-first policy: always fall back to local storage on S3 failure
             logger.info(
-                "Falling back to local storage for hospital_id=%d, filename=%s",
+                "Falling back to local storage for hospital_id=%d, filename=%s (local-first policy)",
                 hospital_id,
                 sanitize_log_value(filename)
             )
@@ -421,9 +409,8 @@ class S3FileStorageAdapter:
                 self.backend = "s3"
                 return ("s3", object_key)
             except Exception as e:
-                if self.s3_config.fallback_policy == "never":
-                    raise ValueError(f"S3 upload failed and fallback is disabled: {e}")
-                logger.warning("S3 upload failed, will use local storage: %s", e)
+                # Local-first: always fall back to local storage on S3 failure
+                logger.warning("S3 upload failed, will use local storage (local-first policy): %s", e)
 
         # Fallback to local
         self.backend = "local"

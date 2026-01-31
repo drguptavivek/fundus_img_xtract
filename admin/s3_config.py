@@ -201,12 +201,14 @@ def s3_config_create():
             if addressing_style not in ("auto", "virtual", "path"):
                 errors.append("Invalid addressing style. Must be 'auto', 'virtual', or 'path'.")
 
-            # Fallback policy (master admin only)
+            # Fallback policy (DEPRECATED - now always local-first)
+            # The fallback_policy field is kept for backward compatibility but is ignored
+            # All S3 failures automatically fall back to local storage
             try:
                 if not validate_fallback_policy(fallback_policy):
                     errors.append("Invalid fallback policy.")
-                if fallback_policy == "always" and not is_master:
-                    errors.append("Only master admin can set fallback policy to 'always'.")
+                # Note: Policy is now always treated as "always" (local-first)
+                # even if set to "never" in the database
             except ValueError as e:
                 errors.append(str(e))
 

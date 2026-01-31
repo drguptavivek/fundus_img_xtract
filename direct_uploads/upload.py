@@ -568,12 +568,10 @@ def _upload_to_s3_and_get_metadata(
             sanitize_log_value(filename),
             sanitize_log_value(e),
         )
-        # Check fallback policy before re-raising
-        from utils.s3_upload_handler import get_active_s3_config
-        s3_config = get_active_s3_config(hospital_id)
-        if s3_config and s3_config.fallback_policy == "never":
-            # Fail hard - no local fallback
-            raise ValueError(f"S3 upload failed and fallback is disabled: {e}")
+        # Local-first: always allow local fallback on S3 failure
+        current_app.logger.info(
+            "S3 upload failed, local fallback available (local-first policy)"
+        )
         return None
 
 

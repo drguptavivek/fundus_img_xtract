@@ -177,9 +177,8 @@ def serve_media_with_hmac(uuid_str: str):
                         s3_config_id,
                         e
                     )
-                    # Check fallback policy
-                    if s3_config.fallback_policy == "never":
-                        abort(503, description="S3 service unavailable")
+                    # Local-first: fall back to local serving on S3 failure
+                    logger.info("S3 presigned URL generation failed, serving from local (local-first policy)")
 
         # No S3 metadata or S3 failed with fallback="always"
         # Serve from local filesystem
@@ -255,8 +254,8 @@ def serve_media_edited_with_hmac(uuid_str: str):
                     return redirect(presigned_url, code=307)
                 except Exception as e:
                     logger.error("Failed to generate S3 presigned URL for edited file: %s", e)
-                    if s3_config.fallback_policy == "never":
-                        abort(503, description="S3 service unavailable")
+                    # Local-first: fall back to local serving on S3 failure
+                    logger.info("S3 presigned URL generation failed for edited file, serving from local (local-first policy)")
 
         # Fallback to local
         return directImgEdByUUID(uuid_str)
@@ -337,8 +336,8 @@ def serve_media_thumbnail_with_hmac(uuid_str: str):
                     return redirect(presigned_url, code=307)
                 except Exception as e:
                     logger.error("Failed to generate S3 presigned URL for thumbnail: %s", e)
-                    if s3_config.fallback_policy == "never":
-                        abort(503, description="S3 service unavailable")
+                    # Local-first: fall back to local serving on S3 failure
+                    logger.info("S3 presigned URL generation failed for thumbnail, serving from local (local-first policy)")
 
         # Fallback to local thumbnail serving
         if isinstance(file_record, DirectImageUpload):

@@ -431,6 +431,11 @@ class EncounterSetImage(Base):
     folder_rel: Mapped[str] = mapped_column(String(512), nullable=False)
     file_hash: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # Verification and PII masking fields
+    is_anonymized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_reviewed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_not_gradable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    not_gradable_reason: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_set_images")
 

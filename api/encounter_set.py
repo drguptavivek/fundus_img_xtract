@@ -14,6 +14,8 @@ from auth.decorators import token_auth_required
 from utils.rate_limiter import api_rate_limit
 from utils.log_sanitize import sanitize_log_value
 
+logger = logging.getLogger("api.encounter_set")
+
 from flask_login import login_required, current_user
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload

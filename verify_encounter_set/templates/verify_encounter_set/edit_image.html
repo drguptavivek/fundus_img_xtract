@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}Edit Image - Position {{ image.spatial_position }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .tools-panel {
+        gap: 1rem;
+        padding-bottom: 12px;
+    }
+
+    .image-info-row .info-item {
+        display: inline-block;
+        flex-shrink: 0
+    }
+
+    .canvas-container {
+        border: 1px solid #dee2e6;
+        border-radius: .375rem;
+        justify-content: center;
+        align-items: center;
+        overflow: auto;
+        position: relative
+    }
+
+    #imageCanvas {
+        max-width: 100%;
+        max-height: 100%;
+        cursor: crosshair
+    }
+
+    #ocrOverlayCanvas {
+        position: absolute;
+        inset: 0;
+        max-width: 100%;
+        max-height: 100%;
+        pointer-events: none;
+    }
+
+    .color-picker-container label,
+    .slider-container label {
+        font-size: .7rem;
+        display: block;
+        text-align: center;
+        margin-bottom: .25rem
+    }
+
+    .slider-container input[type=range] {
+        width: 100%
+    }
+
+    .color-picker-container input[type=color] {
+        width: 100%;
+        height: 30px;
+        padding: 0
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="width: 1200px;">
+    <h1>Edit Encounter Set Image</h1>
+    <div class="row" style="padding: 1rem 0rem;">
+        <div class="col-10">
+            <div class="image-info-row">
+                <strong>Patient:</strong> {{ encounter.name }}
+                <strong>Patient ID:</strong> {{ encounter.patient_id }}
+                <br />
+                <strong>Position:</strong> {{ image.spatial_position }} of 9
+                <strong>Filename:</strong> {{ image.original_filename }}
+                <br />
+                <strong>Lab Unit:</strong> {{ encounter.lab_unit.name if encounter.lab_unit else 'N/A' }}
+                <strong>Capture Date:</strong> {{ encounter.capture_date }}
+            </div>
+        </div>
+        <div class="col-1">
+            <a href="{{ url_for('verify_encounter_set.verify_encounter', uuid=encounter.uuid) }}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Verify
+            </a>
+        </div>
+    </div>
+
+    <div class="image-editor-wrapper card p-3">
+        <div class="card-header">
+            Editor - Mask PII before finalizing verification
+        </div>
+        <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+        <div class="editor-main card-body row">
+
+            <!-- Tools Panel  -->
+            <div class="tools-panel row">
+                <!-- Tool Selection -->
+                <div class="tool-group col-3">
+                    <div class="tool-label">Tools</div>
+                    <input type="radio" class="btn-check" name="tool" id="brush-tool" value="brush" autocomplete="off" checked>
+                    <label class="btn btn-outline-primary tool-btn" for="brush-tool">
+                        <i class="bi bi-brush"></i> Brush
+                    </label>
+
+                    <input type="radio" class="btn-check" name="tool" id="eraser-tool" value="eraser" autocomplete="off">
+                    <label class="btn btn-outline-primary tool-btn" for="eraser-tool">
+                        <i class="bi bi-eraser"></i> Eraser
+                    </label>
+
+                    <input type="radio" class="btn-check" name="tool" id="crop-tool" value="crop" autocomplete="off">
+                    <label class="btn btn-outline-primary tool-btn" for="crop-tool">
+                        <i class="bi bi-crop"></i> Crop
+                    </label>
+                </div>
+
+                <!-- Brush Size -->
+                <div class="tool-group col-3">
+                    <div class="tool-label">Size</div>
+                    <div class="slider-container">
+                        <label id="brush-size-value">10px</label>
+                        <input type="range" class="form-range" id="brush-size" min="1" max="50" value="10">
+                    </div>
+                </div>
+                <!-- Brush Color -->
+                <div class="tool-group col-1">
+                    <div class="tool-label">Color</div>
+                    <div class="color-picker-container">
+                        <input type="color" class="form-control form-control-color" id="brush-color" value="#000000"
+                            title="Choose brush color" style="border-width: 2px; border-color: rgb(195, 190, 190);">
+                    </div>
+                </div>
+                <!-- Actions -->
+                <div class="tool-group col">
+                    <div class="tool-label">Actions</div>
+                    <div class="action-buttons">
+                        <button id="clear-canvas" class="btn btn-warning btn-sm">
+                            <i class="bi bi-trash"></i> Clear
+                        </button>
+                        <button id="undo" class="btn btn-secondary btn-sm" disabled>
+                            <i class="bi bi-arrow-counterclockwise"></i> Undo
+                        </button>
+                        <button id="redo" class="btn btn-secondary btn-sm" disabled>
+                            <i class="bi bi-arrow-clockwise"></i> Redo
+                        </button>
+                        <button id="apply-crop" class="btn btn-primary btn-sm" style="display: none;">
+                            <i class="bi bi-check-lg"></i> Apply Crop
+                        </button>
+                        <button id="save-image" class="btn btn-success btn-sm"
+                            data-image-uuid="{{ image.uuid }}"
+                            data-save-url="{{ url_for('verify_encounter_set.save_edit', uuid=image.uuid) }}">
+                            <i class="bi bi-save"></i> Save & Mark Reviewed
+                        </button>
+                        {% if has_edited_version %}
+                        <button id="restore-original" class="btn btn-danger btn-sm"
+                            data-restore-url="{{ url_for('verify_encounter_set.restore_original', uuid=image.uuid) }}">
+                            <i class="bi bi-arrow-repeat"></i> Restore Original
+                        </button>
+                        {% endif %}
+                        <button id="mark-not-gradable" class="btn btn-outline-danger btn-sm"
+                            data-image-uuid="{{ image.uuid }}"
+                            data-mark-url="{{ url_for('verify_encounter_set.mark_not_gradable', uuid=image.uuid) }}">
+                            <i class="bi bi-x-circle"></i> Not Gradable
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="canvas-container">
+                <canvas id="imageCanvas" data-image-url="{{ image_url }}" data-image-uuid="{{ image.uuid }}"></canvas>
+                <canvas id="ocrOverlayCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Not Gradable Modal -->
+<div class="modal fade" id="notGradableModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Mark Image as Not Gradable</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="notGradableForm">
+                    <div class="mb-3">
+                        <label for="notGradableReason" class="form-label">Reason <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="notGradableReason" rows="3" required
+                            placeholder="e.g., Image too blurry, poor lighting, anatomy not visible..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmNotGradable">Mark Not Gradable</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="{{ url_for('static', filename='js/edit_image.js') }}?v={{ config.get('ASSETS_VERSION','') }}" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Save button handler for encounter set images
+    const saveBtn = document.getElementById('save-image');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async function() {
+            const saveUrl = this.dataset.saveUrl;
+            const csrfToken = document.getElementById('csrf_token').value;
+
+            try {
+                const response = await fetch(saveUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        // In production, this would include crop coordinates, etc.
+                        saved: true
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert('Image saved and marked as reviewed!');
+                    window.location.href = "{{ url_for('verify_encounter_set.verify_encounter', uuid=encounter.uuid) }}";
+                } else {
+                    alert('Error saving: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+    }
+
+    // Restore original button handler
+    const restoreBtn = document.getElementById('restore-original');
+    if (restoreBtn) {
+        restoreBtn.addEventListener('click', async function() {
+            if (!confirm('Restore original image? This will remove all edits.')) return;
+
+            const restoreUrl = this.dataset.restoreUrl;
+            const csrfToken = document.getElementById('csrf_token').value;
+
+            try {
+                const response = await fetch(restoreUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+    }
+
+    // Not Gradable modal handlers
+    const notGradableBtn = document.getElementById('mark-not-gradable');
+    const notGradableModal = new bootstrap.Modal(document.getElementById('notGradableModal'));
+    const confirmNotGradableBtn = document.getElementById('confirmNotGradable');
+
+    if (notGradableBtn) {
+        notGradableBtn.addEventListener('click', function() {
+            notGradableModal.show();
+        });
+
+        confirmNotGradableBtn.addEventListener('click', async function() {
+            const reason = document.getElementById('notGradableReason').value.trim();
+            if (!reason) {
+                alert('Please provide a reason.');
+                return;
+            }
+
+            const markUrl = notGradableBtn.dataset.markUrl;
+            const csrfToken = document.getElementById('csrf_token').value;
+
+            try {
+                const response = await fetch(markUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({ reason: reason })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    notGradableModal.hide();
+                    window.location.href = "{{ url_for('verify_encounter_set.verify_encounter', uuid=encounter.uuid) }}";
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

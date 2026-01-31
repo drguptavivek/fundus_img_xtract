@@ -28,6 +28,7 @@ from utils.utilsImgServe import (
     universalImageThumbnailByUUID,
     encounterSetImageByUUID,
     encounterSetImageThumbnailByUUID,
+    encounterSetImageEditedByUUID,
 )
 from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import transaction_scope
@@ -480,6 +481,14 @@ def _encounterSetImageByUUID(uuid_str: str):
 def _encounterSetImageThumbnailByUUID(uuid_str: str):
     """Serve encounter set thumbnail by UUID."""
     return encounterSetImageThumbnailByUUID(uuid_str)
+
+
+@bp.route("/encounter_set/img/<uuid_str>/edited", methods=["GET"])
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+def _encounterSetImageEditedByUUID(uuid_str: str):
+    """Serve encounter set edited image by UUID (only if edited version exists)."""
+    return encounterSetImageEditedByUUID(uuid_str)
 
 
 # ============================================================================

@@ -836,3 +836,30 @@ def encounterSetImageThumbnailByUUID(uuid: str):
         
         # Fallback to full image for now
         return _serve_encounter_set_image(img, uuid)
+
+
+def encounterSetImageEditedByUUID(uuid: str):
+    """Serve edited encounter set image by UUID (if exists, else 404)."""
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+    context = determine_scoping_context()
+    with transaction_scope() as db:
+        query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        img = query.first()
+        if not img:
+            abort(404)
+        if not img.edited_filename:
+            abort(404, description="No edited version exists")
+
+        # Serve the edited version
+        image_path_str = str(BASE_DIR / img.folder_rel / img.edited_filename)
+        if not os.path.exists(image_path_str):
+            abort(404)
+        return _build_image_response(
+            image_path_str,
+            img.edited_filename,
+            uuid,
+            cache_control='no-cache, no-store, must-revalidate',
+            add_no_cache_headers=True,
+        )

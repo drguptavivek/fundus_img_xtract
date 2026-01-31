@@ -65,15 +65,10 @@ def test_upload_new_encounter(client, db_session, app):
             assert encounter is not None
             assert encounter.patient_id == 'PAT123'
             assert encounter.is_set_based is True
-            
-                        # Query set image
-            
-                        set_image = session.query(EncounterSetImage).filter_by(uuid=res_data["image_uuid"]).first()
-            
-                        assert set_image is not None, f"EncounterSetImage with uuid {res_data['image_uuid']} not found"
-            
-                        assert set_image.spatial_position == 5
-            
-                        assert set_image.patient_encounter_id == encounter.id
-            
-            
+
+            # Query set image
+            set_image = session.query(EncounterSetImage).filter_by(uuid=res_data["image_uuid"]).first()
+
+            assert set_image is not None, f"EncounterSetImage with uuid {res_data['image_uuid']} not found"
+            assert set_image.spatial_position == 5
+            assert set_image.patient_encounter_id == encounter.id

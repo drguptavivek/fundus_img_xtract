@@ -15,7 +15,7 @@ Medical imaging system for fundus image management with multi-disease grading (G
 
 **Problem**: Commands run inside Docker container create files owned by `root`, causing permission errors when editing from host.
 
-**Solution**: Always run Docker commands with your user ID (`-u $(id -u):$(id -g)`):
+**Solution**: Always run Docker commands with your user ID (`-u $(id -u):$(id -g)`) for uv run alembic. Other commands can be run directly
 
 ```bash
 #  - Creates root-owned files:
@@ -43,12 +43,12 @@ $DC up web -d
 $DC exec web uv run pytest tests/
 
 # Database migrations (NOTE: use -u flag to avoid root-owned files)
-$DC exec web uv run alembic heads
-$DC exec web uv run alembic revision --autogenerate -m "description"
-$DC exec web uv run alembic upgrade head
+docker compose exec web uv run alembic heads
+docker compose exec -u $(id -u):$(id -g) -e UV_CACHE_DIR=/tmp/.uv-cache web uv run alembic revision  --autogenerate -m  "description"
+docker compose exec web uv run alembic upgrade head
 
 # Create user
-$DC exec web uv run python -m scripts.create_user <username>
+docker compose exec web uv run python -m scripts.create_user <username>
 ```
 
 ## Architecture

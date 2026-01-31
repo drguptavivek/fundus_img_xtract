@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Verify: {{ encounter.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .grid-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .grid-slot {
+        aspect-ratio: 1 / 1;
+        border: 2px dashed #dee2e6;
+        border-radius: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        background-color: #f8f9fa;
+        transition: all 0.2s;
+    }
+    .grid-slot.has-image {
+        border-style: solid;
+        border-color: #0d6efd;
+    }
+    .grid-slot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .slot-label {
+        position: absolute;
+        top: 0.25rem;
+        left: 0.25rem;
+        background: rgba(0,0,0,0.5);
+        color: white;
+        padding: 0 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        z-index: 2;
+    }
+    .image-actions {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.25rem;
+        transform: translateY(100%);
+        transition: transform 0.2s;
+        z-index: 3;
+    }
+    .grid-slot:hover .image-actions {
+        transform: translateY(0);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Verify Encounter Set</h1>
+            <h5 class="text-muted">{{ encounter.name }} ({{ encounter.patient_id }})</h5>
+        </div>
+        <div>
+            <a href="{{ url_for('verify_encounter_set.index') }}" class="btn btn-outline-secondary me-2">Back</a>
+            <form action="{{ url_for('verify_encounter_set.finalize_verification', uuid=encounter.uuid) }}" method="POST" class="d-inline">
+                {{ csrf_field() if csrf_field else '' }}
+                <button type="submit" class="btn btn-success">
+                    <i class="bi bi-check-circle me-1"></i> Finalize Verification
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">Cardinal Gaze Positions (3x3 Grid)</h5>
+                </div>
+                <div class="card-body py-4">
+                    <div class="grid-container">
+                        {% for i in range(1, 10) %}
+                        <div class="grid-slot {% if grid[i] %}has-image{% endif %}" data-position="{{ i }}">
+                            <span class="slot-label">{{ i }}</span>
+                            {% if grid[i] %}
+                                <img src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=grid[i].uuid) }}" alt="Position {{ i }}">
+                                <div class="image-actions">
+                                    <button class="btn btn-sm btn-light btn-reorder" title="Move" data-uuid="{{ grid[i].uuid }}">
+                                        <i class="bi bi-arrows-move"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-light btn-edit" title="Mask/Crop" data-uuid="{{ grid[i].uuid }}">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                </div>
+                            {% else %}
+                                <div class="text-muted text-center p-2">
+                                    <i class="bi bi-image fs-4"></i>
+                                    <div class="small">Empty</div>
+                                </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i> Drag and drop to reorder images or click the edit icon to manually mask PII.
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">Encounter Details</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">UUID</dt>
+                        <dd class="col-sm-7 text-truncate"><small>{{ encounter.uuid }}</small></dd>
+                        
+                        <dt class="col-sm-5">Patient Name</dt>
+                        <dd class="col-sm-7">{{ encounter.name }}</dd>
+                        
+                        <dt class="col-sm-5">Patient ID</dt>
+                        <dd class="col-sm-7">{{ encounter.patient_id }}</dd>
+                        
+                        <dt class="col-sm-5">Capture Date</dt>
+                        <dd class="col-sm-7">{{ encounter.capture_date }}</dd>
+                        
+                        <dt class="col-sm-5">Lab Unit</dt>
+                        <dd class="col-sm-7">{{ encounter.lab_unit.name if encounter.lab_unit else 'N/A' }}</dd>
+                    </dl>
+                </div>
+            </div>
+            
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0">Status Check</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="flex-shrink-0">
+                            <i class="bi bi-check-circle-fill text-success fs-4"></i>
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Images Uploaded</h6>
+                            <small class="text-muted">{{ encounter.encounter_set_images|length }} of 9 positions filled</small>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            {% if encounter.encounter_verified_status == 'verified' %}
+                                <i class="bi bi-shield-check-fill text-success fs-4"></i>
+                            {% else %}
+                                <i class="bi bi-hourglass-split text-warning fs-4"></i>
+                            {% endif %}
+                        </div>
+                        <div class="ms-3">
+                            <h6 class="mb-0">Verification</h6>
+                            <small class="text-muted">
+                                {{ encounter.encounter_verified_status|capitalize if encounter.encounter_verified_status else 'Pending' }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Placeholder for drag and drop reordering logic
+    document.querySelectorAll('.btn-reorder').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const uuid = this.dataset.uuid;
+            const newPos = prompt("Enter new position (1-9):");
+            if (newPos && newPos >= 1 && newPos <= 9) {
+                fetch("{{ url_for('verify_encounter_set.update_position') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token() if csrf_token else "" }}'
+                    },
+                    body: JSON.stringify({
+                        image_uuid: uuid,
+                        position: newPos
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert("Error: " + data.message);
+                    }
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}

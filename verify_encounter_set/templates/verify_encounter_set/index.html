@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Encounter Set Verification{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Encounter Set Verification</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="{{ url_for('home.index') }}">Home</a></li>
+                <li class="breadcrumb-item active">Verification</li>
+            </ol>
+        </nav>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="card-title mb-0 text-primary">Pending Verification</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light text-muted">
+                        <tr>
+                            <th class="px-4">Encounter ID / Name</th>
+                            <th>Patient ID</th>
+                            <th>Capture Date</th>
+                            <th>Lab Unit</th>
+                            <th>Images</th>
+                            <th class="text-end px-4">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if encounters %}
+                            {% for encounter in encounters %}
+                            <tr>
+                                <td class="px-4">
+                                    <div class="fw-bold">{{ encounter.name }}</div>
+                                    <small class="text-muted">{{ encounter.uuid }}</small>
+                                </td>
+                                <td>{{ encounter.patient_id }}</td>
+                                <td>{{ encounter.capture_date }}</td>
+                                <td>{{ encounter.lab_unit.name if encounter.lab_unit else 'N/A' }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ encounter.encounter_set_images|length }} images</span>
+                                </td>
+                                <td class="text-end px-4">
+                                    <a href="{{ url_for('verify_encounter_set.verify_encounter', uuid=encounter.uuid) }}" class="btn btn-primary btn-sm px-3">
+                                        <i class="bi bi-shield-check me-1"></i> Verify
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5">
+                                    <div class="text-muted mb-2">
+                                        <i class="bi bi-inbox fs-1"></i>
+                                    </div>
+                                    <p class="mb-0">No encounter sets pending verification.</p>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

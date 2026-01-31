@@ -509,6 +509,7 @@ def _register_blueprints(app: Flask) -> None:
     from verify_remedio_glaucoma import bp as verify_remedio_glaucoma_bp
     from verify_remedio_dr import bp as verify_remedio_dr_bp
     from verify_remedio_nodr import bp as verify_remedio_nodr_bp
+    from verify_encounter_set import bp as verify_encounter_set_bp
     from media import bp as media_bp
     from account import account_bp
     from audit import bp as audit_bp
@@ -539,6 +540,7 @@ def _register_blueprints(app: Flask) -> None:
     app.register_blueprint(verify_remedio_glaucoma_bp)
     app.register_blueprint(verify_remedio_dr_bp)
     app.register_blueprint(verify_remedio_nodr_bp)
+    app.register_blueprint(verify_encounter_set_bp)
     app.register_blueprint(media_bp)
     app.register_blueprint(account_bp)
     app.register_blueprint(audit_bp)

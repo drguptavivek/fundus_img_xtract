@@ -4,7 +4,7 @@ from typing import Tuple
 from flask import send_file, abort, flash, make_response, current_app, request
 from flask_login import current_user
 from werkzeug.exceptions import NotFound
-from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR
+from models import DirectImageVerify, Disease, EncounterFile, EncounterFilePDF, PatientEncounters, ZipFile, IMAGE_DIR, DiabeticRetinopathyReport, GlaucomaReport, PDF_DIR, DirectImageUpload, BASE_DIR, DR_PDF_DIR, GLAUCOMA_PDF_DIR, DIRECT_UPLOAD_DIR, EncounterSetImage
 from utils.fileUtils import (
     get_thumbnail_path_direct, get_thumbnail_path_encounter,
     thumbnail_exists_direct, thumbnail_exists_encounter,
@@ -785,3 +785,54 @@ def universalImageThumbnailByUUID(uuid: str):
             return _serve_direct_final_thumbnail(db, direct_image, uuid)
 
         abort(404)
+
+def _serve_encounter_set_image(img: EncounterSetImage, uuid: str):
+    # folder_rel is already relative to BASE_DIR
+    image_path_str = str(BASE_DIR / img.folder_rel / img.original_filename)
+    if not os.path.exists(image_path_str):
+        abort(404)
+    return _build_image_response(
+        image_path_str,
+        img.original_filename,
+        uuid,
+        cache_control='no-cache, no-store, must-revalidate',
+        add_no_cache_headers=True,
+    )
+
+def encounterSetImageByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+    context = determine_scoping_context()
+    with transaction_scope() as db:
+        query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        img = query.first()
+        if not img:
+            abort(404)
+        return _serve_encounter_set_image(img, uuid)
+
+def encounterSetImageThumbnailByUUID(uuid: str):
+    if not current_user or not current_user.is_authenticated:
+        abort(401)
+    context = determine_scoping_context()
+    with transaction_scope() as db:
+        query = db.query(EncounterSetImage).join(PatientEncounters).filter(EncounterSetImage.uuid == uuid)
+        query = apply_scoping(query, PatientEncounters, current_user, context)
+        img = query.first()
+        if not img:
+            abort(404)
+        
+        # If thumbnail exists, serve it
+        if img.thumbnail_filename:
+            thumb_path = BASE_DIR / img.folder_rel / "thumbnails" / img.thumbnail_filename
+            if thumb_path.exists():
+                return _build_image_response(
+                    str(thumb_path),
+                    img.thumbnail_filename,
+                    uuid,
+                    cache_control='private, max-age=60',
+                    extra_headers={'X-Thumbnail': 'true'},
+                )
+        
+        # Fallback to full image for now
+        return _serve_encounter_set_image(img, uuid)

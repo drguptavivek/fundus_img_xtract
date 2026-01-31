@@ -26,6 +26,8 @@ from utils.utilsImgServe import (
     directImgEdThumbnailByUUID,
     directImgFinalThumbnailByUUID,
     universalImageThumbnailByUUID,
+    encounterSetImageByUUID,
+    encounterSetImageThumbnailByUUID,
 )
 from utils.log_sanitize import sanitize_log_value
 from db_transaction_manager import transaction_scope
@@ -455,6 +457,29 @@ def _directImgFinalThumbnailByUUID(uuid_str: str):
 def _universalImageThumbnailByUUID(uuid_str: str):
     """Universal thumbnail serving that works for both encounter and direct upload images."""
     return universalImageThumbnailByUUID(uuid_str)
+
+
+# === Encounter Set Media Routes ===
+
+@bp.route("/encounter_set/img/<uuid_str>", methods=["GET"])
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@rate_limit("4000 per hour; 200 per minute", methods=["GET"], per_method=True, error_message="Image fetch limit exceeded. Please slow down.")
+def _encounterSetImageByUUID(uuid_str: str):
+    """Serve encounter set image by UUID."""
+    return encounterSetImageByUUID(uuid_str)
+
+
+@bp.route("/encounter_set/img/<uuid_str>/thumbnail", methods=["GET"])
+@roles_required("fileUploader", "optometrist", "data_manager", "admin", "ophthalmologist", "resident")
+@rate_limit_with_feedback(
+    "4000 per hour; 500 per minute",
+    methods=["GET"],
+    per_method=True,
+    error_message="Thumbnail fetch limit exceeded. Please slow down.",
+)
+def _encounterSetImageThumbnailByUUID(uuid_str: str):
+    """Serve encounter set thumbnail by UUID."""
+    return encounterSetImageThumbnailByUUID(uuid_str)
 
 
 # ============================================================================

@@ -392,6 +392,7 @@ class ZipFile(Base):
 class PatientEncounters(Base):
     __tablename__ = 'patient_encounters'
     id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
     zip_file_id: Mapped[int | None] = mapped_column(ForeignKey('zip_files.id'), unique=True, nullable=True)
     is_set_based: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     name: Mapped[str]

@@ -14,7 +14,106 @@ from auth.decorators import token_auth_required
 from utils.rate_limiter import api_rate_limit
 from utils.log_sanitize import sanitize_log_value
 
-logger = logging.getLogger("api.encounter_set")
+from flask_login import login_required, current_user
+from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
+from auth.roles import roles_required
+from utils.hospital_scoping import apply_scoping
+
+@api_bp.route('/v1/encounter-set/unverified', methods=['GET'])
+@login_required
+@roles_required("admin", "local_admin", "optometrist")
+def list_unverified_encounter_sets():
+    """List set-based encounters that need verification."""
+    with transaction_scope() as db:
+        query = select(PatientEncounters).where(
+            and_(
+                PatientEncounters.is_set_based == True,
+                PatientEncounters.encounter_verified_status != "verified"
+            )
+        ).order_by(PatientEncounters.capture_date.desc())
+        
+        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        encounters = db.execute(query).scalars().all()
+        
+        return jsonify([{
+            "uuid": enc.uuid,
+            "patient_id": enc.patient_id,
+            "patient_name": enc.name,
+            "capture_date": enc.capture_date,
+            "image_count": len(enc.encounter_set_images)
+        } for enc in encounters])
+
+@api_bp.route('/v1/encounter-set/<uuid>/details', methods=['GET'])
+@login_required
+@roles_required("admin", "local_admin", "optometrist")
+def get_encounter_set_details(uuid):
+    """Get details and images for a specific encounter set."""
+    with transaction_scope() as db:
+        query = select(PatientEncounters).where(PatientEncounters.uuid == uuid).options(
+            selectinload(PatientEncounters.encounter_set_images)
+        )
+        query = apply_scoping(query, PatientEncounters, current_user, "view")
+        encounter = db.execute(query).scalar_one_or_none()
+        
+        if not encounter:
+            return jsonify({"error": "Encounter not found"}), 404
+            
+        images = [{
+            "uuid": img.uuid,
+            "spatial_position": img.spatial_position,
+            "url": url_for('media.get_encounter_set_image', uuid=img.uuid),
+            "thumbnail_url": url_for('media.get_encounter_set_thumbnail', uuid=img.uuid) if img.thumbnail_filename else None
+        } for img in encounter.encounter_set_images]
+        
+        return jsonify({
+            "uuid": encounter.uuid,
+            "patient_id": encounter.patient_id,
+            "patient_name": encounter.name,
+            "capture_date": encounter.capture_date,
+            "images": images
+        })
+
+@api_bp.route('/v1/encounter-set/image/<uuid>/position', methods=['POST'])
+@login_required
+@roles_required("admin", "local_admin", "optometrist")
+def update_image_position(uuid):
+    """Update the spatial position of an image."""
+    pos_raw = request.json.get("spatial_position")
+    if pos_raw is None or not (1 <= int(pos_raw) <= 9):
+        return jsonify({"error": "Invalid spatial_position"}), 400
+        
+    with transaction_scope() as db:
+        # Check permission via encounter scoping
+        query = select(EncounterSetImage).where(EncounterSetImage.uuid == uuid).options(
+            selectinload(EncounterSetImage.patient_encounter)
+        )
+        img = db.execute(query).scalar_one_or_none()
+        
+        if not img:
+            return jsonify({"error": "Image not found"}), 404
+            
+        # Scope check
+        enc_query = select(PatientEncounters).where(PatientEncounters.id == img.patient_encounter_id)
+        enc_query = apply_scoping(enc_query, PatientEncounters, current_user, "edit")
+        if not db.execute(enc_query).scalar_one_or_none():
+            return jsonify({"error": "Access denied"}), 403
+            
+        # Check for collision
+        collision = db.query(EncounterSetImage).filter(
+            and_(
+                EncounterSetImage.patient_encounter_id == img.patient_encounter_id,
+                EncounterSetImage.spatial_position == int(pos_raw),
+                EncounterSetImage.id != img.id
+            )
+        ).first()
+        
+        if collision:
+            return jsonify({"error": "Position already occupied"}), 409
+            
+        img.spatial_position = int(pos_raw)
+        db.commit()
+        return jsonify({"message": "Position updated"})
 
 def generate_mobile_token(hospital_id, lab_unit_id, allowed_diseases):
     """

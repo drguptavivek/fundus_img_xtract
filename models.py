@@ -317,7 +317,12 @@ class Disease(Base):
     __tablename__ = 'diseases'
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    grading_scope: Mapped[str] = mapped_column(String(20), default="image", server_default="image", nullable=False)
     disease_gradings: Mapped[List["DiseaseGrading"]] = relationship("DiseaseGrading", back_populates="disease")
+
+    __table_args__ = (
+        CheckConstraint("grading_scope IN ('image', 'encounter')", name="ck_disease_grading_scope"),
+    )
 
 class Area(Base):
     __tablename__ = 'areas'
@@ -387,7 +392,8 @@ class ZipFile(Base):
 class PatientEncounters(Base):
     __tablename__ = 'patient_encounters'
     id: Mapped[int] = mapped_column(primary_key=True)
-    zip_file_id: Mapped[int] = mapped_column(ForeignKey('zip_files.id'), unique=True)
+    zip_file_id: Mapped[int | None] = mapped_column(ForeignKey('zip_files.id'), unique=True, nullable=True)
+    is_set_based: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     name: Mapped[str]
     patient_id: Mapped[str]
     capture_date: Mapped[str]
@@ -405,11 +411,32 @@ class PatientEncounters(Base):
 
     zip_file: Mapped["ZipFile"] = relationship(back_populates="patient_encounter")
     encounter_files: Mapped[List["EncounterFile"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
+    encounter_set_images: Mapped[List["EncounterSetImage"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     encounter_file_pdfs: Mapped[List["EncounterFilePDF"]] = relationship(cascade="all, delete-orphan")
     dr_reports: Mapped[List["DiabeticRetinopathyReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_reports: Mapped[List["GlaucomaReport"]] = relationship(back_populates="patient_encounter", cascade="all, delete-orphan")
     glaucoma_results_cleaned: Mapped[List["GlaucomaResultsCleaned"]] = relationship()
     lab_unit: Mapped["LabUnit"] = relationship()
+
+class EncounterSetImage(Base):
+    __tablename__ = 'encounter_set_images'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    uuid: Mapped[str] = mapped_column(String(36), unique=True, index=True, default=lambda: str(uuid4()))
+    patient_encounter_id: Mapped[int] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), index=True)
+    spatial_position: Mapped[int] = mapped_column(Integer, nullable=False) # 1-9
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    edited_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    thumbnail_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    folder_rel: Mapped[str] = mapped_column(String(512), nullable=False)
+    file_hash: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_set_images")
+
+    __table_args__ = (
+        UniqueConstraint('patient_encounter_id', 'spatial_position', name='uq_encounter_set_image_position'),
+        CheckConstraint('spatial_position >= 1 AND spatial_position <= 9', name='ck_encounter_set_image_position_range'),
+    )
 
 class EncounterFile(Base):
     __tablename__ = 'encounter_files'
@@ -903,6 +930,7 @@ class GradingTask(Base):
     # Exactly one of these must be non-null
     encounter_file_id: Mapped[int | None] = mapped_column(ForeignKey('encounter_files.id', ondelete='CASCADE'), nullable=True, index=True)
     direct_image_upload_id: Mapped[int | None] = mapped_column(ForeignKey('direct_image_uploads.id', ondelete='CASCADE'), nullable=True, index=True)
+    patient_encounter_id: Mapped[int | None] = mapped_column(ForeignKey('patient_encounters.id', ondelete='CASCADE'), nullable=True, index=True)
 
     disease_id: Mapped[int] = mapped_column(ForeignKey('diseases.id'), nullable=False, index=True)
     # lab_unit_id is used strictly for grading assignment and queue scoping.
@@ -921,6 +949,7 @@ class GradingTask(Base):
     lab_unit: Mapped['LabUnit'] = relationship('LabUnit', foreign_keys=[lab_unit_id])
     encounter_file: Mapped['EncounterFile'] = relationship('EncounterFile')
     direct_image: Mapped['DirectImageUpload'] = relationship('DirectImageUpload')
+    patient_encounter: Mapped['PatientEncounters'] = relationship('PatientEncounters')
     grades: Mapped[list['Grade']] = relationship('Grade', back_populates='task', cascade="all, delete-orphan")
     consensus: Mapped['Consensus | None'] = relationship(
         'Consensus', back_populates='task', uselist=False, cascade="all, delete-orphan", single_parent=True
@@ -934,14 +963,15 @@ class GradingTask(Base):
     __table_args__ = (
         # Ensure one and only one image reference is set
         CheckConstraint(
-            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL) OR "
-            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL)",
-            name='ck_grading_task_either_encounter_or_direct'
+            "(encounter_file_id IS NOT NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NOT NULL AND patient_encounter_id IS NULL) OR "
+            "(encounter_file_id IS NULL AND direct_image_upload_id IS NULL AND patient_encounter_id IS NOT NULL)",
+            name='ck_grading_task_source_polymorphic'
         ),
-        # Unique per image×disease across all lab units (enforces single task/gold standard globally).
-        # SQLite treats NULLs as distinct; works with the one-of-two FK check above.
+        # Unique per image/encounter×disease across all lab units
         UniqueConstraint('encounter_file_id', 'disease_id', name='uq_task_encounter_disease'),
         UniqueConstraint('direct_image_upload_id', 'disease_id', name='uq_task_direct_disease'),
+        UniqueConstraint('patient_encounter_id', 'disease_id', name='uq_task_patient_encounter_disease'),
         CheckConstraint(
             "state IN ('pending','resident_done','resident2_done','arbitration','final')",
             name='ck_task_state_valid'

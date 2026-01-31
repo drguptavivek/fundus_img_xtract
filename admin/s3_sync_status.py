@@ -31,7 +31,8 @@ def _get_user_hospitals():
         return []
 
     # Admins can see all hospitals
-    if "admin" in current_user.get_roles():
+    user_roles = {r.name for r in (current_user.roles or [])}
+    if "admin" in user_roles or getattr(current_user, 'is_master_admin', False):
         with transaction_scope() as db:
             return [h.id for h in db.execute(select(Hospital).order_by(Hospital.id)).scalars().all()]
 

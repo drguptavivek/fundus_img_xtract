@@ -717,10 +717,8 @@ def verify_edit(encounter_id: int):
         )
 
         can_encounter_verify = True
-        if dr_reports and encounter.dr_verified_status != "verified":
-            can_encounter_verify = False
-        if gl_reports and encounter.glaucoma_verified_status != "verified":
-            can_encounter_verify = False
+        # Note: Image tagging (laterality/centering) is independent from DR/Glaucoma verification
+        # Encounters can be verified regardless of whether images have been tagged
 
         return render_template(
             "verify_remedio/edit.html",

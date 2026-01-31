@@ -25,6 +25,65 @@
     });
   }
 
+  function updateThumbnailIndicator(efId, side, centering) {
+    // Find the sidebar button for this image using the data-ef-id attribute
+    const sidebarBtn = document.querySelector(`button[data-ef-id="${efId}"]`);
+    if (!sidebarBtn) {
+      console.warn('Sidebar button not found for ef_id:', efId);
+      return;
+    }
+
+    // The colored dot is a span.thumbnail-status-dot
+    const dot = sidebarBtn.querySelector('.thumbnail-status-dot');
+    if (!dot) {
+      console.warn('Status dot not found in sidebar button');
+      return;
+    }
+
+    // Check if both side and centering are now set (both are valid values)
+    // side values: 'right', 'left', 'cannot_tell'
+    // centering values: 'macula', 'disk', 'cannot_tell'
+    const hasSide = side && side !== '';
+    const hasCentering = centering && centering !== '';
+
+    // We need to check if BOTH side AND centering are set
+    // To do this properly, we need to query the current state from all images
+    // For now, re-fetch the page's thumbnail list to get accurate state
+
+    // Simple approach: re-fetch the entire page's sidebar via HTMX
+    // The sidebar has hx-get which points to viewer_panel, so we can't use that
+    // Instead, trigger an HTMX refresh of the sidebar list
+
+    // Even simpler: Check the form buttons in the current viewer panel
+    // If both a side and centering button are active (btn-primary), then the image is fully tagged
+    const viewerPanel = document.getElementById('encounter-viewer-panel');
+    if (viewerPanel) {
+      const activeSideBtn = viewerPanel.querySelector('.eye-mark-form button.btn-primary[name="side"]');
+      const activeCenteringBtn = viewerPanel.querySelector('.center-mark-form button.btn-primary[name="centering"]');
+
+      const hasSide = activeSideBtn && activeSideBtn.value !== 'cannot_tell';
+      const hasCentering = activeCenteringBtn && activeCenteringBtn.value !== 'cannot_tell';
+
+      // Green: fully tagged (both side and centering set)
+      // Yellow: partially tagged (only one of side/centering set)
+      // Red: not tagged (neither set)
+      let color, title;
+      if (hasSide && hasCentering) {
+        color = '#198754';  // green
+        title = 'Tagged';
+      } else if (hasSide || hasCentering) {
+        color = '#ffc107';  // yellow
+        title = 'Partially tagged';
+      } else {
+        color = '#dc3545';  // red
+        title = 'Pending tags';
+      }
+
+      dot.style.backgroundColor = color;
+      dot.setAttribute('title', title);
+    }
+  }
+
   function showToast(message, type){
     const container = document.getElementById('flash-toasts') || (function(){
       const div = document.createElement('div');
@@ -91,7 +150,31 @@
           },
           credentials: 'same-origin'
         }).then(res => res.json()).then(json => {
-          if (json && json.ok) updateButtons(form, side);
+          if (json && json.ok) {
+            updateButtons(form, side);
+            // Re-fetch the entire viewer panel via HTMX to get accurate state
+            const sidebarBtn = document.querySelector(`button[data-ef-id="${json.ef_id}"]`);
+            if (sidebarBtn) {
+              fetch(sidebarBtn.getAttribute('hx-get'), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+              }).then(res => res.text()).then(html => {
+                // Parse the HTML to find the updated sidebar button
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newBtn = doc.querySelector(`button[data-ef-id="${json.ef_id}"]`);
+                if (newBtn) {
+                  const newDot = newBtn.querySelector('.thumbnail-status-dot');
+                  if (newDot) {
+                    const dot = sidebarBtn.querySelector('.thumbnail-status-dot');
+                    if (dot) {
+                      dot.style.backgroundColor = newDot.style.backgroundColor;
+                      dot.setAttribute('title', newDot.getAttribute('title'));
+                    }
+                  }
+                }
+              }).catch(err => console.error('Failed to refresh thumbnail indicator:', err));
+            }
+          }
         }).catch(err => console.error('Laterality update failed', err));
       });
     });
@@ -112,7 +195,31 @@
           },
           credentials: 'same-origin'
         }).then(res => res.json()).then(json => {
-          if (json && json.ok) updateCenterButtons(form, centering);
+          if (json && json.ok) {
+            updateCenterButtons(form, centering);
+            // Re-fetch the entire viewer panel via HTMX to get accurate state
+            const sidebarBtn = document.querySelector(`button[data-ef-id="${json.ef_id}"]`);
+            if (sidebarBtn) {
+              fetch(sidebarBtn.getAttribute('hx-get'), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+              }).then(res => res.text()).then(html => {
+                // Parse the HTML to find the updated sidebar button
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newBtn = doc.querySelector(`button[data-ef-id="${json.ef_id}"]`);
+                if (newBtn) {
+                  const newDot = newBtn.querySelector('.thumbnail-status-dot');
+                  if (newDot) {
+                    const dot = sidebarBtn.querySelector('.thumbnail-status-dot');
+                    if (dot) {
+                      dot.style.backgroundColor = newDot.style.backgroundColor;
+                      dot.setAttribute('title', newDot.getAttribute('title'));
+                    }
+                  }
+                }
+              }).catch(err => console.error('Failed to refresh thumbnail indicator:', err));
+            }
+          }
         }).catch(err => console.error('Centering update failed', err));
       });
     });

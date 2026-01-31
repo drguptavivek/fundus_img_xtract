@@ -246,7 +246,7 @@
           {% endif %}
         </div>
         {% if not can_encounter_verify %}
-        <div class="small text-muted">Verify DR/Glaucoma first (if present).</div>
+        <div class="small text-muted">Encounter verification is not available for this encounter.</div>
         {% endif %}
       </div>
     </div>
@@ -261,12 +261,14 @@
             {% set side_ok = ef.eye_side in ['right','left','cannot_tell'] %}
             {% set centering_ok = ef.centering in ['macula','disk','cannot_tell'] %}
             {% set tag_ok = side_ok and centering_ok %}
+            {% set tag_partial = side_ok or centering_ok %}
             <button type="button" class="list-group-item list-group-item-action p-2 position-relative"
+              data-ef-id="{{ ef.id }}"
               hx-get="{{ url_for('verify_remedio.viewer_panel', encounter_id=encounter.id, image_id=ef.id) }}"
               hx-target="#encounter-viewer-panel" hx-swap="innerHTML">
-              <span class="position-absolute top-50 end-0 translate-middle p-1 border border-light rounded-circle"
-                style="background-color: {{ '#198754' if tag_ok else '#dc3545' }};"
-                title="{{ 'Tagged' if tag_ok else 'Pending tags' }}"></span>
+              <span class="position-absolute top-50 end-0 translate-middle p-1 border border-light rounded-circle thumbnail-status-dot"
+                style="background-color: {{ '#198754' if tag_ok else ('#ffc107' if tag_partial else '#dc3545') }};"
+                title="{{ 'Tagged' if tag_ok else ('Partially tagged' if tag_partial else 'Pending tags') }}"></span>
               <img src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=ef.uuid) }}" alt="Thumbnail"
                 style="width:100px; height:100px; object-fit:cover; display:block; background:#f8f9fa;" />
             </button>

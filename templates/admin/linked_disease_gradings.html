@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Linked Disease Grading{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Linked Disease Grading</h2>
+
+    <div class="card mb-4">
+        <div class="card-header">Create Link</div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('admin.linked_disease_gradings_list') }}">
+                {{ csrf_field() }}
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label for="primary_disease_id" class="form-label">Primary Disease</label>
+                        <select class="form-select" id="primary_disease_id" name="primary_disease_id" required>
+                            <option value="">Select primary</option>
+                            {% for disease in diseases %}
+                                <option value="{{ disease.id }}">{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="linked_disease_id" class="form-label">Linked Disease</label>
+                        <select class="form-select" id="linked_disease_id" name="linked_disease_id" required>
+                            <option value="">Select linked</option>
+                            {% for disease in diseases %}
+                                <option value="{{ disease.id }}">{{ disease.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="display_order" class="form-label">Display Order</label>
+                        <input type="number" class="form-control" id="display_order" name="display_order" value="0">
+                    </div>
+                    <div class="col-md-2">
+                        <label for="is_active" class="form-label">Status</label>
+                        <select class="form-select" id="is_active" name="is_active">
+                            <option value="1" selected>Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">Create Link</button>
+                </div>
+                <p class="text-muted mt-2 mb-0">To change the primary/linked disease, delete the link and create a new one.</p>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Existing Links</div>
+        <div class="card-body">
+            {% if links %}
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Primary</th>
+                                <th>Linked</th>
+                                <th>Display Order</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for link in links %}
+                                <tr>
+                                    <td>{{ link.primary_disease.name if link.primary_disease else link.primary_disease_id }}</td>
+                                    <td>{{ link.linked_disease.name if link.linked_disease else link.linked_disease_id }}</td>
+                                    <td>{{ link.display_order }}</td>
+                                    <td>
+                                        {% if link.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('admin.edit_linked_disease_grading', link_id=link.id) }}">Edit</a>
+                                        <form method="POST" action="{{ url_for('admin.delete_linked_disease_grading', link_id=link.id) }}" class="d-inline" onsubmit="return confirm('Delete this linked grading?');">
+                                            {{ csrf_field() }}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">No linked grading records found.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

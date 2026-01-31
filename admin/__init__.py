@@ -9,6 +9,11 @@ from .lookups.camera import list_cameras, edit_camera, delete_camera
 from .lookups.disease import list_diseases, edit_disease, delete_disease
 from .lookups.area import list_areas, edit_area, delete_area
 from .disease_gradings import list_disease_gradings, delete_disease_grading, get_grading_features
+from .linked_grading import (
+    linked_disease_gradings_list,
+    edit_linked_disease_grading,
+    delete_linked_disease_grading,
+)
 from .uploads import malicious_uploads
 from .grading_eligibility import manage_eligibility_users, edit_eligibility
 from .logs import log_viewer
@@ -198,6 +203,26 @@ admin_bp.add_url_rule("/area/<int:item_id>/delete", view_func=delete_area, metho
 admin_bp.add_url_rule("/disease-gradings", view_func=list_disease_gradings, methods=["GET", "POST"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/delete", view_func=delete_disease_grading, methods=["POST"])
 admin_bp.add_url_rule("/disease-gradings/<int:grading_id>/features", view_func=get_grading_features, methods=["GET"])
+
+# Linked disease grading routes
+admin_bp.add_url_rule(
+    "/linked-disease-gradings",
+    view_func=linked_disease_gradings_list,
+    methods=["GET", "POST"],
+    endpoint="linked_disease_gradings_list",
+)
+admin_bp.add_url_rule(
+    "/linked-disease-gradings/<int:link_id>/edit",
+    view_func=edit_linked_disease_grading,
+    methods=["GET", "POST"],
+    endpoint="edit_linked_disease_grading",
+)
+admin_bp.add_url_rule(
+    "/linked-disease-gradings/<int:link_id>/delete",
+    view_func=delete_linked_disease_grading,
+    methods=["POST"],
+    endpoint="delete_linked_disease_grading",
+)
 
 
 # Grading Eligibility routes

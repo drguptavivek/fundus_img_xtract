@@ -253,9 +253,9 @@
     <div class="card-body">
       {% if images %}
       {% set image = images[0] %}
-      {% set viewer_height = '320px' %}
-      <div class="row g-3">
-        <div class="col-12 col-lg-2">
+      {% set viewer_height = '500px' %}
+      <div class="row g-2">
+        <div class="col-12 col-lg-2 mr-1">
           <div class="list-group">
             {% for ef in images %}
             {% set side_ok = ef.eye_side in ['right','left','cannot_tell'] %}
@@ -266,7 +266,7 @@
               data-ef-id="{{ ef.id }}"
               hx-get="{{ url_for('verify_remedio.viewer_panel', encounter_id=encounter.id, image_id=ef.id) }}"
               hx-target="#encounter-viewer-panel" hx-swap="innerHTML">
-              <span class="position-absolute top-50 end-0 translate-middle p-1 border border-light rounded-circle thumbnail-status-dot"
+              <span class="position-absolute top-50 end-0 translate-middle-x p-1 border border-light rounded-circle thumbnail-status-dot"
                 style="background-color: {{ '#198754' if tag_ok else ('#ffc107' if tag_partial else '#dc3545') }};"
                 title="{{ 'Tagged' if tag_ok else ('Partially tagged' if tag_partial else 'Pending tags') }}"></span>
               <img src="{{ url_for('media._encounterImageThumbnailByUUID', uuid_str=ef.uuid) }}" alt="Thumbnail"
@@ -275,7 +275,7 @@
             {% endfor %}
           </div>
         </div>
-        <div class="col-12 col-lg-9" id="encounter-viewer-panel" >
+        <div class="col-12 col-lg-10" id="encounter-viewer-panel" >
           {% include "verify_remedio/_viewer_panel.html" with context %}
         </div>
       </div>

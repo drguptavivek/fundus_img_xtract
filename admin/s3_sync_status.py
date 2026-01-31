@@ -188,7 +188,8 @@ def s3_sync_status_api():
                         S3Config.hospital_id == hospital_id,
                         S3Config.is_active == True
                     )
-                ).scalar_one_or_none()
+                )
+            ).scalar_one_or_none()
 
             if not s3_config:
                 return jsonify({"error": "No S3 config for hospital"}), 404

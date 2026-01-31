@@ -716,9 +716,17 @@ def verify_edit(encounter_id: int):
             else "All"
         )
 
+        # Encounter verification requires:
+        # 1. DR verified (if present)
+        # 2. Glaucoma verified (if present)
+        # 3. All images tagged (both laterality and centering)
         can_encounter_verify = True
-        # Note: Image tagging (laterality/centering) is independent from DR/Glaucoma verification
-        # Encounters can be verified regardless of whether images have been tagged
+        if dr_reports and encounter.dr_verified_status != "verified":
+            can_encounter_verify = False
+        if gl_reports and encounter.glaucoma_verified_status != "verified":
+            can_encounter_verify = False
+        if _missing_image_tags(db, encounter.id) > 0:
+            can_encounter_verify = False
 
         return render_template(
             "verify_remedio/edit.html",

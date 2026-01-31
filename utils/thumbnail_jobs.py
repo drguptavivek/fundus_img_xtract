@@ -13,7 +13,7 @@ from enum import Enum
 
 from models import (
     DirectImageUpload, EncounterFile, PatientEncounters, Job, JobItem,
-    Session, DirectImageVerify
+    Session, DirectImageVerify, EncounterSetImage
 )
 from db_transaction_manager import transaction_scope
 from job_store import db_set_job_status, db_set_item_state, db_any_item_error
@@ -54,6 +54,7 @@ class ThumbnailJobType(Enum):
     DIRECT_ORIGINAL = "thumbnail_direct_original"
     DIRECT_EDITED = "thumbnail_direct_edited"
     ENCOUNTER = "thumbnail_encounter"
+    ENCOUNTER_SET_IMAGE = "thumbnail_encounter_set_image"
     BATCH_EXISTING = "thumbnail_batch_existing"
 
 # Job states
@@ -150,6 +151,8 @@ def _validate_image_reference(ref: Dict[str, Any], job_type: ThumbnailJobType) -
         return all(key in ref for key in ['image_id', 'folder_rel', 'edited_filename'])
     elif job_type == ThumbnailJobType.ENCOUNTER:
         return 'image_id' in ref
+    elif job_type == ThumbnailJobType.ENCOUNTER_SET_IMAGE:
+        return all(key in ref for key in ['image_id', 'folder_rel', 'filename'])
     else:
         return False
 
@@ -162,6 +165,8 @@ def _create_job_item_filename(ref: Dict[str, Any], job_type: ThumbnailJobType) -
         return f"direct_edited_{ref['image_id']}_{ref['edited_filename']}"
     elif job_type == ThumbnailJobType.ENCOUNTER:
         return f"encounter_{ref['image_id']}"
+    elif job_type == ThumbnailJobType.ENCOUNTER_SET_IMAGE:
+        return f"encounter_set_{ref['image_id']}_{ref['filename']}"
     else:
         return None
 
@@ -278,6 +283,8 @@ def _process_single_thumbnail(job_token: str, ref: Dict[str, Any], job_type: Thu
             success, message = _generate_direct_thumbnail(ref, kind="edited")
         elif job_type == ThumbnailJobType.ENCOUNTER:
             success, message = _generate_encounter_thumbnail(ref)
+        elif job_type == ThumbnailJobType.ENCOUNTER_SET_IMAGE:
+            success, message = _generate_encounter_set_thumbnail(ref)
 
         # Update item status
         if success:
@@ -352,6 +359,37 @@ def _generate_encounter_thumbnail(ref: Dict[str, Any]) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _generate_encounter_set_thumbnail(ref: Dict[str, Any]) -> tuple[bool, str]:
+    """Generate thumbnail for encounter set image (mobile upload)."""
+    try:
+        image_id = ref['image_id']
+
+        # Get encounter set image from database
+        with transaction_scope() as db:
+            set_image = db.query(EncounterSetImage).filter_by(id=image_id).first()
+            if not set_image:
+                return False, f"EncounterSetImage not found: {image_id}"
+
+            # Build source path - use folder_rel and original_filename
+            source_path = IMAGE_DIR / set_image.folder_rel / set_image.original_filename
+            if not source_path.exists():
+                return False, f"Source image not found: {source_path}"
+
+            # Generate thumbnail path using direct thumbnail pattern (same folder structure)
+            from utils.fileUtils import get_thumbnail_path_direct
+            thumbnail_path = get_thumbnail_path_direct(set_image.folder_rel, set_image.original_filename, "orig")
+
+            # Generate thumbnail
+            success = generate_thumbnail(source_path, thumbnail_path)
+            if success:
+                return True, f"Thumbnail generated: {thumbnail_path.name}"
+            else:
+                return False, "Thumbnail generation failed"
+
+    except Exception as e:
+        return False, str(e)
+
+
 def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
     """Update database record with thumbnail filename."""
     try:
@@ -381,6 +419,16 @@ def _update_thumbnail_record(ref: Dict[str, Any], job_type: ThumbnailJobType):
                     encounter_file.thumbnail_filename = thumbnail_filename
                     db.add(encounter_file)
                     bump_media_cache_version(str(encounter_file.uuid))
+
+            elif job_type == ThumbnailJobType.ENCOUNTER_SET_IMAGE:
+                # Update EncounterSetImage record
+                image_id = ref['image_id']
+                set_image = db.query(EncounterSetImage).filter_by(id=image_id).first()
+                if set_image:
+                    thumbnail_filename = get_thumbnail_filename(set_image.original_filename)
+                    set_image.thumbnail_filename = thumbnail_filename
+                    db.add(set_image)
+                    bump_media_cache_version(str(set_image.uuid))
 
     except Exception as e:
         logger.error(
@@ -563,6 +611,69 @@ def schedule_encounter_thumbnails(encounter_file_ids: List[int], app, user_conte
     except Exception as e:
         logger.error(
             "Failed to schedule thumbnails for encounter files: %s",
+            sanitize_log_value(e),
+        )
+
+
+def schedule_encounter_set_thumbnails(set_image_ids: List[int], app, user_context: Optional[Dict[str, Any]] = None):
+    """
+    Schedule thumbnail generation for encounter set images.
+
+    Args:
+        set_image_ids: List of EncounterSetImage IDs
+        app: Flask application instance
+        user_context: User context dict (user_id, username, ip)
+    """
+    try:
+        if not set_image_ids:
+            return
+
+        with transaction_scope() as db:
+            set_images = db.query(EncounterSetImage).filter(
+                EncounterSetImage.id.in_(set_image_ids)
+            ).all()
+
+            image_references = []
+            lab_unit_id = None
+
+            for si in set_images:
+                image_references.append({
+                    'image_id': si.id,
+                    'folder_rel': si.folder_rel,
+                    'filename': si.original_filename
+                })
+                if not lab_unit_id and si.patient_encounter:
+                    lab_unit_id = si.patient_encounter.lab_unit_id
+
+            if not image_references:
+                logger.warning("No valid encounter set images for thumbnail generation")
+                return
+
+            user_context = user_context or {}
+
+            # Create and queue job
+            job_token = create_thumbnail_job(
+                ThumbnailJobType.ENCOUNTER_SET_IMAGE,
+                image_references,
+                uploader_user_id=user_context.get('user_id'),
+                uploader_username=user_context.get('username'),
+                uploader_ip=user_context.get('ip'),
+                lab_unit_id=lab_unit_id
+            )
+
+            if job_token:
+                queue_thumbnail_job(job_token, app, user_id=user_context.get("user_id"), hospital_id=getattr(set_images[0].patient_encounter, "hospital_id", None) if set_images and set_images[0].patient_encounter else None)
+                logger.info(
+                    "Scheduled thumbnails for %s encounter set images: job %s",
+                    sanitize_log_value(len(set_image_ids)),
+                    sanitize_log_value(job_token),
+                )
+            else:
+                logger.error("Failed to create thumbnail job for encounter set images")
+
+    except Exception as e:
+        logger.error(
+            "Failed to schedule thumbnails for encounter set images: %s",
             sanitize_log_value(e),
         )
 

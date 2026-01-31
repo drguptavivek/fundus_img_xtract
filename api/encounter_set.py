@@ -220,6 +220,26 @@ def upload_encounter_set_image():
         )
         db.add(set_image)
         db.commit()
+
+        # Schedule thumbnail generation in background
+        try:
+            from utils.thumbnail_jobs import schedule_encounter_set_thumbnails
+            schedule_encounter_set_thumbnails(
+                [set_image.id],
+                current_app,
+                user_context={
+                    'user_id': current_user.id,
+                    'username': current_user.username,
+                    'ip': request.remote_addr
+                }
+            )
+        except Exception as e:
+            # Log but don't fail the upload if thumbnail scheduling fails
+            current_app.logger.error(
+                "Failed to schedule thumbnail generation for encounter set image %s: %s",
+                set_image.uuid,
+                e
+            )
         
         return jsonify({
             "message": "Image uploaded successfully",

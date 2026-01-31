@@ -85,6 +85,8 @@ def make_celery_app() -> Celery:
             "celery_tasks.tasks.direct_upload_tasks.process_direct_data_combined_task": {"queue": "pii_detection"},
             "celery_tasks.tasks.direct_upload_tasks.process_direct_metadata_only_task": {"queue": "metadata"},
             "celery_tasks.tasks.direct_upload_tasks.process_direct_pii_only_task": {"queue": "pii_detection"},
+            # Encounter Set Image Routes
+            "celery_tasks.tasks.metadata_tasks.extract_exif_task": {"queue": "metadata"},
         },
     )
 

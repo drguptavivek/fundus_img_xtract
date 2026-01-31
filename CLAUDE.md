@@ -330,8 +330,8 @@ git push                     # PUSH (work NOT done until this succeeds)
 # Create bead AFTER planning is complete
 bd create --title="Feature name" --type=feature --priority=2
 
-# Create corresponding GitHub issue
-gh issue create --title "Feature name" --label "p2,type-feature,bead-xyz"
+# Create corresponding GitHub issue (bead code at end of title)
+gh issue create --title "Feature name [bead-xyz]" --label "p2,Enhancement"
 ```
 
 **Deliverable**: Bead and GitHub issue tracking the work
@@ -504,10 +504,10 @@ bd create --title="Fix login bug" --type=bug --priority=1
 # 2. Get the bead ID (e.g., beads-abc)
 bd show beads-abc
 
-# 3. Create corresponding GitHub issue with bead label
+# 3. Create corresponding GitHub issue (bead code at end of title)
 gh issue create \
-  --title "Fix login bug" \
-  --label "p1,type-bug,bead-abc" \
+  --title "Fix login bug [bead-abc]" \
+  --label "p1,Bug" \
   --body "Beads tracker: beads-abc"
 ```
 
@@ -517,8 +517,8 @@ gh issue create \
 # 1. Create corresponding bead to establish source of truth
 bd create --title="Fix login bug" --type=bug --priority=1
 
-# 2. Update GitHub with bead label to establish the link
-gh issue edit 123 --add-label "bead-abc"
+# 2. Update GitHub title to include bead code
+gh issue edit 123 --title "Fix login bug [bead-abc]"
 ```
 
 ---
@@ -563,16 +563,21 @@ gh issue close 123 124 125 --comment "Completed via beads. Commit: <sha>"
 
 ### Quick Reference: Label Mapping
 
-| Beads Type | GitHub Label |
-|------------|--------------|
-| `--type=bug` | `type-bug` |
-| `--type=feature` | `type-feature` |
-| `--type=task` | `type-task` |
+| Beads Priority | GitHub Label |
+|----------------|--------------|
 | `--priority=0` | `p0` |
 | `--priority=1` | `p1` |
 | `--priority=2` | `p2` |
 | `--priority=3` | `p3` |
 | `--priority=4` | `p4` |
+
+| Beads Type | GitHub Label |
+|------------|--------------|
+| `--type=bug` | `Bug` |
+| `--type=feature` | `Enhancement` |
+| `--type=task` | `Task` |
+| `--type=chore` | `Chore` |
+| `--type=epic` | `Epic` |
 
 ---
 
@@ -580,9 +585,9 @@ gh issue close 123 124 125 --comment "Completed via beads. Commit: <sha>"
 
 After creating work:
 - [ ] Bead exists (`bd show <id>`)
-- [ ] GitHub issue exists with matching title
-- [ ] GitHub has `bead-*` label linking to bead
-- [ ] Priority/type labels match (p0-p4, type-bug/feature/task)
+- [ ] GitHub issue exists with matching title (includes `[bead-<id>]` at end)
+- [ ] Priority label matches (p0-p4)
+- [ ] Type label matches (Bug/Enhancement/Tests/Documentation/Duplicate/Wontfix/Dependencies/Chore/Task/Epic)
 
 After closing work:
 - [ ] Bead is closed (`bd show <id>` shows closed)
@@ -602,31 +607,18 @@ After closing work:
 | `p4` | 🔷 1D76DB | Priority P4 - Backlog |
 
 ### Type Labels (use one)
-| Label | Color | Description |
-|-------|-------|-------------|
-| `type-bug` | 🔴 d73a4a | Bug report |
-| `type-feature` | 🔷 a2eeef | Feature request |
-| `type-task` | 🟣 5319e7 | Task item |
-
-### Other Labels
-| Label | Color | Description |
-|-------|-------|-------------|
-| `bug` | 🔴 d73a4a | Something isn't working |
-| `documentation` | 🔷 0075ca | Improvements or additions to documentation |
-| `enhancement` | 🔷 a2eeef | New feature or request |
-| `good first issue` | 🟣 7057ff | Good for newcomers |
-| `help wanted` | 🟢 008672 | Extra attention is needed |
-| `question` | 🟣 d876e3 | Further information is requested |
-| `hospital-isolation` | 🔷 1a63c9 | Hospital isolation security feature |
-| `tests` | 🟢 2da44e | Test related |
-| `migration` | 🔴 e99695 | Data migration |
-| `bead-*` | 🔷 1a63c9 | Links GitHub issue to Beads tracker ID |
-
-### PR Labels
-| Label | Color | Description |
-|-------|-------|-------------|
-| `dependencies` | 🔷 0366d6 | Pull requests that update a dependency file |
-| `python` | 🔷 2b67c6 | Pull requests that update python code |
+| Label | Description |
+|-------|-------------|
+| `Bug` | Bug report |
+| `Enhancement` | Feature request |
+| `Tests` | Test related |
+| `Documentation` | Docs changes |
+| `Duplicate` | Duplicate issue |
+| `Wontfix` | Won't fix |
+| `Dependencies` | Dependency updates |
+| `Chore` | Maintenance tasks |
+| `Task` | Task item |
+| `Epic` | Large multi-issue effort |
 
 ---
 

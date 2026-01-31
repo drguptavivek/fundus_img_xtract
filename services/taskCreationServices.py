@@ -89,13 +89,17 @@ def create_or_get_task(
     db,
     *,
     kind: str,
-    image_id: int,
+    image_id: int = None,
+    patient_encounter_id: int = None,
     disease_id: int,
     lab_unit_id: int,
     create_linked: bool = True,
 ) -> GradingTask:
     """
     Idempotently create a grading task for (image_ref, disease_id, lab_unit_id).
+
+    For encounter-set grading, use patient_encounter_id instead of image_id.
+
     Guardrails:
       - Uniqueness is global per image×disease, independent of lab. If a task exists, reuse it and NEVER mutate its lab_unit_id.
       - If the existing task is final, treat it as gold standard; do not allow reassignment or duplication.
@@ -103,21 +107,42 @@ def create_or_get_task(
       - Image exists and is not locked (if app tracks locks)
       - Image is verified for the disease (_is_verified_for_disease)
     """
-    if kind not in {'direct','encounter'}:
+    if kind not in {'direct','encounter','encounter_set'}:
         raise ValueError('Invalid image kind')
 
-    # Try to find an existing task first (global per image×disease)
+    # For encounter_set, check if the encounter is verified
+    if kind == 'encounter_set':
+        if patient_encounter_id is None:
+            raise ValueError('patient_encounter_id required for encounter_set kind')
+        encounter = db.get(PatientEncounters, patient_encounter_id)
+        if not encounter:
+            return None  # Encounter not found
+        if encounter.encounter_verified_status != 'verified':
+            return None  # Unverified encounters should not create tasks
+
+    # Determine which field to use based on kind
     if kind == 'direct':
+        image_ref = image_id
         existing = db.execute(
             select(GradingTask).where(
-                GradingTask.direct_image_upload_id == image_id,
+                GradingTask.direct_image_upload_id == image_ref,
                 GradingTask.disease_id == disease_id,
             )
         ).scalar_one_or_none()
-    else:
+    elif kind == 'encounter':
+        image_ref = image_id
         existing = db.execute(
             select(GradingTask).where(
-                GradingTask.encounter_file_id == image_id,
+                GradingTask.encounter_file_id == image_ref,
+                GradingTask.disease_id == disease_id,
+            )
+        ).scalar_one_or_none()
+    else:  # encounter_set
+        # For encounter_set grading, we use patient_encounter_id
+        image_ref = patient_encounter_id
+        existing = db.execute(
+            select(GradingTask).where(
+                GradingTask.patient_encounter_id == image_ref,
                 GradingTask.disease_id == disease_id,
             )
         ).scalar_one_or_none()
@@ -134,9 +159,16 @@ def create_or_get_task(
                 lab_unit_id=lab_unit_id,
                 state='pending',
             )
-        else:
+        elif kind == 'encounter':
             task = GradingTask(
                 encounter_file_id=image_id,
+                disease_id=disease_id,
+                lab_unit_id=lab_unit_id,
+                state='pending',
+            )
+        else:  # encounter_set
+            task = GradingTask(
+                patient_encounter_id=patient_encounter_id,
                 disease_id=disease_id,
                 lab_unit_id=lab_unit_id,
                 state='pending',
@@ -152,6 +184,7 @@ def create_or_get_task(
                 db,
                 kind=kind,
                 image_id=image_id,
+                patient_encounter_id=patient_encounter_id,
                 disease_id=linked_disease_id,
                 lab_unit_id=lab_unit_id,
                 create_linked=False,

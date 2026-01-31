@@ -10,6 +10,7 @@ Module Structure:
 - dashboard.py: Main dashboard with KPIs and grading history
 - dual_grading.py: Core grading workflow with task access, submission, and revision
 - start_grading.py: Entry point for initiating grading sessions
+- encounter_set_grading.py: Encounter-set based grading for diseases like Strabismus
 - consensus.py: Consensus management utilities wrapper
 
 Documentation:
@@ -26,6 +27,7 @@ Routes:
 - /task/<task_id>/<slot_type>: Access/review specific grading task
 - /task/submit: Submit grade for a task
 - /revise/<grade_id>: Revise an existing grade
+- /encounter_set/<uuid>: Grade encounter set with sync-grid viewer
 """
 
 from flask import Blueprint
@@ -39,6 +41,7 @@ from .start_grading import register_routes as register_start_grading_routes
 from .intra_rater import register_routes as register_intra_rater_routes
 from .inter_rater_compare import register_routes as register_inter_rater_routes
 from .grader_statistics import register_routes as register_grader_statistics_routes
+from .encounter_set_grading import register_routes as register_encounter_set_routes
 
 # Register routes with the blueprint
 bp.add_url_rule("/", view_func=index, methods=["GET"])
@@ -55,3 +58,6 @@ register_intra_rater_routes(bp)
 # Register inter-rater comparison routes
 register_inter_rater_routes(bp)
 register_grader_statistics_routes(bp)
+
+# Register encounter-set grading routes
+register_encounter_set_routes(bp)

@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Grading: {{ encounter.name }} ({{ disease.name }}){% endblock %}
+
+{% block extra_css %}
+<style>
+    .sync-grid-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+    .sync-grid-slot {
+        aspect-ratio: 1 / 1;
+        border: 2px solid #dee2e6;
+        border-radius: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        background-color: #f8f9fa;
+        transition: border-color 0.2s;
+    }
+    .sync-grid-slot.has-image {
+        border-style: solid;
+        border-color: #0d6efd;
+        cursor: pointer;
+    }
+    .sync-grid-slot:hover {
+        border-color: #0a58ca;
+    }
+    .sync-grid-slot.active {
+        border-color: #ffc107;
+        border-width: 3px;
+    }
+    .sync-grid-slot.is-not-gradable {
+        border-color: #dc3545;
+        opacity: 0.6;
+    }
+    .sync-grid-slot img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    .slot-label {
+        position: absolute;
+        top: 0.25rem;
+        left: 0.25rem;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 0 0.35rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+        z-index: 2;
+    }
+    .not-gradable-badge {
+        position: absolute;
+        top: 0.25rem;
+        right: 0.25rem;
+        background: #dc3545;
+        color: white;
+        padding: 0 0.35rem;
+        border-radius: 0.25rem;
+        font-size: 0.65rem;
+        z-index: 2;
+    }
+    .sync-controls {
+        position: sticky;
+        top: 1rem;
+        background: rgba(255,255,255,0.95);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        z-index: 10;
+    }
+    .viewer-image {
+        max-height: 70vh;
+        object-fit: contain;
+        border-radius: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Task Info -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body py-2">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h5 class="mb-0">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>
+                                {{ encounter.name }}
+                            </h5>
+                            <small class="text-muted">
+                                {{ disease.name }} | Task ID: {{ task.uuid[:8] }} |
+                                Images: {{ images|length }} |
+                                {% if not_gradable_count > 0 %}
+                                    <span class="text-danger">{{ not_gradable_count }} Not Gradable</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        <div class="col-auto">
+                            {% if existing_grade %}
+                            <span class="badge bg-info">Previous grade: {{ existing_grade.created_at|user_datetime('%H:%M') }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Sync-Grid Viewer (8 columns) -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">3x3 Gaze Grid (Click to View)</h6>
+                        <div class="sync-controls">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="toggleSync" title="Toggle sync zoom/pan">
+                                <i class="bi bi-link-45deg"></i> Sync: <span id="syncStatus">ON</span>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="resetZoom" title="Reset zoom">
+                                <i class="bi bi-aspect-ratio"></i> Reset
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body py-2">
+                    <div class="sync-grid-container" id="syncGrid">
+                        {% for i in range(1, 10) %}
+                        <div class="sync-grid-slot {% if grid[i] %}has-image{% endif %} {% if grid[i] and grid[i].is_not_gradable %}is-not-gradable{% endif %}"
+                             data-position="{{ i }}"
+                             data-uuid="{% if grid[i] %}{{ grid[i].uuid }}{% endif %}">
+                            <span class="slot-label">{{ i }}</span>
+                            {% if grid[i] and grid[i].is_not_gradable %}
+                            <span class="not-gradable-badge">Not Gradable</span>
+                            {% endif %}
+                            {% if grid[i] %}
+                            <img src="{{ url_for('media._encounterSetImageThumbnailByUUID', uuid_str=grid[i].uuid) }}"
+                                 alt="Position {{ i }}"
+                                 data-full-url="{{ url_for('media._encounterSetImageByUUID', uuid_str=grid[i].uuid) }}"
+                                 data-edited-url="{% if grid[i].edited_filename %}{{ url_for('media._encounterSetImageEditedByUUID', uuid_str=grid[i].uuid) }}{% else %}{% endif %}">
+                            {% else %}
+                            <div class="text-muted text-center p-2">
+                                <i class="bi bi-image fs-4"></i>
+                                <div class="small">Empty</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enlarged Viewer -->
+            <div class="card shadow-sm mt-3" id="viewerCard" style="display:none;">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Position <span id="viewerPosition">-</span></h6>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="closeViewer">
+                        <i class="bi bi-x-lg"></i> Close
+                    </button>
+                </div>
+                <div class="card-body p-1 text-center bg-dark">
+                    <img src="" alt="Selected image" class="viewer-image" id="viewerImage">
+                </div>
+            </div>
+        </div>
+
+        <!-- Grading Form (4 columns) -->
+        <div class="col-lg-4">
+            <form id="gradingForm" action="{{ url_for('grading.encounter_set_submit') }}" method="POST">
+                <input type="hidden" name="task_uuid" value="{{ task.uuid }}">
+                <input type="hidden" name="slot" value="{{ request.args.get('slot', 'resident') }}">
+
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white py-2">
+                        <h6 class="mb-0">Submit Grade</h6>
+                    </div>
+                    <div class="card-body">
+                        <!-- Grade Selection -->
+                        <div class="mb-3" id="gradeSelectionGroup">
+                            <label for="label_id" class="form-label">Grade <span class="text-danger">*</span></label>
+                            <select class="form-select form-select-sm" id="label_id" name="label_id" required>
+                                <option value="">-- Select Grade --</option>
+                                {% for label in grading_labels %}
+                                <option value="{{ label.id }}">{{ label.impression }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                <small>Grading guidelines for {{ disease.name }}</small>
+                            </div>
+                        </div>
+
+                        <!-- Comment -->
+                        <div class="mb-3">
+                            <label for="comment" class="form-label">Comment (Optional)</label>
+                            <textarea class="form-control form-control-sm" id="comment" name="comment"
+                                      rows="3" placeholder="Add any observations..."></textarea>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="bi bi-check-lg me-1"></i> Submit Grade
+                            </button>
+                            <a href="{{ url_for('grading.index') }}" class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-x-circle me-1"></i> Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Image Info Modal -->
+<div class="modal fade" id="imageInfoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Image Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="imageInfoBody">
+                <!-- Image details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const syncGrid = document.getElementById('syncGrid');
+    const viewerCard = document.getElementById('viewerCard');
+    const viewerImage = document.getElementById('viewerImage');
+    const viewerPosition = document.getElementById('viewerPosition');
+    const toggleSyncBtn = document.getElementById('toggleSync');
+    const syncStatus = document.getElementById('syncStatus');
+    const resetZoomBtn = document.getElementById('resetZoom');
+    const closeViewerBtn = document.getElementById('closeViewer');
+
+    let syncEnabled = true;
+    let activeSlot = null;
+    let zoomPanState = {};  // Track zoom/pan state for sync
+
+    // Toggle sync zoom/pan
+    toggleSyncBtn.addEventListener('click', function() {
+        syncEnabled = !syncEnabled;
+        syncStatus.textContent = syncEnabled ? 'ON' : 'OFF';
+        toggleSyncBtn.classList.toggle('btn-primary', syncEnabled);
+        toggleSyncBtn.classList.toggle('btn-outline-primary', !syncEnabled);
+    });
+
+    // Reset zoom
+    resetZoomBtn.addEventListener('click', function() {
+        if (viewerImage.src) {
+            viewerImage.style.transform = '';
+            zoomPanState = {};
+        }
+    });
+
+    // Close viewer
+    closeViewerBtn.addEventListener('click', function() {
+        viewerCard.style.display = 'none';
+        activeSlot = null;
+        syncGrid.querySelectorAll('.sync-grid-slot.active').forEach(slot => {
+            slot.classList.remove('active');
+        });
+    });
+
+    // Click on grid slot to view image
+    syncGrid.querySelectorAll('.sync-grid-slot.has-image').forEach(slot => {
+        slot.addEventListener('click', function() {
+            const position = this.dataset.position;
+            const uuid = this.dataset.uuid;
+            const fullUrl = this.dataset.editedUrl && this.dataset.editedUrl !== '' ? this.dataset.editedUrl : this.dataset.fullUrl;
+
+            // Show viewer
+            viewerCard.style.display = 'block';
+            viewerImage.src = fullUrl;
+            viewerPosition.textContent = position;
+
+            // Update active state
+            syncGrid.querySelectorAll('.sync-grid-slot.active').forEach(s => s.classList.remove('active'));
+            this.classList.add('active');
+            activeSlot = position;
+
+            // If sync is enabled and we have zoom/pan state, apply it
+            if (syncEnabled && Object.keys(zoomPanState).length > 0) {
+                viewerImage.style.transform = formatTransform(zoomPanState);
+            }
+        });
+    });
+
+    // Track zoom/pan on viewer image for sync
+    // This would integrate with a JavaScript image zoom library
+    // For now, placeholder for the sync functionality
+    viewerImage.addEventListener('wheel', function(e) {
+        // Placeholder for zoom sync
+        if (syncEnabled) {
+            zoomPanState.zoom = (zoomPanState.zoom || 1) + (e.deltaY > 0 ? -0.1 : 0.1);
+            zoomPanState.zoom = Math.max(0.5, Math.min(5, zoomPanState.zoom));
+            // Apply to all images when sync is enabled
+            if (syncEnabled) {
+                syncGrid.querySelectorAll('.sync-grid-slot img').forEach(img => {
+                    img.style.transform = `scale(${zoomPanState.zoom})`;
+                });
+            }
+        }
+    });
+
+    function formatTransform(state) {
+        const { zoom = 1, panX = 0, panY = 0 } = state;
+        return `scale(${zoom}) translate(${panX}px, ${panY}px)`;
+    }
+});
+</script>
+{% endblock %}

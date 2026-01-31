@@ -4,6 +4,7 @@
 
 A comprehensive system for an eye hospital to manage eye images. It facilitates the generation of curated datasets for training and validating Artificial Intelligence (AI) models targeted at detecting Glaucoma, Diabetic Retinopathy (DR), and Age-related Macular Degeneration (AMD). It is extensible
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/drguptavivek/fundus_img_xtract)
 
 ## 🔑 KEY FEATURES
 

@@ -1,0 +1,162 @@
+{% extends "admin_layout.html" %}
+{% block title %}S3 Sync Status Dashboard{% endblock %}
+
+{% block extra_styles %}
+<style>
+.sync-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.sync-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.status-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+.count-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+.s3-provider-icon {
+    width: 20px;
+    height: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-sync-alt me-2"></i>S3 Sync Status Dashboard
+            </h1>
+            <p class="text-muted mb-0">Monitor and manage S3 synchronization status across hospitals</p>
+        </div>
+        <button class="btn btn-outline-primary" onclick="refreshDashboard()">
+            <i class="fas fa-refresh"></i> Refresh
+        </button>
+    </div>
+
+    {% if not hospitals %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        No hospitals with S3 configuration found.
+    </div>
+    {% else %}
+    <div class="row" id="hospitalsContainer">
+        {% for hospital in hospitals %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="card sync-card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>{{ hospital.name }}</strong>
+                        <br>
+                        <small class="text-muted">{{ hospital.s3_config_name }}</small>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge bg-secondary">
+                            {{ hospital.s3_provider.upper() }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="count-number text-warning">{{ hospital.counts.pending }}</div>
+                            <small class="text-muted">Pending</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="count-number text-primary">{{ hospital.counts.in_progress }}</div>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="count-number text-success">{{ hospital.counts.success }}</div>
+                            <small class="text-muted">Success</small>
+                        </div>
+                        <div class="col-3">
+                            <div class="count-number text-danger">{{ hospital.counts.failed }}</div>
+                            <small class="text-muted">Failed</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-database me-1"></i>
+                            {{ hospital.bucket_name }}
+                        </small>
+                        <a href="{{ url_for('admin.s3_sync_hospital_detail', hospital_id=hospital.id) }}"
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-chart-line me-1"></i> Details
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Summary Stats -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <strong><i class="fas fa-chart-pie me-2"></i>Overall Summary</strong>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center" id="summaryStats">
+                        <div class="col-md-3 col-6 mb-3">
+                            <h4 class="text-warning" id="totalPending">-</h4>
+                            <small class="text-muted">Pending Sync</small>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h4 class="text-primary" id="totalInProgress">-</h4>
+                            <small class="text-muted">In Progress</small>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h4 class="text-success" id="totalSuccess">-</h4>
+                            <small class="text-muted">Successfully Synced</small>
+                        </div>
+                        <div class="col-md-3 col-6 mb-3">
+                            <h4 class="text-danger" id="totalFailed">-</h4>
+                            <small class="text-muted">Failed Syncs</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_scripts %}
+<script>
+function refreshDashboard() {
+    location.reload();
+}
+
+// Calculate and display summary stats
+document.addEventListener('DOMContentLoaded', function() {
+    const hospitalCards = document.querySelectorAll('.sync-card');
+    let totalPending = 0, totalInProgress = 0, totalSuccess = 0, totalFailed = 0;
+
+    hospitalCards.forEach(card => {
+        const counts = card.querySelector('.card-body');
+        totalPending += parseInt(counts.querySelector('.text-warning').textContent) || 0;
+        totalInProgress += parseInt(counts.querySelector('.text-primary').textContent) || 0;
+        totalSuccess += parseInt(counts.querySelector('.text-success').textContent) || 0;
+        totalFailed += parseInt(counts.querySelector('.text-danger').textContent) || 0;
+    });
+
+    document.getElementById('totalPending').textContent = totalPending;
+    document.getElementById('totalInProgress').textContent = totalInProgress;
+    document.getElementById('totalSuccess').textContent = totalSuccess;
+    document.getElementById('totalFailed').textContent = totalFailed;
+});
+
+// Auto-refresh every 30 seconds
+setInterval(refreshDashboard, 30000);
+</script>
+{% endblock %}
+{% endblock %}

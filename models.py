@@ -293,6 +293,83 @@ class S3Config(Base):
               postgresql_where=text("auto_rotate_pepper = TRUE")),
     )
 
+class S3SyncStatus(Base):
+    """
+    S3 Sync Status Tracking
+
+    Tracks the synchronization status of files to S3 storage.
+    Supports retry logic and provides visibility into sync operations.
+    """
+    __tablename__ = 's3_sync_status'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    # File reference (polymorphic - points to different tables)
+    file_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # Values: 'encounter_file', 'encounter_file_pdf', 'direct_upload', 'encounter_set_image'
+    file_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+
+    # S3 config reference
+    s3_config_id: Mapped[int | None] = mapped_column(
+        ForeignKey("s3_configs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
+    # Sync status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        index=True,
+        default='pending'
+    )  # pending, in_progress, success, failed
+
+    variant: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default='original'
+    )  # original, thumbnail, edited, edited_thumbnail
+
+    # Retry tracking
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+        nullable=False
+    )
+
+    s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
+
+    __table_args__ = (
+        # Ensure one status record per file variant
+        UniqueConstraint('file_type', 'file_id', 'variant', name='uq_s3_sync_file_variant'),
+        # Validate status values
+        CheckConstraint(
+            "status IN ('pending', 'in_progress', 'success', 'failed')",
+            name='ck_s3_sync_status'
+        ),
+        # Validate variant values
+        CheckConstraint(
+            "variant IN ('original', 'thumbnail', 'edited', 'edited_thumbnail')",
+            name='ck_s3_sync_variant'
+        ),
+        # Indexes for dashboard queries
+        Index('ix_s3_sync_status_config', 's3_config_id', 'status'),
+        Index('ix_s3_sync_status_created', 's3_config_id', 'status', 'created_at'),
+        Index('ix_s3_sync_file_type_id', 'file_type', 'file_id'),
+    )
+
 class Hospital(Base):
     __tablename__ = 'hospitals'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -438,11 +515,22 @@ class EncounterSetImage(Base):
     is_not_gradable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     not_gradable_reason: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
+    # S3 storage fields (nullable - NULL = local storage, non-NULL = S3 storage)
+    hospital_id: Mapped[int | None] = mapped_column(ForeignKey("hospitals.id"), nullable=True, index=True)
+    s3_config_id: Mapped[int | None] = mapped_column(ForeignKey("s3_configs.id"), nullable=True, index=True)
+    s3_object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for original
+    s3_object_key_edited: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for edited
+    s3_object_key_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)  # S3 object key for thumbnail
+
     patient_encounter: Mapped["PatientEncounters"] = relationship(back_populates="encounter_set_images")
+    s3_config: Mapped["S3Config"] = relationship(foreign_keys=[s3_config_id])
 
     __table_args__ = (
         UniqueConstraint('patient_encounter_id', 'spatial_position', name='uq_encounter_set_image_position'),
         CheckConstraint('spatial_position >= 1 AND spatial_position <= 9', name='ck_encounter_set_image_position_range'),
+        # S3 composite indexes for efficient queries
+        Index("ix_esi_s3_config_uuid", "s3_config_id", "uuid"),
+        Index("ix_esi_hospital_id", "hospital_id"),
     )
 
 class EncounterFile(Base):

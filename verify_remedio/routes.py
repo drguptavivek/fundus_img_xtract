@@ -899,10 +899,8 @@ def verify_dr(encounter_id: int):
         if not dr_reports:
             return {"ok": False, "error": "missing_reports", "message": "No DR reports to verify."}, 400
 
-        missing = _missing_image_tags(db, encounter.id)
-        if missing:
-            msg = f"{missing} image(s) still untagged; cannot verify."
-            return {"ok": False, "error": "incomplete", "message": msg}, 400
+        # Note: DR verification is independent of image tagging
+        # Image tagging is checked only at encounter level
 
         for dr in dr_reports:
             res_key = f"dr_result_{dr.id}"
@@ -1001,10 +999,8 @@ def verify_glaucoma(encounter_id: int):
         if not gl_cleaned:
             gl_cleaned = _ensure_glaucoma_cleaned_rows(db, encounter)
 
-        missing = _missing_image_tags(db, encounter.id)
-        if missing:
-            msg = f"{missing} image(s) still untagged; cannot verify."
-            return {"ok": False, "error": "incomplete", "message": msg}, 400
+        # Note: Glaucoma verification is independent of image tagging
+        # Image tagging is checked only at encounter level
 
         for gl in gl_cleaned:
             right_key = f"gl_vcdr_right_num_{gl.id}"

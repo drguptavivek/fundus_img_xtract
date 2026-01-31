@@ -96,6 +96,15 @@ function openAddModal(diseaseId, diseaseName) {
 }
 
 /**
+ * Open modal for editing disease grading scope
+ */
+function openScopeModal(diseaseId, diseaseName, currentScope) {
+    document.getElementById('scope_disease_id').value = diseaseId;
+    document.getElementById('scope_disease_name').textContent = diseaseName;
+    document.getElementById('grading_scope').value = currentScope || 'image';
+}
+
+/**
  * Open modal for editing an existing grading
  */
 function openEditModal(gradingId, diseaseId, diseaseName, impression, displayOrder, isActive, guidelines, features) {

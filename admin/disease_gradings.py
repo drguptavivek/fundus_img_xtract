@@ -14,6 +14,24 @@ import json
 @roles_required('admin')
 def list_disease_gradings():
     """List all disease gradings and handle creation/update."""
+    # Handle disease grading_scope updates
+    if request.args.get("update_scope") == "1":
+        with transaction_scope() as db:
+            disease_id = request.form.get("disease_id")
+            grading_scope = request.form.get("grading_scope", "image")
+
+            if disease_id and grading_scope in ("image", "encounter"):
+                disease = db.get(Disease, int(disease_id))
+                if disease:
+                    disease.grading_scope = grading_scope
+                    flash(f"{disease.name}: Grading scope updated to '{grading_scope}'", "success")
+                else:
+                    flash("Disease not found.", "danger")
+            else:
+                flash("Invalid disease or grading scope.", "danger")
+
+            return redirect(url_for('admin.list_disease_gradings'))
+
     if request.method == "POST":
         with transaction_scope() as db:
             grading_id = request.form.get("grading_id")

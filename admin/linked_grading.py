@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from auth.roles import roles_required
 from db_transaction_manager import transaction_scope, get_db_session
-from models import Disease, LinkedDiseaseGrading
+from models import Disease, DiseaseGrading, LinkedDiseaseGrading
 from utils.log_sanitize import sanitize_log_value
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,14 @@ def linked_disease_gradings_list() -> ResponseReturnValue:
 
             if not primary or not linked:
                 flash("Selected disease not found.", "danger")
+                return redirect(url_for("admin.linked_disease_gradings_list"))
+
+            if not _is_disease_active(db, primary_id):
+                flash("Primary disease is inactive. Activate at least one grading before linking.", "danger")
+                return redirect(url_for("admin.linked_disease_gradings_list"))
+
+            if not _is_disease_active(db, linked_id):
+                flash("Linked disease is inactive. Activate at least one grading before linking.", "danger")
                 return redirect(url_for("admin.linked_disease_gradings_list"))
 
             existing_pair = db.execute(
@@ -122,12 +130,32 @@ def linked_disease_gradings_list() -> ResponseReturnValue:
         ).scalars().all()
 
         diseases = db.execute(select(Disease).order_by(Disease.name)).scalars().all()
+        active_diseases = db.execute(
+            select(Disease)
+            .join(DiseaseGrading)
+            .where(DiseaseGrading.is_active.is_(True))
+            .distinct()
+            .order_by(Disease.name)
+        ).scalars().all()
 
         return render_template(
             "admin/linked_disease_gradings.html",
             links=links,
             diseases=diseases,
+            active_diseases=active_diseases,
         )
+
+
+def _is_disease_active(db, disease_id: int) -> bool:
+    return (
+        db.execute(
+            select(DiseaseGrading.id)
+            .where(DiseaseGrading.disease_id == disease_id)
+            .where(DiseaseGrading.is_active.is_(True))
+            .limit(1)
+        ).scalar_one_or_none()
+        is not None
+    )
 
 
 @roles_required("admin")

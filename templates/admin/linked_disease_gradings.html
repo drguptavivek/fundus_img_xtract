@@ -16,7 +16,7 @@
                         <label for="primary_disease_id" class="form-label">Primary Disease</label>
                         <select class="form-select" id="primary_disease_id" name="primary_disease_id" required>
                             <option value="">Select primary</option>
-                            {% for disease in diseases %}
+                            {% for disease in active_diseases %}
                                 <option value="{{ disease.id }}">{{ disease.name }}</option>
                             {% endfor %}
                         </select>
@@ -25,7 +25,7 @@
                         <label for="linked_disease_id" class="form-label">Linked Disease</label>
                         <select class="form-select" id="linked_disease_id" name="linked_disease_id" required>
                             <option value="">Select linked</option>
-                            {% for disease in diseases %}
+                            {% for disease in active_diseases %}
                                 <option value="{{ disease.id }}">{{ disease.name }}</option>
                             {% endfor %}
                         </select>
@@ -45,7 +45,8 @@
                 <div class="mt-3 d-flex justify-content-end">
                     <button type="submit" class="btn btn-primary">Create Link</button>
                 </div>
-                <p class="text-muted mt-2 mb-0">To change the primary/linked disease, delete the link and create a new one.</p>
+                <p class="text-muted mt-2 mb-0">Only diseases with at least one active grading can be linked.</p>
+                <p class="text-muted mb-0">To change the primary/linked disease, delete the link and create a new one.</p>
             </form>
         </div>
     </div>

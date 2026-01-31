@@ -1,6 +1,6 @@
 from sqlalchemy import select
 
-from models import Disease, LinkedDiseaseGrading
+from models import Disease, DiseaseGrading, LinkedDiseaseGrading
 from tests.conftest import create_authenticated_client
 from tests.helpers.factories import CoreEntityFactory, UserFactory
 
@@ -8,10 +8,23 @@ from tests.helpers.factories import CoreEntityFactory, UserFactory
 def _create_disease(db_session, name):
     return CoreEntityFactory.create_disease(db_session, name=name)
 
+def _create_active_grading(db_session, disease_id, impression):
+    grading = DiseaseGrading(
+        disease_id=disease_id,
+        impression=impression,
+        display_order=1,
+        is_active=True,
+    )
+    db_session.add(grading)
+    db_session.flush()
+    return grading
+
 
 def test_admin_can_create_linked_grading(app, db_session):
     primary = _create_disease(db_session, "Primary Disease A")
     linked = _create_disease(db_session, "Linked Disease A")
+    _create_active_grading(db_session, primary.id, "Primary A")
+    _create_active_grading(db_session, linked.id, "Linked A")
     admin_user = UserFactory.create_admin(db_session, username="linked_admin_a")
 
     client = create_authenticated_client(app, admin_user, db_session)
@@ -42,6 +55,9 @@ def test_admin_requires_delink_before_relink(app, db_session):
     primary = _create_disease(db_session, "Primary Disease B")
     linked = _create_disease(db_session, "Linked Disease B")
     other_primary = _create_disease(db_session, "Primary Disease C")
+    _create_active_grading(db_session, primary.id, "Primary B")
+    _create_active_grading(db_session, linked.id, "Linked B")
+    _create_active_grading(db_session, other_primary.id, "Primary C")
     admin_user = UserFactory.create_admin(db_session, username="linked_admin_b")
 
     db_session.add(
@@ -79,6 +95,8 @@ def test_admin_requires_delink_before_relink(app, db_session):
 def test_admin_can_update_and_delete_link(app, db_session):
     primary = _create_disease(db_session, "Primary Disease D")
     linked = _create_disease(db_session, "Linked Disease D")
+    _create_active_grading(db_session, primary.id, "Primary D")
+    _create_active_grading(db_session, linked.id, "Linked D")
     admin_user = UserFactory.create_admin(db_session, username="linked_admin_c")
 
     link = LinkedDiseaseGrading(
@@ -116,3 +134,32 @@ def test_admin_can_update_and_delete_link(app, db_session):
 
     deleted = db_session.get(LinkedDiseaseGrading, link.id)
     assert deleted is None
+
+
+def test_admin_blocks_inactive_disease_link(app, db_session):
+    primary = _create_disease(db_session, "Primary Disease E")
+    linked = _create_disease(db_session, "Linked Disease E")
+    _create_active_grading(db_session, primary.id, "Primary E")
+    admin_user = UserFactory.create_admin(db_session, username="linked_admin_d")
+
+    client = create_authenticated_client(app, admin_user, db_session)
+
+    response = client.post(
+        "/admin/linked-disease-gradings",
+        data={
+            "primary_disease_id": str(primary.id),
+            "linked_disease_id": str(linked.id),
+            "display_order": "0",
+            "is_active": "1",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert b"inactive" in response.data
+    link = db_session.execute(
+        select(LinkedDiseaseGrading)
+        .where(LinkedDiseaseGrading.primary_disease_id == primary.id)
+        .where(LinkedDiseaseGrading.linked_disease_id == linked.id)
+    ).scalar_one_or_none()
+    assert link is None

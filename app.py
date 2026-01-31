@@ -179,6 +179,10 @@ def _configure_executors(app: Flask) -> None:
 
 def _register_csrf_protection(app: Flask) -> None:
     def csrf_protect():
+        if request.endpoint:
+            view_func = current_app.view_functions.get(request.endpoint)
+            if view_func and getattr(view_func, '_token_auth_applied', False):
+                return None
         auth_logger = logging.getLogger("auth")
         if not auth_logger.isEnabledFor(logging.DEBUG):
             return None
@@ -568,6 +572,12 @@ def _register_login_guard(app: Flask) -> None:
     def _require_login_everywhere():
         from flask_login import current_user, logout_user
         path = request.path or "/"
+
+        # Allow routes that handle their own authentication (e.g. via JWT)
+        if request.endpoint:
+            view_func = current_app.view_functions.get(request.endpoint)
+            if view_func and getattr(view_func, '_token_auth_applied', False):
+                return
 
         try:
             has_client_session = bool(session.get("_user_id"))

@@ -94,6 +94,7 @@ web = [
     "pip-audit==2.10.0",
     "pytest-celery==1.2.1",
     "watchfiles==1.1.1",
+    "PyJWT==2.11.0",
 ]
 
 # OCR worker container (Celery worker for OCR tasks)
@@ -130,4 +131,5 @@ general = [
     "pytz==2025.2",
     "pyyaml>=6.0.3",
     "requests==2.32.5",  # Needed by package_update_scanner
+    "PyJWT==2.11.0",
 ]

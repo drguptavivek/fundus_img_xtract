@@ -848,7 +848,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'beat'", specifier = ">=6.0.3" },
     { name = "pyyaml", marker = "extra == 'general'", specifier = ">=6.0.3" },
     { name = "pyyaml", marker = "extra == 'web'", specifier = ">=6.0.3" },
-    { name = "redis", specifier = ">=5.0.4,<6.5" },
+    { name = "redis", specifier = ">=6.4.0,<7.0" },
     { name = "requests", marker = "extra == 'general'", specifier = "==2.32.5" },
     { name = "requests", marker = "extra == 'web'", specifier = "==2.32.5" },
     { name = "rich", marker = "extra == 'web'", specifier = "==14.3.1" },

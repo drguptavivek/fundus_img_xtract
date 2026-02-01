@@ -528,14 +528,16 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             )
                             if panel_task.state == 'resident2_done' and panel_has_resident2_grade and not panel_has_resident_grade:
                                 allowed_states.append('resident2_done')
-                            if panel_task.state not in allowed_states:
+                            # Final tasks shown read-only for medical context, not skipped
+                            if panel_task.state not in allowed_states and panel_task.state != 'final':
                                 flash(
                                     f"Task {panel_task.id} is no longer available for resident grading (state: {panel_task.state}).",
                                     "danger",
                                 )
                                 return redirect(url_for("grading.index"))
                         elif slot_type == 'resident2':
-                            if panel_task.state not in ['resident_done']:
+                            # Final tasks shown read-only for medical context, not skipped
+                            if panel_task.state not in ['resident_done', 'final']:
                                 flash(
                                     f"Task {panel_task.id} is no longer available for resident2 grading (state: {panel_task.state}).",
                                     "danger",

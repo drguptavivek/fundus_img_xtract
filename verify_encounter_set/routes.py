@@ -116,7 +116,13 @@ def finalize_verification(uuid):
     # from tasks.taskCreationServices import create_grading_task_for_encounter_set
 
     with transaction_scope() as db:
-        encounter = db.query(PatientEncounters).filter_by(uuid=uuid).first()
+        # P0.5: Use row-level locking for atomic finalization
+        # Lock the encounter for update (prevents concurrent modifications)
+        encounter = db.query(PatientEncounters)\
+            .filter_by(uuid=uuid)\
+            .with_for_update()\
+            .first()
+
         if not encounter:
             abort(404)
 
@@ -126,14 +132,20 @@ def finalize_verification(uuid):
             flash("You don't have permission to verify this encounter set.", "danger")
             return redirect(url_for("verify_encounter_set.index"))
 
-        # Check all images are reviewed before finalizing
-        images = db.query(EncounterSetImage).filter_by(patient_encounter_id=encounter.id).all()
+        # Lock all images while checking (atomic transaction)
+        images = db.query(EncounterSetImage)\
+            .filter_by(patient_encounter_id=encounter.id)\
+            .with_for_update()\
+            .all()
+
+        # Check all images are reviewed (safe - images are locked)
         unreviewed_count = sum(1 for img in images if not img.is_reviewed)
 
         if unreviewed_count > 0:
             flash(f"Cannot finalize: {unreviewed_count} image(s) not yet reviewed. Please review all images before verifying.", "warning")
             return redirect(url_for("verify_encounter_set.verify_encounter", uuid=uuid))
 
+        # Finalize (atomic - encounter and images locked until commit)
         encounter.encounter_verified_status = 'verified'
         encounter.encounter_verified_by = current_user.username
         encounter.encounter_verified_at = utcnow()

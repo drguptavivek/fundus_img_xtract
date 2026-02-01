@@ -8,6 +8,7 @@ from functools import wraps
 from io import BytesIO
 from PIL import Image
 from werkzeug.utils import secure_filename
+from sqlalchemy.exc import IntegrityError
 
 from . import api_bp
 from db_transaction_manager import transaction_scope
@@ -323,27 +324,25 @@ def update_image_position(uuid):
         if not db.execute(enc_query).scalar_one_or_none():
             return jsonify({"error": "Access denied"}), 403
 
-        # Check for collision - verify target position is not occupied
-        collision = db.query(EncounterSetImage).filter(
-            and_(
-                EncounterSetImage.patient_encounter_id == img.patient_encounter_id,
-                EncounterSetImage.spatial_position == spatial_position,  # ← Use validated variable
-                EncounterSetImage.id != img.id
-            )
-        ).first()
+        # Update position (P0.5: Handle race condition via database constraint)
+        img.spatial_position = spatial_position
 
-        if collision:
-            return jsonify({"error": "Position already occupied"}), 409
-
-        # Update position
-        img.spatial_position = spatial_position  # ← Use validated variable
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as e:
+            # Unique constraint violation - another request took this position
+            if 'uq_encounter_set_image_position' in str(e):
+                return jsonify({
+                    "error": "Position already occupied",
+                    "message": "Another user moved an image to this position. Please try a different position."
+                }), 409
+            # Other integrity errors should be raised
+            raise
 
         logger.info(
             "Image position updated",
             extra={
                 'image_uuid': uuid,
-                'old_position': img.spatial_position,
                 'new_position': spatial_position,
                 'user_id': current_user.id
             }

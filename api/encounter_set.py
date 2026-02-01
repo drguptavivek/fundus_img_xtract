@@ -5,6 +5,9 @@ from datetime import datetime, timedelta, timezone
 from flask import jsonify, request, current_app
 from uuid import uuid4
 from functools import wraps
+from io import BytesIO
+from PIL import Image
+from werkzeug.utils import secure_filename
 
 from . import api_bp
 from db_transaction_manager import transaction_scope
@@ -21,6 +24,203 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from auth.roles import roles_required
 from utils.hospital_scoping import apply_scoping
+
+# ============================================================================
+# FILE VALIDATION CONFIGURATION
+# ============================================================================
+
+# Whitelist of allowed file extensions (case-insensitive)
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp'}
+
+# Allowed MIME types for each extension
+ALLOWED_MIME_TYPES = {
+    '.jpg': {'image/jpeg', 'image/jpg'},
+    '.jpeg': {'image/jpeg', 'image/jpg'},
+    '.png': {'image/png'},
+    '.gif': {'image/gif'},
+    '.bmp': {'image/bmp'},
+}
+
+# Magic bytes (file signatures) for validation
+MAGIC_BYTES = {
+    b'\xFF\xD8\xFF\xE0': ('.jpg', 'image/jpeg'),  # JPEG SOI
+    b'\xFF\xD8\xFF\xE1': ('.jpg', 'image/jpeg'),  # JPEG EXIF
+    b'\x89PNG\r\n\x1a\n': ('.png', 'image/png'),  # PNG
+    b'GIF87a': ('.gif', 'image/gif'),              # GIF87a
+    b'GIF89a': ('.gif', 'image/gif'),              # GIF89a
+    b'BM': ('.bmp', 'image/bmp'),                  # BMP
+}
+
+# Max file size: 50 MB
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
+MAX_IMAGE_DIMENSION = 10000  # Max width/height in pixels
+
+
+def validate_image_file(file_obj):
+    """
+    Comprehensive image file validation:
+    1. File extension whitelist
+    2. Magic byte verification
+    3. MIME type validation
+    4. Actual image content verification
+
+    Args:
+        file_obj: werkzeug FileStorage object
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    # =========================================================================
+    # STEP 1: FILENAME VALIDATION
+    # =========================================================================
+
+    if not file_obj.filename:
+        return False, "No filename provided"
+
+    # Check for null bytes and other suspicious patterns
+    if '\x00' in file_obj.filename:
+        logger.warning("Null byte in filename: %s", sanitize_log_value(file_obj.filename))
+        return False, "Invalid filename"
+
+    # Get extension (case-insensitive)
+    filename_lower = file_obj.filename.lower()
+    if '.' not in filename_lower:
+        return False, "File must have an extension (.jpg, .png, .gif, or .bmp)"
+
+    ext = os.path.splitext(filename_lower)[1]
+
+    # Whitelist extension check
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        logger.warning(
+            "Upload rejected: invalid extension",
+            extra={'extension': ext, 'filename': sanitize_log_value(file_obj.filename)}
+        )
+        return False, f"Invalid file format. Only JPG, PNG, GIF, BMP files are allowed"
+
+    # =========================================================================
+    # STEP 2: FILE SIZE VALIDATION
+    # =========================================================================
+
+    file_obj.seek(0, 2)  # Seek to end
+    file_size = file_obj.tell()
+    file_obj.seek(0)  # Reset to beginning
+
+    if file_size == 0:
+        return False, "File is empty"
+
+    if file_size > MAX_FILE_SIZE_BYTES:
+        return False, f"File too large. Maximum size is {MAX_FILE_SIZE_BYTES // (1024*1024)}MB"
+
+    # =========================================================================
+    # STEP 3: MAGIC BYTE VALIDATION (File Signature)
+    # =========================================================================
+
+    file_content = file_obj.read()
+    file_obj.seek(0)  # Reset for later use
+
+    magic_valid = False
+    detected_ext = None
+    detected_mime = None
+
+    for magic_bytes, (ext_match, mime_match) in MAGIC_BYTES.items():
+        if file_content.startswith(magic_bytes):
+            magic_valid = True
+            detected_ext = ext_match
+            detected_mime = mime_match
+            break
+
+    if not magic_valid:
+        logger.warning(
+            "Invalid magic bytes for file",
+            extra={'filename': sanitize_log_value(file_obj.filename)}
+        )
+        return False, "Invalid image file. File is not a valid image"
+
+    # =========================================================================
+    # STEP 4: MIME TYPE VALIDATION
+    # =========================================================================
+
+    content_type = file_obj.content_type or 'application/octet-stream'
+
+    # Check if provided MIME type matches allowed types for this extension
+    allowed_mimes = ALLOWED_MIME_TYPES.get(ext, set())
+
+    if content_type not in allowed_mimes and content_type.lower() not in allowed_mimes:
+        logger.warning(
+            "Invalid MIME type for extension",
+            extra={
+                'extension': ext,
+                'content_type': content_type,
+                'filename': sanitize_log_value(file_obj.filename)
+            }
+        )
+        return False, f"Invalid MIME type {content_type} for {ext} file"
+
+    # =========================================================================
+    # STEP 5: IMAGE CONTENT VERIFICATION (PIL)
+    # =========================================================================
+
+    try:
+        file_obj.seek(0)
+        with Image.open(BytesIO(file_content)) as img:
+            # Verify image format matches magic bytes
+            if img.format:
+                img_format = img.format.lower()
+                # Map PIL format to extension
+                format_to_ext = {
+                    'jpeg': '.jpg',
+                    'jpg': '.jpg',
+                    'png': '.png',
+                    'gif': '.gif',
+                    'bmp': '.bmp',
+                }
+                detected_format = format_to_ext.get(img_format)
+
+                if detected_format and detected_format != ext:
+                    logger.warning(
+                        "File extension mismatch with actual format",
+                        extra={
+                            'extension': ext,
+                            'actual_format': img_format,
+                            'filename': sanitize_log_value(file_obj.filename)
+                        }
+                    )
+                    # Don't reject, just log (some valid images might have wrong ext)
+
+            # Check image dimensions (prevent decompression bombs)
+            width, height = img.size
+            if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+                logger.warning(
+                    "Image dimensions exceed maximum",
+                    extra={'width': width, 'height': height}
+                )
+                return False, f"Image too large. Maximum dimensions are {MAX_IMAGE_DIMENSION}x{MAX_IMAGE_DIMENSION}"
+
+            # Try to verify image (will raise if corrupted)
+            # Note: verify() closes the image, so we do this last
+            img.verify()
+
+    except Exception as e:
+        logger.warning(
+            f"Image verification failed: {str(e)}",
+            extra={'filename': sanitize_log_value(file_obj.filename)}
+        )
+        return False, "Invalid or corrupted image file"
+
+    # =========================================================================
+    # VALIDATION PASSED
+    # =========================================================================
+
+    logger.info(
+        "File validation passed",
+        extra={
+            'filename': sanitize_log_value(file_obj.filename),
+            'extension': ext,
+            'size': file_size
+        }
+    )
+
+    return True, None
 
 @api_bp.route('/v1/encounter-set/unverified', methods=['GET'])
 @login_required
@@ -162,6 +362,13 @@ def upload_encounter_set_image():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
+    # =========================================================================
+    # VALIDATE FILE (extension, magic bytes, MIME type, content)
+    # =========================================================================
+    is_valid, error_msg = validate_image_file(file)
+    if not is_valid:
+        return jsonify({"error": "Invalid image file", "message": error_msg}), 400
+
     encounter_uuid = request.form.get("encounter_uuid")
     
     with transaction_scope() as db:
@@ -196,25 +403,53 @@ def upload_encounter_set_image():
             db.flush() # Get encounter.id
             encounter_uuid = encounter.uuid
             
-        # Handle file storage
-        ext = os.path.splitext(file.filename)[1]
+        # =========================================================================
+        # HANDLE FILE STORAGE - USE SAFE FILENAMES
+        # =========================================================================
+
+        # Generate UUID for file (not user-provided filename)
         img_uuid = str(uuid4())
-        filename = f"{img_uuid}{ext}"
-        
+
+        # Force all images to .jpg to prevent execution (even if uploaded as .png, store as .jpg)
+        # This prevents security issues if file ends up in wrong directory
+        safe_filename = f"{img_uuid}.jpg"
+
         # Directory structure: files/encounter_sets/YYYY_MM_DD/encounter_id/
         date_str = utcnow().strftime("%Y_%m_%d")
         folder_rel = f"files/encounter_sets/{date_str}/{encounter.id}"
         save_path = os.path.join(current_app.root_path, folder_rel)
+
+        # Verify path is within base directory (prevent path traversal)
+        real_path = os.path.realpath(save_path)
+        base_path = os.path.realpath(current_app.root_path)
+        if not real_path.startswith(base_path):
+            logger.error(f"Path traversal attempt detected: {real_path}")
+            return jsonify({"error": "Invalid storage path"}), 500
+
         os.makedirs(save_path, exist_ok=True)
-        
-        file.save(os.path.join(save_path, filename))
-        
+
+        # Save with safe filename (not user-provided)
+        file_path = os.path.join(save_path, safe_filename)
+        file.save(file_path)
+
+        logger.info(
+            "Image saved successfully",
+            extra={
+                'image_uuid': img_uuid,
+                'encounter_uuid': sanitize_log_value(encounter_uuid),
+                'original_filename': sanitize_log_value(file.filename),
+                'stored_filename': safe_filename,
+                'size': os.path.getsize(file_path)
+            }
+        )
+
         # Create EncounterSetImage record
+        # Store ORIGINAL filename separately for reference (not for serving)
         set_image = EncounterSetImage(
             uuid=img_uuid,
             patient_encounter_id=encounter.id,
             spatial_position=spatial_pos,
-            original_filename=filename,
+            original_filename=file.filename,  # User's original name for reference only
             folder_rel=folder_rel,
             created_at=utcnow()
         )

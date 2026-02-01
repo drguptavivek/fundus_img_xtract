@@ -10,7 +10,6 @@ Features:
 
 from flask import render_template, redirect, url_for, request, jsonify, abort, flash
 from flask_login import login_required, current_user
-from flask_wtf.csrf import csrf_protect
 from auth.roles import roles_required
 from models import PatientEncounters, EncounterSetImage, GradingTask, Disease, DiseaseGrading, Grade
 from db_transaction_manager import transaction_scope
@@ -89,7 +88,6 @@ def encounter_set_grading(uuid):
 
 
 @login_required
-@csrf_protect  # CSRF protection for session-authenticated route
 @roles_required("resident", "resident2", "ophthalmologist", "arbitrator", "admin")
 def encounter_set_submit():
     """Submit grade for an encounter set."""

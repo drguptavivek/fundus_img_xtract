@@ -84,7 +84,7 @@ def start_grading(disease_id: int, role_slot: str):
 
             # Prefer resident2 informational messages if both are messages
             if task is None:
-                task = resident2_message if resident2_message not in (None, "") else resident_message
+                task = resident_message if resident_message not in (None, "") else resident2_message
 
         elif role_slot == 'resident2':
             resident2_candidate = get_next_eligible_resident2_task_atomic(current_user.id, disease_id, db=db)
@@ -97,7 +97,7 @@ def start_grading(disease_id: int, role_slot: str):
                     effective_slot = 'resident'
                 else:
                     if resident2_candidate not in (None, ""):
-                        task = resident2_candidate
+                        task = resident_candidate if resident_candidate not in (None, "") else resident2_candidate
                     else:
                         task = resident_candidate
 

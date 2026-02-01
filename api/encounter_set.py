@@ -8,7 +8,6 @@ from functools import wraps
 from io import BytesIO
 from PIL import Image
 from werkzeug.utils import secure_filename
-from flask_wtf.csrf import csrf_protect
 
 from . import api_bp
 from db_transaction_manager import transaction_scope
@@ -279,7 +278,6 @@ def get_encounter_set_details(uuid):
 
 @api_bp.route('/v1/encounter-set/image/<uuid>/position', methods=['POST'])
 @login_required
-@csrf_protect  # ← CSRF protection for session-authenticated route
 @roles_required("admin", "local_admin", "optometrist")
 def update_image_position(uuid):
     """Update the spatial position of an image."""

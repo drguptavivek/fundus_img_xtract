@@ -1,6 +1,5 @@
 from flask import render_template, abort, current_app, flash, redirect, url_for, request, jsonify
 from flask_login import login_required, current_user
-from flask_wtf.csrf import csrf_protect
 from auth.roles import roles_required
 from models import PatientEncounters, EncounterSetImage, Disease
 from db_transaction_manager import transaction_scope
@@ -49,7 +48,6 @@ def verify_encounter(uuid):
 
 @bp.route("/update_position", methods=["POST"])
 @login_required
-@csrf_protect  # CSRF protection for session-authenticated route
 @roles_required("admin", "optometrist", "data_manager")
 def update_position():
     """Update the spatial position of an image in an encounter set."""
@@ -88,7 +86,6 @@ def update_position():
 
 @bp.route("/finalize/<uuid>", methods=["POST"])
 @login_required
-@csrf_protect  # CSRF protection for session-authenticated route
 @roles_required("admin", "optometrist", "data_manager")
 def finalize_verification(uuid):
     """Mark an encounter set as verified and trigger task creation."""
@@ -179,7 +176,6 @@ def edit_image(uuid):
 
 @bp.route("/save_edit/<uuid>", methods=["POST"])
 @login_required
-@csrf_protect  # CSRF protection for session-authenticated route
 @roles_required("admin", "optometrist", "data_manager")
 def save_edit(uuid):
     """Save edited image data (crop/mask coordinates applied)."""

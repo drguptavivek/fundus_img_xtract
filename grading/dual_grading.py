@@ -1051,12 +1051,12 @@ def dual_grading_submit():
                                 # Pre-load UUID while transaction is active
                                 next_task_uuid = next_task.uuid
 
-                        if next_task is None and slot in ("resident", "resident2"):
-                            # Surface resident2 info message first if available
-                            if resident2_message not in (None, ""):
-                                next_task = resident2_message
-                            else:
-                                next_task = resident_message
+                    if next_task is None and slot in ("resident", "resident2"):
+                        # Prefer resident queue messaging if both queues are empty
+                        if resident_message not in (None, ""):
+                            next_task = resident_message
+                        else:
+                            next_task = resident2_message
 
                     # Handle the result outside transaction scope
                     if next_task is None:

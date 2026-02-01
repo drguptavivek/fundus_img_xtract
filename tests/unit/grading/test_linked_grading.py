@@ -1,4 +1,3 @@
-
 import pytest
 from flask import url_for
 from models import GradingTask, LinkedDiseaseGrading, DiseaseGrading, Disease
@@ -66,8 +65,6 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
         lab_unit_id=lab_unit.id,
         can_grade_resident=True
     )
-    # Explicitly deny DR permission (default is denied, but making sure)
-    # The factory only adds one permission, so they don't have DR permission.
     
     # 2. Create Image and Primary Task
     image = ImageFactory.create_direct_upload(
@@ -113,15 +110,6 @@ def test_linked_grading_eligibility_trap(client, db_session, core_test_data, lin
         
         response = client.get(url)
     
-    # 4. Assert Failure (Current Behavior)
-    # Expectation: Redirected to index with error message
-    assert response.status_code == 302
-    assert response.location == url_for('grading.index', _external=False) or \
-           response.location.endswith(url_for('grading.index'))
-           
-    # Check flash message
-    with client.session_transaction() as sess:
-        flash_messages = dict(sess['_flashes']).values()
-        # The exact message from dual_grading.py:
-        # flash("You are not eligible to grade this task as the selected role.", "danger")
-        assert any("not eligible" in msg for msg in str(list(flash_messages)))
+    # 4. Assert Success (New Behavior)
+    # Expectation: Page loads (200 OK) despite ineligibility for linked task.
+    assert response.status_code == 200

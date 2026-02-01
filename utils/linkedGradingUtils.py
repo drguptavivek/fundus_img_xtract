@@ -9,22 +9,59 @@ from models import LinkedDiseaseGrading
 
 
 def get_linked_disease_ids(db, primary_disease_id: int) -> List[int]:
-    rows = db.execute(
-        select(LinkedDiseaseGrading.linked_disease_id)
-        .where(LinkedDiseaseGrading.primary_disease_id == primary_disease_id)
-        .where(LinkedDiseaseGrading.is_active == True)
-        .order_by(LinkedDiseaseGrading.display_order, LinkedDiseaseGrading.id)
-    ).all()
-    return [row[0] for row in rows]
+    """
+    Get all linked disease IDs recursively (e.g. A->B->C).
+    Returns a flat list of all descendants.
+    """
+    all_linked = []
+    queue = [primary_disease_id]
+    visited = {primary_disease_id}
+    
+    while queue:
+        current_id = queue.pop(0)
+        rows = db.execute(
+            select(LinkedDiseaseGrading.linked_disease_id)
+            .where(LinkedDiseaseGrading.primary_disease_id == current_id)
+            .where(LinkedDiseaseGrading.is_active == True)
+            .order_by(LinkedDiseaseGrading.display_order, LinkedDiseaseGrading.id)
+        ).all()
+        
+        children = [row[0] for row in rows]
+        for child_id in children:
+            if child_id not in visited:
+                visited.add(child_id)
+                all_linked.append(child_id)
+                queue.append(child_id)
+                
+    return all_linked
 
 
 def get_primary_disease_id(db, disease_id: int) -> int:
-    row = db.execute(
-        select(LinkedDiseaseGrading.primary_disease_id)
-        .where(LinkedDiseaseGrading.linked_disease_id == disease_id)
-        .where(LinkedDiseaseGrading.is_active == True)
-    ).first()
-    return row[0] if row else disease_id
+    """
+    Get the root primary disease ID for any disease in a linked chain.
+    Supports recursive chains: A->B->C returns A for any of B or C.
+    """
+    current_id = disease_id
+    visited = {disease_id}
+
+    while True:
+        row = db.execute(
+            select(LinkedDiseaseGrading.primary_disease_id)
+            .where(LinkedDiseaseGrading.linked_disease_id == current_id)
+            .where(LinkedDiseaseGrading.is_active == True)
+        ).first()
+
+        if not row:
+            # No parent found, current_id is the primary
+            return current_id
+
+        parent_id = row[0]
+        if parent_id in visited:
+            # Cycle detected, return current
+            return current_id
+
+        visited.add(parent_id)
+        current_id = parent_id
 
 
 def is_primary_disease(db, disease_id: int) -> bool:

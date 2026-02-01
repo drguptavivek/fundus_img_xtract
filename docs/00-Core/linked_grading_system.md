@@ -27,3 +27,28 @@ The core of the system is the `LinkedDiseaseGrading` model, which establishes a 
 - `get_linked_disease_ids(db, primary_id)`: Retrieves all active linked disease IDs for a given primary.
 - `get_primary_disease_id(db, disease_id)`: Finds the primary ID for any given disease ID (returns itself if it's already primary or unlinked).
 - `expand_primary_disease_ids(db, ids)`: Flattens a list of primary IDs to include all their linked counterparts.
+
+## Arbitrator Linked Grading
+
+### Arbitrator Context
+Arbitrators review tasks when resident and resident2 grades don't match (consensus needed). With linked diseases, arbitrators need context from related disease grades to make informed decisions.
+
+### Carousel for Context
+- Arbitrator sees primary + linked diseases in carousel
+- Each disease has independent consensus requirement
+- Editability based on task state:
+  - Primary in 'arbitration' → Editable (need arbitrator decision)
+  - Linked in 'arbitration' → Editable (need arbitrator decision)
+  - Any disease in 'final' → Read-only (already matched)
+
+### Task States and Visibility
+Four scenarios for arbitrator:
+1. **Primary matched, linked not**: Primary read-only (done), linked editable (needs arbitration)
+2. **Linked matched, primary not**: Primary editable (needs arbitration), linked read-only (done)
+3. **Both matched**: Task not shown on dashboard (fully consensused, nothing to arbitrate)
+4. **Both unmatched**: Both editable (arbitrator decides both)
+
+### Independent Consensus
+- Each disease tracks grades and consensus separately
+- Arbitrator decision on DR doesn't affect DME consensus logic
+- Both can be submitted together but resolved independently

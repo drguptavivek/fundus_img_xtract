@@ -436,7 +436,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
             show_save_next = existing_grade is None
             primary_task_uuid = task.uuid
 
-            if slot_type in ("resident", "resident2"):
+            if slot_type in ("resident", "resident2", "arbitrator"):
                 primary_disease_id = get_primary_disease_id(db, task.disease_id)
                 if primary_disease_id != task.disease_id:
                     # Redirect linked disease grading to the primary task for this image
@@ -461,7 +461,6 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         )
 
                 linked_disease_ids = get_linked_disease_ids(db, task.disease_id)
-                print(f"DEBUG: Task {task.id}, Disease {task.disease_id}, Linked IDs: {linked_disease_ids}")
                 if linked_disease_ids:
                     linked_task_list = [task]
                     for linked_disease_id in linked_disease_ids:
@@ -481,15 +480,16 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                             try:
                                 linked_task = svc_ensure_task(image_uuid, linked_disease_id, db)
                             except Exception as ensure_error:
-                                print(f"DEBUG: svc_ensure_task FAILED: {ensure_error}")
                                 grades_logger.exception(
                                     "Failed to ensure linked task for disease %s: %s",
                                     linked_disease_id,
                                     ensure_error,
                                 )
-
-                        if linked_task is not None and linked_task.state == "final":
-                            continue
+                                flash(
+                                    f"Failed to initialize linked grading task for disease ID {linked_disease_id}. Please contact support.",
+                                    "danger",
+                                )
+                                return redirect(url_for("grading.index"))
 
                         if linked_task is not None:
                             linked_task_list.append(linked_task)
@@ -541,6 +541,14 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                     "danger",
                                 )
                                 return redirect(url_for("grading.index"))
+                        elif slot_type == 'arbitrator':
+                            # Arbitrator can see and grade 'arbitration' state tasks
+                            # Can also revise 'final' tasks if eligible for revision
+                            # Other states are shown read-only for context
+                            if panel_task.state not in ['arbitration', 'final']:
+                                # Task not ready for arbitration, will show read-only
+                                # This allows arbitrator to see related diseases' grades for context
+                                pass
 
                         panel_grading_data = _build_grading_data(panel_task)
                         if panel_grading_data is None:
@@ -556,6 +564,24 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         if panel_existing_grade is not None:
                             show_save_next = False
 
+                        # Determine read_only status for this panel
+                        panel_read_only = eligibility_error is not None
+                        if slot_type == 'arbitrator':
+                            # Arbitrator can grade 'arbitration' tasks
+                            # For 'final' tasks, check if eligible for revision
+                            if panel_task.state == 'final':
+                                # Check if arbitrator is revising this specific panel task
+                                panel_arbitrator_revision = is_arbitrator_revision_allowed(
+                                    db, current_user.id, panel_task_id, slot_type
+                                )
+                                panel_read_only = not panel_arbitrator_revision.get('allowed', False)
+                            elif panel_task.state != 'arbitration':
+                                # Not ready for arbitration, show read-only for context
+                                panel_read_only = True
+                        else:
+                            # For resident/resident2, only final is read-only
+                            panel_read_only = panel_read_only or (panel_task.state == "final")
+
                         linked_panels.append(
                             {
                                 "task": panel_task,
@@ -564,7 +590,8 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                 "grading_features": panel_grading_data["grading_features"],
                                 "existing_grade": panel_existing_grade,
                                 "existing_selected_features": panel_existing_features,
-                                "read_only": panel_task.state == "final",
+                                "read_only": panel_read_only,
+                                "eligibility_error": eligibility_error,
                             }
                         )
 
@@ -803,6 +830,13 @@ def dual_grading_submit():
                     return redirect(url_for("grading.index"))
 
                 if not get_user_eligibility_for_task(db, current_user.id, task_id, slot):
+                    if is_linked_submission:
+                        grades_logger.warning(
+                            "Skipping ineligible linked task %s for user %s",
+                            task_id,
+                            sanitize_log_value(current_user.id),
+                        )
+                        continue
                     flash("You are not eligible to grade this task for the selected role.", "danger")
                     return redirect(url_for("grading.dual_grading_task", task_uuid=redirect_task_uuid, slot_type=slot))
 

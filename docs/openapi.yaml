@@ -374,6 +374,265 @@ paths:
   # ========================================================================
   # DIRECT UPLOADS
   # ========================================================================
+  /direct/upload:
+    post:
+      summary: Upload single or multiple fundus images
+      description: |
+        Upload one or more fundus images with associated metadata (camera, disease, area).
+        Supports JPG and PNG formats. Each file validated for size, format, and duplicates.
+        Returns redirect to job status page upon success.
+      tags: [Direct Uploads]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: X-CSRFToken
+          in: header
+          description: CSRF token for form submission
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                hospital_id:
+                  type: integer
+                  description: Hospital ID
+                  example: 1
+                lab_unit_id:
+                  type: integer
+                  description: Lab unit ID
+                  example: 5
+                camera_id:
+                  type: integer
+                  description: Camera ID
+                  example: 10
+                disease_id:
+                  type: integer
+                  description: Disease ID
+                  example: 1
+                area_id:
+                  type: integer
+                  description: Area ID
+                  example: 20
+                is_mydriatic:
+                  type: boolean
+                  description: Pupil dilation status
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Image files (JPG/PNG, max 5MB each)
+              required:
+                - hospital_id
+                - lab_unit_id
+                - camera_id
+                - disease_id
+                - area_id
+                - files
+      responses:
+        '303':
+          description: Redirect to job status page
+          headers:
+            Location:
+              schema:
+                type: string
+              example: /jobs/status?job_id=abc123
+        '400':
+          description: Validation error
+          content:
+            text/html:
+              schema:
+                type: string
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Flash message in session
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /direct/pregraded:
+    post:
+      summary: Upload pre-graded fundus images
+      description: |
+        Upload one or more pre-graded fundus images with grades already assigned.
+        Same validation as /direct/upload with optional dataset_label for curation.
+        Admin/data_manager endpoint only.
+      tags: [Direct Uploads]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                hospital_id:
+                  type: integer
+                lab_unit_id:
+                  type: integer
+                camera_id:
+                  type: integer
+                disease_id:
+                  type: integer
+                area_id:
+                  type: integer
+                is_mydriatic:
+                  type: boolean
+                dataset_label:
+                  type: string
+                  description: Dataset category for curation
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required:
+                - hospital_id
+                - lab_unit_id
+                - camera_id
+                - disease_id
+                - area_id
+                - files
+      responses:
+        '303':
+          description: Redirect to job status page
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/lab-units/{user_id}:
+    get:
+      summary: Get lab units for a user
+      description: Returns list of lab units accessible by the specified user
+      tags: [Direct Uploads]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: User ID
+      responses:
+        '200':
+          description: List of lab units
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    name:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/hospital/{lab_unit_id}:
+    get:
+      summary: Get hospital for a lab unit
+      description: Returns hospital associated with the specified lab unit
+      tags: [Direct Uploads]
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: lab_unit_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Lab unit ID
+      responses:
+        '200':
+          description: Hospital information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # ZIP UPLOADS
+  # ========================================================================
+  /upload:
+    post:
+      summary: Upload Remedio ZIP export or batch images
+      description: |
+        Upload ZIP file(s) containing Remedio FOP exports, PDFs, or image sets.
+        Automatically extracts images, runs OCR on PDFs, and processes metadata.
+        Returns redirect to job status page. Processing is asynchronous.
+      tags: [Direct Uploads]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                hospital_id:
+                  type: integer
+                  description: Hospital ID
+                lab_unit_id:
+                  type: integer
+                  description: Lab unit ID
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: ZIP files (max 10MB each)
+              required:
+                - hospital_id
+                - lab_unit_id
+                - files
+      responses:
+        '302':
+          description: Redirect to job status page
+          headers:
+            Location:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
   /upload-jobs/{job_token}/status:
     get:
       summary: Get upload job status
@@ -919,6 +1178,61 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  # ========================================================================
+  # ADMIN UPLOADS
+  # ========================================================================
+  /database-restore/upload:
+    post:
+      summary: Upload database backup for restoration
+      description: |
+        Upload SQL/GZ/ZIP database backup files for restoration.
+        Admin-only endpoint. File is parsed to extract table count and sample data.
+      tags: [Admin]
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: SQL/GZ/ZIP backup file (max 100MB)
+              required:
+                - file
+      responses:
+        '200':
+          description: Backup file parsed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tables_found:
+                    type: integer
+                  user_count:
+                    type: integer
+                  sample_data:
+                    type: object
+        '400':
+          description: Invalid file type or too large
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: File parsing or extraction error
 
   # ========================================================================
   # UPLOAD STATS
@@ -1648,6 +1962,36 @@ components:
       required:
         - message
         - encounter_id
+
+    DirectUploadResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        message:
+          type: string
+        redirect_url:
+          type: string
+
+    LabUnit:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    Hospital:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
 
     # ========================================================================
     # IMAGE METADATA

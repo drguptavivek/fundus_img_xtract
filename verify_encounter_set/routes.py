@@ -5,7 +5,25 @@ from models import PatientEncounters, EncounterSetImage, Disease
 from db_transaction_manager import transaction_scope
 from utils.utils import with_session
 from utils.hospital_scoping import apply_scoping
+from marshmallow import Schema, fields, validate, ValidationError
 from . import bp
+
+
+# =========================================================================
+# REQUEST SCHEMAS (P1.4: Input Validation)
+# =========================================================================
+
+class CropCoordinatesSchema(Schema):
+    """Validate crop coordinates for image editing"""
+    x = fields.Integer(required=False, validate=validate.Range(min=0))
+    y = fields.Integer(required=False, validate=validate.Range(min=0))
+    width = fields.Integer(required=False, validate=validate.Range(min=1))
+    height = fields.Integer(required=False, validate=validate.Range(min=1))
+
+
+class SaveEditRequestSchema(Schema):
+    """Validate save_edit request data"""
+    crop = fields.Nested(CropCoordinatesSchema, required=False)
 
 @bp.route("/")
 @login_required
@@ -212,7 +230,18 @@ def save_edit(uuid):
     from PIL import Image
     import io
 
-    data = request.json
+    # P1.4: Validate request data
+    data = request.json or {}
+    schema = SaveEditRequestSchema()
+
+    try:
+        validated_data = schema.load(data)
+    except ValidationError as e:
+        return jsonify({
+            "success": False,
+            "message": "Invalid request data",
+            "errors": e.messages
+        }), 422
 
     with transaction_scope() as db:
         img = db.query(EncounterSetImage).filter_by(uuid=uuid).first()

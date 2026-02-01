@@ -461,6 +461,7 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                         )
 
                 linked_disease_ids = get_linked_disease_ids(db, task.disease_id)
+                print(f"DEBUG: Task {task.id}, Disease {task.disease_id}, Linked IDs: {linked_disease_ids}")
                 if linked_disease_ids:
                     linked_task_list = [task]
                     for linked_disease_id in linked_disease_ids:

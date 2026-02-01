@@ -536,21 +536,16 @@ def dual_grading_task(task_uuid: str, slot_type: str):
                                 )
                                 return redirect(url_for("grading.index"))
                         elif slot_type == 'resident2':
-                            # Final tasks shown read-only for medical context, not skipped
-                            if panel_task.state not in ['resident_done', 'final']:
+                            if panel_task.state not in ['resident_done']:
                                 flash(
                                     f"Task {panel_task.id} is no longer available for resident2 grading (state: {panel_task.state}).",
                                     "danger",
                                 )
                                 return redirect(url_for("grading.index"))
                         elif slot_type == 'arbitrator':
-                            # Arbitrator can see and grade 'arbitration' state tasks
-                            # Can also revise 'final' tasks if eligible for revision
-                            # Other states are shown read-only for context
-                            if panel_task.state not in ['arbitration', 'final']:
-                                # Task not ready for arbitration, will show read-only
-                                # This allows arbitrator to see related diseases' grades for context
-                                pass
+                            # Arbitrators can view linked tasks in 'final' state (as read-only context)
+                            # or 'arbitration' state (for active adjudication).
+                            pass
 
                         panel_grading_data = _build_grading_data(panel_task)
                         if panel_grading_data is None:

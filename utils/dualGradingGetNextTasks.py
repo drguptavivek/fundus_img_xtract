@@ -2,7 +2,7 @@
 Utility functions for getting the next eligible dual grading tasks. 
 """
 
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, exists, or_, func
 from models import GradingTask, User, UserDiseaseUnitRole, LabUnit, Grade
 from typing import Optional, Union, List
@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from utils.env_loader import load_environment
 from db_transaction_manager import transaction_scope
+from utils.linkedGradingUtils import get_linked_disease_ids, get_primary_disease_id
 
 load_environment()
 
@@ -103,8 +104,26 @@ def _get_filtered_tasks(db, user_id: int, disease_id: int, role_slot: str, eligi
         
     # Filter by role-specific states
     if role_slot == "arbitrator":
-        # Arbitrators only see arbitration tasks
-        query = query.filter(GradingTask.state == "arbitration")
+        linked_ids = get_linked_disease_ids(db, disease_id)
+        if linked_ids:
+             LinkedTask = aliased(GradingTask)
+             query = query.outerjoin(
+                 LinkedTask,
+                 and_(
+                     or_(
+                         and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
+                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id)
+                     ),
+                     LinkedTask.disease_id.in_(linked_ids)
+                 )
+             ).filter(
+                 or_(
+                     GradingTask.state == "arbitration",
+                     LinkedTask.state == "arbitration"
+                 )
+             )
+        else:
+             query = query.filter(GradingTask.state == "arbitration")
     elif role_slot == "resident":
         # Residents see pending tasks
         query = query.filter(GradingTask.state == "pending")
@@ -384,7 +403,26 @@ def _atomically_get_and_lock_task(db, user_id: int, disease_id: int, role_slot: 
     
     # Filter by role-specific states
     if role_slot == "arbitrator":
-        query = query.filter(GradingTask.state == "arbitration")
+        linked_ids = get_linked_disease_ids(db, disease_id)
+        if linked_ids:
+             LinkedTask = aliased(GradingTask)
+             query = query.outerjoin(
+                 LinkedTask,
+                 and_(
+                     or_(
+                         and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
+                         and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id)
+                     ),
+                     LinkedTask.disease_id.in_(linked_ids)
+                 )
+             ).filter(
+                 or_(
+                     GradingTask.state == "arbitration",
+                     LinkedTask.state == "arbitration"
+                 )
+             )
+        else:
+            query = query.filter(GradingTask.state == "arbitration")
     elif role_slot == "resident":
         query = query.filter(GradingTask.state == "pending")
     elif role_slot == "resident2":

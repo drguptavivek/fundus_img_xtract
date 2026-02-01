@@ -6,7 +6,7 @@ The caller is responsible for managing the session lifecycle (opening and closin
 This design allows for better transaction management and session reuse.
 """
 
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, aliased
 from sqlalchemy import and_, or_
 from models import GradingTask, User, UserDiseaseUnitRole, EncounterFile, DirectImageUpload, Disease, LabUnit, Grade, DiseaseGrading
 from utils.hospital_scoping import apply_scoping
@@ -128,14 +128,42 @@ def get_user_kpi_pending_task_count_data(db, user_id: int) -> Dict[str, Dict[str
         
         # Count arbitration pending tasks (only if user has resident2 eligibility and arbitration permissions)
         if has_resident2_role and info['can_arbitrate']:
-            # Get tasks in arbitration state
-            q = db.query(GradingTask).filter(
-                GradingTask.state == 'arbitration',
+            # Base query for the current disease
+            base_q = db.query(GradingTask).filter(
                 GradingTask.lab_unit_id.in_(lab_unit_ids),
                 GradingTask.disease_id == disease_id
             )
-            q = apply_scoping(q, GradingTask, user, 'grading')
-            arbitration_tasks = q.all()
+
+            # Check if we should include linked tasks in arbitration
+            linked_ids = []
+            if not info.get('is_linked'):
+                linked_ids = get_linked_disease_ids(db, disease_id)
+
+            if linked_ids:
+                LinkedTask = aliased(GradingTask)
+                # Outer join to find any linked task that is in arbitration
+                base_q = base_q.outerjoin(
+                    LinkedTask,
+                    and_(
+                        or_(
+                            and_(GradingTask.encounter_file_id != None, GradingTask.encounter_file_id == LinkedTask.encounter_file_id),
+                            and_(GradingTask.direct_image_upload_id != None, GradingTask.direct_image_upload_id == LinkedTask.direct_image_upload_id)
+                        ),
+                        LinkedTask.disease_id.in_(linked_ids)
+                    )
+                ).filter(
+                    or_(
+                        GradingTask.state == 'arbitration',
+                        LinkedTask.state == 'arbitration'
+                    )
+                )
+            else:
+                base_q = base_q.filter(GradingTask.state == 'arbitration')
+
+            q = apply_scoping(base_q, GradingTask, user, 'grading')
+            
+            # Use distinct because the join might produce multiple rows per primary task
+            arbitration_tasks = q.distinct().all()
             
             # Apply same filtering as in task assignment to exclude tasks user recently graded
             from utils.dualGradingGetNextTasks import _has_user_graded_task_2weeks
